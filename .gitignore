@@ -1,0 +1,38 @@
+.vercel
+.venv
+.env
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.pyw
+*.pyz
+
+# Vercel
+.vercel
+
+# Railway
+.railway
+
+# Heroku
+.heroku
+
+# OpenRouter
+.openrouter
+
+# Supabase
+.supabase
+
+# FastAPI
+.fastapi
+# md files
+*.md
+
+# sql files
+*.sql
+
+
+
+
