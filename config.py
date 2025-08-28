@@ -19,6 +19,10 @@ class Config:
     @classmethod
     def validate(cls):
         """Validate that all required environment variables are set"""
+        # Skip validation in Vercel environment to prevent startup failures
+        if os.environ.get("VERCEL"):
+            return True
+            
         missing_vars = []
         
         if not cls.SUPABASE_URL:
@@ -38,6 +42,8 @@ class Config:
                 "OPENROUTER_SITE_URL=your_site_url (optional)\n"
                 "OPENROUTER_SITE_NAME=your_site_name (optional)"
             )
+        
+        return True
     
     @classmethod
     def get_supabase_config(cls):

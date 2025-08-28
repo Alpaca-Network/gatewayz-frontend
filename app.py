@@ -14,16 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from openai import OpenAI
 
-from db import (
-    create_enhanced_user, deduct_credits, get_user, get_user_count, 
-    get_all_users, record_usage, get_user_usage_metrics, get_admin_monitor_data, 
-    get_user_rate_limits, set_user_rate_limits, check_rate_limit, update_rate_limit_usage,
-    get_user_profile, update_user_profile, delete_user_account,
-    create_api_key, get_user_api_keys, delete_api_key, increment_api_key_usage, get_api_key_usage_stats,
-    add_credits_to_user, get_api_key_by_id, update_api_key, validate_api_key_permissions
-)
-from supabase_config import init_db, get_supabase_client, test_connection
-from config import Config
+# Import models directly
 from models import (
     AddCreditsRequest, CreateUserRequest, CreateUserResponse, ProxyRequest,
     SetRateLimitRequest, RateLimitResponse, UserMonitorResponse, AdminMonitorResponse,
@@ -32,12 +23,155 @@ from models import (
     UserRegistrationRequest, UserRegistrationResponse, AuthMethod, UpdateApiKeyRequest, UpdateApiKeyResponse
 )
 
+# Import database functions directly
+from db import (
+    create_enhanced_user, deduct_credits, get_user, get_user_count, 
+    get_all_users, record_usage, get_user_usage_metrics, get_admin_monitor_data, 
+    get_user_rate_limits, set_user_rate_limits, check_rate_limit, update_rate_limit_usage,
+    get_user_profile, update_user_profile, delete_user_account,
+    create_api_key, get_user_api_keys, delete_api_key, increment_api_key_usage, get_api_key_usage_stats,
+    add_credits_to_user, get_api_key_by_id, update_api_key, validate_api_key_permissions
+)
+
+# Import configuration
+from config import Config
+
+# Initialize logging
 logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 
+# Create FastAPI app
+app = FastAPI(
+    title="AI Gateway API",
+    description="Gateway for AI model access with credit management",
+    version="1.0.0"
+)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Security
 security = HTTPBearer()
 
+# Model cache for OpenRouter models
+_model_cache = {
+    "data": None,
+    "timestamp": None,
+    "ttl": 300  # 5 minutes
+}
+
+def get_cached_models():
+    """Get cached models or fetch from OpenRouter if cache is expired"""
+    try:
+        if _model_cache["data"] and _model_cache["timestamp"]:
+            cache_age = (datetime.utcnow() - _model_cache["timestamp"]).total_seconds()
+            if cache_age < _model_cache["ttl"]:
+                return _model_cache["data"]
+        
+        # Cache expired or empty, fetch fresh data
+        return fetch_models_from_openrouter()
+    except Exception as e:
+        logger.error(f"Error getting cached models: {e}")
+        return None
+
+def invalidate_model_cache():
+    """Invalidate the model cache to force refresh"""
+    _model_cache["data"] = None
+    _model_cache["timestamp"] = None
+
+def fetch_models_from_openrouter():
+    """Fetch models from OpenRouter API"""
+    try:
+        if not Config.OPENROUTER_API_KEY:
+            logger.error("OpenRouter API key not configured")
+            return None
+        
+        headers = {
+            "Authorization": f"Bearer {Config.OPENROUTER_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        
+        response = httpx.get("https://openrouter.ai/api/v1/models", headers=headers)
+        response.raise_for_status()
+        
+        models_data = response.json()
+        _model_cache["data"] = models_data.get("data", [])
+        _model_cache["timestamp"] = datetime.utcnow()
+        
+        return _model_cache["data"]
+    except Exception as e:
+        logger.error(f"Failed to fetch models from OpenRouter: {e}")
+        return None
+
+def get_openrouter_client():
+    """Get OpenRouter client with proper configuration"""
+    try:
+        if not Config.OPENROUTER_API_KEY:
+            raise ValueError("OpenRouter API key not configured")
+        
+        return OpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=Config.OPENROUTER_API_KEY,
+            default_headers={
+                "HTTP-Referer": Config.OPENROUTER_SITE_URL,
+                "X-Title": Config.OPENROUTER_SITE_NAME
+            }
+        )
+    except Exception as e:
+        logger.error(f"Failed to initialize OpenRouter client: {e}")
+        raise
+
+def make_openrouter_request_openai(messages, model, **kwargs):
+    """Make request to OpenRouter using OpenAI client"""
+    try:
+        client = get_openrouter_client()
+        response = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            **kwargs
+        )
+        return response
+    except Exception as e:
+        logger.error(f"OpenRouter request failed: {e}")
+        raise
+
+def process_openrouter_response(response):
+    """Process OpenRouter response to extract relevant data"""
+    try:
+        return {
+            "id": response.id,
+            "object": response.object,
+            "created": response.created,
+            "model": response.model,
+            "choices": [
+                {
+                    "index": choice.index,
+                    "message": {
+                        "role": choice.message.role,
+                        "content": choice.message.content
+                    },
+                    "finish_reason": choice.finish_reason
+                }
+                for choice in response.choices
+            ],
+            "usage": {
+                "prompt_tokens": response.usage.prompt_tokens,
+                "completion_tokens": response.usage.completion_tokens,
+                "total_tokens": response.usage.total_tokens
+            } if response.usage else {}
+        }
+    except Exception as e:
+        logger.error(f"Failed to process OpenRouter response: {e}")
+        raise
+
 async def get_api_key(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Validate API key from either legacy or new system"""
     if not credentials:
         raise HTTPException(status_code=422, detail="Authorization header is required")
     
@@ -53,41 +187,45 @@ async def get_api_key(credentials: HTTPAuthorizationCredentials = Depends(securi
             return api_key
         
         # If not found in old system, check new system
-        client = get_supabase_client()
-        key_result = client.table('api_keys').select('*').eq('api_key', api_key).execute()
-        
-        if key_result.data:
-            key_data = key_result.data[0]
+        try:
+            from supabase_config import get_supabase_client
+            client = get_supabase_client()
+            key_result = client.table('api_keys').select('*').eq('api_key', api_key).execute()
             
-            # Check if key is active
-            if not key_data.get('is_active', True):
-                raise HTTPException(status_code=401, detail="API key is inactive")
-            
-            # Check expiration date
-            if key_data.get('expiration_date'):
-                try:
-                    expiration_str = key_data['expiration_date']
-                    if expiration_str:
-                        if 'Z' in expiration_str:
-                            expiration_str = expiration_str.replace('Z', '+00:00')
-                        elif not expiration_str.endswith('+00:00'):
-                            expiration_str = expiration_str + '+00:00'
-                        
-                        expiration = datetime.fromisoformat(expiration_str)
-                        now = datetime.utcnow().replace(tzinfo=expiration.tzinfo)
-                        
-                        if expiration < now:
-                            raise HTTPException(status_code=401, detail="API key has expired")
-                except Exception as date_error:
-                    logger.warning(f"Error checking expiration for key {api_key}: {date_error}")
-                    # Continue if we can't parse the date
-            
-            # Check request limits
-            if key_data.get('max_requests'):
-                if key_data['requests_used'] >= key_data['max_requests']:
-                    raise HTTPException(status_code=429, detail="API key request limit reached")
-            
-            return api_key
+            if key_result.data:
+                key_data = key_result.data[0]
+                
+                # Check if key is active
+                if not key_data.get('is_active', True):
+                    raise HTTPException(status_code=401, detail="API key is inactive")
+                
+                # Check expiration date
+                if key_data.get('expiration_date'):
+                    try:
+                        expiration_str = key_data['expiration_date']
+                        if expiration_str:
+                            if 'Z' in expiration_str:
+                                expiration_str = expiration_str.replace('Z', '+00:00')
+                            elif not expiration_str.endswith('+00:00'):
+                                expiration_str = expiration_str + '+00:00'
+                            
+                            expiration = datetime.fromisoformat(expiration_str)
+                            now = datetime.utcnow().replace(tzinfo=expiration.tzinfo)
+                            
+                            if expiration < now:
+                                raise HTTPException(status_code=401, detail="API key has expired")
+                    except Exception as date_error:
+                        logger.warning(f"Error checking expiration for key {api_key}: {date_error}")
+                        # Continue if we can't parse the date
+                
+                # Check request limits
+                if key_data.get('max_requests'):
+                    if key_data['requests_used'] >= key_data['max_requests']:
+                        raise HTTPException(status_code=429, detail="API key request limit reached")
+                
+                return api_key
+        except Exception as e:
+            logger.warning(f"Error checking new system for key {api_key}: {e}")
         
         # If not found in either system, reject
         raise HTTPException(status_code=401, detail="Invalid API key")
@@ -98,211 +236,17 @@ async def get_api_key(credentials: HTTPAuthorizationCredentials = Depends(securi
         logger.error(f"Error validating API key {api_key}: {e}")
         raise HTTPException(status_code=401, detail="Invalid API key")
 
-def create_openrouter_client():
-    try:
-        client = OpenAI(
-            base_url="https://openrouter.ai/api/v1",
-            api_key=Config.OPENROUTER_API_KEY,
-        )
-        return client
-    except Exception as e:
-        logger.error(f"Failed to create OpenRouter client: {e}")
-        raise HTTPException(status_code=500, detail="Failed to initialize OpenRouter client")
-
-_model_cache = {
-    "data": None,
-    "timestamp": None,
-    "ttl": 300
-}
-
-def get_cached_models():
-    now = datetime.utcnow()
-    
-    if (_model_cache["data"] is not None and 
-        _model_cache["timestamp"] is not None and
-        (now - _model_cache["timestamp"]).total_seconds() < _model_cache["ttl"]):
-        return _model_cache["data"]
-    
-    try:
-        fresh_data = get_openrouter_models()
-        _model_cache["data"] = fresh_data
-        _model_cache["timestamp"] = now
-        return fresh_data
-    except Exception as e:
-        logger.error(f"Failed to refresh model cache: {e}")
-        return _model_cache["data"] if _model_cache["data"] else []
-
-def invalidate_model_cache():
-    _model_cache["data"] = None
-    _model_cache["timestamp"] = None
-
-@lru_cache(maxsize=1)
-def get_openrouter_models_cached():
-    return get_openrouter_models()
-
-def get_openrouter_models():
-    try:
-        client = create_openrouter_client()
-        models_page = client.models.list()
-        models = list(models_page)
-        
-        formatted_models = []
-        for model in models:
-            provider_info = {}
-            model_id = model.id
-            if '/' in model_id:
-                provider_id = model_id.split('/')[0]
-                provider_info = {
-                    'id': provider_id,
-                    'name': provider_id.title()
-                }
-            else:
-                provider_info = {
-                    'id': 'unknown',
-                    'name': 'Unknown'
-                }
-            
-            pricing_info = {}
-            if hasattr(model, 'pricing') and model.pricing:
-                if hasattr(model.pricing, 'prompt'):
-                    pricing_info['input'] = model.pricing.prompt
-                if hasattr(model.pricing, 'completion'):
-                    pricing_info['output'] = model.pricing.completion
-                if hasattr(model.pricing, 'image'):
-                    pricing_info['image'] = model.pricing.image
-                if hasattr(model.pricing, 'audio'):
-                    pricing_info['audio'] = model.pricing.audio
-            
-            features = []
-            if hasattr(model, 'supported_parameters') and model.supported_parameters:
-                features = list(model.supported_parameters)
-            
-            suggested = False
-            model_name = getattr(model, 'name', '').lower()
-            if any(keyword in model_name for keyword in ['gpt-4', 'claude', 'gemini', 'opus']):
-                suggested = True
-            
-            deprecated = False
-            
-            formatted_models.append({
-                "id": model.id,
-                "name": getattr(model, 'name', model.id),
-                "description": getattr(model, 'description', ''),
-                "context_length": getattr(model, 'context_length', None),
-                "pricing": pricing_info,
-                "architecture": getattr(model, 'architecture', {}),
-                "top_provider": provider_info,
-                "providers": [provider_info],
-                "per_request_limits": getattr(model, 'per_request_limits', {}),
-                "parameter_limits": {},
-                "features": features,
-                "suggested": suggested,
-                "deprecated": deprecated,
-                "supported_parameters": getattr(model, 'supported_parameters', [])
-            })
-        
-        return formatted_models
-        
-    except Exception as e:
-        logger.error(f"Failed to fetch models from OpenRouter: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to fetch models: {str(e)}")
-
-def make_openrouter_request_openai(messages, model="deepseek/deepseek-r1-0528", **kwargs):
-    try:
-        client = create_openrouter_client()
-        
-        completion_params = {
-            "model": model,
-            "messages": messages,
-            "extra_headers": {
-                "HTTP-Referer": Config.OPENROUTER_SITE_URL,
-                "X-Title": Config.OPENROUTER_SITE_NAME,
-            },
-            "extra_body": {}
-        }
-        
-        for key, value in kwargs.items():
-            if value is not None:
-                if isinstance(value, (int, float)) and value == 0:
-                    completion_params[key] = value
-                elif value != 0:
-                    completion_params[key] = value
-        
-        completion = client.chat.completions.create(**completion_params)
-        return completion
-        
-    except Exception as e:
-        logger.error(f"OpenRouter request failed: {e}")
-        raise HTTPException(status_code=500, detail=f"OpenRouter request failed: {str(e)}")
-
-def process_openrouter_response(completion, method="openai"):
-    try:
-        if method == "openai":
-            if not completion.choices or len(completion.choices) == 0:
-                raise HTTPException(status_code=500, detail="No response choices from model")
-            
-            chat_response = completion.choices[0].message.content
-            usage = completion.usage
-            total_tokens = usage.total_tokens if usage else 0
-            prompt_tokens = usage.prompt_tokens if usage else 0
-            completion_tokens = usage.completion_tokens if usage else 0
-            model = completion.model
-            
-        else:
-            if not completion.get("choices") or len(completion["choices"]) == 0:
-                raise HTTPException(status_code=500, detail="No response choices from model")
-            
-            chat_response = completion["choices"][0]["message"]["content"]
-            usage = completion.get("usage", {})
-            total_tokens = usage.get("total_tokens", 0)
-            prompt_tokens = usage.get("prompt_tokens", 0)
-            completion_tokens = usage.get("completion_tokens", 0)
-            model = completion.get("model", "unknown")
-        
-        if not chat_response or chat_response.strip() == "":
-            chat_response = "[No response generated]"
-        
-        return {
-            "content": chat_response,
-            "usage": {
-                "total_tokens": total_tokens,
-                "prompt_tokens": prompt_tokens,
-                "completion_tokens": completion_tokens
-            },
-            "model": model
-        }
-        
-    except Exception as e:
-        logger.error(f"Failed to process OpenRouter response: {e}")
-        raise HTTPException(status_code=500, detail="Failed to process OpenRouter response")
-
+# Initialize configuration
 Config.validate()
 
 try:
+    from supabase_config import init_db
     init_db()
 except Exception as e:
     logger.error(f"Failed to initialize application: {e}")
     raise
 
-app = FastAPI(
-    title="OpenRouter AI Gateway",
-    description="A gateway service for OpenRouter AI with user management and credit system",
-    version="2.0.0",
-    openapi_tags=[
-        {"name": "authentication", "description": "User authentication and balance operations"},
-        {"name": "admin", "description": "Admin operations for user management"},
-        {"name": "chat", "description": "Chat completion operations with OpenRouter"}
-    ]
-)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
+# Health check endpoint
 @app.get("/health")
 async def health_check():
     try:
@@ -310,9 +254,10 @@ async def health_check():
         
         openrouter_status = "unknown"
         try:
-            client = create_openrouter_client()
-            models = client.models.list()
-            openrouter_status = "connected" if models else "error"
+            client = get_openrouter_client()
+            # Test connection by trying to get models
+            test_models = get_cached_models()
+            openrouter_status = "connected" if test_models else "error"
         except:
             openrouter_status = "unavailable"
         
@@ -332,249 +277,81 @@ async def health_check():
             "error": str(e)
         }
 
-@app.get("/models/simple", tags=["chat"])
-async def get_models_simple(
-    category: Optional[str] = Query(None, description="Filter by category (chat, code, image, etc.)"),
-    provider: Optional[str] = Query(None, description="Filter by provider (openai, anthropic, etc.)"),
-    suggested_only: bool = Query(False, description="Show only suggested models"),
-    include_deprecated: bool = Query(False, description="Include deprecated models"),
-    limit: int = Query(50, description="Maximum number of models to return", ge=1, le=200)
-):
+# Models endpoints
+@app.get("/models", tags=["models"])
+async def get_models_endpoint():
+    """Get available AI models from OpenRouter"""
     try:
         models = get_cached_models()
-        
-        filtered_models = []
-        for model in models:
-            if model.get("deprecated", False) and not include_deprecated:
-                continue
-                
-            if suggested_only and not model.get("suggested", False):
-                continue
-                
-            if category:
-                model_name = model.get("name", "").lower()
-                model_desc = model.get("description", "").lower()
-                if category.lower() not in model_name and category.lower() not in model_desc:
-                    continue
-                    
-            if provider:
-                provider_found = False
-                top_provider_id = model.get("top_provider", {}).get("id", "").lower()
-                if provider.lower() in top_provider_id:
-                    provider_found = True
-                if not provider_found and model.get("providers"):
-                    for p in model["providers"]:
-                        if provider.lower() in p.get("id", "").lower():
-                            provider_found = True
-                            break
-                if not provider_found:
-                    continue
-            
-            enhanced_model = {
-                "id": model["id"],
-                "name": model.get("name", model["id"]),
-                "description": model.get("description", ""),
-                "provider": {
-                    "id": model.get("top_provider", {}).get("id", "unknown"),
-                    "name": model.get("top_provider", {}).get("name", "Unknown")
-                },
-                "pricing": {
-                    "input": model.get("pricing", {}).get("input", "N/A"),
-                    "output": model.get("pricing", {}).get("output", "N/A"),
-                    "unit": "per 1K tokens"
-                },
-                "capabilities": {
-                    "context_length": model.get("context_length"),
-                    "features": model.get("features", []),
-                    "architecture": model.get("architecture", {})
-                },
-                "limits": {
-                    "per_request": model.get("per_request_limits", {}),
-                    "parameters": model.get("parameter_limits", {})
-                },
-                "metadata": {
-                    "suggested": model.get("suggested", False),
-                    "deprecated": model.get("deprecated", False)
-                },
-                "recommendations": _get_model_recommendations(model)
-            }
-            
-            filtered_models.append(enhanced_model)
-        
-        filtered_models.sort(key=lambda x: (not x["metadata"]["suggested"], x["name"].lower()))
-        
-        if limit < len(filtered_models):
-            filtered_models = filtered_models[:limit]
-        
-        total_models = len(filtered_models)
-        suggested_count = sum(1 for m in filtered_models if m["metadata"]["suggested"])
-        providers = list(set(m["provider"]["id"] for m in filtered_models))
+        if not models:
+            raise HTTPException(status_code=500, detail="Failed to retrieve models")
         
         return {
             "status": "success",
-            "timestamp": datetime.utcnow().isoformat(),
-            "summary": {
-                "total_models": total_models,
-                "suggested_models": suggested_count,
-                "providers": providers,
-                "filters_applied": {
-                    "category": category,
-                    "provider": provider,
-                    "suggested_only": suggested_only,
-                    "include_deprecated": include_deprecated,
-                    "limit": limit
-                }
-            },
-            "models": filtered_models,
-            "source": "OpenRouter",
-            "cache_info": "Models are cached for 5 minutes for better performance"
+            "total_models": len(models),
+            "models": models,
+            "timestamp": datetime.utcnow().isoformat()
         }
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error fetching enhanced models: {e}")
+        logger.error(f"Error getting models: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
-@app.get("/models/providers", tags=["chat"])
-async def get_available_providers():
+@app.get("/models/providers", tags=["models"])
+async def get_models_providers():
+    """Get provider statistics for available models"""
     try:
         models = get_cached_models()
+        if not models:
+            raise HTTPException(status_code=500, detail="Failed to retrieve models")
         
-        providers_map = {}
+        provider_stats = {}
+        suggested_count = 0
+        pricing_available = 0
         
         for model in models:
-            model_id = model.get("id", "")
-            if '/' in model_id:
-                provider_id = model_id.split('/')[0]
-                
-                if provider_id not in providers_map:
-                    providers_map[provider_id] = {
-                        "id": provider_id,
-                        "name": provider_id.title(),
-                        "model_count": 0,
-                        "suggested_models": 0,
-                        "pricing_available": False,
-                        "total_context_length": 0,
-                        "avg_context_length": 0
-                    }
-                
-                providers_map[provider_id]["model_count"] += 1
-                
-                if model.get("suggested", False):
-                    providers_map[provider_id]["suggested_models"] += 1
-                
-                pricing = model.get("pricing", {})
-                if pricing.get("input") or pricing.get("output"):
-                    providers_map[provider_id]["pricing_available"] = True
-                
-                context_length = model.get("context_length", 0)
-                if context_length:
-                    providers_map[provider_id]["total_context_length"] += context_length
-        
-        for provider_id, provider_data in providers_map.items():
-            if provider_data["model_count"] > 0:
-                provider_data["avg_context_length"] = provider_data["total_context_length"] // provider_data["model_count"]
-        
-        providers_list = list(providers_map.values())
-        providers_list.sort(key=lambda x: x["model_count"], reverse=True)
+            # Count suggested models
+            if model.get('suggested', False):
+                suggested_count += 1
+            
+            # Count models with pricing
+            if model.get('pricing') and any(model['pricing'].values()):
+                pricing_available += 1
+            
+            # Count by provider
+            provider_id = model.get('top_provider', {}).get('id', 'unknown')
+            if provider_id not in provider_stats:
+                provider_stats[provider_id] = {
+                    'name': model.get('top_provider', {}).get('name', provider_id.title()),
+                    'model_count': 0,
+                    'suggested_models': 0
+                }
+            
+            provider_stats[provider_id]['model_count'] += 1
+            if model.get('suggested', False):
+                provider_stats[provider_id]['suggested_models'] += 1
         
         return {
             "status": "success",
-            "timestamp": datetime.utcnow().isoformat(),
-            "total_providers": len(providers_list),
-            "providers": providers_list,
-            "source": "OpenRouter"
+            "provider_statistics": {
+                "total_providers": len(provider_stats),
+                "total_models": len(models),
+                "suggested_models": suggested_count,
+                "pricing_available": pricing_available,
+                "providers": provider_stats
+            },
+            "timestamp": datetime.utcnow().isoformat()
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error fetching providers: {e}")
+        logger.error(f"Error getting provider statistics: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
-def _get_model_recommendations(model: Dict[str, Any]) -> Dict[str, Any]:
-    recommendations = {
-        "best_for": [],
-        "performance": "unknown",
-        "cost_efficiency": "unknown"
-    }
-    
-    model_name = model.get("name", "").lower()
-    model_id = model.get("id", "").lower()
-    features = model.get("features", [])
-    pricing = model.get("pricing", {})
-    architecture = model.get("architecture", {})
-    
-    if any(keyword in model_name for keyword in ["gpt", "claude", "gemini"]):
-        recommendations["best_for"].append("General conversation")
-    
-    if any(keyword in model_name for keyword in ["code", "coder", "deepcoder"]):
-        recommendations["best_for"].append("Code generation")
-    
-    if any(keyword in model_name for keyword in ["opus", "ultra", "pro"]):
-        recommendations["best_for"].append("Advanced reasoning")
-    
-    if any(keyword in model_name for keyword in ["vision", "image"]):
-        recommendations["best_for"].append("Image analysis")
-    
-    if "function_calling" in features or "tools" in features:
-        recommendations["best_for"].append("Function calling")
-    
-    if "structured_outputs" in features:
-        recommendations["best_for"].append("Structured output")
-    
-    if "reasoning" in features:
-        recommendations["best_for"].append("Reasoning tasks")
-    
-    input_modalities = architecture.get("input_modalities", [])
-    if "image" in input_modalities:
-        recommendations["best_for"].append("Multimodal tasks")
-    
-    context_length = model.get("context_length", 0)
-    if context_length:
-        if context_length >= 100000:
-            recommendations["performance"] = "high"
-        elif context_length >= 32000:
-            recommendations["performance"] = "medium"
-        else:
-            recommendations["performance"] = "standard"
-    
-    input_cost = pricing.get("input", 0)
-    output_cost = pricing.get("output", 0)
-    
-    if input_cost and output_cost:
-        try:
-            input_cost_float = float(input_cost)
-            output_cost_float = float(output_cost)
-            total_cost = input_cost_float + output_cost_float
-            
-            if total_cost <= 0.0001:
-                recommendations["cost_efficiency"] = "very_low"
-            elif total_cost <= 0.001:
-                recommendations["cost_efficiency"] = "low"
-            elif total_cost <= 0.01:
-                recommendations["cost_efficiency"] = "medium"
-            else:
-                recommendations["cost_efficiency"] = "high"
-        except (ValueError, TypeError):
-            recommendations["cost_efficiency"] = "unknown"
-    
-    provider = model.get("top_provider", {}).get("id", "").lower()
-    if provider == "openai":
-        if "gpt-4" in model_id:
-            recommendations["best_for"].append("High-quality text generation")
-        elif "gpt-3.5" in model_id:
-            recommendations["best_for"].append("Fast responses")
-    elif provider == "anthropic":
-        if "claude" in model_id:
-            recommendations["best_for"].append("Safety-focused tasks")
-    elif provider == "google":
-        if "gemini" in model_id:
-            recommendations["best_for"].append("Multimodal tasks")
-    
-    recommendations["best_for"] = list(set(recommendations["best_for"]))
-    
-    return recommendations
-
+# User endpoints
 @app.get("/user/balance", tags=["authentication"])
 async def get_user_balance(api_key: str = Depends(get_api_key)):
     try:
@@ -750,8 +527,6 @@ async def update_user_profile_endpoint(
         logger.error(f"Error updating user profile: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
-
-
 @app.delete("/user/account", response_model=DeleteAccountResponse, tags=["authentication"])
 async def delete_user_account_endpoint(
     confirmation: DeleteAccountRequest,
@@ -795,7 +570,7 @@ async def create_user_api_key(
     request: CreateApiKeyRequest,
     api_key: str = Depends(get_api_key)
 ):
-    """Create a new API key or change primary key for the user"""
+    """Create a new API key for the user"""
     try:
         user = get_user(api_key)
         if not user:
@@ -1027,73 +802,7 @@ async def get_user_api_key_usage(api_key: str = Depends(get_api_key)):
         logger.error(f"Error getting API key usage: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
-@app.get("/", tags=["authentication"])
-async def root():
-    return {
-        "name": "OpenRouter AI Gateway",
-        "version": "2.0.0",
-        "description": "A production-ready API gateway for OpenRouter with credit management and monitoring",
-        "status": "active",
-        "endpoints": {
-            "public": [
-                "GET /health - Health check with system status",
-                "GET /models/simple - Get available AI models with enhanced metrics",
-                "GET /models/providers - Get list of available inference providers",
-                "GET / - API information (this endpoint)"
-            ],
-            "admin": [
-                "POST /admin/create_user - Create new user with API key",
-                "POST /admin/add_credits - Add credits to existing user",
-                "GET /admin/balance - Get all user balances and API keys",
-                "GET /admin/monitor - System-wide monitoring dashboard",
-                "POST /admin/limit - Set rate limits for users",
-                "POST /admin/refresh-models - Force refresh model cache",
-                "GET /admin/cache-status - Get cache status information"
-            ],
-            "protected": [
-                "GET /user/balance - Get current user balance",
-                "GET /user/monitor - User-specific usage metrics",
-                "GET /user/limit - Get current user rate limits",
-                "GET /user/profile - Get user profile information",
-                "PUT /user/profile - Update user profile/settings",
-                "POST /user/change-api-key - Generate new API key",
-                "DELETE /user/account - Delete user account",
-                "POST /user/api-keys - Create new API key",
-                "GET /user/api-keys - List all user API keys",
-                "DELETE /user/api-keys/{key_id} - Delete specific API key",
-                "GET /user/api-keys/usage - Get API key usage statistics",
-                "POST /v1/chat/completions - Chat completion with OpenRouter"
-            ]
-        },
-        "features": [
-            "Multi-model AI access via OpenRouter",
-            "Enhanced model information with pricing and capabilities",
-            "Available providers listing with model counts",
-            "Smart caching for improved performance",
-            "Advanced filtering and search options",
-            "Credit-based usage tracking",
-            "Real-time rate limiting",
-            "Comprehensive monitoring and analytics",
-            "Secure API key authentication",
-            "Production-ready error handling"
-        ],
-        "model_endpoint_features": [
-            "Pricing information (input/output costs)",
-            "Context length and capabilities",
-            "Provider information with multiple providers per model",
-            "Performance metrics",
-            "Usage recommendations",
-            "Filtering by category, provider, and features",
-            "Caching for fast response times",
-            "Provider-specific pricing when available"
-        ],
-        "documentation": {
-            "swagger_ui": "/docs",
-            "redoc": "/redoc",
-            "openapi_spec": "/openapi.json"
-        }
-    }
-
+# Authentication endpoints
 @app.post("/auth/register", response_model=UserRegistrationResponse, tags=["authentication"])
 async def user_register(request: UserRegistrationRequest):
     """Register a new user with unified API key system"""
@@ -1136,6 +845,7 @@ async def user_register(request: UserRegistrationRequest):
         logger.error(f"User registration failed: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
+# Admin endpoints
 @app.post("/admin/add_credits", tags=["admin"])
 async def admin_add_credits(req: AddCreditsRequest):
     try:
@@ -1249,6 +959,7 @@ async def admin_set_rate_limit(req: SetRateLimitRequest):
         logger.error(f"Error setting rate limits: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
+# Chat completion endpoint
 @app.post("/v1/chat/completions", tags=["chat"])
 async def proxy_chat(req: ProxyRequest, api_key: str = Depends(get_api_key)):
     try:
@@ -1344,14 +1055,7 @@ async def proxy_chat(req: ProxyRequest, api_key: str = Depends(get_api_key)):
         logger.error(f"Unexpected error in chat completion: {e}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    logger.error(f"Unhandled exception: {exc}")
-    return JSONResponse(
-        status_code=500,
-        content={"detail": "Internal server error"}
-    )
-
+# Admin cache management endpoints
 @app.post("/admin/refresh-models", tags=["admin"])
 async def admin_refresh_models():
     try:
@@ -1361,7 +1065,7 @@ async def admin_refresh_models():
         return {
             "status": "success",
             "message": "Model cache refreshed successfully",
-            "total_models": len(models),
+            "total_models": len(models) if models else 0,
             "timestamp": datetime.utcnow().isoformat()
         }
         
@@ -1392,7 +1096,81 @@ async def admin_cache_status():
         logger.error(f"Failed to get cache status: {e}")
         raise HTTPException(status_code=500, detail="Failed to get cache status")
 
+# Root endpoint
+@app.get("/", tags=["authentication"])
+async def root():
+    return {
+        "name": "OpenRouter AI Gateway",
+        "version": "2.0.0",
+        "description": "A production-ready API gateway for OpenRouter with credit management and monitoring",
+        "status": "active",
+        "endpoints": {
+            "public": [
+                "GET /health - Health check with system status",
+                "GET /models - Get available AI models from OpenRouter",
+                "GET /models/providers - Get provider statistics for available models",
+                "GET / - API information (this endpoint)"
+            ],
+            "admin": [
+                "POST /admin/add_credits - Add credits to existing user",
+                "GET /admin/balance - Get all user balances and API keys",
+                "GET /admin/monitor - System-wide monitoring dashboard",
+                "POST /admin/limit - Set rate limits for users",
+                "POST /admin/refresh-models - Force refresh model cache",
+                "GET /admin/cache-status - Get cache status information"
+            ],
+            "protected": [
+                "GET /user/balance - Get current user balance",
+                "GET /user/monitor - User-specific usage metrics",
+                "GET /user/limit - Get current user rate limits",
+                "GET /user/profile - Get user profile information",
+                "PUT /user/profile - Update user profile/settings",
+                "DELETE /user/account - Delete user account",
+                "POST /user/api-keys - Create new API key",
+                "GET /user/api-keys - List all user API keys",
+                "PUT /user/api-keys/{key_id} - Update specific API key",
+                "DELETE /user/api-keys/{key_id} - Delete specific API key",
+                "GET /user/api-keys/usage - Get API key usage statistics",
+                "POST /v1/chat/completions - Chat completion with OpenRouter"
+            ]
+        },
+        "features": [
+            "Multi-model AI access via OpenRouter",
+            "Enhanced model information with pricing and capabilities",
+            "Available providers listing with model counts",
+            "Smart caching for improved performance",
+            "Advanced filtering and search options",
+            "Credit-based usage tracking",
+            "Real-time rate limiting",
+            "Comprehensive monitoring and analytics",
+            "Secure API key authentication",
+            "Production-ready error handling"
+        ],
+        "model_endpoint_features": [
+            "Pricing information (input/output costs)",
+            "Context length and capabilities",
+            "Provider information with multiple providers per model",
+            "Performance metrics",
+            "Usage recommendations",
+            "Filtering by category, provider, and features",
+            "Caching for fast response times",
+            "Provider-specific pricing when available"
+        ],
+        "documentation": {
+            "swagger_ui": "/docs",
+            "redoc": "/redoc",
+            "openapi_spec": "/openapi.json"
+        }
+    }
 
+# Exception handler
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Unhandled exception: {exc}")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error"}
+    )
 
 # Vercel deployment entry point
 if __name__ == "__main__":

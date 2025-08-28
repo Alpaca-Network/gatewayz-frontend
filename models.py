@@ -4,12 +4,15 @@ from datetime import datetime
 from enum import Enum
 
 
-
-
 class AuthMethod(str, Enum):
     EMAIL = "email"
     WALLET = "wallet"
     GOOGLE = "google"
+
+
+class PaymentMethod(str, Enum):
+    MASTERCARD = "mastercard"
+    PACA_TOKEN = "paca_token"
 
 
 class SubscriptionStatus(str, Enum):
@@ -43,7 +46,8 @@ class UserRegistrationResponse(BaseModel):
     timestamp: datetime
 
 
-
+class SubscriptionPlan(BaseModel):
+    id: int
     name: str
     description: str
     price_usd: float
@@ -91,12 +95,25 @@ class CreditPurchaseResponse(BaseModel):
     timestamp: datetime
 
 
-
-
-
 class AddCreditsRequest(BaseModel):
     api_key: str
     credits: int
+
+
+class CreateUserRequest(BaseModel):
+    username: str
+    email: EmailStr
+    initial_credits: int = 1000
+
+
+class CreateUserResponse(BaseModel):
+    user_id: int
+    username: str
+    email: str
+    api_key: str
+    credits: int
+    message: str
+    timestamp: datetime
 
 
 class Message(BaseModel):
@@ -207,9 +224,6 @@ class UserProfileResponse(BaseModel):
     updated_at: Optional[str]
 
 
-
-
-
 class DeleteAccountRequest(BaseModel):
     confirmation: str
 
@@ -286,6 +300,19 @@ class UpdateApiKeyResponse(BaseModel):
     message: str
     updated_key: ApiKeyResponse
     timestamp: datetime
+
+
+class ApiKeyUsageResponse(BaseModel):
+    api_key: str
+    key_name: str
+    total_requests: int
+    total_tokens: int
+    total_cost: float
+    requests_today: int
+    tokens_today: int
+    cost_today: float
+    last_request_time: Optional[str] = None
+    is_active: bool
 
 
 
