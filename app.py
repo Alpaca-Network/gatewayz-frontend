@@ -15,12 +15,12 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from openai import OpenAI
 
 from db import (
-    add_credits, create_user, create_enhanced_user, deduct_credits, get_user, get_user_count, 
+    create_enhanced_user, deduct_credits, get_user, get_user_count, 
     get_all_users, record_usage, get_user_usage_metrics, get_admin_monitor_data, 
     get_user_rate_limits, set_user_rate_limits, check_rate_limit, update_rate_limit_usage,
-    get_user_profile, update_user_profile, change_user_api_key, delete_user_account,
-    create_api_key, get_user_api_keys, delete_api_key, validate_api_key, increment_api_key_usage, get_api_key_usage_stats,
-    add_credits_to_user
+    get_user_profile, update_user_profile, delete_user_account,
+    create_api_key, get_user_api_keys, delete_api_key, increment_api_key_usage, get_api_key_usage_stats,
+    add_credits_to_user, get_api_key_by_id, update_api_key, validate_api_key_permissions
 )
 from supabase_config import init_db, get_supabase_client, test_connection
 from config import Config
@@ -29,10 +29,10 @@ from models import (
     SetRateLimitRequest, RateLimitResponse, UserMonitorResponse, AdminMonitorResponse,
     UserProfileResponse, UserProfileUpdate, DeleteAccountRequest, DeleteAccountResponse,
     CreateApiKeyRequest, ApiKeyResponse, ListApiKeysResponse, DeleteApiKeyRequest, DeleteApiKeyResponse, ApiKeyUsageResponse,
-    UserRegistrationRequest, UserRegistrationResponse, AuthMethod
+    UserRegistrationRequest, UserRegistrationResponse, AuthMethod, UpdateApiKeyRequest, UpdateApiKeyResponse
 )
 
-logging.basicConfig(level=logging.WARNING)
+logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 
 security = HTTPBearer()
@@ -801,21 +801,11 @@ async def create_user_api_key(
         if not user:
             raise HTTPException(status_code=401, detail="Invalid API key")
         
-        # Handle different actions
-        if request.action == 'change_primary':
-            # Change primary API key
-            new_api_key = change_user_api_key(api_key)
-            return {
-                "status": "success",
-                "message": "Primary API key changed successfully. Please update your applications with the new key.",
-                "old_api_key": f"{api_key[:10]}...",
-                "new_api_key": new_api_key,
-                "action": "change_primary",
-                "timestamp": datetime.utcnow()
-            }
+        # Validate permissions - check if user can create keys
+        if not validate_api_key_permissions(api_key, "write", "api_keys"):
+            raise HTTPException(status_code=403, detail="Insufficient permissions to create API keys")
         
-        elif request.action == 'create':
-            # Create new API key
+        if request.action == 'create':
             # Validate input
             if request.expiration_days is not None and request.expiration_days <= 0:
                 raise HTTPException(status_code=400, detail="Expiration days must be positive")
@@ -829,35 +819,41 @@ async def create_user_api_key(
                 raise HTTPException(status_code=400, detail=f"Invalid environment tag. Must be one of: {valid_environments}")
             
             # Create new API key
-            new_api_key = create_api_key(
-                user_id=user["id"],
-                key_name=request.key_name,
-                environment_tag=request.environment_tag,
-                scope_permissions=request.scope_permissions,
-                expiration_days=request.expiration_days,
-                max_requests=request.max_requests,
-                ip_allowlist=request.ip_allowlist,
-                domain_referrers=request.domain_referrers
-            )
+            try:
+                new_api_key = create_api_key(
+                    user_id=user["id"],
+                    key_name=request.key_name,
+                    environment_tag=request.environment_tag,
+                    scope_permissions=request.scope_permissions,
+                    expiration_days=request.expiration_days,
+                    max_requests=request.max_requests,
+                    ip_allowlist=request.ip_allowlist,
+                    domain_referrers=request.domain_referrers
+                )
+            except ValueError as ve:
+                # Handle specific validation errors
+                error_message = str(ve)
+                if "already exists" in error_message:
+                    return JSONResponse(
+                        status_code=400,
+                        content={"detail": error_message}
+                    )
+                else:
+                    return JSONResponse(
+                        status_code=400,
+                        content={"detail": f"Validation error: {error_message}"}
+                    )
             
-            # Get the created key details
-            user_keys = get_user_api_keys(user["id"])
-            
-            if not user_keys:
-                logger.error(f"No API keys found for user {user['id']} after creation")
-                raise HTTPException(status_code=500, detail="Failed to retrieve created API key - no keys found")
-            
-            created_key = next((key for key in user_keys if key["api_key"] == new_api_key), None)
-            
-            if not created_key:
-                logger.error(f"Created API key {new_api_key} not found in user keys list")
-                logger.error(f"Available keys: {[key.get('api_key', 'unknown') for key in user_keys]}")
-                raise HTTPException(status_code=500, detail="Failed to retrieve created API key - key mismatch")
-            
-            return created_key
+            return {
+                "status": "success",
+                "message": "API key created successfully",
+                "api_key": new_api_key,
+                "key_name": request.key_name,
+                "environment_tag": request.environment_tag
+            }
         
         else:
-            raise HTTPException(status_code=400, detail="Invalid action. Must be 'create' or 'change_primary'")
+            raise HTTPException(status_code=400, detail="Invalid action. Must be 'create'")
         
     except HTTPException:
         raise
@@ -865,28 +861,106 @@ async def create_user_api_key(
         logger.error(f"Error creating/changing API key: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
-@app.get("/user/api-keys", tags=["authentication"])
-async def list_user_api_keys(api_key: str = Depends(get_api_key)):
-    """Get all API keys for the user"""
+@app.put("/user/api-keys/{key_id}", tags=["authentication"])
+async def update_user_api_key_endpoint(
+    key_id: int,
+    request: UpdateApiKeyRequest,
+    api_key: str = Depends(get_api_key)
+):
+    """Update an existing API key for the user"""
     try:
         user = get_user(api_key)
         if not user:
             raise HTTPException(status_code=401, detail="Invalid API key")
         
-        user_keys = get_user_api_keys(user["id"])
+        # Validate permissions - check if user can update keys
+        if not validate_api_key_permissions(api_key, "write", "api_keys"):
+            raise HTTPException(status_code=403, detail="Insufficient permissions to update API keys")
         
-        # Calculate statistics
-        total_keys = len(user_keys)
-        active_keys = sum(1 for key in user_keys if not key.get("is_expired", False))
-        expired_keys = total_keys - active_keys
+        # Verify user owns the key
+        key_to_update = get_api_key_by_id(key_id, user["id"])
         
-        return {
-            "status": "success",
-            "total_keys": total_keys,
-            "active_keys": active_keys,
-            "expired_keys": expired_keys,
-            "keys": user_keys
-        }
+        if not key_to_update:
+            raise HTTPException(status_code=404, detail="API key not found")
+        
+        # Prepare updates (only include fields that were provided)
+        updates = {}
+        if request.key_name is not None:
+            updates['key_name'] = request.key_name
+        if request.scope_permissions is not None:
+            updates['scope_permissions'] = request.scope_permissions
+        if request.expiration_days is not None:
+            updates['expiration_days'] = request.expiration_days
+        if request.max_requests is not None:
+            updates['max_requests'] = request.max_requests
+        if request.ip_allowlist is not None:
+            updates['ip_allowlist'] = request.ip_allowlist
+        if request.domain_referrers is not None:
+            updates['domain_referrers'] = request.domain_referrers
+        if request.is_active is not None:
+            updates['is_active'] = request.is_active
+        
+        if not updates:
+            raise HTTPException(status_code=400, detail="No valid fields to update")
+        
+        # Update the key in the database
+        try:
+            success = update_api_key(api_key, user["id"], updates)
+            
+            if not success:
+                raise HTTPException(status_code=500, detail="Failed to update API key")
+        except ValueError as ve:
+            # Handle specific validation errors
+            error_message = str(ve)
+            if "already exists" in error_message:
+                return JSONResponse(
+                    status_code=400,
+                    content={"detail": error_message}
+                )
+            else:
+                return JSONResponse(
+                    status_code=400,
+                    content={"detail": f"Validation error: {error_message}"}
+                )
+        
+        # Get the updated key details
+        updated_key = get_api_key_by_id(key_id, user["id"])
+        
+        if not updated_key:
+            raise HTTPException(status_code=500, detail="Failed to retrieve updated key details")
+        
+        return UpdateApiKeyResponse(
+            status="success",
+            message="API key updated successfully",
+            updated_key=ApiKeyResponse(**updated_key),
+            timestamp=datetime.utcnow()
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating API key: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.get("/user/api-keys", tags=["authentication"])
+async def list_user_api_keys(api_key: str = Depends(get_api_key)):
+    """Get all API keys for the authenticated user"""
+    try:
+        user = get_user(api_key)
+        if not user:
+            raise HTTPException(status_code=401, detail="Invalid API key")
+        
+        # Validate permissions - check if user can read their keys
+        if not validate_api_key_permissions(api_key, "read", "api_keys"):
+            raise HTTPException(status_code=403, detail="Insufficient permissions to view API keys")
+        
+        keys = get_user_api_keys(user["id"])
+        
+        return ListApiKeysResponse(
+            status="success",
+            total_keys=len(keys),
+            keys=keys
+        )
         
     except HTTPException:
         raise
@@ -923,7 +997,7 @@ async def delete_user_api_key(
             "status": "success",
             "message": "API key deleted successfully",
             "deleted_key_id": key_id,
-            "timestamp": datetime.utcnow()
+            "timestamp": datetime.utcnow().isoformat()
         }
         
     except HTTPException:
@@ -940,7 +1014,7 @@ async def get_user_api_key_usage(api_key: str = Depends(get_api_key)):
         if not user:
             raise HTTPException(status_code=401, detail="Invalid API key")
         
-        usage_stats = get_api_key_usage_stats(user["id"])
+        usage_stats = get_api_key_usage_stats(api_key)
         
         if usage_stats is None:
             raise HTTPException(status_code=500, detail="Failed to retrieve usage statistics")
@@ -1031,20 +1105,11 @@ async def user_register(request: UserRegistrationRequest):
         if request.environment_tag not in ['test', 'staging', 'live', 'development']:
             raise HTTPException(status_code=400, detail="Invalid environment tag")
         
-        # Validate wallet address if wallet auth is selected
-        if request.auth_method == AuthMethod.WALLET:
-            if not request.wallet_address:
-                raise HTTPException(status_code=400, detail="Wallet address required for wallet authentication")
-            if not request.wallet_type:
-                raise HTTPException(status_code=400, detail="Wallet type required for wallet authentication")
-        
         # Create user with enhanced fields
         user_data = create_enhanced_user(
             username=request.username,
             email=request.email,
             auth_method=request.auth_method,
-            wallet_address=request.wallet_address,
-            wallet_type=request.wallet_type,
             credits=request.initial_credits
         )
         
@@ -1060,7 +1125,6 @@ async def user_register(request: UserRegistrationRequest):
                 "write": ["chat", "completions", "profile_update"]
             },
             auth_method=request.auth_method,
-            wallet_address=request.wallet_address,
             subscription_status="trial",
             message="User registered successfully with primary API key",
             timestamp=datetime.utcnow()
@@ -1328,46 +1392,7 @@ async def admin_cache_status():
         logger.error(f"Failed to get cache status: {e}")
         raise HTTPException(status_code=500, detail="Failed to get cache status")
 
-@app.get("/debug/env", tags=["debug"])
-async def debug_environment():
-    try:
-        env_status = {
-            "SUPABASE_URL": bool(Config.SUPABASE_URL),
-            "SUPABASE_KEY": bool(Config.SUPABASE_KEY),
-            "OPENROUTER_API_KEY": bool(Config.OPENROUTER_API_KEY),
-            "OPENROUTER_SITE_URL": Config.OPENROUTER_SITE_URL,
-            "OPENROUTER_SITE_NAME": Config.OPENROUTER_SITE_NAME
-        }
-        
-        db_status = "unknown"
-        try:
-            test_connection()
-            db_status = "connected"
-        except Exception as e:
-            db_status = f"failed: {str(e)}"
-        
-        table_status = "unknown"
-        try:
-            client = get_supabase_client()
-            result = client.table('users').select('*').limit(1).execute()
-            table_status = f"accessible (found {len(result.data)} records)"
-        except Exception as e:
-            table_status = f"failed: {str(e)}"
-        
-        return {
-            "status": "debug_info",
-            "timestamp": datetime.utcnow().isoformat(),
-            "environment_variables": env_status,
-            "database_connection": db_status,
-            "users_table": table_status
-        }
-        
-    except Exception as e:
-        return {
-            "status": "error",
-            "error": str(e),
-            "timestamp": datetime.utcnow().isoformat()
-        }
+
 
 # Vercel deployment entry point
 if __name__ == "__main__":

@@ -7,48 +7,9 @@ import secrets
 
 logger = logging.getLogger(__name__)
 
-def create_user(username: str, email: str, credits: int = 1000) -> Dict[str, Any]:
-    """Create a new user with unified API key system"""
-    try:
-        client = get_supabase_client()
-        
-        # Create user account
-        user_result = client.table('users').insert({
-            'username': username,
-            'email': email,
-            'credits': credits,
-            'is_active': True,
-            'registration_date': datetime.utcnow().isoformat()
-        }).execute()
-        
-        if not user_result.data:
-            raise ValueError("Failed to create user account")
-        
-        user = user_result.data[0]
-        user_id = user['id']
-        
-        # Generate primary API key
-        primary_key = create_api_key(
-            user_id=user_id,
-            key_name='Primary Key',
-            environment_tag='live',
-            is_primary=True
-        )
-        
-        # Return user info with primary key
-        return {
-            'user_id': user_id,
-            'username': username,
-            'email': email,
-            'credits': credits,
-            'primary_api_key': primary_key
-        }
-        
-    except Exception as e:
-        logger.error(f"Failed to create user: {e}")
-        raise RuntimeError(f"Failed to create user: {e}")
 
-def create_enhanced_user(username: str, email: str, auth_method: str, wallet_address: Optional[str], wallet_type: Optional[str], credits: int = 1000) -> Dict[str, Any]:
+
+def create_enhanced_user(username: str, email: str, auth_method: str, credits: int = 1000) -> Dict[str, Any]:
     """Create a new user with enhanced authentication fields"""
     try:
         client = get_supabase_client()
@@ -65,10 +26,7 @@ def create_enhanced_user(username: str, email: str, auth_method: str, wallet_add
             'trial_expires_at': (datetime.utcnow() + timedelta(days=3)).isoformat()
         }
         
-        # Add wallet fields if provided
-        if wallet_address:
-            user_data['wallet_address'] = wallet_address
-            user_data['wallet_type'] = wallet_type
+
         
         # Create user account with a temporary API key (will be replaced)
         user_data['api_key'] = f"temp_{secrets.token_urlsafe(16)}"
@@ -260,12 +218,22 @@ def get_user_usage_metrics(api_key: str) -> Dict[str, Any]:
     try:
         client = get_supabase_client()
         
-        # Get user info
-        user_result = client.table('users').select('id, credits').eq('api_key', api_key).execute()
+        # Get user info from api_keys_new table first
+        key_result = client.table('api_keys_new').select('user_id').eq('api_key', api_key).execute()
+        if not key_result.data:
+            # Fallback to legacy users table
+            user_result = client.table('users').select('id, credits').eq('api_key', api_key).execute()
+            if not user_result.data:
+                return None
+            user_id = user_result.data[0]['id']
+        else:
+            user_id = key_result.data[0]['user_id']
+        
+        # Get user credits
+        user_result = client.table('users').select('credits').eq('id', user_id).execute()
         if not user_result.data:
             return None
         
-        user_id = user_result.data[0]['id']
         current_credits = user_result.data[0]['credits']
         
         # Use the database function to get usage metrics
@@ -759,133 +727,7 @@ def update_user_profile(api_key: str, profile_data: Dict[str, Any]) -> Dict[str,
         logger.error(f"Failed to update user profile: {e}")
         raise RuntimeError(f"Failed to update user profile: {e}")
 
-def change_user_api_key(old_api_key: str) -> str:
-    """Generate a new API key for user"""
-    try:
-        client = get_supabase_client()
-        
-        # Get current user
-        user = get_user(old_api_key)
-        if not user:
-            raise ValueError(f"User with API key {old_api_key} not found")
-        
-        # Check if this is a new API key (gw_ prefix)
-        is_new_key = old_api_key.startswith('gw_')
-        
-        if is_new_key:
-            # For new keys, we need to update the api_keys_new table
-            # First, get the current key record
-            key_record = client.table('api_keys_new').select('*').eq('api_key', old_api_key).execute()
-            
-            if not key_record.data:
-                raise ValueError(f"API key {old_api_key} not found in new system")
-            
-            # Generate new API key with same environment tag
-            current_key = key_record.data[0]
-            environment_tag = current_key.get('environment_tag', 'live')
-            
-            if environment_tag == 'test':
-                prefix = 'gw_test_'
-            elif environment_tag == 'staging':
-                prefix = 'gw_staging_'
-            elif environment_tag == 'development':
-                prefix = 'gw_dev_'
-            else:
-                prefix = 'gw_live_'
-            
-            # Generate random part (32 characters for security)
-            random_part = secrets.token_urlsafe(32)
-            new_api_key = prefix + random_part
-            
-            # Update the API key in api_keys_new table
-            result = client.table('api_keys_new').update({
-                'api_key': new_api_key,
-                'updated_at': datetime.utcnow().isoformat()
-            }).eq('api_key', old_api_key).execute()
-            
-            if not result.data:
-                raise ValueError(f"Failed to update API key")
-            
-            # Update rate limit configs with new API key ID
-            try:
-                client.table('rate_limit_configs').update({
-                    'api_key_id': result.data[0]['id']
-                }).eq('api_key_id', key_record.data[0]['id']).execute()
-            except Exception as e:
-                logger.warning(f"Failed to update rate limit configs: {e}")
-            
-            # Update usage records with new API key
-            try:
-                client.table('usage_records').update({
-                    'api_key': new_api_key
-                }).eq('api_key', old_api_key).execute()
-            except Exception as e:
-                logger.warning(f"Failed to update usage records: {e}")
-            
-            # Update rate limit usage with new API key
-            try:
-                client.table('rate_limit_usage').update({
-                    'api_key': new_api_key
-                }).eq('api_key', old_api_key).execute()
-            except Exception as e:
-                logger.warning(f"Failed to update rate limit usage: {e}")
-            
-            # Create audit log entry
-            try:
-                client.table('api_key_audit_logs').insert({
-                    'user_id': user['id'],
-                    'action': 'rotate',
-                    'api_key_id': result.data[0]['id'],
-                    'details': {
-                        'old_api_key': f"{old_api_key[:10]}...",
-                        'new_api_key': f"{new_api_key[:10]}...",
-                        'environment_tag': environment_tag,
-                        'rotation_date': datetime.utcnow().isoformat()
-                    },
-                    'timestamp': datetime.utcnow().isoformat()
-                }).execute()
-            except Exception as e:
-                logger.warning(f"Failed to create audit log for key rotation: {e}")
-            
-        else:
-            # Legacy key handling (mdlz_sk_ prefix)
-            # Calculate the length of the random part to maintain same total length
-            prefix_length = len("mdlz_sk_")
-            random_part_length = len(old_api_key) - prefix_length
-            
-            # Generate new API key with same length: mdlz_sk_ + random string of same length
-            new_api_key = "mdlz_sk_" + secrets.token_urlsafe(random_part_length)
-            
-            # Update user with new API key
-            result = client.table('users').update({
-                'api_key': new_api_key,
-                'updated_at': datetime.utcnow().isoformat()
-            }).eq('api_key', old_api_key).execute()
-            
-            if not result.data:
-                raise ValueError(f"Failed to update API key")
-            
-            # Update rate limits table with new API key
-            client.table('rate_limits').update({
-                'api_key': new_api_key,
-                'updated_at': datetime.utcnow().isoformat()
-            }).eq('api_key', old_api_key).execute()
-            
-            # Update usage records with new API key
-            client.table('usage_records').update({
-                'api_key': new_api_key
-            }).eq('api_key', old_api_key).execute()
-            
-            # Update rate limit usage with new API key
-            client.table('rate_limit_usage').update({
-                'api_key': new_api_key
-            }).eq('api_key', old_api_key).execute()
-        
-        return new_api_key
-        
-    except Exception as e:
-        logger.error(f"Failed to change API key: {e}")
-        raise RuntimeError(f"Failed to change API key: {e}")
+
 
 def get_user_profile(api_key: str) -> Dict[str, Any]:
     """Get user profile information"""
@@ -904,8 +746,7 @@ def get_user_profile(api_key: str) -> Dict[str, Any]:
             "username": user.get("username"),
             "email": user.get("email"),
             "auth_method": user.get("auth_method"),
-            "wallet_address": user.get("wallet_address"),
-            "wallet_type": user.get("wallet_type"),
+
             "subscription_status": user.get("subscription_status"),
             "trial_expires_at": user.get("trial_expires_at"),
             "is_active": user.get("is_active"),
@@ -944,10 +785,36 @@ def delete_user_account(api_key: str) -> bool:
         raise RuntimeError(f"Failed to delete user account: {e}")
 
 # API Key Management Functions
+def check_key_name_uniqueness(user_id: int, key_name: str, exclude_key_id: Optional[int] = None) -> bool:
+    """Check if a key name is unique within the user's scope"""
+    try:
+        client = get_supabase_client()
+        
+        # Build query to check for existing keys with same name
+        query = client.table('api_keys_new').select('id').eq('user_id', user_id).eq('key_name', key_name)
+        
+        # If we're editing an existing key, exclude it from the check
+        if exclude_key_id:
+            query = query.neq('id', exclude_key_id)
+        
+        result = query.execute()
+        
+        # If no results, the name is unique
+        return len(result.data) == 0
+        
+    except Exception as e:
+        logger.error(f"Error checking key name uniqueness: {e}")
+        # In case of error, assume name is not unique to be safe
+        return False
+
 def create_api_key(user_id: int, key_name: str, environment_tag: str = 'live', scope_permissions: Optional[Dict[str, Any]] = None, expiration_days: Optional[int] = None, max_requests: Optional[int] = None, ip_allowlist: Optional[List[str]] = None, domain_referrers: Optional[List[str]] = None, is_primary: bool = False) -> str:
     """Create a new API key for a user"""
     try:
         client = get_supabase_client()
+        
+        # Check for name uniqueness within user scope
+        if not check_key_name_uniqueness(user_id, key_name):
+            raise ValueError(f"Key name '{key_name}' already exists for this user. Please choose a different name.")
         
         # Generate new API key with environment tag
         if environment_tag == 'test':
@@ -967,6 +834,14 @@ def create_api_key(user_id: int, key_name: str, environment_tag: str = 'live', s
         expiration_date = None
         if expiration_days:
             expiration_date = (datetime.utcnow() + timedelta(days=expiration_days)).isoformat()
+        
+        # Set default permissions if none provided
+        if scope_permissions is None:
+            scope_permissions = {
+                'read': ['*'],
+                'write': ['*'],
+                'admin': ['*']
+            }
         
         # Create the API key record with new fields
         result = client.table('api_keys_new').insert({
@@ -1340,6 +1215,7 @@ def get_api_key_usage_stats(api_key: str) -> Dict[str, Any]:
             key_result = client.table('api_keys_new').select('*').eq('api_key', api_key).execute()
             
             if not key_result.data:
+                logger.warning(f"API key not found in api_keys_new table: {api_key[:20]}...")
                 return {
                     'api_key': api_key,
                     'key_name': 'Unknown',
@@ -1417,7 +1293,7 @@ def get_api_key_usage_stats(api_key: str) -> Dict[str, Any]:
             }
             
     except Exception as e:
-        logger.error(f"Error getting API key usage stats: {e}")
+        logger.error(f"Error getting API key usage stats for {api_key[:20]}...: {e}")
         return {
             'api_key': api_key,
             'key_name': 'Error',
@@ -1430,3 +1306,204 @@ def get_api_key_usage_stats(api_key: str) -> Dict[str, Any]:
             'created_at': None,
             'last_used_at': None
         }
+
+def update_api_key(api_key: str, user_id: int, updates: Dict[str, Any]) -> bool:
+    """Update an API key's details"""
+    try:
+        client = get_supabase_client()
+        
+        # First, get the key to verify ownership and get key_id
+        key_result = client.table('api_keys_new').select('*').eq('api_key', api_key).eq('user_id', user_id).execute()
+        
+        if not key_result.data:
+            raise ValueError("API key not found or not owned by user")
+        
+        key_data = key_result.data[0]
+        key_id = key_data['id']
+        
+        # Prepare update data
+        update_data = {}
+        allowed_fields = [
+            'key_name', 'scope_permissions', 'expiration_days', 'max_requests',
+            'ip_allowlist', 'domain_referrers', 'is_active'
+        ]
+        
+        for field, value in updates.items():
+            if field in allowed_fields:
+                update_data[field] = value
+        
+        # Special handling for key_name uniqueness
+        if 'key_name' in update_data:
+            if not check_key_name_uniqueness(user_id, update_data['key_name'], exclude_key_id=key_id):
+                raise ValueError(f"Key name '{update_data['key_name']}' already exists for this user. Please choose a different name.")
+        
+        # Special handling for expiration_days
+        if 'expiration_days' in update_data:
+            if update_data['expiration_days'] is not None:
+                update_data['expiration_date'] = (datetime.utcnow() + timedelta(days=update_data['expiration_days'])).isoformat()
+            else:
+                update_data['expiration_date'] = None
+            # Remove the days field as we store the actual date
+            del update_data['expiration_days']
+        
+        # Add timestamp
+        update_data['updated_at'] = datetime.utcnow().isoformat()
+        
+        # Update the API key
+        result = client.table('api_keys_new').update(update_data).eq('id', key_id).execute()
+        
+        if not result.data:
+            raise ValueError("Failed to update API key")
+        
+        # Update rate limit config if max_requests changed
+        if 'max_requests' in updates and updates['max_requests'] is not None:
+            try:
+                client.table('rate_limit_configs').update({
+                    'max_requests': updates['max_requests'],
+                    'updated_at': datetime.utcnow().isoformat()
+                }).eq('api_key_id', key_id).execute()
+            except Exception as e:
+                logger.warning(f"Failed to update rate limit config: {e}")
+        
+        # Create audit log entry
+        try:
+            client.table('api_key_audit_logs').insert({
+                'user_id': user_id,
+                'action': 'update',
+                'api_key_id': key_id,
+                'details': {
+                    'updated_fields': list(updates.keys()),
+                    'old_values': {k: key_data.get(k) for k in updates.keys() if k in key_data},
+                    'new_values': updates,
+                    'update_timestamp': datetime.utcnow().isoformat()
+                },
+                'timestamp': datetime.utcnow().isoformat()
+            }).execute()
+        except Exception as e:
+            logger.warning(f"Failed to create audit log for key update: {e}")
+        
+        return True
+        
+    except Exception as e:
+        logger.error(f"Failed to update API key: {e}")
+        raise RuntimeError(f"Failed to update API key: {e}")
+
+def validate_api_key_permissions(api_key: str, required_permission: str, resource: str) -> bool:
+    """Validate if an API key has the required permission for a resource"""
+    try:
+        client = get_supabase_client()
+        
+        # Get the API key record
+        key_result = client.table('api_keys_new').select('scope_permissions, is_active').eq('api_key', api_key).execute()
+        
+        if not key_result.data:
+            # Fallback to legacy key check
+            legacy_result = client.table('api_keys').select('scope_permissions, is_active').eq('api_key', api_key).execute()
+            if not legacy_result.data:
+                logger.warning(f"API key not found: {api_key[:10]}...")
+                return False
+            key_data = legacy_result.data[0]
+        else:
+            key_data = key_result.data[0]
+        
+        # Check if key is active
+        if not key_data.get('is_active', True):
+            logger.warning(f"API key is inactive: {api_key[:10]}...")
+            return False
+        
+        # Get scope permissions
+        scope_permissions = key_data.get('scope_permissions', {})
+        
+        # If no permissions set, grant default access (for backward compatibility)
+        if not scope_permissions or scope_permissions == {}:
+    
+            return True
+        
+        # Check if the required permission exists
+        if required_permission in scope_permissions:
+            # Check if the resource is in the allowed list for this permission
+            allowed_resources = scope_permissions[required_permission]
+            if isinstance(allowed_resources, list):
+                # Check if resource is in the allowed list or if wildcard (*) is allowed
+                has_permission = '*' in allowed_resources or resource in allowed_resources
+                return has_permission
+            elif isinstance(allowed_resources, str):
+                # Single resource or wildcard
+                has_permission = allowed_resources == '*' or allowed_resources == resource
+                return has_permission
+        
+        return False
+        return False
+        
+    except Exception as e:
+        logger.error(f"Error validating API key permissions: {e}")
+        return False
+
+def get_api_key_by_id(key_id: int, user_id: int) -> Optional[Dict[str, Any]]:
+    """Get API key details by ID, ensuring user ownership"""
+    try:
+        client = get_supabase_client()
+        
+        result = client.table('api_keys_new').select('*').eq('id', key_id).eq('user_id', user_id).execute()
+        
+        if not result.data:
+            return None
+        
+        key_data = result.data[0]
+        
+        # Calculate days remaining
+        days_remaining = None
+        if key_data.get('expiration_date'):
+            try:
+                expiration_str = key_data['expiration_date']
+                if expiration_str:
+                    # Handle different datetime formats
+                    if 'Z' in expiration_str:
+                        expiration_str = expiration_str.replace('Z', '+00:00')
+                    elif expiration_str.endswith('+00:00'):
+                        pass  # Already timezone-aware
+                    else:
+                        # Make naive datetime timezone-aware
+                        expiration_str = expiration_str + '+00:00'
+                    
+                    expiration = datetime.fromisoformat(expiration_str)
+                    now = datetime.utcnow().replace(tzinfo=expiration.tzinfo)
+                    days_remaining = max(0, (expiration - now).days)
+            except Exception as date_error:
+                logger.warning(f"Error calculating days remaining for key {key_id}: {date_error}")
+                days_remaining = None
+        
+        # Calculate requests remaining
+        requests_remaining = None
+        if key_data.get('max_requests'):
+            requests_remaining = max(0, key_data['max_requests'] - key_data.get('requests_used', 0))
+        
+        # Calculate usage percentage
+        usage_percentage = None
+        if key_data.get('max_requests') and key_data.get('requests_used'):
+            usage_percentage = min(100, (key_data.get('requests_used', 0) / key_data['max_requests']) * 100)
+        
+        return {
+            'id': key_data['id'],
+            'key_name': key_data['key_name'],
+            'api_key': key_data['api_key'],
+            'environment_tag': key_data.get('environment_tag', 'live'),
+            'scope_permissions': key_data.get('scope_permissions', {}),
+            'is_active': key_data['is_active'],
+            'is_primary': key_data.get('is_primary', False),
+            'expiration_date': key_data.get('expiration_date'),
+            'days_remaining': days_remaining,
+            'max_requests': key_data.get('max_requests'),
+            'requests_used': key_data.get('requests_used', 0),
+            'requests_remaining': requests_remaining,
+            'usage_percentage': usage_percentage,
+            'ip_allowlist': key_data.get('ip_allowlist', []),
+            'domain_referrers': key_data.get('domain_referrers', []),
+            'created_at': key_data.get('created_at'),
+            'updated_at': key_data.get('updated_at'),
+            'last_used_at': key_data.get('last_used_at')
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting API key by ID: {e}")
+        return None

@@ -3,25 +3,13 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 from enum import Enum
 
-# Alternative import if pydantic[email] causes issues
-# from pydantic import BaseModel
-# EmailStr = str  # Fallback to string type
+
 
 
 class AuthMethod(str, Enum):
     EMAIL = "email"
     WALLET = "wallet"
     GOOGLE = "google"
-
-
-class WalletType(str, Enum):
-    METAMASK = "metamask"
-    PHANTOM = "phantom"
-
-
-class PaymentMethod(str, Enum):
-    MASTERCARD = "mastercard"
-    PACA_TOKEN = "paca_token"
 
 
 class SubscriptionStatus(str, Enum):
@@ -36,8 +24,6 @@ class UserRegistrationRequest(BaseModel):
     username: str
     email: EmailStr
     auth_method: AuthMethod = AuthMethod.EMAIL
-    wallet_address: Optional[str] = None
-    wallet_type: Optional[WalletType] = None
     initial_credits: int = 1000
     environment_tag: str = 'live'
     key_name: str = 'Primary Key'
@@ -52,52 +38,12 @@ class UserRegistrationResponse(BaseModel):
     environment_tag: str
     scope_permissions: Dict[str, List[str]]
     auth_method: AuthMethod
-    wallet_address: Optional[str]
     subscription_status: SubscriptionStatus
     message: str
     timestamp: datetime
 
 
-# Authentication Models
-class UserLoginRequest(BaseModel):
-    identifier: str  # Can be email, username, or wallet address
-    auth_method: AuthMethod
-    password: Optional[str] = None  # For email auth
-    wallet_signature: Optional[str] = None  # For wallet auth
 
-
-class UserLoginResponse(BaseModel):
-    user_id: int
-    username: str
-    email: str
-    api_key: str
-    credits: int
-    auth_method: AuthMethod
-    wallet_address: Optional[str]
-    subscription_status: SubscriptionStatus
-    access_token: str
-    refresh_token: str
-    expires_at: datetime
-
-
-# Wallet Authentication Models
-class WalletAuthRequest(BaseModel):
-    wallet_address: str
-    wallet_type: WalletType
-    message: str
-    signature: str
-    nonce: str
-
-
-class WalletAuthResponse(BaseModel):
-    authenticated: bool
-    user_id: Optional[int]
-    message: str
-
-
-# Payment and Subscription Models
-class SubscriptionPlan(BaseModel):
-    id: int
     name: str
     description: str
     price_usd: float
@@ -145,14 +91,7 @@ class CreditPurchaseResponse(BaseModel):
     timestamp: datetime
 
 
-# Existing models continue below...
-class CreateUserRequest(BaseModel):
-    credits: int = 0
 
-
-class CreateUserResponse(BaseModel):
-    api_key: str
-    credits: int
 
 
 class AddCreditsRequest(BaseModel):
@@ -260,8 +199,6 @@ class UserProfileResponse(BaseModel):
     username: Optional[str]
     email: Optional[str]
     auth_method: Optional[str]
-    wallet_address: Optional[str]
-    wallet_type: Optional[str]
     subscription_status: Optional[str]
     trial_expires_at: Optional[str]
     is_active: Optional[bool]
@@ -293,7 +230,7 @@ class CreateApiKeyRequest(BaseModel):
     max_requests: Optional[int] = None
     ip_allowlist: Optional[List[str]] = None
     domain_referrers: Optional[List[str]] = None
-    action: str = 'create'  # 'create' for new key, 'change_primary' to change primary key
+    action: str = 'create'
 
 
 class ApiKeyResponse(BaseModel):
@@ -304,40 +241,52 @@ class ApiKeyResponse(BaseModel):
     scope_permissions: Dict[str, List[str]]
     is_active: bool
     is_primary: bool
-    expiration_date: Optional[datetime]
-    max_requests: Optional[int]
+    expiration_date: Optional[str] = None
+    days_remaining: Optional[int] = None
+    max_requests: Optional[int] = None
     requests_used: int
+    requests_remaining: Optional[int] = None
+    usage_percentage: Optional[float] = None
     ip_allowlist: List[str]
     domain_referrers: List[str]
-    created_at: datetime
-    last_used_at: Optional[datetime]
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+    last_used_at: Optional[str] = None
 
 
 class ListApiKeysResponse(BaseModel):
     status: str
     total_keys: int
-    active_keys: int
-    expired_keys: int
     keys: List[ApiKeyResponse]
 
 
 class DeleteApiKeyRequest(BaseModel):
-    confirmation: str
+    confirmation: str = "DELETE"
 
 
 class DeleteApiKeyResponse(BaseModel):
     status: str
     message: str
     deleted_key_id: int
+    timestamp: str
+
+
+class UpdateApiKeyRequest(BaseModel):
+    key_name: Optional[str] = None
+    scope_permissions: Optional[Dict[str, List[str]]] = None
+    expiration_days: Optional[int] = None
+    max_requests: Optional[int] = None
+    ip_allowlist: Optional[List[str]] = None
+    domain_referrers: Optional[List[str]] = None
+    is_active: Optional[bool] = None
+
+
+class UpdateApiKeyResponse(BaseModel):
+    status: str
+    message: str
+    updated_key: ApiKeyResponse
     timestamp: datetime
 
 
-class ApiKeyUsageResponse(BaseModel):
-    user_id: int
-    total_keys: int
-    total_requests: int
-    total_tokens: int
-    requests_remaining: Optional[int]
-    usage_percentage: Optional[float]
-    keys_usage: List[Dict[str, Any]]
+
 
