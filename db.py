@@ -1507,3 +1507,54 @@ def get_api_key_by_id(key_id: int, user_id: int) -> Optional[Dict[str, Any]]:
     except Exception as e:
         logger.error(f"Error getting API key by ID: {e}")
         return None
+
+def get_user_all_api_keys_usage(user_id: int) -> Dict[str, Any]:
+    """Get usage statistics for all API keys of a user"""
+    try:
+        client = get_supabase_client()
+        
+        # Get all API keys for the user
+        keys_result = client.table('api_keys_new').select('*').eq('user_id', user_id).execute()
+        
+        if not keys_result.data:
+            return {
+                'user_id': user_id,
+                'total_keys': 0,
+                'keys': []
+            }
+        
+        keys_usage = []
+        for key_data in keys_result.data:
+            # Calculate requests remaining and usage percentage
+            requests_remaining = None
+            usage_percentage = None
+            
+            if key_data.get('max_requests'):
+                requests_remaining = max(0, key_data['max_requests'] - key_data.get('requests_used', 0))
+                usage_percentage = min(100, (key_data.get('requests_used', 0) / key_data['max_requests']) * 100)
+            
+            key_usage = {
+                'key_id': key_data['id'],
+                'api_key': key_data['api_key'][:10] + '...',  # Truncate for security
+                'key_name': key_data.get('key_name', 'Unnamed Key'),
+                'is_active': key_data.get('is_active', False),
+                'is_primary': key_data.get('is_primary', False),
+                'requests_used': key_data.get('requests_used', 0),
+                'max_requests': key_data.get('max_requests'),
+                'requests_remaining': requests_remaining,
+                'usage_percentage': usage_percentage,
+                'environment_tag': key_data.get('environment_tag', 'live'),
+                'created_at': key_data.get('created_at'),
+                'last_used_at': key_data.get('last_used_at')
+            }
+            keys_usage.append(key_usage)
+        
+        return {
+            'user_id': user_id,
+            'total_keys': len(keys_usage),
+            'keys': keys_usage
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting all API keys usage for user {user_id}: {e}")
+        return None

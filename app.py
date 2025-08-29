@@ -30,7 +30,8 @@ from db import (
     get_user_rate_limits, set_user_rate_limits, check_rate_limit, update_rate_limit_usage,
     get_user_profile, update_user_profile, delete_user_account,
     create_api_key, get_user_api_keys, delete_api_key, increment_api_key_usage, get_api_key_usage_stats,
-    add_credits_to_user, get_api_key_by_id, update_api_key, validate_api_key_permissions
+    add_credits_to_user, get_api_key_by_id, update_api_key, validate_api_key_permissions,
+    get_user_all_api_keys_usage
 )
 
 # Import configuration
@@ -609,15 +610,9 @@ async def create_user_api_key(
                 # Handle specific validation errors
                 error_message = str(ve)
                 if "already exists" in error_message:
-                    return JSONResponse(
-                        status_code=400,
-                        content={"detail": error_message}
-                    )
+                    raise HTTPException(status_code=400, detail=error_message)
                 else:
-                    return JSONResponse(
-                        status_code=400,
-                        content={"detail": f"Validation error: {error_message}"}
-                    )
+                    raise HTTPException(status_code=400, detail=f"Validation error: {error_message}")
             
             return {
                 "status": "success",
@@ -688,15 +683,9 @@ async def update_user_api_key_endpoint(
             # Handle specific validation errors
             error_message = str(ve)
             if "already exists" in error_message:
-                return JSONResponse(
-                    status_code=400,
-                    content={"detail": error_message}
-                )
+                raise HTTPException(status_code=400, detail=error_message)
             else:
-                return JSONResponse(
-                    status_code=400,
-                    content={"detail": f"Validation error: {error_message}"}
-                )
+                raise HTTPException(status_code=400, detail=f"Validation error: {error_message}")
         
         # Get the updated key details
         updated_key = get_api_key_by_id(key_id, user["id"])
@@ -789,7 +778,7 @@ async def get_user_api_key_usage(api_key: str = Depends(get_api_key)):
         if not user:
             raise HTTPException(status_code=401, detail="Invalid API key")
         
-        usage_stats = get_api_key_usage_stats(api_key)
+        usage_stats = get_user_all_api_keys_usage(user["id"])
         
         if usage_stats is None:
             raise HTTPException(status_code=500, detail="Failed to retrieve usage statistics")
