@@ -14,7 +14,7 @@ class Config:
     # OpenRouter Configuration
     OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
     OPENROUTER_SITE_URL = os.environ.get("OPENROUTER_SITE_URL", "https://your-site.com")
-    OPENROUTER_SITE_NAME = os.environ.get("OPENROUTER_SITE_NAME", "Vercel AI Gateway")
+    OPENROUTER_SITE_NAME = os.environ.get("OPENROUTER_SITE_NAME", "Openrouter AI Gateway")
     
     @classmethod
     def validate(cls):
