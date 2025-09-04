@@ -1615,6 +1615,14 @@ def get_user_plan(user_id: int) -> Optional[Dict[str, Any]]:
         
         plan = plan_result.data[0]
         
+        # Handle features field - convert from dict to list if needed
+        features = plan.get('features', [])
+        if isinstance(features, dict):
+            # Convert dict to list of feature names
+            features = list(features.keys())
+        elif not isinstance(features, list):
+            features = []
+        
         # Combine user plan and plan data
         return {
             'user_plan_id': user_plan['id'],
@@ -1627,7 +1635,7 @@ def get_user_plan(user_id: int) -> Optional[Dict[str, Any]]:
             'daily_token_limit': plan['daily_token_limit'],
             'monthly_token_limit': plan['monthly_token_limit'],
             'price_per_month': plan['price_per_month'],
-            'features': plan['features'],
+            'features': features,
             'start_date': user_plan['start_date'],
             'end_date': user_plan['end_date'],
             'is_active': user_plan['is_active']
@@ -1719,8 +1727,12 @@ def check_plan_entitlements(user_id: int, required_feature: str = None) -> Dict[
                 'can_access_feature': required_feature in ['basic_models'] if required_feature else True
             }
         
-        # Active plan
-        features = user_plan['features'] if isinstance(user_plan['features'], list) else []
+        # Active plan - handle features field conversion
+        features = user_plan.get('features', [])
+        if isinstance(features, dict):
+            features = list(features.keys())
+        elif not isinstance(features, list):
+            features = []
         
         return {
             'has_plan': True,
