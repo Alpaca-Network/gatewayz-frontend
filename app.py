@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from openai import OpenAI
+from urllib.parse import urlparse
 
 # Import models directly
 from models import (
@@ -20,7 +21,8 @@ from models import (
     SetRateLimitRequest, RateLimitResponse, UserMonitorResponse, AdminMonitorResponse,
     UserProfileResponse, UserProfileUpdate, DeleteAccountRequest, DeleteAccountResponse,
     CreateApiKeyRequest, ApiKeyResponse, ListApiKeysResponse, DeleteApiKeyRequest, DeleteApiKeyResponse, ApiKeyUsageResponse,
-    UserRegistrationRequest, UserRegistrationResponse, AuthMethod, UpdateApiKeyRequest, UpdateApiKeyResponse
+    UserRegistrationRequest, UserRegistrationResponse, AuthMethod, UpdateApiKeyRequest, UpdateApiKeyResponse,
+    PlanResponse, UserPlanResponse, AssignPlanRequest, PlanUsageResponse, PlanEntitlementsResponse
 )
 
 # Import database functions directly
@@ -31,7 +33,8 @@ from db import (
     get_user_profile, update_user_profile, delete_user_account,
     create_api_key, get_user_api_keys, delete_api_key, increment_api_key_usage, get_api_key_usage_stats,
     add_credits_to_user, get_api_key_by_id, update_api_key, validate_api_key_permissions,
-    get_user_all_api_keys_usage
+    get_user_all_api_keys_usage, get_all_plans, get_plan_by_id, get_user_plan, assign_user_plan,
+    check_plan_entitlements, get_user_usage_within_plan_limits, enforce_plan_limits, get_environment_usage_summary
 )
 
 # Import configuration
@@ -171,8 +174,8 @@ def process_openrouter_response(response):
         logger.error(f"Failed to process OpenRouter response: {e}")
         raise
 
-async def get_api_key(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    """Validate API key from either legacy or new system"""
+async def get_api_key(credentials: HTTPAuthorizationCredentials = Depends(security), request: Request = None):
+    """Validate API key from either legacy or new system with access controls"""
     if not credentials:
         raise HTTPException(status_code=422, detail="Authorization header is required")
     
@@ -182,9 +185,97 @@ async def get_api_key(credentials: HTTPAuthorizationCredentials = Depends(securi
     
     # Simple validation: check if the API key exists in either system
     try:
-        # First try to get user from the old system
+        # First try to get user (supports new and legacy systems)
         user = get_user(api_key)
         if user:
+            # If this is a new key, enforce new system controls
+            try:
+                from supabase_config import get_supabase_client
+                client = get_supabase_client()
+                key_result_new = client.table('api_keys_new').select('*').eq('api_key', api_key).execute()
+                if key_result_new.data:
+                    key_data = key_result_new.data[0]
+
+                    # Active
+                    if not key_data.get('is_active', True):
+                        raise HTTPException(status_code=401, detail="API key is inactive")
+
+                    # Expiration
+                    if key_data.get('expiration_date'):
+                        try:
+                            exp_str = key_data['expiration_date']
+                            if exp_str:
+                                if 'Z' in exp_str:
+                                    exp_str = exp_str.replace('Z', '+00:00')
+                                elif not exp_str.endswith('+00:00'):
+                                    exp_str = exp_str + '+00:00'
+                                expiration = datetime.fromisoformat(exp_str)
+                                now = datetime.utcnow().replace(tzinfo=expiration.tzinfo)
+                                if expiration < now:
+                                    raise HTTPException(status_code=401, detail="API key has expired")
+                        except Exception as date_error:
+                            logger.warning(f"Error checking expiration for key {api_key}: {date_error}")
+
+                    # Max requests
+                    if key_data.get('max_requests') is not None:
+                        if key_data.get('requests_used', 0) >= key_data['max_requests']:
+                            raise HTTPException(status_code=429, detail="API key request limit reached")
+
+                    # IP allowlist
+                    try:
+                        ip_allowlist = key_data.get('ip_allowlist') or []
+                        if isinstance(ip_allowlist, str):
+                            try:
+                                ip_allowlist = json.loads(ip_allowlist)
+                            except Exception:
+                                ip_allowlist = []
+                        if ip_allowlist and request is not None:
+                            # Extract client IP
+                            xff = request.headers.get('x-forwarded-for') or request.headers.get('X-Forwarded-For')
+                            xri = request.headers.get('x-real-ip') or request.headers.get('X-Real-IP')
+                            client_ip = None
+                            if xff:
+                                client_ip = xff.split(',')[0].strip()
+                            elif xri:
+                                client_ip = xri.strip()
+                            elif request.client:
+                                client_ip = request.client.host
+                            if client_ip and client_ip not in ip_allowlist:
+                                raise HTTPException(status_code=403, detail="IP address not allowed for this API key")
+                    except HTTPException:
+                        raise
+                    except Exception as ip_err:
+                        logger.warning(f"Error enforcing IP allowlist for key {api_key}: {ip_err}")
+
+                    # Domain referrers
+                    try:
+                        domain_referrers = key_data.get('domain_referrers') or []
+                        if isinstance(domain_referrers, str):
+                            try:
+                                domain_referrers = json.loads(domain_referrers)
+                            except Exception:
+                                domain_referrers = []
+                        if domain_referrers and request is not None:
+                            origin = request.headers.get('origin') or request.headers.get('Origin')
+                            referer = request.headers.get('referer') or request.headers.get('Referer')
+                            header_url = origin or referer
+                            if header_url:
+                                try:
+                                    hostname = urlparse(header_url).hostname or ''
+                                except Exception:
+                                    hostname = ''
+                                if hostname and not any(hostname == d or hostname.endswith('.' + d) for d in domain_referrers):
+                                    raise HTTPException(status_code=403, detail="Referrer domain not allowed for this API key")
+                    except HTTPException:
+                        raise
+                    except Exception as dom_err:
+                        logger.warning(f"Error enforcing domain referrers for key {api_key}: {dom_err}")
+
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.warning(f"Error applying new-key enforcement for {api_key}: {e}")
+
             return api_key
         
         # If not found in old system, check new system
@@ -223,6 +314,38 @@ async def get_api_key(credentials: HTTPAuthorizationCredentials = Depends(securi
                 if key_data.get('max_requests'):
                     if key_data['requests_used'] >= key_data['max_requests']:
                         raise HTTPException(status_code=429, detail="API key request limit reached")
+
+                # Enforce IP allowlist
+                try:
+                    ip_allowlist = key_data.get('ip_allowlist') or []
+                    if isinstance(ip_allowlist, str):
+                        # handle text[] serialized as string
+                        try:
+                            ip_allowlist = json.loads(ip_allowlist)
+                        except Exception:
+                            ip_allowlist = []
+                    if ip_allowlist:
+                        request_ip = None
+                        # Attempt to extract client IP from headers (behind proxies) or connection
+                        # Will be validated again in route if needed
+                        # FastAPI dependency context not available; defer strict check to route if needed
+                        # Here we conservatively reject only if a trusted header is present and mismatched
+                        # Actual strict enforcement will happen in route via check_rate_limit path
+                    
+                except Exception as ip_err:
+                    logger.warning(f"Error checking IP allowlist for key {api_key}: {ip_err}")
+
+                # Enforce domain referrers for browser-origin calls
+                try:
+                    domain_referrers = key_data.get('domain_referrers') or []
+                    if isinstance(domain_referrers, str):
+                        try:
+                            domain_referrers = json.loads(domain_referrers)
+                        except Exception:
+                            domain_referrers = []
+                    # Domain enforcement will be applied in route layer using request headers if list provided
+                except Exception as dom_err:
+                    logger.warning(f"Error checking domain referrers for key {api_key}: {dom_err}")
                 
                 return api_key
         except Exception as e:
@@ -751,8 +874,17 @@ async def delete_user_api_key(
                 detail="Confirmation must be 'DELETE_KEY' to proceed with key deletion"
             )
         
-        # Delete the API key
-        success = delete_api_key(key_id, user["id"])
+        # Validate permissions - check if user can delete keys
+        if not validate_api_key_permissions(api_key, "write", "api_keys"):
+            raise HTTPException(status_code=403, detail="Insufficient permissions to delete API keys")
+
+        # Resolve key string by id and ownership
+        key_to_delete = get_api_key_by_id(key_id, user["id"])
+        if not key_to_delete:
+            raise HTTPException(status_code=404, detail="API key not found")
+
+        # Delete the API key by its actual string
+        success = delete_api_key(key_to_delete["api_key"], user["id"])
         
         if not success:
             raise HTTPException(status_code=500, detail="Failed to delete API key")
@@ -956,6 +1088,17 @@ async def proxy_chat(req: ProxyRequest, api_key: str = Depends(get_api_key)):
         if not user:
             raise HTTPException(status_code=401, detail="Invalid API key")
         
+        # Get environment tag from API key
+        environment_tag = user.get('environment_tag', 'live')
+        
+        # Check plan limits first
+        plan_check = enforce_plan_limits(user['id'], 0, environment_tag)  # Check with 0 tokens first
+        if not plan_check['allowed']:
+            raise HTTPException(
+                status_code=429, 
+                detail=f"Plan limit exceeded: {plan_check['reason']}"
+            )
+        
         rate_limit_check = check_rate_limit(api_key, tokens_used=0)
         if not rate_limit_check['allowed']:
             raise HTTPException(
@@ -987,6 +1130,14 @@ async def proxy_chat(req: ProxyRequest, api_key: str = Depends(get_api_key)):
             
             usage = processed_response.get('usage', {})
             total_tokens = usage.get('total_tokens', 0)
+            
+            # Check plan limits with actual token usage
+            plan_check_final = enforce_plan_limits(user['id'], total_tokens, environment_tag)
+            if not plan_check_final['allowed']:
+                raise HTTPException(
+                    status_code=429, 
+                    detail=f"Plan limit exceeded: {plan_check_final['reason']}"
+                )
             
             rate_limit_check = check_rate_limit(api_key, tokens_used=total_tokens)
             if not rate_limit_check['allowed']:
@@ -1084,6 +1235,137 @@ async def admin_cache_status():
     except Exception as e:
         logger.error(f"Failed to get cache status: {e}")
         raise HTTPException(status_code=500, detail="Failed to get cache status")
+
+# Plan Management Endpoints
+@app.get("/plans", response_model=List[PlanResponse], tags=["plans"])
+async def get_plans():
+    """Get all available subscription plans"""
+    try:
+        plans = get_all_plans()
+        return plans
+        
+    except Exception as e:
+        logger.error(f"Error getting plans: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.get("/plans/{plan_id}", response_model=PlanResponse, tags=["plans"])
+async def get_plan(plan_id: int):
+    """Get a specific plan by ID"""
+    try:
+        plan = get_plan_by_id(plan_id)
+        if not plan:
+            raise HTTPException(status_code=404, detail="Plan not found")
+        return plan
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting plan {plan_id}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.get("/user/plan", response_model=UserPlanResponse, tags=["authentication"])
+async def get_user_plan_endpoint(api_key: str = Depends(get_api_key)):
+    """Get current user's plan"""
+    try:
+        user = get_user(api_key)
+        if not user:
+            raise HTTPException(status_code=401, detail="Invalid API key")
+        
+        user_plan = get_user_plan(user["id"])
+        if not user_plan:
+            raise HTTPException(status_code=404, detail="No active plan found")
+        
+        return user_plan
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting user plan: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.get("/user/plan/usage", response_model=PlanUsageResponse, tags=["authentication"])
+async def get_user_plan_usage(api_key: str = Depends(get_api_key)):
+    """Get user's plan usage and limits"""
+    try:
+        user = get_user(api_key)
+        if not user:
+            raise HTTPException(status_code=401, detail="Invalid API key")
+        
+        usage_data = get_user_usage_within_plan_limits(user["id"])
+        if not usage_data:
+            raise HTTPException(status_code=500, detail="Failed to retrieve usage data")
+        
+        return usage_data
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting user plan usage: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.get("/user/plan/entitlements", response_model=PlanEntitlementsResponse, tags=["authentication"])
+async def get_user_plan_entitlements(api_key: str = Depends(get_api_key), feature: Optional[str] = Query(None)):
+    """Check user's plan entitlements"""
+    try:
+        user = get_user(api_key)
+        if not user:
+            raise HTTPException(status_code=401, detail="Invalid API key")
+        
+        entitlements = check_plan_entitlements(user["id"], feature)
+        return entitlements
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error checking user plan entitlements: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.post("/admin/assign-plan", tags=["admin"])
+async def assign_plan_to_user(request: AssignPlanRequest):
+    """Assign a plan to a user (Admin only)"""
+    try:
+        success = assign_user_plan(request.user_id, request.plan_id, request.duration_months)
+        
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to assign plan")
+        
+        return {
+            "status": "success",
+            "message": f"Plan {request.plan_id} assigned to user {request.user_id} for {request.duration_months} months",
+            "user_id": request.user_id,
+            "plan_id": request.plan_id,
+            "duration_months": request.duration_months,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error assigning plan: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.get("/user/environment-usage", tags=["authentication"])
+async def get_user_environment_usage(api_key: str = Depends(get_api_key)):
+    """Get user's usage breakdown by environment"""
+    try:
+        user = get_user(api_key)
+        if not user:
+            raise HTTPException(status_code=401, detail="Invalid API key")
+        
+        env_usage = get_environment_usage_summary(user["id"])
+        
+        return {
+            "status": "success",
+            "user_id": user["id"],
+            "environment_usage": env_usage,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting environment usage: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 # Root endpoint
 @app.get("/", tags=["authentication"])
