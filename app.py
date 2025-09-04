@@ -1241,12 +1241,49 @@ async def admin_cache_status():
 async def get_plans():
     """Get all available subscription plans"""
     try:
+        logger.info("Attempting to get all plans...")
         plans = get_all_plans()
-        return plans
+        logger.info(f"Successfully retrieved {len(plans) if plans else 0} plans")
+        
+        if not plans:
+            logger.warning("No plans found in database")
+            return []
+        
+        # Convert to PlanResponse format
+        plan_responses = []
+        for plan in plans:
+            try:
+                # Handle features field - convert from dict to list if needed
+                features = plan.get("features", [])
+                if isinstance(features, dict):
+                    # Convert dict to list of feature names
+                    features = list(features.keys())
+                elif not isinstance(features, list):
+                    features = []
+                
+                plan_response = {
+                    "id": plan.get("id"),
+                    "name": plan.get("name"),
+                    "description": plan.get("description"),
+                    "daily_request_limit": plan.get("daily_request_limit"),
+                    "monthly_request_limit": plan.get("monthly_request_limit"),
+                    "daily_token_limit": plan.get("daily_token_limit"),
+                    "monthly_token_limit": plan.get("monthly_token_limit"),
+                    "price_per_month": float(plan.get("price_per_month", 0)),
+                    "features": features,
+                    "is_active": plan.get("is_active", True)
+                }
+                plan_responses.append(plan_response)
+            except Exception as plan_error:
+                logger.error(f"Error processing plan {plan.get('id', 'unknown')}: {plan_error}")
+                continue
+        
+        logger.info(f"Returning {len(plan_responses)} plan responses")
+        return plan_responses
         
     except Exception as e:
-        logger.error(f"Error getting plans: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        logger.error(f"Error getting plans: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 @app.get("/plans/{plan_id}", response_model=PlanResponse, tags=["plans"])
 async def get_plan(plan_id: int):

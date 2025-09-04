@@ -1569,11 +1569,19 @@ def get_user_all_api_keys_usage(user_id: int) -> Dict[str, Any]:
 def get_all_plans() -> List[Dict[str, Any]]:
     """Get all available subscription plans"""
     try:
+        logger.info("Getting all plans from database...")
         client = get_supabase_client()
+        logger.info("Supabase client obtained successfully")
+        
         result = client.table('plans').select('*').eq('is_active', True).order('price_per_month').execute()
+        logger.info(f"Database query executed, got {len(result.data) if result.data else 0} plans")
+        
+        if result.data:
+            logger.info(f"First plan sample: {result.data[0] if result.data else 'None'}")
+        
         return result.data or []
     except Exception as e:
-        logger.error(f"Error getting plans: {e}")
+        logger.error(f"Error getting plans: {e}", exc_info=True)
         return []
 
 def get_plan_by_id(plan_id: int) -> Optional[Dict[str, Any]]:
