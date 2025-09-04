@@ -1589,7 +1589,24 @@ def get_plan_by_id(plan_id: int) -> Optional[Dict[str, Any]]:
     try:
         client = get_supabase_client()
         result = client.table('plans').select('*').eq('id', plan_id).eq('is_active', True).execute()
-        return result.data[0] if result.data else None
+        
+        if not result.data:
+            return None
+        
+        plan = result.data[0]
+        
+        # Handle features field - convert from dict to list if needed
+        features = plan.get('features', [])
+        if isinstance(features, dict):
+            # Convert dict to list of feature names
+            features = list(features.keys())
+        elif not isinstance(features, list):
+            features = []
+        
+        # Return plan with converted features
+        plan['features'] = features
+        return plan
+        
     except Exception as e:
         logger.error(f"Error getting plan {plan_id}: {e}")
         return None
