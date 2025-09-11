@@ -1,11 +1,11 @@
-# OpenRouter AI Gateway
+# Gatewayz Universal Inference API
 
-A production-ready FastAPI application that provides a credit-metered API gateway for OpenRouter with enterprise-grade security features, advanced user management, and comprehensive audit logging.
+A production-ready FastAPI application that provides a credit-metered API gateway for Gatewayz with enterprise-grade security features, advanced user management, and comprehensive audit logging.
 
 ## 🚀 Features
 
 ### Core Features
-- **Multi-Model Support**: Access to hundreds of AI models via OpenRouter
+- **Multi-Model Support**: Access to hundreds of AI models via Gatewayz
 - **Advanced User Management**: Self-registration, profile management, and account deletion
 - **Multi-Key System**: Create, manage, and rotate multiple API keys with custom names and permissions
 - **Credit System**: Token-based credit deduction with real-time balance checking
@@ -69,7 +69,7 @@ A production-ready FastAPI application that provides a credit-metered API gatewa
 - GET `/user/plan/entitlements` - Check user's plan entitlements
 
 ### AI Services
-- POST `/v1/chat/completions` - Chat completion with OpenRouter models
+- POST `/v1/chat/completions` - Chat completion with Gatewayz models
 
 ### Admin
 - POST `/admin/add_credits` - Add credits to existing user
