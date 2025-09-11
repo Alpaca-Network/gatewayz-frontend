@@ -293,6 +293,8 @@ class UpdateApiKeyRequest(BaseModel):
     ip_allowlist: Optional[List[str]] = None
     domain_referrers: Optional[List[str]] = None
     is_active: Optional[bool] = None
+    action: Optional[str] = None  # 'update', 'rotate', or 'bulk_rotate' for Phase 4 integration
+    environment_tag: Optional[str] = None  # For bulk operations
 
 
 class UpdateApiKeyResponse(BaseModel):
