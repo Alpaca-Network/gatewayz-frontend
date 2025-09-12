@@ -1,18 +1,13 @@
 # What is the AI Gateway?
 
-The AI Gateway is an open-source orchestration layer that exposes a unified REST API to many large language-model providers. It sits between your applications and upstream services, handling authentication, metering usage with credits, and enforcing security so you can focus on product development.
+The AI Gateway is an open‑source service that provides a unified API for interacting with multiple AI models through a single, credit‑metered interface. It sits between your applications and upstream model providers, handling authentication, usage tracking, and security so you can focus on building great products.
 
-## Unified API for many models
-Harness dozens of providers through a consistent interface. Switch models or route requests without changing your application code.
+## Why use the AI Gateway?
 
-## Credit-based billing
-Every request is metered through a token-based credit system, making it easy to cap usage and bill teams or customers.
-
-## Built-in security
-Keys are encrypted at rest, scoped to domains or IPs, and rotated automatically. Allowlists and audit logs help protect your workloads.
-
-## Analytics and monitoring
-Real-time dashboards and logs provide insight into model performance and cost. Track usage by user, model, or endpoint.
+- **Single entry point for many models** – Access hundreds of models via a consistent REST API.
+- **Credit-based billing** – Meter usage with token-based credits that deduct automatically on each request.
+- **Strong security defaults** – Encrypted key storage, allowlists, domain restrictions, and key rotation to keep your systems safe.
+- **Operational transparency** – Real-time monitoring, audit logs, and detailed usage analytics for both users and admins.
 
 For a deeper look at the platform's capabilities and ideal scenarios, see:
 
