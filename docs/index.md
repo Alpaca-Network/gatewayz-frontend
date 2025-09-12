@@ -1,6 +1,12 @@
 # AI Gateway Documentation
 
-Welcome to the AI Gateway documentation! This comprehensive guide covers everything you need to know about setting up, deploying, and operating the AI Gateway API.
+Welcome to the AI Gateway documentation! This guide walks through setting up, deploying, and operating the AI Gateway API.
+
+For a high-level overview of the project, see:
+
+- [What is the AI Gateway?](introduction/what-is-gateway.md)
+- [Key Features](introduction/key-features.md)
+- [When to Use the AI Gateway](introduction/use-cases.md)
 
 ## Quick Start
 
@@ -29,26 +35,6 @@ Welcome to the AI Gateway documentation! This comprehensive guide covers everyth
 ### Deployment
 - **[Deployment Guide](deployment.md)** - Production deployment instructions
 - **[Platform Support](deployment.md)** - Vercel, Railway, Heroku, and more
-
-## Key Features
-
-### Core Functionality
-- **Multi-Model AI Access**: Access to multiple AI models through OpenRouter
-- **Credit Management**: Token-based credit system with usage tracking
-- **Rate Limiting**: Comprehensive rate limiting and plan enforcement
-- **API Key Management**: Secure API key creation, rotation, and management
-
-### Security Features
-- **Phase 4 Security**: IP allowlists, domain restrictions, key rotation
-- **Audit Logging**: Comprehensive security event tracking
-- **Authentication**: Multi-layer API key validation
-- **Authorization**: Fine-grained permission controls
-
-### Monitoring & Analytics
-- **Real-time Monitoring**: System health and performance metrics
-- **Usage Analytics**: Detailed usage tracking and reporting
-- **Admin Dashboard**: System-wide monitoring and management
-- **Health Checks**: Automated health monitoring and alerting
 
 ## API Endpoints
 
@@ -95,4 +81,4 @@ This project is licensed under the same license as the main repository.
 
 ---
 
-**Need help getting started?** Check out the [Setup Guide](setup.md) for step-by-step instructions, or jump straight to the [API Reference](api.md) to explore the available endpoints.
+**Need help getting started?** See the [Setup Guide](setup.md) for step-by-step instructions or head to the [API Reference](api.md) to explore the available endpoints.
