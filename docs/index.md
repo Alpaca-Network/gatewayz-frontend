@@ -8,6 +8,12 @@ For a high-level overview of the project, see:
 - [Key Features](introduction/key-features.md)
 - [When to Use the AI Gateway](introduction/use-cases.md)
 
+For a high-level overview of the project, see:
+
+- [What is the AI Gateway?](introduction/what-is-gateway.md)
+- [Key Features](introduction/key-features.md)
+- [When to Use the AI Gateway](introduction/use-cases.md)
+
 ## Quick Start
 
 1. **[Setup Guide](setup.md)** - Get started with local development
