@@ -8,6 +8,7 @@ import hashlib
 import hmac
 import secrets
 import logging
+import os
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List
 from cryptography.fernet import Fernet
@@ -31,8 +32,8 @@ class SecurityManager:
         """Create a secure hash of an API key using HMAC-SHA256"""
         try:
             # Use a secret salt for additional security
-            salt = b"api_gateway_salt_2024"  # In production, this should be from environment
-            hash_obj = hmac.new(salt, api_key.encode('utf-8'), hashlib.sha256)
+            salt = os.environ.get("API_GATEWAY_SALT", "api_gateway_salt_2024").encode()
+            hash_obj = hmac.new(salt, api_key.encode("utf-8"), hashlib.sha256)
             return hash_obj.hexdigest()
         except Exception as e:
             logger.error(f"Error hashing API key: {e}")
