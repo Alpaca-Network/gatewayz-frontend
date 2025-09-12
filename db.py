@@ -4,6 +4,7 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime, timedelta
 from supabase_config import get_supabase_client
 import secrets
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -1901,3 +1902,235 @@ def get_environment_usage_summary(user_id: int) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Error getting environment usage summary for user {user_id}: {e}")
         return {}
+
+# =============================================================================
+# ADVANCED RATE LIMITING FUNCTIONS
+# =============================================================================
+
+def get_rate_limit_config(api_key: str) -> Optional[Dict[str, Any]]:
+    """Get rate limit configuration for a specific API key"""
+    try:
+        client = get_supabase_client()
+        
+        # Get rate limit config from api_keys table
+        result = client.table('api_keys').select('rate_limit_config').eq('api_key', api_key).execute()
+        
+        if result.data and result.data[0].get('rate_limit_config'):
+            return result.data[0]['rate_limit_config']
+        
+        # Fallback to default config
+        return {
+            'requests_per_minute': 60,
+            'requests_per_hour': 1000,
+            'requests_per_day': 10000,
+            'tokens_per_minute': 10000,
+            'tokens_per_hour': 100000,
+            'tokens_per_day': 1000000,
+            'burst_limit': 10,
+            'concurrency_limit': 5,
+            'window_size_seconds': 60
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting rate limit config for key {api_key[:10]}...: {e}")
+        return None
+
+def update_rate_limit_config(api_key: str, config: Dict[str, Any]) -> bool:
+    """Update rate limit configuration for a specific API key"""
+    try:
+        client = get_supabase_client()
+        
+        result = client.table('api_keys').update({
+            'rate_limit_config': config,
+            'updated_at': datetime.utcnow().isoformat()
+        }).eq('api_key', api_key).execute()
+        
+        return len(result.data) > 0
+        
+    except Exception as e:
+        logger.error(f"Error updating rate limit config for key {api_key[:10]}...: {e}")
+        return False
+
+def get_user_rate_limit_configs(user_id: int) -> List[Dict[str, Any]]:
+    """Get all rate limit configurations for a user's API keys"""
+    try:
+        client = get_supabase_client()
+        
+        result = client.table('api_keys').select(
+            'api_key, key_name, rate_limit_config, environment_tag'
+        ).eq('user_id', user_id).execute()
+        
+        configs = []
+        for key in (result.data or []):
+            config = key.get('rate_limit_config', {})
+            configs.append({
+                'api_key': key['api_key'],
+                'key_name': key['key_name'],
+                'environment_tag': key['environment_tag'],
+                'rate_limit_config': config
+            })
+        
+        return configs
+        
+    except Exception as e:
+        logger.error(f"Error getting rate limit configs for user {user_id}: {e}")
+        return []
+
+def bulk_update_rate_limit_configs(user_id: int, config: Dict[str, Any]) -> int:
+    """Bulk update rate limit configurations for all user's API keys"""
+    try:
+        client = get_supabase_client()
+        
+        result = client.table('api_keys').update({
+            'rate_limit_config': config,
+            'updated_at': datetime.utcnow().isoformat()
+        }).eq('user_id', user_id).execute()
+        
+        return len(result.data)
+        
+    except Exception as e:
+        logger.error(f"Error bulk updating rate limit configs for user {user_id}: {e}")
+        return 0
+
+def get_rate_limit_usage_stats(api_key: str, time_window: str = 'minute') -> Dict[str, Any]:
+    """Get current rate limit usage statistics for an API key"""
+    try:
+        client = get_supabase_client()
+        
+        now = datetime.utcnow()
+        
+        if time_window == 'minute':
+            start_time = now.replace(second=0, microsecond=0)
+            end_time = start_time + timedelta(minutes=1)
+        elif time_window == 'hour':
+            start_time = now.replace(minute=0, second=0, microsecond=0)
+            end_time = start_time + timedelta(hours=1)
+        elif time_window == 'day':
+            start_time = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            end_time = start_time + timedelta(days=1)
+        else:
+            raise ValueError(f"Invalid time window: {time_window}")
+        
+        # Get usage records for the time window
+        result = client.table('usage_records').select(
+            'tokens_used, created_at'
+        ).eq('api_key', api_key).gte('created_at', start_time.isoformat()).lt('created_at', end_time.isoformat()).execute()
+        
+        total_requests = len(result.data or [])
+        total_tokens = sum(record.get('tokens_used', 0) for record in (result.data or []))
+        
+        return {
+            'time_window': time_window,
+            'start_time': start_time.isoformat(),
+            'end_time': end_time.isoformat(),
+            'total_requests': total_requests,
+            'total_tokens': total_tokens,
+            'requests_per_second': total_requests / (end_time - start_time).total_seconds() if (end_time - start_time).total_seconds() > 0 else 0
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting rate limit usage stats for key {api_key[:10]}...: {e}")
+        return {
+            'time_window': time_window,
+            'total_requests': 0,
+            'total_tokens': 0,
+            'requests_per_second': 0
+        }
+
+def get_system_rate_limit_stats() -> Dict[str, Any]:
+    """Get system-wide rate limiting statistics"""
+    try:
+        client = get_supabase_client()
+        
+        now = datetime.utcnow()
+        minute_ago = now - timedelta(minutes=1)
+        hour_ago = now - timedelta(hours=1)
+        day_ago = now - timedelta(days=1)
+        
+        # Get usage stats for different time windows
+        minute_result = client.table('usage_records').select('api_key, tokens_used').gte('created_at', minute_ago.isoformat()).execute()
+        hour_result = client.table('usage_records').select('api_key, tokens_used').gte('created_at', hour_ago.isoformat()).execute()
+        day_result = client.table('usage_records').select('api_key, tokens_used').gte('created_at', day_ago.isoformat()).execute()
+        
+        # Calculate stats
+        minute_requests = len(minute_result.data or [])
+        minute_tokens = sum(record.get('tokens_used', 0) for record in (minute_result.data or []))
+        
+        hour_requests = len(hour_result.data or [])
+        hour_tokens = sum(record.get('tokens_used', 0) for record in (hour_result.data or []))
+        
+        day_requests = len(day_result.data or [])
+        day_tokens = sum(record.get('tokens_used', 0) for record in (day_result.data or []))
+        
+        # Get unique active keys
+        active_keys_minute = len(set(record['api_key'] for record in (minute_result.data or [])))
+        active_keys_hour = len(set(record['api_key'] for record in (hour_result.data or [])))
+        active_keys_day = len(set(record['api_key'] for record in (day_result.data or [])))
+        
+        return {
+            'timestamp': now.isoformat(),
+            'minute': {
+                'requests': minute_requests,
+                'tokens': minute_tokens,
+                'active_keys': active_keys_minute,
+                'requests_per_second': minute_requests / 60
+            },
+            'hour': {
+                'requests': hour_requests,
+                'tokens': hour_tokens,
+                'active_keys': active_keys_hour,
+                'requests_per_minute': hour_requests / 60
+            },
+            'day': {
+                'requests': day_requests,
+                'tokens': day_tokens,
+                'active_keys': active_keys_day,
+                'requests_per_hour': day_requests / 24
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting system rate limit stats: {e}")
+        return {
+            'timestamp': datetime.utcnow().isoformat(),
+            'minute': {'requests': 0, 'tokens': 0, 'active_keys': 0, 'requests_per_second': 0},
+            'hour': {'requests': 0, 'tokens': 0, 'active_keys': 0, 'requests_per_minute': 0},
+            'day': {'requests': 0, 'tokens': 0, 'active_keys': 0, 'requests_per_hour': 0}
+        }
+
+def create_rate_limit_alert(api_key: str, alert_type: str, details: Dict[str, Any]) -> bool:
+    """Create a rate limit alert for monitoring"""
+    try:
+        client = get_supabase_client()
+        
+        alert_data = {
+            'api_key': api_key,
+            'alert_type': alert_type,
+            'details': details,
+            'created_at': datetime.utcnow().isoformat(),
+            'resolved': False
+        }
+        
+        result = client.table('rate_limit_alerts').insert(alert_data).execute()
+        return len(result.data) > 0
+        
+    except Exception as e:
+        logger.error(f"Error creating rate limit alert: {e}")
+        return False
+
+def get_rate_limit_alerts(api_key: Optional[str] = None, resolved: bool = False, limit: int = 100) -> List[Dict[str, Any]]:
+    """Get rate limit alerts with optional filtering"""
+    try:
+        client = get_supabase_client()
+        
+        query = client.table('rate_limit_alerts').select('*').eq('resolved', resolved).order('created_at', desc=True).limit(limit)
+        
+        if api_key:
+            query = query.eq('api_key', api_key)
+        
+        result = query.execute()
+        return result.data or []
+        
+    except Exception as e:
+        logger.error(f"Error getting rate limit alerts: {e}")
+        return []
