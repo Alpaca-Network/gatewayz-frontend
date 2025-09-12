@@ -29,6 +29,7 @@ __pycache__
 .fastapi
 # md files
 *.md
+!docs/**/*.md
 
 # sql files
 *.sql
