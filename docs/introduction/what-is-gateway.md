@@ -13,4 +13,3 @@ For a deeper look at the platform's capabilities and ideal scenarios, see:
 
 - [Key Features](key-features.md)
 - [When to Use the AI Gateway](use-cases.md)
-

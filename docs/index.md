@@ -1,6 +1,12 @@
 # AI Gateway Documentation
 
-Welcome to the AI Gateway documentation! This comprehensive guide covers everything you need to know about setting up, deploying, and operating the AI Gateway API.
+Welcome to the AI Gateway documentation! This guide walks through setting up, deploying, and operating the AI Gateway API.
+
+For a high-level overview of the project, see:
+
+- [What is the AI Gateway?](introduction/what-is-gateway.md)
+- [Key Features](introduction/key-features.md)
+- [When to Use the AI Gateway](introduction/use-cases.md)
 
 For a high-level overview of the project, see:
 
@@ -81,4 +87,4 @@ This project is licensed under the same license as the main repository.
 
 ---
 
-**Need help getting started?** Check out the [Setup Guide](setup.md) for step-by-step instructions, or jump straight to the [API Reference](api.md) to explore the available endpoints.
+**Need help getting started?** See the [Setup Guide](setup.md) for step-by-step instructions or head to the [API Reference](api.md) to explore the available endpoints.
