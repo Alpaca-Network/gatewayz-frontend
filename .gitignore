@@ -19,8 +19,8 @@ __pycache__
 # Heroku
 .heroku
 
-# OpenRouter
-.openrouter
+# Gatewayz
+.gatewayz
 
 # Supabase
 .supabase

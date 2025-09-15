@@ -5,7 +5,7 @@
 ### Health Check Endpoint
 **GET** `/health`
 - **Purpose**: System health and dependency status
-- **Response**: Database connectivity, OpenRouter status, user count, timestamp
+- **Response**: Database connectivity, Gatewayz status, user count, timestamp
 - **Use Cases**: Uptime monitoring, load balancer health checks, alerting
 
 Example response:
@@ -13,7 +13,7 @@ Example response:
 {
   "status": "healthy",
   "database": "connected",
-  "openrouter": "connected",
+  "Gatewayz": "connected",
   "user_count": 42,
   "timestamp": "2025-09-01T12:00:00.000000"
 }
@@ -39,7 +39,7 @@ The application provides comprehensive logging at multiple levels:
 #### Log Sources
 - **Application Logs**: FastAPI application logs
 - **Database Logs**: Supabase connection and query logs
-- **External API Logs**: OpenRouter API call logs
+- **External API Logs**: Gatewayz API call logs
 - **Security Logs**: Authentication and authorization events
 
 ### Platform-Specific Logging
@@ -107,7 +107,7 @@ The application provides comprehensive logging at multiple levels:
 
 ### Cache Operations
 **POST** `/admin/refresh-models`
-- **Purpose**: Force refresh of OpenRouter model cache
+- **Purpose**: Force refresh of Gatewayz model cache
 - **Authentication**: Admin access required
 - **Response**: Cache refresh status and model count
 - **Use Cases**: Model updates, cache invalidation, troubleshooting
@@ -119,7 +119,7 @@ The application provides comprehensive logging at multiple levels:
 - **Use Cases**: Cache monitoring, performance optimization
 
 ### Cache Configuration
-- **TTL**: 5 minutes for OpenRouter models
+- **TTL**: 5 minutes for Gatewayz models
 - **Storage**: In-memory cache with automatic refresh
 - **Fallback**: Graceful degradation when cache is unavailable
 - **Monitoring**: Cache hit rates and performance metrics
@@ -135,7 +135,7 @@ The application provides comprehensive logging at multiple levels:
 ### Monitoring Tools
 - **Application Metrics**: Built-in FastAPI metrics
 - **Database Metrics**: Supabase performance metrics
-- **External API Metrics**: OpenRouter API performance
+- **External API Metrics**: Gatewayz API performance
 - **Custom Metrics**: Business-specific metrics
 
 ### Alerting
@@ -198,7 +198,7 @@ The application provides comprehensive logging at multiple levels:
 - **Health Checks**: Use health endpoint for system status
 - **Log Analysis**: Analyze logs for error patterns
 - **Performance Metrics**: Monitor key performance indicators
-- **External Service Status**: Check OpenRouter and Supabase status
+- **External Service Status**: Check Gatewayz and Supabase status
 
 ### Recovery Procedures
 - **Service Restart**: Restart application services

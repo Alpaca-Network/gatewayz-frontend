@@ -12,12 +12,12 @@ Authorization: Bearer YOUR_API_KEY
 
 ### Health Check
 **GET** `/health`
-- Returns system status, database connectivity, OpenRouter status, user count, and timestamp
+- Returns system status, database connectivity, Gatewayz status, user count, and timestamp
 - No authentication required
 
 ### Models
 **GET** `/models`
-- Returns available AI models from OpenRouter with pricing, capabilities, and provider information
+- Returns available AI models from Gatewayz with pricing, capabilities, and provider information
 - Cached for 5 minutes with automatic refresh
 - No authentication required
 
@@ -160,7 +160,7 @@ Authorization: Bearer YOUR_API_KEY
 
 ### OpenAI-Compatible Proxy
 **POST** `/v1/chat/completions`
-- OpenAI-compatible endpoint proxied to OpenRouter
+- OpenAI-compatible endpoint proxied to Gatewayz
 - Request body: `ProxyRequest`
 - Features: credit deduction, rate limiting, plan enforcement, usage tracking
 - Returns: OpenAI-compatible response with gateway usage information
@@ -189,7 +189,7 @@ curl -X POST http://localhost:8000/v1/chat/completions \
 | 404 | Not Found - Resource not found |
 | 429 | Too Many Requests - Rate limit or plan limit exceeded |
 | 500 | Internal Server Error - Server-side error |
-| 503 | Service Unavailable - OpenRouter service unavailable |
+| 503 | Service Unavailable - Gatewayz service unavailable |
 
 ## Security Features
 
