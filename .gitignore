@@ -27,8 +27,10 @@ __pycache__
 
 # FastAPI
 .fastapi
+
 # md files
 *.md
+!docs/**/*.md
 
 # sql files
 *.sql
