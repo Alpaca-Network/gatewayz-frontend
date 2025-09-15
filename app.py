@@ -1778,14 +1778,14 @@ async def get_rate_limit_alerts_endpoint(
 @app.get("/", tags=["authentication"])
 async def root():
     return {
-        "name": "OpenRouter AI Gateway",
+        "name": "Gatewayz Inference API",
         "version": "2.0.0",
-        "description": "A production-ready API gateway for OpenRouter with credit management and monitoring",
+        "description": "A production-ready API gateway for Gatewayz with credit management and monitoring",
         "status": "active",
         "endpoints": {
             "public": [
                 "GET /health - Health check with system status",
-                "GET /models - Get available AI models from OpenRouter",
+                "GET /models - Get available AI models from Gatewayz",
                 "GET /models/providers - Get provider statistics for available models",
                 "GET / - API information (this endpoint)"
             ],
@@ -1810,11 +1810,11 @@ async def root():
                 "DELETE /user/api-keys/{key_id} - Delete specific API key",
                 "GET /user/api-keys/usage - Get API key usage statistics with audit info",
                 "GET /user/api-keys/audit-logs - Get audit logs for security monitoring (Phase 4)",
-                "POST /v1/chat/completions - Chat completion with OpenRouter"
+                "POST /v1/chat/completions - Chat completion with Gatewayz"
             ]
         },
         "features": [
-            "Multi-model AI access via OpenRouter",
+            "Multi-model AI access via Gatewayz",
             "Enhanced model information with pricing and capabilities",
             "Available providers listing with model counts",
             "Smart caching for improved performance",
