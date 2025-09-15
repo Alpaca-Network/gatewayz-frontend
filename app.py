@@ -57,13 +57,10 @@ logger = logging.getLogger(__name__)
 
 # Create FastAPI app
 app = FastAPI(
-    title="Gatewayz API",
-    description="Gateway for AI model access with credit management and advanced security",
-    version="2.0.0"
+    title="Gatewayz Universal Inference API",
+    description="Gateway for AI model access powered by Gatewayz",
+    version="2.0.1"
 )
-
-# Include Phase 4 security router
-# Phase 4 security features are now integrated into existing endpoints above
 
 # Add CORS middleware
 app.add_middleware(
