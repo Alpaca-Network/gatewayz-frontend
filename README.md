@@ -95,7 +95,6 @@ uvicorn app:app --reload
 - **Access Controls**: IP allowlist and domain restrictions enforced
 - **Audit Logging**: Comprehensive security event tracking
 - **Key Rotation**: Individual and bulk rotation capabilities
-- **Configurable Hash Salt**: Set `API_GATEWAY_SALT` to override the default HMAC salt
 
 ## 📚 Documentation
 
