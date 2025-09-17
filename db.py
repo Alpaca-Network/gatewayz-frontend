@@ -2287,24 +2287,83 @@ def get_trial_analytics() -> Dict[str, Any]:
     try:
         client = get_supabase_client()
         
-        # Get trial statistics
-        trial_stats = client.table('api_keys').select('is_trial, trial_converted, trial_start_date, trial_end_date').execute()
+        # Get trial statistics from api_keys_new table
+        trial_stats = client.table('api_keys_new').select('is_trial, trial_converted, trial_start_date, trial_end_date, trial_used_tokens, trial_used_requests, trial_used_credits, trial_credits, subscription_status').execute()
         
         if not trial_stats.data:
             return {"error": "No data available"}
         
-        total_trials = len([k for k in trial_stats.data if k['is_trial']])
-        active_trials = len([k for k in trial_stats.data if k['is_trial'] and k['trial_end_date'] and datetime.fromisoformat(k['trial_end_date'].replace('Z', '+00:00')) > datetime.now()])
-        converted_trials = len([k for k in trial_stats.data if k['trial_converted']])
+        # Filter trial keys
+        trial_keys = [k for k in trial_stats.data if k.get('is_trial', False)]
+        total_trials = len(trial_keys)
         
+        # Calculate active trials (not expired)
+        active_trials = 0
+        expired_trials = 0
+        current_time = datetime.utcnow()
+        
+        for key in trial_keys:
+            trial_end_date = key.get('trial_end_date')
+            if trial_end_date:
+                try:
+                    if trial_end_date.endswith('Z'):
+                        end_date = datetime.fromisoformat(trial_end_date.replace('Z', '+00:00'))
+                    else:
+                        end_date = datetime.fromisoformat(trial_end_date)
+                    
+                    # Convert to naive UTC for comparison
+                    if end_date.tzinfo is not None:
+                        end_date = end_date.replace(tzinfo=None)
+                    
+                    if end_date > current_time:
+                        active_trials += 1
+                    else:
+                        expired_trials += 1
+                except Exception as e:
+                    logger.warning(f"Error parsing trial end date: {e}")
+                    expired_trials += 1
+            else:
+                expired_trials += 1
+        
+        # Calculate conversions
+        converted_trials = len([k for k in trial_keys if k.get('trial_converted', False)])
         conversion_rate = (converted_trials / total_trials * 100) if total_trials > 0 else 0
+        
+        # Calculate usage statistics
+        total_tokens_used = sum(k.get('trial_used_tokens', 0) for k in trial_keys)
+        total_requests_used = sum(k.get('trial_used_requests', 0) for k in trial_keys)
+        total_credits_used = sum(float(k.get('trial_used_credits', 0)) for k in trial_keys)
+        total_credits_allocated = sum(float(k.get('trial_credits', 0)) for k in trial_keys)
+        
+        # Calculate average usage per trial
+        avg_tokens_per_trial = total_tokens_used / total_trials if total_trials > 0 else 0
+        avg_requests_per_trial = total_requests_used / total_trials if total_trials > 0 else 0
+        avg_credits_per_trial = total_credits_used / total_trials if total_trials > 0 else 0
         
         return {
             "total_trials": total_trials,
             "active_trials": active_trials,
-            "expired_trials": total_trials - active_trials,
+            "expired_trials": expired_trials,
             "converted_trials": converted_trials,
-            "conversion_rate": round(conversion_rate, 2)
+            "conversion_rate": round(conversion_rate, 2),
+            "usage_statistics": {
+                "total_tokens_used": total_tokens_used,
+                "total_requests_used": total_requests_used,
+                "total_credits_used": round(total_credits_used, 2),
+                "total_credits_allocated": round(total_credits_allocated, 2),
+                "credits_utilization_rate": round((total_credits_used / total_credits_allocated * 100) if total_credits_allocated > 0 else 0, 2)
+            },
+            "average_usage_per_trial": {
+                "tokens": round(avg_tokens_per_trial, 2),
+                "requests": round(avg_requests_per_trial, 2),
+                "credits": round(avg_credits_per_trial, 2)
+            },
+            "trial_status_breakdown": {
+                "active": active_trials,
+                "expired": expired_trials,
+                "converted": converted_trials,
+                "pending_conversion": total_trials - active_trials - converted_trials
+            }
         }
         
     except Exception as e:
