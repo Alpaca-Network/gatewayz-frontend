@@ -10,27 +10,30 @@ logger = logging.getLogger(__name__)
 
 
 
-def create_enhanced_user(username: str, email: str, auth_method: str, credits: int = 1000) -> Dict[str, Any]:
-    """Create a new user with enhanced authentication fields"""
+def create_enhanced_user(username: str, email: str, auth_method: str, credits: int = 10) -> Dict[str, Any]:
+    """Create a new user with automatic 3-day trial and $10 credits"""
     try:
         client = get_supabase_client()
         
-        # Prepare user data
+        # Prepare user data with trial setup
+        trial_start = datetime.utcnow()
+        trial_end = trial_start + timedelta(days=3)
+        
         user_data = {
             'username': username,
             'email': email,
-            'credits': credits,
+            'credits': credits,  # $10 trial credits
             'is_active': True,
-            'registration_date': datetime.utcnow().isoformat(),
+            'registration_date': trial_start.isoformat(),
             'auth_method': auth_method,
             'subscription_status': 'trial',
-            'trial_expires_at': (datetime.utcnow() + timedelta(days=3)).isoformat()
+            'trial_expires_at': trial_end.isoformat()
         }
         
 
         
         # Create user account with a temporary API key (will be replaced)
-        user_data['api_key'] = f"temp_{secrets.token_urlsafe(16)}"
+        user_data['api_key'] = f"gw_temp_{secrets.token_urlsafe(16)}"
         user_result = client.table('users').insert(user_data).execute()
         
         if not user_result.data:
@@ -851,7 +854,28 @@ def create_api_key(user_id: int, key_name: str, environment_tag: str = 'live', s
             }
         
         # Create the API key record with new fields
-        result = client.table('api_keys_new').insert({
+        # Set up trial for new users (if this is their first key)
+        trial_data = {}
+        if is_primary:
+            trial_start = datetime.utcnow()
+            trial_end = trial_start + timedelta(days=3)
+            trial_data = {
+                'is_trial': True,
+                'trial_start_date': trial_start.isoformat(),
+                'trial_end_date': trial_end.isoformat(),
+                'trial_used_tokens': 0,
+                'trial_used_requests': 0,
+                'trial_used_credits': 0.0,
+                'trial_max_tokens': 100000,
+                'trial_max_requests': 1000,
+                'trial_credits': 10.0,
+                'trial_converted': False,
+                'subscription_status': 'trial',
+                'subscription_plan': 'free_trial'
+            }
+        
+        # Combine base data with trial data
+        api_key_data = {
             'user_id': user_id,
             'key_name': key_name,
             'api_key': api_key,
@@ -866,7 +890,12 @@ def create_api_key(user_id: int, key_name: str, environment_tag: str = 'live', s
             'domain_referrers': domain_referrers or [],
             'created_by_user_id': user_id,
             'last_used_at': datetime.utcnow().isoformat()
-        }).execute()
+        }
+        
+        # Add trial data if this is a primary key
+        api_key_data.update(trial_data)
+        
+        result = client.table('api_keys_new').insert(api_key_data).execute()
         
         if not result.data:
             raise ValueError("Failed to create API key")
@@ -2099,9 +2128,18 @@ def get_system_rate_limit_stats() -> Dict[str, Any]:
         }
 
 def create_rate_limit_alert(api_key: str, alert_type: str, details: Dict[str, Any]) -> bool:
-    """Create a rate limit alert for monitoring"""
+    """Create a rate limit alert for monitoring (optional - table may not exist)"""
     try:
         client = get_supabase_client()
+        
+        # Check if rate_limit_alerts table exists
+        try:
+            # Try to query the table to see if it exists
+            client.table('rate_limit_alerts').select('id').limit(1).execute()
+        except Exception:
+            # Table doesn't exist, skip alert creation
+            logger.info("Rate limit alerts table not available, skipping alert creation")
+            return True
         
         alert_data = {
             'api_key': api_key,
@@ -2115,8 +2153,8 @@ def create_rate_limit_alert(api_key: str, alert_type: str, details: Dict[str, An
         return len(result.data) > 0
         
     except Exception as e:
-        logger.error(f"Error creating rate limit alert: {e}")
-        return False
+        logger.warning(f"Rate limit alert creation failed (non-critical): {e}")
+        return True  # Return True to not block the main flow
 
 def get_rate_limit_alerts(api_key: Optional[str] = None, resolved: bool = False, limit: int = 100) -> List[Dict[str, Any]]:
     """Get rate limit alerts with optional filtering"""

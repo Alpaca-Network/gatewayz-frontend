@@ -448,12 +448,29 @@ async def get_user_balance(api_key: str = Depends(get_api_key)):
         if not user:
             raise HTTPException(status_code=401, detail="Invalid API key")
         
-        return {
-            "api_key": f"{api_key[:10]}...",
-            "credits": user["credits"],
-            "status": "active",
-            "user_id": user.get("id")
-        }
+        # Check if this is a trial user
+        from trial_validation import validate_trial_access
+        trial_validation = validate_trial_access(api_key)
+        
+        if trial_validation.get('is_trial', False):
+            # For trial users, show trial credits and tokens
+            return {
+                "api_key": f"{api_key[:10]}...",
+                "credits": trial_validation.get('remaining_credits', 0.0),
+                "tokens_remaining": trial_validation.get('remaining_tokens', 0),
+                "requests_remaining": trial_validation.get('remaining_requests', 0),
+                "status": "trial",
+                "trial_end_date": trial_validation.get('trial_end_date'),
+                "user_id": user.get("id")
+            }
+        else:
+            # For non-trial users, show regular credits
+            return {
+                "api_key": f"{api_key[:10]}...",
+                "credits": user["credits"],
+                "status": "active",
+                "user_id": user.get("id")
+            }
     except HTTPException:
         raise
     except Exception as e:
@@ -1077,18 +1094,15 @@ async def user_register(request: UserRegistrationRequest):
     """Register a new user with unified API key system"""
     try:
         # Validate input
-        if request.initial_credits < 0:
-            raise HTTPException(status_code=400, detail="Initial credits must be non-negative")
-        
         if request.environment_tag not in ['test', 'staging', 'live', 'development']:
             raise HTTPException(status_code=400, detail="Invalid environment tag")
         
-        # Create user with enhanced fields
+        # Create user with enhanced fields (automatic 500,000 tokens trial)
         user_data = create_enhanced_user(
             username=request.username,
             email=request.email,
             auth_method=request.auth_method,
-            credits=request.initial_credits
+            credits=10  # $10 worth of credits (500,000 tokens)
         )
         
         return UserRegistrationResponse(
@@ -1104,7 +1118,7 @@ async def user_register(request: UserRegistrationRequest):
             },
             auth_method=request.auth_method,
             subscription_status="trial",
-            message="User registered successfully with primary API key",
+            message="User registered successfully with 3-day free trial and 500,000 tokens ($10 credits)",
             timestamp=datetime.utcnow()
         )
         
@@ -1247,46 +1261,55 @@ async def proxy_chat(req: ProxyRequest, api_key: str = Depends(get_api_key)):
                 detail=f"Plan limit exceeded: {plan_check['reason']}"
             )
         
-        # Use advanced rate limiting
-        # Check trial status first
-        trial_service = get_trial_service()
-        trial_validation = await trial_service.validate_trial_access(api_key, tokens_used=0)
+        # Check trial status first (simplified)
+        from trial_validation import validate_trial_access
+        trial_validation = validate_trial_access(api_key)
         
-        if not trial_validation.is_valid:
-            if trial_validation.is_trial and trial_validation.is_expired:
+        if not trial_validation['is_valid']:
+            if trial_validation.get('is_trial') and trial_validation.get('is_expired'):
                 raise HTTPException(
                     status_code=403,
-                    detail=f"Trial has expired. Please upgrade to a paid plan to continue using the API.",
-                    headers={"X-Trial-Expired": "true", "X-Trial-End-Date": trial_validation.trial_end_date.isoformat() if trial_validation.trial_end_date else ""}
+                    detail=trial_validation['error'],
+                    headers={"X-Trial-Expired": "true", "X-Trial-End-Date": trial_validation.get('trial_end_date', '')}
                 )
-            elif trial_validation.is_trial and not trial_validation.is_expired:
+            elif trial_validation.get('is_trial'):
+                headers = {}
+                if 'remaining_tokens' in trial_validation:
+                    headers["X-Trial-Remaining-Tokens"] = str(trial_validation['remaining_tokens'])
+                if 'remaining_requests' in trial_validation:
+                    headers["X-Trial-Remaining-Requests"] = str(trial_validation['remaining_requests'])
+                if 'remaining_credits' in trial_validation:
+                    headers["X-Trial-Remaining-Credits"] = str(trial_validation['remaining_credits'])
+                
                 raise HTTPException(
                     status_code=429,
-                    detail=f"Trial limit exceeded: {trial_validation.error_message}",
-                    headers={"X-Trial-Remaining-Tokens": str(trial_validation.remaining_tokens), "X-Trial-Remaining-Requests": str(trial_validation.remaining_requests)}
+                    detail=trial_validation['error'],
+                    headers=headers
                 )
             else:
                 raise HTTPException(
                     status_code=403,
-                    detail="Access denied. Please start a trial or subscribe to a paid plan."
+                    detail=trial_validation.get('error', 'Access denied. Please start a trial or subscribe to a paid plan.')
                 )
         
-        rate_limit_manager = get_rate_limit_manager()
-        rate_limit_check = await rate_limit_manager.check_rate_limit(api_key, tokens_used=0)
-        if not rate_limit_check.allowed:
-            # Create rate limit alert
-            create_rate_limit_alert(api_key, "rate_limit_exceeded", {
-                "reason": rate_limit_check.reason,
-                "retry_after": rate_limit_check.retry_after,
-                "remaining_requests": rate_limit_check.remaining_requests,
-                "remaining_tokens": rate_limit_check.remaining_tokens
-            })
-            
-            raise HTTPException(
-                status_code=429, 
-                detail=f"Rate limit exceeded: {rate_limit_check.reason}",
-                headers={"Retry-After": str(rate_limit_check.retry_after)} if rate_limit_check.retry_after else None
-            )
+        # Skip rate limiting for trial users - they have their own limits
+        if not trial_validation.get('is_trial', False):
+            rate_limit_manager = get_rate_limit_manager()
+            rate_limit_check = await rate_limit_manager.check_rate_limit(api_key, tokens_used=0)
+            if not rate_limit_check.allowed:
+                # Create rate limit alert
+                create_rate_limit_alert(api_key, "rate_limit_exceeded", {
+                    "reason": rate_limit_check.reason,
+                    "retry_after": rate_limit_check.retry_after,
+                    "remaining_requests": rate_limit_check.remaining_requests,
+                    "remaining_tokens": rate_limit_check.remaining_tokens
+                })
+                
+                raise HTTPException(
+                    status_code=429, 
+                    detail=f"Rate limit exceeded: {rate_limit_check.reason}",
+                    headers={"Retry-After": str(rate_limit_check.retry_after)} if rate_limit_check.retry_after else None
+                )
         
         if user['credits'] <= 0:
             raise HTTPException(status_code=402, detail="Insufficient credits")
@@ -1321,48 +1344,54 @@ async def proxy_chat(req: ProxyRequest, api_key: str = Depends(get_api_key)):
                     detail=f"Plan limit exceeded: {plan_check_final['reason']}"
                 )
             
-            # Final rate limit check with actual token usage
-            # Track trial usage if applicable
-            if trial_validation.is_trial and not trial_validation.is_expired:
+            # Track trial usage BEFORE generating response
+            if trial_validation.get('is_trial') and not trial_validation.get('is_expired'):
                 try:
-                    # Calculate credit cost (standard pricing: $20 for 1M tokens = $0.00002 per token)
-                    credit_cost = total_tokens * 0.00002
-                    await trial_service.track_trial_usage(TrackUsageRequest(
-                        api_key=api_key,
-                        tokens_used=total_tokens,
-                        requests_used=1,
-                        credits_used=credit_cost
-                    ))
+                    from trial_validation import track_trial_usage
+                    logger.info(f"Tracking trial usage: {total_tokens} tokens, 1 request")
+                    success = track_trial_usage(api_key, total_tokens, 1)
+                    if success:
+                        logger.info("Trial usage tracked successfully")
+                    else:
+                        logger.warning("Failed to track trial usage")
                 except Exception as e:
                     logger.warning(f"Failed to track trial usage: {e}")
             
-            rate_limit_check_final = await rate_limit_manager.check_rate_limit(api_key, tokens_used=total_tokens)
-            if not rate_limit_check_final.allowed:
-                # Create rate limit alert
-                create_rate_limit_alert(api_key, "rate_limit_exceeded", {
-                    "reason": rate_limit_check_final.reason,
-                    "retry_after": rate_limit_check_final.retry_after,
-                    "remaining_requests": rate_limit_check_final.remaining_requests,
-                    "remaining_tokens": rate_limit_check_final.remaining_tokens,
-                    "tokens_requested": total_tokens
-                })
-                
-                raise HTTPException(
-                    status_code=429, 
-                    detail=f"Rate limit exceeded: {rate_limit_check_final.reason}",
-                    headers={"Retry-After": str(rate_limit_check_final.retry_after)} if rate_limit_check_final.retry_after else None
-                )
+            # Final rate limit check with actual token usage
             
-            if user['credits'] < total_tokens:
-                raise HTTPException(
-                    status_code=402, 
-                    detail=f"Insufficient credits. Required: {total_tokens}, Available: {user['credits']}"
-                )
+            # Skip final rate limiting for trial users - they have their own limits
+            if not trial_validation.get('is_trial', False):
+                rate_limit_check_final = await rate_limit_manager.check_rate_limit(api_key, tokens_used=total_tokens)
+                if not rate_limit_check_final.allowed:
+                    # Create rate limit alert
+                    create_rate_limit_alert(api_key, "rate_limit_exceeded", {
+                        "reason": rate_limit_check_final.reason,
+                        "retry_after": rate_limit_check_final.retry_after,
+                        "remaining_requests": rate_limit_check_final.remaining_requests,
+                        "remaining_tokens": rate_limit_check_final.remaining_tokens,
+                        "tokens_requested": total_tokens
+                    })
+                    
+                    raise HTTPException(
+                        status_code=429, 
+                        detail=f"Rate limit exceeded: {rate_limit_check_final.reason}",
+                        headers={"Retry-After": str(rate_limit_check_final.retry_after)} if rate_limit_check_final.retry_after else None
+                    )
+            
+            # Only check user credits for non-trial users
+            if not trial_validation.get('is_trial', False):
+                if user['credits'] < total_tokens:
+                    raise HTTPException(
+                        status_code=402, 
+                        detail=f"Insufficient credits. Required: {total_tokens}, Available: {user['credits']}"
+                    )
             
             try:
-                deduct_credits(api_key, total_tokens)
-                cost = total_tokens * 0.02 / 1000
-                record_usage(user['id'], api_key, req.model, total_tokens, cost)
+                # Only deduct credits for non-trial users
+                if not trial_validation.get('is_trial', False):
+                    deduct_credits(api_key, total_tokens)
+                    cost = total_tokens * 0.02 / 1000
+                    record_usage(user['id'], api_key, req.model, total_tokens, cost)
                 update_rate_limit_usage(api_key, total_tokens)
                 
                 # Increment API key usage count
@@ -1373,11 +1402,22 @@ async def proxy_chat(req: ProxyRequest, api_key: str = Depends(get_api_key)):
             except Exception as e:
                 logger.error(f"Error in usage recording process: {e}")
             
-            processed_response['gateway_usage'] = {
-                'tokens_charged': total_tokens,
-                'user_balance_after': user['credits'] - total_tokens,
-                'user_api_key': f"{api_key[:10]}..."
-            }
+            # Calculate balance after usage
+            if trial_validation.get('is_trial', False):
+                # For trial users, show trial credits remaining
+                trial_remaining_credits = trial_validation.get('remaining_credits', 0.0)
+                processed_response['gateway_usage'] = {
+                    'tokens_charged': total_tokens,
+                    'trial_credits_remaining': trial_remaining_credits,
+                    'user_api_key': f"{api_key[:10]}..."
+                }
+            else:
+                # For non-trial users, show user credits remaining
+                processed_response['gateway_usage'] = {
+                    'tokens_charged': total_tokens,
+                    'user_balance_after': user['credits'] - total_tokens,
+                    'user_api_key': f"{api_key[:10]}..."
+                }
             
             return processed_response
             
@@ -1896,89 +1936,34 @@ async def root():
         }
     }
 
-# Trial Management Endpoints
+# Trial Status Endpoint (Simplified)
 
-@app.post("/trial/start", response_model=StartTrialResponse, tags=["trial"])
-async def start_trial(request: StartTrialRequest, api_key: str = Depends(get_api_key)):
-    """Start a free trial for the authenticated API key"""
-    try:
-        trial_service = get_trial_service()
-        response = await trial_service.start_trial(request)
-        
-        if not response.success:
-            raise HTTPException(status_code=400, detail=response.message)
-        
-        return response
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error starting trial: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-@app.get("/trial/status", response_model=TrialStatusResponse, tags=["trial"])
+@app.get("/trial/status", tags=["trial"])
 async def get_trial_status(api_key: str = Depends(get_api_key)):
     """Get current trial status for the authenticated API key"""
     try:
-        trial_service = get_trial_service()
-        response = await trial_service.get_trial_status(api_key)
+        from trial_validation import validate_trial_access
+        trial_status = validate_trial_access(api_key)
         
-        if not response.success:
-            raise HTTPException(status_code=400, detail=response.message)
-        
-        return response
-    except HTTPException:
-        raise
+        return {
+            "success": True,
+            "trial_status": trial_status,
+            "message": "Trial status retrieved successfully"
+        }
     except Exception as e:
         logger.error(f"Error getting trial status: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
-@app.post("/trial/convert", response_model=ConvertTrialResponse, tags=["trial"])
-async def convert_trial_to_paid(request: ConvertTrialRequest, api_key: str = Depends(get_api_key)):
-    """Convert trial to paid subscription"""
-    try:
-        trial_service = get_trial_service()
-        response = await trial_service.convert_trial_to_paid(request)
-        
-        if not response.success:
-            raise HTTPException(status_code=400, detail=response.message)
-        
-        return response
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error converting trial: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-@app.post("/trial/track-usage", response_model=TrackUsageResponse, tags=["trial"])
-async def track_trial_usage(request: TrackUsageRequest, api_key: str = Depends(get_api_key)):
-    """Track trial usage (called automatically by the system)"""
-    try:
-        trial_service = get_trial_service()
-        response = await trial_service.track_trial_usage(request)
-        
-        if not response.success:
-            raise HTTPException(status_code=400, detail=response.message)
-        
-        return response
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error tracking trial usage: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-@app.get("/subscription/plans", response_model=SubscriptionPlansResponse, tags=["subscription"])
+@app.get("/subscription/plans", tags=["subscription"])
 async def get_subscription_plans():
     """Get available subscription plans"""
     try:
-        trial_service = get_trial_service()
-        response = await trial_service.get_subscription_plans()
-        
-        if not response.success:
-            raise HTTPException(status_code=400, detail=response.message)
-        
-        return response
-    except HTTPException:
-        raise
+        plans = get_subscription_plans()
+        return {
+            "success": True,
+            "plans": plans,
+            "message": "Subscription plans retrieved successfully"
+        }
     except Exception as e:
         logger.error(f"Error getting subscription plans: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")

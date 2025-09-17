@@ -27,7 +27,6 @@ class UserRegistrationRequest(BaseModel):
     username: str
     email: EmailStr
     auth_method: AuthMethod = AuthMethod.EMAIL
-    initial_credits: int = 1000
     environment_tag: str = 'live'
     key_name: str = 'Primary Key'
 
