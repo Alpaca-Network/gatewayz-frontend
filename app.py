@@ -42,11 +42,18 @@ from db import (
     # New rate limiting functions
     get_rate_limit_config, update_rate_limit_config, get_user_rate_limit_configs,
     bulk_update_rate_limit_configs, get_rate_limit_usage_stats, get_system_rate_limit_stats,
-    create_rate_limit_alert, get_rate_limit_alerts
+    create_rate_limit_alert, get_rate_limit_alerts,
+    # Trial management functions
+    get_trial_analytics
 )
 
 # Import new rate limiting module
 from rate_limiting import get_rate_limit_manager, RateLimitConfig, RateLimitResult
+from trial_service import get_trial_service
+from trial_models import (
+    StartTrialRequest, StartTrialResponse, ConvertTrialRequest, ConvertTrialResponse,
+    TrialStatusResponse, TrackUsageRequest, TrackUsageResponse, SubscriptionPlansResponse
+)
 
 # Import configuration
 from config import Config
@@ -54,6 +61,16 @@ from config import Config
 # Initialize logging
 logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
+
+# Admin key validation
+def get_admin_key(credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer())):
+    """Validate admin API key"""
+    admin_key = credentials.credentials
+    # You should replace this with your actual admin key validation logic
+    # For now, using a simple check - replace with proper validation
+    if admin_key != os.environ.get("ADMIN_API_KEY", "admin_key_placeholder"):
+        raise HTTPException(status_code=401, detail="Invalid admin API key")
+    return admin_key
 
 # Create FastAPI app
 app = FastAPI(
@@ -1231,6 +1248,29 @@ async def proxy_chat(req: ProxyRequest, api_key: str = Depends(get_api_key)):
             )
         
         # Use advanced rate limiting
+        # Check trial status first
+        trial_service = get_trial_service()
+        trial_validation = await trial_service.validate_trial_access(api_key, tokens_used=0)
+        
+        if not trial_validation.is_valid:
+            if trial_validation.is_trial and trial_validation.is_expired:
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Trial has expired. Please upgrade to a paid plan to continue using the API.",
+                    headers={"X-Trial-Expired": "true", "X-Trial-End-Date": trial_validation.trial_end_date.isoformat() if trial_validation.trial_end_date else ""}
+                )
+            elif trial_validation.is_trial and not trial_validation.is_expired:
+                raise HTTPException(
+                    status_code=429,
+                    detail=f"Trial limit exceeded: {trial_validation.error_message}",
+                    headers={"X-Trial-Remaining-Tokens": str(trial_validation.remaining_tokens), "X-Trial-Remaining-Requests": str(trial_validation.remaining_requests)}
+                )
+            else:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Access denied. Please start a trial or subscribe to a paid plan."
+                )
+        
         rate_limit_manager = get_rate_limit_manager()
         rate_limit_check = await rate_limit_manager.check_rate_limit(api_key, tokens_used=0)
         if not rate_limit_check.allowed:
@@ -1282,6 +1322,20 @@ async def proxy_chat(req: ProxyRequest, api_key: str = Depends(get_api_key)):
                 )
             
             # Final rate limit check with actual token usage
+            # Track trial usage if applicable
+            if trial_validation.is_trial and not trial_validation.is_expired:
+                try:
+                    # Calculate credit cost (standard pricing: $20 for 1M tokens = $0.00002 per token)
+                    credit_cost = total_tokens * 0.00002
+                    await trial_service.track_trial_usage(TrackUsageRequest(
+                        api_key=api_key,
+                        tokens_used=total_tokens,
+                        requests_used=1,
+                        credits_used=credit_cost
+                    ))
+                except Exception as e:
+                    logger.warning(f"Failed to track trial usage: {e}")
+            
             rate_limit_check_final = await rate_limit_manager.check_rate_limit(api_key, tokens_used=total_tokens)
             if not rate_limit_check_final.allowed:
                 # Create rate limit alert
@@ -1841,6 +1895,106 @@ async def root():
             "openapi_spec": "/openapi.json"
         }
     }
+
+# Trial Management Endpoints
+
+@app.post("/trial/start", response_model=StartTrialResponse, tags=["trial"])
+async def start_trial(request: StartTrialRequest, api_key: str = Depends(get_api_key)):
+    """Start a free trial for the authenticated API key"""
+    try:
+        trial_service = get_trial_service()
+        response = await trial_service.start_trial(request)
+        
+        if not response.success:
+            raise HTTPException(status_code=400, detail=response.message)
+        
+        return response
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error starting trial: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.get("/trial/status", response_model=TrialStatusResponse, tags=["trial"])
+async def get_trial_status(api_key: str = Depends(get_api_key)):
+    """Get current trial status for the authenticated API key"""
+    try:
+        trial_service = get_trial_service()
+        response = await trial_service.get_trial_status(api_key)
+        
+        if not response.success:
+            raise HTTPException(status_code=400, detail=response.message)
+        
+        return response
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting trial status: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.post("/trial/convert", response_model=ConvertTrialResponse, tags=["trial"])
+async def convert_trial_to_paid(request: ConvertTrialRequest, api_key: str = Depends(get_api_key)):
+    """Convert trial to paid subscription"""
+    try:
+        trial_service = get_trial_service()
+        response = await trial_service.convert_trial_to_paid(request)
+        
+        if not response.success:
+            raise HTTPException(status_code=400, detail=response.message)
+        
+        return response
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error converting trial: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.post("/trial/track-usage", response_model=TrackUsageResponse, tags=["trial"])
+async def track_trial_usage(request: TrackUsageRequest, api_key: str = Depends(get_api_key)):
+    """Track trial usage (called automatically by the system)"""
+    try:
+        trial_service = get_trial_service()
+        response = await trial_service.track_trial_usage(request)
+        
+        if not response.success:
+            raise HTTPException(status_code=400, detail=response.message)
+        
+        return response
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error tracking trial usage: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.get("/subscription/plans", response_model=SubscriptionPlansResponse, tags=["subscription"])
+async def get_subscription_plans():
+    """Get available subscription plans"""
+    try:
+        trial_service = get_trial_service()
+        response = await trial_service.get_subscription_plans()
+        
+        if not response.success:
+            raise HTTPException(status_code=400, detail=response.message)
+        
+        return response
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting subscription plans: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.get("/admin/trial/analytics", tags=["admin"])
+async def get_trial_analytics_admin(admin_key: str = Depends(get_admin_key)):
+    """Get trial analytics and conversion metrics for admin"""
+    try:
+        analytics = get_trial_analytics()
+        return {
+            "success": True,
+            "analytics": analytics
+        }
+    except Exception as e:
+        logger.error(f"Error getting trial analytics: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get trial analytics")
 
 # Exception handler
 @app.exception_handler(Exception)

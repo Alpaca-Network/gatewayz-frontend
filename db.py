@@ -2134,3 +2134,141 @@ def get_rate_limit_alerts(api_key: Optional[str] = None, resolved: bool = False,
     except Exception as e:
         logger.error(f"Error getting rate limit alerts: {e}")
         return []
+
+# Trial Management Functions
+
+def start_trial_for_key(api_key: str, trial_days: int = 14) -> Dict[str, Any]:
+    """Start a free trial for an API key"""
+    try:
+        client = get_supabase_client()
+        
+        # Get API key ID
+        key_result = client.table('api_keys').select('id').eq('key', api_key).execute()
+        if not key_result.data:
+            return {"success": False, "error": "API key not found"}
+        
+        api_key_id = key_result.data[0]['id']
+        
+        # Call database function
+        result = client.rpc('start_trial', {
+            'api_key_id': api_key_id,
+            'trial_days': trial_days
+        }).execute()
+        
+        return result.data if result.data else {"success": False, "error": "Database error"}
+        
+    except Exception as e:
+        logger.error(f"Error starting trial: {e}")
+        return {"success": False, "error": str(e)}
+
+def get_trial_status_for_key(api_key: str) -> Dict[str, Any]:
+    """Get trial status for an API key"""
+    try:
+        client = get_supabase_client()
+        
+        # Get API key ID
+        key_result = client.table('api_keys').select('id').eq('key', api_key).execute()
+        if not key_result.data:
+            return {"success": False, "error": "API key not found"}
+        
+        api_key_id = key_result.data[0]['id']
+        
+        # Call database function
+        result = client.rpc('check_trial_status', {
+            'api_key_id': api_key_id
+        }).execute()
+        
+        return result.data if result.data else {"success": False, "error": "Database error"}
+        
+    except Exception as e:
+        logger.error(f"Error getting trial status: {e}")
+        return {"success": False, "error": str(e)}
+
+def convert_trial_to_paid_for_key(api_key: str, plan_name: str) -> Dict[str, Any]:
+    """Convert trial to paid subscription for an API key"""
+    try:
+        client = get_supabase_client()
+        
+        # Get API key ID
+        key_result = client.table('api_keys').select('id').eq('key', api_key).execute()
+        if not key_result.data:
+            return {"success": False, "error": "API key not found"}
+        
+        api_key_id = key_result.data[0]['id']
+        
+        # Call database function
+        result = client.rpc('convert_trial_to_paid', {
+            'api_key_id': api_key_id,
+            'plan_name': plan_name
+        }).execute()
+        
+        return result.data if result.data else {"success": False, "error": "Database error"}
+        
+    except Exception as e:
+        logger.error(f"Error converting trial: {e}")
+        return {"success": False, "error": str(e)}
+
+def track_trial_usage_for_key(api_key: str, tokens_used: int, requests_used: int = 1) -> Dict[str, Any]:
+    """Track trial usage for an API key"""
+    try:
+        client = get_supabase_client()
+        
+        # Get API key ID
+        key_result = client.table('api_keys').select('id').eq('key', api_key).execute()
+        if not key_result.data:
+            return {"success": False, "error": "API key not found"}
+        
+        api_key_id = key_result.data[0]['id']
+        
+        # Call database function
+        result = client.rpc('track_trial_usage', {
+            'api_key_id': api_key_id,
+            'tokens_used': tokens_used,
+            'requests_used': requests_used
+        }).execute()
+        
+        return result.data if result.data else {"success": False, "error": "Database error"}
+        
+    except Exception as e:
+        logger.error(f"Error tracking trial usage: {e}")
+        return {"success": False, "error": str(e)}
+
+def get_subscription_plans() -> List[Dict[str, Any]]:
+    """Get available subscription plans"""
+    try:
+        client = get_supabase_client()
+        result = client.table('subscription_plans').select('*').eq('is_active', True).execute()
+        return result.data if result.data else []
+        
+    except Exception as e:
+        logger.error(f"Error getting subscription plans: {e}")
+        return []
+
+def get_trial_analytics() -> Dict[str, Any]:
+    """Get trial analytics and conversion metrics"""
+    try:
+        client = get_supabase_client()
+        
+        # Get trial statistics
+        trial_stats = client.table('api_keys').select('is_trial, trial_converted, trial_start_date, trial_end_date').execute()
+        
+        if not trial_stats.data:
+            return {"error": "No data available"}
+        
+        total_trials = len([k for k in trial_stats.data if k['is_trial']])
+        active_trials = len([k for k in trial_stats.data if k['is_trial'] and k['trial_end_date'] and datetime.fromisoformat(k['trial_end_date'].replace('Z', '+00:00')) > datetime.now()])
+        converted_trials = len([k for k in trial_stats.data if k['trial_converted']])
+        
+        conversion_rate = (converted_trials / total_trials * 100) if total_trials > 0 else 0
+        
+        return {
+            "total_trials": total_trials,
+            "active_trials": active_trials,
+            "expired_trials": total_trials - active_trials,
+            "converted_trials": converted_trials,
+            "conversion_rate": round(conversion_rate, 2)
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting trial analytics: {e}")
+        return {"error": str(e)}

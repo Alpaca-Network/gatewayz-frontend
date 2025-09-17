@@ -15,6 +15,7 @@ import json
 import redis
 from functools import lru_cache
 from redis_config import get_redis_client, is_redis_available
+from rate_limiting_fallback import get_fallback_rate_limit_manager
 
 logger = logging.getLogger(__name__)
 
@@ -486,9 +487,16 @@ class RateLimitManager:
 # Global rate limit manager instance
 _rate_limit_manager = None
 
-def get_rate_limit_manager() -> RateLimitManager:
-    """Get global rate limit manager instance"""
+def get_rate_limit_manager():
+    """Get rate limit manager instance - uses fallback if Redis unavailable"""
     global _rate_limit_manager
-    if _rate_limit_manager is None:
-        _rate_limit_manager = RateLimitManager()
-    return _rate_limit_manager
+    
+    # Check if Redis is available
+    if is_redis_available():
+        if _rate_limit_manager is None:
+            _rate_limit_manager = RateLimitManager()
+        return _rate_limit_manager
+    else:
+        # Use fallback manager when Redis is not available
+        logger.warning("Redis not available, using fallback rate limiting")
+        return get_fallback_rate_limit_manager()

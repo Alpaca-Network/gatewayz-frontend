@@ -32,17 +32,30 @@ class RedisConfig:
     def get_connection_pool(self) -> ConnectionPool:
         """Get Redis connection pool"""
         if self._pool is None:
-            self._pool = ConnectionPool(
-                host=self.redis_host,
-                port=self.redis_port,
-                db=self.redis_db,
-                password=self.redis_password,
-                max_connections=self.redis_max_connections,
-                socket_timeout=self.redis_socket_timeout,
-                socket_connect_timeout=self.redis_socket_connect_timeout,
-                retry_on_timeout=self.redis_retry_on_timeout,
-                decode_responses=True
-            )
+            # Parse Redis URL if it contains connection details
+            if self.redis_url and "://" in self.redis_url:
+                # Use URL-based connection for Redis Cloud
+                self._pool = ConnectionPool.from_url(
+                    self.redis_url,
+                    max_connections=self.redis_max_connections,
+                    socket_timeout=self.redis_socket_timeout,
+                    socket_connect_timeout=self.redis_socket_connect_timeout,
+                    retry_on_timeout=self.redis_retry_on_timeout,
+                    decode_responses=True
+                )
+            else:
+                # Use individual parameters for local Redis
+                self._pool = ConnectionPool(
+                    host=self.redis_host,
+                    port=self.redis_port,
+                    db=self.redis_db,
+                    password=self.redis_password,
+                    max_connections=self.redis_max_connections,
+                    socket_timeout=self.redis_socket_timeout,
+                    socket_connect_timeout=self.redis_socket_connect_timeout,
+                    retry_on_timeout=self.redis_retry_on_timeout,
+                    decode_responses=True
+                )
         return self._pool
     
     def get_client(self) -> redis.Redis:
