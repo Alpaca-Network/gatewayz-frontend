@@ -1130,7 +1130,7 @@ async def user_register(request: UserRegistrationRequest):
 
 # Admin endpoints
 @app.post("/admin/add_credits", tags=["admin"])
-async def admin_add_credits(req: AddCreditsRequest):
+async def admin_add_credits(req: AddCreditsRequest, admin_key: str = Depends(get_admin_key)):
     try:
         user = get_user(req.api_key)
         if not user:
@@ -1157,7 +1157,7 @@ async def admin_add_credits(req: AddCreditsRequest):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/admin/balance", tags=["admin"])
-async def admin_get_all_balances():
+async def admin_get_all_balances(admin_key: str = Depends(get_admin_key)):
     try:
         users = get_all_users()
         
@@ -1181,7 +1181,7 @@ async def admin_get_all_balances():
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/admin/monitor", tags=["admin"])
-async def admin_monitor():
+async def admin_monitor(admin_key: str = Depends(get_admin_key)):
     try:
         monitor_data = get_admin_monitor_data()
         
@@ -1212,7 +1212,7 @@ async def admin_monitor():
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.post("/admin/limit", tags=["admin"])
-async def admin_set_rate_limit(req: SetRateLimitRequest):
+async def admin_set_rate_limit(req: SetRateLimitRequest, admin_key: str = Depends(get_admin_key)):
     try:
         set_user_rate_limits(req.api_key, req.rate_limits.dict())
         
@@ -1444,7 +1444,7 @@ async def proxy_chat(req: ProxyRequest, api_key: str = Depends(get_api_key)):
 
 # Admin cache management endpoints
 @app.post("/admin/refresh-models", tags=["admin"])
-async def admin_refresh_models():
+async def admin_refresh_models(admin_key: str = Depends(get_admin_key)):
     try:
         invalidate_model_cache()
         models = get_cached_models()
@@ -1461,7 +1461,7 @@ async def admin_refresh_models():
         raise HTTPException(status_code=500, detail="Failed to refresh model cache")
 
 @app.get("/admin/cache-status", tags=["admin"])
-async def admin_cache_status():
+async def admin_cache_status(admin_key: str = Depends(get_admin_key)):
     try:
         cache_age = None
         if _model_cache["timestamp"]:
@@ -1605,7 +1605,7 @@ async def get_user_plan_entitlements(api_key: str = Depends(get_api_key), featur
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.post("/admin/assign-plan", tags=["admin"])
-async def assign_plan_to_user(request: AssignPlanRequest):
+async def assign_plan_to_user(request: AssignPlanRequest, admin_key: str = Depends(get_admin_key)):
     """Assign a plan to a user (Admin only)"""
     try:
         success = assign_user_plan(request.user_id, request.plan_id, request.duration_months)
@@ -1832,7 +1832,7 @@ async def get_api_key_rate_limit_usage(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/admin/rate-limits/system", tags=["admin"])
-async def get_system_rate_limits():
+async def get_system_rate_limits(admin_key: str = Depends(get_admin_key)):
     """Get system-wide rate limiting statistics"""
     try:
         stats = get_system_rate_limit_stats()
@@ -1851,7 +1851,8 @@ async def get_system_rate_limits():
 async def get_rate_limit_alerts_endpoint(
     api_key: Optional[str] = None,
     resolved: bool = False,
-    limit: int = 100
+    limit: int = 100,
+    admin_key: str = Depends(get_admin_key)
 ):
     """Get rate limit alerts for monitoring"""
     try:
