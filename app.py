@@ -1957,13 +1957,34 @@ async def get_trial_status(api_key: str = Depends(get_api_key)):
 
 @app.get("/subscription/plans", tags=["subscription"])
 async def get_subscription_plans():
-    """Get available subscription plans"""
+    """Get available subscription plans with trial information"""
     try:
-        plans = get_subscription_plans()
+        # Use the existing plans table and add trial information
+        plans = get_all_plans()
+        
+        # Add trial information to each plan
+        enhanced_plans = []
+        for plan in plans:
+            enhanced_plan = {
+                **plan,
+                "trial_days": 3 if plan.get('name', '').lower() == 'free trial' else 0,
+                "trial_credits": 10.0 if plan.get('name', '').lower() == 'free trial' else 0.0,
+                "plan_type": "trial" if plan.get('name', '').lower() == 'free trial' else "paid",
+                "features": plan.get('features', []),
+                "max_concurrent_requests": plan.get('max_concurrent_requests', 5)
+            }
+            enhanced_plans.append(enhanced_plan)
+        
         return {
             "success": True,
-            "plans": plans,
-            "message": "Subscription plans retrieved successfully"
+            "plans": enhanced_plans,
+            "message": "Subscription plans retrieved successfully",
+            "trial_info": {
+                "trial_days": 3,
+                "trial_credits": 10.0,
+                "trial_tokens": 500000,
+                "trial_requests": 1000
+            }
         }
     except Exception as e:
         logger.error(f"Error getting subscription plans: {e}")
