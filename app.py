@@ -55,6 +55,13 @@ from trial_models import (
     TrialStatusResponse, TrackUsageRequest, TrackUsageResponse, SubscriptionPlansResponse
 )
 
+# Import notification modules
+from notification_service import notification_service
+from notification_models import (
+    NotificationPreferences, UpdateNotificationPreferencesRequest,
+    SendNotificationRequest, NotificationStats, NotificationType, NotificationChannel
+)
+
 # Import configuration
 from config import Config
 
@@ -1988,6 +1995,181 @@ async def get_subscription_plans():
         }
     except Exception as e:
         logger.error(f"Error getting subscription plans: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+## Notification Endpoints
+
+@app.get("/user/notifications/preferences", response_model=NotificationPreferences, tags=["notifications"])
+async def get_notification_preferences(api_key: str = Depends(get_api_key)):
+    """Get user notification preferences"""
+    try:
+        user = get_user(api_key)
+        if not user:
+            raise HTTPException(status_code=401, detail="Invalid API key")
+        
+        preferences = notification_service.get_user_preferences(user['id'])
+        if not preferences:
+            # Create default preferences if they don't exist
+            preferences = notification_service.create_user_preferences(user['id'])
+        
+        return preferences
+    except Exception as e:
+        logger.error(f"Error getting notification preferences: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.put("/user/notifications/preferences", tags=["notifications"])
+async def update_notification_preferences(
+    request: UpdateNotificationPreferencesRequest,
+    api_key: str = Depends(get_api_key)
+):
+    """Update user notification preferences"""
+    try:
+        user = get_user(api_key)
+        if not user:
+            raise HTTPException(status_code=401, detail="Invalid API key")
+        
+        # Convert request to dict, excluding None values
+        updates = {k: v for k, v in request.dict().items() if v is not None}
+        
+        if not updates:
+            raise HTTPException(status_code=400, detail="No updates provided")
+        
+        success = notification_service.update_user_preferences(user['id'], updates)
+        
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to update preferences")
+        
+        return {
+            "status": "success",
+            "message": "Notification preferences updated successfully"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating notification preferences: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.post("/user/notifications/test", tags=["notifications"])
+async def test_notification(
+    notification_type: NotificationType,
+    api_key: str = Depends(get_api_key)
+):
+    """Send test notification to user"""
+    try:
+        user = get_user(api_key)
+        if not user:
+            raise HTTPException(status_code=401, detail="Invalid API key")
+        
+        # Create test notification based on type
+        if notification_type == NotificationType.LOW_BALANCE:
+            subject = f"Test Low Balance Alert - {os.environ.get('APP_NAME', 'AI Gateway')}"
+            content = f"""
+            <html>
+            <body>
+                <h2>Test Low Balance Alert</h2>
+                <p>Hello {user.get('username', 'User')},</p>
+                <p>This is a test notification for low balance alerts.</p>
+                <p>Current Credits: ${user.get('credits', 0):.2f}</p>
+                <p>This is just a test - no action required.</p>
+                <p>Best regards,<br>The {os.environ.get('APP_NAME', 'AI Gateway')} Team</p>
+            </body>
+            </html>
+            """
+        elif notification_type == NotificationType.TRIAL_EXPIRING:
+            subject = f"Test Trial Expiry Alert - {os.environ.get('APP_NAME', 'AI Gateway')}"
+            content = f"""
+            <html>
+            <body>
+                <h2>Test Trial Expiry Alert</h2>
+                <p>Hello {user.get('username', 'User')},</p>
+                <p>This is a test notification for trial expiry alerts.</p>
+                <p>This is just a test - no action required.</p>
+                <p>Best regards,<br>The {os.environ.get('APP_NAME', 'AI Gateway')} Team</p>
+            </body>
+            </html>
+            """
+        else:
+            subject = f"Test Notification - {os.environ.get('APP_NAME', 'AI Gateway')}"
+            content = f"""
+            <html>
+            <body>
+                <h2>Test Notification</h2>
+                <p>Hello {user.get('username', 'User')},</p>
+                <p>This is a test notification.</p>
+                <p>This is just a test - no action required.</p>
+                <p>Best regards,<br>The {os.environ.get('APP_NAME', 'AI Gateway')} Team</p>
+            </body>
+            </html>
+            """
+        
+        request = SendNotificationRequest(
+            user_id=user['id'],
+            type=notification_type,
+            channel=NotificationChannel.EMAIL,
+            subject=subject,
+            content=content,
+            metadata={'test': True}
+        )
+        
+        success = notification_service.create_notification(request)
+        
+        return {
+            "status": "success" if success else "failed",
+            "message": "Test notification sent successfully" if success else "Failed to send test notification"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error sending test notification: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.get("/admin/notifications/stats", response_model=NotificationStats, tags=["admin"])
+async def get_notification_stats(admin_key: str = Depends(get_admin_key)):
+    """Get notification statistics for admin"""
+    try:
+        client = get_supabase_client()
+        
+        # Get notification counts
+        result = client.table('notifications').select('status').execute()
+        notifications = result.data if result.data else []
+        
+        total_notifications = len(notifications)
+        sent_notifications = len([n for n in notifications if n['status'] == 'sent'])
+        failed_notifications = len([n for n in notifications if n['status'] == 'failed'])
+        pending_notifications = len([n for n in notifications if n['status'] == 'pending'])
+        
+        delivery_rate = (sent_notifications / total_notifications * 100) if total_notifications > 0 else 0
+        
+        # Get last 24 hours notifications
+        yesterday = (datetime.utcnow() - timedelta(days=1)).isoformat()
+        recent_result = client.table('notifications').select('id').gte('created_at', yesterday).execute()
+        last_24h_notifications = len(recent_result.data) if recent_result.data else 0
+        
+        return NotificationStats(
+            total_notifications=total_notifications,
+            sent_notifications=sent_notifications,
+            failed_notifications=failed_notifications,
+            pending_notifications=pending_notifications,
+            delivery_rate=round(delivery_rate, 2),
+            last_24h_notifications=last_24h_notifications
+        )
+    except Exception as e:
+        logger.error(f"Error getting notification stats: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.post("/admin/notifications/process", tags=["admin"])
+async def process_notifications(admin_key: str = Depends(get_admin_key)):
+    """Process all pending notifications (admin only)"""
+    try:
+        stats = notification_service.process_notifications()
+        
+        return {
+            "status": "success",
+            "message": "Notifications processed successfully",
+            "stats": stats
+        }
+    except Exception as e:
+        logger.error(f"Error processing notifications: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/admin/trial/analytics", tags=["admin"])
