@@ -5,14 +5,12 @@ Handles low balance notifications, trial expiry alerts, and user communication
 """
 
 import logging
-import smtplib
 import os
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List
 import requests
 import json
+import resend
 
 from notification_models import (
     NotificationPreferences, Notification, NotificationType, 
@@ -29,12 +27,13 @@ class NotificationService:
     
     def __init__(self):
         self.supabase = get_supabase_client()
-        self.smtp_server = os.environ.get("SMTP_SERVER", "smtp.gmail.com")
-        self.smtp_port = int(os.environ.get("SMTP_PORT", "587"))
-        self.smtp_username = os.environ.get("SMTP_USERNAME")
-        self.smtp_password = os.environ.get("SMTP_PASSWORD")
+        self.resend_api_key = os.environ.get("RESEND_API_KEY")
         self.from_email = os.environ.get("FROM_EMAIL", "noreply@yourdomain.com")
         self.app_name = os.environ.get("APP_NAME", "AI Gateway")
+        
+        # Initialize Resend client
+        if self.resend_api_key:
+            resend.api_key = self.resend_api_key
         
     def get_user_preferences(self, user_id: int) -> Optional[NotificationPreferences]:
         """Get user notification preferences"""
@@ -197,35 +196,36 @@ class NotificationService:
             return None
     
     def send_email_notification(self, to_email: str, subject: str, html_content: str, text_content: str = None) -> bool:
-        """Send email notification"""
+        """Send email notification using Resend SDK"""
         try:
-            if not self.smtp_username or not self.smtp_password:
-                logger.warning("SMTP credentials not configured, skipping email notification")
+            if not self.resend_api_key:
+                logger.warning("Resend API key not configured, skipping email notification")
                 return False
             
-            msg = MIMEMultipart('alternative')
-            msg['Subject'] = subject
-            msg['From'] = self.from_email
-            msg['To'] = to_email
+            # Prepare email data for Resend
+            email_params = {
+                "from": self.from_email,
+                "to": [to_email],
+                "subject": subject,
+                "html": html_content
+            }
             
-            # Add text content
+            # Add text content if provided
             if text_content:
-                text_part = MIMEText(text_content, 'plain')
-                msg.attach(text_part)
+                email_params["text"] = text_content
             
-            # Add HTML content
-            html_part = MIMEText(html_content, 'html')
-            msg.attach(html_part)
+            # Send email via Resend SDK
+            response = resend.Emails.send(email_params)
             
-            # Send email
-            with smtplib.SMTP(self.smtp_server, self.smtp_port) as server:
-                server.starttls()
-                server.login(self.smtp_username, self.smtp_password)
-                server.send_message(msg)
-            
-            return True
+            if response and response.get('id'):
+                logger.info(f"Email sent successfully via Resend. ID: {response['id']}")
+                return True
+            else:
+                logger.error(f"Resend API error: {response}")
+                return False
+                
         except Exception as e:
-            logger.error(f"Error sending email notification: {e}")
+            logger.error(f"Error sending email notification via Resend: {e}")
             return False
     
     def send_webhook_notification(self, webhook_url: str, data: Dict[str, Any]) -> bool:

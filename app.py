@@ -27,6 +27,7 @@ from models import (
 
 # Import Phase 4 security modules
 from security import get_security_manager, get_audit_logger
+from supabase_config import get_supabase_client
 # Phase 4 security features integrated into existing endpoints
 
 # Import database functions directly
@@ -235,7 +236,6 @@ async def get_api_key(credentials: HTTPAuthorizationCredentials = Depends(securi
     logger.info(f"Phase 4 validation: Client IP: {client_ip}, Referer: {referer}")
     
     # Phase 4 secure validation with IP/domain enforcement
-    from supabase_config import get_supabase_client
     client = get_supabase_client()
     
     # Check both new and legacy API key tables
@@ -725,7 +725,6 @@ async def create_user_api_key(
                 audit_logger = get_audit_logger()
                 
                 # Get the created key ID for audit logging
-                from supabase_config import get_supabase_client
                 client = get_supabase_client()
                 key_result = client.table('api_keys').select('*').eq('api_key', new_api_key).execute()
                 
@@ -2130,6 +2129,7 @@ async def get_notification_stats(admin_key: str = Depends(get_admin_key)):
         client = get_supabase_client()
         
         # Get notification counts
+        logger.info("Fetching notification counts...")
         result = client.table('notifications').select('status').execute()
         notifications = result.data if result.data else []
         
@@ -2140,10 +2140,26 @@ async def get_notification_stats(admin_key: str = Depends(get_admin_key)):
         
         delivery_rate = (sent_notifications / total_notifications * 100) if total_notifications > 0 else 0
         
-        # Get last 24 hours notifications
-        yesterday = (datetime.utcnow() - timedelta(days=1)).isoformat()
-        recent_result = client.table('notifications').select('id').gte('created_at', yesterday).execute()
-        last_24h_notifications = len(recent_result.data) if recent_result.data else 0
+        # Get last 24 hours notifications - use a simpler approach
+        logger.info("Fetching recent notifications...")
+        try:
+            yesterday = (datetime.utcnow() - timedelta(days=1)).isoformat()
+            recent_result = client.table('notifications').select('id').gte('created_at', yesterday).execute()
+            last_24h_notifications = len(recent_result.data) if recent_result.data else 0
+        except Exception as recent_error:
+            logger.warning(f"Error fetching recent notifications: {recent_error}")
+            # Fallback: get all notifications and filter in Python
+            all_notifications = client.table('notifications').select('created_at').execute()
+            if all_notifications.data:
+                yesterday_dt = datetime.utcnow() - timedelta(days=1)
+                last_24h_notifications = len([
+                    n for n in all_notifications.data 
+                    if datetime.fromisoformat(n['created_at'].replace('Z', '+00:00')) >= yesterday_dt
+                ])
+            else:
+                last_24h_notifications = 0
+        
+        logger.info(f"Notification stats calculated: total={total_notifications}, sent={sent_notifications}, failed={failed_notifications}, pending={pending_notifications}")
         
         return NotificationStats(
             total_notifications=total_notifications,
@@ -2154,8 +2170,8 @@ async def get_notification_stats(admin_key: str = Depends(get_admin_key)):
             last_24h_notifications=last_24h_notifications
         )
     except Exception as e:
-        logger.error(f"Error getting notification stats: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        logger.error(f"Error getting notification stats: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 @app.post("/admin/notifications/process", tags=["admin"])
 async def process_notifications(admin_key: str = Depends(get_admin_key)):
