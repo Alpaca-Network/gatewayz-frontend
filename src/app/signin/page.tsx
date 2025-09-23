@@ -22,6 +22,7 @@ import {
 } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
+import { ApiKeyAuth } from '@/components/auth/api-key-auth';
 
 export default function SignInPage() {
   const [email, setEmail] = useState('');
@@ -31,6 +32,7 @@ export default function SignInPage() {
   const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
   const [resetSuccess, setResetSuccess] = useState(false);
+  const [authMethod, setAuthMethod] = useState<'email' | 'api'>('email');
   const { toast } = useToast();
   const router = useRouter();
 
@@ -260,10 +262,39 @@ export default function SignInPage() {
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-lg p-4 space-y-5 w-[460px]">
           {/* Header */}
           <div className="text-center space-y-3">
-            <h1 className="text-[32px] font-bold font-inter" style={{ fontWeight: 700 }}>Sign In With Email</h1>
+            <h1 className="text-[32px] font-bold font-inter" style={{ fontWeight: 700 }}>
+              {authMethod === 'email' ? 'Sign In With Email' : 'Sign In With API Key'}
+            </h1>
+            
+            {/* Auth Method Toggle */}
+            <div className="flex bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+              <button
+                type="button"
+                onClick={() => setAuthMethod('email')}
+                className={`flex-1 py-2 px-3 text-sm font-medium rounded-md transition-colors ${
+                  authMethod === 'email'
+                    ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                }`}
+              >
+                Email
+              </button>
+              <button
+                type="button"
+                onClick={() => setAuthMethod('api')}
+                className={`flex-1 py-2 px-3 text-sm font-medium rounded-md transition-colors ${
+                  authMethod === 'api'
+                    ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                }`}
+              >
+                API Key
+              </button>
             </div>
+          </div>
 
-          {/* Email/Password Form */}
+          {/* Conditional Auth Forms */}
+          {authMethod === 'email' ? (
             <form className="space-y-4" onSubmit={handleSignIn}>
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
@@ -407,7 +438,7 @@ export default function SignInPage() {
 
             </form>
 
-          {/* Divider */}
+            {/* Divider */}
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
               <div className="w-full border-t" />
@@ -417,37 +448,40 @@ export default function SignInPage() {
               </div>
             </div>
 
-          {/* Social Login Buttons */}
-          <div className="grid grid-cols-2 gap-3">
-            <Button 
-              variant="outline" 
-              onClick={handleGithubSignIn} 
-              className="w-full !bg-black hover:!bg-gray-800 !text-white border-none"
-            >
-              <Image 
-                src="/assets/icons/git.png" 
-                alt="GitHub" 
-                width={16} 
-                height={16} 
-                className="mr-2"
-              />
-              GitHub
-            </Button>
-            <Button 
-              variant="outline" 
-              onClick={handleGoogleSignIn} 
-              className="w-full !bg-black hover:!bg-gray-800 !text-white border-none"
-            >
-              <Image 
-                src="/assets/icons/google.png" 
-                alt="Google" 
-                width={16} 
-                height={16} 
-                className="mr-2"
-              />
-              Google
-                </Button>
+            {/* Social Login Buttons */}
+            <div className="grid grid-cols-2 gap-3">
+              <Button 
+                variant="outline" 
+                onClick={handleGithubSignIn} 
+                className="w-full !bg-black hover:!bg-gray-800 !text-white border-none"
+              >
+                <Image 
+                  src="/assets/icons/git.png" 
+                  alt="GitHub" 
+                  width={16} 
+                  height={16} 
+                  className="mr-2"
+                />
+                GitHub
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={handleGoogleSignIn} 
+                className="w-full !bg-black hover:!bg-gray-800 !text-white border-none"
+              >
+                <Image 
+                  src="/assets/icons/google.png" 
+                  alt="Google" 
+                  width={16} 
+                  height={16} 
+                  className="mr-2"
+                />
+                Google
+              </Button>
             </div>
+          ) : (
+            <ApiKeyAuth onSuccess={() => router.push('/')} />
+          )}
 
           {/* Sign Up Link */}
           <p className="text-center text-sm text-muted-foreground">

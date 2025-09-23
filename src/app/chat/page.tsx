@@ -37,6 +37,8 @@ import './chat.css';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { chat } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
+import { useChatCompletion } from '@/hooks/use-api';
+import { useApiContext } from '@/contexts/ApiContext';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format, isToday, isYesterday, formatDistanceToNow } from 'date-fns';
 
@@ -219,7 +221,7 @@ const ChatSidebar = ({ sessions, activeSessionId, setActiveSessionId, createNewC
     const groupedSessions = groupChatsByDate(sessions);
 
     return (
-    <aside className="flex flex-col gap-6 p-6 h-full">
+    <aside className="flex flex-col gap-6 p-8 h-full">
         <div className="flex items-center gap-2">
             <h2 className="text-3xl font-bold">Chat</h2>
         </div>
@@ -370,6 +372,10 @@ export default function ChatPage() {
     const { toast } = useToast();
     const chatContainerRef = useRef<HTMLDivElement>(null);
     const messageInputRef = useRef<HTMLInputElement>(null);
+    
+    // API integration
+    const { mutate: sendChatMessage, loading: chatLoading } = useChatCompletion();
+    const { isAuthenticated, userBalance } = useApiContext();
 
      const activeSession = useMemo(() => {
         return sessions.find(s => s.id === activeSessionId) || null;
@@ -522,22 +528,53 @@ export default function ChatPage() {
         setLoading(true);
 
         try {
-            const response = await chat({
-                modelName: selectedModel.value,
-                prompt: message,
+            // Check authentication
+            if (!isAuthenticated) {
+                toast({
+                    title: "Authentication Required",
+                    description: "Please sign in with your API key to use the chat feature.",
+                    variant: 'destructive'
+                });
+                return;
+            }
+
+            // Use real API for chat completion
+            const response = await sendChatMessage({
+                model: selectedModel.value,
+                messages: updatedMessages,
+                temperature: 0.7,
+                max_tokens: 1000,
             });
-             const finalSessions = sessions.map(session => {
-                if (session.id === activeSessionId) {
-                    return { 
-                        ...session,
-                        title: isFirstMessage ? message : session.title,
-                        messages: [...updatedMessages, { role: 'assistant' as const, content: response }],
-                        updatedAt: new Date()
-                    };
-                }
-                return session;
-            });
-             setSessions(finalSessions);
+
+            if (response) {
+                const finalSessions = sessions.map(session => {
+                    if (session.id === activeSessionId) {
+                        return { 
+                            ...session,
+                            title: isFirstMessage ? message : session.title,
+                            messages: [
+                                ...updatedMessages,
+                                {
+                                    role: 'assistant' as const,
+                                    content:
+                                        (response &&
+                                         typeof response === 'object' &&
+                                         'choices' in response &&
+                                         Array.isArray((response as any).choices) &&
+                                         (response as any).choices[0]?.message?.content)
+                                            ? (response as any).choices[0].message.content
+                                            : 'No response received'
+                                }
+                            ],
+                            updatedAt: new Date()
+                        };
+                    }
+                    return session;
+                });
+                setSessions(finalSessions);
+            } else {
+                throw new Error('No response received');
+            }
         } catch (error) {
             toast({
                 title: "Error",
@@ -558,9 +595,10 @@ export default function ChatPage() {
     };
     
   return (
-    <div className="flex h-[calc(100svh-130px)] bg-background">
+    <div className="h-[calc(100svh-130px)] bg-background">
+        <div className="flex max-w-screen-2xl mx-auto">
       {/* Left Sidebar */}
-        <div className="hidden lg:flex w-[32rem] bg-muted/20 border-r justify-end">
+        <div className="hidden lg:flex w-[320px] bg-muted/20 border-r justify-start">
           <ChatSidebar 
             sessions={sessions} 
             activeSessionId={activeSessionId} 
@@ -572,7 +610,7 @@ export default function ChatPage() {
         </div>
       
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col relative">
+      <main className="flex-1 flex flex-col relative px-8">
       <img 
         src="/logo_transparent.svg" 
         alt="Stats" 
@@ -582,7 +620,7 @@ export default function ChatPage() {
        
         
         {/* Header with title and model selector */}
-        <header className="relative z-10 w-[80%] flex items-center justify-between p-6 pl-24 pr-0">
+        <header className="relative z-10 w-[100%] flex items-center justify-between p-6 pl-24 pr-0">
           <div className="flex items-center gap-2">
             <div className="lg:hidden">
               <Sheet>
@@ -614,7 +652,7 @@ export default function ChatPage() {
         </header>
 
         {/* Main content area */}
-        <div className="relative z-10 w-[80%] flex-1 flex flex-col overflow-hidden">
+        <div className="relative z-10 w-[100%] flex-1 flex flex-col overflow-hidden">
           {/* Chat messages area */}
           {messages.length > 0 && (
             <div ref={chatContainerRef} className="flex-1   ml-20 flex flex-col gap-6 overflow-y-auto p-6 bg-card">
@@ -692,6 +730,7 @@ export default function ChatPage() {
           </div>
         </div>
       </main>
+      </div>
     </div>
   );
 }

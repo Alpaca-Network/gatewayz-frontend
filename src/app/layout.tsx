@@ -4,6 +4,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { AppHeader } from '@/components/layout/app-header';
 import { AppFooter } from '@/components/layout/app-footer';
 import { ThemeProvider } from '@/components/theme-provider';
+import { ApiProvider } from '@/contexts/ApiContext';
+import { ErrorBoundary } from '@/components/error-boundary';
 import { Inter } from 'next/font/google';
 
 const inter = Inter({ subsets: ['latin'] });
@@ -30,10 +32,14 @@ export default function RootLayout({
           defaultTheme="light"
           storageKey="ui-theme"
         >
-          <AppHeader />
-          {children}
-          <Toaster />
-          <AppFooter />
+          <ErrorBoundary>
+            <ApiProvider>
+              <AppHeader />
+              {children}
+              <Toaster />
+              <AppFooter />
+            </ApiProvider>
+          </ErrorBoundary>
         </ThemeProvider>
       </body>
     </html>
