@@ -16,6 +16,7 @@ class NotificationType(str, Enum):
     TRIAL_EXPIRED = "trial_expired"
     PLAN_EXPIRING = "plan_expiring"
     PLAN_EXPIRED = "plan_expired"
+    SUBSCRIPTION_EXPIRING = "subscription_expiring"
     CREDIT_ADDED = "credit_added"
     USAGE_ALERT = "usage_alert"
 

@@ -2050,7 +2050,7 @@ async def update_notification_preferences(
 
 @app.post("/user/notifications/test", tags=["notifications"])
 async def test_notification(
-    notification_type: NotificationType,
+    notification_type: NotificationType = Query(..., description="Type of notification to test"),
     api_key: str = Depends(get_api_key)
 ):
     """Send test notification to user"""
@@ -2082,6 +2082,19 @@ async def test_notification(
                 <h2>Test Trial Expiry Alert</h2>
                 <p>Hello {user.get('username', 'User')},</p>
                 <p>This is a test notification for trial expiry alerts.</p>
+                <p>This is just a test - no action required.</p>
+                <p>Best regards,<br>The {os.environ.get('APP_NAME', 'AI Gateway')} Team</p>
+            </body>
+            </html>
+            """
+        elif notification_type == NotificationType.SUBSCRIPTION_EXPIRING:
+            subject = f"Test Subscription Expiry Alert - {os.environ.get('APP_NAME', 'AI Gateway')}"
+            content = f"""
+            <html>
+            <body>
+                <h2>Test Subscription Expiry Alert</h2>
+                <p>Hello {user.get('username', 'User')},</p>
+                <p>This is a test notification for subscription expiry alerts.</p>
                 <p>This is just a test - no action required.</p>
                 <p>Best regards,<br>The {os.environ.get('APP_NAME', 'AI Gateway')} Team</p>
             </body>

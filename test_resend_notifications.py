@@ -105,12 +105,10 @@ def test_notification_preferences():
         
         # Test send test notification
         print("\n3. Sending test notification via Resend...")
-        test_data = {"notification_type": "low_balance"}
         
         response = requests.post(
-            f"{BASE_URL}/user/notifications/test",
-            headers=headers,
-            json=test_data
+            f"{BASE_URL}/user/notifications/test?notification_type=low_balance", 
+            headers=headers
         )
         
         if response.status_code == 200:
