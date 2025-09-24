@@ -40,6 +40,7 @@ The application provides comprehensive logging at multiple levels:
 - **Application Logs**: FastAPI application logs
 - **Database Logs**: Supabase connection and query logs
 - **External API Logs**: Gatewayz API call logs
+- **Email Logs**: Resend email delivery and notification logs
 - **Security Logs**: Authentication and authorization events
 
 ### Platform-Specific Logging

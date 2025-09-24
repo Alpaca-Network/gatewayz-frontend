@@ -11,6 +11,7 @@
 ### External Services
 - **Supabase Project**: Database and authentication service
 - **OpenRouter API Key**: AI model access credentials
+- **Resend API Key**: Email delivery service for notifications
 - **Domain** (optional): For production deployment
 
 ## Installation
@@ -56,6 +57,12 @@ SUPABASE_KEY=your_supabase_anon_key
 
 # OpenRouter Configuration
 OPENROUTER_API_KEY=sk-or-v1-your_openrouter_key
+
+# Email Configuration (for notifications)
+RESEND_API_KEY=re_your_resend_api_key
+FROM_EMAIL=noreply@yourdomain.com
+APP_NAME=AI Gateway
+APP_URL=https://yourdomain.com
 ```
 
 ### Optional Variables
@@ -101,6 +108,12 @@ The application expects the following tables in your Supabase project:
 - **plans**: Subscription plan definitions
 - **user_plans**: User plan assignments and history
 - **audit_logs**: Security event logging
+
+#### Notification Tables
+- **notification_preferences**: User email notification settings
+- **notifications**: Email notification records and status
+- **notification_templates**: Professional HTML email templates
+- **password_reset_tokens**: Secure password reset tokens
 
 ### Database Initialization
 The application automatically initializes database connections on startup:
@@ -200,7 +213,31 @@ uvicorn app:app --reload --port 8001
 - **Application Logs**: Check console output for errors
 - **Database Logs**: Check Supabase dashboard
 - **OpenRouter Logs**: Check OpenRouter dashboard
+- **Email Logs**: Check Resend dashboard for email delivery
 - **Health Endpoint**: Monitor system status
+
+## Email Setup
+
+### Resend Configuration
+1. **Create Resend Account**: Sign up at [resend.com](https://resend.com)
+2. **Get API Key**: Generate API key from dashboard
+3. **Verify Domain**: Add and verify your sending domain
+4. **Configure Environment**: Add `RESEND_API_KEY` to environment variables
+
+### Email Templates
+The application includes professional email templates for:
+- **Welcome Emails**: New user onboarding
+- **Password Reset**: Secure password reset with tokens
+- **Low Balance Alerts**: Credit depletion warnings
+- **Trial Expiry**: Trial expiration reminders
+- **Usage Reports**: Monthly usage analytics
+- **API Key Notifications**: Security alerts for key creation
+
+### Email Security
+- **No API Key Exposure**: API keys are never included in emails
+- **Dashboard Access**: Sensitive information accessed through secure dashboard
+- **Token-Based Reset**: Password reset uses secure, time-limited tokens
+- **Professional Design**: Mobile-responsive, branded email templates
 
 ## Development Tools
 

@@ -31,8 +31,19 @@ Authorization: Bearer YOUR_API_KEY
 ### Authentication & Registration
 **POST** `/auth/register`
 - Register a new user with unified API key system
+- Automatically sends welcome email with account details
 - Request body: `UserRegistrationRequest`
 - Returns: `UserRegistrationResponse` with primary API key
+
+**POST** `/auth/password-reset`
+- Request password reset email with secure token
+- Request body: `email` (string)
+- Returns: Success message (doesn't reveal if email exists)
+
+**POST** `/auth/reset-password`
+- Reset password using secure token from email
+- Request body: `token` (string), `new_password` (string)
+- Returns: Success message
 
 ### User Management
 **GET** `/user/balance`
@@ -86,7 +97,27 @@ Authorization: Bearer YOUR_API_KEY
 
 **GET** `/user/api-keys/usage`
 - Get usage statistics for all user API keys
-- Returns: `ApiKeyUsageResponse` with audit logging information
+
+### Notifications & Email
+**POST** `/user/notifications/send-usage-report`
+- Send monthly usage report email
+- Request body: `month` (string, format: YYYY-MM)
+- Returns: Success message
+
+**POST** `/user/notifications/test`
+- Test notification templates
+- Request body: `notification_type` (query parameter)
+- Available types: low_balance, trial_expiring, subscription_expiring
+- Returns: Test notification sent confirmation
+
+**GET** `/user/notifications/preferences`
+- Get user notification preferences
+- Returns: `NotificationPreferences` with email settings
+
+**PUT** `/user/notifications/preferences`
+- Update user notification preferences
+- Request body: `UpdateNotificationPreferencesRequest`
+- Returns: Updated preferences
 
 **GET** `/user/api-keys/audit-logs`
 - Get audit logs for security monitoring (Phase 4 feature)
@@ -146,6 +177,11 @@ Authorization: Bearer YOUR_API_KEY
 - Assign plan to user (Admin only)
 - Request body: `AssignPlanRequest`
 - Returns: assignment confirmation
+
+### Notifications & Email
+**GET** `/admin/notifications/stats`
+- Get notification statistics and metrics
+- Returns: `NotificationStats` with email delivery statistics
 
 ### Cache Management
 **POST** `/admin/refresh-models`

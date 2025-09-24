@@ -26,6 +26,7 @@ For a high-level overview of the project, see:
 - **[Authentication](api.md#authentication)** - API key authentication and security
 - **[Rate Limiting](api.md#rate-limiting)** - Rate limiting and usage controls
 - **[Error Handling](api.md#error-codes)** - Error codes and troubleshooting
+- **[Email Features](email-features.md)** - Professional email notifications and templates
 
 ### Operations
 - **[Operations Guide](operations.md)** - Monitoring, logging, and maintenance
@@ -44,16 +45,21 @@ For a high-level overview of the project, see:
 - `GET /models/providers` - Provider statistics
 
 ### User Endpoints
-- `POST /auth/register` - User registration
+- `POST /auth/register` - User registration (sends welcome email)
+- `POST /auth/password-reset` - Request password reset email
+- `POST /auth/reset-password` - Reset password with token
 - `GET /user/balance` - Account balance
 - `GET /user/monitor` - Usage metrics
 - `POST /user/api-keys` - API key management
+- `POST /user/notifications/send-usage-report` - Send monthly usage report
+- `POST /user/notifications/test` - Test notification templates
 - `POST /v1/chat/completions` - AI chat completions
 
 ### Admin Endpoints
 - `GET /admin/monitor` - System monitoring
 - `POST /admin/add_credits` - Credit management
 - `POST /admin/limit` - Rate limit configuration
+- `GET /admin/notifications/stats` - Notification statistics
 
 ## Getting Help
 

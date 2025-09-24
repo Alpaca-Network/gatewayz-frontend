@@ -31,6 +31,10 @@ The AI Gateway is a production-ready FastAPI application that provides a unified
   - User management and authentication
   - API key storage and validation
   - Usage tracking and analytics
+- **Resend**: Professional email delivery service
+  - Email notifications and templates
+  - Secure password reset tokens
+  - Usage reports and alerts
 
 ### Security Module (`security.py`)
 - **Advanced Security Manager**: Secure key hashing and encryption
@@ -46,6 +50,8 @@ The AI Gateway is a production-ready FastAPI application that provides a unified
 - **Plans**: Subscription management, entitlements, usage limits
 - **Usage Tracking**: Comprehensive metrics and analytics
 - **Rate Limiting**: Multi-tier rate limiting configuration
+- **Notifications**: Email templates, preferences, delivery tracking
+- **Email Security**: Password reset tokens, secure communications
 
 ### Request/Response Models
 - **Pydantic Models**: Type-safe request/response validation
@@ -122,6 +128,28 @@ The AI Gateway is a production-ready FastAPI application that provides a unified
 - **Usage Analytics**: Real-time monitoring
 - **Error Tracking**: Detailed error logging
 - **Performance Metrics**: System health monitoring
+
+## Notification System
+
+### Email Architecture
+- **Template Engine**: Professional HTML email templates
+- **Delivery Service**: Resend API for reliable email delivery
+- **Security**: No API key exposure in email content
+- **Responsive Design**: Mobile-optimized email templates
+
+### Notification Types
+- **Welcome Emails**: New user onboarding with secure dashboard access
+- **Password Reset**: Token-based secure password reset
+- **Low Balance Alerts**: Credit depletion warnings
+- **Trial Expiry**: Trial expiration reminders
+- **Usage Reports**: Monthly analytics and insights
+- **API Key Notifications**: Security alerts for key management
+
+### Email Security
+- **Token-Based Reset**: Time-limited password reset tokens
+- **Dashboard Access**: Sensitive information accessed through secure dashboard
+- **No Credential Exposure**: API keys never included in emails
+- **Professional Templates**: Branded, mobile-responsive design
 
 ## Deployment Architecture
 

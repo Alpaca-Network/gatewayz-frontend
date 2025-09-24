@@ -22,6 +22,19 @@ OPENROUTER_API_KEY=sk-or-v1-your_openrouter_key
 - **OPENROUTER_API_KEY**: Your OpenRouter API key for AI model access
 - **Purpose**: Authentication with OpenRouter API for AI model requests
 
+#### Email Configuration
+```env
+RESEND_API_KEY=re_your_resend_api_key
+FROM_EMAIL=noreply@yourdomain.com
+APP_NAME=AI Gateway
+APP_URL=https://yourdomain.com
+```
+- **RESEND_API_KEY**: Your Resend API key for email delivery
+- **FROM_EMAIL**: Email address for sending notifications
+- **APP_NAME**: Application name used in email templates
+- **APP_URL**: Base URL for email links and dashboard access
+- **Purpose**: Professional email notifications and user communication
+
 ### Optional Variables
 
 #### OpenRouter Site Information
