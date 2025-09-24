@@ -1518,11 +1518,16 @@ async def get_plans():
                     "id": plan.get("id"),
                     "name": plan.get("name"),
                     "description": plan.get("description"),
+                    "plan_type": plan.get("plan_type", "free"),
                     "daily_request_limit": plan.get("daily_request_limit"),
                     "monthly_request_limit": plan.get("monthly_request_limit"),
                     "daily_token_limit": plan.get("daily_token_limit"),
                     "monthly_token_limit": plan.get("monthly_token_limit"),
                     "price_per_month": float(plan.get("price_per_month", 0)),
+                    "yearly_price": float(plan.get("yearly_price", 0)) if plan.get("yearly_price") else None,
+                    "price_per_token": float(plan.get("price_per_token", 0)) if plan.get("price_per_token") else None,
+                    "is_pay_as_you_go": plan.get("is_pay_as_you_go", False),
+                    "max_concurrent_requests": plan.get("max_concurrent_requests", 5),
                     "features": features,
                     "is_active": plan.get("is_active", True)
                 }
@@ -1530,6 +1535,10 @@ async def get_plans():
             except Exception as plan_error:
                 logger.error(f"Error processing plan {plan.get('id', 'unknown')}: {plan_error}")
                 continue
+        
+        # Sort plans by type (Free, Dev, Team, Customize)
+        plan_order = {'free': 0, 'dev': 1, 'team': 2, 'customize': 3}
+        plan_responses.sort(key=lambda x: plan_order.get(x.get('plan_type', 'free'), 999))
         
         logger.info(f"Returning {len(plan_responses)} plan responses")
         return plan_responses
@@ -1963,23 +1972,40 @@ async def get_trial_status(api_key: str = Depends(get_api_key)):
 
 @app.get("/subscription/plans", tags=["subscription"])
 async def get_subscription_plans():
-    """Get available subscription plans with trial information"""
+    """Get available subscription plans with 4-tier structure"""
     try:
-        # Use the existing plans table and add trial information
+        # Get all plans from database
         plans = get_all_plans()
         
-        # Add trial information to each plan
+        # Enhance plans with additional information
         enhanced_plans = []
         for plan in plans:
+            plan_type = plan.get('plan_type', 'free')
+            is_pay_as_you_go = plan.get('is_pay_as_you_go', False)
+            
             enhanced_plan = {
-                **plan,
-                "trial_days": 3 if plan.get('name', '').lower() == 'free trial' else 0,
-                "trial_credits": 10.0 if plan.get('name', '').lower() == 'free trial' else 0.0,
-                "plan_type": "trial" if plan.get('name', '').lower() == 'free trial' else "paid",
+                "id": plan.get('id'),
+                "name": plan.get('name'),
+                "description": plan.get('description'),
+                "plan_type": plan_type,
+                "monthly_price": float(plan.get('price_per_month', 0)),
+                "yearly_price": float(plan.get('yearly_price', 0)) if plan.get('yearly_price') else None,
+                "price_per_token": float(plan.get('price_per_token', 0)) if plan.get('price_per_token') else None,
+                "is_pay_as_you_go": is_pay_as_you_go,
+                "daily_request_limit": plan.get('daily_request_limit', 0),
+                "monthly_request_limit": plan.get('monthly_request_limit', 0),
+                "daily_token_limit": plan.get('daily_token_limit', 0),
+                "monthly_token_limit": plan.get('monthly_token_limit', 0),
+                "max_concurrent_requests": plan.get('max_concurrent_requests', 5),
                 "features": plan.get('features', []),
-                "max_concurrent_requests": plan.get('max_concurrent_requests', 5)
+                "is_active": plan.get('is_active', True),
+                "trial_eligible": plan_type == 'free'  # Only Free plan is trial eligible
             }
             enhanced_plans.append(enhanced_plan)
+        
+        # Sort plans by price (Free, Dev, Team, Customize)
+        plan_order = {'free': 0, 'dev': 1, 'team': 2, 'customize': 3}
+        enhanced_plans.sort(key=lambda x: plan_order.get(x['plan_type'], 999))
         
         return {
             "success": True,
@@ -1988,8 +2014,9 @@ async def get_subscription_plans():
             "trial_info": {
                 "trial_days": 3,
                 "trial_credits": 10.0,
-                "trial_tokens": 500000,
-                "trial_requests": 1000
+                "trial_tokens": 1000000,  # 1M tokens for trial
+                "trial_requests": 10000,  # 10K requests for trial
+                "trial_plan": "free"
             }
         }
     except Exception as e:

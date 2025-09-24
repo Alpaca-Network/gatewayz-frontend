@@ -227,9 +227,14 @@ class NotificationService:
             if not preferences or not preferences.email_notifications:
                 return None
             
-            # Check if user has an active paid plan
+            # Check if user has an active paid plan (Dev, Team, or Customize)
             user_plan = get_user_plan(user_id)
             if not user_plan or not user_plan.get('is_active', False):
+                return None
+            
+            # Only send subscription expiry alerts for paid plans (not Free)
+            plan_type = user_plan.get('plan_type', 'free')
+            if plan_type == 'free':
                 return None
             
             # Check if plan is expiring soon

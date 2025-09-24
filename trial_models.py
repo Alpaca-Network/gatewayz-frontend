@@ -19,24 +19,28 @@ class SubscriptionStatus(str, Enum):
 
 class PlanType(str, Enum):
     """Plan type enumeration"""
-    TRIAL = "trial"
     FREE = "free"
-    PAID = "paid"
+    DEV = "dev"
+    TEAM = "team"
+    CUSTOMIZE = "customize"
 
 class SubscriptionPlan(BaseModel):
     """Subscription plan model"""
     id: Optional[int] = None
     plan_name: str
     plan_type: PlanType
+    description: str = ""
     monthly_price: float = 0.0
-    yearly_price: float = 0.0
-    max_requests_per_month: int = 1000
-    max_tokens_per_month: int = 100000
-    max_requests_per_day: int = 100
-    max_tokens_per_day: int = 10000
+    yearly_price: Optional[float] = None
+    daily_request_limit: int = 1000
+    monthly_request_limit: int = 1000
+    daily_token_limit: int = 100000
+    monthly_token_limit: int = 100000
     max_concurrent_requests: int = 5
-    features: Dict[str, Any] = Field(default_factory=dict)
+    price_per_token: Optional[float] = None  # For pay-as-you-go plans
+    features: List[str] = Field(default_factory=list)
     is_active: bool = True
+    is_pay_as_you_go: bool = False  # For Customize plan
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 

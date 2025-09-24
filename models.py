@@ -321,11 +321,16 @@ class PlanResponse(BaseModel):
     id: int
     name: str
     description: str
+    plan_type: str = "free"
     daily_request_limit: int
     monthly_request_limit: int
     daily_token_limit: int
     monthly_token_limit: int
     price_per_month: float
+    yearly_price: Optional[float] = None
+    price_per_token: Optional[float] = None
+    is_pay_as_you_go: bool = False
+    max_concurrent_requests: int = 5
     features: List[str]
     is_active: bool
 
