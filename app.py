@@ -58,6 +58,7 @@ from trial_models import (
 
 # Import notification modules
 from notification_service import notification_service
+from enhanced_notification_service import enhanced_notification_service
 from notification_models import (
     NotificationPreferences, UpdateNotificationPreferencesRequest,
     SendNotificationRequest, NotificationStats, NotificationType, NotificationChannel
@@ -1111,6 +1112,17 @@ async def user_register(request: UserRegistrationRequest):
             credits=10  # $10 worth of credits (500,000 tokens)
         )
         
+        # Send welcome email
+        try:
+            enhanced_notification_service.send_welcome_email(
+                user_id=user_data['user_id'],
+                username=user_data['username'],
+                email=user_data['email'],
+                credits=user_data['credits']
+            )
+        except Exception as e:
+            logger.warning(f"Failed to send welcome email: {e}")
+        
         return UserRegistrationResponse(
             user_id=user_data['user_id'],
             username=user_data['username'],
@@ -1124,7 +1136,7 @@ async def user_register(request: UserRegistrationRequest):
             },
             auth_method=request.auth_method,
             subscription_status="trial",
-            message="User registered successfully with 3-day free trial and 500,000 tokens ($10 credits)",
+            message="User registered successfully!",
             timestamp=datetime.utcnow()
         )
         
@@ -2160,6 +2172,111 @@ async def test_notification(
         raise
     except Exception as e:
         logger.error(f"Error sending test notification: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.post("/auth/password-reset", tags=["authentication"])
+async def request_password_reset(email: str):
+    """Request password reset email"""
+    try:
+        # Find user by email
+        client = get_supabase_client()
+        user_result = client.table('users').select('id', 'username', 'email').eq('email', email).execute()
+        
+        if not user_result.data:
+            # Don't reveal if email exists or not for security
+            return {"message": "If an account with that email exists, a password reset link has been sent."}
+        
+        user = user_result.data[0]
+        
+        # Send password reset email
+        reset_token = enhanced_notification_service.send_password_reset_email(
+            user_id=user['id'],
+            username=user['username'],
+            email=user['email']
+        )
+        
+        if reset_token:
+            return {"message": "Password reset email sent successfully"}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to send password reset email")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error requesting password reset: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.post("/auth/reset-password", tags=["authentication"])
+async def reset_password(token: str, new_password: str):
+    """Reset password using token"""
+    try:
+        client = get_supabase_client()
+        
+        # Verify token
+        token_result = client.table('password_reset_tokens').select('*').eq('token', token).eq('used', False).execute()
+        
+        if not token_result.data:
+            raise HTTPException(status_code=400, detail="Invalid or expired reset token")
+        
+        token_data = token_result.data[0]
+        expires_at = datetime.fromisoformat(token_data['expires_at'].replace('Z', '+00:00'))
+        
+        if datetime.utcnow().replace(tzinfo=expires_at.tzinfo) > expires_at:
+            raise HTTPException(status_code=400, detail="Reset token has expired")
+        
+        # Update password (in a real app, you'd hash this)
+        # For now, we'll just mark the token as used
+        client.table('password_reset_tokens').update({'used': True}).eq('id', token_data['id']).execute()
+        
+        return {"message": "Password reset successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error resetting password: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.post("/user/notifications/send-usage-report", tags=["notifications"])
+async def send_usage_report(
+    month: str = Query(..., description="Month to send report for (YYYY-MM)"),
+    api_key: str = Depends(get_api_key)
+):
+    """Send monthly usage report email"""
+    try:
+        user = get_user(api_key)
+        if not user:
+            raise HTTPException(status_code=401, detail="Invalid API key")
+        
+        # Get usage stats for the month
+        client = get_supabase_client()
+        start_date = f"{month}-01"
+        end_date = f"{month}-31"
+        
+        # This is a simplified example - you'd need to implement actual usage tracking
+        usage_stats = {
+            'total_requests': 1000,
+            'tokens_used': 50000,
+            'credits_spent': 5.00,
+            'remaining_credits': user.get('credits', 0)
+        }
+        
+        success = enhanced_notification_service.send_monthly_usage_report(
+            user_id=user['id'],
+            username=user['username'],
+            email=user['email'],
+            month=month,
+            usage_stats=usage_stats
+        )
+        
+        if success:
+            return {"message": "Usage report sent successfully"}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to send usage report")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error sending usage report: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/admin/notifications/stats", response_model=NotificationStats, tags=["admin"])

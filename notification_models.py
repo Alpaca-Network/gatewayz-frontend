@@ -19,6 +19,11 @@ class NotificationType(str, Enum):
     SUBSCRIPTION_EXPIRING = "subscription_expiring"
     CREDIT_ADDED = "credit_added"
     USAGE_ALERT = "usage_alert"
+    WELCOME = "welcome"
+    PASSWORD_RESET = "password_reset"
+    USAGE_REPORT = "usage_report"
+    API_KEY_CREATED = "api_key_created"
+    PLAN_UPGRADE = "plan_upgrade"
 
 class NotificationChannel(str, Enum):
     """Notification channel enumeration"""
