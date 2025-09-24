@@ -175,8 +175,8 @@ export default function OrganizationPage() {
   const totalValue = useMemo(() => {
       // Calculate total value based on input/output costs and estimated usage
       const total = orgModels.reduce((acc, model) => {
-        const inputCost = parseFloat(model.inputCost);
-        const outputCost = parseFloat(model.outputCost);
+        const inputCost = parseFloat(model.inputCost.toString());
+        const outputCost = parseFloat(model.outputCost.toString());
         const tokenValue = parseFloat(model.tokens);
         
         // Estimate value based on token usage and costs
@@ -259,7 +259,7 @@ export default function OrganizationPage() {
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart
                   data={chartData}
-                  // margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
+                  margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
                 >
                   <defs>
                     <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
