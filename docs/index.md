@@ -43,7 +43,8 @@ For a high-level overview of the project, see:
 ### Public Endpoints
 - `GET /health` - System health check
 - `GET /models` - Available AI models
-- `GET /models/providers` - Provider statistics
+- `GET /models/providers` - Provider statistics with official URLs
+- `GET /providers` - Available providers from OpenRouter
 
 ### User Endpoints
 - `POST /auth/register` - User registration (sends welcome email)

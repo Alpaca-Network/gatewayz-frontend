@@ -23,8 +23,77 @@ Authorization: Bearer YOUR_API_KEY
 
 **GET** `/models/providers`
 - Returns provider statistics across all available models
-- Includes model counts, suggested models, and pricing availability
+- Includes model counts, suggested models, pricing availability, and official provider URLs
+- Uses OpenRouter's official providers API for accurate site URLs and policy links
 - No authentication required
+
+**GET** `/providers`
+- Returns available providers directly from OpenRouter API
+- Includes official provider information, privacy policies, terms of service, and status pages
+- No authentication required
+
+Example response for `/models/providers`:
+```json
+{
+  "status": "success",
+  "provider_statistics": {
+    "total_providers": 15,
+    "total_models": 324,
+    "suggested_models": 12,
+    "pricing_available": 324,
+    "providers": {
+      "openai": {
+        "name": "OpenAI",
+        "model_count": 12,
+        "suggested_models": 5,
+        "logo_url": null,
+        "site_url": "https://openai.com",
+        "privacy_policy_url": "https://openai.com/policies/privacy-policy/",
+        "terms_of_service_url": "https://openai.com/policies/row-terms-of-use/",
+        "status_page_url": "https://status.openai.com/"
+      },
+      "anthropic": {
+        "name": "Anthropic",
+        "model_count": 8,
+        "suggested_models": 2,
+        "logo_url": null,
+        "site_url": "https://www.anthropic.com",
+        "privacy_policy_url": "https://www.anthropic.com/privacy",
+        "terms_of_service_url": "https://www.anthropic.com/terms",
+        "status_page_url": "https://status.anthropic.com/"
+      }
+    }
+  },
+  "timestamp": "2024-01-15T10:30:00Z"
+}
+```
+
+Example response for `/providers`:
+```json
+{
+  "status": "success",
+  "total_providers": 25,
+  "providers": [
+    {
+      "name": "OpenAI",
+      "slug": "openai",
+      "privacy_policy_url": "https://openai.com/policies/privacy-policy/",
+      "terms_of_service_url": "https://openai.com/policies/row-terms-of-use/",
+      "status_page_url": "https://status.openai.com/"
+    },
+    {
+      "name": "Anthropic",
+      "slug": "anthropic",
+      "privacy_policy_url": "https://www.anthropic.com/privacy",
+      "terms_of_service_url": "https://www.anthropic.com/terms",
+      "status_page_url": "https://status.anthropic.com/"
+    }
+  ],
+  "timestamp": "2024-01-15T10:30:00Z"
+}
+```
+
+**Note**: Logo URLs are still not provided by OpenRouter API, but site URLs and policy links are now accurately sourced from OpenRouter's official providers API.
 
 ## User Endpoints
 
@@ -262,3 +331,4 @@ All API usage is tracked with:
 - Model-specific usage statistics
 - Environment-based usage breakdown
 - Real-time monitoring and analytics
+

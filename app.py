@@ -107,6 +107,13 @@ _model_cache = {
     "ttl": 300  # 5 minutes
 }
 
+# Provider cache for OpenRouter providers
+_provider_cache = {
+    "data": None,
+    "timestamp": None,
+    "ttl": 3600  # 1 hour (providers change less frequently)
+}
+
 def get_cached_models():
     """Get cached models or fetch from OpenRouter if cache is expired"""
     try:
@@ -125,6 +132,99 @@ def invalidate_model_cache():
     """Invalidate the model cache to force refresh"""
     _model_cache["data"] = None
     _model_cache["timestamp"] = None
+
+def get_cached_providers():
+    """Get cached providers or fetch from OpenRouter if cache is expired"""
+    try:
+        if _provider_cache["data"] and _provider_cache["timestamp"]:
+            cache_age = (datetime.utcnow() - _provider_cache["timestamp"]).total_seconds()
+            if cache_age < _provider_cache["ttl"]:
+                return _provider_cache["data"]
+        
+        # Cache expired or empty, fetch fresh data
+        return fetch_providers_from_openrouter()
+    except Exception as e:
+        logger.error(f"Error getting cached providers: {e}")
+        return None
+
+def fetch_providers_from_openrouter():
+    """Fetch providers from OpenRouter API"""
+    try:
+        if not Config.OPENROUTER_API_KEY:
+            logger.error("OpenRouter API key not configured")
+            return None
+        
+        headers = {
+            "Authorization": f"Bearer {Config.OPENROUTER_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        
+        response = httpx.get("https://openrouter.ai/api/v1/providers", headers=headers)
+        response.raise_for_status()
+        
+        providers_data = response.json()
+        _provider_cache["data"] = providers_data.get("data", [])
+        _provider_cache["timestamp"] = datetime.utcnow()
+        
+        return _provider_cache["data"]
+    except Exception as e:
+        logger.error(f"Failed to fetch providers from OpenRouter: {e}")
+        return None
+
+def get_provider_info(provider_id: str, provider_name: str) -> dict:
+    """Get provider information from OpenRouter providers API"""
+    try:
+        providers = get_cached_providers()
+        if not providers:
+            return {
+                'logo_url': None,
+                'site_url': None,
+                'privacy_policy_url': None,
+                'terms_of_service_url': None,
+                'status_page_url': None
+            }
+        
+        # Find provider by slug (provider_id)
+        provider_info = None
+        for provider in providers:
+            if provider.get('slug') == provider_id:
+                provider_info = provider
+                break
+        
+        if provider_info:
+            # Extract domain from privacy policy URL for site URL
+            site_url = None
+            if provider_info.get('privacy_policy_url'):
+                # Extract domain from privacy policy URL
+                from urllib.parse import urlparse
+                parsed = urlparse(provider_info['privacy_policy_url'])
+                site_url = f"{parsed.scheme}://{parsed.netloc}"
+            
+            return {
+                'logo_url': None,  # Still not provided by OpenRouter
+                'site_url': site_url,
+                'privacy_policy_url': provider_info.get('privacy_policy_url'),
+                'terms_of_service_url': provider_info.get('terms_of_service_url'),
+                'status_page_url': provider_info.get('status_page_url')
+            }
+        else:
+            # Provider not found in OpenRouter providers list
+            return {
+                'logo_url': None,
+                'site_url': None,
+                'privacy_policy_url': None,
+                'terms_of_service_url': None,
+                'status_page_url': None
+            }
+    except Exception as e:
+        logger.error(f"Error getting provider info for {provider_id}: {e}")
+        return {
+            'logo_url': None,
+            'site_url': None,
+            'privacy_policy_url': None,
+            'terms_of_service_url': None,
+            'status_page_url': None
+        }
 
 def fetch_models_from_openrouter():
     """Fetch models from OpenRouter API"""
@@ -396,6 +496,51 @@ async def get_models_endpoint():
         logger.error(f"Error getting models: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
+@app.get("/models/debug", tags=["models"])
+async def get_models_debug():
+    """Debug endpoint to inspect model data structure"""
+    try:
+        models = get_cached_models()
+        if not models:
+            raise HTTPException(status_code=500, detail="Failed to retrieve models")
+        
+        # Return first few models with their structure
+        sample_models = models[:3] if len(models) >= 3 else models
+        
+        return {
+            "status": "success",
+            "total_models": len(models),
+            "sample_models": sample_models,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting debug model data: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.get("/providers", tags=["models"])
+async def get_providers():
+    """Get available providers from OpenRouter API"""
+    try:
+        providers = get_cached_providers()
+        if not providers:
+            raise HTTPException(status_code=500, detail="Failed to retrieve providers")
+        
+        return {
+            "status": "success",
+            "total_providers": len(providers),
+            "providers": providers,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting providers: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
 @app.get("/models/providers", tags=["models"])
 async def get_models_providers():
     """Get provider statistics for available models"""
@@ -417,13 +562,76 @@ async def get_models_providers():
             if model.get('pricing') and any(model['pricing'].values()):
                 pricing_available += 1
             
-            # Count by provider
-            provider_id = model.get('top_provider', {}).get('id', 'unknown')
+            # Extract provider information from model ID
+            provider_id = 'unknown'
+            provider_name = 'Unknown'
+            
+            if 'id' in model and model['id']:
+                model_id = model['id']
+                if '/' in model_id:
+                    # Extract provider from model ID (e.g., "qwen/qwen3-vl-235b" -> "qwen")
+                    provider_id = model_id.split('/')[0]
+                    # Convert provider ID to proper name
+                    provider_name = provider_id.title()
+                    
+                    # Handle special cases for better naming
+                    if provider_id == 'openai':
+                        provider_name = 'OpenAI'
+                    elif provider_id == 'anthropic':
+                        provider_name = 'Anthropic'
+                    elif provider_id == 'google':
+                        provider_name = 'Google'
+                    elif provider_id == 'meta':
+                        provider_name = 'Meta'
+                    elif provider_id == 'microsoft':
+                        provider_name = 'Microsoft'
+                    elif provider_id == 'qwen':
+                        provider_name = 'Qwen'
+                    elif provider_id == 'deepseek':
+                        provider_name = 'DeepSeek'
+                    elif provider_id == 'mistral':
+                        provider_name = 'Mistral'
+                    elif provider_id == 'cohere':
+                        provider_name = 'Cohere'
+                    elif provider_id == 'claude':
+                        provider_name = 'Claude'
+                    elif provider_id == 'gemini':
+                        provider_name = 'Gemini'
+                    elif provider_id == 'llama':
+                        provider_name = 'Llama'
+                    elif provider_id == 'codestral':
+                        provider_name = 'Codestral'
+                    elif provider_id == 'command':
+                        provider_name = 'Command'
+                    elif provider_id == 'jamba':
+                        provider_name = 'Jamba'
+                    elif provider_id == 'mixtral':
+                        provider_name = 'Mixtral'
+                    elif provider_id == 'phi':
+                        provider_name = 'Phi'
+                    elif provider_id == 'solar':
+                        provider_name = 'Solar'
+                    elif provider_id == 'yi':
+                        provider_name = 'Yi'
+                    elif provider_id == 'zephyr':
+                        provider_name = 'Zephyr'
+                else:
+                    # Single word model ID, likely from OpenRouter directly
+                    provider_id = 'openrouter'
+                    provider_name = 'OpenRouter'
+            
+            # Initialize provider stats if not exists
             if provider_id not in provider_stats:
+                provider_info = get_provider_info(provider_id, provider_name)
                 provider_stats[provider_id] = {
-                    'name': model.get('top_provider', {}).get('name', provider_id.title()),
+                    'name': provider_name,
                     'model_count': 0,
-                    'suggested_models': 0
+                    'suggested_models': 0,
+                    'logo_url': provider_info['logo_url'],
+                    'site_url': provider_info['site_url'],
+                    'privacy_policy_url': provider_info['privacy_policy_url'],
+                    'terms_of_service_url': provider_info['terms_of_service_url'],
+                    'status_page_url': provider_info['status_page_url']
                 }
             
             provider_stats[provider_id]['model_count'] += 1
