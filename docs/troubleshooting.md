@@ -31,6 +31,7 @@
 
 4. **Verify Database Tables**
    - Ensure required tables exist: `users`, `api_keys`, `usage_records`, etc.
+   - Check notification tables: `notification_templates`, `password_reset_tokens`
    - Check Row Level Security (RLS) policies
    - Verify table permissions for the API key
 
@@ -337,13 +338,120 @@ curl -H "Authorization: Bearer YOUR_API_KEY" \
      "http://localhost:8000/user/limit"
 ```
 
+### Email Service Status
+```bash
+# Check notification stats
+curl -H "Authorization: Bearer YOUR_API_KEY" \
+     "http://localhost:8000/admin/notifications/stats"
+
+# Test email template
+curl -X POST -H "Authorization: Bearer YOUR_API_KEY" \
+     "http://localhost:8000/user/notifications/test?notification_type=welcome"
+```
+
 ## Getting Help
 
 ### Log Analysis
 1. **Check Application Logs**: Look for error patterns and stack traces
 2. **Review Database Logs**: Check Supabase dashboard for query issues
 3. **Monitor External APIs**: Check OpenRouter and other service status
-4. **Health Endpoint**: Use health check for system status
+4. **Email Logs**: Check Resend dashboard for email delivery issues
+5. **Health Endpoint**: Use health check for system status
+
+## Email Troubleshooting
+
+### Email Delivery Issues
+
+#### Emails Not Being Sent
+**Symptoms:**
+- Users not receiving welcome emails after registration
+- Password reset emails not arriving
+- Notification emails not being delivered
+
+**Solutions:**
+1. **Verify Resend Configuration**
+   ```bash
+   # Check environment variables
+   echo $RESEND_API_KEY
+   echo $FROM_EMAIL
+   echo $APP_NAME
+   echo $APP_URL
+   ```
+
+2. **Test Email Service**
+   ```bash
+   # Test notification endpoint
+   curl -X POST -H "Authorization: Bearer YOUR_API_KEY" \
+        "http://localhost:8000/user/notifications/test?notification_type=welcome"
+   ```
+
+3. **Check Resend Dashboard**
+   - Verify API key is valid and active
+   - Check domain verification status
+   - Review delivery logs and bounce rates
+   - Ensure sending limits are not exceeded
+
+4. **Verify Email Templates**
+   - Check if templates exist in database
+   - Validate template variables and formatting
+   - Test template rendering with sample data
+
+**Error Messages:**
+```
+Failed to send email: Invalid API key
+Email delivery failed: Domain not verified
+Template not found: welcome_email
+```
+
+### Email Template Issues
+
+#### Template Rendering Errors
+**Symptoms:**
+- Emails with broken HTML or missing content
+- Template variable substitution failures
+- CSS styling issues in emails
+
+**Solutions:**
+1. **Check Template Variables**
+   - Ensure all required variables are provided
+   - Verify variable names match template placeholders
+   - Check for missing or null values
+
+2. **Validate HTML Templates**
+   - Check for unescaped characters in HTML
+   - Verify CSS syntax and escaping
+   - Test template rendering with sample data
+
+3. **Test Template Endpoints**
+   ```bash
+   # Test specific template
+   curl -X POST -H "Authorization: Bearer YOUR_API_KEY" \
+        "http://localhost:8000/user/notifications/test?notification_type=low_balance"
+   ```
+
+### Password Reset Issues
+
+#### Reset Tokens Not Working
+**Symptoms:**
+- Password reset links not working
+- Tokens expiring too quickly
+- Reset requests not being processed
+
+**Solutions:**
+1. **Check Token Generation**
+   - Verify tokens are being created in database
+   - Check token expiration times
+   - Ensure tokens are properly formatted
+
+2. **Verify Email Links**
+   - Check if reset links are properly formatted
+   - Verify APP_URL environment variable
+   - Test link generation and validation
+
+3. **Check Token Cleanup**
+   - Ensure used tokens are marked as used
+   - Verify expired tokens are cleaned up
+   - Check token validation logic
 
 ### Common Error Codes
 - **400**: Bad Request - Check request format and parameters

@@ -8,7 +8,8 @@ Before deploying, ensure you have:
 
 1. ✅ Supabase project set up with the `users` table
 2. ✅ OpenRouter API key
-3. ✅ Environment variables configured
+3. ✅ Resend API key for email notifications
+4. ✅ Environment variables configured
 
 ## Platform-Specific Deployment
 
@@ -185,6 +186,10 @@ All deployments require these environment variables:
 | `SUPABASE_URL` | Your Supabase project URL | ✅ | `https://abc123.supabase.co` |
 | `SUPABASE_KEY` | Your Supabase anon key | ✅ | `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...` |
 | `OPENROUTER_API_KEY` | Your OpenRouter API key | ✅ | `sk-or-v1-...` |
+| `RESEND_API_KEY` | Your Resend API key for emails | ✅ | `re_your_resend_api_key` |
+| `FROM_EMAIL` | Email address for sending notifications | ✅ | `noreply@yourdomain.com` |
+| `APP_NAME` | Application name for email templates | ✅ | `AI Gateway` |
+| `APP_URL` | Base URL for email links | ✅ | `https://yourdomain.com` |
 | `OPENROUTER_SITE_URL` | Your site URL for rankings | ❌ | `https://your-site.com` |
 | `OPENROUTER_SITE_NAME` | Your site name for rankings | ❌ | `Your Site Name` |
 
@@ -203,6 +208,10 @@ All deployments require these environment variables:
 ### Protected Endpoints (Authentication Required)
 - `GET /user/balance` - Get user balance
 - `POST /v1/chat/completions` - Chat completion
+- `POST /auth/password-reset` - Request password reset email
+- `POST /auth/reset-password` - Reset password with token
+- `POST /user/notifications/send-usage-report` - Send monthly usage report
+- `POST /user/notifications/test` - Test notification templates
 
 ## Health Check Endpoint
 

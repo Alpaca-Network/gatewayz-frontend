@@ -137,6 +137,7 @@ The application provides comprehensive logging at multiple levels:
 - **Application Metrics**: Built-in FastAPI metrics
 - **Database Metrics**: Supabase performance metrics
 - **External API Metrics**: Gatewayz API performance
+- **Email Metrics**: Resend delivery statistics and bounce rates
 - **Custom Metrics**: Business-specific metrics
 
 ### Alerting
@@ -206,3 +207,31 @@ The application provides comprehensive logging at multiple levels:
 - **Cache Refresh**: Force refresh model cache
 - **Database Connection**: Reset database connections
 - **External Service**: Check external service availability
+- **Email Service**: Verify Resend API connectivity and delivery
+
+## Email Operations
+
+### Email Monitoring
+**GET** `/admin/notifications/stats`
+- **Purpose**: Get email delivery statistics and metrics
+- **Authentication**: Admin access required
+- **Response**: Email delivery rates, bounce rates, notification counts
+- **Use Cases**: Email performance monitoring, delivery troubleshooting
+
+### Email Templates
+- **Template Management**: Professional HTML email templates stored in database
+- **Template Types**: Welcome, password reset, low balance, trial expiry, usage reports
+- **Template Variables**: Dynamic content with user-specific data
+- **Template Testing**: Test endpoint for template validation
+
+### Email Security
+- **No API Key Exposure**: API keys never included in email content
+- **Token-Based Reset**: Secure password reset with time-limited tokens
+- **Dashboard Access**: Sensitive information accessed through secure dashboard
+- **Email Validation**: Proper email format validation and sanitization
+
+### Email Delivery
+- **Resend Integration**: Professional email delivery service
+- **Delivery Tracking**: Email delivery status and bounce handling
+- **Retry Logic**: Automatic retry for failed email deliveries
+- **Error Handling**: Graceful handling of email service failures
