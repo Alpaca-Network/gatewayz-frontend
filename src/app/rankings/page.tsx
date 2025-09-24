@@ -28,7 +28,8 @@ export default function RankingsPage() {
       org: model.organization,
       category: model.category,
       provider: model.provider,
-      tokens: `${model.tokens.toFixed(1)}B`,
+      // tokens: `${model.tokens.toFixed(1)}B`,
+      tokens: model.tokens,
       value: model.value,
       changePercent: `${model.change > 0 ? '+' : ''}${model.change.toFixed(1)}%`,
     }));

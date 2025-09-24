@@ -507,29 +507,15 @@ print(completion.choices[0])`,
                 className="h-12 pr-20 bg-gray-100 border-gray-300" 
                 value={apiKey}
                 type="password"
-                onChange={(e) => setApiKey(e.target.value)}
-                onKeyPress={handleCopyApiKey}
+                readOnly
               />
               <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-2">
-                <button 
-                  onClick={handleCopyApiKey}
-                  className="p-1"
-                >
-                  <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-                  </svg>
-                </button>
-                <div className="w-px h-6 bg-gray-400"></div>
-                <button className="p-1">
-                  <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                  </svg>
-                </button>
+                
+                <img src='/material-symbols_key.svg' alt='Copy' width={24} height={24} />
               </div>
             </div>   
             <span className="flex-1">
-              <Button className="w-full bg-black text-white h-12 rounded-lg hover:bg-gray-800">Generate API Key</Button>    
+              <Button className="w-full bg-black text-white h-12 rounded-lg hover:bg-gray-800"><a href="/settings/keys">Generate API Key</a></Button>    
             </span>
           </div>
         </section>
