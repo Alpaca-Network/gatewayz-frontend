@@ -596,7 +596,7 @@ export default function ChatPage() {
     
   return (
     <div className="h-[calc(100svh-130px)] bg-background">
-        <div className="flex max-w-screen-2xl mx-auto">
+        <div className="flex max-w-screen-2xl mx-auto h-[calc(100svh-130px)]">
       {/* Left Sidebar */}
         <div className="hidden lg:flex w-[320px] bg-muted/20 border-r justify-start">
           <ChatSidebar 
@@ -652,7 +652,7 @@ export default function ChatPage() {
         </header>
 
         {/* Main content area */}
-        <div className="relative z-10 w-[100%] flex-1 flex flex-col overflow-hidden">
+        <div className="relative z-10 w-[100%] flex-1 flex flex-col overflow-hidden h-[calc(100svh-130px)]">
           {/* Chat messages area */}
           {messages.length > 0 && (
             <div ref={chatContainerRef} className="flex-1   ml-20 flex flex-col gap-6 overflow-y-auto p-6 bg-card">

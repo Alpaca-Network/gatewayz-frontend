@@ -119,6 +119,7 @@ export function useModelData(selectedTimeRange: TimeRange, selectedCategory: Mod
   }, [isClient, appTimeFrame]);
 
   return { 
+    modelsData,
     filteredModels, 
     chartData, 
     adjustedApps,
