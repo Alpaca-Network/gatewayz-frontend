@@ -27,6 +27,7 @@ For a high-level overview of the project, see:
 - **[Rate Limiting](api.md#rate-limiting)** - Rate limiting and usage controls
 - **[Error Handling](api.md#error-codes)** - Error codes and troubleshooting
 - **[Email Features](email-features.md)** - Professional email notifications and templates
+- **[Frontend Key Generation](frontend-key-generation.md)** - Frontend implementation guide for API key generation
 
 ### Operations
 - **[Operations Guide](operations.md)** - Monitoring, logging, and maintenance

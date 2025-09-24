@@ -214,7 +214,7 @@ class ProfessionalEmailTemplates:
             {content}
         </div>
         <div class="footer">
-            <p>© 2024 {app_name}. All rights reserved.</p>
+            <p>© 2025 {app_name}. All rights reserved.</p>
             <p>This email was sent to {email}</p>
             <div class="social-links">
                 <a href="{app_url}">Website</a>
