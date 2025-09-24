@@ -75,7 +75,7 @@ const FeaturedModelCard = ({
             </div>
             <div>
               <h3 className="font-bold text-base text-black">{model.name}</h3>
-              <span>By</span><span className="text-sm text-blue-600"> {model.by.charAt(0).toUpperCase() + model.by.slice(1)}</span>
+              <span>By</span><span className="text-sm text-blue-600"><a href={`https://api.gatewayz.ai/${model.by}`} target="_blank"> {model.by.charAt(0).toUpperCase() + model.by.slice(1)}</a></span>
             </div>
           </div>
           
