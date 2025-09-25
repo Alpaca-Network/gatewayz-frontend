@@ -7,20 +7,23 @@ import { Menu } from "lucide-react";
 import Link from 'next/link';
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { onAuthStateChanged, type User } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { usePrivy } from '@privy-io/react-auth';
 import { UserNav } from './user-nav';
 import { SearchBar } from './search-bar';
 
 export function AppHeader() {
-  const [user, setUser] = useState<User | null>(null);
+  const { user, login, getAccessToken } = usePrivy();
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setUser(user);
-    });
-    return () => unsubscribe();
-  }, []);
+    const get = async () => {
+      if(user) {
+        const token = await getAccessToken();
+        console.log({user});
+        console.log({token});
+      }
+    }
+    get();
+  }, [user])
 
   return (
     <header className="sticky top-0 z-50 w-full h-[65px] border-b bg-header flex items-center">
@@ -45,9 +48,9 @@ export function AppHeader() {
             {user ? (
               <UserNav user={user} />
             ) : (
-              <Link href="/signin">
-                <Button variant="outline">Sign In</Button>
-              </Link>
+              // <Link href="/signin">
+                <Button variant="outline" onClick={() => login()}>Sign In</Button>
+              // </Link>
             )}
             <ThemeToggle />
           </div>
@@ -71,9 +74,9 @@ export function AppHeader() {
                     {user ? (
                        <UserNav user={user} />
                     ) : (
-                       <Link href="/signin">
-                         <Button variant="outline" className="w-full">Sign In</Button>
-                       </Link>
+                      // <Link href="/signin">
+                      <Button variant="outline" onClick={() => login()}>Sign In</Button>
+                      // </Link>
                     )}
                      <ThemeToggle />
                   </div>

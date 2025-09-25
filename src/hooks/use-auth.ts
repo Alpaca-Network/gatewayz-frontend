@@ -1,24 +1,13 @@
 "use client";
 
-import { useState, useEffect } from 'react';
-import { auth, onAuthStateChanged, type User } from '@/lib/firebase';
+import { usePrivy } from '@privy-io/react-auth';
 
 export function useAuth() {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setUser(user);
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, []);
+  const { user, authenticated, ready } = usePrivy();
 
   return {
     user,
-    loading,
-    isAuthenticated: !!user,
+    loading: !ready,
+    isAuthenticated: authenticated,
   };
 }

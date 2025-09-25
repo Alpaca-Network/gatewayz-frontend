@@ -1,0 +1,26 @@
+import { PrivyProvider } from '@privy-io/react-auth';
+
+export const privyConfig = {
+  appId: process.env.NEXT_PUBLIC_PRIVY_APP_ID!,
+  config: {
+    // Customize the appearance of the Privy modal
+    appearance: {
+      theme: 'light',
+      accentColor: '#000000',
+      logo: '/logo_black.svg',
+    },
+    // Configure login methods
+    loginMethods: ['email', 'google', 'github'],
+    // // Configure embedded wallets (disabled for now as requested)
+    // embeddedWallets: {
+    //   createOnLogin: 'off',
+    // },
+    // Configure OAuth providers
+    oauth: {
+      providers: ['google', 'github'],
+    },
+  },
+};
+
+export { PrivyProvider };
+
