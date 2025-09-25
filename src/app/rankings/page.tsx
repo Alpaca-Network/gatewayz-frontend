@@ -196,12 +196,12 @@ export default function RankingsPage() {
             <Card className="p-6 py-2 border border-gray-200">
               <div className="grid grid-cols-24 gap-4 items-center">
                 {/* Rank Column - 2 columns */}
-                <div className="col-span-2">
+                <div className="col-span-1">
                     <span className="text-sm  ">Rank</span>
                 </div>
 
                 {/* Model Info Column - 8 columns */}
-                <div className="col-span-5">
+                <div className="col-span-6">
                     <span className="text-sm">AI Model</span>
                 </div>
                 {/* Model Info Column - 8 columns */}
@@ -237,7 +237,7 @@ export default function RankingsPage() {
               <Card key={model.rank} className="p-6 py-2 border border-gray-200">
                 <div className="grid grid-cols-24 gap-4 items-center">
                   {/* Rank Column - 2 columns */}
-                  <div className="col-span-2">
+                  <div className="col-span-1">
                     <div className="flex flex-col items-start">
                       <span className="text-sm text-muted-foreground">#{model.rank}</span>
                       <div className="flex items-center space-x-1">
@@ -254,7 +254,7 @@ export default function RankingsPage() {
                   </div>
 
                   {/* Model Info Column - 8 columns */}
-                   <div className="col-span-5">
+                   <div className="col-span-6">
                      <div className="flex items-center space-x-3">
                        <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center">
                          <img src="/deepseek_1.png" alt={model.model} className="w-16 h-16 rounded-full" />
@@ -341,16 +341,22 @@ export default function RankingsPage() {
              {topModels.slice(0, 20).map((model, i) => (
                <Card key={i} className="p-6 col-span-6 border border-gray-400">
                  <div className="space-y-4">
-                   <div className="flex items-center space-x-3">
-                     <div className="w-12 h-12 rounded-full flex items-center justify-center">
-                       <img src="/devicon_google.svg" alt={model.model} className="w-12 h-12 rounded-full" />
+                 <div className="flex justify-between items-start">
+                     <div className="flex space-x-3">
+                       <div className="w-12 h-12 rounded-full flex items-center justify-center">
+                         <img src="/devicon_google.svg" alt={model.model} className="w-12 h-12 rounded-full" />
+                       </div>
+                       <div>
+                         <h3 className="font-semibold text-lg">{model.model}</h3>
+                         <p className="text-sm">{model.org} • {model.provider}</p>
+                       </div>
                      </div>
-                     <div>
-                       <h3 className="font-semibold text-lg">{model.model}</h3>
-                       <p className="text-sm">{model.org} • {model.category}</p>
-                     </div>
+
+                     <div className="flex items-start space-x-1 font-bold">#{model.rank}</div>
                    </div>
-                   
+                   <div className="flex justify-between items-start font-semibold">
+                    <div>Autonomous Coding Agent that is...</div>
+                   </div>
                    <div className="flex justify-between items-end">
                      <div>
                        <p className="text-2xl font-bold">{model.tokens}</p>
@@ -364,7 +370,7 @@ export default function RankingsPage() {
                      </div>
                    </div>
                    
-                   <Button variant="outline" className="w-full border border-gray-400">
+                   <Button variant="outline" className="w-full border border-gray-400 bg-white">
                      View App →
                    </Button>
                  </div>

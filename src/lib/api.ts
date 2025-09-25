@@ -127,7 +127,7 @@ class ApiClient {
   }
 
   async getModelProviders() {
-    return this.request('/models/providers');
+    return this.request('/provider');
   }
 
   // User endpoints
