@@ -16,7 +16,7 @@ The API provides three main endpoints for accessing inference provider and model
 
 **Endpoint:** `GET /provider`
 
-**Description:** Returns all available inference providers with detailed metric data, including logos and additional metadata.
+**Description:** Returns all available inference providers with detailed metric data, including logos, model counts, and additional metadata.
 
 **Query Parameters:**
 - `moderated_only` (boolean, optional): Filter for moderated providers only (default: false)
@@ -28,17 +28,18 @@ The API provides three main endpoints for accessing inference provider and model
 {
   "data": [
     {
-      "name": "Provider Name",
-      "slug": "provider-slug",
-      "privacy_policy_url": "https://provider.com/privacy",
-      "terms_of_service_url": "https://provider.com/terms",
-      "status_page_url": "https://status.provider.com/",
+      "name": "OpenAI",
+      "slug": "openai",
+      "privacy_policy_url": "https://openai.com/privacy",
+      "terms_of_service_url": "https://openai.com/terms",
+      "status_page_url": "https://status.openai.com/",
       "may_log_prompts": true,
       "may_train_on_data": false,
-      "moderated_by_openrouter": false,
+      "moderated_by_openrouter": true,
       "needs_moderated": false,
-      "logo_url": "https://logo-url.com/logo.svg",
-      "site_url": "https://provider.com"
+      "logo_url": "https://www.google.com/s2/favicons?domain=openai.com&sz=128",
+      "site_url": "https://openai.com",
+      "model_count": 15
     }
   ],
   "total": 50,
@@ -105,6 +106,9 @@ curl -X GET "https://your-api.com/provider?moderated_only=true&limit=5&offset=0"
       "hugging_face_id": "openai/gpt-4",
       "per_request_limits": {},
       "supported_parameters": ["temperature", "max_tokens", "top_p"],
+      "provider_slug": "openai",
+      "provider_site_url": "https://openai.com",
+      "model_logo_url": "https://www.google.com/s2/favicons?domain=openai.com&sz=128",
       "huggingface_metrics": {
         "downloads": 42076,
         "likes": 675,
@@ -236,6 +240,22 @@ The API now includes optional integration with Hugging Face to provide additiona
 - **Optional Integration**: Use `include_huggingface=false` to get original OpenRouter data only
 - **Caching**: Hugging Face data is cached for 1 hour to reduce API calls
 - **Error Handling**: Graceful fallback to original data if Hugging Face API is unavailable
+
+### Provider Logo Properties
+
+All providers now include enhanced logo information:
+
+- `logo_url`: Generated logo URL using Google's favicon service with 128px size (same format as `model_logo_url`)
+- `site_url`: Provider's website URL extracted from various sources
+- `model_count`: Number of available models provided by this provider
+
+### Model Logo Properties
+
+All models now include provider logo information:
+
+- `provider_slug`: Provider identifier extracted from model ID (e.g., "openai" from "openai/gpt-4")
+- `provider_site_url`: Provider's website URL from the providers endpoint
+- `model_logo_url`: Generated logo URL using Google's favicon service with 128px size
 
 ### Hugging Face Metrics Included
 

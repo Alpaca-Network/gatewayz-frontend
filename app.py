@@ -426,6 +426,143 @@ def enhance_model_with_huggingface_data(openrouter_model: dict) -> dict:
         logger.error(f"Error enhancing model with Hugging Face data: {e}")
         return openrouter_model
 
+def get_model_count_by_provider(provider_slug: str, models_data: list = None) -> int:
+    """Get count of models for a specific provider"""
+    try:
+        if not models_data or not provider_slug:
+            return 0
+        
+        count = 0
+        for model in models_data:
+            model_id = model.get('id', '')
+            if '/' in model_id:
+                model_provider = model_id.split('/')[0]
+                if model_provider == provider_slug:
+                    count += 1
+        
+        return count
+    except Exception as e:
+        logger.error(f"Error counting models for provider {provider_slug}: {e}")
+        return 0
+
+def enhance_providers_with_logos_and_sites(providers: list) -> list:
+    """Enhance providers with site_url and logo_url (shared logic)"""
+    try:
+        enhanced_providers = []
+        for provider in providers:
+            # Extract site URL from various sources
+            site_url = None
+            
+            # Try privacy policy URL first
+            if provider.get('privacy_policy_url'):
+                try:
+                    from urllib.parse import urlparse
+                    parsed = urlparse(provider['privacy_policy_url'])
+                    site_url = f"{parsed.scheme}://{parsed.netloc}"
+                except Exception:
+                    pass
+            
+            # Try terms of service URL if privacy policy didn't work
+            if not site_url and provider.get('terms_of_service_url'):
+                try:
+                    from urllib.parse import urlparse
+                    parsed = urlparse(provider['terms_of_service_url'])
+                    site_url = f"{parsed.scheme}://{parsed.netloc}"
+                except Exception:
+                    pass
+            
+            # Try status page URL if others didn't work
+            if not site_url and provider.get('status_page_url'):
+                try:
+                    from urllib.parse import urlparse
+                    parsed = urlparse(provider['status_page_url'])
+                    site_url = f"{parsed.scheme}://{parsed.netloc}"
+                except Exception:
+                    pass
+            
+            # Manual mapping for known providers
+            if not site_url:
+                manual_site_urls = {
+                    'openai': 'https://openai.com',
+                    'anthropic': 'https://anthropic.com',
+                    'google': 'https://google.com',
+                    'meta': 'https://meta.com',
+                    'microsoft': 'https://microsoft.com',
+                    'cohere': 'https://cohere.com',
+                    'mistralai': 'https://mistral.ai',
+                    'perplexity': 'https://perplexity.ai',
+                    'amazon': 'https://aws.amazon.com',
+                    'baidu': 'https://baidu.com',
+                    'tencent': 'https://tencent.com',
+                    'alibaba': 'https://alibaba.com',
+                    'ai21': 'https://ai21.com',
+                    'inflection': 'https://inflection.ai'
+                }
+                site_url = manual_site_urls.get(provider.get('slug'))
+            
+            # Generate logo URL using Google favicon service
+            logo_url = None
+            if site_url:
+                # Clean the site URL for favicon service
+                clean_url = site_url.replace('https://', '').replace('http://', '')
+                if clean_url.startswith('www.'):
+                    clean_url = clean_url[4:]
+                logo_url = f"https://www.google.com/s2/favicons?domain={clean_url}&sz=128"
+            
+            enhanced_provider = {
+                **provider,
+                "site_url": site_url,
+                "logo_url": logo_url
+            }
+            
+            enhanced_providers.append(enhanced_provider)
+        
+        return enhanced_providers
+    except Exception as e:
+        logger.error(f"Error enhancing providers with logos and sites: {e}")
+        return providers
+
+def enhance_model_with_provider_info(openrouter_model: dict, providers_data: list = None) -> dict:
+    """Enhance OpenRouter model data with provider information and logo"""
+    try:
+        model_id = openrouter_model.get('id', '')
+        
+        # Extract provider slug from model id (e.g., "openai/gpt-4" -> "openai")
+        provider_slug = None
+        if '/' in model_id:
+            provider_slug = model_id.split('/')[0]
+        
+        # Get provider information
+        provider_site_url = None
+        if providers_data and provider_slug:
+            for provider in providers_data:
+                if provider.get('slug') == provider_slug:
+                    provider_site_url = provider.get('site_url')
+                    break
+        
+        # Generate model logo URL using Google favicon service
+        model_logo_url = None
+        if provider_site_url:
+            # Clean the site URL for favicon service
+            clean_url = provider_site_url.replace('https://', '').replace('http://', '')
+            if clean_url.startswith('www.'):
+                clean_url = clean_url[4:]
+            model_logo_url = f"https://www.google.com/s2/favicons?domain={clean_url}&sz=128"
+            logger.info(f"Generated model_logo_url: {model_logo_url}")
+        
+        # Add provider information to model
+        enhanced_model = {
+            **openrouter_model,
+            "provider_slug": provider_slug,
+            "provider_site_url": provider_site_url,
+            "model_logo_url": model_logo_url
+        }
+        
+        return enhanced_model
+    except Exception as e:
+        logger.error(f"Error enhancing model with provider info: {e}")
+        return openrouter_model
+
 
 def get_openrouter_client():
     """Get OpenRouter client with proper configuration"""
@@ -1777,6 +1914,225 @@ async def admin_test_huggingface(admin_key: str = Depends(get_admin_key), huggin
         logger.error(f"Failed to test Hugging Face API for {hugging_face_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to test Hugging Face API: {str(e)}")
 
+@app.get("/admin/debug-models", tags=["admin"])
+async def admin_debug_models(admin_key: str = Depends(get_admin_key)):
+    """Debug models and providers data for troubleshooting"""
+    try:
+        # Get raw data
+        models = get_cached_models()
+        providers = get_cached_providers()
+        
+        # Sample some models and providers
+        sample_models = models[:3] if models else []
+        sample_providers = providers[:3] if providers else []
+        
+        # Test provider matching for a sample model
+        provider_matching_test = []
+        if sample_models and sample_providers:
+            for model in sample_models[:2]:
+                model_id = model.get('id', '')
+                provider_slug = model_id.split('/')[0] if '/' in model_id else None
+                
+                matching_provider = None
+                if provider_slug:
+                    for provider in providers:
+                        if provider.get('slug') == provider_slug:
+                            matching_provider = provider
+                            break
+                
+                provider_matching_test.append({
+                    "model_id": model_id,
+                    "provider_slug": provider_slug,
+                    "found_provider": bool(matching_provider),
+                    "provider_site_url": matching_provider.get('site_url') if matching_provider else None,
+                    "provider_data": matching_provider
+                })
+        
+        return {
+            "models_cache": {
+                "total_models": len(models) if models else 0,
+                "sample_models": sample_models,
+                "cache_timestamp": _models_cache.get("timestamp"),
+                "cache_age_seconds": (datetime.utcnow() - _models_cache["timestamp"]).total_seconds() if _models_cache.get("timestamp") else None
+            },
+            "providers_cache": {
+                "total_providers": len(providers) if providers else 0,
+                "sample_providers": sample_providers,
+                "cache_timestamp": _provider_cache.get("timestamp"),
+                "cache_age_seconds": (datetime.utcnow() - _provider_cache["timestamp"]).total_seconds() if _provider_cache.get("timestamp") else None
+            },
+            "provider_matching_test": provider_matching_test,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to debug models and providers: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to debug: {str(e)}")
+
+@app.get("/test-provider-matching", tags=["debug"])
+async def test_provider_matching():
+    """Test provider matching logic without authentication"""
+    try:
+        # Get raw data
+        models = get_cached_models()
+        providers = get_cached_providers()
+        
+        if not models or not providers:
+            return {
+                "error": "No models or providers data available",
+                "models_count": len(models) if models else 0,
+                "providers_count": len(providers) if providers else 0
+            }
+        
+        # Test with a specific model
+        test_model = None
+        for model in models:
+            if 'openai' in model.get('id', '').lower():
+                test_model = model
+                break
+        
+        if not test_model:
+            test_model = models[0]  # Use first model as fallback
+        
+        model_id = test_model.get('id', '')
+        provider_slug = model_id.split('/')[0] if '/' in model_id else None
+        
+        # Find matching provider
+        matching_provider = None
+        if provider_slug:
+            for provider in providers:
+                if provider.get('slug') == provider_slug:
+                    matching_provider = provider
+                    break
+        
+        # Test the enhancement function
+        enhanced_model = enhance_model_with_provider_info(test_model, providers)
+        
+        return {
+            "test_model": {
+                "id": model_id,
+                "provider_slug": provider_slug
+            },
+            "matching_provider": {
+                "found": bool(matching_provider),
+                "slug": matching_provider.get('slug') if matching_provider else None,
+                "site_url": matching_provider.get('site_url') if matching_provider else None,
+                "name": matching_provider.get('name') if matching_provider else None,
+                "privacy_policy_url": matching_provider.get('privacy_policy_url') if matching_provider else None,
+                "terms_of_service_url": matching_provider.get('terms_of_service_url') if matching_provider else None,
+                "status_page_url": matching_provider.get('status_page_url') if matching_provider else None
+            },
+            "enhanced_model": {
+                "provider_slug": enhanced_model.get('provider_slug'),
+                "provider_site_url": enhanced_model.get('provider_site_url'),
+                "model_logo_url": enhanced_model.get('model_logo_url')
+            },
+            "available_providers": [
+                {
+                    "slug": p.get('slug'),
+                    "name": p.get('name'),
+                    "site_url": p.get('site_url'),
+                    "privacy_policy_url": p.get('privacy_policy_url'),
+                    "terms_of_service_url": p.get('terms_of_service_url'),
+                    "status_page_url": p.get('status_page_url')
+                } for p in providers[:5]
+            ],
+            "cache_info": {
+                "provider_cache_timestamp": _provider_cache.get("timestamp"),
+                "provider_cache_age": (datetime.utcnow() - _provider_cache["timestamp"]).total_seconds() if _provider_cache.get("timestamp") else None
+            },
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to test provider matching: {e}")
+        return {"error": str(e)}
+
+@app.post("/test-refresh-providers", tags=["debug"])
+async def test_refresh_providers():
+    """Refresh providers cache and test again"""
+    try:
+        # Clear provider cache
+        _provider_cache["data"] = None
+        _provider_cache["timestamp"] = None
+        
+        # Fetch fresh data
+        fresh_providers = fetch_providers_from_openrouter()
+        
+        if not fresh_providers:
+            return {"error": "Failed to fetch fresh providers data"}
+        
+        # Test the enhancement on fresh data
+        test_model = {"id": "openai/gpt-4", "name": "GPT-4"}
+        enhanced_model = enhance_model_with_provider_info(test_model, fresh_providers)
+        
+        return {
+            "fresh_providers_count": len(fresh_providers),
+            "sample_providers": [
+                {
+                    "slug": p.get('slug'),
+                    "name": p.get('name'),
+                    "privacy_policy_url": p.get('privacy_policy_url'),
+                    "terms_of_service_url": p.get('terms_of_service_url'),
+                    "status_page_url": p.get('status_page_url')
+                } for p in fresh_providers[:3]
+            ],
+            "enhanced_model": {
+                "provider_slug": enhanced_model.get('provider_slug'),
+                "provider_site_url": enhanced_model.get('provider_site_url'),
+                "model_logo_url": enhanced_model.get('model_logo_url')
+            },
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to refresh providers: {e}")
+        return {"error": str(e)}
+
+@app.get("/test-openrouter-providers", tags=["debug"])
+async def test_openrouter_providers():
+    """Test what OpenRouter actually returns for providers"""
+    try:
+        if not Config.OPENROUTER_API_KEY:
+            return {"error": "OpenRouter API key not configured"}
+        
+        headers = {
+            "Authorization": f"Bearer {Config.OPENROUTER_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        
+        response = httpx.get("https://openrouter.ai/api/v1/providers", headers=headers)
+        response.raise_for_status()
+        
+        raw_data = response.json()
+        providers = raw_data.get("data", [])
+        
+        # Find OpenAI provider
+        openai_provider = None
+        for provider in providers:
+            if provider.get('slug') == 'openai':
+                openai_provider = provider
+                break
+        
+        return {
+            "total_providers": len(providers),
+            "openai_provider_raw": openai_provider,
+            "sample_providers": [
+                {
+                    "slug": p.get('slug'),
+                    "name": p.get('name'),
+                    "privacy_policy_url": p.get('privacy_policy_url'),
+                    "terms_of_service_url": p.get('terms_of_service_url'),
+                    "status_page_url": p.get('status_page_url')
+                } for p in providers[:5]
+            ],
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to test OpenRouter providers: {e}")
+        return {"error": str(e)}
+
 # Provider and Models Information Endpoints
 @app.get("/provider", tags=["providers"])
 async def get_providers(
@@ -1784,11 +2140,14 @@ async def get_providers(
     limit: Optional[int] = Query(None, description="Limit number of results"),
     offset: Optional[int] = Query(0, description="Offset for pagination")
 ):
-    """Get all available provider list with detailed metric data"""
+    """Get all available provider list with detailed metric data including model count and logo URLs"""
     try:
         providers = get_cached_providers()
         if not providers:
             raise HTTPException(status_code=503, detail="Provider data unavailable")
+        
+        # Get models data for counting
+        models = get_cached_models()
         
         # Apply moderation filter if specified
         if moderated_only:
@@ -1802,27 +2161,12 @@ async def get_providers(
             providers = providers[:limit]
         
         # Enhance provider data with additional metrics
-        enhanced_providers = []
-        for provider in providers:
-            enhanced_provider = {
-                **provider,
-                "logo_url": get_provider_logo_from_services(
-                    provider.get('slug', ''), 
-                    provider.get('privacy_policy_url')
-                ),
-                "site_url": None
-            }
-            
-            # Extract site URL from privacy policy URL
-            if provider.get('privacy_policy_url'):
-                try:
-                    from urllib.parse import urlparse
-                    parsed = urlparse(provider['privacy_policy_url'])
-                    enhanced_provider["site_url"] = f"{parsed.scheme}://{parsed.netloc}"
-                except Exception:
-                    pass
-            
-            enhanced_providers.append(enhanced_provider)
+        enhanced_providers = enhance_providers_with_logos_and_sites(providers)
+        
+        # Add model count to each provider
+        for provider in enhanced_providers:
+            model_count = get_model_count_by_provider(provider.get('slug'), models)
+            provider["model_count"] = model_count
         
         return {
             "data": enhanced_providers,
@@ -1846,30 +2190,56 @@ async def get_models(
     offset: Optional[int] = Query(0, description="Offset for pagination"),
     include_huggingface: bool = Query(True, description="Include Hugging Face metrics for models that have hugging_face_id")
 ):
-    """Get all metric data of available models with optional filtering, pagination, and Hugging Face integration"""
+    """Get all metric data of available models with optional filtering, pagination, Hugging Face integration, and provider logos"""
     try:
+        logger.info(f"Getting models with provider={provider}, limit={limit}, offset={offset}")
+        
         models = get_cached_models()
+        logger.info(f"Retrieved {len(models) if models else 0} models from cache")
+        
         if not models:
+            logger.error("No models data available from cache")
             raise HTTPException(status_code=503, detail="Models data unavailable")
+        
+        # Get enhanced providers data (same as /provider endpoint)
+        providers = get_cached_providers()
+        if not providers:
+            raise HTTPException(status_code=503, detail="Provider data unavailable")
+        
+        # Enhance providers data with site_url and logo_url (same logic as /provider endpoint)
+        enhanced_providers = enhance_providers_with_logos_and_sites(providers)
+        
+        logger.info(f"Retrieved {len(enhanced_providers)} enhanced providers from cache")
         
         # Apply provider filter if specified
         if provider:
+            original_count = len(models)
             models = [model for model in models if provider.lower() in model.get('id', '').lower()]
+            logger.info(f"Filtered models by provider '{provider}': {original_count} -> {len(models)}")
         
         # Apply pagination
         total_models = len(models)
         if offset:
             models = models[offset:]
+            logger.info(f"Applied offset {offset}: {len(models)} models remaining")
         if limit:
             models = models[:limit]
+            logger.info(f"Applied limit {limit}: {len(models)} models remaining")
         
-        # Enhance models with Hugging Face data if requested
-        if include_huggingface:
-            enhanced_models = []
-            for model in models:
-                enhanced_model = enhance_model_with_huggingface_data(model)
-                enhanced_models.append(enhanced_model)
-            models = enhanced_models
+        # Enhance models with provider information and logos
+        enhanced_models = []
+        for model in models:
+            # First enhance with provider info (logos, slugs, etc.)
+            enhanced_model = enhance_model_with_provider_info(model, enhanced_providers)
+            
+            # Then enhance with Hugging Face data if requested
+            if include_huggingface:
+                enhanced_model = enhance_model_with_huggingface_data(enhanced_model)
+            
+            enhanced_models.append(enhanced_model)
+        
+        models = enhanced_models
+        logger.info(f"Enhanced {len(models)} models with provider info and logos")
         
         return {
             "data": models,
@@ -1899,9 +2269,21 @@ async def get_specific_model(
         if not model_data:
             raise HTTPException(status_code=404, detail=f"Model {provider_name}/{model_name} not found")
         
-        # Enhance with Hugging Face data if requested and available
-        if include_huggingface and isinstance(model_data, dict):
-            model_data = enhance_model_with_huggingface_data(model_data)
+        # Get enhanced providers data (same as /provider endpoint)
+        providers = get_cached_providers()
+        if not providers:
+            raise HTTPException(status_code=503, detail="Provider data unavailable")
+        
+        # Enhance providers data with site_url and logo_url (same logic as /provider endpoint)
+        enhanced_providers = enhance_providers_with_logos_and_sites(providers)
+        
+        # Enhance with provider information and logos
+        if isinstance(model_data, dict):
+            model_data = enhance_model_with_provider_info(model_data, enhanced_providers)
+            
+            # Then enhance with Hugging Face data if requested
+            if include_huggingface:
+                model_data = enhance_model_with_huggingface_data(model_data)
         
         return {
             "data": model_data,
