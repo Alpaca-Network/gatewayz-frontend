@@ -107,6 +107,13 @@ _provider_cache = {
     "ttl": 3600  # 1 hour (providers change less frequently)
 }
 
+# Models cache for OpenRouter models
+_models_cache = {
+    "data": None,
+    "timestamp": None,
+    "ttl": 1800  # 30 minutes (models change more frequently than providers)
+}
+
 
 
 def get_cached_providers():
@@ -255,6 +262,68 @@ def get_provider_info(provider_id: str, provider_name: str) -> dict:
             'terms_of_service_url': None,
             'status_page_url': None
         }
+
+
+def get_cached_models():
+    """Get cached models or fetch from OpenRouter if cache is expired"""
+    try:
+        if _models_cache["data"] and _models_cache["timestamp"]:
+            cache_age = (datetime.utcnow() - _models_cache["timestamp"]).total_seconds()
+            if cache_age < _models_cache["ttl"]:
+                return _models_cache["data"]
+        
+        # Cache expired or empty, fetch fresh data
+        return fetch_models_from_openrouter()
+    except Exception as e:
+        logger.error(f"Error getting cached models: {e}")
+        return None
+
+def fetch_models_from_openrouter():
+    """Fetch models from OpenRouter API"""
+    try:
+        if not Config.OPENROUTER_API_KEY:
+            logger.error("OpenRouter API key not configured")
+            return None
+        
+        headers = {
+            "Authorization": f"Bearer {Config.OPENROUTER_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        
+        response = httpx.get("https://openrouter.ai/api/v1/models", headers=headers)
+        response.raise_for_status()
+        
+        models_data = response.json()
+        _models_cache["data"] = models_data.get("data", [])
+        _models_cache["timestamp"] = datetime.utcnow()
+        
+        return _models_cache["data"]
+    except Exception as e:
+        logger.error(f"Failed to fetch models from OpenRouter: {e}")
+        return None
+
+def fetch_specific_model_from_openrouter(provider_name: str, model_name: str):
+    """Fetch specific model data from OpenRouter API"""
+    try:
+        if not Config.OPENROUTER_API_KEY:
+            logger.error("OpenRouter API key not configured")
+            return None
+        
+        headers = {
+            "Authorization": f"Bearer {Config.OPENROUTER_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        
+        # Use the specific model endpoint
+        url = f"https://openrouter.ai/api/v1/models/{provider_name}/{model_name}/endpoints"
+        response = httpx.get(url, headers=headers)
+        response.raise_for_status()
+        
+        model_data = response.json()
+        return model_data.get("data")
+    except Exception as e:
+        logger.error(f"Failed to fetch specific model {provider_name}/{model_name} from OpenRouter: {e}")
+        return None
 
 
 def get_openrouter_client():
@@ -1537,6 +1606,127 @@ async def admin_cache_status(admin_key: str = Depends(get_admin_key)):
     except Exception as e:
         logger.error(f"Failed to get cache status: {e}")
         raise HTTPException(status_code=500, detail="Failed to get cache status")
+
+# Provider and Models Information Endpoints
+@app.get("/provider", tags=["providers"])
+async def get_providers(
+    moderated_only: bool = Query(False, description="Filter for moderated providers only"),
+    limit: Optional[int] = Query(None, description="Limit number of results"),
+    offset: Optional[int] = Query(0, description="Offset for pagination")
+):
+    """Get all available provider list with detailed metric data"""
+    try:
+        providers = get_cached_providers()
+        if not providers:
+            raise HTTPException(status_code=503, detail="Provider data unavailable")
+        
+        # Apply moderation filter if specified
+        if moderated_only:
+            providers = [p for p in providers if p.get('moderated_by_openrouter', False)]
+        
+        # Apply pagination
+        total_providers = len(providers)
+        if offset:
+            providers = providers[offset:]
+        if limit:
+            providers = providers[:limit]
+        
+        # Enhance provider data with additional metrics
+        enhanced_providers = []
+        for provider in providers:
+            enhanced_provider = {
+                **provider,
+                "logo_url": get_provider_logo_from_services(
+                    provider.get('slug', ''), 
+                    provider.get('privacy_policy_url')
+                ),
+                "site_url": None
+            }
+            
+            # Extract site URL from privacy policy URL
+            if provider.get('privacy_policy_url'):
+                try:
+                    from urllib.parse import urlparse
+                    parsed = urlparse(provider['privacy_policy_url'])
+                    enhanced_provider["site_url"] = f"{parsed.scheme}://{parsed.netloc}"
+                except Exception:
+                    pass
+            
+            enhanced_providers.append(enhanced_provider)
+        
+        return {
+            "data": enhanced_providers,
+            "total": total_providers,
+            "returned": len(enhanced_providers),
+            "offset": offset or 0,
+            "limit": limit,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get providers: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get providers")
+
+@app.get("/models", tags=["models"])
+async def get_models(
+    provider: Optional[str] = Query(None, description="Filter models by provider"),
+    limit: Optional[int] = Query(None, description="Limit number of results"),
+    offset: Optional[int] = Query(0, description="Offset for pagination")
+):
+    """Get all metric data of available models with optional filtering and pagination"""
+    try:
+        models = get_cached_models()
+        if not models:
+            raise HTTPException(status_code=503, detail="Models data unavailable")
+        
+        # Apply provider filter if specified
+        if provider:
+            models = [model for model in models if provider.lower() in model.get('id', '').lower()]
+        
+        # Apply pagination
+        total_models = len(models)
+        if offset:
+            models = models[offset:]
+        if limit:
+            models = models[:limit]
+        
+        return {
+            "data": models,
+            "total": total_models,
+            "returned": len(models),
+            "offset": offset or 0,
+            "limit": limit,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get models: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get models")
+
+@app.get("/{provider_name}/{model_name}", tags=["models"])
+async def get_specific_model(provider_name: str, model_name: str):
+    """Get specific model data of given provider with detailed information"""
+    try:
+        model_data = fetch_specific_model_from_openrouter(provider_name, model_name)
+        if not model_data:
+            raise HTTPException(status_code=404, detail=f"Model {provider_name}/{model_name} not found")
+        
+        return {
+            "data": model_data,
+            "provider": provider_name,
+            "model": model_name,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get specific model {provider_name}/{model_name}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get model data")
 
 # Plan Management Endpoints
 @app.get("/plans", response_model=List[PlanResponse], tags=["plans"])
