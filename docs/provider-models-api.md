@@ -68,6 +68,7 @@ curl -X GET "https://your-api.com/provider?moderated_only=true&limit=5&offset=0"
 - `provider` (string, optional): Filter models by provider name
 - `limit` (integer, optional): Limit number of results
 - `offset` (integer, optional): Offset for pagination (default: 0)
+- `include_huggingface` (boolean, optional): Include Hugging Face metrics for models with hugging_face_id (default: true)
 
 **Response Format:**
 ```json
@@ -103,24 +104,47 @@ curl -X GET "https://your-api.com/provider?moderated_only=true&limit=5&offset=0"
       "context_length": 128000,
       "hugging_face_id": "openai/gpt-4",
       "per_request_limits": {},
-      "supported_parameters": ["temperature", "max_tokens", "top_p"]
+      "supported_parameters": ["temperature", "max_tokens", "top_p"],
+      "huggingface_metrics": {
+        "downloads": 42076,
+        "likes": 675,
+        "pipeline_tag": "image-text-to-text",
+        "num_parameters": 257517120,
+        "gated": false,
+        "private": false,
+        "last_modified": "2025-09-23T08:52:16.000Z",
+        "author": "ibm-granite",
+        "author_data": {
+          "name": "ibm-granite",
+          "fullname": "IBM Granite",
+          "avatar_url": "https://cdn-avatars.huggingface.co/v1/production/uploads/639bcaa2445b133a4e942436/CEW-OjXkRkDNmTxSu8Egh.png",
+          "follower_count": 2630
+        },
+        "available_inference_providers": [],
+        "widget_output_urls": [],
+        "is_liked_by_user": false
+      }
     }
   ],
   "total": 100,
   "returned": 10,
   "offset": 0,
   "limit": 10,
+  "include_huggingface": true,
   "timestamp": "2024-01-15T10:30:00Z"
 }
 ```
 
 **Example Usage:**
 ```bash
-# Get all models
+# Get all models with Hugging Face data (default)
 curl -X GET "https://your-api.com/models"
 
-# Filter by provider with pagination
-curl -X GET "https://your-api.com/models?provider=openai&limit=5&offset=0"
+# Get models without Hugging Face data
+curl -X GET "https://your-api.com/models?include_huggingface=false"
+
+# Filter by provider with pagination and Hugging Face data
+curl -X GET "https://your-api.com/models?provider=openai&limit=5&offset=0&include_huggingface=true"
 ```
 
 ### 3. Get Specific Model
@@ -132,6 +156,9 @@ curl -X GET "https://your-api.com/models?provider=openai&limit=5&offset=0"
 **Path Parameters:**
 - `provider_name` (string): The provider slug (e.g., "openai", "anthropic")
 - `model_name` (string): The model name (e.g., "gpt-4", "claude-3")
+
+**Query Parameters:**
+- `include_huggingface` (boolean, optional): Include Hugging Face metrics if available (default: true)
 
 **Response Format:**
 ```json
@@ -175,9 +202,12 @@ curl -X GET "https://your-api.com/models?provider=openai&limit=5&offset=0"
 
 **Example Usage:**
 ```bash
-# Get specific model information
+# Get specific model information with Hugging Face data (default)
 curl -X GET "https://your-api.com/openai/gpt-4"
 curl -X GET "https://your-api.com/anthropic/claude-3"
+
+# Get specific model without Hugging Face data
+curl -X GET "https://your-api.com/openai/gpt-4?include_huggingface=false"
 ```
 
 ## Error Handling
@@ -196,10 +226,44 @@ Error responses follow this format:
 }
 ```
 
+## Hugging Face Integration
+
+The API now includes optional integration with Hugging Face to provide additional model metrics for models that have a `hugging_face_id` in their OpenRouter response.
+
+### Features
+
+- **Automatic Enhancement**: Models with `hugging_face_id` are automatically enhanced with Hugging Face data
+- **Optional Integration**: Use `include_huggingface=false` to get original OpenRouter data only
+- **Caching**: Hugging Face data is cached for 1 hour to reduce API calls
+- **Error Handling**: Graceful fallback to original data if Hugging Face API is unavailable
+
+### Hugging Face Metrics Included
+
+When `include_huggingface=true` (default), models with `hugging_face_id` will include:
+
+- `downloads`: Number of model downloads
+- `likes`: Number of likes on Hugging Face
+- `pipeline_tag`: Model pipeline type (e.g., "text-generation", "image-classification")
+- `num_parameters`: Number of model parameters
+- `gated`: Whether the model requires authentication
+- `private`: Whether the model is private
+- `last_modified`: Last modification date
+- `author`: Model author/organization
+- `author_data`: Detailed author information including avatar URL and follower count
+- `available_inference_providers`: Available inference providers
+- `widget_output_urls`: Widget output URLs
+- `is_liked_by_user`: Whether the current user has liked the model
+
+### Admin Endpoints
+
+- `GET /admin/huggingface-cache-status`: View Hugging Face cache status and statistics
+- `POST /admin/refresh-huggingface-cache`: Clear Hugging Face cache to force refresh
+
 ## Caching
 
 - **Provider data**: Cached for 1 hour (3600 seconds)
 - **Model data**: Cached for 30 minutes (1800 seconds)
+- **Hugging Face data**: Cached for 1 hour (3600 seconds)
 - **Specific model data**: Not cached, fetched on-demand
 
 ## Rate Limiting
@@ -212,17 +276,26 @@ These endpoints do not require authentication and are publicly accessible.
 
 ## Data Sources
 
-All data is sourced from the OpenRouter API:
-- Providers: `https://openrouter.ai/api/v1/providers`
-- Models: `https://openrouter.ai/api/v1/models`
-- Specific Model: `https://openrouter.ai/api/v1/models/{provider}/{model}/endpoints`
+The API combines data from multiple sources:
+
+### OpenRouter API
+- **Providers**: `https://openrouter.ai/api/v1/providers`
+- **Models**: `https://openrouter.ai/api/v1/models`
+- **Specific Model**: `https://openrouter.ai/api/v1/models/{provider}/{model}/endpoints`
+
+### Hugging Face API (Optional Enhancement)
+- **Model Details**: `https://huggingface.co/api/models/{hugging_face_id}`
+- Only used when `include_huggingface=true` and model has `hugging_face_id`
 
 ## Implementation Details
 
 The implementation includes:
-- Automatic caching with TTL
-- Error handling and logging
-- Pagination support
-- Filtering capabilities
+- Automatic caching with TTL for all data sources
+- Error handling and logging with graceful fallbacks
+- Pagination support for all list endpoints
+- Filtering capabilities (provider, moderation status)
 - Enhanced provider data with logos and site URLs
-- Comprehensive model metadata
+- Comprehensive model metadata from OpenRouter
+- Optional Hugging Face integration for additional metrics
+- Admin endpoints for cache management
+- Timeout handling for external API calls

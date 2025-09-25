@@ -114,6 +114,13 @@ _models_cache = {
     "ttl": 1800  # 30 minutes (models change more frequently than providers)
 }
 
+# Hugging Face cache for model details
+_huggingface_cache = {
+    "data": {},  # Dictionary mapping hugging_face_id to model data
+    "timestamp": None,
+    "ttl": 3600  # 1 hour (Hugging Face data changes less frequently)
+}
+
 
 
 def get_cached_providers():
@@ -324,6 +331,100 @@ def fetch_specific_model_from_openrouter(provider_name: str, model_name: str):
     except Exception as e:
         logger.error(f"Failed to fetch specific model {provider_name}/{model_name} from OpenRouter: {e}")
         return None
+
+def get_cached_huggingface_model(hugging_face_id: str):
+    """Get cached Hugging Face model data or fetch if not cached"""
+    try:
+        # Check if we have cached data for this specific model
+        if hugging_face_id in _huggingface_cache["data"]:
+            return _huggingface_cache["data"][hugging_face_id]
+        
+        # Fetch from Hugging Face API
+        return fetch_huggingface_model(hugging_face_id)
+    except Exception as e:
+        logger.error(f"Error getting cached Hugging Face model {hugging_face_id}: {e}")
+        return None
+
+def fetch_huggingface_model(hugging_face_id: str):
+    """Fetch model data from Hugging Face API"""
+    try:
+        # Hugging Face API endpoint for model info
+        url = f"https://huggingface.co/api/models/{hugging_face_id}"
+        
+        response = httpx.get(url, timeout=10.0)
+        response.raise_for_status()
+        
+        model_data = response.json()
+        
+        # Cache the result
+        _huggingface_cache["data"][hugging_face_id] = model_data
+        _huggingface_cache["timestamp"] = datetime.utcnow()
+        
+        return model_data
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 404:
+            logger.warning(f"Hugging Face model {hugging_face_id} not found")
+            return None
+        else:
+            logger.error(f"HTTP error fetching Hugging Face model {hugging_face_id}: {e}")
+            return None
+    except Exception as e:
+        logger.error(f"Failed to fetch Hugging Face model {hugging_face_id}: {e}")
+        return None
+
+def enhance_model_with_huggingface_data(openrouter_model: dict) -> dict:
+    """Enhance OpenRouter model data with Hugging Face information"""
+    try:
+        hugging_face_id = openrouter_model.get('hugging_face_id')
+        if not hugging_face_id:
+            return openrouter_model
+        
+        # Get Hugging Face data
+        hf_data = get_cached_huggingface_model(hugging_face_id)
+        if not hf_data:
+            return openrouter_model
+        
+        # Extract author data more robustly
+        author_data = None
+        if hf_data.get('author_data'):
+            author_data = {
+                "name": hf_data['author_data'].get('name'),
+                "fullname": hf_data['author_data'].get('fullname'),
+                "avatar_url": hf_data['author_data'].get('avatarUrl'),
+                "follower_count": hf_data['author_data'].get('followerCount', 0)
+            }
+        elif hf_data.get('author'):
+            # Fallback: create basic author data from author field
+            author_data = {
+                "name": hf_data.get('author'),
+                "fullname": hf_data.get('author'),
+                "avatar_url": None,
+                "follower_count": 0
+            }
+        
+        # Create enhanced model data
+        enhanced_model = {
+            **openrouter_model,
+            "huggingface_metrics": {
+                "downloads": hf_data.get('downloads', 0),
+                "likes": hf_data.get('likes', 0),
+                "pipeline_tag": hf_data.get('pipeline_tag'),
+                "num_parameters": hf_data.get('numParameters'),
+                "gated": hf_data.get('gated', False),
+                "private": hf_data.get('private', False),
+                "last_modified": hf_data.get('lastModified'),
+                "author": hf_data.get('author'),
+                "author_data": author_data,
+                "available_inference_providers": hf_data.get('availableInferenceProviders', []),
+                "widget_output_urls": hf_data.get('widgetOutputUrls', []),
+                "is_liked_by_user": hf_data.get('isLikedByUser', False)
+            }
+        }
+        
+        return enhanced_model
+    except Exception as e:
+        logger.error(f"Error enhancing model with Hugging Face data: {e}")
+        return openrouter_model
 
 
 def get_openrouter_client():
@@ -1607,6 +1708,75 @@ async def admin_cache_status(admin_key: str = Depends(get_admin_key)):
         logger.error(f"Failed to get cache status: {e}")
         raise HTTPException(status_code=500, detail="Failed to get cache status")
 
+@app.get("/admin/huggingface-cache-status", tags=["admin"])
+async def admin_huggingface_cache_status(admin_key: str = Depends(get_admin_key)):
+    """Get Hugging Face cache status and statistics"""
+    try:
+        cache_age = None
+        if _huggingface_cache["timestamp"]:
+            cache_age = (datetime.utcnow() - _huggingface_cache["timestamp"]).total_seconds()
+        
+        return {
+            "huggingface_cache": {
+                "age_seconds": cache_age,
+                "is_valid": cache_age is not None and cache_age < _huggingface_cache["ttl"],
+                "total_cached_models": len(_huggingface_cache["data"]),
+                "cached_model_ids": list(_huggingface_cache["data"].keys())
+            },
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get Hugging Face cache status: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get Hugging Face cache status")
+
+@app.post("/admin/refresh-huggingface-cache", tags=["admin"])
+async def admin_refresh_huggingface_cache(admin_key: str = Depends(get_admin_key)):
+    """Clear Hugging Face cache to force refresh on next request"""
+    try:
+        _huggingface_cache["data"] = {}
+        _huggingface_cache["timestamp"] = None
+        
+        return {
+            "message": "Hugging Face cache cleared successfully",
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to clear Hugging Face cache: {e}")
+        raise HTTPException(status_code=500, detail="Failed to clear Hugging Face cache")
+
+@app.get("/admin/test-huggingface/{hugging_face_id}", tags=["admin"])
+async def admin_test_huggingface(admin_key: str = Depends(get_admin_key), hugging_face_id: str = "openai/gpt-oss-120b"):
+    """Test Hugging Face API response for debugging"""
+    try:
+        hf_data = fetch_huggingface_model(hugging_face_id)
+        if not hf_data:
+            raise HTTPException(status_code=404, detail=f"Hugging Face model {hugging_face_id} not found")
+        
+        return {
+            "hugging_face_id": hugging_face_id,
+            "raw_response": hf_data,
+            "author_data_extracted": {
+                "has_author_data": bool(hf_data.get('author_data')),
+                "author_data": hf_data.get('author_data'),
+                "author": hf_data.get('author'),
+                "extracted_author_data": {
+                    "name": hf_data.get('author_data', {}).get('name') if hf_data.get('author_data') else None,
+                    "fullname": hf_data.get('author_data', {}).get('fullname') if hf_data.get('author_data') else None,
+                    "avatar_url": hf_data.get('author_data', {}).get('avatarUrl') if hf_data.get('author_data') else None,
+                    "follower_count": hf_data.get('author_data', {}).get('followerCount', 0) if hf_data.get('author_data') else 0
+                }
+            },
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to test Hugging Face API for {hugging_face_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to test Hugging Face API: {str(e)}")
+
 # Provider and Models Information Endpoints
 @app.get("/provider", tags=["providers"])
 async def get_providers(
@@ -1673,9 +1843,10 @@ async def get_providers(
 async def get_models(
     provider: Optional[str] = Query(None, description="Filter models by provider"),
     limit: Optional[int] = Query(None, description="Limit number of results"),
-    offset: Optional[int] = Query(0, description="Offset for pagination")
+    offset: Optional[int] = Query(0, description="Offset for pagination"),
+    include_huggingface: bool = Query(True, description="Include Hugging Face metrics for models that have hugging_face_id")
 ):
-    """Get all metric data of available models with optional filtering and pagination"""
+    """Get all metric data of available models with optional filtering, pagination, and Hugging Face integration"""
     try:
         models = get_cached_models()
         if not models:
@@ -1692,12 +1863,21 @@ async def get_models(
         if limit:
             models = models[:limit]
         
+        # Enhance models with Hugging Face data if requested
+        if include_huggingface:
+            enhanced_models = []
+            for model in models:
+                enhanced_model = enhance_model_with_huggingface_data(model)
+                enhanced_models.append(enhanced_model)
+            models = enhanced_models
+        
         return {
             "data": models,
             "total": total_models,
             "returned": len(models),
             "offset": offset or 0,
             "limit": limit,
+            "include_huggingface": include_huggingface,
             "timestamp": datetime.utcnow().isoformat()
         }
         
@@ -1708,17 +1888,26 @@ async def get_models(
         raise HTTPException(status_code=500, detail="Failed to get models")
 
 @app.get("/{provider_name}/{model_name}", tags=["models"])
-async def get_specific_model(provider_name: str, model_name: str):
+async def get_specific_model(
+    provider_name: str, 
+    model_name: str,
+    include_huggingface: bool = Query(True, description="Include Hugging Face metrics if available")
+):
     """Get specific model data of given provider with detailed information"""
     try:
         model_data = fetch_specific_model_from_openrouter(provider_name, model_name)
         if not model_data:
             raise HTTPException(status_code=404, detail=f"Model {provider_name}/{model_name} not found")
         
+        # Enhance with Hugging Face data if requested and available
+        if include_huggingface and isinstance(model_data, dict):
+            model_data = enhance_model_with_huggingface_data(model_data)
+        
         return {
             "data": model_data,
             "provider": provider_name,
             "model": model_name,
+            "include_huggingface": include_huggingface,
             "timestamp": datetime.utcnow().isoformat()
         }
         
