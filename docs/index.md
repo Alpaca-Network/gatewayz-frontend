@@ -47,7 +47,7 @@ For a high-level overview of the project, see:
 - `GET /providers` - Available providers from OpenRouter
 
 ### User Endpoints
-- `POST /auth/register` - User registration (sends welcome email)
+- `POST /create` - Create API key for dashboard users (sends welcome email)
 - `POST /auth/password-reset` - Request password reset email
 - `POST /auth/reset-password` - Reset password with token
 - `GET /user/balance` - Account balance

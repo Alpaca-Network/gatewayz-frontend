@@ -170,7 +170,7 @@ Visit http://localhost:8000/docs to verify:
 ### 3. Test API Key Creation
 ```bash
 # Register a test user
-curl -X POST http://localhost:8000/auth/register \
+curl -X POST http://localhost:8000/create \
   -H "Content-Type: application/json" \
   -d '{
     "username": "testuser",

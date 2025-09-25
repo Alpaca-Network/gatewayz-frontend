@@ -178,7 +178,7 @@ APP_URL=https://gatewayz.ai
 ### API Endpoints
 
 #### Authentication
-- `POST /auth/register` - User registration (sends welcome email)
+- `POST /create` - Create API key for dashboard users (sends welcome email)
 - `POST /auth/password-reset` - Request password reset email
 - `POST /auth/reset-password` - Reset password with token
 

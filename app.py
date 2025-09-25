@@ -1130,15 +1130,15 @@ async def get_user_audit_logs(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 # Authentication endpoints
-@app.post("/auth/register", response_model=UserRegistrationResponse, tags=["authentication"])
-async def user_register(request: UserRegistrationRequest):
-    """Register a new user with unified API key system"""
+@app.post("/create", response_model=UserRegistrationResponse, tags=["authentication"])
+async def create_api_key(request: UserRegistrationRequest):
+    """Create API key for user after dashboard login"""
     try:
         # Validate input
         if request.environment_tag not in ['test', 'staging', 'live', 'development']:
             raise HTTPException(status_code=400, detail="Invalid environment tag")
         
-        # Create user with enhanced fields (automatic 500,000 tokens trial)
+        # Create user account and generate API key for dashboard user
         user_data = create_enhanced_user(
             username=request.username,
             email=request.email,
@@ -1146,7 +1146,7 @@ async def user_register(request: UserRegistrationRequest):
             credits=10  # $10 worth of credits (500,000 tokens)
         )
         
-        # Send welcome email
+        # Send welcome email with API key information
         try:
             enhanced_notification_service.send_welcome_email(
                 user_id=user_data['user_id'],
@@ -1170,14 +1170,14 @@ async def user_register(request: UserRegistrationRequest):
             },
             auth_method=request.auth_method,
             subscription_status="trial",
-            message="User registered successfully!",
+            message="API key created successfully!",
             timestamp=datetime.utcnow()
         )
         
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"User registration failed: {e}")
+        logger.error(f"API key creation failed: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 # Admin endpoints

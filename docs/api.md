@@ -99,8 +99,8 @@ Example response for `/providers`:
 ## User Endpoints
 
 ### Authentication & Registration
-**POST** `/auth/register`
-- Register a new user with unified API key system
+**POST** `/create`
+- Create API key for user after dashboard login
 - Automatically sends welcome email with account details
 - Request body: `UserRegistrationRequest`
 - Returns: `UserRegistrationResponse` with primary API key
