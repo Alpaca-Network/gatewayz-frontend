@@ -100,13 +100,6 @@ app.add_middleware(
 # Security
 security = HTTPBearer()
 
-# Model cache for OpenRouter models
-_model_cache = {
-    "data": None,
-    "timestamp": None,
-    "ttl": 300  # 5 minutes
-}
-
 # Provider cache for OpenRouter providers
 _provider_cache = {
     "data": None,
@@ -114,24 +107,7 @@ _provider_cache = {
     "ttl": 3600  # 1 hour (providers change less frequently)
 }
 
-def get_cached_models():
-    """Get cached models or fetch from OpenRouter if cache is expired"""
-    try:
-        if _model_cache["data"] and _model_cache["timestamp"]:
-            cache_age = (datetime.utcnow() - _model_cache["timestamp"]).total_seconds()
-            if cache_age < _model_cache["ttl"]:
-                return _model_cache["data"]
-        
-        # Cache expired or empty, fetch fresh data
-        return fetch_models_from_openrouter()
-    except Exception as e:
-        logger.error(f"Error getting cached models: {e}")
-        return None
 
-def invalidate_model_cache():
-    """Invalidate the model cache to force refresh"""
-    _model_cache["data"] = None
-    _model_cache["timestamp"] = None
 
 def get_cached_providers():
     """Get cached providers or fetch from OpenRouter if cache is expired"""
@@ -171,8 +147,59 @@ def fetch_providers_from_openrouter():
         logger.error(f"Failed to fetch providers from OpenRouter: {e}")
         return None
 
+
+def get_provider_logo_from_services(provider_id: str, site_url: str = None) -> str:
+    """Get provider logo using third-party services and manual mapping"""
+    try:
+        # Manual mapping for major providers (high-quality logos)
+        MANUAL_LOGO_DB = {
+            'openai': 'https://cdn.jsdelivr.net/gh/simple-icons/simple-icons@develop/icons/openai.svg',
+            'anthropic': 'https://cdn.jsdelivr.net/gh/simple-icons/simple-icons@develop/icons/anthropic.svg',
+            'google': 'https://cdn.jsdelivr.net/gh/simple-icons/simple-icons@develop/icons/google.svg',
+            'meta': 'https://cdn.jsdelivr.net/gh/simple-icons/simple-icons@develop/icons/meta.svg',
+            'microsoft': 'https://cdn.jsdelivr.net/gh/simple-icons/simple-icons@develop/icons/microsoft.svg',
+            'nvidia': 'https://cdn.jsdelivr.net/gh/simple-icons/simple-icons@develop/icons/nvidia.svg',
+            'cohere': 'https://cdn.jsdelivr.net/gh/simple-icons/simple-icons@develop/icons/cohere.svg',
+            'mistralai': 'https://cdn.jsdelivr.net/gh/simple-icons/simple-icons@develop/icons/mistralai.svg',
+            'perplexity': 'https://cdn.jsdelivr.net/gh/simple-icons/simple-icons@develop/icons/perplexity.svg',
+            'amazon': 'https://cdn.jsdelivr.net/gh/simple-icons/simple-icons@develop/icons/amazon.svg',
+            'baidu': 'https://cdn.jsdelivr.net/gh/simple-icons/simple-icons@develop/icons/baidu.svg',
+            'tencent': 'https://cdn.jsdelivr.net/gh/simple-icons/simple-icons@develop/icons/tencent.svg',
+            'alibaba': 'https://cdn.jsdelivr.net/gh/simple-icons/simple-icons@develop/icons/alibabacloud.svg',
+            'ai21': 'https://cdn.jsdelivr.net/gh/simple-icons/simple-icons@develop/icons/ai21labs.svg',
+            'inflection': 'https://cdn.jsdelivr.net/gh/simple-icons/simple-icons@develop/icons/inflection.svg'
+        }
+        
+        # Try manual mapping first
+        if provider_id in MANUAL_LOGO_DB:
+            logger.info(f"Found manual logo for {provider_id}")
+            return MANUAL_LOGO_DB[provider_id]
+        
+        # Fallback to third-party service using site URL
+        if site_url:
+            from urllib.parse import urlparse
+            try:
+                parsed = urlparse(site_url)
+                domain = parsed.netloc
+                # Remove www. prefix if present
+                if domain.startswith('www.'):
+                    domain = domain[4:]
+                
+                # Use Clearbit Logo API
+                logo_url = f"https://logo.clearbit.com/{domain}"
+                logger.info(f"Using Clearbit logo service for {provider_id}: {logo_url}")
+                return logo_url
+            except Exception as e:
+                logger.error(f"Error extracting domain from {site_url}: {e}")
+        
+        logger.info(f"No logo found for provider {provider_id}")
+        return None
+    except Exception as e:
+        logger.error(f"Error getting provider logo for {provider_id}: {e}")
+        return None
+
 def get_provider_info(provider_id: str, provider_name: str) -> dict:
-    """Get provider information from OpenRouter providers API"""
+    """Get provider information from OpenRouter providers API with Hugging Face logos"""
     try:
         providers = get_cached_providers()
         if not providers:
@@ -191,17 +218,20 @@ def get_provider_info(provider_id: str, provider_name: str) -> dict:
                 provider_info = provider
                 break
         
+        # Get site URL from OpenRouter
+        site_url = None
+        if provider_info and provider_info.get('privacy_policy_url'):
+            # Extract domain from privacy policy URL
+            from urllib.parse import urlparse
+            parsed = urlparse(provider_info['privacy_policy_url'])
+            site_url = f"{parsed.scheme}://{parsed.netloc}"
+        
+        # Get logo using manual mapping and third-party services
+        logo_url = get_provider_logo_from_services(provider_id, site_url)
+        
         if provider_info:
-            # Extract domain from privacy policy URL for site URL
-            site_url = None
-            if provider_info.get('privacy_policy_url'):
-                # Extract domain from privacy policy URL
-                from urllib.parse import urlparse
-                parsed = urlparse(provider_info['privacy_policy_url'])
-                site_url = f"{parsed.scheme}://{parsed.netloc}"
-            
             return {
-                'logo_url': None,  # Still not provided by OpenRouter
+                'logo_url': logo_url,
                 'site_url': site_url,
                 'privacy_policy_url': provider_info.get('privacy_policy_url'),
                 'terms_of_service_url': provider_info.get('terms_of_service_url'),
@@ -210,8 +240,8 @@ def get_provider_info(provider_id: str, provider_name: str) -> dict:
         else:
             # Provider not found in OpenRouter providers list
             return {
-                'logo_url': None,
-                'site_url': None,
+                'logo_url': logo_url,
+                'site_url': site_url,
                 'privacy_policy_url': None,
                 'terms_of_service_url': None,
                 'status_page_url': None
@@ -226,29 +256,6 @@ def get_provider_info(provider_id: str, provider_name: str) -> dict:
             'status_page_url': None
         }
 
-def fetch_models_from_openrouter():
-    """Fetch models from OpenRouter API"""
-    try:
-        if not Config.OPENROUTER_API_KEY:
-            logger.error("OpenRouter API key not configured")
-            return None
-        
-        headers = {
-            "Authorization": f"Bearer {Config.OPENROUTER_API_KEY}",
-            "Content-Type": "application/json"
-        }
-        
-        response = httpx.get("https://openrouter.ai/api/v1/models", headers=headers)
-        response.raise_for_status()
-        
-        models_data = response.json()
-        _model_cache["data"] = models_data.get("data", [])
-        _model_cache["timestamp"] = datetime.utcnow()
-        
-        return _model_cache["data"]
-    except Exception as e:
-        logger.error(f"Failed to fetch models from OpenRouter: {e}")
-        return None
 
 def get_openrouter_client():
     """Get OpenRouter client with proper configuration"""
@@ -452,9 +459,9 @@ async def health_check():
         openrouter_status = "unknown"
         try:
             client = get_openrouter_client()
-            # Test connection by trying to get models
-            test_models = get_cached_models()
-            openrouter_status = "connected" if test_models else "error"
+            # Test connection by trying to get providers
+            test_providers = get_cached_providers()
+            openrouter_status = "connected" if test_providers else "error"
         except:
             openrouter_status = "unavailable"
         
@@ -474,187 +481,6 @@ async def health_check():
             "error": str(e)
         }
 
-# Models endpoints
-@app.get("/models", tags=["models"])
-async def get_models_endpoint():
-    """Get available AI models from OpenRouter"""
-    try:
-        models = get_cached_models()
-        if not models:
-            raise HTTPException(status_code=500, detail="Failed to retrieve models")
-        
-        return {
-            "status": "success",
-            "total_models": len(models),
-            "models": models,
-            "timestamp": datetime.utcnow().isoformat()
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error getting models: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-@app.get("/models/debug", tags=["models"])
-async def get_models_debug():
-    """Debug endpoint to inspect model data structure"""
-    try:
-        models = get_cached_models()
-        if not models:
-            raise HTTPException(status_code=500, detail="Failed to retrieve models")
-        
-        # Return first few models with their structure
-        sample_models = models[:3] if len(models) >= 3 else models
-        
-        return {
-            "status": "success",
-            "total_models": len(models),
-            "sample_models": sample_models,
-            "timestamp": datetime.utcnow().isoformat()
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error getting debug model data: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-@app.get("/providers", tags=["models"])
-async def get_providers():
-    """Get available providers from OpenRouter API"""
-    try:
-        providers = get_cached_providers()
-        if not providers:
-            raise HTTPException(status_code=500, detail="Failed to retrieve providers")
-        
-        return {
-            "status": "success",
-            "total_providers": len(providers),
-            "providers": providers,
-            "timestamp": datetime.utcnow().isoformat()
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error getting providers: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-@app.get("/models/providers", tags=["models"])
-async def get_models_providers():
-    """Get provider statistics for available models"""
-    try:
-        models = get_cached_models()
-        if not models:
-            raise HTTPException(status_code=500, detail="Failed to retrieve models")
-        
-        provider_stats = {}
-        suggested_count = 0
-        pricing_available = 0
-        
-        for model in models:
-            # Count suggested models
-            if model.get('suggested', False):
-                suggested_count += 1
-            
-            # Count models with pricing
-            if model.get('pricing') and any(model['pricing'].values()):
-                pricing_available += 1
-            
-            # Extract provider information from model ID
-            provider_id = 'unknown'
-            provider_name = 'Unknown'
-            
-            if 'id' in model and model['id']:
-                model_id = model['id']
-                if '/' in model_id:
-                    # Extract provider from model ID (e.g., "qwen/qwen3-vl-235b" -> "qwen")
-                    provider_id = model_id.split('/')[0]
-                    # Convert provider ID to proper name
-                    provider_name = provider_id.title()
-                    
-                    # Handle special cases for better naming
-                    if provider_id == 'openai':
-                        provider_name = 'OpenAI'
-                    elif provider_id == 'anthropic':
-                        provider_name = 'Anthropic'
-                    elif provider_id == 'google':
-                        provider_name = 'Google'
-                    elif provider_id == 'meta':
-                        provider_name = 'Meta'
-                    elif provider_id == 'microsoft':
-                        provider_name = 'Microsoft'
-                    elif provider_id == 'qwen':
-                        provider_name = 'Qwen'
-                    elif provider_id == 'deepseek':
-                        provider_name = 'DeepSeek'
-                    elif provider_id == 'mistral':
-                        provider_name = 'Mistral'
-                    elif provider_id == 'cohere':
-                        provider_name = 'Cohere'
-                    elif provider_id == 'claude':
-                        provider_name = 'Claude'
-                    elif provider_id == 'gemini':
-                        provider_name = 'Gemini'
-                    elif provider_id == 'llama':
-                        provider_name = 'Llama'
-                    elif provider_id == 'codestral':
-                        provider_name = 'Codestral'
-                    elif provider_id == 'command':
-                        provider_name = 'Command'
-                    elif provider_id == 'jamba':
-                        provider_name = 'Jamba'
-                    elif provider_id == 'mixtral':
-                        provider_name = 'Mixtral'
-                    elif provider_id == 'phi':
-                        provider_name = 'Phi'
-                    elif provider_id == 'solar':
-                        provider_name = 'Solar'
-                    elif provider_id == 'yi':
-                        provider_name = 'Yi'
-                    elif provider_id == 'zephyr':
-                        provider_name = 'Zephyr'
-                else:
-                    # Single word model ID, likely from OpenRouter directly
-                    provider_id = 'openrouter'
-                    provider_name = 'OpenRouter'
-            
-            # Initialize provider stats if not exists
-            if provider_id not in provider_stats:
-                provider_info = get_provider_info(provider_id, provider_name)
-                provider_stats[provider_id] = {
-                    'name': provider_name,
-                    'model_count': 0,
-                    'suggested_models': 0,
-                    'logo_url': provider_info['logo_url'],
-                    'site_url': provider_info['site_url'],
-                    'privacy_policy_url': provider_info['privacy_policy_url'],
-                    'terms_of_service_url': provider_info['terms_of_service_url'],
-                    'status_page_url': provider_info['status_page_url']
-                }
-            
-            provider_stats[provider_id]['model_count'] += 1
-            if model.get('suggested', False):
-                provider_stats[provider_id]['suggested_models'] += 1
-        
-        return {
-            "status": "success",
-            "provider_statistics": {
-                "total_providers": len(provider_stats),
-                "total_models": len(models),
-                "suggested_models": suggested_count,
-                "pricing_available": pricing_available,
-                "providers": provider_stats
-            },
-            "timestamp": datetime.utcnow().isoformat()
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error getting provider statistics: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
 
 # User endpoints
 @app.get("/user/balance", tags=["authentication"])
@@ -1669,38 +1495,41 @@ async def proxy_chat(req: ProxyRequest, api_key: str = Depends(get_api_key)):
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 # Admin cache management endpoints
-@app.post("/admin/refresh-models", tags=["admin"])
-async def admin_refresh_models(admin_key: str = Depends(get_admin_key)):
+@app.post("/admin/refresh-providers", tags=["admin"])
+async def admin_refresh_providers(admin_key: str = Depends(get_admin_key)):
     try:
-        invalidate_model_cache()
-        models = get_cached_models()
+        # Invalidate provider cache to force refresh
+        _provider_cache["data"] = None
+        _provider_cache["timestamp"] = None
+        
+        providers = get_cached_providers()
         
         return {
             "status": "success",
-            "message": "Model cache refreshed successfully",
-            "total_models": len(models) if models else 0,
+            "message": "Provider cache refreshed successfully",
+            "total_providers": len(providers) if providers else 0,
             "timestamp": datetime.utcnow().isoformat()
         }
         
     except Exception as e:
-        logger.error(f"Failed to refresh model cache: {e}")
-        raise HTTPException(status_code=500, detail="Failed to refresh model cache")
+        logger.error(f"Failed to refresh provider cache: {e}")
+        raise HTTPException(status_code=500, detail="Failed to refresh provider cache")
 
 @app.get("/admin/cache-status", tags=["admin"])
 async def admin_cache_status(admin_key: str = Depends(get_admin_key)):
     try:
         cache_age = None
-        if _model_cache["timestamp"]:
-            cache_age = (datetime.utcnow() - _model_cache["timestamp"]).total_seconds()
+        if _provider_cache["timestamp"]:
+            cache_age = (datetime.utcnow() - _provider_cache["timestamp"]).total_seconds()
         
         return {
             "status": "success",
             "cache_info": {
-                "has_data": _model_cache["data"] is not None,
+                "has_data": _provider_cache["data"] is not None,
                 "cache_age_seconds": cache_age,
-                "ttl_seconds": _model_cache["ttl"],
-                "is_valid": cache_age is not None and cache_age < _model_cache["ttl"],
-                "total_cached_models": len(_model_cache["data"]) if _model_cache["data"] else 0
+                "ttl_seconds": _provider_cache["ttl"],
+                "is_valid": cache_age is not None and cache_age < _provider_cache["ttl"],
+                "total_cached_providers": len(_provider_cache["data"]) if _provider_cache["data"] else 0
             },
             "timestamp": datetime.utcnow().isoformat()
         }

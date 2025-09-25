@@ -25,6 +25,7 @@ Authorization: Bearer YOUR_API_KEY
 - Returns provider statistics across all available models
 - Includes model counts, suggested models, pricing availability, and official provider URLs
 - Uses OpenRouter's official providers API for accurate site URLs and policy links
+- **Includes provider logo URLs** using hybrid approach (manual mapping + Clearbit API)
 - No authentication required
 
 **GET** `/providers`
@@ -46,7 +47,7 @@ Example response for `/models/providers`:
         "name": "OpenAI",
         "model_count": 12,
         "suggested_models": 5,
-        "logo_url": null,
+        "logo_url": "https://cdn.jsdelivr.net/gh/simple-icons/simple-icons@develop/icons/openai.svg",
         "site_url": "https://openai.com",
         "privacy_policy_url": "https://openai.com/policies/privacy-policy/",
         "terms_of_service_url": "https://openai.com/policies/row-terms-of-use/",
@@ -56,7 +57,7 @@ Example response for `/models/providers`:
         "name": "Anthropic",
         "model_count": 8,
         "suggested_models": 2,
-        "logo_url": null,
+        "logo_url": "https://cdn.jsdelivr.net/gh/simple-icons/simple-icons@develop/icons/anthropic.svg",
         "site_url": "https://www.anthropic.com",
         "privacy_policy_url": "https://www.anthropic.com/privacy",
         "terms_of_service_url": "https://www.anthropic.com/terms",
