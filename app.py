@@ -496,7 +496,45 @@ def enhance_providers_with_logos_and_sites(providers: list) -> list:
                     'tencent': 'https://tencent.com',
                     'alibaba': 'https://alibaba.com',
                     'ai21': 'https://ai21.com',
-                    'inflection': 'https://inflection.ai'
+                    'inflection': 'https://inflection.ai',
+                    'siliconflow': 'https://siliconflow.ai',
+                    'stealth': 'https://stealth.ai',
+                    'z-ai': 'https://z.ai',
+                    'groq': 'https://groq.com',
+                    'together': 'https://together.ai',
+                    'replicate': 'https://replicate.com',
+                    'huggingface': 'https://huggingface.co',
+                    'fireworks': 'https://fireworks.ai',
+                    'deepseek': 'https://deepseek.com',
+                    'qwen': 'https://qwenlm.com',
+                    'moonshot': 'https://moonshot.cn',
+                    'minimax': 'https://minimax.chat',
+                    'baichuan': 'https://baichuan-ai.com',
+                    'zhipu': 'https://zhipuai.cn',
+                    'volcengine': 'https://volcengine.com',
+                    'sensenova': 'https://sensenova.cn',
+                    'lingyi': 'https://lingyiwanwu.com',
+                    'doubao': 'https://doubao.com',
+                    'kimi': 'https://kimi.moonshot.cn',
+                    'glm': 'https://glm-4.com',
+                    'internlm': 'https://internlm.ai',
+                    'yi': 'https://01.ai',
+                    'qianwen': 'https://qianwen.aliyun.com',
+                    'tongyi': 'https://tongyi.aliyun.com',
+                    'wenxin': 'https://wenxin.baidu.com',
+                    'ernie': 'https://ernie-bot.baidu.com',
+                    'chatglm': 'https://chatglm.cn',
+                    'claude': 'https://claude.ai',
+                    'gemini': 'https://ai.google.dev',
+                    'palm': 'https://ai.google.dev',
+                    'bard': 'https://bard.google.com',
+                    'gpt': 'https://openai.com',
+                    'dall-e': 'https://openai.com',
+                    'whisper': 'https://openai.com',
+                    'codex': 'https://openai.com',
+                    'gpt-3': 'https://openai.com',
+                    'gpt-4': 'https://openai.com',
+                    'gpt-5': 'https://openai.com'
                 }
                 site_url = manual_site_urls.get(provider.get('slug'))
             
@@ -2131,6 +2169,72 @@ async def test_openrouter_providers():
         
     except Exception as e:
         logger.error(f"Failed to test OpenRouter providers: {e}")
+        return {"error": str(e)}
+
+@app.get("/debug-provider-models/{provider_slug}", tags=["debug"])
+async def debug_provider_models(provider_slug: str):
+    """Debug endpoint to check model counting for a specific provider"""
+    try:
+        # Get models data
+        models = get_cached_models()
+        if not models:
+            return {"error": "No models data available"}
+        
+        # Get providers data
+        providers = get_cached_providers()
+        if not providers:
+            return {"error": "No providers data available"}
+        
+        # Find the specific provider
+        target_provider = None
+        for provider in providers:
+            if provider.get('slug') == provider_slug:
+                target_provider = provider
+                break
+        
+        if not target_provider:
+            return {"error": f"Provider '{provider_slug}' not found"}
+        
+        # Count models for this provider
+        matching_models = []
+        for model in models:
+            model_id = model.get('id', '')
+            if '/' in model_id:
+                model_provider = model_id.split('/')[0]
+                if model_provider == provider_slug:
+                    matching_models.append({
+                        'id': model_id,
+                        'name': model.get('name'),
+                        'provider_slug': model.get('provider_slug')
+                    })
+        
+        # Get enhanced provider data
+        enhanced_providers = enhance_providers_with_logos_and_sites(providers)
+        enhanced_provider = None
+        for provider in enhanced_providers:
+            if provider.get('slug') == provider_slug:
+                enhanced_provider = provider
+                break
+        
+        return {
+            "provider_slug": provider_slug,
+            "provider_name": target_provider.get('name'),
+            "raw_provider_data": {
+                "privacy_policy_url": target_provider.get('privacy_policy_url'),
+                "terms_of_service_url": target_provider.get('terms_of_service_url'),
+                "status_page_url": target_provider.get('status_page_url')
+            },
+            "enhanced_provider_data": {
+                "site_url": enhanced_provider.get('site_url') if enhanced_provider else None,
+                "logo_url": enhanced_provider.get('logo_url') if enhanced_provider else None
+            },
+            "model_count": len(matching_models),
+            "matching_models": matching_models[:10],  # Show first 10 models
+            "total_models_available": len(models)
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to debug provider models for {provider_slug}: {e}")
         return {"error": str(e)}
 
 # Provider and Models Information Endpoints
