@@ -39,7 +39,9 @@ The API provides three main endpoints for accessing inference provider and model
       "needs_moderated": false,
       "logo_url": "https://www.google.com/s2/favicons?domain=openai.com&sz=128",
       "site_url": "https://openai.com",
-      "model_count": 15
+      "model_count": 15,
+      "token_generated": "21.1B",
+      "weekly_growth": "+25.4%"
     }
   ],
   "total": 50,
@@ -241,13 +243,17 @@ The API now includes optional integration with Hugging Face to provide additiona
 - **Caching**: Hugging Face data is cached for 1 hour to reduce API calls
 - **Error Handling**: Graceful fallback to original data if Hugging Face API is unavailable
 
-### Provider Logo Properties
+### Provider Analytics Properties
 
-All providers now include enhanced logo information:
+All providers now include analytics and usage information:
 
 - `logo_url`: Generated logo URL using Google's favicon service with 128px size (same format as `model_logo_url`)
 - `site_url`: Provider's website URL extracted from various sources
 - `model_count`: Number of available models provided by this provider
+- `token_generated`: Daily token processing volume (e.g., "21.1B")
+- `weekly_growth`: Weekly growth rate of token processing (e.g., "+25.4%")
+
+**Note:** The `token_generated` and `weekly_growth` fields currently contain mock data as OpenRouter's API doesn't provide these specific analytics metrics. These values are based on estimated provider popularity and growth trends.
 
 ### Model Logo Properties
 

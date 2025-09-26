@@ -445,6 +445,28 @@ def get_model_count_by_provider(provider_slug: str, models_data: list = None) ->
         logger.error(f"Error counting models for provider {provider_slug}: {e}")
         return 0
 
+def get_real_token_generated(provider_slug: str) -> str:
+    """Get real token generated data from analytics database"""
+    try:
+        # TODO: Implement real analytics tracking
+        # This would query your analytics database for actual token counts
+        # For now, return None to indicate no real data available
+        return None
+    except Exception as e:
+        logger.error(f"Error getting real token generated for {provider_slug}: {e}")
+        return None
+
+def get_real_weekly_growth(provider_slug: str) -> str:
+    """Get real weekly growth data from analytics database"""
+    try:
+        # TODO: Implement real analytics tracking
+        # This would calculate growth from historical data
+        # For now, return None to indicate no real data available
+        return None
+    except Exception as e:
+        logger.error(f"Error getting real weekly growth for {provider_slug}: {e}")
+        return None
+
 def enhance_providers_with_logos_and_sites(providers: list) -> list:
     """Enhance providers with site_url and logo_url (shared logic)"""
     try:
@@ -2267,10 +2289,17 @@ async def get_providers(
         # Enhance provider data with additional metrics
         enhanced_providers = enhance_providers_with_logos_and_sites(providers)
         
-        # Add model count to each provider
+        # Add model count and analytics data to each provider
         for provider in enhanced_providers:
             model_count = get_model_count_by_provider(provider.get('slug'), models)
             provider["model_count"] = model_count
+            
+            # Try to get real analytics data first, fallback to None if not available
+            token_generated = get_real_token_generated(provider.get('slug'))
+            weekly_growth = get_real_weekly_growth(provider.get('slug'))
+            
+            provider["token_generated"] = token_generated
+            provider["weekly_growth"] = weekly_growth
         
         return {
             "data": enhanced_providers,
