@@ -133,7 +133,7 @@ def add_credits(api_key: str, credits: int) -> None:
     add_credits_to_user(user['id'], credits)
 
 def deduct_credits(api_key: str, tokens: int) -> None:
-    """Deduct credits from user account by API key"""
+    """Deduct credits from user account by API key based on token usage"""
     if tokens <= 0:
         raise ValueError("Tokens must be positive")
     
@@ -145,12 +145,15 @@ def deduct_credits(api_key: str, tokens: int) -> None:
         user_id = user['id']
         current_credits = user['credits']
         
-        if current_credits < tokens:
-            raise ValueError(f"Insufficient credits. Current: {current_credits}, Required: {tokens}")
+        # Convert tokens to credits: $10 = 500,000 tokens, so 1 token = $0.00002
+        credits_to_deduct = tokens * 0.00002
+        
+        if current_credits < credits_to_deduct:
+            raise ValueError(f"Insufficient credits. Current: ${current_credits:.4f}, Required: ${credits_to_deduct:.4f}")
         
         client = get_supabase_client()
         result = client.table('users').update({
-            'credits': current_credits - tokens,
+            'credits': current_credits - credits_to_deduct,
             'updated_at': datetime.utcnow().isoformat()
         }).eq('id', user_id).execute()
         

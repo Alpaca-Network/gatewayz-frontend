@@ -8,6 +8,7 @@ class AuthMethod(str, Enum):
     EMAIL = "email"
     WALLET = "wallet"
     GOOGLE = "google"
+    GITHUB = "github"
 
 
 class PaymentMethod(str, Enum):
@@ -21,6 +22,32 @@ class SubscriptionStatus(str, Enum):
     CANCELLED = "cancelled"
     TRIAL = "trial"
 
+
+# Privy Authentication Models
+class PrivySignupRequest(BaseModel):
+    privy_user_id: str
+    auth_method: AuthMethod
+    email: Optional[EmailStr] = None
+    username: Optional[str] = None
+    display_name: Optional[str] = None
+    gmail_address: Optional[EmailStr] = None
+    github_username: Optional[str] = None
+
+class PrivySigninRequest(BaseModel):
+    privy_user_id: str
+    auth_method: AuthMethod
+
+class PrivyAuthResponse(BaseModel):
+    user_id: int
+    privy_user_id: str
+    username: str
+    email: str
+    auth_method: AuthMethod
+    api_key: str
+    credits: int
+    is_new_user: bool
+    message: str
+    timestamp: datetime
 
 # Enhanced User Registration Models
 class UserRegistrationRequest(BaseModel):
@@ -123,11 +150,11 @@ class Message(BaseModel):
 class ProxyRequest(BaseModel):
     model: str
     messages: List[Message]
-    max_tokens: Optional[int] = None
-    temperature: Optional[float] = None
-    top_p: Optional[float] = None
-    frequency_penalty: Optional[float] = None
-    presence_penalty: Optional[float] = None
+    max_tokens: Optional[int] = 950  # Default to 950 tokens (between 900-1000)
+    temperature: Optional[float] = 1.0  # Default temperature
+    top_p: Optional[float] = 1.0  # Default top_p
+    frequency_penalty: Optional[float] = 0.0  # Default frequency_penalty
+    presence_penalty: Optional[float] = 0.0  # Default presence_penalty
     
     class Config:
         extra = "allow"

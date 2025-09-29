@@ -22,7 +22,8 @@ from models import (
     UserProfileResponse, UserProfileUpdate, DeleteAccountRequest, DeleteAccountResponse,
     CreateApiKeyRequest, ApiKeyResponse, ListApiKeysResponse, DeleteApiKeyRequest, DeleteApiKeyResponse, ApiKeyUsageResponse,
     UserRegistrationRequest, UserRegistrationResponse, AuthMethod, UpdateApiKeyRequest, UpdateApiKeyResponse,
-    PlanResponse, UserPlanResponse, AssignPlanRequest, PlanUsageResponse, PlanEntitlementsResponse
+    PlanResponse, UserPlanResponse, AssignPlanRequest, PlanUsageResponse, PlanEntitlementsResponse,
+    PrivySignupRequest, PrivySigninRequest, PrivyAuthResponse
 )
 
 # Import Phase 4 security modules
@@ -49,8 +50,33 @@ from db import (
 )
 
 # Import new rate limiting module
-from rate_limiting import get_rate_limit_manager, RateLimitConfig, RateLimitResult
+from rate_limiting import get_rate_limiter, RateLimitConfig, RateLimitResult, DEFAULT_CONFIG, PREMIUM_CONFIG, ENTERPRISE_CONFIG
 from trial_service import get_trial_service
+
+def get_user_rate_limit_config(user_id: int) -> RateLimitConfig:
+    """Get rate limit configuration based on user's subscription plan"""
+    try:
+        # Get user's current plan
+        user_plan = get_user_plan(user_id)
+        
+        if not user_plan:
+            # No active plan - use default limits
+            return DEFAULT_CONFIG
+        
+        plan_type = user_plan.get('plan_type', 'free')
+        
+        # Map plan types to rate limit configurations
+        if plan_type == 'dev':
+            return PREMIUM_CONFIG
+        elif plan_type in ['team', 'customize']:
+            return ENTERPRISE_CONFIG
+        else:
+            # Free plan or unknown - use default
+            return DEFAULT_CONFIG
+            
+    except Exception as e:
+        logger.error(f"Error getting rate limit config for user {user_id}: {e}")
+        return DEFAULT_CONFIG
 from trial_models import (
     StartTrialRequest, StartTrialResponse, ConvertTrialRequest, ConvertTrialResponse,
     TrialStatusResponse, TrackUsageRequest, TrackUsageResponse, SubscriptionPlansResponse
@@ -1496,10 +1522,254 @@ async def get_user_audit_logs(
         logger.error(f"Error getting audit logs: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
+# Privy Authentication Helper Functions
+def get_user_by_privy_id(privy_user_id: str) -> Optional[Dict[str, Any]]:
+    """Get user by Privy user ID (stored in username field with prefix)"""
+    try:
+        logger.info(f"Looking up user by Privy ID: {privy_user_id}")
+        supabase = get_supabase_client()
+        if not supabase:
+            logger.error("Failed to get Supabase client")
+            return None
+        
+        # Look for username that starts with "privy_{privy_user_id}_"
+        privy_username_pattern = f"privy_{privy_user_id}_"
+        result = supabase.table('users').select('*').like('username', f"{privy_username_pattern}%").execute()
+        logger.info(f"Query result: {result}")
+        
+        if result.data and len(result.data) > 0:
+            user = result.data[0]
+            logger.info(f"Found user: {user}")
+            
+            # Extract original username and add privy_user_id to the response
+            original_username = user['username'].replace(privy_username_pattern, '')
+            user['privy_user_id'] = privy_user_id
+            user['username'] = original_username
+            
+            return user
+        else:
+            logger.info(f"No user found with Privy ID: {privy_user_id}")
+            return None
+    except Exception as e:
+        logger.error(f"Error getting user by Privy ID {privy_user_id}: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        return None
+
+def create_privy_user(privy_user_id: str, username: str, email: str, auth_method: AuthMethod, 
+                     display_name: Optional[str] = None, github_username: Optional[str] = None, 
+                     gmail_address: Optional[str] = None) -> Dict[str, Any]:
+    """Create a new user with Privy authentication using existing schema"""
+    try:
+        logger.info(f"Creating Privy user: {privy_user_id}, {username}, {email}, {auth_method}")
+        
+        # Use the existing create_enhanced_user function which works with current schema
+        user_data = create_enhanced_user(
+            username=username,
+            email=email,
+            auth_method=auth_method.value,
+            credits=10
+        )
+        
+        # Store Privy ID in a custom field or use existing fields creatively
+        # For now, we'll store it in the username field with a prefix
+        privy_username = f"privy_{privy_user_id}_{username}"
+        
+        # Update the user with Privy-specific information
+        supabase = get_supabase_client()
+        if supabase:
+            # Store additional Privy data in existing fields
+            update_data = {
+                'username': privy_username,  # Store Privy ID in username
+                'updated_at': datetime.utcnow().isoformat()
+            }
+            
+            # Store auth method specific data in available fields
+            if auth_method == AuthMethod.GOOGLE and display_name:
+                # Store display name in a comment or description field if available
+                update_data['is_active'] = True  # Use existing field
+            elif auth_method == AuthMethod.GITHUB and github_username:
+                # Store GitHub username in email field with special format
+                if not email or email.endswith('@users.noreply.github.com'):
+                    update_data['email'] = f"{github_username}@users.noreply.github.com"
+            
+            supabase.table('users').update(update_data).eq('id', user_data['user_id']).execute()
+        
+        logger.info(f"Created Privy user successfully: {user_data['user_id']}")
+        
+        return {
+            'user_id': user_data['user_id'],
+            'privy_user_id': privy_user_id,  # Return the original Privy ID
+            'username': username,  # Return the original username
+            'email': email,
+            'auth_method': auth_method,
+            'api_key': user_data['primary_api_key'],
+            'credits': user_data['credits']
+        }
+            
+    except Exception as e:
+        logger.error(f"Error creating Privy user: {e}")
+        logger.error(f"Error type: {type(e)}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise
+
+def get_user_api_key(user_id: int) -> str:
+    """Get user's API key by user ID"""
+    try:
+        supabase = get_supabase_client()
+        result = supabase.table('users').select('api_key').eq('id', user_id).execute()
+        
+        if result.data:
+            return result.data[0]['api_key']
+        raise Exception("API key not found")
+    except Exception as e:
+        logger.error(f"Error getting API key for user {user_id}: {e}")
+        raise
+
+def generate_api_key() -> str:
+    """Generate a secure API key"""
+    import secrets
+    import string
+    
+    # Generate a 32-character random string
+    alphabet = string.ascii_letters + string.digits
+    return ''.join(secrets.choice(alphabet) for _ in range(32))
+
+# Debug endpoint for testing database connection
+@app.get("/debug/db-test", tags=["debug"])
+async def debug_db_test():
+    """Test database connection and table structure"""
+    try:
+        supabase = get_supabase_client()
+        if not supabase:
+            return {"error": "Failed to get Supabase client"}
+        
+        # Test basic connection
+        result = supabase.table('users').select('count').execute()
+        
+        return {
+            "status": "success",
+            "supabase_connected": True,
+            "users_table_accessible": True,
+            "message": "Database connection working"
+        }
+    except Exception as e:
+        logger.error(f"Database test failed: {e}")
+        return {
+            "status": "error",
+            "supabase_connected": False,
+            "error": str(e)
+        }
+
+# Privy Authentication endpoints
+@app.post("/signup", response_model=PrivyAuthResponse, tags=["privy-auth"])
+async def privy_signup(request: PrivySignupRequest):
+    """Sign up user with Privy authentication (Google, Email, GitHub)"""
+    try:
+        # Validate auth method specific data
+        if request.auth_method == AuthMethod.EMAIL:
+            if not request.email:
+                raise HTTPException(status_code=400, detail="Email is required for email authentication")
+            username = request.username or request.email.split('@')[0]
+            email = request.email
+        elif request.auth_method == AuthMethod.GOOGLE:
+            if not request.gmail_address:
+                raise HTTPException(status_code=400, detail="Gmail address is required for Google authentication")
+            username = request.username or request.display_name or request.gmail_address.split('@')[0]
+            email = request.gmail_address
+        elif request.auth_method == AuthMethod.GITHUB:
+            if not request.github_username:
+                raise HTTPException(status_code=400, detail="GitHub username is required for GitHub authentication")
+            username = request.username or request.github_username
+            # Use a valid email format for GitHub users
+            email = request.email or f"{request.github_username}@users.noreply.github.com"
+        else:
+            raise HTTPException(status_code=400, detail="Unsupported authentication method")
+        
+        # Check if user already exists with this Privy ID
+        existing_user = get_user_by_privy_id(request.privy_user_id)
+        if existing_user:
+            # User exists, return existing data
+            api_key = get_user_api_key(existing_user['user_id'])
+            return PrivyAuthResponse(
+                user_id=existing_user['user_id'],
+                privy_user_id=existing_user['privy_user_id'],
+                username=existing_user['username'],
+                email=existing_user['email'],
+                auth_method=AuthMethod(existing_user['auth_method']),
+                api_key=api_key,
+                credits=existing_user['credits'],
+                is_new_user=False,
+                message="Welcome back!",
+                timestamp=datetime.utcnow()
+            )
+        
+        # Create new user
+        user_data = create_privy_user(
+            privy_user_id=request.privy_user_id,
+            username=username,
+            email=email,
+            auth_method=request.auth_method,
+            display_name=request.display_name,
+            github_username=request.github_username,
+            gmail_address=request.gmail_address
+        )
+        
+        return PrivyAuthResponse(
+            user_id=user_data['user_id'],
+            privy_user_id=user_data['privy_user_id'],
+            username=user_data['username'],
+            email=user_data['email'],
+            auth_method=user_data['auth_method'],
+            api_key=user_data['api_key'],
+            credits=user_data['credits'],
+            is_new_user=True,
+            message="Account created successfully!",
+            timestamp=datetime.utcnow()
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in Privy signup: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.post("/signin", response_model=PrivyAuthResponse, tags=["privy-auth"])
+async def privy_signin(request: PrivySigninRequest):
+    """Sign in user with Privy authentication"""
+    try:
+        # Find user by Privy ID
+        user = get_user_by_privy_id(request.privy_user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found. Please sign up first.")
+        
+        # Get user's API key
+        api_key = get_user_api_key(user['user_id'])
+        
+        return PrivyAuthResponse(
+            user_id=user['user_id'],
+            privy_user_id=user['privy_user_id'],
+            username=user['username'],
+            email=user['email'],
+            auth_method=AuthMethod(user['auth_method']),
+            api_key=api_key,
+            credits=user['credits'],
+            is_new_user=False,
+            message="Welcome back!",
+            timestamp=datetime.utcnow()
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in Privy signin: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
 # Authentication endpoints
 @app.post("/create", response_model=UserRegistrationResponse, tags=["authentication"])
 async def create_api_key(request: UserRegistrationRequest):
-    """Create API key for user after dashboard login"""
+    """Create API key for user after dashboard login (Legacy endpoint)"""
     try:
         # Validate input
         if request.environment_tag not in ['test', 'staging', 'live', 'development']:
@@ -1545,6 +1815,67 @@ async def create_api_key(request: UserRegistrationRequest):
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"API key creation failed: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.post("/create-authenticated", response_model=PrivyAuthResponse, tags=["privy-auth"])
+async def create_authenticated_api_key(
+    privy_user_id: str = Query(..., description="Privy user ID from frontend"),
+    auth_method: AuthMethod = Query(..., description="Authentication method used"),
+    key_name: str = Query("Primary Key", description="Name for the API key")
+):
+    """Create API key for authenticated user (requires Privy authentication)"""
+    try:
+        # Find user by Privy ID
+        user = get_user_by_privy_id(privy_user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found. Please sign up first.")
+        
+        # Check if user already has an API key
+        existing_api_key = get_user_api_key(user['user_id'])
+        if existing_api_key:
+            return PrivyAuthResponse(
+                user_id=user['user_id'],
+                privy_user_id=user['privy_user_id'],
+                username=user['username'],
+                email=user['email'],
+                auth_method=AuthMethod(user['auth_method']),
+                api_key=existing_api_key,
+                credits=user['credits'],
+                is_new_user=False,
+                message="API key already exists",
+                timestamp=datetime.utcnow()
+            )
+        
+        # Generate new API key
+        new_api_key = generate_api_key()
+        
+        # Update user with new API key
+        supabase = get_supabase_client()
+        result = supabase.table('users').update({
+            'api_key': new_api_key,
+            'updated_at': datetime.utcnow().isoformat()
+        }).eq('id', user['user_id']).execute()
+        
+        if not result.data:
+            raise HTTPException(status_code=500, detail="Failed to create API key")
+        
+        return PrivyAuthResponse(
+            user_id=user['user_id'],
+            privy_user_id=user['privy_user_id'],
+            username=user['username'],
+            email=user['email'],
+            auth_method=AuthMethod(user['auth_method']),
+            api_key=new_api_key,
+            credits=user['credits'],
+            is_new_user=False,
+            message="API key created successfully!",
+            timestamp=datetime.utcnow()
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating authenticated API key: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 # Admin endpoints
@@ -1713,8 +2044,9 @@ async def proxy_chat(req: ProxyRequest, api_key: str = Depends(get_api_key)):
         
         # Skip rate limiting for trial users - they have their own limits
         if not trial_validation.get('is_trial', False):
-            rate_limit_manager = get_rate_limit_manager()
-            rate_limit_check = await rate_limit_manager.check_rate_limit(api_key, tokens_used=0)
+            rate_limit_manager = get_rate_limiter()
+            rate_limit_config = get_user_rate_limit_config(user['id'])
+            rate_limit_check = await rate_limit_manager.check_rate_limit(api_key, rate_limit_config, tokens_used=0)
             if not rate_limit_check.allowed:
                 # Create rate limit alert
                 create_rate_limit_alert(api_key, "rate_limit_exceeded", {
@@ -1737,17 +2069,53 @@ async def proxy_chat(req: ProxyRequest, api_key: str = Depends(get_api_key)):
             messages = [msg.dict() for msg in req.messages]
             model = req.model
             
-            optional_params = {}
+            # Validate and set max_tokens with proper defaults
+            max_tokens = 950  # Default value between 900-1000
             if req.max_tokens is not None:
-                optional_params['max_tokens'] = req.max_tokens
+                if req.max_tokens <= 0:
+                    raise HTTPException(
+                        status_code=400, 
+                        detail="The max_tokens value must not be 0 or negative"
+                    )
+                elif req.max_tokens > 1000:
+                    # Cap at 1000 to avoid credit issues
+                    max_tokens = 1000
+                    logger.warning(f"max_tokens capped at 1000 (requested: {req.max_tokens})")
+                else:
+                    max_tokens = req.max_tokens
+            
+            optional_params = {
+                'max_tokens': max_tokens  # Always set max_tokens
+            }
+            
+            # Set other optional parameters with validation
             if req.temperature is not None:
-                optional_params['temperature'] = req.temperature
+                if 0 <= req.temperature <= 2:
+                    optional_params['temperature'] = req.temperature
+                else:
+                    logger.warning(f"Temperature clamped to valid range (requested: {req.temperature})")
+                    optional_params['temperature'] = max(0, min(2, req.temperature))
+            
             if req.top_p is not None:
-                optional_params['top_p'] = req.top_p
+                if 0 <= req.top_p <= 1:
+                    optional_params['top_p'] = req.top_p
+                else:
+                    logger.warning(f"top_p clamped to valid range (requested: {req.top_p})")
+                    optional_params['top_p'] = max(0, min(1, req.top_p))
+            
             if req.frequency_penalty is not None:
-                optional_params['frequency_penalty'] = req.frequency_penalty
+                if -2 <= req.frequency_penalty <= 2:
+                    optional_params['frequency_penalty'] = req.frequency_penalty
+                else:
+                    logger.warning(f"frequency_penalty clamped to valid range (requested: {req.frequency_penalty})")
+                    optional_params['frequency_penalty'] = max(-2, min(2, req.frequency_penalty))
+            
             if req.presence_penalty is not None:
-                optional_params['presence_penalty'] = req.presence_penalty
+                if -2 <= req.presence_penalty <= 2:
+                    optional_params['presence_penalty'] = req.presence_penalty
+                else:
+                    logger.warning(f"presence_penalty clamped to valid range (requested: {req.presence_penalty})")
+                    optional_params['presence_penalty'] = max(-2, min(2, req.presence_penalty))
             
             response = make_openrouter_request_openai(messages, model, **optional_params)
             processed_response = process_openrouter_response(response)
@@ -1780,7 +2148,7 @@ async def proxy_chat(req: ProxyRequest, api_key: str = Depends(get_api_key)):
             
             # Skip final rate limiting for trial users - they have their own limits
             if not trial_validation.get('is_trial', False):
-                rate_limit_check_final = await rate_limit_manager.check_rate_limit(api_key, tokens_used=total_tokens)
+                rate_limit_check_final = await rate_limit_manager.check_rate_limit(api_key, rate_limit_config, tokens_used=total_tokens)
                 if not rate_limit_check_final.allowed:
                     # Create rate limit alert
                     create_rate_limit_alert(api_key, "rate_limit_exceeded", {
@@ -1799,10 +2167,12 @@ async def proxy_chat(req: ProxyRequest, api_key: str = Depends(get_api_key)):
             
             # Only check user credits for non-trial users
             if not trial_validation.get('is_trial', False):
-                if user['credits'] < total_tokens:
+                # Convert tokens to credits: $10 = 500,000 tokens, so 1 token = $0.00002
+                credits_required = total_tokens * 0.00002
+                if user['credits'] < credits_required:
                     raise HTTPException(
                         status_code=402, 
-                        detail=f"Insufficient credits. Required: {total_tokens}, Available: {user['credits']}"
+                        detail=f"Insufficient credits. Required: ${credits_required:.4f}, Available: ${user['credits']:.4f}"
                     )
             
             try:
@@ -1832,9 +2202,11 @@ async def proxy_chat(req: ProxyRequest, api_key: str = Depends(get_api_key)):
                 }
             else:
                 # For non-trial users, show user credits remaining
+                credits_deducted = total_tokens * 0.00002
                 processed_response['gateway_usage'] = {
                     'tokens_charged': total_tokens,
-                    'user_balance_after': user['credits'] - total_tokens,
+                    'credits_deducted': f"${credits_deducted:.4f}",
+                    'user_balance_after': f"${user['credits'] - credits_deducted:.4f}",
                     'user_api_key': f"{api_key[:10]}..."
                 }
             
