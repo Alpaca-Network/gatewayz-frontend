@@ -1147,6 +1147,23 @@ def get_authenticated_privy_user(privy_user_id: str = Query(..., description="Pr
     
     return user
 
+def get_authenticated_user(privy_user_id: str = Query(..., description="Privy user ID for authentication")):
+    """Primary authentication using Privy User ID for all user endpoints"""
+    if not privy_user_id:
+        raise HTTPException(
+            status_code=401, 
+            detail="Privy user ID required for authentication"
+        )
+    
+    user = get_user_by_privy_id(privy_user_id)
+    if not user:
+        raise HTTPException(
+            status_code=401, 
+            detail="User not found. Please log in with Privy first."
+        )
+    
+    return user
+
 # Initialize configuration
 Config.validate()
 
@@ -1191,20 +1208,19 @@ async def health_check():
 
 # User endpoints
 @app.get("/user/balance", tags=["authentication"])
-async def get_user_balance(api_key: str = Depends(get_api_key)):
+async def get_user_balance(user: dict = Depends(get_authenticated_user)):
     try:
-        user = get_user(api_key)
-        if not user:
-            raise HTTPException(status_code=401, detail="Invalid API key")
+        # User is already authenticated via privy_user_id
+        user_id = user['id']
         
         # Check if this is a trial user
         from trial_validation import validate_trial_access
-        trial_validation = validate_trial_access(api_key)
+        trial_validation = validate_trial_access(user_id)
         
         if trial_validation.get('is_trial', False):
             # For trial users, show trial credits and tokens
             return {
-                "api_key": f"{api_key[:10]}...",
+                "privy_user_id": user.get("privy_user_id"),
                 "credits": trial_validation.get('remaining_credits', 0.0),
                 "tokens_remaining": trial_validation.get('remaining_tokens', 0),
                 "requests_remaining": trial_validation.get('remaining_requests', 0),
@@ -1215,7 +1231,7 @@ async def get_user_balance(api_key: str = Depends(get_api_key)):
         else:
             # For non-trial users, show regular credits
             return {
-                "api_key": f"{api_key[:10]}...",
+                "privy_user_id": user.get("privy_user_id"),
                 "credits": user["credits"],
                 "status": "active",
                 "user_id": user.get("id")
@@ -2010,7 +2026,7 @@ def create_privy_user(privy_user_id: str, username: str, email: str, auth_method
             'api_key': user_data['primary_api_key'],
             'credits': user_data['credits']
         }
-            
+        
     except Exception as e:
         logger.error(f"Error creating Privy user: {e}")
         logger.error(f"Error type: {type(e)}")
@@ -2113,11 +2129,16 @@ async def privy_authenticate(request: PrivyAuthRequest):
                 'last_login': datetime.utcnow().isoformat()
             })
             
+            # Auto-generate API key if user doesn't have one
+            api_key = get_user_api_key(existing_user['id'])
+            if not api_key:
+                api_key = generate_api_key_for_privy_user(existing_user['id'])
+            
             return PrivyAuthResponse(
                 success=True,
                 message="User authenticated successfully",
                 user_id=existing_user['id'],
-                api_key=None,
+                api_key=api_key,
                 auth_method=auth_method,
                 privy_user_id=privy_user_id,
                 is_new_user=False,
@@ -2140,11 +2161,14 @@ async def privy_authenticate(request: PrivyAuthRequest):
                 refresh_token=refresh_token
             )
             
+            # Auto-generate API key for new user
+            api_key = generate_api_key_for_privy_user(user_result['user_id'])
+            
             return PrivyAuthResponse(
                 success=True,
                 message="User created and authenticated successfully",
                 user_id=user_result['user_id'],
-                api_key=None,
+                api_key=api_key,
                 auth_method=auth_method,
                 privy_user_id=privy_user_id,
                 is_new_user=True,
@@ -2322,11 +2346,9 @@ async def admin_set_rate_limit(req: SetRateLimitRequest, admin_key: str = Depend
 
 # Chat completion endpoint
 @app.post("/v1/chat/completions", tags=["chat"])
-async def proxy_chat(req: ProxyRequest, api_key: str = Depends(get_api_key)):
+async def proxy_chat(req: ProxyRequest, user: dict = Depends(get_authenticated_user)):
     try:
-        user = get_user(api_key)
-        if not user:
-            raise HTTPException(status_code=401, detail="Invalid API key")
+        # User is already authenticated via privy_user_id
         
         # Get environment tag from API key
         environment_tag = user.get('environment_tag', 'live')
@@ -2341,7 +2363,7 @@ async def proxy_chat(req: ProxyRequest, api_key: str = Depends(get_api_key)):
         
         # Check trial status first (simplified)
         from trial_validation import validate_trial_access
-        trial_validation = validate_trial_access(api_key)
+        trial_validation = validate_trial_access(user['id'])
         
         if not trial_validation['is_valid']:
             if trial_validation.get('is_trial') and trial_validation.get('is_expired'):
@@ -2372,17 +2394,20 @@ async def proxy_chat(req: ProxyRequest, api_key: str = Depends(get_api_key)):
         
         # Skip rate limiting for trial users - they have their own limits
         if not trial_validation.get('is_trial', False):
-            rate_limit_manager = get_rate_limiter()
-            rate_limit_config = get_user_rate_limit_config(user['id'])
-            rate_limit_check = await rate_limit_manager.check_rate_limit(api_key, rate_limit_config, tokens_used=0)
-            if not rate_limit_check.allowed:
-                # Create rate limit alert
-                create_rate_limit_alert(api_key, "rate_limit_exceeded", {
-                    "reason": rate_limit_check.reason,
-                    "retry_after": rate_limit_check.retry_after,
-                    "remaining_requests": rate_limit_check.remaining_requests,
-                    "remaining_tokens": rate_limit_check.remaining_tokens
-                })
+            # Get user's API key for rate limiting
+            user_api_key = get_user_api_key(user['id'])
+            if user_api_key:
+                rate_limit_manager = get_rate_limiter()
+                rate_limit_config = get_user_rate_limit_config(user['id'])
+                rate_limit_check = await rate_limit_manager.check_rate_limit(user_api_key, rate_limit_config, tokens_used=0)
+                if not rate_limit_check.allowed:
+                    # Create rate limit alert
+                    create_rate_limit_alert(user_api_key, "rate_limit_exceeded", {
+                        "reason": rate_limit_check.reason,
+                        "retry_after": rate_limit_check.retry_after,
+                        "remaining_requests": rate_limit_check.remaining_requests,
+                        "remaining_tokens": rate_limit_check.remaining_tokens
+                    })
                 
                 raise HTTPException(
                     status_code=429, 
@@ -2464,7 +2489,7 @@ async def proxy_chat(req: ProxyRequest, api_key: str = Depends(get_api_key)):
                 try:
                     from trial_validation import track_trial_usage
                     logger.info(f"Tracking trial usage: {total_tokens} tokens, 1 request")
-                    success = track_trial_usage(api_key, total_tokens, 1)
+                    success = track_trial_usage(user['id'], total_tokens, 1)
                     if success:
                         logger.info("Trial usage tracked successfully")
                     else:
@@ -2475,11 +2500,11 @@ async def proxy_chat(req: ProxyRequest, api_key: str = Depends(get_api_key)):
             # Final rate limit check with actual token usage
             
             # Skip final rate limiting for trial users - they have their own limits
-            if not trial_validation.get('is_trial', False):
-                rate_limit_check_final = await rate_limit_manager.check_rate_limit(api_key, rate_limit_config, tokens_used=total_tokens)
+            if not trial_validation.get('is_trial', False) and user_api_key:
+                rate_limit_check_final = await rate_limit_manager.check_rate_limit(user_api_key, rate_limit_config, tokens_used=total_tokens)
                 if not rate_limit_check_final.allowed:
                     # Create rate limit alert
-                    create_rate_limit_alert(api_key, "rate_limit_exceeded", {
+                    create_rate_limit_alert(user_api_key, "rate_limit_exceeded", {
                         "reason": rate_limit_check_final.reason,
                         "retry_after": rate_limit_check_final.retry_after,
                         "remaining_requests": rate_limit_check_final.remaining_requests,
@@ -2505,14 +2530,16 @@ async def proxy_chat(req: ProxyRequest, api_key: str = Depends(get_api_key)):
             
             try:
                 # Only deduct credits for non-trial users
-                if not trial_validation.get('is_trial', False):
-                    deduct_credits(api_key, total_tokens)
+                if not trial_validation.get('is_trial', False) and user_api_key:
+                    deduct_credits(user_api_key, total_tokens)
                     cost = total_tokens * 0.02 / 1000
-                    record_usage(user['id'], api_key, req.model, total_tokens, cost)
-                update_rate_limit_usage(api_key, total_tokens)
+                    record_usage(user['id'], user_api_key, req.model, total_tokens, cost)
+                if user_api_key:
+                    update_rate_limit_usage(user_api_key, total_tokens)
                 
                 # Increment API key usage count
-                increment_api_key_usage(api_key)
+                if user_api_key:
+                    increment_api_key_usage(user_api_key)
                 
             except ValueError as e:
                 logger.error(f"Failed to deduct credits: {e}")
@@ -2526,7 +2553,7 @@ async def proxy_chat(req: ProxyRequest, api_key: str = Depends(get_api_key)):
                 processed_response['gateway_usage'] = {
                     'tokens_charged': total_tokens,
                     'trial_credits_remaining': trial_remaining_credits,
-                    'user_api_key': f"{api_key[:10]}..."
+                    'privy_user_id': user.get('privy_user_id', 'N/A')
                 }
             else:
                 # For non-trial users, show user credits remaining
@@ -2535,7 +2562,7 @@ async def proxy_chat(req: ProxyRequest, api_key: str = Depends(get_api_key)):
                     'tokens_charged': total_tokens,
                     'credits_deducted': f"${credits_deducted:.4f}",
                     'user_balance_after': f"${user['credits'] - credits_deducted:.4f}",
-                    'user_api_key': f"{api_key[:10]}..."
+                    'privy_user_id': user.get('privy_user_id', 'N/A')
                 }
             
             return processed_response
