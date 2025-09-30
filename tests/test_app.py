@@ -3,13 +3,15 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
+from src.db.users import get_user
+from src.main import app
+from src.supabase_config import init_db
+
 os.environ['VERCEL_API_KEY'] = 'test-vercel-key'
-from gateway.app import app, init_db, get_user  # noqa: E402
-from gateway.db import DB_PATH
 
 
 @pytest.fixture(autouse=True)
-def setup_db(tmp_path):
+def setup_db(tmp_path, DB_PATH=None):
     os.environ['GATEWAY_DB'] = str(tmp_path / 'test.db')
     init_db()
     yield

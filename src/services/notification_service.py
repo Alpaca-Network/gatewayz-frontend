@@ -5,20 +5,21 @@ Handles low balance notifications, trial expiry alerts, and user communication
 """
 
 import logging
+import datetime
 import os
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any
 import requests
-import json
 import resend
 
 from notification_models import (
-    NotificationPreferences, Notification, NotificationType, 
+    NotificationPreferences, NotificationType,
     NotificationChannel, NotificationStatus, SendNotificationRequest,
-    LowBalanceAlert, TrialExpiryAlert, NotificationStats
+    LowBalanceAlert, TrialExpiryAlert
 )
-from db import get_supabase_client, get_user, get_user_plan
-from trial_validation import validate_trial_access
+from src.db.plans import get_user_plan
+from src.supabase_config import get_supabase_client
+from src.trials.trial_validation import validate_trial_access
 
 logger = logging.getLogger(__name__)
 
@@ -77,13 +78,13 @@ class NotificationService:
                 'trial_expiry_reminder_days': preferences.trial_expiry_reminder_days,
                 'plan_expiry_reminder_days': preferences.plan_expiry_reminder_days,
                 'usage_alerts': preferences.usage_alerts,
-                'created_at': datetime.utcnow().isoformat(),
-                'updated_at': datetime.utcnow().isoformat()
+                'created_at': datetime.now(datetime.UTC).isoformat(),
+                'updated_at': datetime.now(datetime.UTC).isoformat()
             }).execute()
             
             if result.data:
-                preferences.created_at = datetime.utcnow()
-                preferences.updated_at = datetime.utcnow()
+                preferences.created_at = datetime.now(datetime.UTC)
+                preferences.updated_at = datetime.now(datetime.UTC)
             
             return preferences
         except Exception as e:
@@ -93,7 +94,7 @@ class NotificationService:
     def update_user_preferences(self, user_id: int, updates: Dict[str, Any]) -> bool:
         """Update user notification preferences"""
         try:
-            updates['updated_at'] = datetime.utcnow().isoformat()
+            updates['updated_at'] = datetime.now(datetime.UTC).isoformat()
             
             result = self.supabase.table('notification_preferences').update(updates).eq('user_id', user_id).execute()
             return len(result.data) > 0
@@ -140,7 +141,7 @@ class NotificationService:
                     if trial_end:
                         try:
                             trial_end_date = datetime.fromisoformat(trial_end.replace('Z', '+00:00'))
-                            remaining_days = (trial_end_date - datetime.utcnow()).days
+                            remaining_days = (trial_end_date - datetime.now(datetime.UTC)).days
                             alert.trial_remaining_days = max(0, remaining_days)
                         except:
                             pass
@@ -160,7 +161,7 @@ class NotificationService:
     def _has_recent_notification(self, user_id: int, notification_type: str, hours: int = 24) -> bool:
         """Check if user has received a notification of this type recently"""
         try:
-            since = datetime.utcnow() - timedelta(hours=hours)
+            since = datetime.now(datetime.UTC) - timedelta(hours=hours)
             result = self.supabase.table('notifications').select('id').eq('user_id', user_id).eq('type', notification_type).gte('created_at', since.isoformat()).execute()
             return len(result.data) > 0
         except Exception as e:
@@ -191,7 +192,7 @@ class NotificationService:
             
             try:
                 trial_end_date = datetime.fromisoformat(trial_end_date_str.replace('Z', '+00:00'))
-                remaining_days = (trial_end_date - datetime.utcnow()).days
+                remaining_days = (trial_end_date - datetime.now(datetime.UTC)).days
                 
                 # Send reminder exactly 1 day before expiry
                 if remaining_days == 1:
@@ -221,7 +222,6 @@ class NotificationService:
             if not user.data:
                 return None
             
-            user_data = user.data[0]
             preferences = self.get_user_preferences(user_id)
             
             if not preferences or not preferences.email_notifications:
@@ -244,7 +244,7 @@ class NotificationService:
             
             try:
                 end_date = datetime.fromisoformat(end_date_str.replace('Z', '+00:00'))
-                remaining_days = (end_date - datetime.utcnow()).days
+                remaining_days = (end_date - datetime.now(datetime.UTC)).days
                 
                 # Send daily alerts starting 5 days before expiry
                 if 1 <= remaining_days <= 5:
@@ -354,9 +354,9 @@ class NotificationService:
                 'subject': request.subject,
                 'content': request.content,
                 'status': NotificationStatus.SENT if success else NotificationStatus.FAILED,
-                'sent_at': datetime.utcnow().isoformat() if success else None,
+                'sent_at': datetime.now(datetime.UTC).isoformat() if success else None,
                 'metadata': request.metadata,
-                'created_at': datetime.utcnow().isoformat()
+                'created_at': datetime.now(datetime.UTC).isoformat()
             }
             
             if not success:
@@ -378,8 +378,7 @@ class NotificationService:
             
             user_data = user.data[0]
             username = user_data.get('username', 'User')
-            email = user_data.get('email')
-            
+
             if alert.is_trial:
                 subject = f"Low Trial Credits - {self.app_name}"
                 html_content = f"""

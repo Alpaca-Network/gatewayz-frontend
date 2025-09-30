@@ -7,9 +7,11 @@ Works without Redis using in-memory storage
 import time
 import asyncio
 from collections import defaultdict, deque
-from typing import Dict, Optional, Any
+from typing import Optional
 from dataclasses import dataclass
 import logging
+
+from src.db.rate_limits import get_rate_limit_config, update_rate_limit_config
 
 logger = logging.getLogger(__name__)
 
@@ -204,7 +206,6 @@ class FallbackRateLimitManager:
     async def _load_key_config_from_db(self, api_key: str) -> Optional[RateLimitConfig]:
         """Load rate limit configuration from database"""
         try:
-            from db import get_rate_limit_config
             config_data = get_rate_limit_config(api_key)
             if config_data:
                 return RateLimitConfig(**config_data)
@@ -216,7 +217,6 @@ class FallbackRateLimitManager:
         """Update rate limit configuration for API key"""
         self.key_configs[api_key] = config
         try:
-            from db import update_rate_limit_config
             config_dict = {
                 'requests_per_minute': config.requests_per_minute,
                 'requests_per_hour': config.requests_per_hour,

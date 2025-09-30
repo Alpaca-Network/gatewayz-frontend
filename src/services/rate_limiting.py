@@ -5,16 +5,16 @@ Implements sliding-window rate limiting, burst controls, and configurable limits
 """
 
 import time
-import asyncio
 import logging
-from typing import Dict, List, Optional, Tuple, Any
+import datetime
+from typing import Dict, Optional, Any
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from collections import defaultdict, deque
-import json
 import redis
-from functools import lru_cache
-from redis_config import get_redis_client, is_redis_available
+
+from src.db.rate_limits import update_rate_limit_config, get_rate_limit_config
+from src.redis_config import get_redis_client, is_redis_available
 from rate_limiting_fallback import get_fallback_rate_limit_manager
 
 logger = logging.getLogger(__name__)
@@ -58,7 +58,6 @@ class SlidingWindowRateLimiter:
         api_key: str, 
         config: RateLimitConfig,
         tokens_used: int = 0,
-        request_type: str = "api"
     ) -> RateLimitResult:
         """Check rate limit with sliding window algorithm"""
         try:
@@ -69,7 +68,7 @@ class SlidingWindowRateLimiter:
                     allowed=False,
                     remaining_requests=0,
                     remaining_tokens=0,
-                    reset_time=datetime.utcnow() + timedelta(seconds=60),
+                    reset_time=datetime.now(datetime.UTC) + timedelta(seconds=60),
                     retry_after=60,
                     reason="Concurrency limit exceeded",
                     concurrency_remaining=0
@@ -82,7 +81,7 @@ class SlidingWindowRateLimiter:
                     allowed=False,
                     remaining_requests=0,
                     remaining_tokens=0,
-                    reset_time=datetime.utcnow() + timedelta(seconds=burst_check["retry_after"]),
+                    reset_time=datetime.now(datetime.UTC) + timedelta(seconds=burst_check["retry_after"]),
                     retry_after=burst_check["retry_after"],
                     reason="Burst limit exceeded",
                     burst_remaining=burst_check["remaining"]
@@ -119,7 +118,7 @@ class SlidingWindowRateLimiter:
                 allowed=True,
                 remaining_requests=config.requests_per_minute,
                 remaining_tokens=config.tokens_per_minute,
-                reset_time=datetime.utcnow() + timedelta(minutes=1),
+                reset_time=datetime.now(datetime.UTC) + timedelta(minutes=1),
                 reason="Rate limit check failed, allowing request"
             )
     
@@ -152,8 +151,8 @@ class SlidingWindowRateLimiter:
             pipe = self.redis_client.pipeline()
             
             # Get current burst tokens
-            pipe.hget(key, "tokens")
-            pipe.hget(key, "last_refill")
+            await pipe.hget(key, "tokens")
+            await pipe.hget(key, "last_refill")
             
             results = pipe.execute()
             current_tokens = float(results[0] or 0)
@@ -166,9 +165,9 @@ class SlidingWindowRateLimiter:
             
             if current_tokens >= 1:
                 # Consume one token
-                pipe.hset(key, "tokens", current_tokens - 1)
-                pipe.hset(key, "last_refill", now)
-                pipe.expire(key, 300)  # Expire after 5 minutes
+                await pipe.hset(key, "tokens", current_tokens - 1)
+                await pipe.hset(key, "last_refill", now)
+                await pipe.expire(key, 300)  # Expire after 5 minutes
                 pipe.execute()
                 
                 return {
@@ -209,7 +208,7 @@ class SlidingWindowRateLimiter:
     
     async def _check_sliding_window(self, api_key: str, config: RateLimitConfig, tokens_used: int) -> Dict[str, Any]:
         """Check sliding window rate limits"""
-        now = datetime.utcnow()
+        now = datetime.now(datetime.UTC)
         window_start = now - timedelta(seconds=config.window_size_seconds)
         
         if self.redis_client:
@@ -236,12 +235,12 @@ class SlidingWindowRateLimiter:
         day_key = f"rate_limit:{api_key}:day:{now.strftime('%Y%m%d')}"
         
         # Get current counts
-        pipe.get(f"{minute_key}:requests")
-        pipe.get(f"{minute_key}:tokens")
-        pipe.get(f"{hour_key}:requests")
-        pipe.get(f"{hour_key}:tokens")
-        pipe.get(f"{day_key}:requests")
-        pipe.get(f"{day_key}:tokens")
+        await pipe.get(f"{minute_key}:requests")
+        await pipe.get(f"{minute_key}:tokens")
+        await pipe.get(f"{hour_key}:requests")
+        await pipe.get(f"{hour_key}:tokens")
+        await pipe.get(f"{day_key}:requests")
+        await pipe.get(f"{day_key}:tokens")
         
         results = pipe.execute()
         
@@ -314,20 +313,20 @@ class SlidingWindowRateLimiter:
             }
         
         # All checks passed, update counters
-        pipe.incr(f"{minute_key}:requests")
-        pipe.incrby(f"{minute_key}:tokens", tokens_used)
-        pipe.incr(f"{hour_key}:requests")
-        pipe.incrby(f"{hour_key}:tokens", tokens_used)
-        pipe.incr(f"{day_key}:requests")
-        pipe.incrby(f"{day_key}:tokens", tokens_used)
+        await pipe.incr(f"{minute_key}:requests")
+        await pipe.incrby(f"{minute_key}:tokens", tokens_used)
+        await pipe.incr(f"{hour_key}:requests")
+        await pipe.incrby(f"{hour_key}:tokens", tokens_used)
+        await pipe.incr(f"{day_key}:requests")
+        await pipe.incrby(f"{day_key}:tokens", tokens_used)
         
         # Set expiration times
-        pipe.expire(f"{minute_key}:requests", 120)  # 2 minutes
-        pipe.expire(f"{minute_key}:tokens", 120)
-        pipe.expire(f"{hour_key}:requests", 7200)   # 2 hours
-        pipe.expire(f"{hour_key}:tokens", 7200)
-        pipe.expire(f"{day_key}:requests", 172800)  # 2 days
-        pipe.expire(f"{day_key}:tokens", 172800)
+        await pipe.expire(f"{minute_key}:requests", 120)  # 2 minutes
+        await pipe.expire(f"{minute_key}:tokens", 120)
+        await pipe.expire(f"{hour_key}:requests", 7200)   # 2 hours
+        await pipe.expire(f"{hour_key}:tokens", 7200)
+        await pipe.expire(f"{day_key}:requests", 172800)  # 2 days
+        await pipe.expire(f"{day_key}:tokens", 172800)
         
         pipe.execute()
         
@@ -427,8 +426,7 @@ class RateLimitManager:
         """Load rate limit configuration from database"""
         try:
             # Import here to avoid circular imports
-            from db import get_rate_limit_config
-            
+
             config_data = get_rate_limit_config(api_key)
             if config_data:
                 return RateLimitConfig(
@@ -455,7 +453,7 @@ class RateLimitManager:
     ) -> RateLimitResult:
         """Check rate limit for a specific API key"""
         config = await self.get_key_config(api_key)
-        return await self.rate_limiter.check_rate_limit(api_key, config, tokens_used, request_type)
+        return await self.rate_limiter.check_rate_limit(api_key, config, tokens_used)
     
     async def update_key_config(self, api_key: str, config: RateLimitConfig):
         """Update rate limit configuration for a specific key"""
@@ -466,8 +464,6 @@ class RateLimitManager:
     async def _save_key_config_to_db(self, api_key: str, config: RateLimitConfig):
         """Save rate limit configuration to database"""
         try:
-            from db import update_rate_limit_config
-            
             config_dict = {
                 'requests_per_minute': config.requests_per_minute,
                 'requests_per_hour': config.requests_per_hour,

@@ -9,36 +9,123 @@ import hmac
 import secrets
 import logging
 import os
-from datetime import datetime, timedelta
-from typing import Optional, Dict, Any, List
+from typing import Optional, List
 from cryptography.fernet import Fernet
 import base64
 
 logger = logging.getLogger(__name__)
+
+
+def _generate_encryption_key() -> str:
+    """Generate a new encryption key"""
+    return Fernet.generate_key().decode()
+
+
+def hash_api_key(api_key: str) -> str:
+    """Create a secure hash of an API key using HMAC-SHA256"""
+    try:
+        # Use a secret salt for additional security
+        salt = os.environ.get("API_GATEWAY_SALT", "api_gateway_salt_2024").encode()
+        hash_obj = hmac.new(salt, api_key.encode("utf-8"), hashlib.sha256)
+        return hash_obj.hexdigest()
+    except Exception as e:
+        logger.error(f"Error hashing API key: {e}")
+        raise
+
+
+def generate_secure_api_key(environment_tag: str = 'live', key_length: int = 32) -> str:
+    """Generate a cryptographically secure API key"""
+    try:
+        # Generate secure random part
+        random_part = secrets.token_urlsafe(key_length)
+
+        # Add environment prefix
+        if environment_tag == 'test':
+            prefix = 'gw_test_'
+        elif environment_tag == 'staging':
+            prefix = 'gw_staging_'
+        elif environment_tag == 'development':
+            prefix = 'gw_dev_'
+        else:
+            prefix = 'gw_live_'
+
+        return prefix + random_part
+    except Exception as e:
+        logger.error(f"Error generating secure API key: {e}")
+        raise
+
+
+def _ip_in_cidr(ip: str, cidr: str) -> bool:
+    """Check if IP is in CIDR range (simplified implementation)"""
+    try:
+        # This is a simplified implementation
+        # In production, use a proper IP address library like ipaddress
+        if '/' not in cidr:
+            return ip == cidr
+
+        # For now, just do exact match
+        # TODO: Implement proper CIDR checking
+        return ip == cidr.split('/')[0]
+    except Exception as e:
+        logger.error(f"Error checking CIDR: {e}")
+        return False
+
+
+def validate_domain_referrers(referer: str, allowed_domains: List[str]) -> bool:
+    """Validate if referer domain is in the allowlist"""
+    if not allowed_domains or not referer:
+        return True  # No restrictions
+
+    try:
+        from urllib.parse import urlparse
+        parsed_url = urlparse(referer)
+        hostname = parsed_url.hostname
+
+        if not hostname:
+            return False
+
+        # Check if hostname matches any allowed domain
+        for allowed_domain in allowed_domains:
+            if hostname == allowed_domain or hostname.endswith('.' + allowed_domain):
+                return True
+
+        return False
+    except Exception as e:
+        logger.error(f"Error validating domain referrers: {e}")
+        return False
+
+
+def validate_ip_allowlist(client_ip: str, allowed_ips: List[str]) -> bool:
+    """Validate if client IP is in the allowlist"""
+    if not allowed_ips:
+        return True  # No restrictions
+
+    try:
+        # Check exact match first
+        if client_ip in allowed_ips:
+            return True
+
+        # Check CIDR ranges (basic implementation)
+        for allowed_ip in allowed_ips:
+            if '/' in allowed_ip:
+                # Handle CIDR notation (simplified)
+                if _ip_in_cidr(client_ip, allowed_ip):
+                    return True
+
+        return False
+    except Exception as e:
+        logger.error(f"Error validating IP allowlist: {e}")
+        return False
+
 
 class SecurityManager:
     """Advanced security manager for API keys and audit logging"""
     
     def __init__(self, encryption_key: Optional[str] = None):
         """Initialize security manager with optional encryption key"""
-        self.encryption_key = encryption_key or self._generate_encryption_key()
+        self.encryption_key = encryption_key or _generate_encryption_key()
         self.cipher_suite = Fernet(self.encryption_key.encode())
-    
-    def _generate_encryption_key(self) -> str:
-        """Generate a new encryption key"""
-        return Fernet.generate_key().decode()
-    
-    def hash_api_key(self, api_key: str) -> str:
-        """Create a secure hash of an API key using HMAC-SHA256"""
-        try:
-            # Use a secret salt for additional security
-            salt = os.environ.get("API_GATEWAY_SALT", "api_gateway_salt_2024").encode()
-            hash_obj = hmac.new(salt, api_key.encode("utf-8"), hashlib.sha256)
-            return hash_obj.hexdigest()
-        except Exception as e:
-            logger.error(f"Error hashing API key: {e}")
-            raise
-    
+
     def encrypt_api_key(self, api_key: str) -> str:
         """Encrypt an API key for secure storage"""
         try:
@@ -57,87 +144,7 @@ class SecurityManager:
         except Exception as e:
             logger.error(f"Error decrypting API key: {e}")
             raise
-    
-    def generate_secure_api_key(self, environment_tag: str = 'live', key_length: int = 32) -> str:
-        """Generate a cryptographically secure API key"""
-        try:
-            # Generate secure random part
-            random_part = secrets.token_urlsafe(key_length)
-            
-            # Add environment prefix
-            if environment_tag == 'test':
-                prefix = 'gw_test_'
-            elif environment_tag == 'staging':
-                prefix = 'gw_staging_'
-            elif environment_tag == 'development':
-                prefix = 'gw_dev_'
-            else:
-                prefix = 'gw_live_'
-            
-            return prefix + random_part
-        except Exception as e:
-            logger.error(f"Error generating secure API key: {e}")
-            raise
-    
-    def validate_ip_allowlist(self, client_ip: str, allowed_ips: List[str]) -> bool:
-        """Validate if client IP is in the allowlist"""
-        if not allowed_ips:
-            return True  # No restrictions
-        
-        try:
-            # Check exact match first
-            if client_ip in allowed_ips:
-                return True
-            
-            # Check CIDR ranges (basic implementation)
-            for allowed_ip in allowed_ips:
-                if '/' in allowed_ip:
-                    # Handle CIDR notation (simplified)
-                    if self._ip_in_cidr(client_ip, allowed_ip):
-                        return True
-            
-            return False
-        except Exception as e:
-            logger.error(f"Error validating IP allowlist: {e}")
-            return False
-    
-    def _ip_in_cidr(self, ip: str, cidr: str) -> bool:
-        """Check if IP is in CIDR range (simplified implementation)"""
-        try:
-            # This is a simplified implementation
-            # In production, use a proper IP address library like ipaddress
-            if '/' not in cidr:
-                return ip == cidr
-            
-            # For now, just do exact match
-            # TODO: Implement proper CIDR checking
-            return ip == cidr.split('/')[0]
-        except Exception as e:
-            logger.error(f"Error checking CIDR: {e}")
-            return False
-    
-    def validate_domain_referrers(self, referer: str, allowed_domains: List[str]) -> bool:
-        """Validate if referer domain is in the allowlist"""
-        if not allowed_domains or not referer:
-            return True  # No restrictions
-        
-        try:
-            from urllib.parse import urlparse
-            parsed_url = urlparse(referer)
-            hostname = parsed_url.hostname
-            
-            if not hostname:
-                return False
-            
-            # Check if hostname matches any allowed domain
-            for allowed_domain in allowed_domains:
-                if hostname == allowed_domain or hostname.endswith('.' + allowed_domain):
-                    return True
-            
-            return False
-        except Exception as e:
-            logger.error(f"Error validating domain referrers: {e}")
-            return False
+
 
 class AuditLogger:
     """Comprehensive audit logging system"""

@@ -7,19 +7,17 @@ Adds welcome emails, password reset, usage reports, and more
 import logging
 import os
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any, List
-import requests
+from typing import Optional, Dict, Any
 import json
 import resend
 import secrets
 
-from notification_models import (
-    NotificationPreferences, Notification, NotificationType, 
-    NotificationChannel, NotificationStatus, SendNotificationRequest,
-    LowBalanceAlert, TrialExpiryAlert, NotificationStats
+from src.services.notification_models import (
+    NotificationPreferences, NotificationType,
+    NotificationChannel, NotificationStatus, SendNotificationRequest
 )
-from db import get_supabase_client, get_user, get_user_plan
-from professional_email_templates import email_templates
+from src.services.professional_email_templates import email_templates
+from src.supabase_config import get_supabase_client
 
 logger = logging.getLogger(__name__)
 
