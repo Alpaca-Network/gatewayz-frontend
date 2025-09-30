@@ -2060,7 +2060,7 @@ def generate_api_key() -> str:
 
 
 # Privy Authentication endpoints
-@app.post("/auth/privy", response_model=PrivyAuthResponse, tags=["privy-auth"])
+@app.post("/auth", response_model=PrivyAuthResponse, tags=["privy-auth"])
 async def privy_authenticate(request: PrivyAuthRequest):
     """Handle complete Privy authentication response from frontend"""
     try:
