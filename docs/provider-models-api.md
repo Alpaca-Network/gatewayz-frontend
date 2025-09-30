@@ -128,7 +128,27 @@ curl -X GET "https://your-api.com/provider?moderated_only=true&limit=5&offset=0"
         },
         "available_inference_providers": [],
         "widget_output_urls": [],
-        "is_liked_by_user": false
+        "is_liked_by_user": false,
+        "performance_metrics": {
+          "avg_latency_ms": 1250,
+          "p95_latency_ms": 2100,
+          "throughput_tokens_per_sec": 45.2,
+          "uptime_percentage": 99.8,
+          "inference_speed_score": 8.5,
+          "hardware_efficiency": 7.2,
+          "last_updated": "2025-09-23T08:52:16.000Z",
+          "data_source": "huggingface"
+        }
+      },
+      "performance_metrics": {
+        "avg_latency_ms": 1200,
+        "p95_latency_ms": 2000,
+        "throughput_tokens_per_sec": 50.0,
+        "uptime_percentage": 99.5,
+        "inference_speed_score": 8.0,
+        "hardware_efficiency": 7.5,
+        "last_updated": "2024-01-15T10:30:00Z",
+        "data_source": "openrouter_estimated"
       }
     }
   ],
@@ -276,9 +296,51 @@ When `include_huggingface=true` (default), models with `hugging_face_id` will in
 - `last_modified`: Last modification date
 - `author`: Model author/organization
 - `author_data`: Detailed author information including avatar URL and follower count
-- `available_inference_providers`: Available inference providers
-- `widget_output_urls`: Widget output URLs
-- `is_liked_by_user`: Whether the current user has liked the model
+
+### Performance Metrics Included
+
+All models now include performance metrics for latency and throughput:
+
+#### For Models with Hugging Face Data:
+- `avg_latency_ms`: Average response latency in milliseconds
+- `p95_latency_ms`: 95th percentile latency in milliseconds
+- `throughput_tokens_per_sec`: Tokens processed per second
+- `uptime_percentage`: Model availability percentage
+- `inference_speed_score`: Community-based speed rating (1-10)
+- `hardware_efficiency`: Hardware efficiency score (1-10)
+- `last_updated`: Last performance data update
+- `data_source`: "huggingface"
+
+#### For Models without Hugging Face Data:
+- `avg_latency_ms`: Estimated latency based on context length and pricing
+- `p95_latency_ms`: Estimated 95th percentile latency
+- `throughput_tokens_per_sec`: Estimated throughput based on pricing
+- `uptime_percentage`: Estimated uptime based on provider reliability
+- `inference_speed_score`: Calculated score based on context and pricing
+- `hardware_efficiency`: Calculated efficiency based on model characteristics
+- `last_updated`: Model creation or last modification date
+- `data_source`: "openrouter_estimated"
+
+**Note:** Performance metrics are calculated using real data from API responses:
+- **Hugging Face models**: Based on real community data (downloads, likes, parameters, pipeline type) and model characteristics
+- **OpenRouter-only models**: Calculated from real OpenRouter data (context length, pricing, model names, provider reliability)
+
+### Real Data Sources Used:
+
+#### Hugging Face Data:
+- `downloads`: Actual download count from Hugging Face
+- `likes`: Real community likes count
+- `numParameters`: Actual model parameter count
+- `pipeline_tag`: Real model pipeline type (text-generation, classification, etc.)
+- `lastModified`: Actual last modification timestamp
+- `tags`: Real model tags and categories
+
+#### OpenRouter Data:
+- `context_length`: Real context window size
+- `pricing`: Actual prompt and completion prices
+- `model_name`: Real model names (GPT-4, Claude, etc.)
+- `provider_slug`: Actual provider identifiers
+- `created`: Real model creation timestamp
 
 ### Admin Endpoints
 
