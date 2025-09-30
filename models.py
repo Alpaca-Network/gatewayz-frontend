@@ -38,7 +38,6 @@ class PrivySigninRequest(BaseModel):
     auth_method: AuthMethod
 
 class CreateApiKeyRequest(BaseModel):
-    privy_user_id: str
     environment_tag: str = "live"
     key_name: str = "Primary Key"
 

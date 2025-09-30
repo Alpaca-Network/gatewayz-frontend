@@ -1130,6 +1130,23 @@ def get_privy_user(privy_user_id: str = Query(..., description="Privy user ID fo
     
     return user
 
+def get_authenticated_privy_user(privy_user_id: str = Query(..., description="Privy user ID for authentication")):
+    """Authenticate Privy user from query parameter"""
+    if not privy_user_id:
+        raise HTTPException(
+            status_code=401, 
+            detail="Authentication required. Please log in with Privy first."
+        )
+    
+    user = get_user_by_privy_id(privy_user_id)
+    if not user:
+        raise HTTPException(
+            status_code=401, 
+            detail="Authentication required. Please log in with Privy first."
+        )
+    
+    return user
+
 # Initialize configuration
 Config.validate()
 
@@ -2146,11 +2163,14 @@ async def privy_authenticate(request: PrivyAuthRequest):
 
 # Authentication endpoints
 @app.post("/create", response_model=PrivyAuthResponse, tags=["authentication"])
-async def create_api_key(request: CreateApiKeyRequest):
+async def create_api_key(
+    request: CreateApiKeyRequest, 
+    user: dict = Depends(get_authenticated_privy_user)
+):
     """Create API key for authenticated Privy user"""
     try:
         # Extract data from request
-        privy_user_id = request.privy_user_id
+        privy_user_id = user.get('privy_user_id')  # Get from authenticated user
         environment_tag = request.environment_tag
         key_name = request.key_name
         
@@ -2158,14 +2178,9 @@ async def create_api_key(request: CreateApiKeyRequest):
         if environment_tag not in ['test', 'staging', 'live', 'development']:
             raise HTTPException(status_code=400, detail="Invalid environment tag")
         
-        # Find user by Privy ID
-        user = get_user_by_privy_id(privy_user_id)
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found. Please authenticate first.")
-        
         # Generate API key for the user
         api_key = generate_api_key_for_privy_user(
-            user_id=user['user_id'],
+            user_id=user['id'],
             environment_tag=environment_tag,
             key_name=key_name
         )
@@ -2173,7 +2188,7 @@ async def create_api_key(request: CreateApiKeyRequest):
         return PrivyAuthResponse(
             success=True,
             message="API key created successfully!",
-            user_id=user['user_id'],
+            user_id=user['id'],
             api_key=api_key,
             auth_method=AuthMethod(user.get('auth_method', 'email')),
             privy_user_id=privy_user_id,
