@@ -37,17 +37,49 @@ class PrivySigninRequest(BaseModel):
     privy_user_id: str
     auth_method: AuthMethod
 
-class PrivyAuthResponse(BaseModel):
-    user_id: int
+class CreateApiKeyRequest(BaseModel):
     privy_user_id: str
-    username: str
-    email: str
-    auth_method: AuthMethod
-    api_key: str
-    credits: int
-    is_new_user: bool
+    environment_tag: str = "live"
+    key_name: str = "Primary Key"
+
+class PrivyLinkedAccount(BaseModel):
+    type: str
+    subject: Optional[str] = None
+    email: Optional[str] = None
+    name: Optional[str] = None
+    verified_at: Optional[int] = None
+    first_verified_at: Optional[int] = None
+    latest_verified_at: Optional[int] = None
+
+class PrivyUserData(BaseModel):
+    id: str
+    created_at: int
+    linked_accounts: List[PrivyLinkedAccount] = []
+    mfa_methods: List[str] = []
+    has_accepted_terms: bool = False
+    is_guest: bool = False
+
+class PrivyAuthRequest(BaseModel):
+    user: PrivyUserData
+    token: str
+    privy_access_token: Optional[str] = None
+    refresh_token: Optional[str] = None
+    session_update_action: Optional[str] = None
+    is_new_user: Optional[bool] = None
+
+class PrivyAuthResponse(BaseModel):
+    success: bool
     message: str
-    timestamp: datetime
+    user_id: Optional[int] = None
+    api_key: Optional[str] = None
+    auth_method: Optional[AuthMethod] = None
+    privy_user_id: Optional[str] = None
+    is_new_user: Optional[bool] = None
+    display_name: Optional[str] = None
+    email: Optional[str] = None
+    credits: Optional[int] = None
+    timestamp: Optional[datetime] = None
+
 
 # Enhanced User Registration Models
 class UserRegistrationRequest(BaseModel):

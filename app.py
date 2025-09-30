@@ -23,7 +23,7 @@ from models import (
     CreateApiKeyRequest, ApiKeyResponse, ListApiKeysResponse, DeleteApiKeyRequest, DeleteApiKeyResponse, ApiKeyUsageResponse,
     UserRegistrationRequest, UserRegistrationResponse, AuthMethod, UpdateApiKeyRequest, UpdateApiKeyResponse,
     PlanResponse, UserPlanResponse, AssignPlanRequest, PlanUsageResponse, PlanEntitlementsResponse,
-    PrivySignupRequest, PrivySigninRequest, PrivyAuthResponse
+    PrivySignupRequest, PrivySigninRequest, PrivyAuthRequest, PrivyAuthResponse
 )
 
 # Import Phase 4 security modules
@@ -1118,6 +1118,18 @@ async def get_api_key(credentials: HTTPAuthorizationCredentials = Depends(securi
     # If not found in either system, reject
     raise HTTPException(status_code=401, detail="Invalid API key")
 
+def get_privy_user(privy_user_id: str = Query(..., description="Privy user ID for authentication")):
+    """Get user by Privy user ID for authentication"""
+    if not privy_user_id:
+        raise HTTPException(status_code=401, detail="Privy user ID required")
+    
+    # Get user by Privy ID
+    user = get_user_by_privy_id(privy_user_id)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid Privy user ID")
+    
+    return user
+
 # Initialize configuration
 Config.validate()
 
@@ -1841,6 +1853,96 @@ def get_user_by_privy_id(privy_user_id: str) -> Optional[Dict[str, Any]]:
         logger.error(f"Traceback: {traceback.format_exc()}")
         return None
 
+def update_user_tokens(user_id: int, token_data: Dict[str, Any]) -> bool:
+    """Update user's Privy tokens in database"""
+    try:
+        supabase = get_supabase_client()
+        if not supabase:
+            logger.error("Failed to get Supabase client")
+            return False
+        
+        # Update user with token data
+        result = supabase.table('users').update({
+            'privy_access_token': token_data.get('privy_access_token'),
+            'refresh_token': token_data.get('refresh_token'),
+            'last_login': token_data.get('last_login')
+        }).eq('id', user_id).execute()
+        
+        if result.data:
+            logger.info(f"Updated tokens for user {user_id}")
+            return True
+        else:
+            logger.error(f"Failed to update tokens for user {user_id}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"Error updating user tokens: {e}")
+        return False
+
+def generate_api_key_for_privy_user(user_id: int, environment_tag: str = "live", key_name: str = "Primary Key") -> str:
+    """Generate API key for Privy user using /create endpoint logic"""
+    try:
+        logger.info(f"Generating API key for Privy user {user_id}")
+        
+        # Use the existing create_api_key function
+        api_key_result = create_api_key(
+            user_id=user_id,
+            key_name=key_name,
+            environment_tag=environment_tag,
+            is_primary=True
+        )
+        
+        if api_key_result and 'api_key' in api_key_result:
+            return api_key_result['api_key']
+        else:
+            # Fallback: generate a simple API key
+            return f"gw_{environment_tag}_{secrets.token_urlsafe(32)}"
+            
+    except Exception as e:
+        logger.error(f"Error generating API key for Privy user {user_id}: {e}")
+        # Fallback: generate a simple API key
+        return f"gw_{environment_tag}_{secrets.token_urlsafe(32)}"
+
+def create_privy_user_with_tokens(privy_user_id: str, username: str, email: str, auth_method: AuthMethod,
+                                display_name: Optional[str] = None, privy_access_token: Optional[str] = None,
+                                refresh_token: Optional[str] = None) -> Dict[str, Any]:
+    """Create a new user with Privy authentication and store tokens"""
+    try:
+        logger.info(f"Creating Privy user with tokens: {privy_user_id}, {username}, {email}, {auth_method}")
+        
+        # Create user with enhanced data including tokens
+        user_data = create_enhanced_user(
+            username=f"privy_{privy_user_id}_{username}",
+            email=email,
+            auth_method=auth_method.value,
+            credits=10  # $10 trial credits
+        )
+        
+        # Update user with Privy-specific data
+        supabase = get_supabase_client()
+        if supabase:
+            supabase.table('users').update({
+                'privy_user_id': privy_user_id,
+                'privy_access_token': privy_access_token,
+                'refresh_token': refresh_token,
+                'display_name': display_name,
+                'last_login': datetime.utcnow().isoformat()
+            }).eq('id', user_data['user_id']).execute()
+        
+        return {
+            'user_id': user_data['user_id'],
+            'privy_user_id': privy_user_id,
+            'username': username,
+            'email': email,
+            'auth_method': auth_method.value,
+            'display_name': display_name,
+            'credits': user_data.get('credits', 10)
+        }
+        
+    except Exception as e:
+        logger.error(f"Error creating Privy user with tokens: {e}")
+        raise
+
 def create_privy_user(privy_user_id: str, username: str, email: str, auth_method: AuthMethod, 
                      display_name: Optional[str] = None, github_username: Optional[str] = None, 
                      gmail_address: Optional[str] = None) -> Dict[str, Any]:
@@ -1922,296 +2024,172 @@ def generate_api_key() -> str:
     return ''.join(secrets.choice(alphabet) for _ in range(32))
 
 # Debug endpoint for testing database connection
-@app.get("/debug/db-test", tags=["debug"])
-async def debug_db_test():
-    """Test database connection and table structure"""
-    try:
-        supabase = get_supabase_client()
-        if not supabase:
-            return {"error": "Failed to get Supabase client"}
-        
-        # Test basic connection
-        result = supabase.table('users').select('count').execute()
-        
-        return {
-            "status": "success",
-            "supabase_connected": True,
-            "users_table_accessible": True,
-            "message": "Database connection working"
-        }
-    except Exception as e:
-        logger.error(f"Database test failed: {e}")
-        return {
-            "status": "error",
-            "supabase_connected": False,
-            "error": str(e)
-        }
 
-@app.get("/debug/performance-metrics/{model_id}", tags=["debug"])
-async def debug_performance_metrics(model_id: str):
-    """Test performance metrics for a specific model"""
-    try:
-        # Get models data
-        models = get_cached_models()
-        if not models:
-            raise HTTPException(status_code=503, detail="Models data unavailable")
-        
-        # Find the specific model
-        target_model = None
-        for model in models:
-            if model.get('id') == model_id:
-                target_model = model
-                break
-        
-        if not target_model:
-            raise HTTPException(status_code=404, detail=f"Model {model_id} not found")
-        
-        # Test Hugging Face performance metrics
-        hf_performance = None
-        if target_model.get('hugging_face_id'):
-            hf_data = get_cached_huggingface_model(target_model['hugging_face_id'])
-            if hf_data:
-                hf_performance = extract_huggingface_performance_metrics(hf_data)
-        
-        # Test fallback performance metrics
-        fallback_performance = generate_fallback_performance_metrics(target_model)
-        
-        return {
-            "model_id": model_id,
-            "model_name": target_model.get('name'),
-            "hugging_face_id": target_model.get('hugging_face_id'),
-            "huggingface_performance": hf_performance,
-            "fallback_performance": fallback_performance,
-            "context_length": target_model.get('context_length'),
-            "pricing": target_model.get('pricing'),
-            "timestamp": datetime.utcnow().isoformat()
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Performance metrics test failed: {e}")
-        return {
-            "status": "error",
-            "error": str(e),
-            "timestamp": datetime.utcnow().isoformat()
-        }
 
 # Privy Authentication endpoints
-@app.post("/signup", response_model=PrivyAuthResponse, tags=["privy-auth"])
-async def privy_signup(request: PrivySignupRequest):
-    """Sign up user with Privy authentication (Google, Email, GitHub)"""
+@app.post("/auth/privy", response_model=PrivyAuthResponse, tags=["privy-auth"])
+async def privy_authenticate(request: PrivyAuthRequest):
+    """Handle complete Privy authentication response from frontend"""
     try:
-        # Validate auth method specific data
-        if request.auth_method == AuthMethod.EMAIL:
-            if not request.email:
-                raise HTTPException(status_code=400, detail="Email is required for email authentication")
-            username = request.username or request.email.split('@')[0]
-            email = request.email
-        elif request.auth_method == AuthMethod.GOOGLE:
-            if not request.gmail_address:
-                raise HTTPException(status_code=400, detail="Gmail address is required for Google authentication")
-            username = request.username or request.display_name or request.gmail_address.split('@')[0]
-            email = request.gmail_address
-        elif request.auth_method == AuthMethod.GITHUB:
-            if not request.github_username:
-                raise HTTPException(status_code=400, detail="GitHub username is required for GitHub authentication")
-            username = request.username or request.github_username
-            # Use a valid email format for GitHub users
-            email = request.email or f"{request.github_username}@users.noreply.github.com"
-        else:
-            raise HTTPException(status_code=400, detail="Unsupported authentication method")
+        logger.info("Received Privy authentication request")
         
-        # Check if user already exists with this Privy ID
-        existing_user = get_user_by_privy_id(request.privy_user_id)
+        # Extract user data from Privy response
+        user_data = request.user
+        privy_user_id = user_data.id
+        linked_accounts = user_data.linked_accounts
+        token = request.token
+        privy_access_token = request.privy_access_token
+        refresh_token = request.refresh_token
+        is_new_user = request.is_new_user or False
+        
+        if not privy_user_id:
+            raise HTTPException(status_code=400, detail="Privy user ID is required")
+        
+        # Extract account information from linked accounts
+        google_account = None
+        email_account = None
+        github_account = None
+        
+        for account in linked_accounts:
+            if account.type == 'google_oauth':
+                google_account = account
+            elif account.type == 'email':
+                email_account = account
+            elif account.type == 'github_oauth':
+                github_account = account
+        
+        # Determine primary authentication method and user details
+        auth_method = None
+        username = None
+        email = None
+        display_name = None
+        
+        if google_account:
+            auth_method = AuthMethod.GOOGLE
+            email = google_account.email
+            display_name = google_account.name
+            username = f"google_{google_account.subject or ''}"
+        elif email_account:
+            auth_method = AuthMethod.EMAIL
+            email = email_account.email
+            username = email.split('@')[0] if email else None
+        elif github_account:
+            auth_method = AuthMethod.GITHUB
+            username = github_account.name  # GitHub uses 'name' field
+            display_name = github_account.name
+            email = f"{username}@users.noreply.github.com" if username else None
+        
+        if not auth_method or not email:
+            raise HTTPException(status_code=400, detail="No valid authentication method found")
+        
+        # Check if user already exists
+        existing_user = get_user_by_privy_id(privy_user_id)
+        
         if existing_user:
-            # User exists, return existing data
-            api_key = get_user_api_key(existing_user['user_id'])
+            # User exists, update tokens
+            logger.info(f"User {privy_user_id} already exists, updating tokens")
+            
+            # Update user tokens in database
+            update_user_tokens(existing_user['id'], {
+                'privy_access_token': privy_access_token,
+                'refresh_token': refresh_token,
+                'last_login': datetime.utcnow().isoformat()
+            })
+            
             return PrivyAuthResponse(
-                user_id=existing_user['user_id'],
-                privy_user_id=existing_user['privy_user_id'],
-                username=existing_user['username'],
-                email=existing_user['email'],
-                auth_method=AuthMethod(existing_user['auth_method']),
-                api_key=api_key,
-                credits=existing_user['credits'],
+                success=True,
+                message="User authenticated successfully",
+                user_id=existing_user['id'],
+                api_key=None,
+                auth_method=auth_method,
+                privy_user_id=privy_user_id,
                 is_new_user=False,
-                message="Welcome back!",
-                timestamp=datetime.utcnow()
+                display_name=existing_user.get('display_name'),
+                email=existing_user.get('email'),
+                credits=existing_user.get('credits', 0)
             )
-        
-        # Create new user
-        user_data = create_privy_user(
-            privy_user_id=request.privy_user_id,
-            username=username,
-            email=email,
-            auth_method=request.auth_method,
-            display_name=request.display_name,
-            github_username=request.github_username,
-            gmail_address=request.gmail_address
-        )
-        
-        return PrivyAuthResponse(
-            user_id=user_data['user_id'],
-            privy_user_id=user_data['privy_user_id'],
-            username=user_data['username'],
-            email=user_data['email'],
-            auth_method=user_data['auth_method'],
-            api_key=user_data['api_key'],
-            credits=user_data['credits'],
-            is_new_user=True,
-            message="Account created successfully!",
-            timestamp=datetime.utcnow()
-        )
-        
+        else:
+            # New user, create account
+            logger.info(f"Creating new user for Privy ID: {privy_user_id}")
+            
+            # Create user with Privy data
+            user_result = create_privy_user_with_tokens(
+                privy_user_id=privy_user_id,
+                username=username,
+                email=email,
+                auth_method=auth_method,
+                display_name=display_name,
+                privy_access_token=privy_access_token,
+                refresh_token=refresh_token
+            )
+            
+            return PrivyAuthResponse(
+                success=True,
+                message="User created and authenticated successfully",
+                user_id=user_result['user_id'],
+                api_key=None,
+                auth_method=auth_method,
+                privy_user_id=privy_user_id,
+                is_new_user=True,
+                display_name=display_name,
+                email=email,
+                credits=user_result.get('credits', 10)
+            )
+            
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error in Privy signup: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        logger.error(f"Privy authentication failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Authentication failed: {str(e)}")
 
-@app.post("/signin", response_model=PrivyAuthResponse, tags=["privy-auth"])
-async def privy_signin(request: PrivySigninRequest):
-    """Sign in user with Privy authentication"""
-    try:
-        # Find user by Privy ID
-        user = get_user_by_privy_id(request.privy_user_id)
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found. Please sign up first.")
-        
-        # Get user's API key
-        api_key = get_user_api_key(user['user_id'])
-        
-        return PrivyAuthResponse(
-            user_id=user['user_id'],
-            privy_user_id=user['privy_user_id'],
-            username=user['username'],
-            email=user['email'],
-            auth_method=AuthMethod(user['auth_method']),
-            api_key=api_key,
-            credits=user['credits'],
-            is_new_user=False,
-            message="Welcome back!",
-            timestamp=datetime.utcnow()
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error in Privy signin: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+
 
 # Authentication endpoints
-@app.post("/create", response_model=UserRegistrationResponse, tags=["authentication"])
-async def create_api_key(request: UserRegistrationRequest):
-    """Create API key for user after dashboard login (Legacy endpoint)"""
+@app.post("/create", response_model=PrivyAuthResponse, tags=["authentication"])
+async def create_api_key(request: CreateApiKeyRequest):
+    """Create API key for authenticated Privy user"""
     try:
-        # Validate input
-        if request.environment_tag not in ['test', 'staging', 'live', 'development']:
+        # Extract data from request
+        privy_user_id = request.privy_user_id
+        environment_tag = request.environment_tag
+        key_name = request.key_name
+        
+        # Validate environment tag
+        if environment_tag not in ['test', 'staging', 'live', 'development']:
             raise HTTPException(status_code=400, detail="Invalid environment tag")
         
-        # Create user account and generate API key for dashboard user
-        user_data = create_enhanced_user(
-            username=request.username,
-            email=request.email,
-            auth_method=request.auth_method,
-            credits=10  # $10 worth of credits (500,000 tokens)
+        # Find user by Privy ID
+        user = get_user_by_privy_id(privy_user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found. Please authenticate first.")
+        
+        # Generate API key for the user
+        api_key = generate_api_key_for_privy_user(
+            user_id=user['user_id'],
+            environment_tag=environment_tag,
+            key_name=key_name
         )
         
-        # Send welcome email with API key information
-        try:
-            enhanced_notification_service.send_welcome_email(
-                user_id=user_data['user_id'],
-                username=user_data['username'],
-                email=user_data['email'],
-                credits=user_data['credits']
-            )
-        except Exception as e:
-            logger.warning(f"Failed to send welcome email: {e}")
-        
-        return UserRegistrationResponse(
-            user_id=user_data['user_id'],
-            username=user_data['username'],
-            email=user_data['email'],
-            api_key=user_data['primary_api_key'],
-            credits=user_data['credits'],
-            environment_tag=request.environment_tag,
-            scope_permissions={
-                "read": ["models", "usage", "profile"],
-                "write": ["chat", "completions", "profile_update"]
-            },
-            auth_method=request.auth_method,
-            subscription_status="trial",
+        return PrivyAuthResponse(
+            success=True,
             message="API key created successfully!",
+            user_id=user['user_id'],
+            api_key=api_key,
+            auth_method=AuthMethod(user.get('auth_method', 'email')),
+            privy_user_id=privy_user_id,
+            is_new_user=False,
+            display_name=user.get('display_name'),
+            email=user.get('email'),
+            credits=user.get('credits', 0),
             timestamp=datetime.utcnow()
         )
         
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"API key creation failed: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
-@app.post("/create-authenticated", response_model=PrivyAuthResponse, tags=["privy-auth"])
-async def create_authenticated_api_key(
-    privy_user_id: str = Query(..., description="Privy user ID from frontend"),
-    auth_method: AuthMethod = Query(..., description="Authentication method used"),
-    key_name: str = Query("Primary Key", description="Name for the API key")
-):
-    """Create API key for authenticated user (requires Privy authentication)"""
-    try:
-        # Find user by Privy ID
-        user = get_user_by_privy_id(privy_user_id)
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found. Please sign up first.")
-        
-        # Check if user already has an API key
-        existing_api_key = get_user_api_key(user['user_id'])
-        if existing_api_key:
-            return PrivyAuthResponse(
-                user_id=user['user_id'],
-                privy_user_id=user['privy_user_id'],
-                username=user['username'],
-                email=user['email'],
-                auth_method=AuthMethod(user['auth_method']),
-                api_key=existing_api_key,
-                credits=user['credits'],
-                is_new_user=False,
-                message="API key already exists",
-                timestamp=datetime.utcnow()
-            )
-        
-        # Generate new API key
-        new_api_key = generate_api_key()
-        
-        # Update user with new API key
-        supabase = get_supabase_client()
-        result = supabase.table('users').update({
-            'api_key': new_api_key,
-            'updated_at': datetime.utcnow().isoformat()
-        }).eq('id', user['user_id']).execute()
-        
-        if not result.data:
-            raise HTTPException(status_code=500, detail="Failed to create API key")
-        
-        return PrivyAuthResponse(
-            user_id=user['user_id'],
-            privy_user_id=user['privy_user_id'],
-            username=user['username'],
-            email=user['email'],
-            auth_method=AuthMethod(user['auth_method']),
-            api_key=new_api_key,
-            credits=user['credits'],
-            is_new_user=False,
-            message="API key created successfully!",
-            timestamp=datetime.utcnow()
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error creating authenticated API key: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
 
 # Admin endpoints
 @app.post("/admin/add_credits", tags=["admin"])
@@ -2681,290 +2659,10 @@ async def admin_test_huggingface(admin_key: str = Depends(get_admin_key), huggin
         logger.error(f"Failed to test Hugging Face API for {hugging_face_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to test Hugging Face API: {str(e)}")
 
-@app.get("/admin/debug-models", tags=["admin"])
-async def admin_debug_models(admin_key: str = Depends(get_admin_key)):
-    """Debug models and providers data for troubleshooting"""
-    try:
-        # Get raw data
-        models = get_cached_models()
-        providers = get_cached_providers()
-        
-        # Sample some models and providers
-        sample_models = models[:3] if models else []
-        sample_providers = providers[:3] if providers else []
-        
-        # Test provider matching for a sample model
-        provider_matching_test = []
-        if sample_models and sample_providers:
-            for model in sample_models[:2]:
-                model_id = model.get('id', '')
-                provider_slug = model_id.split('/')[0] if '/' in model_id else None
-                
-                matching_provider = None
-                if provider_slug:
-                    for provider in providers:
-                        if provider.get('slug') == provider_slug:
-                            matching_provider = provider
-                            break
-                
-                provider_matching_test.append({
-                    "model_id": model_id,
-                    "provider_slug": provider_slug,
-                    "found_provider": bool(matching_provider),
-                    "provider_site_url": matching_provider.get('site_url') if matching_provider else None,
-                    "provider_data": matching_provider
-                })
-        
-        return {
-            "models_cache": {
-                "total_models": len(models) if models else 0,
-                "sample_models": sample_models,
-                "cache_timestamp": _models_cache.get("timestamp"),
-                "cache_age_seconds": (datetime.utcnow() - _models_cache["timestamp"]).total_seconds() if _models_cache.get("timestamp") else None
-            },
-            "providers_cache": {
-                "total_providers": len(providers) if providers else 0,
-                "sample_providers": sample_providers,
-                "cache_timestamp": _provider_cache.get("timestamp"),
-                "cache_age_seconds": (datetime.utcnow() - _provider_cache["timestamp"]).total_seconds() if _provider_cache.get("timestamp") else None
-            },
-            "provider_matching_test": provider_matching_test,
-            "timestamp": datetime.utcnow().isoformat()
-        }
-        
-    except Exception as e:
-        logger.error(f"Failed to debug models and providers: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to debug: {str(e)}")
 
-@app.get("/test-provider-matching", tags=["debug"])
-async def test_provider_matching():
-    """Test provider matching logic without authentication"""
-    try:
-        # Get raw data
-        models = get_cached_models()
-        providers = get_cached_providers()
-        
-        if not models or not providers:
-            return {
-                "error": "No models or providers data available",
-                "models_count": len(models) if models else 0,
-                "providers_count": len(providers) if providers else 0
-            }
-        
-        # Test with a specific model
-        test_model = None
-        for model in models:
-            if 'openai' in model.get('id', '').lower():
-                test_model = model
-                break
-        
-        if not test_model:
-            test_model = models[0]  # Use first model as fallback
-        
-        model_id = test_model.get('id', '')
-        provider_slug = model_id.split('/')[0] if '/' in model_id else None
-        
-        # Find matching provider
-        matching_provider = None
-        if provider_slug:
-            for provider in providers:
-                if provider.get('slug') == provider_slug:
-                    matching_provider = provider
-                    break
-        
-        # Test the enhancement function
-        enhanced_model = enhance_model_with_provider_info(test_model, providers)
-        
-        return {
-            "test_model": {
-                "id": model_id,
-                "provider_slug": provider_slug
-            },
-            "matching_provider": {
-                "found": bool(matching_provider),
-                "slug": matching_provider.get('slug') if matching_provider else None,
-                "site_url": matching_provider.get('site_url') if matching_provider else None,
-                "name": matching_provider.get('name') if matching_provider else None,
-                "privacy_policy_url": matching_provider.get('privacy_policy_url') if matching_provider else None,
-                "terms_of_service_url": matching_provider.get('terms_of_service_url') if matching_provider else None,
-                "status_page_url": matching_provider.get('status_page_url') if matching_provider else None
-            },
-            "enhanced_model": {
-                "provider_slug": enhanced_model.get('provider_slug'),
-                "provider_site_url": enhanced_model.get('provider_site_url'),
-                "model_logo_url": enhanced_model.get('model_logo_url')
-            },
-            "available_providers": [
-                {
-                    "slug": p.get('slug'),
-                    "name": p.get('name'),
-                    "site_url": p.get('site_url'),
-                    "privacy_policy_url": p.get('privacy_policy_url'),
-                    "terms_of_service_url": p.get('terms_of_service_url'),
-                    "status_page_url": p.get('status_page_url')
-                } for p in providers[:5]
-            ],
-            "cache_info": {
-                "provider_cache_timestamp": _provider_cache.get("timestamp"),
-                "provider_cache_age": (datetime.utcnow() - _provider_cache["timestamp"]).total_seconds() if _provider_cache.get("timestamp") else None
-            },
-            "timestamp": datetime.utcnow().isoformat()
-        }
-        
-    except Exception as e:
-        logger.error(f"Failed to test provider matching: {e}")
-        return {"error": str(e)}
 
-@app.post("/test-refresh-providers", tags=["debug"])
-async def test_refresh_providers():
-    """Refresh providers cache and test again"""
-    try:
-        # Clear provider cache
-        _provider_cache["data"] = None
-        _provider_cache["timestamp"] = None
-        
-        # Fetch fresh data
-        fresh_providers = fetch_providers_from_openrouter()
-        
-        if not fresh_providers:
-            return {"error": "Failed to fetch fresh providers data"}
-        
-        # Test the enhancement on fresh data
-        test_model = {"id": "openai/gpt-4", "name": "GPT-4"}
-        enhanced_model = enhance_model_with_provider_info(test_model, fresh_providers)
-        
-        return {
-            "fresh_providers_count": len(fresh_providers),
-            "sample_providers": [
-                {
-                    "slug": p.get('slug'),
-                    "name": p.get('name'),
-                    "privacy_policy_url": p.get('privacy_policy_url'),
-                    "terms_of_service_url": p.get('terms_of_service_url'),
-                    "status_page_url": p.get('status_page_url')
-                } for p in fresh_providers[:3]
-            ],
-            "enhanced_model": {
-                "provider_slug": enhanced_model.get('provider_slug'),
-                "provider_site_url": enhanced_model.get('provider_site_url'),
-                "model_logo_url": enhanced_model.get('model_logo_url')
-            },
-            "timestamp": datetime.utcnow().isoformat()
-        }
-        
-    except Exception as e:
-        logger.error(f"Failed to refresh providers: {e}")
-        return {"error": str(e)}
 
-@app.get("/test-openrouter-providers", tags=["debug"])
-async def test_openrouter_providers():
-    """Test what OpenRouter actually returns for providers"""
-    try:
-        if not Config.OPENROUTER_API_KEY:
-            return {"error": "OpenRouter API key not configured"}
-        
-        headers = {
-            "Authorization": f"Bearer {Config.OPENROUTER_API_KEY}",
-            "Content-Type": "application/json"
-        }
-        
-        response = httpx.get("https://openrouter.ai/api/v1/providers", headers=headers)
-        response.raise_for_status()
-        
-        raw_data = response.json()
-        providers = raw_data.get("data", [])
-        
-        # Find OpenAI provider
-        openai_provider = None
-        for provider in providers:
-            if provider.get('slug') == 'openai':
-                openai_provider = provider
-                break
-        
-        return {
-            "total_providers": len(providers),
-            "openai_provider_raw": openai_provider,
-            "sample_providers": [
-                {
-                    "slug": p.get('slug'),
-                    "name": p.get('name'),
-                    "privacy_policy_url": p.get('privacy_policy_url'),
-                    "terms_of_service_url": p.get('terms_of_service_url'),
-                    "status_page_url": p.get('status_page_url')
-                } for p in providers[:5]
-            ],
-            "timestamp": datetime.utcnow().isoformat()
-        }
-        
-    except Exception as e:
-        logger.error(f"Failed to test OpenRouter providers: {e}")
-        return {"error": str(e)}
 
-@app.get("/debug-provider-models/{provider_slug}", tags=["debug"])
-async def debug_provider_models(provider_slug: str):
-    """Debug endpoint to check model counting for a specific provider"""
-    try:
-        # Get models data
-        models = get_cached_models()
-        if not models:
-            return {"error": "No models data available"}
-        
-        # Get providers data
-        providers = get_cached_providers()
-        if not providers:
-            return {"error": "No providers data available"}
-        
-        # Find the specific provider
-        target_provider = None
-        for provider in providers:
-            if provider.get('slug') == provider_slug:
-                target_provider = provider
-                break
-        
-        if not target_provider:
-            return {"error": f"Provider '{provider_slug}' not found"}
-        
-        # Count models for this provider
-        matching_models = []
-        for model in models:
-            model_id = model.get('id', '')
-            if '/' in model_id:
-                model_provider = model_id.split('/')[0]
-                if model_provider == provider_slug:
-                    matching_models.append({
-                        'id': model_id,
-                        'name': model.get('name'),
-                        'provider_slug': model.get('provider_slug')
-                    })
-        
-        # Get enhanced provider data
-        enhanced_providers = enhance_providers_with_logos_and_sites(providers)
-        enhanced_provider = None
-        for provider in enhanced_providers:
-            if provider.get('slug') == provider_slug:
-                enhanced_provider = provider
-                break
-        
-        return {
-            "provider_slug": provider_slug,
-            "provider_name": target_provider.get('name'),
-            "raw_provider_data": {
-                "privacy_policy_url": target_provider.get('privacy_policy_url'),
-                "terms_of_service_url": target_provider.get('terms_of_service_url'),
-                "status_page_url": target_provider.get('status_page_url')
-            },
-            "enhanced_provider_data": {
-                "site_url": enhanced_provider.get('site_url') if enhanced_provider else None,
-                "logo_url": enhanced_provider.get('logo_url') if enhanced_provider else None
-            },
-            "model_count": len(matching_models),
-            "matching_models": matching_models[:10],  # Show first 10 models
-            "total_models_available": len(models)
-        }
-        
-    except Exception as e:
-        logger.error(f"Failed to debug provider models for {provider_slug}: {e}")
-        return {"error": str(e)}
 
 # Provider and Models Information Endpoints
 @app.get("/provider", tags=["providers"])
