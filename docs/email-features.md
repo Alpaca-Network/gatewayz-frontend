@@ -190,8 +190,9 @@ APP_URL=https://gatewayz.ai
 ### Code Integration
 
 #### Welcome Email
+
 ```python
-from enhanced_notification_service import enhanced_notification_service
+from src.enhanced_notification_service import enhanced_notification_service
 
 # Send welcome email after user registration
 enhanced_notification_service.send_welcome_email(
