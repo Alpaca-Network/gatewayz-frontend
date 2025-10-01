@@ -3,7 +3,6 @@ import datetime
 from datetime import datetime
 
 from src.enhanced_notification_service import enhanced_notification_service
-from src.main import app
 from fastapi import APIRouter, HTTPException
 
 from src.supabase_config import get_supabase_client
@@ -15,7 +14,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@app.post("/auth/password-reset", tags=["authentication"])
+@router.post("/auth/password-reset", tags=["authentication"])
 async def request_password_reset(email: str):
     """Request password reset email"""
     try:
@@ -48,7 +47,7 @@ async def request_password_reset(email: str):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@app.post("/auth/reset-password", tags=["authentication"])
+@router.post("/auth/reset-password", tags=["authentication"])
 async def reset_password(token: str):
     """Reset password using token"""
     try:

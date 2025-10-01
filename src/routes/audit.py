@@ -4,7 +4,6 @@ import logging
 
 from src.db.api_keys import validate_api_key_permissions
 from src.db.users import get_user
-from src.main import app
 from fastapi import APIRouter
 from datetime import datetime
 
@@ -20,7 +19,7 @@ router = APIRouter()
 
 
 
-@app.get("/user/api-keys/audit-logs", tags=["authentication"])
+@router.get("/user/api-keys/audit-logs", tags=["authentication"])
 async def get_user_audit_logs(
         key_id: Optional[int] = None,
         action: Optional[str] = None,

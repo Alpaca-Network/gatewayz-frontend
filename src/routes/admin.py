@@ -10,7 +10,7 @@ from src.db.trials import get_trial_analytics
 from src.db.users import create_enhanced_user, get_user, add_credits_to_user, get_all_users, get_admin_monitor_data, \
     deduct_credits, record_usage
 from src.enhanced_notification_service import enhanced_notification_service
-from src.main import app, _provider_cache, _huggingface_cache, _models_cache
+from src.main import _provider_cache, _huggingface_cache, _models_cache
 from fastapi import APIRouter
 from datetime import datetime
 
@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@app.post("/create", response_model=UserRegistrationResponse, tags=["authentication"])
+@router.post("/create", response_model=UserRegistrationResponse, tags=["authentication"])
 async def create_api_key(request: UserRegistrationRequest):
     """Create an API key for the user after dashboard login"""
     try:
@@ -85,7 +85,7 @@ async def create_api_key(request: UserRegistrationRequest):
 
 
 # Admin endpoints
-@app.post("/admin/add_credits", tags=["admin"])
+@router.post("/admin/add_credits", tags=["admin"])
 async def admin_add_credits(req: AddCreditsRequest):
     try:
         user = get_user(req.api_key)
@@ -113,7 +113,7 @@ async def admin_add_credits(req: AddCreditsRequest):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@app.get("/admin/balance", tags=["admin"])
+@router.get("/admin/balance", tags=["admin"])
 async def admin_get_all_balances():
     try:
         users = get_all_users()
@@ -138,7 +138,7 @@ async def admin_get_all_balances():
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@app.get("/admin/monitor", tags=["admin"])
+@router.get("/admin/monitor", tags=["admin"])
 async def admin_monitor():
     try:
         monitor_data = get_admin_monitor_data()
@@ -170,7 +170,7 @@ async def admin_monitor():
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@app.post("/admin/limit", tags=["admin"])
+@router.post("/admin/limit", tags=["admin"])
 async def admin_set_rate_limit(req: SetRateLimitRequest):
     try:
         set_user_rate_limits(req.api_key, req.rate_limits.model_dump())
@@ -203,7 +203,7 @@ async def admin_set_rate_limit(req: SetRateLimitRequest):
 
 
 # Chat completion endpoint
-@app.post("/v1/chat/completions", tags=["chat"])
+@router.post("/v1/chat/completions", tags=["chat"])
 async def proxy_chat(req: ProxyRequest, api_key: str = Depends(get_api_key)):
     try:
         user = get_user(api_key)
@@ -406,7 +406,7 @@ async def proxy_chat(req: ProxyRequest, api_key: str = Depends(get_api_key)):
 
 
 # Admin cache management endpoints
-@app.post("/admin/refresh-providers", tags=["admin"])
+@router.post("/admin/refresh-providers", tags=["admin"])
 async def admin_refresh_providers():
     try:
         # Invalidate provider cache to force refresh
@@ -427,7 +427,7 @@ async def admin_refresh_providers():
         raise HTTPException(status_code=500, detail="Failed to refresh provider cache")
 
 
-@app.get("/admin/cache-status", tags=["admin"])
+@router.get("/admin/cache-status", tags=["admin"])
 async def admin_cache_status():
     try:
         cache_age = None
@@ -451,7 +451,7 @@ async def admin_cache_status():
         raise HTTPException(status_code=500, detail="Failed to get cache status")
 
 
-@app.get("/admin/huggingface-cache-status", tags=["admin"])
+@router.get("/admin/huggingface-cache-status", tags=["admin"])
 async def admin_huggingface_cache_status():
     """Get Hugging Face cache status and statistics"""
     try:
@@ -474,7 +474,7 @@ async def admin_huggingface_cache_status():
         raise HTTPException(status_code=500, detail="Failed to get Hugging Face cache status")
 
 
-@app.post("/admin/refresh-huggingface-cache", tags=["admin"])
+@router.post("/admin/refresh-huggingface-cache", tags=["admin"])
 async def admin_refresh_huggingface_cache():
     """Clear Hugging Face cache to force refresh on the next request"""
     try:
@@ -491,7 +491,7 @@ async def admin_refresh_huggingface_cache():
         raise HTTPException(status_code=500, detail="Failed to clear Hugging Face cache")
 
 
-@app.get("/admin/test-huggingface/{hugging_face_id}", tags=["admin"])
+@router.get("/admin/test-huggingface/{hugging_face_id}", tags=["admin"])
 async def admin_test_huggingface( hugging_face_id: str = "openai/gpt-oss-120b"):
     """Test Hugging Face API response for debugging"""
     try:
@@ -525,7 +525,7 @@ async def admin_test_huggingface( hugging_face_id: str = "openai/gpt-oss-120b"):
         raise HTTPException(status_code=500, detail=f"Failed to test Hugging Face API: {str(e)}")
 
 
-@app.get("/admin/debug-models", tags=["admin"])
+@router.get("/admin/debug-models", tags=["admin"])
 async def admin_debug_models():
     """Debug models and providers data for troubleshooting"""
     try:
@@ -585,7 +585,7 @@ async def admin_debug_models():
         raise HTTPException(status_code=500, detail=f"Failed to debug: {str(e)}")
 
 
-@app.get("/test-provider-matching", tags=["debug"])
+@router.get("/test-provider-matching", tags=["debug"])
 async def test_provider_matching():
     """Test provider matching logic without authentication"""
     try:
@@ -667,7 +667,7 @@ async def test_provider_matching():
         return {"error": str(e)}
 
 
-@app.post("/test-refresh-providers", tags=["debug"])
+@router.post("/test-refresh-providers", tags=["debug"])
 async def test_refresh_providers():
     """Refresh providers cache and test again"""
     try:
@@ -709,7 +709,7 @@ async def test_refresh_providers():
         return {"error": str(e)}
 
 
-@app.get("/test-openrouter-providers", tags=["debug"])
+@router.get("/test-openrouter-providers", tags=["debug"])
 async def test_openrouter_providers():
     """Test what OpenRouter actually returns for providers"""
     try:
@@ -756,7 +756,7 @@ async def test_openrouter_providers():
 
 
 
-@app.get("/admin/trial/analytics", tags=["admin"])
+@router.get("/admin/trial/analytics", tags=["admin"])
 async def get_trial_analytics_admin():
     """Get trial analytics and conversion metrics for admin"""
     try:

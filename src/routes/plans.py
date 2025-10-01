@@ -9,16 +9,18 @@ from src.db.plans import get_all_plans, get_plan_by_id, get_user_plan, get_user_
     check_plan_entitlements, assign_user_plan
 from src.db.rate_limits import get_environment_usage_summary
 from src.db.users import get_user
-from src.main import app
 from src.models import PlanResponse, UserPlanResponse, PlanUsageResponse, PlanEntitlementsResponse, AssignPlanRequest
 from src.security.deps import get_api_key
+from fastapi import APIRouter
 
 # Initialize logging
 logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 
+router = APIRouter()
+
 #Plan Management Endpoints
-@app.get("/plans", response_model=List[PlanResponse], tags=["plans"])
+@router.get("/plans", response_model=List[PlanResponse], tags=["plans"])
 async def get_plans():
     """Get all available subscription plans"""
     try:
@@ -75,7 +77,7 @@ async def get_plans():
         logger.error(f"Error getting plans: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
-@app.get("/plans/{plan_id}", response_model=PlanResponse, tags=["plans"])
+@router.get("/plans/{plan_id}", response_model=PlanResponse, tags=["plans"])
 async def get_plan(plan_id: int):
     """Get a specific plan by ID"""
     try:
@@ -90,7 +92,7 @@ async def get_plan(plan_id: int):
         logger.error(f"Error getting plan {plan_id}: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
-@app.get("/user/plan", response_model=UserPlanResponse, tags=["authentication"])
+@router.get("/user/plan", response_model=UserPlanResponse, tags=["authentication"])
 async def get_user_plan_endpoint(api_key: str = Depends(get_api_key)):
     """Get current user's plan"""
     try:
@@ -110,7 +112,7 @@ async def get_user_plan_endpoint(api_key: str = Depends(get_api_key)):
         logger.error(f"Error getting user plan: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
-@app.get("/user/plan/usage", response_model=PlanUsageResponse, tags=["authentication"])
+@router.get("/user/plan/usage", response_model=PlanUsageResponse, tags=["authentication"])
 async def get_user_plan_usage(api_key: str = Depends(get_api_key)):
     """Get user's plan usage and limits"""
     try:
@@ -130,7 +132,7 @@ async def get_user_plan_usage(api_key: str = Depends(get_api_key)):
         logger.error(f"Error getting user plan usage: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
-@app.get("/user/plan/entitlements", response_model=PlanEntitlementsResponse, tags=["authentication"])
+@router.get("/user/plan/entitlements", response_model=PlanEntitlementsResponse, tags=["authentication"])
 async def get_user_plan_entitlements(api_key: str = Depends(get_api_key), feature: Optional[str] = Query(None)):
     """Check user's plan entitlements"""
     try:
@@ -147,7 +149,7 @@ async def get_user_plan_entitlements(api_key: str = Depends(get_api_key), featur
         logger.error(f"Error checking user plan entitlements: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
-@app.post("/admin/assign-plan", tags=["admin"])
+@router.post("/admin/assign-plan", tags=["admin"])
 async def assign_plan_to_user(request: AssignPlanRequest):
     """Assign a plan to a user (Admin only)"""
     try:
@@ -171,7 +173,7 @@ async def assign_plan_to_user(request: AssignPlanRequest):
         logger.error(f"Error assigning plan: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
-@app.get("/user/environment-usage", tags=["authentication"])
+@router.get("/user/environment-usage", tags=["authentication"])
 async def get_user_environment_usage(api_key: str = Depends(get_api_key)):
     """Get user's usage breakdown by environment"""
     try:
@@ -196,7 +198,7 @@ async def get_user_environment_usage(api_key: str = Depends(get_api_key)):
 
 # Trial Status Endpoint (Simplified)
 
-@app.get("/trial/status", tags=["trial"])
+@router.get("/trial/status", tags=["trial"])
 async def get_trial_status(api_key: str = Depends(get_api_key)):
     """Get the current trial status for the authenticated API key"""
     try:
@@ -212,7 +214,7 @@ async def get_trial_status(api_key: str = Depends(get_api_key)):
         logger.error(f"Error getting trial status: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
-@app.get("/subscription/plans", tags=["subscription"])
+@router.get("/subscription/plans", tags=["subscription"])
 async def get_subscription_plans():
     """Get available subscription plans with 4-tier structure"""
     try:

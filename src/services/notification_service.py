@@ -12,7 +12,7 @@ from typing import Optional, Dict, Any
 import requests
 import resend
 
-from notification_models import (
+from src.services.notification_models import (
     NotificationPreferences, NotificationType,
     NotificationChannel, NotificationStatus, SendNotificationRequest,
     LowBalanceAlert, TrialExpiryAlert

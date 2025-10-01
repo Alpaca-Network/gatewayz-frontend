@@ -6,7 +6,6 @@ import logging
 
 from src.db.users import  get_user
 from src.enhanced_notification_service import enhanced_notification_service
-from src.main import app
 from fastapi import APIRouter, Query
 from datetime import datetime
 from fastapi import Depends, HTTPException
@@ -24,7 +23,7 @@ router = APIRouter()
 
 ## Notification Endpoints
 
-@app.get("/user/notifications/preferences", response_model=NotificationPreferences, tags=["notifications"])
+@router.get("/user/notifications/preferences", response_model=NotificationPreferences, tags=["notifications"])
 async def get_notification_preferences(api_key: str = Depends(get_api_key)):
     """Get user notification preferences"""
     try:
@@ -43,7 +42,7 @@ async def get_notification_preferences(api_key: str = Depends(get_api_key)):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@app.put("/user/notifications/preferences", tags=["notifications"])
+@router.put("/user/notifications/preferences", tags=["notifications"])
 async def update_notification_preferences(
         request: UpdateNotificationPreferencesRequest,
         api_key: str = Depends(get_api_key)
@@ -76,7 +75,7 @@ async def update_notification_preferences(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@app.post("/user/notifications/test", tags=["notifications"])
+@router.post("/user/notifications/test", tags=["notifications"])
 async def test_notification(
         notification_type: NotificationType = Query(..., description="Type of notification to test"),
         api_key: str = Depends(get_api_key)
@@ -164,7 +163,7 @@ async def test_notification(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@app.post("/user/notifications/send-usage-report", tags=["notifications"])
+@router.post("/user/notifications/send-usage-report", tags=["notifications"])
 async def send_usage_report(
         month: str = Query(..., description="Month to send report for (YYYY-MM)"),
         api_key: str = Depends(get_api_key)
@@ -203,7 +202,7 @@ async def send_usage_report(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@app.get("/admin/notifications/stats", response_model=NotificationStats, tags=["admin"])
+@router.get("/admin/notifications/stats", response_model=NotificationStats, tags=["admin"])
 async def get_notification_stats():
     """Get notification statistics for admin"""
     try:
@@ -256,7 +255,7 @@ async def get_notification_stats():
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
-@app.post("/admin/notifications/process", tags=["admin"])
+@router.post("/admin/notifications/process", tags=["admin"])
 async def process_notifications():
     """Process all pending notifications (admin only)"""
     try:

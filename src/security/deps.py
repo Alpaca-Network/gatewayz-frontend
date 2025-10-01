@@ -1,8 +1,6 @@
 import datetime
 import logging
 
-from src import  security
-
 from src.db.users import get_user
 from fastapi import APIRouter, Depends
 
@@ -10,7 +8,7 @@ from datetime import datetime
 
 from fastapi import HTTPException, Request
 
-from fastapi.security import HTTPAuthorizationCredentials
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from src.supabase_config import get_supabase_client
 
@@ -19,7 +17,9 @@ logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-async def get_api_key(credentials: HTTPAuthorizationCredentials = Depends(security.security), request: Request = None):
+security = HTTPBearer()
+
+async def get_api_key(credentials: HTTPAuthorizationCredentials = Depends(security), request: Request = None):
     """Validate an API key from either legacy or new system with access controls"""
     if not credentials:
         raise HTTPException(status_code=422, detail="Authorization header is required")

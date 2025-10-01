@@ -4,7 +4,6 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime, timedelta
 
 from src.db.plans import check_plan_entitlements
-from src.db.users import get_user
 from src.supabase_config import get_supabase_client
 import secrets
 
@@ -302,6 +301,9 @@ def delete_api_key(api_key: str, user_id: int) -> bool:
 
 def validate_api_key(api_key: str) -> Optional[Dict[str, Any]]:
     """Validate an API key and return user info if valid"""
+    # Lazy import to avoid circular dependency
+    from src.db.users import get_user
+
     try:
         client = get_supabase_client()
 
@@ -417,6 +419,9 @@ def validate_api_key(api_key: str) -> Optional[Dict[str, Any]]:
 
 def increment_api_key_usage(api_key: str) -> None:
     """Increment the request count for an API key"""
+    # Lazy import to avoid circular dependency
+    from src.db.users import get_user
+
     try:
         client = get_supabase_client()
 

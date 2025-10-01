@@ -6,7 +6,6 @@ from src.db.api_keys import validate_api_key_permissions, create_api_key, get_ap
     update_api_key, get_user_api_keys, get_user_all_api_keys_usage, delete_api_key
 
 from src.db.users import get_user
-from src.main import app
 from fastapi import APIRouter
 from datetime import datetime
 
@@ -26,7 +25,7 @@ router = APIRouter()
 
 
 # API Key Management Endpoints
-@app.post("/user/api-keys", tags=["authentication"])
+@router.post("/user/api-keys", tags=["authentication"])
 async def create_user_api_key(
         request: CreateApiKeyRequest,
         api_key: str = Depends(get_api_key)
@@ -125,7 +124,7 @@ async def create_user_api_key(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@app.put("/user/api-keys/{key_id}", tags=["authentication"])
+@router.put("/user/api-keys/{key_id}", tags=["authentication"])
 async def update_user_api_key_endpoint(
         key_id: int,
         request: UpdateApiKeyRequest,
@@ -256,7 +255,7 @@ async def update_user_api_key_endpoint(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@app.get("/user/api-keys", tags=["authentication"])
+@router.get("/user/api-keys", tags=["authentication"])
 async def list_user_api_keys(api_key: str = Depends(get_api_key)):
     """Get all API keys for the authenticated user"""
     try:
@@ -302,7 +301,7 @@ async def list_user_api_keys(api_key: str = Depends(get_api_key)):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@app.delete("/user/api-keys/{key_id}", tags=["authentication"])
+@router.delete("/user/api-keys/{key_id}", tags=["authentication"])
 async def delete_user_api_key(
         key_id: int,
         confirmation: DeleteApiKeyRequest,
@@ -350,7 +349,7 @@ async def delete_user_api_key(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@app.get("/user/api-keys/usage", tags=["authentication"])
+@router.get("/user/api-keys/usage", tags=["authentication"])
 async def get_user_api_key_usage(api_key: str = Depends(get_api_key)):
     """Get usage statistics for all API keys of the user"""
     try:

@@ -7,15 +7,17 @@ from fastapi import Depends, HTTPException
 
 from src.db.rate_limits import get_user_rate_limits, check_rate_limit
 from src.db.users import get_user, get_user_usage_metrics, get_user_profile, update_user_profile, delete_user_account
-from src.main import app
 from src.models import UserProfileResponse, UserProfileUpdate, DeleteAccountResponse, DeleteAccountRequest
 from src.security.deps import get_api_key
+from fastapi import APIRouter
 
 # Initialize logging
 logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 
-@app.get("/user/balance", tags=["authentication"])
+router = APIRouter()
+
+@router.get("/user/balance", tags=["authentication"])
 async def get_user_balance(api_key: str = Depends(get_api_key)):
     try:
         user = get_user(api_key)
@@ -52,7 +54,7 @@ async def get_user_balance(api_key: str = Depends(get_api_key)):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@app.get("/user/monitor", tags=["authentication"])
+@router.get("/user/monitor", tags=["authentication"])
 async def user_monitor(api_key: str = Depends(get_api_key)):
     try:
         user = get_user(api_key)
@@ -94,7 +96,7 @@ async def user_monitor(api_key: str = Depends(get_api_key)):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@app.get("/user/limit", tags=["authentication"])
+@router.get("/user/limit", tags=["authentication"])
 async def user_get_rate_limits(api_key: str = Depends(get_api_key)):
     try:
         user = get_user(api_key)
@@ -154,7 +156,7 @@ async def user_get_rate_limits(api_key: str = Depends(get_api_key)):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@app.get("/user/profile", response_model=UserProfileResponse, tags=["authentication"])
+@router.get("/user/profile", response_model=UserProfileResponse, tags=["authentication"])
 async def get_user_profile_endpoint(api_key: str = Depends(get_api_key)):
     """Get user profile information"""
     try:
@@ -175,7 +177,7 @@ async def get_user_profile_endpoint(api_key: str = Depends(get_api_key)):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@app.put("/user/profile", response_model=UserProfileResponse, tags=["authentication"])
+@router.put("/user/profile", response_model=UserProfileResponse, tags=["authentication"])
 async def update_user_profile_endpoint(
         profile_update: UserProfileUpdate,
         api_key: str = Depends(get_api_key)
@@ -212,7 +214,7 @@ async def update_user_profile_endpoint(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@app.delete("/user/account", response_model=DeleteAccountResponse, tags=["authentication"])
+@router.delete("/user/account", response_model=DeleteAccountResponse, tags=["authentication"])
 async def delete_user_account_endpoint(
         confirmation: DeleteAccountRequest,
         api_key: str = Depends(get_api_key)

@@ -24,6 +24,25 @@ from src.config import Config
 logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 
+# Cache dictionaries for models and providers
+_models_cache = {
+    "data": None,
+    "timestamp": None,
+    "ttl": 3600  # 1 hour TTL
+}
+
+_huggingface_cache = {
+    "data": {},
+    "timestamp": None,
+    "ttl": 3600  # 1 hour TTL
+}
+
+_provider_cache = {
+    "data": None,
+    "timestamp": None,
+    "ttl": 3600  # 1 hour TTL
+}
+
 # Admin key validation
 def get_admin_key(credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer())):
     """Validate admin API key"""
@@ -71,6 +90,54 @@ def create_app() -> FastAPI:
         app.include_router(catalog_routes.router)
     except Exception as e:
         logger.error(f"Failed to include catalog routes: {e}")
+
+    try:
+        from src.routes import auth as auth_routes
+        app.include_router(auth_routes.router)
+    except Exception as e:
+        logger.error(f"Failed to include auth routes: {e}")
+
+    try:
+        from src.routes import users as users_routes
+        app.include_router(users_routes.router)
+    except Exception as e:
+        logger.error(f"Failed to include users routes: {e}")
+
+    try:
+        from src.routes import api_keys as api_keys_routes
+        app.include_router(api_keys_routes.router)
+    except Exception as e:
+        logger.error(f"Failed to include api_keys routes: {e}")
+
+    try:
+        from src.routes import admin as admin_routes
+        app.include_router(admin_routes.router)
+    except Exception as e:
+        logger.error(f"Failed to include admin routes: {e}")
+
+    try:
+        from src.routes import audit as audit_routes
+        app.include_router(audit_routes.router)
+    except Exception as e:
+        logger.error(f"Failed to include audit routes: {e}")
+
+    try:
+        from src.routes import notifications as notifications_routes
+        app.include_router(notifications_routes.router)
+    except Exception as e:
+        logger.error(f"Failed to include notifications routes: {e}")
+
+    try:
+        from src.routes import plans as plans_routes
+        app.include_router(plans_routes.router)
+    except Exception as e:
+        logger.error(f"Failed to include plans routes: {e}")
+
+    try:
+        from src.routes import rate_limits as rate_limits_routes
+        app.include_router(rate_limits_routes.router)
+    except Exception as e:
+        logger.error(f"Failed to include rate_limits routes: {e}")
 
     # Exception handler
     @app.exception_handler(Exception)

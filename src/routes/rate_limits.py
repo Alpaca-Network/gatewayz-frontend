@@ -9,18 +9,20 @@ from src.db.api_keys import get_api_key_by_id
 from src.db.rate_limits import get_user_rate_limit_configs, get_rate_limit_usage_stats, update_rate_limit_config, \
     bulk_update_rate_limit_configs, get_rate_limit_config, get_system_rate_limit_stats, get_rate_limit_alerts
 from src.db.users import get_user
-from src.main import app
 from src.security.deps import get_api_key
+from fastapi import APIRouter
 
 # Initialize logging
 logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 
+router = APIRouter()
+
 # =============================================================================
 # ADVANCED RATE LIMITING ENDPOINTS
 # =============================================================================
 
-@app.get("/user/rate-limits", tags=["authentication"])
+@router.get("/user/rate-limits", tags=["authentication"])
 async def get_user_rate_limits_advanced(api_key: str = Depends(get_api_key)):
     """Get advanced rate limit configuration and status for user's API keys"""
     try:
@@ -73,7 +75,7 @@ async def get_user_rate_limits_advanced(api_key: str = Depends(get_api_key)):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@app.put("/user/rate-limits/{key_id}", tags=["authentication"])
+@router.put("/user/rate-limits/{key_id}", tags=["authentication"])
 async def update_user_rate_limits_advanced(
         key_id: int,
         rate_limit_config: dict,
@@ -122,7 +124,7 @@ async def update_user_rate_limits_advanced(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@app.post("/user/rate-limits/bulk-update", tags=["authentication"])
+@router.post("/user/rate-limits/bulk-update", tags=["authentication"])
 async def bulk_update_user_rate_limits(
         rate_limit_config: dict,
         api_key: str = Depends(get_api_key)
@@ -162,7 +164,7 @@ async def bulk_update_user_rate_limits(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@app.get("/user/rate-limits/usage/{key_id}", tags=["authentication"])
+@router.get("/user/rate-limits/usage/{key_id}", tags=["authentication"])
 async def get_api_key_rate_limit_usage(
         key_id: int,
         time_window: str = "minute",
@@ -206,7 +208,7 @@ async def get_api_key_rate_limit_usage(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@app.get("/admin/rate-limits/system", tags=["admin"])
+@router.get("/admin/rate-limits/system", tags=["admin"])
 async def get_system_rate_limits():
     """Get system-wide rate limiting statistics"""
     try:
@@ -223,7 +225,7 @@ async def get_system_rate_limits():
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@app.get("/admin/rate-limits/alerts", tags=["admin"])
+@router.get("/admin/rate-limits/alerts", tags=["admin"])
 async def get_rate_limit_alerts_endpoint(
         api_key: Optional[str] = None,
         resolved: bool = False,
@@ -246,7 +248,7 @@ async def get_rate_limit_alerts_endpoint(
 
 
 # Root endpoint
-@app.get("/", tags=["authentication"])
+@router.get("/", tags=["authentication"])
 async def root():
     return {
         "name": "Gatewayz Inference API",
