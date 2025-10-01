@@ -2,7 +2,7 @@ import json
 import logging
 from datetime import datetime
 
-from supabase_config import get_supabase_client
+from src.supabase_config import get_supabase_client
 
 
 logging.basicConfig(level=logging.INFO)

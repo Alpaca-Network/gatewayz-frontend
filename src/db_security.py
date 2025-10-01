@@ -7,8 +7,9 @@ Implements secure key storage, audit logging, and advanced security features.
 import logging
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timedelta
-from supabase_config import get_supabase_client
-from security import get_security_manager, get_audit_logger
+from src.supabase_config import get_supabase_client
+from src.security.security import get_security_manager, get_audit_logger, generate_secure_api_key, hash_api_key, \
+    validate_ip_allowlist, validate_domain_referrers
 
 logger = logging.getLogger(__name__)
 
@@ -28,10 +29,10 @@ def create_secure_api_key(user_id: int, key_name: str, environment_tag: str = 'l
             raise ValueError(f"Key name '{key_name}' already exists for this user. Please choose a different name.")
         
         # Generate secure API key
-        api_key = security_manager.generate_secure_api_key(environment_tag)
+        api_key = generate_secure_api_key(environment_tag)
         
         # Create hash for secure storage
-        key_hash = security_manager.hash_api_key(api_key)
+        key_hash = hash_api_key(api_key)
         
         # Encrypt the API key for storage
         encrypted_key = security_manager.encrypt_api_key(api_key)
@@ -191,13 +192,13 @@ def validate_secure_api_key(api_key: str, client_ip: str = None, referer: str = 
                     
                     # Validate IP allowlist
                     if client_ip and key_data.get('ip_allowlist'):
-                        if not security_manager.validate_ip_allowlist(client_ip, key_data['ip_allowlist']):
+                        if not validate_ip_allowlist(client_ip, key_data['ip_allowlist']):
                             audit_logger.log_security_violation("IP_NOT_ALLOWED", user_id, key_id, f"IP {client_ip} not in allowlist", client_ip)
                             return None
                     
                     # Validate domain referrers
                     if referer and key_data.get('domain_referrers'):
-                        if not security_manager.validate_domain_referrers(referer, key_data['domain_referrers']):
+                        if not validate_domain_referrers(referer, key_data['domain_referrers']):
                             audit_logger.log_security_violation("DOMAIN_NOT_ALLOWED", user_id, key_id, f"Referer {referer} not in allowlist", client_ip)
                             return None
                     
@@ -257,12 +258,12 @@ def rotate_api_key(key_id: int, user_id: int, new_key_name: str = None) -> Optio
         old_key_name = key_data['key_name']
         
         # Generate new API key
-        new_api_key = security_manager.generate_secure_api_key(
+        new_api_key = generate_secure_api_key(
             key_data.get('environment_tag', 'live')
         )
         
         # Create hash and encrypt new key
-        new_key_hash = security_manager.hash_api_key(new_api_key)
+        new_key_hash = hash_api_key(new_api_key)
         new_encrypted_key = security_manager.encrypt_api_key(new_api_key)
         
         # Update the key record

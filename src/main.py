@@ -16,7 +16,7 @@ from openai import OpenAI
 from urllib.parse import urlparse
 
 # Import models directly
-from models import (
+from src.models import (
     AddCreditsRequest, CreateUserRequest, CreateUserResponse, ProxyRequest,
     SetRateLimitRequest, RateLimitResponse, UserMonitorResponse, AdminMonitorResponse,
     UserProfileResponse, UserProfileUpdate, DeleteAccountRequest, DeleteAccountResponse,
@@ -27,12 +27,12 @@ from models import (
 )
 
 # Import Phase 4 security modules
-from security import get_security_manager, get_audit_logger
-from supabase_config import get_supabase_client
+from src.security import get_security_manager, get_audit_logger
+from src.supabase_config import get_supabase_client
 # Phase 4 security features integrated into existing endpoints
 
 # Import database functions directly
-from db import (
+from src.db import (
     create_enhanced_user, deduct_credits, get_user, get_user_count, 
     get_all_users, record_usage, get_user_usage_metrics, get_admin_monitor_data, 
     get_user_rate_limits, set_user_rate_limits, check_rate_limit, update_rate_limit_usage,
@@ -50,8 +50,8 @@ from db import (
 )
 
 # Import new rate limiting module
-from rate_limiting import get_rate_limiter, RateLimitConfig, RateLimitResult, DEFAULT_CONFIG, PREMIUM_CONFIG, ENTERPRISE_CONFIG
-from trial_service import get_trial_service
+from src.services.rate_limiting import get_rate_limiter, RateLimitConfig, RateLimitResult, DEFAULT_CONFIG, PREMIUM_CONFIG, ENTERPRISE_CONFIG
+from src.trials.trial_service import get_trial_service
 
 def get_user_rate_limit_config(user_id: int) -> RateLimitConfig:
     """Get rate limit configuration based on user's subscription plan"""
@@ -77,21 +77,21 @@ def get_user_rate_limit_config(user_id: int) -> RateLimitConfig:
     except Exception as e:
         logger.error(f"Error getting rate limit config for user {user_id}: {e}")
         return DEFAULT_CONFIG
-from trial_models import (
+from src.schemas.trial_models import (
     StartTrialRequest, StartTrialResponse, ConvertTrialRequest, ConvertTrialResponse,
     TrialStatusResponse, TrackUsageRequest, TrackUsageResponse, SubscriptionPlansResponse
 )
 
 # Import notification modules
-from notification_service import notification_service
-from enhanced_notification_service import enhanced_notification_service
-from notification_models import (
+from src.services.notification_service import notification_service
+from src.enhanced_notification_service import enhanced_notification_service
+from src.services.notification_models import (
     NotificationPreferences, UpdateNotificationPreferencesRequest,
     SendNotificationRequest, NotificationStats, NotificationType, NotificationChannel
 )
 
 # Import configuration
-from config import Config
+from src.config import Config
 
 # Initialize logging
 logging.basicConfig(level=logging.ERROR)
@@ -1168,7 +1168,7 @@ def get_authenticated_user(privy_user_id: str = Query(..., description="Privy us
 Config.validate()
 
 try:
-    from supabase_config import init_db
+    from src.supabase_config import init_db
     init_db()
 except Exception as e:
     logger.error(f"Failed to initialize application: {e}")
@@ -1214,7 +1214,7 @@ async def get_user_balance(user: dict = Depends(get_authenticated_user)):
         user_id = user['id']
         
         # Check if this is a trial user
-        from trial_validation import validate_trial_access
+        from src.trials.trial_validation import validate_trial_access
         trial_validation = validate_trial_access(user_id)
         
         if trial_validation.get('is_trial', False):
@@ -1479,7 +1479,7 @@ async def create_user_api_key(
                 )
                 
                 # Add Phase 4 security logging and audit features
-                from security import get_audit_logger
+                from src.security import get_audit_logger
                 audit_logger = get_audit_logger()
                 
                 # Get the created key ID for audit logging
@@ -1582,7 +1582,7 @@ async def update_user_api_key_endpoint(
         elif request.action == 'bulk_rotate':
             # Handle bulk rotation for all user keys
             try:
-                from db_security import bulk_rotate_user_keys
+                from src.db_security import bulk_rotate_user_keys
                 
                 result = bulk_rotate_user_keys(
                     user_id=user["id"],
@@ -1827,7 +1827,7 @@ async def get_user_audit_logs(
                 raise HTTPException(status_code=400, detail="Invalid end_date format. Use ISO format.")
         
         # Get audit logs
-        from db_security import get_audit_logs
+        from src.db_security import get_audit_logs
         
         logs = get_audit_logs(
             user_id=user["id"],
@@ -2383,7 +2383,7 @@ async def proxy_chat(req: ProxyRequest, user: dict = Depends(get_authenticated_u
             )
         
         # Check trial status first (simplified)
-        from trial_validation import validate_trial_access
+        from src.trials.trial_validation import validate_trial_access
         trial_validation = validate_trial_access(user['id'])
         
         if not trial_validation['is_valid']:
@@ -2508,7 +2508,7 @@ async def proxy_chat(req: ProxyRequest, user: dict = Depends(get_authenticated_u
             # Track trial usage BEFORE generating response
             if trial_validation.get('is_trial') and not trial_validation.get('is_expired'):
                 try:
-                    from trial_validation import track_trial_usage
+                    from src.trials.trial_validation import track_trial_usage
                     logger.info(f"Tracking trial usage: {total_tokens} tokens, 1 request")
                     success = track_trial_usage(user['id'], total_tokens, 1)
                     if success:
@@ -3379,7 +3379,7 @@ async def root():
 async def get_trial_status(api_key: str = Depends(get_api_key)):
     """Get current trial status for the authenticated API key"""
     try:
-        from trial_validation import validate_trial_access
+        from src.trials.trial_validation import validate_trial_access
         trial_status = validate_trial_access(api_key)
         
         return {
