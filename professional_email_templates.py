@@ -229,9 +229,18 @@ class ProfessionalEmailTemplates:
     
     def welcome_email(self, username: str, email: str, credits: int) -> Dict[str, str]:
         """Welcome to Gatewayz!"""
+        # Use display name if it looks like a real name, otherwise use email prefix
+        display_name = username
+        if username and not username.startswith(('google_', 'github_', 'privy_')):
+            display_name = username
+        elif email:
+            display_name = email.split('@')[0].replace('.', ' ').title()
+        else:
+            display_name = "there"
+            
         content = f"""
             <h2>Welcome to {self.app_name}! 🎉</h2>
-            <p>Hi <strong>{username}</strong>,</p>
+            <p>Hi <strong>{display_name}</strong>,</p>
             <p>Welcome to {self.app_name}! We're excited to have you on board. Your account has been successfully created and you're ready to start building amazing AI-powered applications.</p>
             
             <div class="success-box">
@@ -291,7 +300,7 @@ class ProfessionalEmailTemplates:
             ),
             "text": f"""Welcome to {self.app_name}!
 
-Hi {username},
+Hi {display_name},
 
 Welcome to {self.app_name}! We're excited to have you on board.
 

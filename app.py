@@ -2164,6 +2164,27 @@ async def privy_authenticate(request: PrivyAuthRequest):
             # Auto-generate API key for new user
             api_key = generate_api_key_for_privy_user(user_result['user_id'])
             
+            # Send welcome email to new user
+            try:
+                logger.info(f"Attempting to send welcome email to: {email}")
+                logger.info(f"Resend API key configured: {bool(os.environ.get('RESEND_API_KEY'))}")
+                logger.info(f"From email: {os.environ.get('FROM_EMAIL', 'noreply@yourdomain.com')}")
+                
+                welcome_sent = enhanced_notification_service.send_welcome_email(
+                    user_id=user_result['user_id'],
+                    username=display_name or username,  # Use display_name if available, fallback to username
+                    email=email,
+                    credits=user_result.get('credits', 10)
+                )
+                if welcome_sent:
+                    logger.info(f"✅ Welcome email sent successfully to: {email}")
+                else:
+                    logger.warning(f"❌ Failed to send welcome email to: {email}")
+            except Exception as e:
+                logger.error(f"❌ Error sending welcome email: {e}")
+                logger.error(f"Error details: {str(e)}", exc_info=True)
+                # Don't fail the registration if email fails
+            
             return PrivyAuthResponse(
                 success=True,
                 message="User created and authenticated successfully",
@@ -2400,14 +2421,14 @@ async def proxy_chat(req: ProxyRequest, user: dict = Depends(get_authenticated_u
                 rate_limit_manager = get_rate_limiter()
                 rate_limit_config = get_user_rate_limit_config(user['id'])
                 rate_limit_check = await rate_limit_manager.check_rate_limit(user_api_key, rate_limit_config, tokens_used=0)
-                if not rate_limit_check.allowed:
-                    # Create rate limit alert
-                    create_rate_limit_alert(user_api_key, "rate_limit_exceeded", {
-                        "reason": rate_limit_check.reason,
-                        "retry_after": rate_limit_check.retry_after,
-                        "remaining_requests": rate_limit_check.remaining_requests,
-                        "remaining_tokens": rate_limit_check.remaining_tokens
-                    })
+            if not rate_limit_check.allowed:
+                # Create rate limit alert
+                create_rate_limit_alert(user_api_key, "rate_limit_exceeded", {
+                    "reason": rate_limit_check.reason,
+                    "retry_after": rate_limit_check.retry_after,
+                    "remaining_requests": rate_limit_check.remaining_requests,
+                    "remaining_tokens": rate_limit_check.remaining_tokens
+                })
                 
                 raise HTTPException(
                     status_code=429, 
@@ -3718,6 +3739,52 @@ async def process_notifications(admin_key: str = Depends(get_admin_key)):
     except Exception as e:
         logger.error(f"Error processing notifications: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.post("/admin/test-email", tags=["admin"])
+async def test_email_configuration(admin_key: str = Depends(get_admin_key)):
+    """Test email configuration (admin only)"""
+    try:
+        # Check environment variables
+        resend_key = os.environ.get("RESEND_API_KEY")
+        from_email = os.environ.get("FROM_EMAIL", "noreply@yourdomain.com")
+        app_name = os.environ.get("APP_NAME", "AI Gateway")
+        
+        config_status = {
+            "resend_api_key_configured": bool(resend_key),
+            "from_email": from_email,
+            "app_name": app_name,
+            "resend_key_length": len(resend_key) if resend_key else 0
+        }
+        
+        # Test sending a simple email
+        if resend_key:
+            try:
+                import resend
+                resend.api_key = resend_key
+                
+                response = resend.Emails.send({
+                    "from": from_email,
+                    "to": ["test@example.com"],
+                    "subject": f"Test Email from {app_name}",
+                    "html": "<h1>Test Email</h1><p>This is a test email to verify configuration.</p>"
+                })
+                
+                config_status["test_email_sent"] = bool(response.get('id'))
+                config_status["resend_response"] = response
+                
+            except Exception as e:
+                config_status["test_email_error"] = str(e)
+        else:
+            config_status["test_email_error"] = "No Resend API key configured"
+        
+        return {
+            "status": "success",
+            "message": "Email configuration test completed",
+            "config": config_status
+        }
+    except Exception as e:
+        logger.error(f"Error testing email configuration: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 @app.get("/admin/trial/analytics", tags=["admin"])
 async def get_trial_analytics_admin(admin_key: str = Depends(get_admin_key)):

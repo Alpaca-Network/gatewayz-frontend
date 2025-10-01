@@ -40,7 +40,13 @@ class EnhancedNotificationService:
     def send_welcome_email(self, user_id: int, username: str, email: str, credits: int) -> bool:
         """Send welcome email to new users (API key not included for security)"""
         try:
+            logger.info(f"Enhanced notification service - sending welcome email to: {email}")
+            logger.info(f"Resend API key available: {bool(self.resend_api_key)}")
+            logger.info(f"From email: {self.from_email}")
+            logger.info(f"App name: {self.app_name}")
+            
             template = email_templates.welcome_email(username, email, credits)
+            logger.info(f"Email template generated successfully")
             
             success = self.send_email_notification(
                 to_email=email,
@@ -48,6 +54,8 @@ class EnhancedNotificationService:
                 html_content=template["html"],
                 text_content=template["text"]
             )
+            
+            logger.info(f"Email notification result: {success}")
             
             if success:
                 # Create notification record
@@ -69,6 +77,7 @@ class EnhancedNotificationService:
             return success
         except Exception as e:
             logger.error(f"Error sending welcome email: {e}")
+            logger.error(f"Error details: {str(e)}", exc_info=True)
             return False
     
     def send_password_reset_email(self, user_id: int, username: str, email: str) -> Optional[str]:
@@ -293,11 +302,17 @@ The {self.app_name} Team
     def send_email_notification(self, to_email: str, subject: str, html_content: str, text_content: str = None) -> bool:
         """Send email notification using Resend SDK"""
         try:
+            logger.info(f"Attempting to send email to: {to_email}")
+            logger.info(f"Subject: {subject}")
+            logger.info(f"Resend API key configured: {bool(self.resend_api_key)}")
+            logger.info(f"From email: {self.from_email}")
+            
             if not self.resend_api_key:
-                logger.warning("Resend API key not configured, skipping email notification")
+                logger.warning("❌ Resend API key not configured, skipping email notification")
                 return False
             
             # Use Resend SDK
+            logger.info("Sending email via Resend SDK...")
             response = resend.Emails.send({
                 "from": self.from_email,
                 "to": [to_email],
@@ -306,15 +321,18 @@ The {self.app_name} Team
                 "text": text_content
             })
             
+            logger.info(f"Resend response: {response}")
+            
             if response.get('id'):
-                logger.info(f"Email sent successfully to {to_email}, ID: {response['id']}")
+                logger.info(f"✅ Email sent successfully to {to_email}, ID: {response['id']}")
                 return True
             else:
-                logger.error(f"Failed to send email to {to_email}: {response}")
+                logger.error(f"❌ Failed to send email to {to_email}: {response}")
                 return False
                 
         except Exception as e:
-            logger.error(f"Error sending email to {to_email}: {e}")
+            logger.error(f"❌ Error sending email to {to_email}: {e}")
+            logger.error(f"Error details: {str(e)}", exc_info=True)
             return False
     
     def create_notification(self, request: SendNotificationRequest) -> bool:
