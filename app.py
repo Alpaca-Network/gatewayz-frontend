@@ -3426,13 +3426,9 @@ async def get_subscription_plans():
 ## Notification Endpoints
 
 @app.get("/user/notifications/preferences", response_model=NotificationPreferences, tags=["notifications"])
-async def get_notification_preferences(api_key: str = Depends(get_api_key)):
+async def get_notification_preferences(user: dict = Depends(get_authenticated_user)):
     """Get user notification preferences"""
     try:
-        user = get_user(api_key)
-        if not user:
-            raise HTTPException(status_code=401, detail="Invalid API key")
-        
         preferences = notification_service.get_user_preferences(user['id'])
         if not preferences:
             # Create default preferences if they don't exist
@@ -3446,14 +3442,10 @@ async def get_notification_preferences(api_key: str = Depends(get_api_key)):
 @app.put("/user/notifications/preferences", tags=["notifications"])
 async def update_notification_preferences(
     request: UpdateNotificationPreferencesRequest,
-    api_key: str = Depends(get_api_key)
+    user: dict = Depends(get_authenticated_user)
 ):
     """Update user notification preferences"""
     try:
-        user = get_user(api_key)
-        if not user:
-            raise HTTPException(status_code=401, detail="Invalid API key")
-        
         # Convert request to dict, excluding None values
         updates = {k: v for k, v in request.dict().items() if v is not None}
         
@@ -3478,13 +3470,10 @@ async def update_notification_preferences(
 @app.post("/user/notifications/test", tags=["notifications"])
 async def test_notification(
     notification_type: NotificationType = Query(..., description="Type of notification to test"),
-    api_key: str = Depends(get_api_key)
+    user: dict = Depends(get_authenticated_user)
 ):
     """Send test notification to user"""
     try:
-        user = get_user(api_key)
-        if not user:
-            raise HTTPException(status_code=401, detail="Invalid API key")
         
         # Create test notification based on type
         if notification_type == NotificationType.LOW_BALANCE:
@@ -3627,13 +3616,10 @@ async def reset_password(token: str, new_password: str):
 @app.post("/user/notifications/send-usage-report", tags=["notifications"])
 async def send_usage_report(
     month: str = Query(..., description="Month to send report for (YYYY-MM)"),
-    api_key: str = Depends(get_api_key)
+    user: dict = Depends(get_authenticated_user)
 ):
     """Send monthly usage report email"""
     try:
-        user = get_user(api_key)
-        if not user:
-            raise HTTPException(status_code=401, detail="Invalid API key")
         
         # Get usage stats for the month
         client = get_supabase_client()
