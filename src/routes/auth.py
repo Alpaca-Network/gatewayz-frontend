@@ -45,6 +45,7 @@ async def privy_auth(request: PrivyAuthRequest):
         if existing_user:
             # Existing user - return their info
             logger.info(f"Existing Privy user found: {existing_user['id']}")
+            logger.info(f"User details - ID: {existing_user['id']}, Email: {existing_user.get('email')}, Welcome sent: {existing_user.get('welcome_email_sent', 'Not set')}")
             
             # Send welcome email if they haven't received one yet
             user_email = existing_user.get('email') or email
