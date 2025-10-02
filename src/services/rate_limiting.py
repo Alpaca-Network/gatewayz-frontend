@@ -449,6 +449,12 @@ class RateLimitManager:
                     concurrency_limit=config_data.get('concurrency_limit', 5),
                     window_size_seconds=config_data.get('window_size_seconds', 60)
                 )
+        except Exception as e:
+            logger.error(f"Failed to load rate limit config from DB: {e}")
+
+        # Return default config if not found or error
+        return DEFAULT_CONFIG
+
     async def increment_request(self, api_key: str, config: RateLimitConfig, tokens_used: int = 0):
         """Increment request count (handled by fallback system)"""
         try:
@@ -490,8 +496,11 @@ class RateLimitManager:
                 'concurrency_limit': config.concurrency_limit,
                 'window_size_seconds': config.window_size_seconds
             }
-            
+
             update_rate_limit_config(api_key, config_dict)
+        except Exception as e:
+            logger.error(f"Failed to save rate limit config to DB: {e}")
+
     async def get_rate_limit_status(self, api_key: str, config: RateLimitConfig) -> Dict[str, Any]:
         """Get current rate limit status"""
         try:

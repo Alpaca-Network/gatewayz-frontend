@@ -8,7 +8,15 @@
       "Bash(fi)",
       "Bash(done)",
       "Bash(git reset:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git pull:*)",
+      "Bash(git stash:*)",
+      "Bash(curl -s http://127.0.0.1:8000/openapi.json)",
+      "Bash(curl -s http://127.0.0.1:8000/)",
+      "Bash(curl -s http://127.0.0.1:8000/models)",
+      "Bash(curl -s http://127.0.0.1:8000/provider)",
+      "Bash(curl:*)"
     ],
     "deny": [],
     "ask": []
