@@ -207,7 +207,7 @@ class EnhancedNotificationService:
                 </div>
                 
                 <div style="text-align: center; margin: 30px 0;">
-                    <a href="{self.app_url}/dashboard" class="cta-button">📊 View Dashboard</a>
+                    <a href="{self.app_url}/settings/credits" class="cta-button">📊 View Dashboard</a>
                     <a href="{self.app_url}/billing" class="cta-button secondary-button">💳 Billing Details</a>
                 </div>
                 
@@ -281,7 +281,7 @@ The {self.app_name} Team
                 </div>
                 
                 <div style="text-align: center; margin: 30px 0;">
-                    <a href="{self.app_url}/dashboard" class="cta-button">📊 Manage API Keys</a>
+                    <a href="{self.app_url}/settings/credits" class="cta-button">📊 Manage API Keys</a>
                     <a href="{self.app_url}/docs" class="cta-button secondary-button">📚 API Documentation</a>
                 </div>
                 

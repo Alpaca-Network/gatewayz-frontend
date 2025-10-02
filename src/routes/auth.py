@@ -47,16 +47,20 @@ async def privy_auth(request: PrivyAuthRequest):
             logger.info(f"Existing Privy user found: {existing_user['id']}")
             
             # Send welcome email if they haven't received one yet
-            if email and existing_user.get('email'):
+            user_email = existing_user.get('email') or email
+            if user_email:
                 try:
+                    logger.info(f"Attempting to send welcome email to user {existing_user['id']} with email {user_email}")
                     enhanced_notification_service.send_welcome_email_if_needed(
                         user_id=existing_user['id'],
                         username=existing_user.get('username') or display_name,
-                        email=existing_user.get('email'),
+                        email=user_email,
                         credits=existing_user.get('credits', 0)
                     )
                 except Exception as e:
                     logger.warning(f"Failed to send welcome email to existing user: {e}")
+            else:
+                logger.warning(f"No email found for user {existing_user['id']}, skipping welcome email")
             
             return PrivyAuthResponse(
                 success=True,

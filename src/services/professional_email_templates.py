@@ -252,7 +252,7 @@ class ProfessionalEmailTemplates:
                 <h3 style="margin-bottom: 16px;">🔑 Your API Key</h3>
                 <p style="margin-bottom: 12px;">Your API key has been generated and is available in your dashboard.</p>
                 <div style="text-align: center; margin: 20px 0;">
-                    <a href="{self.app_url}/dashboard" class="cta-button">🔐 View API Key in Dashboard</a>
+                    <a href="{self.app_url}/settings/keys" class="cta-button">🔐 View API Key in Dashboard</a>
                 </div>
                 <p style="font-size: 14px; color: #6b7280; margin-top: 12px;">⚠️ Keep your API key secure and never share it publicly.</p>
             </div>
@@ -270,16 +270,16 @@ class ProfessionalEmailTemplates:
             
             <div style="text-align: center; margin: 30px 0;">
                 <a href="{self.app_url}/docs" class="cta-button">📚 View Documentation</a>
-                <a href="{self.app_url}/dashboard" class="cta-button secondary-button">📊 Go to Dashboard</a>
+                <a href="{self.app_url}/settings/credits" class="cta-button secondary-button">📊 Go to Dashboard</a>
             </div>
             
             <div class="divider"></div>
             
             <h3>🚀 Quick Start Guide</h3>
             <ol style="margin-left: 20px; color: #4b5563;">
-                <li style="margin-bottom: 8px;">Access your <a href="{self.app_url}/dashboard" style="color: #3b82f6;">dashboard</a> to get your API key</li>
+                <li style="margin-bottom: 8px;">Access your <a href="{self.app_url}/settings/credits" style="color: #3b82f6;">dashboard</a> to get your API key</li>
                 <li style="margin-bottom: 8px;">Read our <a href="{self.app_url}/docs" style="color: #3b82f6;">API documentation</a></li>
-                <li style="margin-bottom: 8px;">Try our <a href="{self.app_url}/playground" style="color: #3b82f6;">interactive playground</a></li>
+                <li style="margin-bottom: 8px;">Try our <a href="{self.app_url}/chat" style="color: #3b82f6;">interactive playground</a></li>
                 <li style="margin-bottom: 8px;">Check out our <a href="{self.app_url}/examples" style="color: #3b82f6;">code examples</a></li>
                 <li style="margin-bottom: 8px;">Join our <a href="{self.app_url}/community" style="color: #3b82f6;">developer community</a></li>
             </ol>
@@ -311,7 +311,7 @@ Your Account Details:
 Your API key is available in your dashboard for security reasons.
 
 Quick Start:
-1. Access your dashboard: {self.app_url}/dashboard
+1. Access your dashboard: {self.app_url}/settings/credits
 2. Read our documentation: {self.app_url}/docs
 3. Try our playground: {self.app_url}/playground
 4. Check out examples: {self.app_url}/examples
@@ -344,7 +344,7 @@ The {self.app_name} Team
             <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 24px; margin: 24px 0; text-align: center;">
                 <h3 style="margin-bottom: 16px; color: #1e293b;">🔑 Get Your API Key</h3>
                 <p style="margin-bottom: 20px; color: #64748b;">Your API key is ready in your dashboard</p>
-                <a href="{self.app_url}/dashboard" class="cta-button">View Dashboard</a>
+                <a href="{self.app_url}/settings/credits" class="cta-button">View Dashboard</a>
             </div>
             
             <div style="text-align: center; margin: 30px 0;">
@@ -374,7 +374,7 @@ Hi {display_name},
 
 Welcome to {self.app_name}! Your account is ready and you have ${credits} in free credits to get started.
 
-Get your API key: {self.app_url}/dashboard
+Get your API key: {self.app_url}/settings/credits
 Read documentation: {self.app_url}/docs
 Try playground: {self.app_url}/playground
 
@@ -522,7 +522,7 @@ The {self.app_name} Team
             
             <div style="text-align: center; margin: 30px 0;">
                 <a href="{self.app_url}/pricing" class="cta-button">🚀 Upgrade Now</a>
-                <a href="{self.app_url}/dashboard" class="cta-button secondary-button">📊 View Usage</a>
+                <a href="{self.app_url}/settings/activity" class="cta-button secondary-button">📊 View Usage</a>
             </div>
             
             <div class="divider"></div>
@@ -676,7 +676,7 @@ The {self.app_name} Team
             </div>
             
             <div style="text-align: center; margin: 30px 0;">
-                <a href="{self.app_url}/dashboard" class="cta-button">📊 View Dashboard</a>
+                <a href="{self.app_url}/settings/credits" class="cta-button">📊 View Dashboard</a>
                 <a href="{self.app_url}/billing" class="cta-button secondary-button">💳 Billing History</a>
             </div>
             
@@ -824,7 +824,7 @@ The {self.app_name} Team
             </div>
             
             <div style="text-align: center; margin: 30px 0;">
-                <a href="{self.app_url}/dashboard" class="cta-button">📊 View Detailed Analytics</a>
+                <a href="{self.app_url}/settings/activity" class="cta-button">📊 View Detailed Analytics</a>
                 <a href="{self.app_url}/billing" class="cta-button secondary-button">💳 Manage Billing</a>
             </div>
             
@@ -863,7 +863,7 @@ Tokens Used: {usage_stats.get('tokens_used', 0):,}
 Credits Spent: ${usage_stats.get('credits_spent', 0):.2f}
 Remaining Credits: ${usage_stats.get('remaining_credits', 0):.2f}
 
-View detailed analytics: {self.app_url}/dashboard
+View detailed analytics: {self.app_url}/settings/activity
 Manage billing: {self.app_url}/billing
 
 Questions? Contact us: {self.support_email}
