@@ -50,6 +50,9 @@ class PrivyLinkedAccount(BaseModel):
     first_verified_at: Optional[int] = None
     latest_verified_at: Optional[int] = None
 
+    class Config:
+        extra = "allow"  # Allow extra fields from Privy
+
 class PrivyUserData(BaseModel):
     id: str
     created_at: int
@@ -57,6 +60,9 @@ class PrivyUserData(BaseModel):
     mfa_methods: List[str] = []
     has_accepted_terms: bool = False
     is_guest: bool = False
+
+    class Config:
+        extra = "allow"  # Allow extra fields from Privy
 
 class PrivyAuthRequest(BaseModel):
     user: PrivyUserData
