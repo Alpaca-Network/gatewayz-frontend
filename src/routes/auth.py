@@ -1,6 +1,6 @@
 import logging
 import datetime
-from datetime import datetime
+from datetime import datetime, timezone
 
 from src.enhanced_notification_service import enhanced_notification_service
 from fastapi import APIRouter, HTTPException
@@ -62,7 +62,7 @@ async def reset_password(token: str):
         token_data = token_result.data[0]
         expires_at = datetime.fromisoformat(token_data['expires_at'].replace('Z', '+00:00'))
 
-        if datetime.now(datetime.UTC).replace(tzinfo=expires_at.tzinfo) > expires_at:
+        if datetime.now(timezone.utc).replace(tzinfo=expires_at.tzinfo) > expires_at:
             raise HTTPException(status_code=400, detail="Reset token has expired")
 
         # Update password (in a real app, you'd hash this)

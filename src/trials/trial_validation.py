@@ -6,7 +6,7 @@ Direct trial validation without complex service layer
 
 import logging
 import datetime
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Any
 from src.supabase_config import get_supabase_client
 
@@ -61,7 +61,7 @@ def validate_trial_access(api_key: str) -> Dict[str, Any]:
                     trial_end = datetime.fromisoformat(trial_end_date)
                 
                 # Get current UTC time (naive)
-                now = datetime.now(datetime.UTC)
+                now = datetime.now(timezone.utc)
                 
                 if trial_end <= now:
                     return {

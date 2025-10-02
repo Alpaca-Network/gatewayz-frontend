@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find:*)",
+      "Bash(for:*)",
+      "Bash(do if [ -f \"$file\" ])",
+      "Bash(then sed -i 's/from datetime import datetime, timedelta$/from datetime import datetime, timedelta, timezone/g' \"$file\")",
+      "Bash(fi)",
+      "Bash(done)",
+      "Bash(git reset:*)",
+      "Bash(git commit:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

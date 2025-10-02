@@ -1,7 +1,7 @@
 import logging
 import datetime
 from typing import Optional, Dict, Any, List
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from src.db.api_keys import create_api_key
 from src.supabase_config import get_supabase_client
@@ -16,7 +16,7 @@ def create_enhanced_user(username: str, email: str, auth_method: str, credits: i
         client = get_supabase_client()
 
         # Prepare user data with trial setup
-        trial_start = datetime.now(datetime.UTC)
+        trial_start = datetime.now(timezone.utc)
         trial_end = trial_start + timedelta(days=3)
 
         user_data = {
@@ -114,7 +114,7 @@ def add_credits_to_user(user_id: int, credits: int) -> None:
         client = get_supabase_client()
         result = client.table('users').update({
             'credits': client.table('users').select('credits').eq('id', user_id).execute().data[0]['credits'] + credits,
-            'updated_at': datetime.now(datetime.UTC).isoformat()
+            'updated_at': datetime.now(timezone.utc).isoformat()
         }).eq('id', user_id).execute()
 
         if not result.data:
@@ -153,7 +153,7 @@ def deduct_credits(api_key: str, tokens: int) -> None:
         client = get_supabase_client()
         result = client.table('users').update({
             'credits': current_credits - tokens,
-            'updated_at': datetime.now(datetime.UTC).isoformat()
+            'updated_at': datetime.now(timezone.utc).isoformat()
         }).eq('id', user_id).execute()
 
     except Exception as e:
@@ -206,7 +206,7 @@ def record_usage(user_id: int, api_key: str, model: str, tokens_used: int, cost:
 
         # Ensure timestamp is timezone-aware
         from datetime import timezone
-        timestamp = datetime.now(datetime.UTC).replace(tzinfo=timezone.utc).isoformat()
+        timestamp = datetime.now(timezone.utc).replace(tzinfo=timezone.utc).isoformat()
 
         result = client.table('usage_records').insert({
             'user_id': user_id,
@@ -327,7 +327,7 @@ def get_admin_monitor_data() -> Dict[str, Any]:
         active_users = len([user for user in users if user.get('credits', 0) > 0])
 
         # Calculate time-based statistics
-        now = datetime.now(datetime.UTC)
+        now = datetime.now(timezone.utc)
         day_ago = now - timedelta(days=1)
         week_ago = now - timedelta(days=7)
         month_ago = now - timedelta(days=30)
@@ -496,7 +496,7 @@ def update_user_profile(api_key: str, profile_data: Dict[str, Any]) -> Dict[str,
         if not update_data:
             raise ValueError("No valid profile fields to update")
 
-        update_data['updated_at'] = datetime.now(datetime.UTC).isoformat()
+        update_data['updated_at'] = datetime.now(timezone.utc).isoformat()
 
         # Update user profile
         result = client.table('users').update(update_data).eq('api_key', api_key).execute()

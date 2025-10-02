@@ -12,7 +12,7 @@ from src.db.users import create_enhanced_user, get_user, add_credits_to_user, ge
 from src.enhanced_notification_service import enhanced_notification_service
 from src.main import _provider_cache, _huggingface_cache, _models_cache
 from fastapi import APIRouter
-from datetime import datetime
+from datetime import datetime, timezone
 
 import httpx
 from fastapi import Depends, HTTPException
@@ -74,7 +74,7 @@ async def create_api_key(request: UserRegistrationRequest):
             auth_method=request.auth_method,
             subscription_status="trial",
             message="API key created successfully!",
-            timestamp=datetime.now(datetime.UTC)
+            timestamp=datetime.now(timezone.utc)
         )
 
     except ValueError as e:
@@ -152,14 +152,14 @@ async def admin_monitor():
             # Still return the data but log the error
             return {
                 "status": "success",
-                "timestamp": datetime.now(datetime.UTC).isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "data": monitor_data,
                 "warning": "Data retrieved with errors, some information may be incomplete"
             }
 
         return {
             "status": "success",
-            "timestamp": datetime.now(datetime.UTC).isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "data": monitor_data
         }
 
@@ -419,7 +419,7 @@ async def admin_refresh_providers():
             "status": "success",
             "message": "Provider cache refreshed successfully",
             "total_providers": len(providers) if providers else 0,
-            "timestamp": datetime.now(datetime.UTC).isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
 
     except Exception as e:
@@ -432,7 +432,7 @@ async def admin_cache_status():
     try:
         cache_age = None
         if _provider_cache["timestamp"]:
-            cache_age = (datetime.now(datetime.UTC) - _provider_cache["timestamp"]).total_seconds()
+            cache_age = (datetime.now(timezone.utc) - _provider_cache["timestamp"]).total_seconds()
 
         return {
             "status": "success",
@@ -443,7 +443,7 @@ async def admin_cache_status():
                 "is_valid": cache_age is not None and cache_age < _provider_cache["ttl"],
                 "total_cached_providers": len(_provider_cache["data"]) if _provider_cache["data"] else 0
             },
-            "timestamp": datetime.now(datetime.UTC).isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
 
     except Exception as e:
@@ -457,7 +457,7 @@ async def admin_huggingface_cache_status():
     try:
         cache_age = None
         if _huggingface_cache["timestamp"]:
-            cache_age = (datetime.now(datetime.UTC) - _huggingface_cache["timestamp"]).total_seconds()
+            cache_age = (datetime.now(timezone.utc) - _huggingface_cache["timestamp"]).total_seconds()
 
         return {
             "huggingface_cache": {
@@ -466,7 +466,7 @@ async def admin_huggingface_cache_status():
                 "total_cached_models": len(_huggingface_cache["data"]),
                 "cached_model_ids": list(_huggingface_cache["data"].keys())
             },
-            "timestamp": datetime.now(datetime.UTC).isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
 
     except Exception as e:
@@ -483,7 +483,7 @@ async def admin_refresh_huggingface_cache():
 
         return {
             "message": "Hugging Face cache cleared successfully",
-            "timestamp": datetime.now(datetime.UTC).isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
 
     except Exception as e:
@@ -515,7 +515,7 @@ async def admin_test_huggingface( hugging_face_id: str = "openai/gpt-oss-120b"):
                         'author_data') else 0
                 }
             },
-            "timestamp": datetime.now(datetime.UTC).isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
 
     except HTTPException:
@@ -565,7 +565,7 @@ async def admin_debug_models():
                 "sample_models": sample_models,
                 "cache_timestamp": _models_cache.get("timestamp"),
                 "cache_age_seconds": (
-                            datetime.now(datetime.UTC) - _models_cache["timestamp"]).total_seconds() if _models_cache.get(
+                            datetime.now(timezone.utc) - _models_cache["timestamp"]).total_seconds() if _models_cache.get(
                     "timestamp") else None
             },
             "providers_cache": {
@@ -573,11 +573,11 @@ async def admin_debug_models():
                 "sample_providers": sample_providers,
                 "cache_timestamp": _provider_cache.get("timestamp"),
                 "cache_age_seconds": (
-                            datetime.now(datetime.UTC) - _provider_cache["timestamp"]).total_seconds() if _provider_cache.get(
+                            datetime.now(timezone.utc) - _provider_cache["timestamp"]).total_seconds() if _provider_cache.get(
                     "timestamp") else None
             },
             "provider_matching_test": provider_matching_test,
-            "timestamp": datetime.now(datetime.UTC).isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
 
     except Exception as e:
@@ -656,10 +656,10 @@ async def test_provider_matching():
             "cache_info": {
                 "provider_cache_timestamp": _provider_cache.get("timestamp"),
                 "provider_cache_age": (
-                            datetime.now(datetime.UTC) - _provider_cache["timestamp"]).total_seconds() if _provider_cache.get(
+                            datetime.now(timezone.utc) - _provider_cache["timestamp"]).total_seconds() if _provider_cache.get(
                     "timestamp") else None
             },
-            "timestamp": datetime.now(datetime.UTC).isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
 
     except Exception as e:
@@ -701,7 +701,7 @@ async def test_refresh_providers():
                 "provider_site_url": enhanced_model.get('provider_site_url'),
                 "model_logo_url": enhanced_model.get('model_logo_url')
             },
-            "timestamp": datetime.now(datetime.UTC).isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
 
     except Exception as e:
@@ -746,7 +746,7 @@ async def test_openrouter_providers():
                     "status_page_url": p.get('status_page_url')
                 } for p in providers[:5]
             ],
-            "timestamp": datetime.now(datetime.UTC).isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
 
     except Exception as e:
