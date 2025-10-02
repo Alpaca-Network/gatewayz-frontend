@@ -10,7 +10,7 @@ from src.models import PrivyAuthRequest, PrivyAuthResponse, AuthMethod
 from src.db.users import get_user_by_privy_id, create_enhanced_user
 
 # Initialize logging
-logging.basicConfig(level=logging.ERROR)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -48,17 +48,20 @@ async def privy_auth(request: PrivyAuthRequest):
             
             # Send welcome email if they haven't received one yet
             user_email = existing_user.get('email') or email
+            logger.info(f"Welcome email check - User ID: {existing_user['id']}, Email: {user_email}, Welcome sent: {existing_user.get('welcome_email_sent', 'Not set')}")
+            
             if user_email:
                 try:
                     logger.info(f"Attempting to send welcome email to user {existing_user['id']} with email {user_email}")
-                    enhanced_notification_service.send_welcome_email_if_needed(
+                    success = enhanced_notification_service.send_welcome_email_if_needed(
                         user_id=existing_user['id'],
                         username=existing_user.get('username') or display_name,
                         email=user_email,
                         credits=existing_user.get('credits', 0)
                     )
+                    logger.info(f"Welcome email result for user {existing_user['id']}: {success}")
                 except Exception as e:
-                    logger.warning(f"Failed to send welcome email to existing user: {e}")
+                    logger.error(f"Failed to send welcome email to existing user: {e}")
             else:
                 logger.warning(f"No email found for user {existing_user['id']}, skipping welcome email")
             
