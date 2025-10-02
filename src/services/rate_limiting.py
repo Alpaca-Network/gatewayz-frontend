@@ -574,3 +574,14 @@ ENTERPRISE_CONFIG = RateLimitConfig(
     burst_limit=100,
     concurrency_limit=50
 )
+
+# Global rate limit manager instance
+_rate_limit_manager = None
+
+@lru_cache(maxsize=1)
+def get_rate_limit_manager() -> RateLimitManager:
+    """Get global rate limit manager instance"""
+    global _rate_limit_manager
+    if _rate_limit_manager is None:
+        _rate_limit_manager = RateLimitManager()
+    return _rate_limit_manager
