@@ -27,7 +27,8 @@ def create_enhanced_user(username: str, email: str, auth_method: str, credits: i
             'registration_date': trial_start.isoformat(),
             'auth_method': auth_method,
             'subscription_status': 'trial',
-            'trial_expires_at': trial_end.isoformat()
+            'trial_expires_at': trial_end.isoformat(),
+            'welcome_email_sent': False  # New users haven't received welcome email yet
         }
 
         # Add privy_user_id if provided
@@ -563,6 +564,27 @@ def get_user_profile(api_key: str) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Failed to get user profile: {e}")
         return None
+
+
+def mark_welcome_email_sent(user_id: int) -> bool:
+    """Mark welcome email as sent for a user"""
+    try:
+        client = get_supabase_client()
+        
+        result = client.table('users').update({
+            'welcome_email_sent': True,
+            'updated_at': datetime.now(timezone.utc).isoformat()
+        }).eq('id', user_id).execute()
+        
+        if not result.data:
+            raise ValueError(f"User with ID {user_id} not found")
+        
+        logger.info(f"Welcome email marked as sent for user {user_id}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Failed to mark welcome email as sent: {e}")
+        raise RuntimeError(f"Failed to mark welcome email as sent: {e}")
 
 
 def delete_user_account(api_key: str) -> bool:

@@ -43,7 +43,8 @@ class EnhancedNotificationService:
             logger.info(f"From email: {self.from_email}")
             logger.info(f"App name: {self.app_name}")
             
-            template = email_templates.welcome_email(username, email, credits)
+            # Use the simple welcome email template
+            template = email_templates.simple_welcome_email(username, email, credits)
             logger.info(f"Email template generated successfully")
             
             success = self.send_email_notification(
@@ -76,6 +77,38 @@ class EnhancedNotificationService:
         except Exception as e:
             logger.error(f"Error sending welcome email: {e}")
             logger.error(f"Error details: {str(e)}", exc_info=True)
+            return False
+    
+    def send_welcome_email_if_needed(self, user_id: int, username: str, email: str, credits: int) -> bool:
+        """Send welcome email only if the user hasn't received one yet"""
+        try:
+            # Check if user has already received a welcome email
+            user_result = self.supabase.table('users').select('welcome_email_sent').eq('id', user_id).execute()
+            
+            if not user_result.data:
+                logger.warning(f"User {user_id} not found, skipping welcome email")
+                return False
+            
+            user_data = user_result.data[0]
+            welcome_email_sent = user_data.get('welcome_email_sent', False)
+            
+            if welcome_email_sent:
+                logger.info(f"User {user_id} has already received welcome email, skipping")
+                return True
+            
+            # Send welcome email
+            success = self.send_welcome_email(user_id, username, email, credits)
+            
+            if success:
+                # Mark welcome email as sent
+                from src.db.users import mark_welcome_email_sent
+                mark_welcome_email_sent(user_id)
+                logger.info(f"Welcome email sent and marked as sent for user {user_id}")
+            
+            return success
+            
+        except Exception as e:
+            logger.error(f"Error checking/sending welcome email: {e}")
             return False
     
     def send_password_reset_email(self, user_id: int, username: str, email: str) -> Optional[str]:

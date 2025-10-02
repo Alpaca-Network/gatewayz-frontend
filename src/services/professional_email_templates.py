@@ -325,6 +325,66 @@ The {self.app_name} Team
 """
         }
     
+    def simple_welcome_email(self, username: str, email: str, credits: int) -> Dict[str, str]:
+        """Simple, clean welcome email template"""
+        # Use display name if it looks like a real name, otherwise use email prefix
+        display_name = username
+        if username and not username.startswith(('google_', 'github_', 'privy_')):
+            display_name = username
+        elif email:
+            display_name = email.split('@')[0].replace('.', ' ').title()
+        else:
+            display_name = "there"
+            
+        content = f"""
+            <h2>Welcome to {self.app_name}! 🎉</h2>
+            <p>Hi <strong>{display_name}</strong>,</p>
+            <p>Welcome to {self.app_name}! Your account is ready and you have <strong>${credits}</strong> in free credits to get started.</p>
+            
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 24px; margin: 24px 0; text-align: center;">
+                <h3 style="margin-bottom: 16px; color: #1e293b;">🔑 Get Your API Key</h3>
+                <p style="margin-bottom: 20px; color: #64748b;">Your API key is ready in your dashboard</p>
+                <a href="{self.app_url}/dashboard" class="cta-button">View Dashboard</a>
+            </div>
+            
+            <div style="text-align: center; margin: 30px 0;">
+                <a href="{self.app_url}/docs" class="cta-button">📚 Documentation</a>
+                <a href="{self.app_url}/playground" class="cta-button secondary-button">🚀 Try Playground</a>
+            </div>
+            
+            <p style="font-size: 14px; color: #6b7280; text-align: center; margin-top: 30px;">
+                Questions? Contact us at <a href="mailto:{self.support_email}" style="color: #3b82f6;">{self.support_email}</a>
+            </p>
+        """
+        
+        return {
+            "subject": f"Welcome to {self.app_name}! 🚀",
+            "html": self.get_base_template().format(
+                subject=f"Welcome to {self.app_name}!",
+                header_subtitle="Your account is ready",
+                content=content,
+                app_name=self.app_name,
+                app_url=self.app_url,
+                support_email=self.support_email,
+                email=email
+            ),
+            "text": f"""Welcome to {self.app_name}!
+
+Hi {display_name},
+
+Welcome to {self.app_name}! Your account is ready and you have ${credits} in free credits to get started.
+
+Get your API key: {self.app_url}/dashboard
+Read documentation: {self.app_url}/docs
+Try playground: {self.app_url}/playground
+
+Questions? Contact us: {self.support_email}
+
+Best regards,
+The {self.app_name} Team
+"""
+        }
+    
     def low_balance_alert(self, username: str, email: str, current_credits: float, threshold: float, is_trial: bool = False, plan_name: str = None) -> Dict[str, str]:
         """Low balance alert email"""
         if is_trial:
