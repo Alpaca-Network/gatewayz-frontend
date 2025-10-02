@@ -90,15 +90,19 @@ async def privy_auth(request: PrivyAuthRequest):
             # Send welcome email if we have an email
             if email:
                 try:
-                    enhanced_notification_service.send_welcome_email(
+                    success = enhanced_notification_service.send_welcome_email(
                         user_id=user_data['user_id'],
                         username=user_data['username'],
                         email=email,
                         credits=user_data['credits']
                     )
-                    # Mark welcome email as sent for new users
-                    from src.db.users import mark_welcome_email_sent
-                    mark_welcome_email_sent(user_data['user_id'])
+                    # Only mark welcome email as sent if it was actually sent successfully
+                    if success:
+                        from src.db.users import mark_welcome_email_sent
+                        mark_welcome_email_sent(user_data['user_id'])
+                        logger.info(f"Welcome email sent and marked as sent for new user {user_data['user_id']}")
+                    else:
+                        logger.warning(f"Welcome email failed to send for new user {user_data['user_id']}")
                 except Exception as e:
                     logger.warning(f"Failed to send welcome email: {e}")
 

@@ -51,12 +51,19 @@ async def create_api_key(request: UserRegistrationRequest):
 
         # Send a welcome email with API key information
         try:
-            enhanced_notification_service.send_welcome_email(
+            success = enhanced_notification_service.send_welcome_email(
                 user_id=user_data['user_id'],
                 username=user_data['username'],
                 email=user_data['email'],
                 credits=user_data['credits']
             )
+            # Only mark welcome email as sent if it was actually sent successfully
+            if success:
+                from src.db.users import mark_welcome_email_sent
+                mark_welcome_email_sent(user_data['user_id'])
+                logger.info(f"Welcome email sent and marked as sent for admin user {user_data['user_id']}")
+            else:
+                logger.warning(f"Welcome email failed to send for admin user {user_data['user_id']}")
         except Exception as e:
             logger.warning(f"Failed to send welcome email: {e}")
 
