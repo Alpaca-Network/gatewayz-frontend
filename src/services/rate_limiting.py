@@ -11,6 +11,7 @@ from typing import Dict, Optional, Any
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from collections import defaultdict, deque
+from functools import lru_cache
 import redis
 
 from src.db.rate_limits import update_rate_limit_config, get_rate_limit_config

@@ -16,7 +16,8 @@
       "Bash(curl -s http://127.0.0.1:8000/)",
       "Bash(curl -s http://127.0.0.1:8000/models)",
       "Bash(curl -s http://127.0.0.1:8000/provider)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(timeout:*)"
     ],
     "deny": [],
     "ask": []

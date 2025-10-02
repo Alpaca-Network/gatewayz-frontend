@@ -6,12 +6,105 @@ from src.enhanced_notification_service import enhanced_notification_service
 from fastapi import APIRouter, HTTPException
 
 from src.supabase_config import get_supabase_client
+from src.models import PrivyAuthRequest, PrivyAuthResponse, AuthMethod
+from src.db.users import get_user_by_privy_id, create_enhanced_user
 
 # Initialize logging
 logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+@router.post("/auth", response_model=PrivyAuthResponse, tags=["authentication"])
+async def privy_auth(request: PrivyAuthRequest):
+    """Authenticate user via Privy and return API key"""
+    try:
+        logger.info(f"Privy auth request for user: {request.user.id}")
+
+        # Extract user info from Privy linked accounts
+        email = None
+        display_name = None
+        auth_method = AuthMethod.EMAIL  # Default
+
+        for account in request.user.linked_accounts:
+            if account.type == "email" and account.email:
+                email = account.email
+                auth_method = AuthMethod.EMAIL
+            elif account.type == "google_oauth" and account.email:
+                email = account.email
+                display_name = account.name
+                auth_method = AuthMethod.GOOGLE
+            elif account.type == "github" and account.name:
+                display_name = account.name
+                auth_method = AuthMethod.GITHUB
+
+        # Check if user already exists by privy_user_id
+        existing_user = get_user_by_privy_id(request.user.id)
+
+        if existing_user:
+            # Existing user - return their info
+            logger.info(f"Existing Privy user found: {existing_user['id']}")
+            return PrivyAuthResponse(
+                success=True,
+                message="Login successful",
+                user_id=existing_user['id'],
+                api_key=existing_user['api_key'],
+                auth_method=auth_method,
+                privy_user_id=request.user.id,
+                is_new_user=False,
+                display_name=existing_user.get('username') or display_name,
+                email=existing_user.get('email') or email,
+                credits=existing_user.get('credits', 0),
+                timestamp=datetime.now(timezone.utc)
+            )
+        else:
+            # New user - create account
+            logger.info(f"Creating new Privy user: {request.user.id}")
+
+            # Generate username from email or privy ID
+            username = email.split('@')[0] if email else f"user_{request.user.id[:8]}"
+
+            # Create user with Privy ID
+            user_data = create_enhanced_user(
+                username=username,
+                email=email or f"{request.user.id}@privy.user",
+                auth_method=auth_method,
+                privy_user_id=request.user.id,
+                credits=10  # $10 worth of credits for new users
+            )
+
+            # Send welcome email if we have an email
+            if email:
+                try:
+                    enhanced_notification_service.send_welcome_email(
+                        user_id=user_data['user_id'],
+                        username=user_data['username'],
+                        email=email,
+                        credits=user_data['credits']
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to send welcome email: {e}")
+
+            logger.info(f"New Privy user created: {user_data['user_id']}")
+
+            return PrivyAuthResponse(
+                success=True,
+                message="Account created successfully",
+                user_id=user_data['user_id'],
+                api_key=user_data['primary_api_key'],
+                auth_method=auth_method,
+                privy_user_id=request.user.id,
+                is_new_user=True,
+                display_name=display_name or user_data['username'],
+                email=email,
+                credits=user_data['credits'],
+                timestamp=datetime.now(timezone.utc)
+            )
+
+    except Exception as e:
+        logger.error(f"Privy authentication failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Authentication failed: {str(e)}")
 
 
 @router.post("/auth/password-reset", tags=["authentication"])

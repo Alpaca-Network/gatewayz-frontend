@@ -10,7 +10,7 @@ import secrets
 logger = logging.getLogger(__name__)
 
 
-def create_enhanced_user(username: str, email: str, auth_method: str, credits: int = 10) -> Dict[str, Any]:
+def create_enhanced_user(username: str, email: str, auth_method: str, credits: int = 10, privy_user_id: Optional[str] = None) -> Dict[str, Any]:
     """Create a new user with automatic 3-day trial and $10 credits"""
     try:
         client = get_supabase_client()
@@ -29,6 +29,10 @@ def create_enhanced_user(username: str, email: str, auth_method: str, credits: i
             'subscription_status': 'trial',
             'trial_expires_at': trial_end.isoformat()
         }
+
+        # Add privy_user_id if provided
+        if privy_user_id:
+            user_data['privy_user_id'] = privy_user_id
 
         # Create user account with a temporary API key (will be replaced)
         user_data['api_key'] = f"gw_temp_{secrets.token_urlsafe(16)}"
@@ -102,6 +106,23 @@ def get_user(api_key: str) -> Optional[Dict[str, Any]]:
 
     except Exception as e:
         logger.error(f"Error getting user: {e}")
+        return None
+
+
+def get_user_by_privy_id(privy_user_id: str) -> Optional[Dict[str, Any]]:
+    """Get user by Privy user ID"""
+    try:
+        client = get_supabase_client()
+
+        result = client.table('users').select('*').eq('privy_user_id', privy_user_id).execute()
+
+        if result.data:
+            return result.data[0]
+
+        return None
+
+    except Exception as e:
+        logger.error(f"Error getting user by Privy ID: {e}")
         return None
 
 
