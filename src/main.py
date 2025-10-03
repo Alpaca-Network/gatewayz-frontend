@@ -128,6 +128,12 @@ def create_app() -> FastAPI:
         logger.error(f"Failed to include plans routes: {e}")
 
     try:
+        from src.routes import ranking as ranking_routes
+        app.include_router(ranking_routes.router)
+    except Exception as e:
+        logger.error(f"Failed to include ranking routes: {e}")
+
+    try:
         from src.routes import rate_limits as rate_limits_routes
         app.include_router(rate_limits_routes.router)
     except Exception as e:
