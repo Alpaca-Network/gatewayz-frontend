@@ -7,12 +7,12 @@ import logging
 from src.db.users import  get_user
 from src.enhanced_notification_service import enhanced_notification_service
 from fastapi import APIRouter, Query
-from datetime import datetime, timezone
+from datetime import datetime
 from fastapi import Depends, HTTPException
 from src.security.deps import get_api_key
-from src.services.notification_models import NotificationPreferences, UpdateNotificationPreferencesRequest, \
+from src.schemas.notification import NotificationPreferences, UpdateNotificationPreferencesRequest, \
     NotificationType, SendNotificationRequest, NotificationChannel, NotificationStats
-from src.services.notification_service import notification_service
+from src.services.notification import notification_service
 
 from src.supabase_config import get_supabase_client
 
@@ -223,7 +223,7 @@ async def get_notification_stats():
         # Get last 24-hour notifications - use a simpler approach
         logger.info("Fetching recent notifications...")
         try:
-            yesterday = (datetime.now(timezone.utc) - datetime.timedelta(days=1)).isoformat()
+            yesterday = (datetime.now(datetime.UTC) - datetime.timedelta(days=1)).isoformat()
             recent_result = client.table('notifications').select('id').gte('created_at', yesterday).execute()
             last_24h_notifications = len(recent_result.data) if recent_result.data else 0
         except Exception as recent_error:
@@ -231,7 +231,7 @@ async def get_notification_stats():
             # Fallback: get all notifications and filter in Python
             all_notifications = client.table('notifications').select('created_at').execute()
             if all_notifications.data:
-                yesterday_dt = datetime.now(timezone.utc) - datetime.timedelta(days=1)
+                yesterday_dt = datetime.now(datetime.UTC) - datetime.timedelta(days=1)
                 last_24h_notifications = len([
                     n for n in all_notifications.data
                     if datetime.fromisoformat(n['created_at'].replace('Z', '+00:00')) >= yesterday_dt

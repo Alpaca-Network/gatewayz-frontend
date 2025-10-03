@@ -9,9 +9,8 @@ import logging
 import datetime
 from typing import Dict, Optional, Any
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from collections import defaultdict, deque
-from functools import lru_cache
 import redis
 
 from src.db.rate_limits import update_rate_limit_config, get_rate_limit_config
@@ -60,6 +59,7 @@ class SlidingWindowRateLimiter:
     ) -> RateLimitResult:
         """Check rate limit using fallback system"""
         try:
+<<<<<<< HEAD:src/services/rate_limiting.py
             # Check concurrency limit first
             concurrency_check = await self._check_concurrency_limit(api_key, config)
             if not concurrency_check["allowed"]:
@@ -67,7 +67,7 @@ class SlidingWindowRateLimiter:
                     allowed=False,
                     remaining_requests=0,
                     remaining_tokens=0,
-                    reset_time=datetime.now(timezone.utc) + timedelta(seconds=60),
+                    reset_time=datetime.now(datetime.UTC) + timedelta(seconds=60),
                     retry_after=60,
                     reason="Concurrency limit exceeded",
                     concurrency_remaining=0
@@ -80,7 +80,7 @@ class SlidingWindowRateLimiter:
                     allowed=False,
                     remaining_requests=0,
                     remaining_tokens=0,
-                    reset_time=datetime.now(timezone.utc) + timedelta(seconds=burst_check["retry_after"]),
+                    reset_time=datetime.now(datetime.UTC) + timedelta(seconds=burst_check["retry_after"]),
                     retry_after=burst_check["retry_after"],
                     reason="Burst limit exceeded",
                     burst_remaining=burst_check["remaining"]
@@ -101,6 +101,7 @@ class SlidingWindowRateLimiter:
                 )
             
             # All checks passed
+=======
             # Use the fallback rate limiting system
             result = await self.fallback_manager.check_rate_limit(
                 api_key=api_key,
@@ -108,8 +109,9 @@ class SlidingWindowRateLimiter:
                 tokens_used=tokens_used,
                 request_type=request_type
             )
-
+            
             # Convert fallback result to our format
+>>>>>>> 4d0dcfae13c90ab97b6022e6fae970be3c71ece5:rate_limiting.py
             return RateLimitResult(
                 allowed=result.allowed,
                 remaining_requests=result.remaining_requests,
@@ -128,10 +130,11 @@ class SlidingWindowRateLimiter:
                 allowed=True,
                 remaining_requests=config.requests_per_minute,
                 remaining_tokens=config.tokens_per_minute,
-                reset_time=datetime.now(timezone.utc) + timedelta(minutes=1),
+                reset_time=datetime.now(datetime.UTC) + timedelta(minutes=1),
                 reason="Rate limit check failed, allowing request"
             )
     
+<<<<<<< HEAD:src/services/rate_limiting.py
     async def _check_concurrency_limit(self, api_key: str, config: RateLimitConfig) -> Dict[str, Any]:
         """Check concurrent request limit"""
         current_concurrent = self.concurrent_requests.get(api_key, 0)
@@ -218,7 +221,7 @@ class SlidingWindowRateLimiter:
     
     async def _check_sliding_window(self, api_key: str, config: RateLimitConfig, tokens_used: int) -> Dict[str, Any]:
         """Check sliding window rate limits"""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(datetime.UTC)
         window_start = now - timedelta(seconds=config.window_size_seconds)
         
         if self.redis_client:
@@ -450,12 +453,7 @@ class RateLimitManager:
                     concurrency_limit=config_data.get('concurrency_limit', 5),
                     window_size_seconds=config_data.get('window_size_seconds', 60)
                 )
-        except Exception as e:
-            logger.error(f"Failed to load rate limit config from DB: {e}")
-
-        # Return default config if not found or error
-        return DEFAULT_CONFIG
-
+=======
     async def increment_request(self, api_key: str, config: RateLimitConfig, tokens_used: int = 0):
         """Increment request count (handled by fallback system)"""
         try:
@@ -464,9 +462,11 @@ class RateLimitManager:
                 config=config,
                 tokens_used=tokens_used
             )
+>>>>>>> 4d0dcfae13c90ab97b6022e6fae970be3c71ece5:rate_limiting.py
         except Exception as e:
             logger.error(f"Failed to increment request count for key {api_key[:10]}...: {e}")
     
+<<<<<<< HEAD:src/services/rate_limiting.py
     async def check_rate_limit(
         self, 
         api_key: str, 
@@ -497,15 +497,14 @@ class RateLimitManager:
                 'concurrency_limit': config.concurrency_limit,
                 'window_size_seconds': config.window_size_seconds
             }
-
+            
             update_rate_limit_config(api_key, config_dict)
-        except Exception as e:
-            logger.error(f"Failed to save rate limit config to DB: {e}")
-
+=======
     async def get_rate_limit_status(self, api_key: str, config: RateLimitConfig) -> Dict[str, Any]:
         """Get current rate limit status"""
         try:
             return await self.fallback_manager.get_rate_limit_status(api_key, config)
+>>>>>>> 4d0dcfae13c90ab97b6022e6fae970be3c71ece5:rate_limiting.py
         except Exception as e:
             logger.error(f"Failed to get rate limit status for key {api_key[:10]}...: {e}")
             return {
@@ -574,14 +573,3 @@ ENTERPRISE_CONFIG = RateLimitConfig(
     burst_limit=100,
     concurrency_limit=50
 )
-
-# Global rate limit manager instance
-_rate_limit_manager = None
-
-@lru_cache(maxsize=1)
-def get_rate_limit_manager() -> RateLimitManager:
-    """Get global rate limit manager instance"""
-    global _rate_limit_manager
-    if _rate_limit_manager is None:
-        _rate_limit_manager = RateLimitManager()
-    return _rate_limit_manager

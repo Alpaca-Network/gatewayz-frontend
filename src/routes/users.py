@@ -1,7 +1,7 @@
 import logging
 import datetime
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 from fastapi import Depends, HTTPException
 
@@ -25,7 +25,7 @@ async def get_user_balance(api_key: str = Depends(get_api_key)):
             raise HTTPException(status_code=401, detail="Invalid API key")
 
         # Check if this is a trial user
-        from src.trials.trial_validation import validate_trial_access
+        from src.services.trial_validation import validate_trial_access
         trial_validation = validate_trial_access(api_key)
 
         if trial_validation.get('is_trial', False):
@@ -81,7 +81,7 @@ async def user_monitor(api_key: str = Depends(get_api_key)):
 
         return {
             "status": "success",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(datetime.UTC).isoformat(),
             "user_id": usage_data["user_id"],
             "api_key": f"{api_key[:10]}...",
             "current_credits": usage_data["current_credits"],
@@ -122,9 +122,9 @@ async def user_get_rate_limits(api_key: str = Depends(get_api_key)):
                     "reason": "No rate limits configured"
                 },
                 "reset_times": {
-                    "minute": datetime.now(timezone.utc).replace(second=0, microsecond=0) + timedelta(minutes=1),
-                    "hour": datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0) + timedelta(hours=1),
-                    "day": datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+                    "minute": datetime.now(datetime.UTC).replace(second=0, microsecond=0) + timedelta(minutes=1),
+                    "hour": datetime.now(datetime.UTC).replace(minute=0, second=0, microsecond=0) + timedelta(hours=1),
+                    "day": datetime.now(datetime.UTC).replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
                 }
             }
 
@@ -143,9 +143,9 @@ async def user_get_rate_limits(api_key: str = Depends(get_api_key)):
             },
             "current_usage": current_usage,
             "reset_times": {
-                "minute": datetime.now(timezone.utc).replace(second=0, microsecond=0) + timedelta(minutes=1),
-                "hour": datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0) + timedelta(hours=1),
-                "day": datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+                "minute": datetime.now(datetime.UTC).replace(second=0, microsecond=0) + timedelta(minutes=1),
+                "hour": datetime.now(datetime.UTC).replace(minute=0, second=0, microsecond=0) + timedelta(hours=1),
+                "day": datetime.now(datetime.UTC).replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
             }
         }
 
@@ -242,7 +242,7 @@ async def delete_user_account_endpoint(
             "status": "success",
             "message": "User account deleted successfully",
             "user_id": user["id"],
-            "timestamp": datetime.now(timezone.utc)
+            "timestamp": datetime.now(datetime.UTC)
         }
 
     except HTTPException:

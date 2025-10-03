@@ -5,7 +5,7 @@ from src.config import Config
 
 from src.main import _huggingface_cache, _models_cache
 from fastapi import APIRouter
-from datetime import datetime, timezone
+from datetime import datetime
 
 import httpx
 
@@ -20,7 +20,7 @@ def get_cached_models():
     """Get cached models or fetch from OpenRouter if cache is expired"""
     try:
         if _models_cache["data"] and _models_cache["timestamp"]:
-            cache_age = (datetime.now(timezone.utc) - _models_cache["timestamp"]).total_seconds()
+            cache_age = (datetime.now(datetime.UTC) - _models_cache["timestamp"]).total_seconds()
             if cache_age < _models_cache["ttl"]:
                 return _models_cache["data"]
 
@@ -48,7 +48,7 @@ def fetch_models_from_openrouter():
 
         models_data = response.json()
         _models_cache["data"] = models_data.get("data", [])
-        _models_cache["timestamp"] = datetime.now(timezone.utc)
+        _models_cache["timestamp"] = datetime.now(datetime.UTC)
 
         return _models_cache["data"]
     except Exception as e:
@@ -107,7 +107,7 @@ def fetch_huggingface_model(hugging_face_id: str):
 
         # Cache the result
         _huggingface_cache["data"][hugging_face_id] = model_data
-        _huggingface_cache["timestamp"] = datetime.now(timezone.utc)
+        _huggingface_cache["timestamp"] = datetime.now(datetime.UTC)
 
         return model_data
     except httpx.HTTPStatusError as e:

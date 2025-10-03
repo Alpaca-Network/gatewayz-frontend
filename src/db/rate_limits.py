@@ -1,7 +1,7 @@
 import logging
 import datetime
 from typing import Optional, Dict, Any, List
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 from src.db.users import get_user
 from src.supabase_config import get_supabase_client
@@ -74,8 +74,8 @@ def set_user_rate_limits(api_key: str, rate_limits: Dict[str, int]) -> None:
             'tokens_per_minute': rate_limits.get('tokens_per_minute', 10000),
             'tokens_per_hour': rate_limits.get('tokens_per_hour', 100000),
             'tokens_per_day': rate_limits.get('tokens_per_day', 1000000),
-            'created_at': datetime.now(timezone.utc).isoformat(),
-            'updated_at': datetime.now(timezone.utc).isoformat()
+            'created_at': datetime.now(datetime.UTC).isoformat(),
+            'updated_at': datetime.now(datetime.UTC).isoformat()
         }
 
         existing = client.table('rate_limits').select('*').eq('api_key', api_key).execute()
@@ -98,7 +98,7 @@ def check_rate_limit(api_key: str, tokens_used: int = 0) -> Dict[str, Any]:
         if not rate_limits:
             return {'allowed': True, 'reason': 'No rate limits configured'}
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(datetime.UTC)
         minute_start = now.replace(second=0, microsecond=0)
         hour_start = now.replace(minute=0, second=0, microsecond=0)
         day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -161,7 +161,7 @@ def update_rate_limit_usage(api_key: str, tokens_used: int) -> None:
             return
 
         user_id = user['id']
-        now = datetime.now(timezone.utc)
+        now = datetime.now(datetime.UTC)
 
         # Ensure timestamp is timezone-aware
         from datetime import timezone
@@ -321,7 +321,7 @@ def update_rate_limit_config(api_key: str, config: Dict[str, Any]) -> bool:
 
         result = client.table('api_keys').update({
             'rate_limit_config': config,
-            'updated_at': datetime.now(timezone.utc).isoformat()
+            'updated_at': datetime.now(datetime.UTC).isoformat()
         }).eq('api_key', api_key).execute()
 
         return len(result.data) > 0
@@ -364,7 +364,7 @@ def bulk_update_rate_limit_configs(user_id: int, config: Dict[str, Any]) -> int:
 
         result = client.table('api_keys').update({
             'rate_limit_config': config,
-            'updated_at': datetime.now(timezone.utc).isoformat()
+            'updated_at': datetime.now(datetime.UTC).isoformat()
         }).eq('user_id', user_id).execute()
 
         return len(result.data)
@@ -379,7 +379,7 @@ def get_rate_limit_usage_stats(api_key: str, time_window: str = 'minute') -> Dic
     try:
         client = get_supabase_client()
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(datetime.UTC)
 
         if time_window == 'minute':
             start_time = now.replace(second=0, microsecond=0)
@@ -427,7 +427,7 @@ def get_system_rate_limit_stats() -> Dict[str, Any]:
     try:
         client = get_supabase_client()
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(datetime.UTC)
         minute_ago = now - timedelta(minutes=1)
         hour_ago = now - timedelta(hours=1)
         day_ago = now - timedelta(days=1)
@@ -480,7 +480,7 @@ def get_system_rate_limit_stats() -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Error getting system rate limit stats: {e}")
         return {
-            'timestamp': datetime.now(timezone.utc).isoformat(),
+            'timestamp': datetime.now(datetime.UTC).isoformat(),
             'minute': {'requests': 0, 'tokens': 0, 'active_keys': 0, 'requests_per_second': 0},
             'hour': {'requests': 0, 'tokens': 0, 'active_keys': 0, 'requests_per_minute': 0},
             'day': {'requests': 0, 'tokens': 0, 'active_keys': 0, 'requests_per_hour': 0}
@@ -505,7 +505,7 @@ def create_rate_limit_alert(api_key: str, alert_type: str, details: Dict[str, An
             'api_key': api_key,
             'alert_type': alert_type,
             'details': details,
-            'created_at': datetime.now(timezone.utc).isoformat(),
+            'created_at': datetime.now(datetime.UTC).isoformat(),
             'resolved': False
         }
 

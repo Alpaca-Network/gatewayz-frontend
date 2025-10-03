@@ -7,7 +7,7 @@ from src.db.api_keys import validate_api_key_permissions, create_api_key, get_ap
 
 from src.db.users import get_user
 from fastapi import APIRouter
-from datetime import datetime, timezone
+from datetime import datetime
 
 from fastapi import Depends, HTTPException
 
@@ -186,7 +186,7 @@ async def update_user_api_key_endpoint(
                     "rotated_count": result['rotated_count'],
                     "new_keys": result['new_keys'],
                     "phase4_integration": True,
-                    "timestamp": datetime.now(timezone.utc).isoformat()
+                    "timestamp": datetime.now(datetime.UTC).isoformat()
                 }
             except Exception as e:
                 logger.error(f"Bulk rotation failed: {e}")
@@ -245,7 +245,7 @@ async def update_user_api_key_endpoint(
             status="success",
             message=message,
             updated_key=ApiKeyResponse(**updated_key),
-            timestamp=datetime.now(timezone.utc)
+            timestamp=datetime.now(datetime.UTC)
         )
 
     except HTTPException:
@@ -339,7 +339,7 @@ async def delete_user_api_key(
             "status": "success",
             "message": "API key deleted successfully",
             "deleted_key_id": key_id,
-            "timestamp": datetime.now(timezone.utc).isoformat()
+            "timestamp": datetime.now(datetime.UTC).isoformat()
         }
 
     except HTTPException:
@@ -366,7 +366,7 @@ async def get_user_api_key_usage(api_key: str = Depends(get_api_key)):
         enhanced_usage = usage_stats.copy()
         enhanced_usage['audit_logging'] = {
             'enabled': True,
-            'last_audit_check': datetime.now(timezone.utc).isoformat(),
+            'last_audit_check': datetime.now(datetime.UTC).isoformat(),
             'security_events_tracked': True,
             'access_patterns_monitored': True
         }

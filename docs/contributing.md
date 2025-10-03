@@ -54,8 +54,8 @@ source .venv/bin/activate
 pip install -r requirements.txt
 
 # Set up environment variables
-cp .env.example .env  # If example exists
-# Or create .env file manually with required variables
+cp ..env.example ..env  # If example exists
+# Or create ..env file manually with required variables
 ```
 
 ### Required Environment Variables

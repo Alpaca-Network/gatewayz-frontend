@@ -1,7 +1,7 @@
 import logging
 import datetime
 
-from datetime import datetime, timezone
+from datetime import datetime
 
 import httpx
 
@@ -22,7 +22,7 @@ def get_cached_providers():
     """Get cached providers or fetch from OpenRouter if cache is expired"""
     try:
         if _provider_cache["data"] and _provider_cache["timestamp"]:
-            cache_age = (datetime.now(timezone.utc) - _provider_cache["timestamp"]).total_seconds()
+            cache_age = (datetime.now(datetime.UTC) - _provider_cache["timestamp"]).total_seconds()
             if cache_age < _provider_cache["ttl"]:
                 return _provider_cache["data"]
 
@@ -50,7 +50,7 @@ def fetch_providers_from_openrouter():
 
         providers_data = response.json()
         _provider_cache["data"] = providers_data.get("data", [])
-        _provider_cache["timestamp"] = datetime.now(timezone.utc)
+        _provider_cache["timestamp"] = datetime.now(datetime.UTC)
 
         return _provider_cache["data"]
     except Exception as e:

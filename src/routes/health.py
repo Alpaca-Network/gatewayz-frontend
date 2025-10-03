@@ -3,7 +3,7 @@ import logging
 
 from src.db.users import  get_user_count
 from fastapi import APIRouter
-from datetime import datetime, timezone
+from datetime import datetime
 
 from src.services.openrouter_client import get_openrouter_client
 from src.services.providers import get_cached_providers
@@ -33,7 +33,7 @@ async def health_check():
             "database": "connected",
             "openrouter": openrouter_status,
             "user_count": user_count,
-            "timestamp": datetime.now(timezone.utc).isoformat()
+            "timestamp": datetime.now(datetime.UTC).isoformat()
         }
     except Exception as e:
         logger.error(f"Health check failed: {e}")

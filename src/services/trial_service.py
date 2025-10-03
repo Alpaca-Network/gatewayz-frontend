@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/.env python3
 """
 Trial Management Service
 Handles free trial logic, expiration, and conversion to paid subscriptions
@@ -10,7 +10,7 @@ from typing import Optional
 from supabase import create_client, Client
 import os
 
-from src.schemas.trial_models import StartTrialRequest, StartTrialResponse, SubscriptionStatus, TrialStatusResponse, \
+from src.schemas.trials import StartTrialRequest, StartTrialResponse, SubscriptionStatus, TrialStatusResponse, \
     TrialStatus, ConvertTrialRequest, ConvertTrialResponse, TrackUsageRequest, TrackUsageResponse, \
     SubscriptionPlansResponse, SubscriptionPlan, PlanType, TrialValidationResult
 

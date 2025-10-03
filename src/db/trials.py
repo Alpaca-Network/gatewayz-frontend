@@ -1,7 +1,7 @@
 import logging
 import datetime
 from typing import Dict, Any
-from datetime import datetime, timezone
+from datetime import datetime
 from src.supabase_config import get_supabase_client
 
 logger = logging.getLogger(__name__)
@@ -126,7 +126,7 @@ def get_trial_analytics() -> Dict[str, Any]:
         # Calculate active trials (not expired)
         active_trials = 0
         expired_trials = 0
-        current_time = datetime.now(timezone.utc)
+        current_time = datetime.now(datetime.UTC)
 
         for key in trial_keys:
             trial_end_date = key.get('trial_end_date')

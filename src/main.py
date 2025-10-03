@@ -86,6 +86,12 @@ def create_app() -> FastAPI:
         logger.error(f"Failed to include health routes: {e}")
 
     try:
+        from src.routes import catalog as catalog_routes
+        app.include_router(catalog_routes.router)
+    except Exception as e:
+        logger.error(f"Failed to include catalog routes: {e}")
+
+    try:
         from src.routes import auth as auth_routes
         app.include_router(auth_routes.router)
     except Exception as e:
@@ -132,19 +138,6 @@ def create_app() -> FastAPI:
         app.include_router(rate_limits_routes.router)
     except Exception as e:
         logger.error(f"Failed to include rate_limits routes: {e}")
-
-    try:
-        from src.routes import chat as chat_routes
-        app.include_router(chat_routes.router)
-    except Exception as e:
-        logger.error(f"Failed to include chat routes: {e}")
-
-    # Register catalog routes LAST because it has catch-all /{provider_name}/{model_name} route
-    try:
-        from src.routes import catalog as catalog_routes
-        app.include_router(catalog_routes.router)
-    except Exception as e:
-        logger.error(f"Failed to include catalog routes: {e}")
 
     # Exception handler
     @app.exception_handler(Exception)

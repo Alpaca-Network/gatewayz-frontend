@@ -12,7 +12,7 @@ from src.db.users import create_enhanced_user, get_user, add_credits_to_user, ge
 from src.enhanced_notification_service import enhanced_notification_service
 from src.main import _provider_cache, _huggingface_cache, _models_cache
 from fastapi import APIRouter
-from datetime import datetime, timezone
+from datetime import datetime
 
 import httpx
 from fastapi import Depends, HTTPException
@@ -51,19 +51,12 @@ async def create_api_key(request: UserRegistrationRequest):
 
         # Send a welcome email with API key information
         try:
-            success = enhanced_notification_service.send_welcome_email(
+            enhanced_notification_service.send_welcome_email(
                 user_id=user_data['user_id'],
                 username=user_data['username'],
                 email=user_data['email'],
                 credits=user_data['credits']
             )
-            # Only mark welcome email as sent if it was actually sent successfully
-            if success:
-                from src.db.users import mark_welcome_email_sent
-                mark_welcome_email_sent(user_data['user_id'])
-                logger.info(f"Welcome email sent and marked as sent for admin user {user_data['user_id']}")
-            else:
-                logger.warning(f"Welcome email failed to send for admin user {user_data['user_id']}")
         except Exception as e:
             logger.warning(f"Failed to send welcome email: {e}")
 
@@ -81,7 +74,7 @@ async def create_api_key(request: UserRegistrationRequest):
             auth_method=request.auth_method,
             subscription_status="trial",
             message="API key created successfully!",
-            timestamp=datetime.now(timezone.utc)
+            timestamp=datetime.now(datetime.UTC)
         )
 
     except ValueError as e:
@@ -159,14 +152,14 @@ async def admin_monitor():
             # Still return the data but log the error
             return {
                 "status": "success",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(datetime.UTC).isoformat(),
                 "data": monitor_data,
                 "warning": "Data retrieved with errors, some information may be incomplete"
             }
 
         return {
             "status": "success",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(datetime.UTC).isoformat(),
             "data": monitor_data
         }
 
@@ -209,6 +202,209 @@ async def admin_set_rate_limit(req: SetRateLimitRequest):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+# Chat completion endpoint
+@router.post("/v1/chat/completions", tags=["chat"])
+async def proxy_chat(req: ProxyRequest, api_key: str = Depends(get_api_key)):
+    try:
+        user = get_user(api_key)
+        if not user:
+            raise HTTPException(status_code=401, detail="Invalid API key")
+
+        # Get environment tag from an API key
+        environment_tag = user.get('environment_tag', 'live')
+
+        # Check plan limits first
+        plan_check = enforce_plan_limits(user['id'], 0, environment_tag)  # Check with 0 tokens first
+        if not plan_check['allowed']:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Plan limit exceeded: {plan_check['reason']}"
+            )
+
+        # Check trial status first (simplified)
+        from src.services.trial_validation import validate_trial_access
+        trial_validation = validate_trial_access(api_key)
+
+        if not trial_validation['is_valid']:
+            if trial_validation.get('is_trial') and trial_validation.get('is_expired'):
+                raise HTTPException(
+                    status_code=403,
+                    detail=trial_validation['error'],
+                    headers={"X-Trial-Expired": "true", "X-Trial-End-Date": trial_validation.get('trial_end_date', '')}
+                )
+            elif trial_validation.get('is_trial'):
+                headers = {}
+                if 'remaining_tokens' in trial_validation:
+                    headers["X-Trial-Remaining-Tokens"] = str(trial_validation['remaining_tokens'])
+                if 'remaining_requests' in trial_validation:
+                    headers["X-Trial-Remaining-Requests"] = str(trial_validation['remaining_requests'])
+                if 'remaining_credits' in trial_validation:
+                    headers["X-Trial-Remaining-Credits"] = str(trial_validation['remaining_credits'])
+
+                raise HTTPException(
+                    status_code=429,
+                    detail=trial_validation['error'],
+                    headers=headers
+                )
+            else:
+                raise HTTPException(
+                    status_code=403,
+                    detail=trial_validation.get('error',
+                                                'Access denied. Please start a trial or subscribe to a paid plan.')
+                )
+
+        # Skip rate limiting for trial users - they have their own limits
+        if not trial_validation.get('is_trial', False):
+            rate_limit_manager = get_rate_limit_manager()
+            rate_limit_check = await rate_limit_manager.check_rate_limit(api_key, tokens_used=0)
+            if not rate_limit_check.allowed:
+                # Create rate limit alert
+                create_rate_limit_alert(api_key, "rate_limit_exceeded", {
+                    "reason": rate_limit_check.reason,
+                    "retry_after": rate_limit_check.retry_after,
+                    "remaining_requests": rate_limit_check.remaining_requests,
+                    "remaining_tokens": rate_limit_check.remaining_tokens
+                })
+
+                raise HTTPException(
+                    status_code=429,
+                    detail=f"Rate limit exceeded: {rate_limit_check.reason}",
+                    headers={"Retry-After": str(rate_limit_check.retry_after)} if rate_limit_check.retry_after else None
+                )
+
+        if user['credits'] <= 0:
+            raise HTTPException(status_code=402, detail="Insufficient credits")
+
+        try:
+            messages = [msg.model_dump() for msg in req.messages]
+            model = req.model
+
+            optional_params = {}
+            if req.max_tokens is not None:
+                optional_params['max_tokens'] = req.max_tokens
+            if req.temperature is not None:
+                optional_params['temperature'] = req.temperature
+            if req.top_p is not None:
+                optional_params['top_p'] = req.top_p
+            if req.frequency_penalty is not None:
+                optional_params['frequency_penalty'] = req.frequency_penalty
+            if req.presence_penalty is not None:
+                optional_params['presence_penalty'] = req.presence_penalty
+
+            response = make_openrouter_request_openai(messages, model, **optional_params)
+            processed_response = process_openrouter_response(response)
+
+            usage = processed_response.get('usage', {})
+            total_tokens = usage.get('total_tokens', 0)
+
+            # Check plan limits with actual token usage
+            plan_check_final = enforce_plan_limits(user['id'], total_tokens, environment_tag)
+            if not plan_check_final['allowed']:
+                raise HTTPException(
+                    status_code=429,
+                    detail=f"Plan limit exceeded: {plan_check_final['reason']}"
+                )
+
+            # Track trial usage BEFORE generating a response
+            if trial_validation.get('is_trial') and not trial_validation.get('is_expired'):
+                try:
+                    from src.services.trial_validation import track_trial_usage
+                    logger.info(f"Tracking trial usage: {total_tokens} tokens, 1 request")
+                    success = track_trial_usage(api_key, total_tokens, 1)
+                    if success:
+                        logger.info("Trial usage tracked successfully")
+                    else:
+                        logger.warning("Failed to track trial usage")
+                except Exception as e:
+                    logger.warning(f"Failed to track trial usage: {e}")
+
+            # Final rate limit check with actual token usage
+
+            # Skip final rate limiting for trial users - they have their own limits
+            if not trial_validation.get('is_trial', False):
+                rate_limit_check_final = await rate_limit_manager.check_rate_limit(api_key, tokens_used=total_tokens)
+                if not rate_limit_check_final.allowed:
+                    # Create rate limit alert
+                    create_rate_limit_alert(api_key, "rate_limit_exceeded", {
+                        "reason": rate_limit_check_final.reason,
+                        "retry_after": rate_limit_check_final.retry_after,
+                        "remaining_requests": rate_limit_check_final.remaining_requests,
+                        "remaining_tokens": rate_limit_check_final.remaining_tokens,
+                        "tokens_requested": total_tokens
+                    })
+
+                    raise HTTPException(
+                        status_code=429,
+                        detail=f"Rate limit exceeded: {rate_limit_check_final.reason}",
+                        headers={"Retry-After": str(
+                            rate_limit_check_final.retry_after)} if rate_limit_check_final.retry_after else None
+                    )
+
+            # Only check user credits for non-trial users
+            if not trial_validation.get('is_trial', False):
+                if user['credits'] < total_tokens:
+                    raise HTTPException(
+                        status_code=402,
+                        detail=f"Insufficient credits. Required: {total_tokens}, Available: {user['credits']}"
+                    )
+
+            try:
+                # Only deduct credits for non-trial users
+                if not trial_validation.get('is_trial', False):
+                    deduct_credits(api_key, total_tokens)
+                    cost = total_tokens * 0.02 / 1000
+                    record_usage(user['id'], api_key, req.model, total_tokens, cost)
+                update_rate_limit_usage(api_key, total_tokens)
+
+                # Increment API key usage count
+                increment_api_key_usage(api_key)
+
+            except ValueError as e:
+                logger.error(f"Failed to deduct credits: {e}")
+            except Exception as e:
+                logger.error(f"Error in usage recording process: {e}")
+
+            # Calculate balance after usage
+            if trial_validation.get('is_trial', False):
+                # For trial users, show trial credits remaining
+                trial_remaining_credits = trial_validation.get('remaining_credits', 0.0)
+                processed_response['gateway_usage'] = {
+                    'tokens_charged': total_tokens,
+                    'trial_credits_remaining': trial_remaining_credits,
+                    'user_api_key': f"{api_key[:10]}..."
+                }
+            else:
+                # For non-trial users, show user credits remaining
+                processed_response['gateway_usage'] = {
+                    'tokens_charged': total_tokens,
+                    'user_balance_after': user['credits'] - total_tokens,
+                    'user_api_key': f"{api_key[:10]}..."
+                }
+
+            return processed_response
+
+        except httpx.HTTPStatusError as e:
+            logger.error(f"OpenRouter HTTP error: {e.response.status_code} - {e.response.text}")
+            if e.response.status_code == 429:
+                raise HTTPException(status_code=429, detail="OpenRouter rate limit exceeded")
+            elif e.response.status_code == 401:
+                raise HTTPException(status_code=500, detail="OpenRouter authentication error")
+            elif e.response.status_code == 400:
+                raise HTTPException(status_code=400, detail=f"Invalid request: {e.response.text}")
+            else:
+                raise HTTPException(status_code=e.response.status_code, detail=f"OpenRouter error: {e.response.text}")
+
+        except httpx.RequestError as e:
+            logger.error(f"OpenRouter request error: {e}")
+            raise HTTPException(status_code=503, detail=f"OpenRouter service unavailable: {str(e)}")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error in chat completion: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
 # Admin cache management endpoints
 @router.post("/admin/refresh-providers", tags=["admin"])
 async def admin_refresh_providers():
@@ -223,7 +419,7 @@ async def admin_refresh_providers():
             "status": "success",
             "message": "Provider cache refreshed successfully",
             "total_providers": len(providers) if providers else 0,
-            "timestamp": datetime.now(timezone.utc).isoformat()
+            "timestamp": datetime.now(datetime.UTC).isoformat()
         }
 
     except Exception as e:
@@ -236,7 +432,7 @@ async def admin_cache_status():
     try:
         cache_age = None
         if _provider_cache["timestamp"]:
-            cache_age = (datetime.now(timezone.utc) - _provider_cache["timestamp"]).total_seconds()
+            cache_age = (datetime.now(datetime.UTC) - _provider_cache["timestamp"]).total_seconds()
 
         return {
             "status": "success",
@@ -247,7 +443,7 @@ async def admin_cache_status():
                 "is_valid": cache_age is not None and cache_age < _provider_cache["ttl"],
                 "total_cached_providers": len(_provider_cache["data"]) if _provider_cache["data"] else 0
             },
-            "timestamp": datetime.now(timezone.utc).isoformat()
+            "timestamp": datetime.now(datetime.UTC).isoformat()
         }
 
     except Exception as e:
@@ -261,7 +457,7 @@ async def admin_huggingface_cache_status():
     try:
         cache_age = None
         if _huggingface_cache["timestamp"]:
-            cache_age = (datetime.now(timezone.utc) - _huggingface_cache["timestamp"]).total_seconds()
+            cache_age = (datetime.now(datetime.UTC) - _huggingface_cache["timestamp"]).total_seconds()
 
         return {
             "huggingface_cache": {
@@ -270,7 +466,7 @@ async def admin_huggingface_cache_status():
                 "total_cached_models": len(_huggingface_cache["data"]),
                 "cached_model_ids": list(_huggingface_cache["data"].keys())
             },
-            "timestamp": datetime.now(timezone.utc).isoformat()
+            "timestamp": datetime.now(datetime.UTC).isoformat()
         }
 
     except Exception as e:
@@ -287,7 +483,7 @@ async def admin_refresh_huggingface_cache():
 
         return {
             "message": "Hugging Face cache cleared successfully",
-            "timestamp": datetime.now(timezone.utc).isoformat()
+            "timestamp": datetime.now(datetime.UTC).isoformat()
         }
 
     except Exception as e:
@@ -319,7 +515,7 @@ async def admin_test_huggingface( hugging_face_id: str = "openai/gpt-oss-120b"):
                         'author_data') else 0
                 }
             },
-            "timestamp": datetime.now(timezone.utc).isoformat()
+            "timestamp": datetime.now(datetime.UTC).isoformat()
         }
 
     except HTTPException:
@@ -369,7 +565,7 @@ async def admin_debug_models():
                 "sample_models": sample_models,
                 "cache_timestamp": _models_cache.get("timestamp"),
                 "cache_age_seconds": (
-                            datetime.now(timezone.utc) - _models_cache["timestamp"]).total_seconds() if _models_cache.get(
+                            datetime.now(datetime.UTC) - _models_cache["timestamp"]).total_seconds() if _models_cache.get(
                     "timestamp") else None
             },
             "providers_cache": {
@@ -377,11 +573,11 @@ async def admin_debug_models():
                 "sample_providers": sample_providers,
                 "cache_timestamp": _provider_cache.get("timestamp"),
                 "cache_age_seconds": (
-                            datetime.now(timezone.utc) - _provider_cache["timestamp"]).total_seconds() if _provider_cache.get(
+                            datetime.now(datetime.UTC) - _provider_cache["timestamp"]).total_seconds() if _provider_cache.get(
                     "timestamp") else None
             },
             "provider_matching_test": provider_matching_test,
-            "timestamp": datetime.now(timezone.utc).isoformat()
+            "timestamp": datetime.now(datetime.UTC).isoformat()
         }
 
     except Exception as e:
@@ -460,10 +656,10 @@ async def test_provider_matching():
             "cache_info": {
                 "provider_cache_timestamp": _provider_cache.get("timestamp"),
                 "provider_cache_age": (
-                            datetime.now(timezone.utc) - _provider_cache["timestamp"]).total_seconds() if _provider_cache.get(
+                            datetime.now(datetime.UTC) - _provider_cache["timestamp"]).total_seconds() if _provider_cache.get(
                     "timestamp") else None
             },
-            "timestamp": datetime.now(timezone.utc).isoformat()
+            "timestamp": datetime.now(datetime.UTC).isoformat()
         }
 
     except Exception as e:
@@ -505,7 +701,7 @@ async def test_refresh_providers():
                 "provider_site_url": enhanced_model.get('provider_site_url'),
                 "model_logo_url": enhanced_model.get('model_logo_url')
             },
-            "timestamp": datetime.now(timezone.utc).isoformat()
+            "timestamp": datetime.now(datetime.UTC).isoformat()
         }
 
     except Exception as e:
@@ -550,7 +746,7 @@ async def test_openrouter_providers():
                     "status_page_url": p.get('status_page_url')
                 } for p in providers[:5]
             ],
-            "timestamp": datetime.now(timezone.utc).isoformat()
+            "timestamp": datetime.now(datetime.UTC).isoformat()
         }
 
     except Exception as e:

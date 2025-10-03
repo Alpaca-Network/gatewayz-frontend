@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/.env python3
 """
 Notification Service
 Handles low balance notifications, trial expiry alerts, and user communication
@@ -12,14 +12,14 @@ from typing import Optional, Dict, Any
 import requests
 import resend
 
-from src.services.notification_models import (
+from src.schemas.notification import (
     NotificationPreferences, NotificationType,
     NotificationChannel, NotificationStatus, SendNotificationRequest,
     LowBalanceAlert, TrialExpiryAlert
 )
 from src.db.plans import get_user_plan
 from src.supabase_config import get_supabase_client
-from src.trials.trial_validation import validate_trial_access
+from src.services.trial_validation import validate_trial_access
 
 logger = logging.getLogger(__name__)
 
