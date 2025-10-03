@@ -1,6 +1,6 @@
 import logging
 import datetime
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import  Optional
 
 from fastapi import Depends, HTTPException
@@ -65,7 +65,7 @@ async def get_user_rate_limits_advanced(api_key: str = Depends(get_api_key)):
             "status": "success",
             "user_id": user["id"],
             "rate_limit_configs": enhanced_configs,
-            "timestamp": datetime.now(datetime.UTC).isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
 
     except HTTPException:
@@ -114,7 +114,7 @@ async def update_user_rate_limits_advanced(
             "message": "Rate limit configuration updated successfully",
             "key_id": key_id,
             "updated_config": rate_limit_config,
-            "timestamp": datetime.now(datetime.UTC).isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
 
     except HTTPException:
@@ -154,7 +154,7 @@ async def bulk_update_user_rate_limits(
             "message": f"Rate limit configuration updated for {updated_count} API keys",
             "updated_count": updated_count,
             "updated_config": rate_limit_config,
-            "timestamp": datetime.now(datetime.UTC).isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
 
     except HTTPException:
@@ -198,7 +198,7 @@ async def get_api_key_rate_limit_usage(
             "time_window": time_window,
             "usage_stats": usage_stats,
             "rate_limit_config": rate_limit_config,
-            "timestamp": datetime.now(datetime.UTC).isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
 
     except HTTPException:
@@ -217,7 +217,7 @@ async def get_system_rate_limits():
         return {
             "status": "success",
             "system_stats": stats,
-            "timestamp": datetime.now(datetime.UTC).isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
 
     except Exception as e:
@@ -239,7 +239,7 @@ async def get_rate_limit_alerts_endpoint(
             "status": "success",
             "total_alerts": len(alerts),
             "alerts": alerts,
-            "timestamp": datetime.now(datetime.UTC).isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
 
     except Exception as e:

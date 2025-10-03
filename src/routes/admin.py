@@ -222,7 +222,7 @@ async def proxy_chat(req: ProxyRequest, api_key: str = Depends(get_api_key)):
             )
 
         # Check trial status first (simplified)
-        from src.services.trial_validation import validate_trial_access
+        from src.trials.trial_validation import validate_trial_access
         trial_validation = validate_trial_access(api_key)
 
         if not trial_validation['is_valid']:
@@ -308,7 +308,7 @@ async def proxy_chat(req: ProxyRequest, api_key: str = Depends(get_api_key)):
             # Track trial usage BEFORE generating a response
             if trial_validation.get('is_trial') and not trial_validation.get('is_expired'):
                 try:
-                    from src.services.trial_validation import track_trial_usage
+                    from src.trials.trial_validation import track_trial_usage
                     logger.info(f"Tracking trial usage: {total_tokens} tokens, 1 request")
                     success = track_trial_usage(api_key, total_tokens, 1)
                     if success:

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/.env python3
 """
 Stripe Payment Service
 Service layer for handling Stripe payment operations

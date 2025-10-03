@@ -3,7 +3,7 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, Query
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import  HTTPException
 
@@ -59,7 +59,7 @@ async def get_providers(
             "returned": len(enhanced_providers),
             "offset": offset or 0,
             "limit": limit,
-            "timestamp": datetime.now(datetime.UTC).isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
     except HTTPException:
@@ -136,7 +136,7 @@ async def get_models(
             "offset": offset or 0,
             "limit": limit,
             "include_huggingface": include_huggingface,
-            "timestamp": datetime.now(datetime.UTC).isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
     except HTTPException:
@@ -179,7 +179,7 @@ async def get_specific_model(
             "provider": provider_name,
             "model": model_name,
             "include_huggingface": include_huggingface,
-            "timestamp": datetime.now(datetime.UTC).isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
     except HTTPException:

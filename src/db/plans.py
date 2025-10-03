@@ -1,7 +1,7 @@
 import logging
 import datetime
 from typing import Optional, Dict, Any, List
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from src.supabase_config import get_supabase_client
 
 logger = logging.getLogger(__name__)
@@ -119,7 +119,7 @@ def assign_user_plan(user_id: int, plan_id: int, duration_months: int = 1) -> bo
         client.table('user_plans').update({'is_active': False}).eq('user_id', user_id).execute()
 
         # Create new plan assignment
-        start_date = datetime.now(datetime.UTC)
+        start_date = datetime.now(timezone.utc)
         end_date = start_date + timedelta(days=30 * duration_months)
 
         user_plan_data = {
@@ -138,7 +138,7 @@ def assign_user_plan(user_id: int, plan_id: int, duration_months: int = 1) -> bo
         # Update user subscription status
         client.table('users').update({
             'subscription_status': 'active',
-            'updated_at': datetime.now(datetime.UTC).isoformat()
+            'updated_at': datetime.now(timezone.utc).isoformat()
         }).eq('id', user_id).execute()
 
         return True
@@ -168,7 +168,7 @@ def check_plan_entitlements(user_id: int, required_feature: str = None) -> Dict[
 
         # Check if plan is expired
         end_date = datetime.fromisoformat(user_plan['end_date'].replace('Z', '+00:00'))
-        now = datetime.now(datetime.UTC).replace(tzinfo=end_date.tzinfo)
+        now = datetime.now(timezone.utc).replace(tzinfo=end_date.tzinfo)
 
         if end_date < now:
             # Expired plan - revert to trial
@@ -229,7 +229,7 @@ def get_user_usage_within_plan_limits(user_id: int) -> Dict[str, Any]:
         entitlements = check_plan_entitlements(user_id)
 
         # Get usage for today and this month
-        now = datetime.now(datetime.UTC)
+        now = datetime.now(timezone.utc)
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 

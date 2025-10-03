@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/.env python3
 """
 Payment Database Operations
 CRUD operations for payment records in Supabase

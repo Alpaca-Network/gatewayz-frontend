@@ -275,4 +275,50 @@ class MigrationManager:
         if target_version:
             pending_migrations = [
                 m for m in pending_migrations
-                if m._
+                if m._version_tuple() <= Migration(target_version, "", "")._version_tuple()
+            ]
+
+        if not pending_migrations:
+            logger.info("✅ Database is up to date. No migrations to apply.")
+            return 0
+
+        logger.info(f"📋 Found {len(pending_migrations)} pending migration(s)")
+
+        # Apply migrations
+        applied_count = 0
+        for migration in pending_migrations:
+            try:
+                self.apply_migration(migration)
+                applied_count += 1
+            except Exception as e:
+                logger.error(f"Migration failed. Stopping at version {migration.version}")
+                raise
+
+        logger.info(f"✅ Successfully applied {applied_count} migration(s)")
+        return applied_count
+
+    def info(self) -> Dict:
+        """Get migration status information"""
+        applied = self.get_applied_migrations()
+        discovered = self.discover_migrations()
+        applied_versions = {m['version'] for m in applied if m['success']}
+
+        pending = [m for m in discovered if m.version not in applied_versions]
+
+        current_version = None
+        if applied:
+            successful = [m for m in applied if m['success']]
+            if successful:
+                current_version = successful[-1]['version']
+
+        return {
+            'current_version': current_version,
+            'applied_count': len(applied_versions),
+            'pending_count': len(pending),
+            'total_migrations': len(discovered),
+            'applied_migrations': applied,
+            'pending_migrations': [
+                {'version': m.version, 'description': m.description}
+                for m in pending
+            ]
+        }

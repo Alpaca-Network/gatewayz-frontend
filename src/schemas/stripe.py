@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/.env python3
 """
 Stripe Payment Processing Models
 Pydantic models for Stripe payment integration

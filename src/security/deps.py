@@ -4,7 +4,7 @@ import logging
 from src.db.users import get_user
 from fastapi import APIRouter, Depends
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import HTTPException, Request
 
@@ -86,7 +86,7 @@ async def get_api_key(credentials: HTTPAuthorizationCredentials = Depends(securi
                                         expiration_str = expiration_str + '+00:00'
 
                                     expiration = datetime.fromisoformat(expiration_str)
-                                    now = datetime.now(datetime.UTC).replace(tzinfo=expiration.tzinfo)
+                                    now = datetime.now(timezone.utc).replace(tzinfo=expiration.tzinfo)
 
                                     if expiration < now:
                                         logger.warning(f"Key {key_id} has expired")
@@ -119,7 +119,7 @@ async def get_api_key(credentials: HTTPAuthorizationCredentials = Depends(securi
                         # Update last used timestamp
                         try:
                             client.table(table_name).update({
-                                'last_used_at': datetime.now(datetime.UTC).isoformat()
+                                'last_used_at': datetime.now(timezone.utc).isoformat()
                             }).eq('id', key_id).execute()
                         except Exception as update_error:
                             logger.warning(f"Failed to update last_used_at for key {key_id}: {update_error}")
