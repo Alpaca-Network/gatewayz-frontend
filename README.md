@@ -6,6 +6,7 @@ A production-ready FastAPI application that provides a credit-metered API gatewa
 
 ### Core Features
 - **Multi-Model Support**: Access to hundreds of AI models via Gatewayz
+- **Chat Completions API**: OpenAI-compatible chat completions endpoint at `/v1/chat/completions`
 - **Advanced User Management**: Self-registration, profile management, and account deletion
 - **Multi-Key System**: Create, manage, and rotate multiple API keys with custom names and permissions
 - **Credit System**: Token-based credit deduction with real-time balance checking
