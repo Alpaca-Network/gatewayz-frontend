@@ -142,8 +142,14 @@ def create_app() -> FastAPI:
     try:
         from src.routes import chat as chat_routes
         app.include_router(chat_routes.router)
+        logger.info("Chat routes included successfully")
     except Exception as e:
         logger.error(f"Failed to include chat routes: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        # Re-raise in development to help debug
+        if not os.environ.get("VERCEL"):
+            raise
 
     # Register catalog routes LAST because it has catch-all /{provider_name}/{model_name} route
     try:
