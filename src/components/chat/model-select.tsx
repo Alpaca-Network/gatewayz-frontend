@@ -66,14 +66,19 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[300px] p-0">
-        <Command>
+      <PopoverContent
+        className="w-[300px] p-0"
+        align="start"
+        side="bottom"
+        sideOffset={8}
+      >
+        <Command shouldFilter={false}>
           <CommandInput placeholder="Search model..." />
           <CommandList>
             <CommandEmpty>No model found.</CommandEmpty>
             {Object.entries(modelGroups).map(([groupName, groupModels]) => (
                 <CommandGroup key={groupName} heading={groupName}>
-                    {groupModels.map((model) => (
+                    {groupModels.map((model, idx) => (
                     <CommandItem
                         key={model.value}
                         value={model.value}
