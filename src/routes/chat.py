@@ -24,6 +24,7 @@ async def chat_completions(req: ProxyRequest, api_key: str = Depends(get_api_key
     OpenAI-compatible chat completions endpoint.
 
     Handles credit deduction, rate limiting, trial validation, and proxies requests to OpenRouter.
+    Supports all OpenAI-compatible clients and model providers.
     """
     try:
         user = get_user(api_key)
