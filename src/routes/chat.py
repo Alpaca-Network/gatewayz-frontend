@@ -3,12 +3,14 @@ import httpx
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
+from typing import Optional
 
 from src.db.api_keys import increment_api_key_usage
 from src.db.plans import enforce_plan_limits
 from src.db.rate_limits import create_rate_limit_alert, update_rate_limit_usage
 from src.db.users import get_user, deduct_credits, record_usage
+from src.db.chat_history import create_chat_session, save_chat_message, get_chat_session
 from src.models import ProxyRequest
 from src.security.deps import get_api_key
 from src.services.openrouter_client import make_openrouter_request_openai, process_openrouter_response
@@ -22,7 +24,11 @@ router = APIRouter()
 
 
 @router.post("/v1/chat/completions", tags=["chat"])
-async def chat_completions(req: ProxyRequest, api_key: str = Depends(get_api_key)):
+async def chat_completions(
+    req: ProxyRequest, 
+    api_key: str = Depends(get_api_key),
+    session_id: Optional[int] = Query(None, description="Chat session ID to save messages to")
+):
     """
     OpenAI-compatible chat completions endpoint.
 
@@ -248,6 +254,45 @@ async def chat_completions(req: ProxyRequest, api_key: str = Depends(get_api_key
                     'user_api_key': f"{api_key[:10]}..."
                 }
 
+            # Save chat history if session_id is provided
+            if session_id:
+                try:
+                    # Verify session belongs to user
+                    session = await loop.run_in_executor(executor, get_chat_session, session_id, user['id'])
+                    if session:
+                        # Save user message
+                        user_message = messages[0] if messages else None
+                        if user_message and user_message.get('role') == 'user':
+                            await loop.run_in_executor(
+                                executor,
+                                save_chat_message,
+                                session_id,
+                                'user',
+                                user_message.get('content', ''),
+                                req.model,
+                                0  # User message tokens not counted
+                            )
+                        
+                        # Save assistant response
+                        assistant_content = processed_response.get('choices', [{}])[0].get('message', {}).get('content', '')
+                        if assistant_content:
+                            await loop.run_in_executor(
+                                executor,
+                                save_chat_message,
+                                session_id,
+                                'assistant',
+                                assistant_content,
+                                req.model,
+                                total_tokens
+                            )
+                        
+                        logger.info(f"Saved chat history to session {session_id}")
+                    else:
+                        logger.warning(f"Session {session_id} not found for user {user['id']}")
+                except Exception as e:
+                    logger.error(f"Failed to save chat history: {e}")
+                    # Don't fail the request if chat history saving fails
+            
             return processed_response
 
         except httpx.HTTPStatusError as e:
