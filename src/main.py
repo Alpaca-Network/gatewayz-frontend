@@ -139,10 +139,12 @@ def create_app() -> FastAPI:
     except Exception as e:
         logger.error(f"Failed to include rate_limits routes: {e}")
 
-    # Import chat routes - temporarily without try/except to surface errors
-    from src.routes import chat as chat_routes
-    app.include_router(chat_routes.router)
-    logger.info("Chat routes included successfully")
+    try:
+        from src.routes import chat as chat_routes
+        app.include_router(chat_routes.router)
+        logger.info("Chat routes included successfully")
+    except Exception as e:
+        logger.error(f"Failed to include chat routes: {e}")
 
     # Register catalog routes LAST because it has catch-all /{provider_name}/{model_name} route
     try:
