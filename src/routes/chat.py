@@ -30,8 +30,8 @@ async def chat_completions(req: ProxyRequest, api_key: str = Depends(get_api_key
     Supports all OpenAI-compatible clients and model providers.
     """
     try:
-        # Get event loop for async operations
-        loop = asyncio.get_event_loop()
+        # Get running event loop for async operations
+        loop = asyncio.get_running_loop()
 
         # Create thread pool executor for sync database operations
         executor = ThreadPoolExecutor()
