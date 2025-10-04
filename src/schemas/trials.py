@@ -4,10 +4,13 @@ Trial Management Models
 Pydantic models for free trial management
 """
 
-from pydantic import BaseModel, Field
-from typing import Optional, Dict, Any, List
+from pydantic import BaseModel, EmailStr, Field
+from typing import List, Dict, Any, Optional
 from datetime import datetime
-from src.schemas.common import SubscriptionStatus, PlanType
+from enum import Enum
+
+from src.schemas import SubscriptionStatus
+
 
 class TrialStatus(BaseModel):
     """Trial status model"""

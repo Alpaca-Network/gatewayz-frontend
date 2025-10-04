@@ -11,10 +11,11 @@ from src.db.plans import enforce_plan_limits
 from src.db.rate_limits import create_rate_limit_alert, update_rate_limit_usage
 from src.db.users import get_user, deduct_credits, record_usage
 from src.db.chat_history import create_chat_session, save_chat_message, get_chat_session
-from src.models import ProxyRequest
+from src.schemas import ProxyRequest
 from src.security.deps import get_api_key
 from src.services.openrouter_client import make_openrouter_request_openai, process_openrouter_response
 from src.services.rate_limiting import get_rate_limit_manager
+from src.services.trial_validation import validate_trial_access, track_trial_usage
 
 # Initialize logging
 logging.basicConfig(level=logging.ERROR)
@@ -67,7 +68,6 @@ async def chat_completions(
                 )
 
             # Check trial status first (simplified)
-            from src.trials.trial_validation import validate_trial_access
             trial_validation = await loop.run_in_executor(
                 executor,
                 validate_trial_access,
@@ -170,7 +170,6 @@ async def chat_completions(
             # Track trial usage BEFORE generating a response
             if trial_validation.get('is_trial') and not trial_validation.get('is_expired'):
                 try:
-                    from src.trials.trial_validation import track_trial_usage
                     logger.info(f"Tracking trial usage: {total_tokens} tokens, 1 request")
                     success = await loop.run_in_executor(
                         executor,

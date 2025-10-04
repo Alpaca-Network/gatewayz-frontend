@@ -7,7 +7,7 @@ from fastapi import Depends, HTTPException
 
 from src.db.rate_limits import get_user_rate_limits, check_rate_limit
 from src.db.users import get_user, get_user_usage_metrics, get_user_profile, update_user_profile, delete_user_account
-from src.models import UserProfileResponse, UserProfileUpdate, DeleteAccountResponse, DeleteAccountRequest
+from src.schemas import UserProfileResponse, DeleteAccountResponse, UserProfileUpdate, DeleteAccountRequest
 from src.security.deps import get_api_key
 from fastapi import APIRouter
 

@@ -161,7 +161,7 @@ def update_rate_limit_usage(api_key: str, tokens_used: int) -> None:
             return
 
         user_id = user['id']
-        now = datetime.now(timezone.utc)
+        now = datetime.now(datetime.UTC)
 
         # Ensure timestamp is timezone-aware
         from datetime import timezone

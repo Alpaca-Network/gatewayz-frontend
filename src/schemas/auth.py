@@ -1,7 +1,10 @@
 from pydantic import BaseModel, EmailStr
-from typing import List, Optional
+from typing import List, Dict, Any, Optional
 from datetime import datetime
-from src.schemas.common import AuthMethod
+from enum import Enum
+
+from src.schemas import AuthMethod
+
 
 class PrivyLinkedAccount(BaseModel):
     type: str

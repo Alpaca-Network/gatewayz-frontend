@@ -11,7 +11,8 @@ from datetime import datetime, timezone
 
 from fastapi import Depends, HTTPException
 
-from src.models import CreateApiKeyRequest, UpdateApiKeyRequest, UpdateApiKeyResponse, ApiKeyResponse, DeleteApiKeyRequest
+from src.schemas import CreateApiKeyRequest, UpdateApiKeyRequest, UpdateApiKeyResponse, ApiKeyResponse, \
+    DeleteApiKeyRequest
 from src.security.deps import get_api_key
 
 from src.supabase_config import get_supabase_client

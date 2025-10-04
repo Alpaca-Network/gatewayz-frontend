@@ -1,140 +1,298 @@
-import datetime
+"""
+FastAPI Security Dependencies
+Dependency injection functions for authentication and authorization
+"""
+
 import logging
-
-from src.db.users import get_user
-from fastapi import APIRouter, Depends
-
-from datetime import datetime, timezone
-
-from fastapi import HTTPException, Request
-
+from typing import Optional, Dict, Any, List
+from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from src.supabase_config import get_supabase_client
+from src.security.security import validate_api_key_security, audit_logger
+from src.db.users import get_user
 
-# Initialize logging
-logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
-router = APIRouter()
 
+# HTTP Bearer security scheme
 security = HTTPBearer()
 
-async def get_api_key(credentials: HTTPAuthorizationCredentials = Depends(security), request: Request = None):
-    """Validate an API key from either legacy or new system with access controls"""
+
+async def get_api_key(
+        credentials: HTTPAuthorizationCredentials = Depends(security),
+        request: Request = None
+) -> str:
+    """
+    Validate API key from Authorization header
+
+    Extracts and validates Bearer token with security checks including:
+    - Key existence and format
+    - Active status
+    - Expiration date
+    - Request limits
+    - IP allowlist
+    - Domain restrictions
+
+    Args:
+        credentials: HTTP Authorization credentials
+        request: FastAPI request object
+
+    Returns:
+        Validated API key string
+
+    Raises:
+        HTTPException: 401/403/422/429 depending on error type
+    """
     if not credentials:
-        raise HTTPException(status_code=422, detail="Authorization header is required")
+        raise HTTPException(
+            status_code=422,
+            detail="Authorization header is required"
+        )
 
     api_key = credentials.credentials
     if not api_key:
-        raise HTTPException(status_code=401, detail="API key is required")
+        raise HTTPException(
+            status_code=401,
+            detail="API key is required"
+        )
 
-    # Phase 4 secure validation with IP/domain enforcement
-    logger.info(f"Starting Phase 4 validation for key: {api_key[:20]}...")
-
-    # Extract security context from request
-    client_ip = "127.0.0.1"  # Default for testing
+    # Extract security context
+    client_ip = None
     referer = None
+    user_agent = None
 
     if request:
-        # Extract real IP and headers
-        client_ip = request.client.host if request.client else "127.0.0.1"
+        client_ip = request.client.host if request.client else None
         referer = request.headers.get("referer")
+        user_agent = request.headers.get("user-agent")
 
-    logger.info(f"Phase 4 validation: Client IP: {client_ip}, Referer: {referer}")
+    try:
+        # Validate API key with security checks
+        validated_key = validate_api_key_security(
+            api_key=api_key,
+            client_ip=client_ip,
+            referer=referer
+        )
 
-    # Phase 4 secure validation with IP/domain enforcement
-    client = get_supabase_client()
+        # Log successful authentication
+        user = get_user(api_key)
+        if user and request:
+            audit_logger.log_api_key_usage(
+                user_id=user['id'],
+                key_id=user.get('key_id', 0),
+                endpoint=request.url.path,
+                ip_address=client_ip or "unknown",
+                user_agent=user_agent
+            )
 
-    # Check both new and legacy API key tables
-    tables_to_check = ['api_keys', 'api_keys_new']
+        return validated_key
 
-    for table_name in tables_to_check:
-        logger.info(f"Phase 4 validation: Checking {table_name} table")
+    except ValueError as e:
+        error_message = str(e)
 
-        # Get all API keys from this table
-        result = client.table(table_name).select('*').execute()
+        # Map errors to HTTP status codes
+        status_code_map = {
+            "inactive": 401,
+            "expired": 401,
+            "limit reached": 429,
+            "not allowed": 403,
+            "IP address": 403,
+            "Domain": 403
+        }
 
-        logger.info(f"Phase 4 validation: Found {len(result.data) if result.data else 0} keys in {table_name}")
+        status_code = 401
+        for keyword, code in status_code_map.items():
+            if keyword in error_message:
+                status_code = code
+                break
 
-        if result.data:
-            for key_data in result.data:
-                stored_key = key_data['api_key']
+        # Log security violation
+        if client_ip:
+            audit_logger.log_security_violation(
+                violation_type="INVALID_API_KEY",
+                details=error_message,
+                ip_address=client_ip
+            )
 
-                # Check if it's a plain text key (current system)
-                if stored_key.startswith(('gw_live_', 'gw_test_', 'gw_staging_', 'gw_dev_')):
-                    # Compare with a provided key
-                    if stored_key == api_key:
-                        # Found matching key, now validate with Phase 4 security checks
-                        key_id = key_data['id']
+        raise HTTPException(status_code=status_code, detail=error_message)
 
-                        logger.info(
-                            f"Phase 4 validation: Found matching key {key_id} in {table_name}, IP: {client_ip}, Allowlist: {key_data.get('ip_allowlist', [])}")
+    except Exception as e:
+        logger.error(f"Unexpected error validating API key: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Internal authentication error"
+        )
 
-                        # Check if the key is active
-                        if not key_data.get('is_active', True):
-                            logger.warning(f"Key {key_id} is inactive")
-                            raise HTTPException(status_code=401, detail="API key is inactive")
 
-                        # Check expiration date
-                        if key_data.get('expiration_date'):
-                            try:
-                                expiration_str = key_data['expiration_date']
-                                if expiration_str:
-                                    if 'Z' in expiration_str:
-                                        expiration_str = expiration_str.replace('Z', '+00:00')
-                                    elif not expiration_str.endswith('+00:00'):
-                                        expiration_str = expiration_str + '+00:00'
+async def get_current_user(api_key: str = Depends(get_api_key)) -> Dict[str, Any]:
+    """
+    Get the current authenticated user
 
-                                    expiration = datetime.fromisoformat(expiration_str)
-                                    now = datetime.now(timezone.utc).replace(tzinfo=expiration.tzinfo)
+    Chains with get_api_key to extract full user object.
 
-                                    if expiration < now:
-                                        logger.warning(f"Key {key_id} has expired")
-                                        raise HTTPException(status_code=401, detail="API key has expired")
-                            except Exception as date_error:
-                                logger.warning(f"Error checking expiration for key {key_id}: {date_error}")
+    Args:
+        api_key: Validated API key
 
-                        # Check request limits
-                        if key_data.get('max_requests') is not None:
-                            if key_data.get('requests_used', 0) >= key_data['max_requests']:
-                                logger.warning(f"Key {key_id} request limit reached")
-                                raise HTTPException(status_code=429, detail="API key request limit reached")
+    Returns:
+        User dictionary with all data
 
-                        # IP allowlist enforcement
-                        ip_allowlist = key_data.get('ip_allowlist') or []
-                        if ip_allowlist and len(ip_allowlist) > 0 and ip_allowlist != ['']:
-                            logger.info(f"Checking IP {client_ip} against allowlist {ip_allowlist}")
-                            if client_ip not in ip_allowlist:
-                                logger.warning(f"IP {client_ip} not in allowlist {ip_allowlist}")
-                                raise HTTPException(status_code=403, detail="IP address not allowed for this API key")
-
-                        # Domain referrer enforcement
-                        domain_referrers = key_data.get('domain_referrers') or []
-                        if domain_referrers and len(domain_referrers) > 0 and domain_referrers != ['']:
-                            logger.info(f"Checking domain {referer} against allowlist {domain_referrers}")
-                            if not referer or not any(domain in referer for domain in domain_referrers):
-                                logger.warning(f"Domain {referer} not in allowlist {domain_referrers}")
-                                raise HTTPException(status_code=403, detail="Domain not allowed for this API key")
-
-                        # Update last used timestamp
-                        try:
-                            client.table(table_name).update({
-                                'last_used_at': datetime.now(timezone.utc).isoformat()
-                            }).eq('id', key_id).execute()
-                        except Exception as update_error:
-                            logger.warning(f"Failed to update last_used_at for key {key_id}: {update_error}")
-
-                        logger.info(f"Phase 4 validation successful for key {key_id} from {table_name}")
-                        return api_key
-
-    logger.info("Phase 4 validation: No matching key found, falling back to legacy validation")
-
-    # If no matching key found, try legacy validation
+    Raises:
+        HTTPException: 404 if user not found
+    """
     user = get_user(api_key)
-    if user:
-        # Legacy validation fallback
-        logger.info("Using legacy validation fallback")
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    return user
+
+
+async def require_admin(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    """
+    Require admin role
+
+    Args:
+        user: Current user
+
+    Returns:
+        User dictionary if admin
+
+    Raises:
+        HTTPException: 403 if not admin
+    """
+    is_admin = user.get('is_admin', False) or user.get('role') == 'admin'
+
+    if not is_admin:
+        audit_logger.log_security_violation(
+            violation_type="UNAUTHORIZED_ADMIN_ACCESS",
+            user_id=user.get('id'),
+            details="Non-admin attempted admin endpoint"
+        )
+        raise HTTPException(
+            status_code=403,
+            detail="Administrator privileges required"
+        )
+
+    return user
+
+
+async def get_optional_user(
+        credentials: Optional[HTTPAuthorizationCredentials] = Depends(HTTPBearer(auto_error=False)),
+        request: Request = None
+) -> Optional[Dict[str, Any]]:
+    """
+    Get user if authenticated, None otherwise
+
+    Use for endpoints that work for both auth and non-auth users.
+
+    Args:
+        credentials: Optional credentials
+        request: Request object
+
+    Returns:
+        User dict if authenticated, None otherwise
+    """
+    if not credentials:
+        return None
+
+    try:
+        api_key = await get_api_key(credentials, request)
+        return get_user(api_key)
+    except HTTPException:
+        return None
+
+
+async def require_active_subscription(
+        user: Dict[str, Any] = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """
+    Require active subscription
+
+    Args:
+        user: Current user
+
+    Returns:
+        User if subscription active
+
+    Raises:
+        HTTPException: 403 if subscription inactive
+    """
+    subscription_status = user.get('subscription_status', 'inactive')
+
+    if subscription_status not in ['active', 'trial']:
+        raise HTTPException(
+            status_code=403,
+            detail="Active subscription required"
+        )
+
+    return user
+
+
+async def check_credits(
+        user: Dict[str, Any] = Depends(get_current_user),
+        min_credits: float = 0.0
+) -> Dict[str, Any]:
+    """
+    Check if user has sufficient credits
+
+    Args:
+        user: Current user
+        min_credits: Minimum credits required
+
+    Returns:
+        User if credits sufficient
+
+    Raises:
+        HTTPException: 402 if insufficient credits
+    """
+    current_credits = user.get('credits', 0.0)
+
+    if current_credits < min_credits:
+        raise HTTPException(
+            status_code=402,
+            detail=f"Insufficient credits. Required: {min_credits}, Available: {current_credits}"
+        )
+
+    return user
+
+
+async def get_user_id(user: Dict[str, Any] = Depends(get_current_user)) -> int:
+    """Extract just the user ID (lightweight dependency)"""
+    return user['id']
+
+
+async def verify_key_permissions(
+        api_key: str = Depends(get_api_key),
+        required_permissions: List[str] = None
+) -> str:
+    """
+    Verify API key has specific permissions
+
+    Args:
+        api_key: Validated API key
+        required_permissions: List of required permissions
+
+    Returns:
+        API key if permissions valid
+
+    Raises:
+        HTTPException: 403 if insufficient permissions
+    """
+    if not required_permissions:
         return api_key
 
-    # If not found in either system, reject
-    raise HTTPException(status_code=401, detail="Invalid API key")
+    user = get_user(api_key)
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+
+    scope_permissions = user.get('scope_permissions', {})
+
+    for permission in required_permissions:
+        allowed_resources = scope_permissions.get(permission, [])
+
+        if '*' not in allowed_resources and permission not in allowed_resources:
+            raise HTTPException(
+                status_code=403,
+                detail=f"API key lacks '{permission}' permission"
+            )
+
+    return api_key

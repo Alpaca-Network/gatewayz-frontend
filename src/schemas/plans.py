@@ -1,7 +1,10 @@
-from pydantic import BaseModel, Field
-from typing import List, Dict, Optional
+from pydantic import BaseModel, EmailStr, Field
+from typing import List, Dict, Any, Optional
 from datetime import datetime
-from src.schemas.common import PlanType, SubscriptionStatus
+from enum import Enum
+
+from src.schemas import PlanType, SubscriptionStatus
+
 
 class PlanResponse(BaseModel):
     id: int

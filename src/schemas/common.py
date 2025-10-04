@@ -1,3 +1,6 @@
+from pydantic import BaseModel, EmailStr
+from typing import List, Dict, Any, Optional
+from datetime import datetime
 from enum import Enum
 
 class AuthMethod(str, Enum):

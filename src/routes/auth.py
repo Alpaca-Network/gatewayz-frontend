@@ -5,8 +5,8 @@ from datetime import datetime, timezone
 from src.enhanced_notification_service import enhanced_notification_service
 from fastapi import APIRouter, HTTPException
 
+from src.schemas import PrivyAuthResponse, PrivyAuthRequest, AuthMethod
 from src.supabase_config import get_supabase_client
-from src.models import PrivyAuthRequest, PrivyAuthResponse, AuthMethod
 from src.db.users import get_user_by_privy_id, create_enhanced_user
 
 # Initialize logging

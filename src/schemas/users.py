@@ -1,7 +1,10 @@
 from pydantic import BaseModel, EmailStr
-from typing import Dict, List, Any, Optional
+from typing import List, Dict, Any, Optional
 from datetime import datetime
-from src.schemas.common import AuthMethod, SubscriptionStatus
+from enum import Enum
+
+from src.schemas import AuthMethod, SubscriptionStatus
+
 
 class UserRegistrationRequest(BaseModel):
     username: str

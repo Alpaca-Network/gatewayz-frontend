@@ -9,7 +9,7 @@ from src.db.plans import get_all_plans, get_plan_by_id, get_user_plan, get_user_
     check_plan_entitlements, assign_user_plan
 from src.db.rate_limits import get_environment_usage_summary
 from src.db.users import get_user
-from src.models import PlanResponse, UserPlanResponse, PlanUsageResponse, PlanEntitlementsResponse, AssignPlanRequest
+from src.schemas import PlanResponse, UserPlanResponse, PlanUsageResponse, PlanEntitlementsResponse, AssignPlanRequest
 from src.security.deps import get_api_key
 from fastapi import APIRouter
 

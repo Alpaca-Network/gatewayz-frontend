@@ -44,25 +44,44 @@ from src.schemas.api_keys import (
     ApiKeyUsageResponse,
 )
 
-# Payment models
-# Payment models (update)
+# Payment models (includes both generic payment and Stripe-specific models)
 from src.schemas.payments import (
     PaymentStatus,
     PaymentCreate,
     PaymentResponse,
     PaymentUpdate,
+    PaymentRecord,
     SubscriptionPlan,
     CreateSubscriptionRequest,
     SubscriptionResponse,
     CreditPurchaseRequest,
     CreditPurchaseResponse,
     AddCreditsRequest,
+    # Stripe-specific models
+    StripeCurrency,
+    StripePaymentMethodType,
+    StripeWebhookEventType,
+    CreateCheckoutSessionRequest,
+    CheckoutSessionResponse,
+    CreatePaymentIntentRequest,
+    PaymentIntentResponse,
+    CreateStripeCustomerRequest,
+    StripeCustomerResponse,
+    CreateRefundRequest,
+    RefundResponse,
+    StripeWebhookEvent,
+    WebhookProcessingResult,
+    CreditPackage,
+    CreditPackagesResponse,
+    PaymentHistoryResponse,
+    PaymentSummary,
+    PaymentStatsResponse,
+    StripeErrorResponse,
 )
 
 # Plan models
 from src.schemas.plans import (
     PlanResponse,
-    SubscriptionPlan,
     SubscriptionHistory,
     SubscriptionPlansResponse,
     UserPlanResponse,
@@ -105,32 +124,6 @@ from src.schemas.proxy import (
     ProxyRequest,
 )
 
-# Stripe models
-from src.schemas.stripe import (
-    StripePaymentStatus,
-    StripeCurrency,
-    StripePaymentMethodType,
-    StripeWebhookEventType,
-    CreateCheckoutSessionRequest,
-    CheckoutSessionResponse,
-    CreatePaymentIntentRequest,
-    PaymentIntentResponse,
-    CreateStripeCustomerRequest,
-    StripeCustomerResponse,
-    CreateRefundRequest,
-    RefundResponse,
-    StripeWebhookEvent,
-    WebhookProcessingResult,
-    StripePaymentRecord,
-    PaymentHistoryResponse,
-    CreditPackage,
-    CreditPackagesResponse,
-    PurchaseCreditPackageRequest,
-    PaymentSummary,
-    PaymentStatsResponse,
-    StripeErrorResponse,
-)
-
 
 __all__ = [
     # Common
@@ -151,8 +144,16 @@ __all__ = [
     "CreateApiKeyRequest",
     "ApiKeyResponse",
     "UpdateApiKeyRequest",
+    # Payments
+    "PaymentStatus",
+    "PaymentCreate",
+    "PaymentResponse",
+    "PaymentUpdate",
+    "PaymentRecord",
     # Stripe
-    "StripePaymentStatus",
+    "StripeCurrency",
+    "StripePaymentMethodType",
+    "StripeWebhookEventType",
     "CreateCheckoutSessionRequest",
     "CheckoutSessionResponse",
     "CreatePaymentIntentRequest",
@@ -161,13 +162,6 @@ __all__ = [
     "WebhookProcessingResult",
     "CreditPackage",
     "PaymentSummary",
-
-    # Payments
-    "PaymentStatus",
-    "PaymentCreate",
-    "PaymentResponse",
-    "PaymentUpdate",
-
     # Plans
     "PlanResponse",
     "SubscriptionPlan",

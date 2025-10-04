@@ -6,22 +6,11 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
-# Import models directly
-
-# Import Phase 4 security modules
-# Phase 4 security features integrated into existing endpoints
-
-# Import database functions directly
-
-# Import new rate limiting module
-
-# Import notification modules
-
 # Import configuration
 from src.config import Config
 
 # Initialize logging
-logging.basicConfig(level=logging.ERROR)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Cache dictionaries for models and providers
@@ -43,15 +32,15 @@ _provider_cache = {
     "ttl": 3600  # 1 hour TTL
 }
 
+
 # Admin key validation
 def get_admin_key(credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer())):
     """Validate admin API key"""
     admin_key = credentials.credentials
-    # You should replace this with your actual admin key validation logic
-    # For now, using a simple check - replace with proper validation
     if admin_key != os.environ.get("ADMIN_API_KEY", "admin_key_placeholder"):
         raise HTTPException(status_code=401, detail="Invalid admin API key")
     return admin_key
+
 
 def create_app() -> FastAPI:
     app = FastAPI(
@@ -72,114 +61,109 @@ def create_app() -> FastAPI:
     # Security
     security = HTTPBearer()
 
-    # Include API routes
+    # ==================== Load All Routes ====================
+    logger.info("🚀 Loading application routes...")
 
-    try:
-        from src.routes import health as health_routes
-        app.include_router(health_routes.router)
-    except Exception as e:
-        logger.error(f"Failed to include health routes: {e}")
+    # Define all routes to load
+    routes_to_load = [
+        ("health", "Health Check"),
+        ("ping", "Ping Service"),
+        ("catalog", "Model Catalog"),
+        ("root", "Root/Home"),
+        ("auth", "Authentication"),
+        ("users", "User Management"),
+        ("api_keys", "API Key Management"),
+        ("admin", "Admin Operations"),
+        ("audit", "Audit Logs"),
+        ("notifications", "Notifications"),
+        ("plans", "Subscription Plans"),
+        ("rate_limits", "Rate Limiting"),
+        ("payments", "Stripe Payments"),
+        ("chat", "Chat Completions"),
+        ("chat_history", "Chat History"),
+        ("ranking", "Model Ranking"),
+    ]
 
-    try:
-        from src.routes import ping as ping_routes
-        app.include_router(ping_routes.router)
-    except Exception as e:
-        logger.error(f"Failed to include ping routes: {e}")
+    loaded_count = 0
+    failed_count = 0
 
-    try:
-        from src.routes import catalog as catalog_routes
-        app.include_router(catalog_routes.router)
-    except Exception as e:
-        logger.error(f"Failed to include catalog routes: {e}")
-    try:
-        from src.routes import root as root_routes
-        app.include_router(root_routes.router)
-    except Exception as e:
-        logger.error(f"Failed to include root routes: {e}")
+    for module_name, display_name in routes_to_load:
+        try:
+            # Import the route module
+            module = __import__(f"src.routes.{module_name}", fromlist=['router'])
+            router = getattr(module, 'router')
 
-    try:
-        from src.routes import health as health_routes
-        app.include_router(health_routes.router)
-    except Exception as e:
-        logger.error(f"Failed to include health routes: {e}")
+            # Include the router
+            app.include_router(router)
 
-    try:
-        from src.routes import catalog as catalog_routes
-        app.include_router(catalog_routes.router)
-    except Exception as e:
-        logger.error(f"Failed to include catalog routes: {e}")
+            # Log success
+            logger.info(f"  ✅ {display_name} ({module_name})")
+            loaded_count += 1
 
-    try:
-        from src.routes import auth as auth_routes
-        app.include_router(auth_routes.router)
-    except Exception as e:
-        logger.error(f"Failed to include auth routes: {e}")
+        except ImportError as e:
+            logger.warning(f"  ⚠️  {display_name} ({module_name}) - Module not found: {e}")
+            failed_count += 1
 
-    try:
-        from src.routes import users as users_routes
-        app.include_router(users_routes.router)
-    except Exception as e:
-        logger.error(f"Failed to include users routes: {e}")
+        except AttributeError as e:
+            logger.error(f"  ❌ {display_name} ({module_name}) - No router found: {e}")
+            failed_count += 1
 
-    try:
-        from src.routes import api_keys as api_keys_routes
-        app.include_router(api_keys_routes.router)
-    except Exception as e:
-        logger.error(f"Failed to include api_keys routes: {e}")
+        except Exception as e:
+            logger.error(f"  ❌ {display_name} ({module_name}) - Error: {e}")
+            failed_count += 1
 
-    try:
-        from src.routes import admin as admin_routes
-        app.include_router(admin_routes.router)
-    except Exception as e:
-        logger.error(f"Failed to include admin routes: {e}")
+    # Log summary
+    logger.info(f"\n📊 Route Loading Summary:")
+    logger.info(f"   ✅ Loaded: {loaded_count}")
+    if failed_count > 0:
+        logger.warning(f"   ❌ Failed: {failed_count}")
+    logger.info(f"   📍 Total: {loaded_count + failed_count}")
 
-    try:
-        from src.routes import audit as audit_routes
-        app.include_router(audit_routes.router)
-    except Exception as e:
-        logger.error(f"Failed to include audit routes: {e}")
+    # ==================== Exception Handler ====================
 
-    try:
-        from src.routes import notifications as notifications_routes
-        app.include_router(notifications_routes.router)
-    except Exception as e:
-        logger.error(f"Failed to include notifications routes: {e}")
-
-    try:
-        from src.routes import plans as plans_routes
-        app.include_router(plans_routes.router)
-    except Exception as e:
-        logger.error(f"Failed to include plans routes: {e}")
-
-    try:
-        from src.routes import rate_limits as rate_limits_routes
-        app.include_router(rate_limits_routes.router)
-    except Exception as e:
-        logger.error(f"Failed to include rate_limits routes: {e}")
-
-    # Exception handler
     @app.exception_handler(Exception)
     async def global_exception_handler(request: Request, exc: Exception):
-        logger.error(f"Unhandled exception: {exc}")
+        logger.error(f"Unhandled exception: {exc}", exc_info=True)
         return JSONResponse(
             status_code=500,
             content={"detail": "Internal server error"}
         )
 
-    # Startup initialization
+    # ==================== Startup Event ====================
+
     @app.on_event("startup")
     async def on_startup():
+        logger.info("\n🔧 Initializing application...")
+
         try:
-            # Validate configuration and initialize database lazily at startup
+            # Validate configuration
+            logger.info("  ⚙️  Validating configuration...")
             Config.validate()
+            logger.info("  ✅ Configuration validated")
+
+            # Initialize database
             try:
+                logger.info("  🗄️  Initializing database...")
                 from src.supabase_config import init_db
                 init_db()
+                logger.info("  ✅ Database initialized")
+
             except Exception as db_e:
-                # Log and continue to allow tests/mocks to override
-                logger.error(f"Database initialization failed at startup: {db_e}")
+                logger.warning(f"  ⚠️  Database initialization warning: {db_e}")
+
         except Exception as e:
-            logger.error(f"Startup initialization failed: {e}")
+            logger.error(f"  ❌ Startup initialization failed: {e}")
+
+        logger.info("\n🎉 Application startup complete!")
+        logger.info(f"📍 API Documentation: http://localhost:8000/docs")
+        logger.info(f"📍 Health Check: http://localhost:8000/health\n")
+
+    # ==================== Shutdown Event ====================
+
+    @app.on_event("shutdown")
+    async def on_shutdown():
+        logger.info("🛑 Shutting down application...")
+        logger.info("✅ Application shutdown complete")
 
     return app
 
@@ -190,4 +174,6 @@ app = create_app()
 # Vercel/CLI entry point
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("src.main:app", host="0.0.0.0", port=8000)
+
+    logger.info("🚀 Starting Gatewayz API server...")
+    uvicorn.run("src.main:app", host="0.0.0.0", port=8000, reload=True)

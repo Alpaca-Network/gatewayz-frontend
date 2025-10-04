@@ -105,8 +105,7 @@ class SlidingWindowRateLimiter:
             result = await self.fallback_manager.check_rate_limit(
                 api_key=api_key,
                 config=config,
-                tokens_used=tokens_used,
-                request_type=request_type
+                tokens_used=tokens_used
             )
 
             # Convert fallback result to our format

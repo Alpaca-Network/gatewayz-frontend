@@ -9,11 +9,12 @@ import argparse
 from datetime import datetime
 from tabulate import tabulate
 
+from db_config import get_db_connection
+from migration_manager import MigrationManager
+
 # Add parent directory to path
 sys.path.insert(0, '.')
 
-from src.db_config import get_db_connection
-from migrations.migration_manager import MigrationManager
 
 
 def format_datetime(dt):

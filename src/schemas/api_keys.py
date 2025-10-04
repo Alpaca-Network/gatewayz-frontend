@@ -1,6 +1,7 @@
-from pydantic import BaseModel
-from typing import Dict, List, Optional
+from pydantic import BaseModel, EmailStr
+from typing import List, Dict, Any, Optional
 from datetime import datetime
+from enum import Enum
 
 class CreateApiKeyRequest(BaseModel):
     key_name: str

@@ -6,7 +6,7 @@ from src.db.chat_history import (
     update_chat_session, delete_chat_session, get_chat_session_stats,
     search_chat_sessions, save_chat_message
 )
-from src.models import (
+from src.schemas.chat import (
     CreateChatSessionRequest, UpdateChatSessionRequest, ChatSessionResponse,
     ChatSessionsListResponse, ChatSessionStatsResponse, SearchChatSessionsRequest
 )
