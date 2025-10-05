@@ -10,7 +10,7 @@ from src.db.trials import get_trial_analytics
 from src.db.users import create_enhanced_user, get_user, add_credits_to_user, get_all_users, get_admin_monitor_data, \
     deduct_credits, record_usage
 from src.enhanced_notification_service import enhanced_notification_service
-from src.main import _provider_cache, _huggingface_cache, _models_cache
+from src.cache import _provider_cache, _huggingface_cache, _models_cache
 from fastapi import APIRouter
 from datetime import datetime, timezone
 
