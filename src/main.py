@@ -115,6 +115,12 @@ def create_app() -> FastAPI:
         logger.error(f"Failed to include ranking routes: {e}")
 
     try:
+        from src.routes import chat_history as chat_history_routes
+        app.include_router(chat_history_routes.router, prefix="/chat-history")
+    except Exception as e:
+        logger.error(f"Failed to include chat history routes: {e}")
+
+    try:
         from src.routes import rate_limits as rate_limits_routes
         app.include_router(rate_limits_routes.router)
     except Exception as e:
