@@ -48,7 +48,7 @@ class RateLimitResult:
 class SlidingWindowRateLimiter:
     """Simplified rate limiter using fallback system"""
     
-    def __init__(self):
+    def __init__(self, redis_client: Optional[redis.Redis] = None):
         # Use fallback rate limiting system (no Redis)
         self.fallback_manager = get_fallback_rate_limit_manager()
         
