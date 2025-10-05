@@ -2,8 +2,7 @@ import datetime
 import logging
 
 from src.config import Config
-
-from src.main import _huggingface_cache, _models_cache
+from src.cache import _huggingface_cache, _models_cache, _portkey_models_cache
 from fastapi import APIRouter
 from datetime import datetime, timezone
 
@@ -16,9 +15,25 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def get_cached_models():
-    """Get cached models or fetch from OpenRouter if cache is expired"""
+def get_cached_models(gateway: str = "openrouter"):
+    """Get cached models or fetch from the requested gateway if cache is expired"""
     try:
+        gateway = (gateway or "openrouter").lower()
+
+        if gateway == "portkey":
+            cache = _portkey_models_cache
+            if cache["data"] and cache["timestamp"]:
+                cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
+                if cache_age < cache["ttl"]:
+                    return cache["data"]
+            return fetch_models_from_portkey()
+
+        if gateway == "all":
+            openrouter_models = get_cached_models("openrouter") or []
+            portkey_models = get_cached_models("portkey") or []
+            return openrouter_models + portkey_models
+
+        # Default to OpenRouter
         if _models_cache["data"] and _models_cache["timestamp"]:
             cache_age = (datetime.now(timezone.utc) - _models_cache["timestamp"]).total_seconds()
             if cache_age < _models_cache["ttl"]:
@@ -27,7 +42,7 @@ def get_cached_models():
         # Cache expired or empty, fetch fresh data
         return fetch_models_from_openrouter()
     except Exception as e:
-        logger.error(f"Error getting cached models: {e}")
+        logger.error(f"Error getting cached models for gateway '{gateway}': {e}")
         return None
 
 
@@ -47,13 +62,101 @@ def fetch_models_from_openrouter():
         response.raise_for_status()
 
         models_data = response.json()
-        _models_cache["data"] = models_data.get("data", [])
+        models = models_data.get("data", [])
+        for model in models:
+            model.setdefault("source_gateway", "openrouter")
+        _models_cache["data"] = models
         _models_cache["timestamp"] = datetime.now(timezone.utc)
 
         return _models_cache["data"]
     except Exception as e:
         logger.error(f"Failed to fetch models from OpenRouter: {e}")
         return None
+
+
+
+def fetch_models_from_portkey():
+    """Fetch models from Portkey API and normalize to the catalog schema"""
+    try:
+        if not Config.PORTKEY_API_KEY:
+            logger.error("Portkey API key not configured")
+            return None
+
+        headers = {
+            "x-portkey-api-key": Config.PORTKEY_API_KEY
+        }
+
+        response = httpx.get("https://api.portkey.ai/v1/models", headers=headers, timeout=20.0)
+        response.raise_for_status()
+
+        payload = response.json()
+        raw_models = payload.get("data", [])
+        normalized_models = [normalize_portkey_model(model) for model in raw_models if model]
+
+        _portkey_models_cache["data"] = normalized_models
+        _portkey_models_cache["timestamp"] = datetime.now(timezone.utc)
+
+        return _portkey_models_cache["data"]
+    except httpx.HTTPStatusError as e:
+        logger.error(f"Portkey HTTP error: {e.response.status_code} - {e.response.text}")
+        return None
+    except Exception as e:
+        logger.error(f"Failed to fetch models from Portkey: {e}")
+        return None
+
+
+def normalize_portkey_model(portkey_model: dict) -> dict:
+    """Normalize Portkey catalog entries to resemble OpenRouter model shape"""
+    slug = portkey_model.get("slug") or portkey_model.get("canonical_slug") or portkey_model.get("id")
+    if not slug:
+        return {"source_gateway": "portkey", "raw_portkey": portkey_model or {}}
+
+    provider_slug = slug.split("/")[0] if "/" in slug else slug
+    provider_slug = provider_slug.lstrip("@")
+
+    model_handle = slug.split("/")[-1]
+    display_name = model_handle.replace("-", " ").replace("_", " ").title()
+
+    description = f"Portkey catalog entry for {slug}. Additional metadata sync is pending."
+
+    pricing = {
+        "prompt": "0",
+        "completion": "0",
+        "request": "0",
+        "image": "0",
+        "web_search": "0",
+        "internal_reasoning": "0"
+    }
+
+    architecture = {
+        "modality": "text->text",
+        "input_modalities": ["text"],
+        "output_modalities": ["text"],
+        "tokenizer": None,
+        "instruct_type": None
+    }
+
+    return {
+        "id": slug,
+        "slug": slug,
+        "canonical_slug": slug,
+        "hugging_face_id": None,
+        "name": display_name,
+        "created": None,
+        "description": description,
+        "context_length": 0,
+        "architecture": architecture,
+        "pricing": pricing,
+        "top_provider": None,
+        "per_request_limits": None,
+        "supported_parameters": [],
+        "default_parameters": {},
+        "provider_slug": provider_slug,
+        "provider_site_url": None,
+        "model_logo_url": None,
+        "source_gateway": "portkey",
+        "raw_portkey": portkey_model
+    }
 
 
 def fetch_specific_model_from_openrouter(provider_name: str, model_name: str):
