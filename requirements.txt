@@ -10,4 +10,5 @@ python-multipart==0.0.6
 email-validator==2.1.0
 cryptography==41.0.7
 resend==0.8.0
-redis==5.0.1stripe==13.0.1
+redis==5.0.1
+stripe==13.0.1
