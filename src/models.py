@@ -192,7 +192,10 @@ class ProxyRequest(BaseModel):
     top_p: Optional[float] = 1.0  # Default top_p
     frequency_penalty: Optional[float] = 0.0  # Default frequency_penalty
     presence_penalty: Optional[float] = 0.0  # Default presence_penalty
-    
+    provider: Optional[str] = "openrouter"  # Default provider: "openrouter" or "portkey"
+    portkey_provider: Optional[str] = "openai"  # Portkey sub-provider (e.g., "openai", "anthropic", "google-ai")
+    portkey_virtual_key: Optional[str] = None  # Portkey virtual key ID (if using Portkey's virtual key vault)
+
     class Config:
         extra = "allow"
 
@@ -437,6 +440,36 @@ class PlanEntitlementsResponse(BaseModel):
     can_access_feature: bool
     plan_expires: Optional[str] = None
     plan_expired: Optional[bool] = None
+
+
+# Image Generation Models
+class ImageGenerationRequest(BaseModel):
+    prompt: str
+    model: Optional[str] = "dall-e-3"  # Default image model (supports @provider/model format)
+    n: Optional[int] = 1  # Number of images to generate
+    size: Optional[str] = "1024x1024"  # Image size (e.g., "512x512", "1024x1024", "1792x1024")
+    quality: Optional[str] = "standard"  # "standard" or "hd"
+    style: Optional[str] = "natural"  # "natural" or "vivid"
+    provider: Optional[str] = None  # Auto-detected from model or explicit: "portkey", "deepinfra", "openai"
+    portkey_provider: Optional[str] = None  # Provider through Portkey (e.g., "@openai", "@stability-ai")
+    portkey_virtual_key: Optional[str] = None  # Portkey virtual key ID
+    response_format: Optional[str] = "url"  # "url" or "b64_json"
+
+    class Config:
+        extra = "allow"
+
+
+class ImageObject(BaseModel):
+    url: Optional[str] = None  # URL of the generated image
+    b64_json: Optional[str] = None  # Base64 encoded JSON of the image
+    revised_prompt: Optional[str] = None  # The actual prompt used after any revisions
+
+
+class ImageGenerationResponse(BaseModel):
+    created: int
+    data: List[ImageObject]
+    provider: str  # Which provider was used
+    model: str  # Which model was used
 
 
 

@@ -146,6 +146,13 @@ def create_app() -> FastAPI:
     except Exception as e:
         logger.error(f"Failed to include chat routes: {e}")
 
+    try:
+        from src.routes import images as images_routes
+        app.include_router(images_routes.router)
+        logger.info("Images routes included successfully")
+    except Exception as e:
+        logger.error(f"Failed to include images routes: {e}")
+
     # Register catalog routes LAST because it has catch-all /{provider_name}/{model_name} route
     try:
         from src.routes import catalog as catalog_routes

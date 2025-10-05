@@ -77,8 +77,13 @@ async def get_models(
     include_huggingface: bool = Query(
         True, description="Include Hugging Face metrics for models that have hugging_face_id"
     ),
+    gateway: Optional[str] = Query("openrouter", description="Gateway to use: 'openrouter' or 'portkey'"),
 ):
-    """Get all metric data of available models with optional filtering, pagination, Hugging Face integration, and provider logos"""
+    """Get all metric data of available models with optional filtering, pagination, Hugging Face integration, and provider logos
+
+    Note: Both OpenRouter and Portkey provide access to the same underlying models from various providers (OpenAI, Anthropic, Google, etc.).
+    The gateway parameter determines which service routes your requests.
+    """
     try:
         logger.info(f"Getting models with provider={provider}, limit={limit}, offset={offset}")
 
@@ -136,6 +141,8 @@ async def get_models(
             "offset": offset or 0,
             "limit": limit,
             "include_huggingface": include_huggingface,
+            "gateway": gateway,
+            "note": "Both OpenRouter and Portkey gateways provide access to these models. Use 'provider' parameter in chat completions to select which gateway to use.",
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 

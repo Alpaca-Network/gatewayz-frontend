@@ -12,6 +12,7 @@ from src.db.users import get_user, deduct_credits, record_usage
 from src.models import ProxyRequest
 from src.security.deps import get_api_key
 from src.services.openrouter_client import make_openrouter_request_openai, process_openrouter_response
+from src.services.portkey_client import make_portkey_request_openai, process_portkey_response
 from src.services.rate_limiting import get_rate_limit_manager
 
 # Initialize logging
@@ -139,10 +140,21 @@ async def chat_completions(req: ProxyRequest, api_key: str = Depends(get_api_key
             if req.presence_penalty is not None:
                 optional_params['presence_penalty'] = req.presence_penalty
 
-            # Make OpenRouter request asynchronously using partial for kwargs
-            make_request_func = partial(make_openrouter_request_openai, messages, model, **optional_params)
-            response = await loop.run_in_executor(executor, make_request_func)
-            processed_response = await loop.run_in_executor(executor, process_openrouter_response, response)
+            # Make request to selected provider asynchronously using partial for kwargs
+            provider = req.provider if req.provider else "openrouter"
+
+            if provider == "portkey":
+                # Use Portkey with specified sub-provider
+                portkey_provider = req.portkey_provider if req.portkey_provider else "openai"
+                portkey_virtual_key = req.portkey_virtual_key if hasattr(req, 'portkey_virtual_key') else None
+                make_request_func = partial(make_portkey_request_openai, messages, model, portkey_provider, portkey_virtual_key, **optional_params)
+                response = await loop.run_in_executor(executor, make_request_func)
+                processed_response = await loop.run_in_executor(executor, process_portkey_response, response)
+            else:
+                # Use OpenRouter (default)
+                make_request_func = partial(make_openrouter_request_openai, messages, model, **optional_params)
+                response = await loop.run_in_executor(executor, make_request_func)
+                processed_response = await loop.run_in_executor(executor, process_openrouter_response, response)
 
             usage = processed_response.get('usage', {})
             total_tokens = usage.get('total_tokens', 0)
