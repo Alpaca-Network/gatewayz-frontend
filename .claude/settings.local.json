@@ -17,7 +17,21 @@
       "Bash(curl -s http://127.0.0.1:8000/models)",
       "Bash(curl -s http://127.0.0.1:8000/provider)",
       "Bash(curl:*)",
-      "Bash(timeout:*)"
+      "Bash(timeout:*)",
+      "Bash(python -m pytest tests/test_app.py::test_chat_completions -v)",
+      "Bash(python:*)",
+      "Bash(API_KEY=\"gw_live_BPPM69PY-lTZC89c7oNN9ow1qruXxzjKu9uGHpeB0kc\")",
+      "Bash(git add:*)",
+      "Read(//c/Users/vaughn.v/Downloads/**)",
+      "Bash(uvicorn:*)",
+      "Bash(cat:*)",
+      "Bash(taskkill:*)",
+      "Bash(netstat:*)",
+      "Bash(awk:*)",
+      "Bash(xargs:*)",
+      "Bash(export PYTHONDONTWRITEBYTECODE=1)",
+      "Bash(echo:*)",
+      "Read(//c/Users/vaughn.v/Documents/GitHub/**)"
     ],
     "deny": [],
     "ask": []

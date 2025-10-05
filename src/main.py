@@ -24,25 +24,6 @@ from src.config import Config
 logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 
-# Cache dictionaries for models and providers
-_models_cache = {
-    "data": None,
-    "timestamp": None,
-    "ttl": 3600  # 1 hour TTL
-}
-
-_huggingface_cache = {
-    "data": {},
-    "timestamp": None,
-    "ttl": 3600  # 1 hour TTL
-}
-
-_provider_cache = {
-    "data": None,
-    "timestamp": None,
-    "ttl": 3600  # 1 hour TTL
-}
-
 # Admin key validation
 def get_admin_key(credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer())):
     """Validate admin API key"""
@@ -151,6 +132,13 @@ def create_app() -> FastAPI:
         logger.info("Chat routes included successfully")
     except Exception as e:
         logger.error(f"Failed to include chat routes: {e}")
+
+    try:
+        from src.routes import images as images_routes
+        app.include_router(images_routes.router)
+        logger.info("Images routes included successfully")
+    except Exception as e:
+        logger.error(f"Failed to include images routes: {e}")
 
     # Register catalog routes LAST because it has catch-all /{provider_name}/{model_name} route
     try:
