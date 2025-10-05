@@ -13,6 +13,26 @@ from src.config import Config
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Cache dictionaries for models and providers
+_models_cache = {
+    "data": None,
+    "timestamp": None,
+    "ttl": 3600  # 1 hour TTL
+}
+
+_huggingface_cache = {
+    "data": {},
+    "timestamp": None,
+    "ttl": 3600  # 1 hour TTL
+}
+
+_provider_cache = {
+    "data": None,
+    "timestamp": None,
+    "ttl": 3600  # 1 hour TTL
+}
+
+
 # Admin key validation
 def get_admin_key(credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer())):
     """Validate admin API key"""
@@ -101,37 +121,6 @@ def create_app() -> FastAPI:
 
     # ==================== Exception Handler ====================
 
-<<<<<<< HEAD
-=======
-    try:
-        from src.routes import rate_limits as rate_limits_routes
-        app.include_router(rate_limits_routes.router)
-    except Exception as e:
-        logger.error(f"Failed to include rate_limits routes: {e}")
-
-    try:
-        from src.routes import chat as chat_routes
-        app.include_router(chat_routes.router)
-        logger.info("Chat routes included successfully")
-    except Exception as e:
-        logger.error(f"Failed to include chat routes: {e}")
-
-    try:
-        from src.routes import images as images_routes
-        app.include_router(images_routes.router)
-        logger.info("Images routes included successfully")
-    except Exception as e:
-        logger.error(f"Failed to include images routes: {e}")
-
-    # Register catalog routes LAST because it has catch-all /{provider_name}/{model_name} route
-    try:
-        from src.routes import catalog as catalog_routes
-        app.include_router(catalog_routes.router)
-    except Exception as e:
-        logger.error(f"Failed to include catalog routes: {e}")
-
-    # Exception handler
->>>>>>> origin/main
     @app.exception_handler(Exception)
     async def global_exception_handler(request: Request, exc: Exception):
         logger.error(f"Unhandled exception: {exc}", exc_info=True)
