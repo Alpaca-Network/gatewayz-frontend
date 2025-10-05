@@ -24,25 +24,6 @@ from src.config import Config
 logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 
-# Cache dictionaries for models and providers
-_models_cache = {
-    "data": None,
-    "timestamp": None,
-    "ttl": 3600  # 1 hour TTL
-}
-
-_huggingface_cache = {
-    "data": {},
-    "timestamp": None,
-    "ttl": 3600  # 1 hour TTL
-}
-
-_provider_cache = {
-    "data": None,
-    "timestamp": None,
-    "ttl": 3600  # 1 hour TTL
-}
-
 # Admin key validation
 def get_admin_key(credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer())):
     """Validate admin API key"""
