@@ -97,11 +97,11 @@ Environment variables are typically set through your deployment platform:
 #### Vercel
 ```bash
 # Set environment variables via Vercel CLI
-vercel env add SUPABASE_URL
-vercel env add SUPABASE_KEY
-vercel env add OPENROUTER_API_KEY
-vercel env add OPENROUTER_SITE_URL
-vercel env add OPENROUTER_SITE_NAME
+vercel .env add SUPABASE_URL
+vercel .env add SUPABASE_KEY
+vercel .env add OPENROUTER_API_KEY
+vercel .env add OPENROUTER_SITE_URL
+vercel .env add OPENROUTER_SITE_NAME
 ```
 
 #### Other Platforms

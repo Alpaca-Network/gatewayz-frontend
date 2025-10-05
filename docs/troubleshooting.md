@@ -52,9 +52,9 @@ Database connection test failed: Connection refused
 **Solutions:**
 1. **Check .env File**
    ```bash
-   # Ensure .env file exists and is readable
-   ls -la .env
-   cat .env
+   # Ensure ..env file exists and is readable
+   ls -la ..env
+   cat ..env
    ```
 
 2. **Verify Required Variables**
@@ -285,7 +285,7 @@ Failed to fetch models from OpenRouter
 1. **Verify Environment Variables**
    ```bash
    # Check environment variables in production
-   vercel env ls  # For Vercel
+   vercel .env ls  # For Vercel
    heroku config  # For Heroku
    ```
 

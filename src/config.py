@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
+# Load environment variables from ..env file
 load_dotenv()
 
 class Config:
@@ -47,7 +47,7 @@ class Config:
         if missing_vars:
             raise RuntimeError(
                 f"Missing required environment variables: {', '.join(missing_vars)}\n"
-                "Please create a .env file with the following variables:\n"
+                "Please create a ..env file with the following variables:\n"
                 "SUPABASE_URL=your_supabase_project_url\n"
                 "SUPABASE_KEY=your_supabase_anon_key\n"
                 "OPENROUTER_API_KEY=your_openrouter_api_key\n"

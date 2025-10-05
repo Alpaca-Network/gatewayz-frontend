@@ -1,48 +1,16 @@
-#!/usr/bin/env python3
+#!/usr/bin/.env python3
 """
 Trial Management Models
-Pydantic models for free trial and subscription management
+Pydantic models for free trial management
 """
 
-from pydantic import BaseModel, Field
-from typing import Optional, Dict, Any, List
+from pydantic import BaseModel, EmailStr, Field
+from typing import List, Dict, Any, Optional
 from datetime import datetime
 from enum import Enum
 
-class SubscriptionStatus(str, Enum):
-    """Subscription status enumeration"""
-    TRIAL = "trial"
-    ACTIVE = "active"
-    EXPIRED = "expired"
-    CANCELLED = "cancelled"
-    SUSPENDED = "suspended"
+from src.schemas import SubscriptionStatus
 
-class PlanType(str, Enum):
-    """Plan type enumeration"""
-    FREE = "free"
-    DEV = "dev"
-    TEAM = "team"
-    CUSTOMIZE = "customize"
-
-class SubscriptionPlan(BaseModel):
-    """Subscription plan model"""
-    id: Optional[int] = None
-    plan_name: str
-    plan_type: PlanType
-    description: str = ""
-    monthly_price: float = 0.0
-    yearly_price: Optional[float] = None
-    daily_request_limit: int = 1000
-    monthly_request_limit: int = 1000
-    daily_token_limit: int = 100000
-    monthly_token_limit: int = 100000
-    max_concurrent_requests: int = 5
-    price_per_token: Optional[float] = None  # For pay-as-you-go plans
-    features: List[str] = Field(default_factory=list)
-    is_active: bool = True
-    is_pay_as_you_go: bool = False  # For Customize plan
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
 
 class TrialStatus(BaseModel):
     """Trial status model"""
@@ -71,18 +39,6 @@ class TrialUsage(BaseModel):
     usage_date: datetime
     requests_used: int = 0
     tokens_used: int = 0
-    created_at: Optional[datetime] = None
-
-class SubscriptionHistory(BaseModel):
-    """Subscription history model"""
-    id: Optional[int] = None
-    api_key_id: int
-    plan_name: str
-    status: SubscriptionStatus
-    start_date: datetime
-    end_date: Optional[datetime] = None
-    price_paid: float = 0.0
-    payment_method: Optional[str] = None
     created_at: Optional[datetime] = None
 
 class TrialConversion(BaseModel):
@@ -150,12 +106,6 @@ class TrackUsageResponse(BaseModel):
     remaining_tokens: int
     remaining_requests: int
     remaining_credits: float
-    message: str
-
-class SubscriptionPlansResponse(BaseModel):
-    """Response for available subscription plans"""
-    success: bool
-    plans: List[SubscriptionPlan]
     message: str
 
 class TrialAnalytics(BaseModel):

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/.env python3
 """
 Advanced Rate Limiting Module
 Implements sliding-window rate limiting, burst controls, and configurable limits per key.
@@ -105,8 +105,7 @@ class SlidingWindowRateLimiter:
             result = await self.fallback_manager.check_rate_limit(
                 api_key=api_key,
                 config=config,
-                tokens_used=tokens_used,
-                request_type=request_type
+                tokens_used=tokens_used
             )
 
             # Convert fallback result to our format

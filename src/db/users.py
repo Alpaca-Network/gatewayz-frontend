@@ -110,6 +110,31 @@ def get_user(api_key: str) -> Optional[Dict[str, Any]]:
         return None
 
 
+def get_user_by_id(user_id: int) -> Optional[Dict[str, Any]]:
+    """
+    Get user by user ID (primary key)
+
+    Args:
+        user_id: User's numeric ID
+
+    Returns:
+        User dictionary if found, None otherwise
+    """
+    try:
+        client = get_supabase_client()
+
+        result = client.table('users').select('*').eq('id', user_id).execute()
+
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+
+        return None
+
+    except Exception as e:
+        logger.error(f"Error getting user by ID {user_id}: {e}")
+        return None
+
+
 def get_user_by_privy_id(privy_user_id: str) -> Optional[Dict[str, Any]]:
     """Get user by Privy user ID"""
     try:

@@ -42,9 +42,9 @@ pip install -r requirements.txt
 ### 4. Environment Configuration
 Create a `.env` file in the project root:
 ```bash
-cp .env.example .env  # If example exists
+cp ..env.example ..env  # If example exists
 # Or create manually
-touch .env
+touch ..env
 ```
 
 ## Environment Variables

@@ -10,9 +10,9 @@ from fastapi import APIRouter, Query
 from datetime import datetime, timezone
 from fastapi import Depends, HTTPException
 from src.security.deps import get_api_key
-from src.services.notification_models import NotificationPreferences, UpdateNotificationPreferencesRequest, \
+from src.schemas.notification import NotificationPreferences, UpdateNotificationPreferencesRequest, \
     NotificationType, SendNotificationRequest, NotificationChannel, NotificationStats
-from src.services.notification_service import notification_service
+from src.services.notification import notification_service
 
 from src.supabase_config import get_supabase_client
 

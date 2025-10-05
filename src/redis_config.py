@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/.env python3
 """
 Redis Configuration Module
 Handles Redis connection and configuration for rate limiting and caching.

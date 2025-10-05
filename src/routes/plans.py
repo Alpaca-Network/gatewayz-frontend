@@ -9,7 +9,7 @@ from src.db.plans import get_all_plans, get_plan_by_id, get_user_plan, get_user_
     check_plan_entitlements, assign_user_plan
 from src.db.rate_limits import get_environment_usage_summary
 from src.db.users import get_user
-from src.models import PlanResponse, UserPlanResponse, PlanUsageResponse, PlanEntitlementsResponse, AssignPlanRequest
+from src.schemas import PlanResponse, UserPlanResponse, PlanUsageResponse, PlanEntitlementsResponse, AssignPlanRequest
 from src.security.deps import get_api_key
 from fastapi import APIRouter
 
@@ -202,7 +202,7 @@ async def get_user_environment_usage(api_key: str = Depends(get_api_key)):
 async def get_trial_status(api_key: str = Depends(get_api_key)):
     """Get the current trial status for the authenticated API key"""
     try:
-        from src.trials.trial_validation import validate_trial_access
+        from src.services.trial_validation import validate_trial_access
         trial_status = validate_trial_access(api_key)
 
         return {

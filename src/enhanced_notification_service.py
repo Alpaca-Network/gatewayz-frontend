@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/.env python3
 """
 Enhanced Notification Service with Professional Email Templates
 Adds welcome emails, password reset, usage reports, and more
@@ -12,7 +12,7 @@ import json
 import resend
 import secrets
 
-from src.services.notification_models import (
+from src.schemas.notification import (
     NotificationPreferences, NotificationType,
     NotificationChannel, NotificationStatus, SendNotificationRequest
 )

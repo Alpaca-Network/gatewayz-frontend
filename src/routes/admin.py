@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 import httpx
 from fastapi import Depends, HTTPException
 
-from src.models import UserRegistrationResponse, UserRegistrationRequest, AddCreditsRequest, SetRateLimitRequest, \
+from src.schemas import UserRegistrationResponse, UserRegistrationRequest, AddCreditsRequest, SetRateLimitRequest, \
     ProxyRequest
 from src.security.deps import get_api_key
 
@@ -25,6 +25,7 @@ from src.services.models import fetch_huggingface_model, get_cached_models, enha
 from src.services.openrouter_client import make_openrouter_request_openai, process_openrouter_response
 from src.services.providers import get_cached_providers, fetch_providers_from_openrouter
 from src.services.rate_limiting import get_rate_limit_manager
+from src.services.trial_validation import validate_trial_access, track_trial_usage
 
 # Initialize logging
 logging.basicConfig(level=logging.ERROR)
@@ -51,19 +52,12 @@ async def create_api_key(request: UserRegistrationRequest):
 
         # Send a welcome email with API key information
         try:
-            success = enhanced_notification_service.send_welcome_email(
+            enhanced_notification_service.send_welcome_email(
                 user_id=user_data['user_id'],
                 username=user_data['username'],
                 email=user_data['email'],
                 credits=user_data['credits']
             )
-            # Only mark welcome email as sent if it was actually sent successfully
-            if success:
-                from src.db.users import mark_welcome_email_sent
-                mark_welcome_email_sent(user_data['user_id'])
-                logger.info(f"Welcome email sent and marked as sent for admin user {user_data['user_id']}")
-            else:
-                logger.warning(f"Welcome email failed to send for admin user {user_data['user_id']}")
         except Exception as e:
             logger.warning(f"Failed to send welcome email: {e}")
 
@@ -207,6 +201,207 @@ async def admin_set_rate_limit(req: SetRateLimitRequest):
     except Exception as e:
         logger.error(f"Error setting rate limits: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+# Chat completion endpoint
+@router.post("/v1/chat/completions", tags=["chat"])
+async def proxy_chat(req: ProxyRequest, api_key: str = Depends(get_api_key)):
+    try:
+        user = get_user(api_key)
+        if not user:
+            raise HTTPException(status_code=401, detail="Invalid API key")
+
+        # Get environment tag from an API key
+        environment_tag = user.get('environment_tag', 'live')
+
+        # Check plan limits first
+        plan_check = enforce_plan_limits(user['id'], 0, environment_tag)  # Check with 0 tokens first
+        if not plan_check['allowed']:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Plan limit exceeded: {plan_check['reason']}"
+            )
+
+        # Check trial status first (simplified)
+        trial_validation = validate_trial_access(api_key)
+
+        if not trial_validation['is_valid']:
+            if trial_validation.get('is_trial') and trial_validation.get('is_expired'):
+                raise HTTPException(
+                    status_code=403,
+                    detail=trial_validation['error'],
+                    headers={"X-Trial-Expired": "true", "X-Trial-End-Date": trial_validation.get('trial_end_date', '')}
+                )
+            elif trial_validation.get('is_trial'):
+                headers = {}
+                if 'remaining_tokens' in trial_validation:
+                    headers["X-Trial-Remaining-Tokens"] = str(trial_validation['remaining_tokens'])
+                if 'remaining_requests' in trial_validation:
+                    headers["X-Trial-Remaining-Requests"] = str(trial_validation['remaining_requests'])
+                if 'remaining_credits' in trial_validation:
+                    headers["X-Trial-Remaining-Credits"] = str(trial_validation['remaining_credits'])
+
+                raise HTTPException(
+                    status_code=429,
+                    detail=trial_validation['error'],
+                    headers=headers
+                )
+            else:
+                raise HTTPException(
+                    status_code=403,
+                    detail=trial_validation.get('error',
+                                                'Access denied. Please start a trial or subscribe to a paid plan.')
+                )
+
+        # Skip rate limiting for trial users - they have their own limits
+        if not trial_validation.get('is_trial', False):
+            rate_limit_manager = get_rate_limit_manager()
+            rate_limit_check = await rate_limit_manager.check_rate_limit(api_key, tokens_used=0)
+            if not rate_limit_check.allowed:
+                # Create rate limit alert
+                create_rate_limit_alert(api_key, "rate_limit_exceeded", {
+                    "reason": rate_limit_check.reason,
+                    "retry_after": rate_limit_check.retry_after,
+                    "remaining_requests": rate_limit_check.remaining_requests,
+                    "remaining_tokens": rate_limit_check.remaining_tokens
+                })
+
+                raise HTTPException(
+                    status_code=429,
+                    detail=f"Rate limit exceeded: {rate_limit_check.reason}",
+                    headers={"Retry-After": str(rate_limit_check.retry_after)} if rate_limit_check.retry_after else None
+                )
+
+        if user['credits'] <= 0:
+            raise HTTPException(status_code=402, detail="Insufficient credits")
+
+        try:
+            messages = [msg.model_dump() for msg in req.messages]
+            model = req.model
+
+            optional_params = {}
+            if req.max_tokens is not None:
+                optional_params['max_tokens'] = req.max_tokens
+            if req.temperature is not None:
+                optional_params['temperature'] = req.temperature
+            if req.top_p is not None:
+                optional_params['top_p'] = req.top_p
+            if req.frequency_penalty is not None:
+                optional_params['frequency_penalty'] = req.frequency_penalty
+            if req.presence_penalty is not None:
+                optional_params['presence_penalty'] = req.presence_penalty
+
+            response = make_openrouter_request_openai(messages, model, **optional_params)
+            processed_response = process_openrouter_response(response)
+
+            usage = processed_response.get('usage', {})
+            total_tokens = usage.get('total_tokens', 0)
+
+            # Check plan limits with actual token usage
+            plan_check_final = enforce_plan_limits(user['id'], total_tokens, environment_tag)
+            if not plan_check_final['allowed']:
+                raise HTTPException(
+                    status_code=429,
+                    detail=f"Plan limit exceeded: {plan_check_final['reason']}"
+                )
+
+            # Track trial usage BEFORE generating a response
+            if trial_validation.get('is_trial') and not trial_validation.get('is_expired'):
+                try:
+                    logger.info(f"Tracking trial usage: {total_tokens} tokens, 1 request")
+                    success = track_trial_usage(api_key, total_tokens, 1)
+                    if success:
+                        logger.info("Trial usage tracked successfully")
+                    else:
+                        logger.warning("Failed to track trial usage")
+                except Exception as e:
+                    logger.warning(f"Failed to track trial usage: {e}")
+
+            # Final rate limit check with actual token usage
+
+            # Skip final rate limiting for trial users - they have their own limits
+            if not trial_validation.get('is_trial', False):
+                rate_limit_check_final = await rate_limit_manager.check_rate_limit(api_key, tokens_used=total_tokens)
+                if not rate_limit_check_final.allowed:
+                    # Create rate limit alert
+                    create_rate_limit_alert(api_key, "rate_limit_exceeded", {
+                        "reason": rate_limit_check_final.reason,
+                        "retry_after": rate_limit_check_final.retry_after,
+                        "remaining_requests": rate_limit_check_final.remaining_requests,
+                        "remaining_tokens": rate_limit_check_final.remaining_tokens,
+                        "tokens_requested": total_tokens
+                    })
+
+                    raise HTTPException(
+                        status_code=429,
+                        detail=f"Rate limit exceeded: {rate_limit_check_final.reason}",
+                        headers={"Retry-After": str(
+                            rate_limit_check_final.retry_after)} if rate_limit_check_final.retry_after else None
+                    )
+
+            # Only check user credits for non-trial users
+            if not trial_validation.get('is_trial', False):
+                if user['credits'] < total_tokens:
+                    raise HTTPException(
+                        status_code=402,
+                        detail=f"Insufficient credits. Required: {total_tokens}, Available: {user['credits']}"
+                    )
+
+            try:
+                # Only deduct credits for non-trial users
+                if not trial_validation.get('is_trial', False):
+                    deduct_credits(api_key, total_tokens)
+                    cost = total_tokens * 0.02 / 1000
+                    record_usage(user['id'], api_key, req.model, total_tokens, cost)
+                update_rate_limit_usage(api_key, total_tokens)
+
+                # Increment API key usage count
+                increment_api_key_usage(api_key)
+
+            except ValueError as e:
+                logger.error(f"Failed to deduct credits: {e}")
+            except Exception as e:
+                logger.error(f"Error in usage recording process: {e}")
+
+            # Calculate balance after usage
+            if trial_validation.get('is_trial', False):
+                # For trial users, show trial credits remaining
+                trial_remaining_credits = trial_validation.get('remaining_credits', 0.0)
+                processed_response['gateway_usage'] = {
+                    'tokens_charged': total_tokens,
+                    'trial_credits_remaining': trial_remaining_credits,
+                    'user_api_key': f"{api_key[:10]}..."
+                }
+            else:
+                # For non-trial users, show user credits remaining
+                processed_response['gateway_usage'] = {
+                    'tokens_charged': total_tokens,
+                    'user_balance_after': user['credits'] - total_tokens,
+                    'user_api_key': f"{api_key[:10]}..."
+                }
+
+            return processed_response
+
+        except httpx.HTTPStatusError as e:
+            logger.error(f"OpenRouter HTTP error: {e.response.status_code} - {e.response.text}")
+            if e.response.status_code == 429:
+                raise HTTPException(status_code=429, detail="OpenRouter rate limit exceeded")
+            elif e.response.status_code == 401:
+                raise HTTPException(status_code=500, detail="OpenRouter authentication error")
+            elif e.response.status_code == 400:
+                raise HTTPException(status_code=400, detail=f"Invalid request: {e.response.text}")
+            else:
+                raise HTTPException(status_code=e.response.status_code, detail=f"OpenRouter error: {e.response.text}")
+
+        except httpx.RequestError as e:
+            logger.error(f"OpenRouter request error: {e}")
+            raise HTTPException(status_code=503, detail=f"OpenRouter service unavailable: {str(e)}")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error in chat completion: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
 # Admin cache management endpoints
