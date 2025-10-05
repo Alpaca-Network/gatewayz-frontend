@@ -44,93 +44,46 @@ def create_payment(
         Created payment record or None if failed
     """
     try:
-        # TEMPORARY BYPASS: Return mock payment record for testing
-        logger.warning("⚠️ BYPASSING DATABASE - Using mock payment record for testing")
+        client = get_supabase_client()
 
+        # Calculate amount in cents
         amount_cents = int(amount * 100)
 
-        mock_payment = {
-            'id': 99999,  # Mock ID
+        # Prepare payment data
+        payment_data = {
             'user_id': user_id,
             'amount_usd': amount,
             'amount_cents': amount_cents,
-            'credits_purchased': amount_cents,
+            'credits_purchased': amount_cents,  # 1 credit = 1 cent
             'bonus_credits': 0,
             'currency': currency.lower(),
             'payment_method': payment_method,
             'status': status,
-            'stripe_payment_intent_id': stripe_payment_intent_id,
-            'stripe_checkout_session_id': stripe_session_id,
-            'stripe_customer_id': stripe_customer_id,
             'metadata': metadata or {},
-            'created_at': datetime.now(timezone.utc)
+            'created_at': datetime.now(timezone.utc).isoformat()
         }
 
-        logger.info(f"✅ Mock payment record created: {mock_payment['id']}")
-        return mock_payment
+        # Add Stripe fields if provided
+        if stripe_payment_intent_id:
+            payment_data['stripe_payment_intent_id'] = stripe_payment_intent_id
 
-        # ORIGINAL CODE (commented out for testing):
-        # amount_cents = int(amount * 100)
-        #
-        # with get_db_connection() as conn:
-        #     cursor = conn.cursor()
-        #
-        #     query = """
-        #         INSERT INTO payments (
-        #             user_id, amount_usd, amount_cents, credits_purchased,
-        #             bonus_credits, currency, payment_method, status,
-        #             stripe_payment_intent_id, stripe_checkout_session_id,
-        #             stripe_customer_id, metadata, created_at
-        #         )
-        #         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        #         RETURNING id, user_id, amount_usd, amount_cents, credits_purchased,
-        #                   bonus_credits, currency, payment_method, status,
-        #                   stripe_payment_intent_id, stripe_checkout_session_id,
-        #                   stripe_customer_id, metadata, created_at
-        #     """
-        #
-        #     cursor.execute(query, (
-        #         user_id,
-        #         amount,
-        #         amount_cents,
-        #         amount_cents,
-        #         0,
-        #         currency.lower(),
-        #         payment_method,
-        #         status,
-        #         stripe_payment_intent_id,
-        #         stripe_session_id,
-        #         stripe_customer_id,
-        #         metadata or {},
-        #         datetime.now(timezone.utc)
-        #     ))
-        #
-        #     result = cursor.fetchone()
-        #     cursor.close()
-        #
-        #     if not result:
-        #         logger.error("Failed to create payment record")
-        #         return None
-        #
-        #     payment = {
-        #         'id': result[0],
-        #         'user_id': result[1],
-        #         'amount_usd': float(result[2]),
-        #         'amount_cents': result[3],
-        #         'credits_purchased': result[4],
-        #         'bonus_credits': result[5],
-        #         'currency': result[6],
-        #         'payment_method': result[7],
-        #         'status': result[8],
-        #         'stripe_payment_intent_id': result[9],
-        #         'stripe_checkout_session_id': result[10],
-        #         'stripe_customer_id': result[11],
-        #         'metadata': result[12],
-        #         'created_at': result[13]
-        #     }
-        #
-        #     logger.info(f"Payment record created successfully: {payment['id']}")
-        #     return payment
+        if stripe_session_id:
+            payment_data['stripe_checkout_session_id'] = stripe_session_id
+
+        if stripe_customer_id:
+            payment_data['stripe_customer_id'] = stripe_customer_id
+
+        # Insert into Supabase
+        result = client.table('payments').insert(payment_data).execute()
+
+        if not result.data:
+            logger.error("Failed to create payment record - no data returned")
+            return None
+
+        payment = result.data[0]
+        logger.info(f"✅ Payment record created successfully: {payment['id']}")
+
+        return payment
 
     except Exception as e:
         logger.error(f"Error creating payment: {e}", exc_info=True)
