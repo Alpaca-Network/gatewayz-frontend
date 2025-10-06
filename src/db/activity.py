@@ -71,14 +71,18 @@ def log_activity(
 
 def get_user_activity_stats(
     user_id: int,
-    days: int = 30
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    days: Optional[int] = None
 ) -> Dict[str, Any]:
     """
     Get aggregated activity statistics for a user
 
     Args:
         user_id: User ID
-        days: Number of days to look back
+        from_date: Start date (YYYY-MM-DD format)
+        to_date: End date (YYYY-MM-DD format)
+        days: Number of days to look back (alternative to from_date/to_date)
 
     Returns:
         Dictionary with date-aggregated stats
@@ -87,13 +91,23 @@ def get_user_activity_stats(
         client = get_supabase_client()
 
         # Calculate date range
-        start_date = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+        if from_date and to_date:
+            start_date = datetime.fromisoformat(from_date).replace(tzinfo=timezone.utc).isoformat()
+            end_date = datetime.fromisoformat(to_date).replace(hour=23, minute=59, second=59, tzinfo=timezone.utc).isoformat()
+        elif days:
+            start_date = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+            end_date = datetime.now(timezone.utc).isoformat()
+        else:
+            # Default to last 30 days
+            start_date = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+            end_date = datetime.now(timezone.utc).isoformat()
 
         # Fetch activity records
         result = client.table('activity_log')\
             .select('*')\
             .eq('user_id', user_id)\
             .gte('timestamp', start_date)\
+            .lte('timestamp', end_date)\
             .order('timestamp', desc=False)\
             .execute()
 
@@ -101,7 +115,9 @@ def get_user_activity_stats(
             return {
                 'total_requests': 0,
                 'total_tokens': 0,
+                'total_spend': 0.0,
                 'total_cost': 0.0,
+                'daily_stats': [],
                 'by_date': [],
                 'by_model': {},
                 'by_provider': {}
@@ -154,17 +170,29 @@ def get_user_activity_stats(
             total_tokens += record.get('tokens', 0)
             total_cost += record.get('cost', 0.0)
 
-        # Convert by_date dict to sorted list
+        # Convert by_date dict to sorted list and format for frontend
         by_date_list = sorted(by_date.values(), key=lambda x: x['date'])
+
+        # Format daily_stats for frontend charts
+        daily_stats = [
+            {
+                'date': item['date'],
+                'spend': round(item['cost'], 4),
+                'tokens': item['tokens'],
+                'requests': item['requests']
+            }
+            for item in by_date_list
+        ]
 
         return {
             'total_requests': total_requests,
             'total_tokens': total_tokens,
+            'total_spend': round(total_cost, 4),
             'total_cost': round(total_cost, 4),
+            'daily_stats': daily_stats,
             'by_date': by_date_list,
             'by_model': by_model,
-            'by_provider': by_provider,
-            'period_days': days
+            'by_provider': by_provider
         }
 
     except Exception as e:
@@ -172,7 +200,9 @@ def get_user_activity_stats(
         return {
             'total_requests': 0,
             'total_tokens': 0,
+            'total_spend': 0.0,
             'total_cost': 0.0,
+            'daily_stats': [],
             'by_date': [],
             'by_model': {},
             'by_provider': {},
@@ -184,6 +214,8 @@ def get_user_activity_log(
     user_id: int,
     limit: int = 50,
     offset: int = 0,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
     model_filter: Optional[str] = None,
     provider_filter: Optional[str] = None
 ) -> List[Dict[str, Any]]:
@@ -194,6 +226,8 @@ def get_user_activity_log(
         user_id: User ID
         limit: Maximum number of records to return
         offset: Number of records to skip
+        from_date: Start date (YYYY-MM-DD format)
+        to_date: End date (YYYY-MM-DD format)
         model_filter: Optional model name filter
         provider_filter: Optional provider name filter
 
@@ -207,6 +241,14 @@ def get_user_activity_log(
         query = client.table('activity_log')\
             .select('*')\
             .eq('user_id', user_id)
+
+        # Apply date filters
+        if from_date:
+            start_date = datetime.fromisoformat(from_date).replace(tzinfo=timezone.utc).isoformat()
+            query = query.gte('timestamp', start_date)
+        if to_date:
+            end_date = datetime.fromisoformat(to_date).replace(hour=23, minute=59, second=59, tzinfo=timezone.utc).isoformat()
+            query = query.lte('timestamp', end_date)
 
         # Apply filters
         if model_filter:

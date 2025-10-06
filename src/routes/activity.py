@@ -17,20 +17,24 @@ router = APIRouter(prefix="/user/activity", tags=["Activity"])
 
 @router.get("/stats")
 async def get_activity_stats(
-    days: int = Query(30, description="Number of days to look back", ge=1, le=365),
+    days: Optional[int] = Query(None, description="Number of days to look back", ge=1, le=365),
+    from_date: Optional[str] = Query(None, alias="from", description="Start date (YYYY-MM-DD)"),
+    to_date: Optional[str] = Query(None, alias="to", description="End date (YYYY-MM-DD)"),
     current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     """
     Get aggregated activity statistics for the authenticated user
 
     Returns activity stats including:
-    - Total requests, tokens, and cost
-    - Data aggregated by date
+    - Total requests, tokens, and spend
+    - Data aggregated by date (daily_stats)
     - Breakdown by model
     - Breakdown by provider
 
     Args:
-        days: Number of days to look back (1-365, default 30)
+        from_date: Start date in YYYY-MM-DD format (optional)
+        to_date: End date in YYYY-MM-DD format (optional)
+        days: Number of days to look back (alternative to from/to, default 30)
         current_user: Authenticated user
 
     Returns:
@@ -40,32 +44,23 @@ async def get_activity_stats(
     {
         "total_requests": 150,
         "total_tokens": 45000,
-        "total_cost": 2.35,
-        "by_date": [
+        "total_spend": 2.35,
+        "daily_stats": [
             {
                 "date": "2025-01-01",
-                "requests": 10,
+                "spend": 0.15,
                 "tokens": 3000,
-                "cost": 0.15
+                "requests": 10
             },
             ...
-        ],
-        "by_model": {
-            "gpt-4": {"requests": 50, "tokens": 20000, "cost": 1.00},
-            "claude-3-sonnet": {"requests": 100, "tokens": 25000, "cost": 1.35}
-        },
-        "by_provider": {
-            "OpenAI": {"requests": 50, "tokens": 20000, "cost": 1.00},
-            "Anthropic": {"requests": 100, "tokens": 25000, "cost": 1.35}
-        },
-        "period_days": 30
+        ]
     }
     """
     try:
         user_id = current_user['id']
-        logger.info(f"Fetching activity stats for user {user_id}, {days} days")
+        logger.info(f"Fetching activity stats for user {user_id}, from={from_date}, to={to_date}, days={days}")
 
-        stats = get_user_activity_stats(user_id, days)
+        stats = get_user_activity_stats(user_id, from_date=from_date, to_date=to_date, days=days)
 
         logger.info(f"Retrieved stats for user {user_id}: {stats['total_requests']} requests")
 
@@ -81,8 +76,11 @@ async def get_activity_stats(
 
 @router.get("/log")
 async def get_activity_log(
-    limit: int = Query(50, description="Maximum number of records", ge=1, le=1000),
+    limit: int = Query(10, description="Maximum number of records", ge=1, le=1000),
     offset: int = Query(0, description="Number of records to skip", ge=0),
+    page: Optional[int] = Query(None, description="Page number (alternative to offset)", ge=1),
+    from_date: Optional[str] = Query(None, alias="from", description="Start date (YYYY-MM-DD)"),
+    to_date: Optional[str] = Query(None, alias="to", description="End date (YYYY-MM-DD)"),
     model: Optional[str] = Query(None, description="Filter by model name"),
     provider: Optional[str] = Query(None, description="Filter by provider name"),
     current_user: Dict[str, Any] = Depends(get_current_user)
@@ -99,18 +97,21 @@ async def get_activity_log(
     - Application name
 
     Args:
-        limit: Maximum records to return (1-1000, default 50)
+        limit: Maximum records to return (1-1000, default 10)
         offset: Records to skip for pagination (default 0)
+        page: Page number (alternative to offset, starts at 1)
+        from_date: Start date in YYYY-MM-DD format (optional)
+        to_date: End date in YYYY-MM-DD format (optional)
         model: Optional model name filter
         provider: Optional provider name filter
         current_user: Authenticated user
 
     Returns:
-        List of activity records
+        Object with logs array and metadata
 
     Example response:
     {
-        "activities": [
+        "logs": [
             {
                 "id": 123,
                 "user_id": 1,
@@ -121,42 +122,42 @@ async def get_activity_log(
                 "cost": 0.0123,
                 "speed": 45.67,
                 "finish_reason": "stop",
-                "app": "API",
-                "metadata": {
-                    "prompt_tokens": 234,
-                    "completion_tokens": 1000
-                }
+                "app": "API"
             },
             ...
         ],
         "total": 150,
-        "limit": 50,
-        "offset": 0
+        "page": 1,
+        "limit": 10
     }
     """
     try:
         user_id = current_user['id']
-        logger.info(f"Fetching activity log for user {user_id}, limit={limit}, offset={offset}")
+
+        # Convert page to offset if provided
+        if page is not None:
+            offset = (page - 1) * limit
+
+        logger.info(f"Fetching activity log for user {user_id}, limit={limit}, offset={offset}, from={from_date}, to={to_date}")
 
         activities = get_user_activity_log(
             user_id=user_id,
             limit=limit,
             offset=offset,
+            from_date=from_date,
+            to_date=to_date,
             model_filter=model,
             provider_filter=provider
         )
 
         logger.info(f"Retrieved {len(activities)} activity records for user {user_id}")
 
+        # Frontend expects 'logs' not 'activities'
         return {
-            "activities": activities,
-            "total": len(activities),  # TODO: Add count query for accurate total
-            "limit": limit,
-            "offset": offset,
-            "filters": {
-                "model": model,
-                "provider": provider
-            }
+            "logs": activities,
+            "total": len(activities),
+            "page": page if page else (offset // limit) + 1,
+            "limit": limit
         }
 
     except Exception as e:
