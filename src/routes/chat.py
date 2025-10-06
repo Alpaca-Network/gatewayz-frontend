@@ -17,6 +17,7 @@ from src.services.openrouter_client import make_openrouter_request_openai, proce
 from src.services.portkey_client import make_portkey_request_openai, process_portkey_response
 from src.services.rate_limiting import get_rate_limit_manager
 from src.services.trial_validation import validate_trial_access, track_trial_usage
+from src.services.pricing import calculate_cost
 
 # Initialize logging
 logging.basicConfig(level=logging.ERROR)
@@ -224,12 +225,19 @@ async def chat_completions(
                             rate_limit_check_final.retry_after)} if rate_limit_check_final.retry_after else None
                     )
 
+            # Calculate actual cost based on model pricing
+            prompt_tokens = usage.get('prompt_tokens', 0)
+            completion_tokens = usage.get('completion_tokens', 0)
+            actual_cost = calculate_cost(req.model, prompt_tokens, completion_tokens)
+
+            logger.info(f"Cost calculation: {prompt_tokens} prompt + {completion_tokens} completion = ${actual_cost:.6f} for {req.model}")
+
             # Only check user credits for non-trial users
             if not trial_validation.get('is_trial', False):
-                if user['credits'] < total_tokens:
+                if user['credits'] < actual_cost:
                     raise HTTPException(
                         status_code=402,
-                        detail=f"Insufficient credits. Required: {total_tokens}, Available: {user['credits']}"
+                        detail=f"Insufficient credits. Required: ${actual_cost:.6f}, Available: ${user['credits']:.6f}"
                     )
 
             try:
@@ -239,12 +247,12 @@ async def chat_completions(
                     usage_metadata = {
                         'model': req.model,
                         'total_tokens': total_tokens,
-                        'prompt_tokens': usage.get('prompt_tokens', 0),
-                        'completion_tokens': usage.get('completion_tokens', 0)
+                        'prompt_tokens': prompt_tokens,
+                        'completion_tokens': completion_tokens,
+                        'cost_usd': actual_cost
                     }
-                    await loop.run_in_executor(executor, deduct_credits, api_key, total_tokens, f"API usage - {req.model}", usage_metadata)
-                    cost = total_tokens * 0.02 / 1000
-                    await loop.run_in_executor(executor, record_usage, user['id'], api_key, req.model, total_tokens, cost)
+                    await loop.run_in_executor(executor, deduct_credits, api_key, actual_cost, f"API usage - {req.model}", usage_metadata)
+                    await loop.run_in_executor(executor, record_usage, user['id'], api_key, req.model, total_tokens, actual_cost)
                 await loop.run_in_executor(executor, update_rate_limit_usage, api_key, total_tokens)
 
                 # Increment API key usage count
@@ -261,9 +269,6 @@ async def chat_completions(
                     # Get provider from model name
                     provider = get_provider_from_model(req.model)
 
-                    # Calculate cost
-                    cost = total_tokens * 0.02 / 1000
-
                     # Get finish reason from response
                     finish_reason = processed_response.get('choices', [{}])[0].get('finish_reason', 'stop')
 
@@ -274,13 +279,13 @@ async def chat_completions(
                         req.model,
                         provider,
                         total_tokens,
-                        cost,
+                        actual_cost,  # Use the actual calculated cost
                         speed,
                         finish_reason,
                         "API",
                         {
-                            'prompt_tokens': usage.get('prompt_tokens', 0),
-                            'completion_tokens': usage.get('completion_tokens', 0),
+                            'prompt_tokens': prompt_tokens,
+                            'completion_tokens': completion_tokens,
                             'provider': provider
                         }
                     )
