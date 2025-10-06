@@ -136,6 +136,7 @@ async def create_checkout_session(
     """
     try:
         user_id = current_user['id']
+        logger.info(f"Creating checkout session for user {user_id}, amount: {request.amount}, currency: {request.currency}")
 
         session = stripe_service.create_checkout_session(
             user_id=user_id,
@@ -155,11 +156,11 @@ async def create_checkout_session(
         }
 
     except ValueError as e:
-        logger.error(f"Validation error creating checkout session: {e}")
+        logger.error(f"Validation error creating checkout session: {e}", exc_info=True)
         raise HTTPException(status_code=400, detail=str(e))
 
     except Exception as e:
-        logger.error(f"Error creating checkout session: {e}")
+        logger.error(f"Error creating checkout session: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=f"Failed to create checkout session: {str(e)}"

@@ -303,7 +303,7 @@ async def get_models(
         raise HTTPException(status_code=500, detail="Failed to get models")
 
 
-@router.get("/{provider_name}/{model_name}", tags=["models"])
+@router.get("/model/{provider_name}/{model_name}", tags=["models"])
 async def get_specific_model(
     provider_name: str,
     model_name: str,
