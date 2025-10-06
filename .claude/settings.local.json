@@ -32,7 +32,9 @@
       "Bash(export PYTHONDONTWRITEBYTECODE=1)",
       "Bash(echo:*)",
       "Read(//c/Users/vaughn.v/Documents/GitHub/**)",
-      "Bash(git rm:*)"
+      "Bash(git rm:*)",
+      "Bash(pip install:*)",
+      "Bash(git restore:*)"
     ],
     "deny": [],
     "ask": []

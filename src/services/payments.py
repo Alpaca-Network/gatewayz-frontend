@@ -85,6 +85,9 @@ class StripeService:
             success_url = request.success_url or f"{self.frontend_url}/payment/success?session_id={{CHECKOUT_SESSION_ID}}"
             cancel_url = request.cancel_url or f"{self.frontend_url}/payment/cancel"
 
+            logger.info(f"Checkout URLs - success: {success_url}, cancel: {cancel_url}")
+            logger.info(f"Request provided URLs - success: {request.success_url}, cancel: {request.cancel_url}")
+
             # Calculate credits
             credits = request.amount
 
