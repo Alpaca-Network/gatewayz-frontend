@@ -235,7 +235,14 @@ async def chat_completions(
             try:
                 # Only deduct credits for non-trial users (use same executor)
                 if not trial_validation.get('is_trial', False):
-                    await loop.run_in_executor(executor, deduct_credits, api_key, total_tokens)
+                    # Prepare metadata for credit transaction logging
+                    usage_metadata = {
+                        'model': req.model,
+                        'total_tokens': total_tokens,
+                        'prompt_tokens': usage.get('prompt_tokens', 0),
+                        'completion_tokens': usage.get('completion_tokens', 0)
+                    }
+                    await loop.run_in_executor(executor, deduct_credits, api_key, total_tokens, f"API usage - {req.model}", usage_metadata)
                     cost = total_tokens * 0.02 / 1000
                     await loop.run_in_executor(executor, record_usage, user['id'], api_key, req.model, total_tokens, cost)
                 await loop.run_in_executor(executor, update_rate_limit_usage, api_key, total_tokens)
