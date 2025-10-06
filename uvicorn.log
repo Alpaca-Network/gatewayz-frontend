@@ -1,0 +1,6 @@
+INFO:     Will watch for changes in these directories: ['c:\\Users\\vaughn.v\\Documents\\GitHub\\gatewayz-backend']
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [65448] using StatReload
+INFO:     Started server process [17396]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
