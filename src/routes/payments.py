@@ -414,7 +414,7 @@ async def get_payment_history(
             "payments": [
                 {
                     "id": payment['id'],
-                    "amount": payment['amount'],
+                    "amount": payment.get('amount_usd', payment.get('amount', 0)),
                     "currency": payment['currency'],
                     "status": payment['status'],
                     "payment_method": payment['payment_method'],
@@ -467,7 +467,7 @@ async def get_payment_details(
 
         return {
             "id": payment['id'],
-            "amount": payment['amount'],
+            "amount": payment.get('amount_usd', payment.get('amount', 0)),
             "currency": payment['currency'],
             "status": payment['status'],
             "payment_method": payment['payment_method'],

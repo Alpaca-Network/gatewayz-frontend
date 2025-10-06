@@ -313,7 +313,7 @@ class StripeService:
                     payment_id=payment['id'],
                     status='completed'
                 )
-                add_credits_to_user(payment['user_id'], payment['amount'])
+                add_credits_to_user(payment['user_id'], payment.get('amount_usd', payment.get('amount', 0)))
                 logger.info(f"Payment succeeded: {payment_intent.id}")
         except Exception as e:
             logger.error(f"Error handling payment succeeded: {e}")
