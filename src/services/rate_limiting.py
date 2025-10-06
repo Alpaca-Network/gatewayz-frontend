@@ -1170,5 +1170,4 @@ def get_rate_limit_manager() -> RateLimitManager:
     global _rate_limit_manager
     if _rate_limit_manager is None:
         _rate_limit_manager = RateLimitManager()
->>>>>>> 2ae02462568dfc0936bd8ac6f970c8062cc98d01
     return _rate_limit_manager
