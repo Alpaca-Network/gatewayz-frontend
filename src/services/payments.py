@@ -81,12 +81,17 @@ class StripeService:
             if not payment:
                 raise Exception("Failed to create payment record")
 
-            # Prepare URLs
-            success_url = request.success_url or f"{self.frontend_url}/payment/success?session_id={{CHECKOUT_SESSION_ID}}"
-            cancel_url = request.cancel_url or f"{self.frontend_url}/payment/cancel"
+            # Prepare URLs - ALWAYS use request URLs if provided
+            success_url = request.success_url if request.success_url else f"{self.frontend_url}/payment/success?session_id={{CHECKOUT_SESSION_ID}}"
+            cancel_url = request.cancel_url if request.cancel_url else f"{self.frontend_url}/payment/cancel"
 
-            logger.info(f"Checkout URLs - success: {success_url}, cancel: {cancel_url}")
-            logger.info(f"Request provided URLs - success: {request.success_url}, cancel: {request.cancel_url}")
+            logger.info(f"=== CHECKOUT SESSION URL DEBUG ===")
+            logger.info(f"Frontend URL from env: {self.frontend_url}")
+            logger.info(f"Request success_url: {request.success_url}")
+            logger.info(f"Request cancel_url: {request.cancel_url}")
+            logger.info(f"Final success_url being sent to Stripe: {success_url}")
+            logger.info(f"Final cancel_url being sent to Stripe: {cancel_url}")
+            logger.info(f"=== END URL DEBUG ===")
 
             # Calculate credits
             credits = request.amount
