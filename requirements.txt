@@ -12,3 +12,8 @@ cryptography==41.0.7
 resend==0.8.0
 redis==5.0.1
 stripe==13.0.1
+
+# Testing dependencies
+pytest==7.4.3
+pytest-cov==4.1.0
+pytest-asyncio==0.21.1
