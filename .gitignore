@@ -40,11 +40,5 @@ __pycache__
 
 
 
-nul
-uvicorn.log
 server.log
-temp.json
-.gitignore
-temp2.json
-response.json
-portkey_models.json
+nul

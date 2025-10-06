@@ -103,4 +103,3 @@ uvicorn app:app --reload
 - **Frontend Integration Guide**: See [API_INTEGRATION_GUIDE.md](API_INTEGRATION_GUIDE.md)
 
 
-# Trigger redeploy
