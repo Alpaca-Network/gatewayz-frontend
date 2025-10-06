@@ -43,6 +43,7 @@ jobs:
         echo "SUPABASE_KEY=test-key" >> $GITHUB_ENV
         echo "OPENROUTER_API_KEY=test-openrouter-key" >> $GITHUB_ENV
         echo "ENCRYPTION_KEY=test-encryption-key-32-bytes-long!" >> $GITHUB_ENV
+        echo "PORTKEY_API_KEY=test-portkey-key" >> $GITHUB_ENV
 
     - name: Run tests with pytest
       run: |
@@ -85,6 +86,7 @@ jobs:
         echo "SUPABASE_KEY=test-key" >> $GITHUB_ENV
         echo "OPENROUTER_API_KEY=test-openrouter-key" >> $GITHUB_ENV
         echo "ENCRYPTION_KEY=test-encryption-key-32-bytes-long!" >> $GITHUB_ENV
+        echo "PORTKEY_API_KEY=test-portkey-key" >> $GITHUB_ENV
 
     - name: Run critical tests only
       run: |
