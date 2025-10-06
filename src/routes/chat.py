@@ -250,6 +250,44 @@ async def chat_completions(
                 # Increment API key usage count
                 await loop.run_in_executor(executor, increment_api_key_usage, api_key)
 
+                # Log activity for analytics
+                try:
+                    from src.db.activity import log_activity, get_provider_from_model
+
+                    # Calculate speed (tokens per second)
+                    # This is an approximation - we don't track actual request time here
+                    speed = 0.0  # TODO: Track actual request duration
+
+                    # Get provider from model name
+                    provider = get_provider_from_model(req.model)
+
+                    # Calculate cost
+                    cost = total_tokens * 0.02 / 1000
+
+                    # Get finish reason from response
+                    finish_reason = processed_response.get('choices', [{}])[0].get('finish_reason', 'stop')
+
+                    await loop.run_in_executor(
+                        executor,
+                        log_activity,
+                        user['id'],
+                        req.model,
+                        provider,
+                        total_tokens,
+                        cost,
+                        speed,
+                        finish_reason,
+                        "API",
+                        {
+                            'prompt_tokens': usage.get('prompt_tokens', 0),
+                            'completion_tokens': usage.get('completion_tokens', 0),
+                            'provider': provider
+                        }
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to log activity: {e}")
+                    # Don't fail the request if activity logging fails
+
             except ValueError as e:
                 logger.error(f"Failed to deduct credits: {e}")
             except Exception as e:
