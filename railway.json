@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 {
   "$schema": "https://railway.app/railway.schema.json",
   "build": {
@@ -9,3 +10,16 @@
     "restartPolicyMaxRetries": 10
   }
 }
+=======
+{
+  "$schema": "https://railway.app/railway.schema.json",
+  "build": {
+    "builder": "NIXPACKS"
+  },
+  "deploy": {
+    "startCommand": "uvicorn src.main:app --host 0.0.0.0 --port $PORT",
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10
+  }
+}
+>>>>>>> 2ae02462568dfc0936bd8ac6f970c8062cc98d01

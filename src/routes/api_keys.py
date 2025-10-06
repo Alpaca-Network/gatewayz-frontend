@@ -70,22 +70,26 @@ async def create_user_api_key(
                 )
 
                 # Add Phase 4 security logging and audit features
-                from src.security.security import get_audit_logger
-                audit_logger = get_audit_logger()
+                try:
+                    from src.security.security import get_audit_logger
+                    audit_logger = get_audit_logger()
 
-                # Get the created key ID for audit logging
-                client = get_supabase_client()
-                key_result = client.table('api_keys').select('*').eq('api_key', new_api_key).execute()
+                    # Get the created key ID for audit logging
+                    client = get_supabase_client()
+                    key_result = client.table('api_keys_new').select('*').eq('api_key', new_api_key).execute()
 
-                if key_result.data:
-                    key_id = key_result.data[0]['id']
-                    audit_logger.log_api_key_creation(
-                        user["id"],
-                        key_id,
-                        request.key_name,
-                        request.environment_tag,
-                        "user"
-                    )
+                    if key_result.data:
+                        key_id = key_result.data[0]['id']
+                        audit_logger.log_api_key_creation(
+                            user["id"],
+                            key_id,
+                            request.key_name,
+                            request.environment_tag,
+                            "user"
+                        )
+                except Exception as audit_error:
+                    # Don't fail the whole request if audit logging fails
+                    logger.warning(f"Audit logging failed for API key creation: {audit_error}")
 
                 # Log the key creation for audit purposes (Phase 4 feature)
                 logger.info(
@@ -121,8 +125,10 @@ async def create_user_api_key(
     except HTTPException:
         raise
     except Exception as e:
+        import traceback
         logger.error(f"Error creating/changing API key: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
 @router.put("/user/api-keys/{key_id}", tags=["authentication"])

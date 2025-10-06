@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 {
   "version": 2,
   "builds": [
@@ -12,4 +13,20 @@
       "dest": "api/index.py"
     }
   ]
+=======
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "api/index.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "api/index.py"
+    }
+  ]
+>>>>>>> 2ae02462568dfc0936bd8ac6f970c8062cc98d01
 }

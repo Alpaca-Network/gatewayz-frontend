@@ -113,7 +113,6 @@ def create_api_key(user_id: int, key_name: str, environment_tag: str = 'live',
             'scope_permissions': scope_permissions,
             'ip_allowlist': ip_allowlist or [],
             'domain_referrers': domain_referrers or [],
-            'created_by_user_id': user_id,
             'last_used_at': datetime.now(timezone.utc).isoformat()
         }
 
@@ -669,6 +668,11 @@ def update_api_key(api_key: str, user_id: int, updates: Dict[str, Any]) -> bool:
 def validate_api_key_permissions(api_key: str, required_permission: str, resource: str) -> bool:
     """Validate if an API key has the required permission for a resource"""
     try:
+        # Temporary keys (gw_temp_*) are session keys stored in users table and have full permissions
+        if api_key.startswith('gw_temp_'):
+            logger.info(f"Granting full permissions to temporary session key: {api_key[:15]}...")
+            return True
+
         client = get_supabase_client()
 
         # Get the API key record
