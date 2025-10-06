@@ -63,6 +63,10 @@ class SlidingWindowRateLimiter:
     def __init__(self, redis_client: Optional[redis.Redis] = None):
         # Use fallback rate limiting system (no Redis)
         self.fallback_manager = get_fallback_rate_limit_manager()
+        self.concurrent_requests = defaultdict(int)
+        self.burst_tokens = {}
+        self.local_cache = {}
+        self.redis_client = redis_client
         
     async def check_rate_limit(
         self, 
@@ -432,6 +436,7 @@ class RateLimitManager:
         self.rate_limiter = SlidingWindowRateLimiter(redis_client)
         self.key_configs = {}  # Cache for per-key configurations
         self.default_config = RateLimitConfig()
+        self.fallback_manager = get_fallback_rate_limit_manager()
     
     async def get_key_config(self, api_key: str) -> RateLimitConfig:
         """Get rate limit configuration for a specific API key"""
