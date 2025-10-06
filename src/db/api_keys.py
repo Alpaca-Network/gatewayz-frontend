@@ -113,7 +113,6 @@ def create_api_key(user_id: int, key_name: str, environment_tag: str = 'live',
             'scope_permissions': scope_permissions,
             'ip_allowlist': ip_allowlist or [],
             'domain_referrers': domain_referrers or [],
-            'created_by_user_id': user_id,
             'last_used_at': datetime.now(timezone.utc).isoformat()
         }
 
