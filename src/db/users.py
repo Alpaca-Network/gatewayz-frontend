@@ -152,20 +152,63 @@ def get_user_by_privy_id(privy_user_id: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-def add_credits_to_user(user_id: int, credits: int) -> None:
-    """Add credits to user account by user ID"""
+def add_credits_to_user(
+    user_id: int,
+    credits: float,
+    transaction_type: str = "admin_credit",
+    description: str = "Credits added",
+    payment_id: Optional[int] = None,
+    metadata: Optional[dict] = None
+) -> None:
+    """
+    Add credits to user account by user ID and log the transaction
+
+    Args:
+        user_id: User ID
+        credits: Amount of credits to add
+        transaction_type: Type of transaction (trial, purchase, admin_credit, etc.)
+        description: Description of the transaction
+        payment_id: Optional payment ID if this is from a payment
+        metadata: Optional metadata dictionary
+    """
     if credits <= 0:
         raise ValueError("Credits must be positive")
 
     try:
+        from src.db.credit_transactions import log_credit_transaction
+
         client = get_supabase_client()
+
+        # Get current balance
+        user_result = client.table('users').select('credits').eq('id', user_id).execute()
+        if not user_result.data:
+            raise ValueError(f"User with ID {user_id} not found")
+
+        balance_before = user_result.data[0]['credits']
+        balance_after = balance_before + credits
+
+        # Update user credits
         result = client.table('users').update({
-            'credits': client.table('users').select('credits').eq('id', user_id).execute().data[0]['credits'] + credits,
+            'credits': balance_after,
             'updated_at': datetime.now(timezone.utc).isoformat()
         }).eq('id', user_id).execute()
 
         if not result.data:
             raise ValueError(f"User with ID {user_id} not found")
+
+        # Log the transaction
+        log_credit_transaction(
+            user_id=user_id,
+            amount=credits,
+            transaction_type=transaction_type,
+            description=description,
+            balance_before=balance_before,
+            balance_after=balance_after,
+            payment_id=payment_id,
+            metadata=metadata
+        )
+
+        logger.info(f"Added {credits} credits to user {user_id}. Balance: {balance_before} → {balance_after}")
 
     except Exception as e:
         logger.error(f"Failed to add credits: {e}")
@@ -181,27 +224,52 @@ def add_credits(api_key: str, credits: int) -> None:
     add_credits_to_user(user['id'], credits)
 
 
-def deduct_credits(api_key: str, tokens: int) -> None:
-    """Deduct credits from user account by API key"""
+def deduct_credits(api_key: str, tokens: float, description: str = "API usage", metadata: Optional[dict] = None) -> None:
+    """
+    Deduct credits from user account by API key and log the transaction
+
+    Args:
+        api_key: User's API key
+        tokens: Amount of credits to deduct
+        description: Description of the usage
+        metadata: Optional metadata (model used, tokens, etc.)
+    """
     if tokens <= 0:
         raise ValueError("Tokens must be positive")
 
     try:
+        from src.db.credit_transactions import log_credit_transaction, TransactionType
+
         user = get_user(api_key)
         if not user:
             raise ValueError(f"User with API key {api_key} not found")
 
         user_id = user['id']
-        current_credits = user['credits']
+        balance_before = user['credits']
 
-        if current_credits < tokens:
-            raise ValueError(f"Insufficient credits. Current: {current_credits}, Required: {tokens}")
+        if balance_before < tokens:
+            raise ValueError(f"Insufficient credits. Current: {balance_before}, Required: {tokens}")
+
+        balance_after = balance_before - tokens
 
         client = get_supabase_client()
         result = client.table('users').update({
-            'credits': current_credits - tokens,
+            'credits': balance_after,
             'updated_at': datetime.now(timezone.utc).isoformat()
         }).eq('id', user_id).execute()
+
+        # Log the transaction (negative amount for deduction)
+        log_credit_transaction(
+            user_id=user_id,
+            amount=-tokens,  # Negative for deduction
+            transaction_type=TransactionType.API_USAGE,
+            description=description,
+            balance_before=balance_before,
+            balance_after=balance_after,
+            metadata=metadata
+        )
+
+        logger.info(f"Deducted {tokens} credits from user {user_id}. Balance: {balance_before} → {balance_after}")
 
     except Exception as e:
         logger.error(f"Failed to deduct credits: {e}")

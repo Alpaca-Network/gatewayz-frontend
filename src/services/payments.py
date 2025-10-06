@@ -287,9 +287,20 @@ class StripeService:
             user_id = int(session.metadata.get('user_id'))
             credits = float(session.metadata.get('credits'))
             payment_id = int(session.metadata.get('payment_id'))
+            amount_dollars = credits / 100  # Convert cents to dollars
 
-            # Add credits
-            add_credits_to_user(user_id, credits / 100)  # Convert cents to dollars
+            # Add credits and log transaction
+            add_credits_to_user(
+                user_id=user_id,
+                credits=amount_dollars,
+                transaction_type='purchase',
+                description=f"Stripe checkout - ${amount_dollars}",
+                payment_id=payment_id,
+                metadata={
+                    'stripe_session_id': session.id,
+                    'stripe_payment_intent_id': session.payment_intent
+                }
+            )
 
             # Update payment
             update_payment_status(
@@ -298,7 +309,7 @@ class StripeService:
                 stripe_payment_intent_id=session.payment_intent
             )
 
-            logger.info(f"Checkout completed: Added {credits/100} credits to user {user_id}")
+            logger.info(f"Checkout completed: Added {amount_dollars} credits to user {user_id}")
 
         except Exception as e:
             logger.error(f"Error handling checkout completed: {e}")
@@ -313,7 +324,16 @@ class StripeService:
                     payment_id=payment['id'],
                     status='completed'
                 )
-                add_credits_to_user(payment['user_id'], payment.get('amount_usd', payment.get('amount', 0)))
+                # Add credits and log transaction
+                amount = payment.get('amount_usd', payment.get('amount', 0))
+                add_credits_to_user(
+                    user_id=payment['user_id'],
+                    credits=amount,
+                    transaction_type='purchase',
+                    description=f"Stripe payment - ${amount}",
+                    payment_id=payment['id'],
+                    metadata={'stripe_payment_intent_id': payment_intent.id}
+                )
                 logger.info(f"Payment succeeded: {payment_intent.id}")
         except Exception as e:
             logger.error(f"Error handling payment succeeded: {e}")
