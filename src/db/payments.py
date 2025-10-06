@@ -385,8 +385,8 @@ def get_payment_statistics(user_id: Optional[int] = None) -> Dict[str, Any]:
         failed = [p for p in payments if p['status'] == 'failed']
         refunded = [p for p in payments if p['status'] == 'refunded']
 
-        total_amount = sum(p['amount'] for p in completed)
-        refunded_amount = sum(p['amount'] for p in refunded)
+        total_amount = sum(p.get('amount_usd', p.get('amount', 0)) for p in completed)
+        refunded_amount = sum(p.get('amount_usd', p.get('amount', 0)) for p in refunded)
 
         return {
             'total_payments': total_payments,
@@ -453,7 +453,7 @@ def get_total_revenue(
 
         for payment in payments:
             currency = payment.get('currency', 'usd')
-            amount = payment.get('amount', 0)
+            amount = payment.get('amount_usd', payment.get('amount', 0))
 
             if currency not in revenue_by_currency:
                 revenue_by_currency[currency] = 0
@@ -516,7 +516,7 @@ def get_payment_trends(days: int = 30) -> Dict[str, Any]:
 
             if payment['status'] == 'completed':
                 daily_stats[date]['completed'] += 1
-                daily_stats[date]['amount'] += payment['amount']
+                daily_stats[date]['amount'] += payment.get('amount_usd', payment.get('amount', 0))
             elif payment['status'] == 'failed':
                 daily_stats[date]['failed'] += 1
 
