@@ -109,12 +109,6 @@ def create_app() -> FastAPI:
         logger.error(f"Failed to include plans routes: {e}")
 
     try:
-        from src.routes import ranking as ranking_routes
-        app.include_router(ranking_routes.router)
-    except Exception as e:
-        logger.error(f"Failed to include ranking routes: {e}")
-
-    try:
         from src.routes import chat_history as chat_history_routes
         app.include_router(chat_history_routes.router, prefix="/chat-history")
     except Exception as e:
@@ -139,6 +133,13 @@ def create_app() -> FastAPI:
         logger.info("Images routes included successfully")
     except Exception as e:
         logger.error(f"Failed to include images routes: {e}")
+
+    # Register ranking routes before catalog (must come before catch-all routes)
+    try:
+        from src.routes import ranking as ranking_routes
+        app.include_router(ranking_routes.router)
+    except Exception as e:
+        logger.error(f"Failed to include ranking routes: {e}")
 
     # Register catalog routes LAST because it has catch-all /{provider_name}/{model_name} route
     try:
