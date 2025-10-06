@@ -252,3 +252,78 @@ async def delete_user_account_endpoint(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+@router.get("/user/credit-transactions", tags=["authentication"])
+async def get_credit_transactions_endpoint(
+        limit: int = 50,
+        offset: int = 0,
+        transaction_type: str = None,
+        api_key: str = Depends(get_api_key)
+):
+    """
+    Get credit transaction history for the authenticated user
+
+    Shows all credit additions and deductions including:
+    - Trial credits
+    - Stripe purchases
+    - API usage
+    - Admin adjustments
+    - Refunds
+    - Bonuses
+
+    Args:
+        limit: Maximum number of transactions to return (default: 50)
+        offset: Number of transactions to skip (default: 0)
+        transaction_type: Optional filter by type (trial, purchase, api_usage, etc.)
+        api_key: Authenticated user's API key
+
+    Returns:
+        List of credit transactions with running balance
+    """
+    try:
+        user = get_user(api_key)
+        if not user:
+            raise HTTPException(status_code=401, detail="Invalid API key")
+
+        from src.db.credit_transactions import get_user_transactions, get_transaction_summary
+
+        user_id = user['id']
+
+        # Get transactions
+        transactions = get_user_transactions(
+            user_id=user_id,
+            limit=limit,
+            offset=offset,
+            transaction_type=transaction_type
+        )
+
+        # Get summary
+        summary = get_transaction_summary(user_id)
+
+        return {
+            "transactions": [
+                {
+                    "id": txn['id'],
+                    "amount": float(txn['amount']),
+                    "transaction_type": txn['transaction_type'],
+                    "description": txn.get('description', ''),
+                    "balance_before": float(txn['balance_before']),
+                    "balance_after": float(txn['balance_after']),
+                    "created_at": txn['created_at'],
+                    "payment_id": txn.get('payment_id'),
+                    "metadata": txn.get('metadata', {})
+                }
+                for txn in transactions
+            ],
+            "summary": summary,
+            "total": len(transactions),
+            "limit": limit,
+            "offset": offset
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting credit transactions: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
