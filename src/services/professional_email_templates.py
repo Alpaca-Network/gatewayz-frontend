@@ -45,10 +45,28 @@ class ProfessionalEmailTemplates:
         }}
         
         .header {{
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%);
             color: white;
-            padding: 40px 30px;
+            padding: 50px 30px;
             text-align: center;
+            position: relative;
+            overflow: hidden;
+        }}
+
+        .header::before {{
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+            animation: pulse 4s ease-in-out infinite;
+        }}
+
+        @keyframes pulse {{
+            0%, 100% {{ transform: scale(1); opacity: 0.5; }}
+            50% {{ transform: scale(1.1); opacity: 0.8; }}
         }}
         
         .header h1 {{
@@ -117,20 +135,24 @@ class ProfessionalEmailTemplates:
         
         .cta-button {{
             display: inline-block;
-            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
             color: white;
             text-decoration: none;
-            padding: 14px 28px;
-            border-radius: 8px;
-            font-weight: 600;
+            padding: 16px 32px;
+            border-radius: 12px;
+            font-weight: 700;
             font-size: 16px;
-            margin: 20px 0;
-            transition: all 0.2s ease;
+            margin: 20px 8px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 20px rgba(99, 102, 241, 0.3);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }}
-        
+
         .cta-button:hover {{
-            transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(99, 102, 241, 0.5);
+            background: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%);
         }}
         
         .secondary-button {{
@@ -237,61 +259,101 @@ class ProfessionalEmailTemplates:
             display_name = email.split('@')[0].replace('.', ' ').title()
         else:
             display_name = "there"
-            
+
         content = f"""
-            <h2>Welcome to {self.app_name}! 🎉</h2>
-            <p>Hi <strong>{display_name}</strong>,</p>
-            <p>Welcome to {self.app_name}! We're excited to have you on board. Your account has been successfully created and you're ready to start building amazing AI-powered applications.</p>
-            
-            <div class="success-box">
-                <h3 style="margin-bottom: 12px; color: #065f46;">🚀 Your Account is Ready!</h3>
-                <p style="margin-bottom: 0; color: #047857;">You've received <strong>${credits}</strong> in free credits to get started with our API.</p>
-            </div>
-            
-            <div class="highlight-box">
-                <h3 style="margin-bottom: 16px;">🔑 Your API Key</h3>
-                <p style="margin-bottom: 12px;">Your API key has been generated and is available in your dashboard.</p>
-                <div style="text-align: center; margin: 20px 0;">
-                    <a href="{self.app_url}/settings/keys" class="cta-button">🔐 View API Key in Dashboard</a>
-                </div>
-                <p style="font-size: 14px; color: #6b7280; margin-top: 12px;">⚠️ Keep your API key secure and never share it publicly.</p>
-            </div>
-            
-            <div class="info-grid">
-                <div class="info-item">
-                    <div class="label">Free Credits</div>
-                    <div class="value">${credits}</div>
-                </div>
-                <div class="info-item">
-                    <div class="label">Trial Period</div>
-                    <div class="value">3 Days</div>
-                </div>
-            </div>
-            
             <div style="text-align: center; margin: 30px 0;">
-                <a href="{self.app_url}/docs" class="cta-button">📚 View Documentation</a>
-                <a href="{self.app_url}/settings/credits" class="cta-button secondary-button">📊 Go to Dashboard</a>
+                <h2 style="font-size: 36px; font-weight: 800; margin-bottom: 12px; background: linear-gradient(135deg, #6366f1, #ec4899); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">
+                    Welcome to the Future of AI 🚀
+                </h2>
+                <p style="font-size: 18px; color: #64748b; font-weight: 500;">Hi <strong style="color: #1e293b;">{display_name}</strong>, your journey starts now</p>
             </div>
-            
+
+            <div style="background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%); border-radius: 16px; padding: 32px; margin: 30px 0; text-align: center; box-shadow: 0 10px 40px rgba(99, 102, 241, 0.3);">
+                <div style="font-size: 48px; margin-bottom: 16px;">💎</div>
+                <h3 style="color: white; font-size: 28px; font-weight: 700; margin-bottom: 12px;">Your Account is Ready!</h3>
+                <p style="color: rgba(255,255,255,0.95); font-size: 18px; margin-bottom: 24px;">You've been credited with</p>
+                <div style="background: rgba(255,255,255,0.2); backdrop-filter: blur(10px); border-radius: 12px; padding: 20px; display: inline-block;">
+                    <div style="font-size: 48px; font-weight: 800; color: white; text-shadow: 0 2px 10px rgba(0,0,0,0.2);">${credits}</div>
+                    <div style="font-size: 16px; color: rgba(255,255,255,0.9); font-weight: 600; text-transform: uppercase; letter-spacing: 1px; margin-top: 8px;">Free Credits</div>
+                </div>
+            </div>
+
+            <div style="background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); border: 2px solid #e2e8f0; border-radius: 16px; padding: 32px; margin: 30px 0;">
+                <div style="text-align: center; margin-bottom: 24px;">
+                    <div style="font-size: 42px; margin-bottom: 12px;">🔑</div>
+                    <h3 style="font-size: 24px; font-weight: 700; color: #1e293b; margin-bottom: 8px;">Your API Key Awaits</h3>
+                    <p style="color: #64748b; font-size: 16px;">Access unlimited AI models with a single key</p>
+                </div>
+                <div style="text-align: center;">
+                    <a href="{self.app_url}/settings/keys" class="cta-button" style="font-size: 18px; padding: 18px 40px;">Get Your API Key</a>
+                </div>
+                <p style="font-size: 14px; color: #94a3b8; text-align: center; margin-top: 20px; font-weight: 500;">
+                    🔒 Your key is encrypted and secured with enterprise-grade protection
+                </p>
+            </div>
+
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin: 30px 0;">
+                <div style="background: white; border: 2px solid #e2e8f0; border-radius: 12px; padding: 24px; text-align: center; transition: all 0.3s ease;">
+                    <div style="font-size: 36px; margin-bottom: 12px;">⚡</div>
+                    <div style="font-size: 32px; font-weight: 800; color: #6366f1; margin-bottom: 8px;">${credits}</div>
+                    <div style="font-size: 14px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">Free Credits</div>
+                </div>
+                <div style="background: white; border: 2px solid #e2e8f0; border-radius: 12px; padding: 24px; text-align: center; transition: all 0.3s ease;">
+                    <div style="font-size: 36px; margin-bottom: 12px;">⏱️</div>
+                    <div style="font-size: 32px; font-weight: 800; color: #ec4899; margin-bottom: 8px;">3 Days</div>
+                    <div style="font-size: 14px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">Trial Period</div>
+                </div>
+            </div>
+
+            <div style="text-align: center; margin: 40px 0;">
+                <a href="{self.app_url}/docs" class="cta-button">📚 Documentation</a>
+                <a href="{self.app_url}/settings/credits" class="cta-button" style="background: linear-gradient(135deg, #ec4899 0%, #f43f5e 100%); box-shadow: 0 4px 20px rgba(236, 72, 153, 0.3);">🎯 Dashboard</a>
+            </div>
+
             <div class="divider"></div>
-            
-            <h3>🚀 Quick Start Guide</h3>
-            <ol style="margin-left: 20px; color: #4b5563;">
-                <li style="margin-bottom: 8px;">Access your <a href="{self.app_url}/settings/credits" style="color: #3b82f6;">dashboard</a> to get your API key</li>
-                <li style="margin-bottom: 8px;">Read our <a href="{self.app_url}/docs" style="color: #3b82f6;">API documentation</a></li>
-                <li style="margin-bottom: 8px;">Try our <a href="{self.app_url}/chat" style="color: #3b82f6;">interactive Chat</a></li>
-                <li style="margin-bottom: 8px;">Check out our <a href="{self.app_url}/examples" style="color: #3b82f6;">code examples</a></li>
-                <li style="margin-bottom: 8px;">Join our <a href="{self.app_url}/community" style="color: #3b82f6;">developer community</a></li>
-            </ol>
-            
-            <p>If you have any questions, don't hesitate to reach out to our support team at <a href="mailto:{self.support_email}" style="color: #3b82f6;">{self.support_email}</a>.</p>
+
+            <div style="background: #f8fafc; border-radius: 12px; padding: 28px; margin: 30px 0;">
+                <h3 style="font-size: 22px; font-weight: 700; color: #1e293b; margin-bottom: 20px; text-align: center;">
+                    🚀 Get Started in Minutes
+                </h3>
+                <div style="display: grid; gap: 16px;">
+                    <div style="display: flex; align-items: start; gap: 16px;">
+                        <div style="flex-shrink: 0; width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, #6366f1, #8b5cf6); display: flex; align-items: center; justify-content: center; font-weight: 700; color: white; font-size: 18px;">1</div>
+                        <div>
+                            <strong style="color: #1e293b; font-size: 16px;">Grab Your API Key</strong>
+                            <p style="color: #64748b; margin: 4px 0 0 0; font-size: 14px;">Head to your <a href="{self.app_url}/settings/credits" style="color: #6366f1; text-decoration: none; font-weight: 600;">dashboard</a> and copy your key</p>
+                        </div>
+                    </div>
+                    <div style="display: flex; align-items: start; gap: 16px;">
+                        <div style="flex-shrink: 0; width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, #8b5cf6, #ec4899); display: flex; align-items: center; justify-content: center; font-weight: 700; color: white; font-size: 18px;">2</div>
+                        <div>
+                            <strong style="color: #1e293b; font-size: 16px;">Explore AI Models</strong>
+                            <p style="color: #64748b; margin: 4px 0 0 0; font-size: 14px;">Browse 300+ models from OpenAI, Anthropic, Google & more</p>
+                        </div>
+                    </div>
+                    <div style="display: flex; align-items: start; gap: 16px;">
+                        <div style="flex-shrink: 0; width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, #ec4899, #f43f5e); display: flex; align-items: center; justify-content: center; font-weight: 700; color: white; font-size: 18px;">3</div>
+                        <div>
+                            <strong style="color: #1e293b; font-size: 16px;">Start Building</strong>
+                            <p style="color: #64748b; margin: 4px 0 0 0; font-size: 14px;">Try our <a href="{self.app_url}/chat" style="color: #6366f1; text-decoration: none; font-weight: 600;">interactive chat</a> or dive into the <a href="{self.app_url}/docs" style="color: #6366f1; text-decoration: none; font-weight: 600;">docs</a></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="text-align: center; margin: 40px 0; padding: 24px; background: linear-gradient(135deg, #f8fafc, #f1f5f9); border-radius: 12px;">
+                <p style="color: #64748b; font-size: 16px; margin-bottom: 12px;">Need help? We're here for you</p>
+                <a href="mailto:{self.support_email}" style="color: #6366f1; font-weight: 700; font-size: 18px; text-decoration: none;">
+                    💬 {self.support_email}
+                </a>
+            </div>
         """
         
         return {
-            "subject": f"Welcome to {self.app_name}! Your account is ready 🚀",
+            "subject": f"🚀 Welcome to the Future of AI - ${credits} Free Credits Inside!",
             "html": self.get_base_template().format(
                 subject=f"Welcome to {self.app_name}!",
-                header_subtitle="Your AI Gateway is ready",
+                header_subtitle="Your AI Journey Starts Now",
                 content=content,
                 app_name=self.app_name,
                 app_url=self.app_url,
