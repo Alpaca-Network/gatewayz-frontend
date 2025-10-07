@@ -54,9 +54,14 @@ def create_enhanced_user(username: str, email: str, auth_method: str, credits: i
         )
 
         # Update user with the actual API key
-        client.table('users').update({
+        update_result = client.table('users').update({
             'api_key': primary_key
         }).eq('id', user_id).execute()
+
+        if not update_result.data:
+            logger.warning(f"Failed to update users.api_key for user {user_id}, but primary key created successfully in api_keys_new")
+
+        logger.info(f"User {user_id} created successfully with primary API key: {primary_key[:15]}...")
 
         # Return user info with primary key
         return {
