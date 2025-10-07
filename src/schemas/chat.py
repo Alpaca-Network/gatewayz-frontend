@@ -57,3 +57,11 @@ class ChatSessionStatsResponse(BaseModel):
 class SearchChatSessionsRequest(BaseModel):
     query: str
     limit: Optional[int] = 20
+
+
+class SaveChatMessageRequest(BaseModel):
+    role: str  # 'user' or 'assistant'
+    content: str
+    model: Optional[str] = None
+    tokens: Optional[int] = 0
+    created_at: Optional[str] = None  # ISO datetime string from frontend

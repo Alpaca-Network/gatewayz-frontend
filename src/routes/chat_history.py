@@ -8,7 +8,8 @@ from src.db.chat_history import (
 )
 from src.schemas.chat import (
     CreateChatSessionRequest, UpdateChatSessionRequest, ChatSessionResponse,
-    ChatSessionsListResponse, ChatSessionStatsResponse, SearchChatSessionsRequest
+    ChatSessionsListResponse, ChatSessionStatsResponse, SearchChatSessionsRequest,
+    SaveChatMessageRequest
 )
 from src.security.deps import get_api_key
 from src.db.users import get_user
@@ -240,39 +241,36 @@ async def search_sessions(
 @router.post("/sessions/{session_id}/messages")
 async def save_message(
     session_id: int,
-    role: str = Query(..., description="Message role: 'user' or 'assistant'"),
-    content: str = Query(..., description="Message content"),
-    model: str = Query(None, description="Model used for this message"),
-    tokens: int = Query(0, description="Number of tokens in this message"),
+    request: SaveChatMessageRequest,
     api_key: str = Depends(get_api_key)
 ):
-    """Save a message to a chat session"""
+    """Save a message to a chat session (accepts JSON body)"""
     try:
         user = get_user(api_key)
         if not user:
             raise HTTPException(status_code=401, detail="Invalid API key")
-        
+
         # Verify session belongs to user
         session = get_chat_session(session_id, user['id'])
         if not session:
             raise HTTPException(status_code=404, detail="Chat session not found")
-        
+
         message = save_chat_message(
             session_id=session_id,
-            role=role,
-            content=content,
-            model=model,
-            tokens=tokens
+            role=request.role,
+            content=request.content,
+            model=request.model,
+            tokens=request.tokens
         )
-        
+
         logger.info(f"Saved message {message['id']} to session {session_id}")
-        
+
         return {
             "success": True,
             "data": message,
             "message": "Message saved successfully"
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
