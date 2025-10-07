@@ -23,13 +23,13 @@ logger = logging.getLogger(__name__)
 @dataclass
 class RateLimitConfig:
     """Rate limit configuration for a specific key"""
-    requests_per_minute: int = 60
+    requests_per_minute: int = 100
     requests_per_hour: int = 1000
     requests_per_day: int = 10000
     tokens_per_minute: int = 10000
     tokens_per_hour: int = 100000
     tokens_per_day: int = 1000000
-    burst_limit: int = 10  # Maximum burst requests
+    burst_limit: int = 20  # Maximum burst requests
     concurrency_limit: int = 5  # Maximum concurrent requests
     window_size_seconds: int = 60  # Sliding window size
 
@@ -47,13 +47,13 @@ class RateLimitResult:
 
 # Default configurations
 DEFAULT_CONFIG = RateLimitConfig(
-    requests_per_minute=60,
+    requests_per_minute=100,
     requests_per_hour=1000,
     requests_per_day=10000,
     tokens_per_minute=10000,
     tokens_per_hour=100000,
     tokens_per_day=1000000,
-    burst_limit=10,
+    burst_limit=20,
     concurrency_limit=5
 )
 
@@ -458,13 +458,13 @@ class RateLimitManager:
             config_data = get_rate_limit_config(api_key)
             if config_data:
                 return RateLimitConfig(
-                    requests_per_minute=config_data.get('requests_per_minute', 60),
+                    requests_per_minute=config_data.get('requests_per_minute', 100),
                     requests_per_hour=config_data.get('requests_per_hour', 1000),
                     requests_per_day=config_data.get('requests_per_day', 10000),
                     tokens_per_minute=config_data.get('tokens_per_minute', 10000),
                     tokens_per_hour=config_data.get('tokens_per_hour', 100000),
                     tokens_per_day=config_data.get('tokens_per_day', 1000000),
-                    burst_limit=config_data.get('burst_limit', 10),
+                    burst_limit=config_data.get('burst_limit', 20),
                     concurrency_limit=config_data.get('concurrency_limit', 5),
                     window_size_seconds=config_data.get('window_size_seconds', 60)
                 )
