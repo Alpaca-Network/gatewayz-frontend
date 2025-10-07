@@ -14,17 +14,23 @@ router = APIRouter()
 
 
 @router.get("/ranking/models", tags=["ranking"])
-async def get_ranking_models():
-    """Get all models from latest_models table for ranking page"""
+async def get_ranking_models(
+    limit: Optional[int] = Query(None, description="Limit number of results"),
+    offset: Optional[int] = Query(0, description="Offset for pagination")
+):
+    """Get all models from openrouter_models table for ranking page with logo URLs"""
     try:        
-        # Get models based on filters
-        models = get_all_latest_models()
-        logger.info(f"Retrieved {len(models)} models")
+        # Get models with pagination support
+        models = get_all_latest_models(limit=limit, offset=offset)
+        logger.info(f"Retrieved {len(models)} models from openrouter_models table")
         
         return {
             "success": True,
             "data": models,
             "count": len(models),
+            "limit": limit,
+            "offset": offset or 0,
+            "has_logo_urls": any(model.get('logo_url') for model in models)
         }
         
     except Exception as e:
