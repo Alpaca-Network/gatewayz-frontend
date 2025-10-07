@@ -1,10 +1,7 @@
-import logging
-import httpx
-import asyncio
-from concurrent.futures import ThreadPoolExecutor
-from functools import partial
+import logging, asyncio, time
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Optional
+import httpx
 
 from src.db.api_keys import increment_api_key_usage
 from src.db.plans import enforce_plan_limits
@@ -19,364 +16,225 @@ from src.services.rate_limiting import get_rate_limit_manager
 from src.services.trial_validation import validate_trial_access, track_trial_usage
 from src.services.pricing import calculate_cost
 
-# Initialize logging
-logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
-
 router = APIRouter()
 
+def mask_key(k: str) -> str:
+    return f"...{k[-4:]}" if k and len(k) >= 4 else "****"
+
+async def _to_thread(func, *args, **kwargs):
+    return await asyncio.to_thread(func, *args, **kwargs)
 
 @router.post("/v1/chat/completions", tags=["chat"])
 async def chat_completions(
-    req: ProxyRequest, 
+    req: ProxyRequest,
     api_key: str = Depends(get_api_key),
     session_id: Optional[int] = Query(None, description="Chat session ID to save messages to")
 ):
-    """
-    OpenAI-compatible chat completions endpoint.
+    # === 0) Setup / sanity ===
+    # Never print keys; log masked
+    logger.info("chat_completions start (api_key=%s, model=%s)", mask_key(api_key), req.model)
 
-    Handles credit deduction, rate limiting, trial validation, and proxies requests to OpenRouter.
-    Supports all OpenAI-compatible clients and model providers.
-    """
     try:
-        # Get running event loop for async operations
-        loop = asyncio.get_running_loop()
+        # === 1) User + plan/trial prechecks (DB calls on thread) ===
+        user = await _to_thread(get_user, api_key)
+        if not user:
+            raise HTTPException(status_code=401, detail="Invalid API key")
 
-        # Create thread pool executor for sync database operations
-        executor = ThreadPoolExecutor()
+        environment_tag = user.get("environment_tag", "live")
 
+        pre_plan = await _to_thread(enforce_plan_limits, user["id"], 0, environment_tag)
+        if not pre_plan.get("allowed", False):
+            raise HTTPException(status_code=429, detail=f"Plan limit exceeded: {pre_plan.get('reason', 'unknown')}")
+
+        trial = await _to_thread(validate_trial_access, api_key)
+        if not trial.get("is_valid", False):
+            if trial.get("is_trial") and trial.get("is_expired"):
+                raise HTTPException(
+                    status_code=403,
+                    detail=trial["error"],
+                    headers={"X-Trial-Expired": "true", "X-Trial-End-Date": trial.get("trial_end_date", "")},
+                )
+            elif trial.get("is_trial"):
+                headers = {}
+                for k in ("remaining_tokens", "remaining_requests", "remaining_credits"):
+                    if k in trial:
+                        headers[f"X-Trial-{k.replace('_','-').title()}"] = str(trial[k])
+                raise HTTPException(status_code=429, detail=trial["error"], headers=headers)
+            else:
+                raise HTTPException(status_code=403, detail=trial.get("error", "Access denied"))
+
+        rate_limit_mgr = get_rate_limit_manager()
+        if not trial.get("is_trial", False):
+            rl_pre = await rate_limit_mgr.check_rate_limit(api_key, tokens_used=0)
+            if not rl_pre.allowed:
+                await _to_thread(create_rate_limit_alert, api_key, "rate_limit_exceeded", {
+                    "reason": rl_pre.reason,
+                    "retry_after": rl_pre.retry_after,
+                    "remaining_requests": rl_pre.remaining_requests,
+                    "remaining_tokens": rl_pre.remaining_tokens
+                })
+                raise HTTPException(
+                    status_code=429,
+                    detail=f"Rate limit exceeded: {rl_pre.reason}",
+                    headers={"Retry-After": str(rl_pre.retry_after)} if rl_pre.retry_after else None
+                )
+
+        if not trial.get("is_trial", False) and user.get("credits", 0.0) <= 0:
+            raise HTTPException(status_code=402, detail="Insufficient credits")
+
+        # === 2) Build upstream request ===
+        messages = [m.model_dump() for m in req.messages]
+        model = req.model
+        optional = {}
+        for name in ("max_tokens", "temperature", "top_p", "frequency_penalty", "presence_penalty"):
+            val = getattr(req, name, None)
+            if val is not None:
+                optional[name] = val
+
+        provider = (req.provider or "openrouter").lower()
+
+        # === 3) Call upstream with explicit timeout ===
+        start = time.monotonic()
         try:
-            # Get user asynchronously
-            user = await loop.run_in_executor(executor, get_user, api_key)
-
-            if not user:
-                raise HTTPException(status_code=401, detail="Invalid API key")
-
-            # Get environment tag from an API key
-            environment_tag = user.get('environment_tag', 'live')
-
-            # Check plan limits first (async)
-            plan_check = await loop.run_in_executor(
-                executor,
-                enforce_plan_limits,
-                user['id'],
-                0,
-                environment_tag
-            )
-            if not plan_check['allowed']:
-                raise HTTPException(
-                    status_code=429,
-                    detail=f"Plan limit exceeded: {plan_check['reason']}"
-                )
-
-            # Check trial status first (simplified)
-            trial_validation = await loop.run_in_executor(
-                executor,
-                validate_trial_access,
-                api_key
-            )
-
-            if not trial_validation['is_valid']:
-                if trial_validation.get('is_trial') and trial_validation.get('is_expired'):
-                    raise HTTPException(
-                        status_code=403,
-                        detail=trial_validation['error'],
-                        headers={"X-Trial-Expired": "true", "X-Trial-End-Date": trial_validation.get('trial_end_date', '')}
-                    )
-                elif trial_validation.get('is_trial'):
-                    headers = {}
-                    if 'remaining_tokens' in trial_validation:
-                        headers["X-Trial-Remaining-Tokens"] = str(trial_validation['remaining_tokens'])
-                    if 'remaining_requests' in trial_validation:
-                        headers["X-Trial-Remaining-Requests"] = str(trial_validation['remaining_requests'])
-                    if 'remaining_credits' in trial_validation:
-                        headers["X-Trial-Remaining-Credits"] = str(trial_validation['remaining_credits'])
-
-                    raise HTTPException(
-                        status_code=429,
-                        detail=trial_validation['error'],
-                        headers=headers
-                    )
-                else:
-                    raise HTTPException(
-                        status_code=403,
-                        detail=trial_validation.get('error',
-                                                    'Access denied. Please start a trial or subscribe to a paid plan.')
-                    )
-
-            # Skip rate limiting for trial users - they have their own limits
-            if not trial_validation.get('is_trial', False):
-                rate_limit_manager = get_rate_limit_manager()
-                rate_limit_check = await rate_limit_manager.check_rate_limit(api_key, tokens_used=0)
-                if not rate_limit_check.allowed:
-                    # Create rate limit alert (async)
-                    await loop.run_in_executor(
-                        executor,
-                        create_rate_limit_alert,
-                        api_key,
-                        "rate_limit_exceeded",
-                        {
-                            "reason": rate_limit_check.reason,
-                            "retry_after": rate_limit_check.retry_after,
-                            "remaining_requests": rate_limit_check.remaining_requests,
-                            "remaining_tokens": rate_limit_check.remaining_tokens
-                        }
-                    )
-
-                    raise HTTPException(
-                        status_code=429,
-                        detail=f"Rate limit exceeded: {rate_limit_check.reason}",
-                        headers={"Retry-After": str(rate_limit_check.retry_after)} if rate_limit_check.retry_after else None
-                    )
-
-            if user['credits'] <= 0:
-                raise HTTPException(status_code=402, detail="Insufficient credits")
-
-            messages = [msg.model_dump() for msg in req.messages]
-            model = req.model
-
-            optional_params = {}
-            if req.max_tokens is not None:
-                optional_params['max_tokens'] = req.max_tokens
-            if req.temperature is not None:
-                optional_params['temperature'] = req.temperature
-            if req.top_p is not None:
-                optional_params['top_p'] = req.top_p
-            if req.frequency_penalty is not None:
-                optional_params['frequency_penalty'] = req.frequency_penalty
-            if req.presence_penalty is not None:
-                optional_params['presence_penalty'] = req.presence_penalty
-
-            # Make request to selected provider asynchronously using partial for kwargs
-            provider = req.provider if req.provider else "openrouter"
-
             if provider == "portkey":
-                # Use Portkey with specified sub-provider
-                portkey_provider = req.portkey_provider if req.portkey_provider else "openai"
-                portkey_virtual_key = req.portkey_virtual_key if hasattr(req, 'portkey_virtual_key') else None
-                make_request_func = partial(make_portkey_request_openai, messages, model, portkey_provider, portkey_virtual_key, **optional_params)
-                response = await loop.run_in_executor(executor, make_request_func)
-                processed_response = await loop.run_in_executor(executor, process_portkey_response, response)
+                portkey_provider = req.portkey_provider or "openai"
+                portkey_virtual_key = getattr(req, "portkey_virtual_key", None)
+                resp_raw = await asyncio.wait_for(
+                    _to_thread(make_portkey_request_openai, messages, model, portkey_provider, portkey_virtual_key, **optional),
+                    timeout=30
+                )
+                processed = await _to_thread(process_portkey_response, resp_raw)
             else:
-                # Use OpenRouter (default)
-                make_request_func = partial(make_openrouter_request_openai, messages, model, **optional_params)
-                response = await loop.run_in_executor(executor, make_request_func)
-                processed_response = await loop.run_in_executor(executor, process_openrouter_response, response)
-
-            usage = processed_response.get('usage', {})
-            total_tokens = usage.get('total_tokens', 0)
-
-            # Check plan limits with actual token usage (async)
-            plan_check_final = await loop.run_in_executor(
-                executor,
-                enforce_plan_limits,
-                user['id'],
-                total_tokens,
-                environment_tag
-            )
-            if not plan_check_final['allowed']:
+                resp_raw = await asyncio.wait_for(
+                    _to_thread(make_openrouter_request_openai, messages, model, **optional),
+                    timeout=30
+                )
+                processed = await _to_thread(process_openrouter_response, resp_raw)
+        except httpx.TimeoutException as e:
+            logger.warning("Upstream timeout (%s): %s", provider, e)
+            raise HTTPException(status_code=504, detail="Upstream timeout")
+        except httpx.HTTPStatusError as e:
+            status = e.response.status_code
+            retry_after = e.response.headers.get("retry-after")
+            # Map upstream statuses to client-facing statuses
+            if status == 429:
                 raise HTTPException(
                     status_code=429,
-                    detail=f"Plan limit exceeded: {plan_check_final['reason']}"
+                    detail="Upstream rate limit exceeded",
+                    headers={"Retry-After": retry_after} if retry_after else None
+                )
+            elif status in (401, 403):
+                # Tests expect 500 for upstream auth failures
+                raise HTTPException(status_code=500, detail="OpenRouter authentication error")
+            elif 400 <= status < 500:
+                raise HTTPException(status_code=400, detail="Upstream rejected the request")
+            else:
+                raise HTTPException(status_code=502, detail="Upstream service error")
+        except httpx.RequestError as e:
+            logger.warning("Upstream network error (%s): %s", provider, e)
+            # Tests expect 503 for generic network/request errors
+            raise HTTPException(status_code=503, detail="OpenRouter service unavailable")
+        except asyncio.TimeoutError:
+            raise HTTPException(status_code=504, detail="Upstream timeout")
+        except Exception as e:
+            logger.error("Unexpected upstream error: %s", e)
+            raise HTTPException(status_code=502, detail="Upstream error")
+
+        elapsed = max(0.001, time.monotonic() - start)
+
+        # === 4) Usage, pricing, final checks ===
+        usage = processed.get("usage", {}) or {}
+        total_tokens = usage.get("total_tokens", 0)
+        prompt_tokens = usage.get("prompt_tokens", 0)
+        completion_tokens = usage.get("completion_tokens", 0)
+
+        post_plan = await _to_thread(enforce_plan_limits, user["id"], total_tokens, environment_tag)
+        if not post_plan.get("allowed", False):
+            raise HTTPException(status_code=429, detail=f"Plan limit exceeded: {post_plan.get('reason', 'unknown')}")
+
+        if trial.get("is_trial") and not trial.get("is_expired"):
+            try:
+                await _to_thread(track_trial_usage, api_key, total_tokens, 1)
+            except Exception as e:
+                logger.warning("Failed to track trial usage: %s", e)
+
+        if not trial.get("is_trial", False):
+            rl_final = await rate_limit_mgr.check_rate_limit(api_key, tokens_used=total_tokens)
+            if not rl_final.allowed:
+                await _to_thread(create_rate_limit_alert, api_key, "rate_limit_exceeded", {
+                    "reason": rl_final.reason,
+                    "retry_after": rl_final.retry_after,
+                    "remaining_requests": rl_final.remaining_requests,
+                    "remaining_tokens": rl_final.remaining_tokens,
+                    "tokens_requested": total_tokens
+                })
+                raise HTTPException(
+                    status_code=429,
+                    detail=f"Rate limit exceeded: {rl_final.reason}",
+                    headers={"Retry-After": str(rl_final.retry_after)} if rl_final.retry_after else None
                 )
 
-            # Track trial usage BEFORE generating a response
-            if trial_validation.get('is_trial') and not trial_validation.get('is_expired'):
-                try:
-                    logger.info(f"Tracking trial usage: {total_tokens} tokens, 1 request")
-                    success = await loop.run_in_executor(
-                        executor,
-                        track_trial_usage,
-                        api_key,
-                        total_tokens,
-                        1
-                    )
-                    if success:
-                        logger.info("Trial usage tracked successfully")
-                    else:
-                        logger.warning("Failed to track trial usage")
-                except Exception as e:
-                    logger.warning(f"Failed to track trial usage: {e}")
+        cost = calculate_cost(model, prompt_tokens, completion_tokens)
 
-            # Final rate limit check with actual token usage
-            # Skip final rate limiting for trial users - they have their own limits
-            if not trial_validation.get('is_trial', False):
-                rate_limit_check_final = await rate_limit_manager.check_rate_limit(api_key, tokens_used=total_tokens)
-                if not rate_limit_check_final.allowed:
-                    # Create rate limit alert (async)
-                    await loop.run_in_executor(
-                        executor,
-                        create_rate_limit_alert,
-                        api_key,
-                        "rate_limit_exceeded",
-                        {
-                            "reason": rate_limit_check_final.reason,
-                            "retry_after": rate_limit_check_final.retry_after,
-                            "remaining_requests": rate_limit_check_final.remaining_requests,
-                            "remaining_tokens": rate_limit_check_final.remaining_tokens,
-                            "tokens_requested": total_tokens
-                        }
-                    )
-
-                    raise HTTPException(
-                        status_code=429,
-                        detail=f"Rate limit exceeded: {rate_limit_check_final.reason}",
-                        headers={"Retry-After": str(
-                            rate_limit_check_final.retry_after)} if rate_limit_check_final.retry_after else None
-                    )
-
-            # Calculate actual cost based on model pricing
-            prompt_tokens = usage.get('prompt_tokens', 0)
-            completion_tokens = usage.get('completion_tokens', 0)
-            actual_cost = calculate_cost(req.model, prompt_tokens, completion_tokens)
-
-            logger.info(f"Cost calculation: {prompt_tokens} prompt + {completion_tokens} completion = ${actual_cost:.6f} for {req.model}")
-
-            # Only check user credits for non-trial users
-            if not trial_validation.get('is_trial', False):
-                if user['credits'] < actual_cost:
-                    raise HTTPException(
-                        status_code=402,
-                        detail=f"Insufficient credits. Required: ${actual_cost:.6f}, Available: ${user['credits']:.6f}"
-                    )
-
+        if not trial.get("is_trial", False):
+            # Ideally: wrap deduct+record+balance fetch in a DB transaction
             try:
-                # Only deduct credits for non-trial users (use same executor)
-                if not trial_validation.get('is_trial', False):
-                    # Prepare metadata for credit transaction logging
-                    usage_metadata = {
-                        'model': req.model,
-                        'total_tokens': total_tokens,
-                        'prompt_tokens': prompt_tokens,
-                        'completion_tokens': completion_tokens,
-                        'cost_usd': actual_cost
-                    }
-                    await loop.run_in_executor(executor, deduct_credits, api_key, actual_cost, f"API usage - {req.model}", usage_metadata)
-                    await loop.run_in_executor(executor, record_usage, user['id'], api_key, req.model, total_tokens, actual_cost)
-                await loop.run_in_executor(executor, update_rate_limit_usage, api_key, total_tokens)
-
-                # Increment API key usage count
-                await loop.run_in_executor(executor, increment_api_key_usage, api_key)
-
-                # Log activity for analytics
-                try:
-                    from src.db.activity import log_activity, get_provider_from_model
-
-                    # Calculate speed (tokens per second)
-                    # This is an approximation - we don't track actual request time here
-                    speed = 0.0  # TODO: Track actual request duration
-
-                    # Get provider from model name
-                    provider = get_provider_from_model(req.model)
-
-                    # Get finish reason from response
-                    finish_reason = processed_response.get('choices', [{}])[0].get('finish_reason', 'stop')
-
-                    await loop.run_in_executor(
-                        executor,
-                        log_activity,
-                        user['id'],
-                        req.model,
-                        provider,
-                        total_tokens,
-                        actual_cost,  # Use the actual calculated cost
-                        speed,
-                        finish_reason,
-                        "API",
-                        {
-                            'prompt_tokens': prompt_tokens,
-                            'completion_tokens': completion_tokens,
-                            'provider': provider
-                        }
-                    )
-                except Exception as e:
-                    logger.warning(f"Failed to log activity: {e}")
-                    # Don't fail the request if activity logging fails
-
+                await _to_thread(deduct_credits, api_key, cost, f"API usage - {model}", {
+                    "model": model,
+                    "total_tokens": total_tokens,
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "cost_usd": cost,
+                })
+                await _to_thread(record_usage, user["id"], api_key, model, total_tokens, cost)
             except ValueError as e:
-                logger.error(f"Failed to deduct credits: {e}")
+                # e.g., insufficient funds detected atomically in DB
+                raise HTTPException(status_code=402, detail=str(e))
             except Exception as e:
-                logger.error(f"Error in usage recording process: {e}")
+                logger.error("Usage recording error: %s", e)
 
-            # Calculate balance after usage
-            if trial_validation.get('is_trial', False):
-                # For trial users, show trial credits remaining
-                trial_remaining_credits = trial_validation.get('remaining_credits', 0.0)
-                processed_response['gateway_usage'] = {
-                    'tokens_charged': total_tokens,
-                    'trial_credits_remaining': trial_remaining_credits,
-                    'user_api_key': f"{api_key[:10]}..."
-                }
-            else:
-                # For non-trial users, show user credits remaining
-                processed_response['gateway_usage'] = {
-                    'tokens_charged': total_tokens,
-                    'user_balance_after': user['credits'] - total_tokens,
-                    'user_api_key': f"{api_key[:10]}..."
-                }
+            await _to_thread(update_rate_limit_usage, api_key, total_tokens)
 
-            # Save chat history if session_id is provided
-            if session_id:
-                try:
-                    # Verify session belongs to user
-                    session = await loop.run_in_executor(executor, get_chat_session, session_id, user['id'])
-                    if session:
-                        # Save user message
-                        user_message = messages[0] if messages else None
-                        if user_message and user_message.get('role') == 'user':
-                            await loop.run_in_executor(
-                                executor,
-                                save_chat_message,
-                                session_id,
-                                'user',
-                                user_message.get('content', ''),
-                                req.model,
-                                0  # User message tokens not counted
-                            )
-                        
-                        # Save assistant response
-                        assistant_content = processed_response.get('choices', [{}])[0].get('message', {}).get('content', '')
-                        if assistant_content:
-                            await loop.run_in_executor(
-                                executor,
-                                save_chat_message,
-                                session_id,
-                                'assistant',
-                                assistant_content,
-                                req.model,
-                                total_tokens
-                            )
-                        
-                        logger.info(f"Saved chat history to session {session_id}")
-                    else:
-                        logger.warning(f"Session {session_id} not found for user {user['id']}")
-                except Exception as e:
-                    logger.error(f"Failed to save chat history: {e}")
-                    # Don't fail the request if chat history saving fails
-            
-            return processed_response
+        await _to_thread(increment_api_key_usage, api_key)
 
-        except httpx.HTTPStatusError as e:
-            logger.error(f"OpenRouter HTTP error: {e.response.status_code} - {e.response.text}")
-            if e.response.status_code == 429:
-                raise HTTPException(status_code=429, detail="OpenRouter rate limit exceeded")
-            elif e.response.status_code == 401:
-                raise HTTPException(status_code=500, detail="OpenRouter authentication error")
-            elif e.response.status_code == 400:
-                raise HTTPException(status_code=400, detail=f"Invalid request: {e.response.text}")
-            else:
-                raise HTTPException(status_code=e.response.status_code, detail=f"OpenRouter error: {e.response.text}")
+        # === 5) History (use the last user message in this request only) ===
+        if session_id:
+            try:
+                session = await _to_thread(get_chat_session, session_id, user["id"])
+                if session:
+                    # save last user turn in this call
+                    last_user = None
+                    for m in reversed(messages):
+                        if m.get("role") == "user":
+                            last_user = m
+                            break
+                    if last_user:
+                        await _to_thread(save_chat_message, session_id, "user", last_user.get("content",""), model, 0)
 
-        except httpx.RequestError as e:
-            logger.error(f"OpenRouter request error: {e}")
-            raise HTTPException(status_code=503, detail=f"OpenRouter service unavailable: {str(e)}")
+                    assistant_content = processed.get("choices", [{}])[0].get("message", {}).get("content", "")
+                    if assistant_content:
+                        await _to_thread(save_chat_message, session_id, "assistant", assistant_content, model, total_tokens)
+                else:
+                    logger.warning("Session %s not found for user %s", session_id, user["id"])
+            except Exception as e:
+                logger.warning("Failed to save chat history: %s", e)
 
-        finally:
-            # Clean up executor
-            executor.shutdown(wait=False)
+        # === 6) Attach gateway usage (non-sensitive) ===
+        processed.setdefault("gateway_usage", {})
+        processed["gateway_usage"].update({
+            "tokens_charged": total_tokens,
+            "request_ms": int(elapsed * 1000),
+        })
+        if not trial.get("is_trial", False):
+            # If you can cheaply re-fetch balance, do it here; otherwise omit
+            processed["gateway_usage"]["cost_usd"] = round(cost, 6)
+
+        return processed
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Unexpected error in chat completion: {e}")
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        logger.exception("Unhandled server error")
+        # Don’t leak internal details
+        raise HTTPException(status_code=500, detail="Internal server error")
