@@ -54,5 +54,5 @@ class PrivyAuthResponse(BaseModel):
     is_new_user: Optional[bool] = None
     display_name: Optional[str] = None
     email: Optional[str] = None
-    credits: Optional[int] = None
+    credits: Optional[float] = None
     timestamp: Optional[datetime] = None
