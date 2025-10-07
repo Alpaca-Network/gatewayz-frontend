@@ -8,11 +8,17 @@ import os
 
 class ProfessionalEmailTemplates:
     """Professional email templates with modern design"""
-    
-    def __init__(self, app_name: str = "Gatewayz", app_url: str = "https://betagatewayz.ai"):
+
+    def __init__(self, app_name: str = "Gatewayz", app_url: str = "https://betagatewayz.ai", support_email: str = None):
         self.app_name = app_name
         self.app_url = app_url
-        self.support_email = f"support@{app_url.split('//')[-1]}"
+        # Use provided support email or extract from URL
+        if support_email:
+            self.support_email = support_email
+        else:
+            # Extract domain from URL and use support email
+            domain = app_url.split('//')[-1].replace('beta.', '').replace('www.', '')
+            self.support_email = f"support@{domain}"
     
     def get_base_template(self) -> str:
         """Base HTML template with modern design"""
@@ -938,5 +944,6 @@ The {self.app_name} Team
 # Global instance
 email_templates = ProfessionalEmailTemplates(
     app_name=os.environ.get("APP_NAME", "Gatewayz"),
-    app_url=os.environ.get("APP_URL", "https://beta.gatewayz.ai")
+    app_url=os.environ.get("APP_URL", "https://beta.gatewayz.ai"),
+    support_email=os.environ.get("SUPPORT_EMAIL", "support@gatewayz.ai")
 )
