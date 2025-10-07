@@ -1,5 +1,6 @@
 import logging
 import asyncio
+import time
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from fastapi import APIRouter, Depends, HTTPException
@@ -71,6 +72,9 @@ async def generate_images(req: ImageGenerationRequest, api_key: str = Depends(ge
             # Make image generation request
             logger.info(f"Generating {req.n} image(s) with prompt: {prompt[:50]}...")
 
+            # Start timing inference
+            start = time.monotonic()
+
             if provider == "deepinfra":
                 # Direct DeepInfra request
                 make_request_func = partial(
@@ -113,13 +117,16 @@ async def generate_images(req: ImageGenerationRequest, api_key: str = Depends(ge
                 model
             )
 
+            # Calculate inference latency
+            elapsed = max(0.001, time.monotonic() - start)
+
             # Deduct credits (100 tokens per image generated)
             tokens_charged = 100 * req.n
 
             try:
                 await loop.run_in_executor(executor, deduct_credits, api_key, tokens_charged)
                 cost = tokens_charged * 0.02 / 1000
-                await loop.run_in_executor(executor, record_usage, user['id'], api_key, model, tokens_charged, cost)
+                await loop.run_in_executor(executor, record_usage, user['id'], api_key, model, tokens_charged, cost, int(elapsed * 1000))
 
                 # Increment API key usage count
                 await loop.run_in_executor(executor, increment_api_key_usage, api_key)
@@ -132,6 +139,7 @@ async def generate_images(req: ImageGenerationRequest, api_key: str = Depends(ge
             # Add gateway usage info
             processed_response['gateway_usage'] = {
                 'tokens_charged': tokens_charged,
+                'request_ms': int(elapsed * 1000),
                 'user_balance_after': user['credits'] - tokens_charged,
                 'user_api_key': f"{api_key[:10]}...",
                 'images_generated': req.n

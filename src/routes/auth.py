@@ -64,11 +64,33 @@ async def privy_auth(request: PrivyAuthRequest):
             # Existing user - return their info
             logger.info(f"Existing Privy user found: {existing_user['id']}")
             logger.info(f"User details - ID: {existing_user['id']}, Email: {existing_user.get('email')}, Welcome sent: {existing_user.get('welcome_email_sent', 'Not set')}")
-            
+
+            # Get the primary API key from api_keys_new table (not users.api_key which might be stale)
+            client = get_supabase_client()
+
+            # First try to get primary key
+            primary_key_result = client.table('api_keys_new').select('api_key').eq('user_id', existing_user['id']).eq('is_primary', True).eq('is_active', True).execute()
+
+            api_key_to_return = existing_user['api_key']  # Default fallback
+
+            if primary_key_result.data and len(primary_key_result.data) > 0:
+                # Found primary key
+                api_key_to_return = primary_key_result.data[0]['api_key']
+                logger.info(f"Returning primary API key for user {existing_user['id']}: {api_key_to_return[:15]}...")
+            else:
+                # No primary key, get ANY active key from api_keys_new
+                any_key_result = client.table('api_keys_new').select('api_key').eq('user_id', existing_user['id']).eq('is_active', True).order('created_at', desc=False).limit(1).execute()
+
+                if any_key_result.data and len(any_key_result.data) > 0:
+                    api_key_to_return = any_key_result.data[0]['api_key']
+                    logger.info(f"No primary key found, returning first active API key for user {existing_user['id']}: {api_key_to_return[:15]}...")
+                else:
+                    logger.warning(f"No API keys found in api_keys_new for user {existing_user['id']}, using legacy key from users table: {api_key_to_return[:15] if api_key_to_return else 'None'}...")
+
             # Send welcome email if they haven't received one yet
             user_email = existing_user.get('email') or email
             logger.info(f"Welcome email check - User ID: {existing_user['id']}, Email: {user_email}, Welcome sent: {existing_user.get('welcome_email_sent', 'Not set')}")
-            
+
             if user_email:
                 try:
                     logger.info(f"Attempting to send welcome email to user {existing_user['id']} with email {user_email}")
@@ -83,12 +105,12 @@ async def privy_auth(request: PrivyAuthRequest):
                     logger.error(f"Failed to send welcome email to existing user: {e}")
             else:
                 logger.warning(f"No email found for user {existing_user['id']}, skipping welcome email")
-            
+
             return PrivyAuthResponse(
                 success=True,
                 message="Login successful",
                 user_id=existing_user['id'],
-                api_key=existing_user['api_key'],
+                api_key=api_key_to_return,
                 auth_method=auth_method,
                 privy_user_id=request.user.id,
                 is_new_user=False,

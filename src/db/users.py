@@ -328,7 +328,7 @@ def get_user_count() -> int:
         return 0
 
 
-def record_usage(user_id: int, api_key: str, model: str, tokens_used: int, cost: float = 0.0) -> None:
+def record_usage(user_id: int, api_key: str, model: str, tokens_used: int, cost: float = 0.0, latency_ms: int = None) -> None:
     try:
         client = get_supabase_client()
 
@@ -340,7 +340,7 @@ def record_usage(user_id: int, api_key: str, model: str, tokens_used: int, cost:
         from datetime import timezone
         timestamp = datetime.now(timezone.utc).replace(tzinfo=timezone.utc).isoformat()
 
-        result = client.table('usage_records').insert({
+        usage_data = {
             'user_id': user_id,
             'api_key': api_key,
             'model': model,
@@ -348,10 +348,16 @@ def record_usage(user_id: int, api_key: str, model: str, tokens_used: int, cost:
             'cost': cost,
             'request_id': request_id,
             'timestamp': timestamp
-        }).execute()
+        }
+
+        # Add latency if provided
+        if latency_ms is not None:
+            usage_data['latency_ms'] = latency_ms
+
+        result = client.table('usage_records').insert(usage_data).execute()
 
         logger.info(
-            f"Usage recorded successfully: user_id={user_id}, api_key={api_key[:20]}..., model={model}, tokens={tokens_used}, cost={cost}, request_id={request_id}")
+            f"Usage recorded successfully: user_id={user_id}, api_key={api_key[:20]}..., model={model}, tokens={tokens_used}, cost={cost}, latency_ms={latency_ms}, request_id={request_id}")
 
     except Exception as e:
         logger.error(f"Failed to record usage: {e}")

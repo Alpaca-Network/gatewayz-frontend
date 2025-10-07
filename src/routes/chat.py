@@ -187,7 +187,7 @@ async def chat_completions(
                     "completion_tokens": completion_tokens,
                     "cost_usd": cost,
                 })
-                await _to_thread(record_usage, user["id"], api_key, model, total_tokens, cost)
+                await _to_thread(record_usage, user["id"], api_key, model, total_tokens, cost, int(elapsed * 1000))
             except ValueError as e:
                 # e.g., insufficient funds detected atomically in DB
                 raise HTTPException(status_code=402, detail=str(e))
