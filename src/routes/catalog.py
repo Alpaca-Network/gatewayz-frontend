@@ -344,3 +344,103 @@ async def get_specific_model(
     except Exception as e:
         logger.error(f"Failed to get specific model {provider_name}/{model_name}: {e}")
         raise HTTPException(status_code=500, detail="Failed to get model data")
+
+
+@router.get("/developer/{developer_name}/models", tags=["models"])
+async def get_developer_models(
+    developer_name: str,
+    limit: Optional[int] = Query(None, description="Limit number of results"),
+    offset: Optional[int] = Query(0, description="Offset for pagination"),
+    include_huggingface: bool = Query(True, description="Include Hugging Face metrics"),
+    gateway: Optional[str] = Query("all", description="Gateway: 'openrouter', 'portkey', or 'all'"),
+):
+    """
+    Get all models from a specific developer/provider (e.g., anthropic, openai, google)
+
+    Args:
+        developer_name: Provider/developer name (e.g., 'anthropic', 'openai', 'google', 'meta')
+        limit: Maximum number of models to return
+        offset: Number of models to skip (for pagination)
+        include_huggingface: Whether to include HuggingFace metrics
+        gateway: Which gateway to query ('openrouter', 'portkey', or 'all')
+
+    Returns:
+        JSON response with:
+        - models: List of model objects from the developer
+        - developer: Developer name
+        - total: Total number of models found
+        - count: Number of models returned (after pagination)
+
+    Example:
+        GET /catalog/developer/anthropic/models
+        GET /catalog/developer/openai/models?limit=10
+    """
+    try:
+        logger.info(f"Getting models for developer: {developer_name}")
+
+        # Get models from specified gateway
+        gateway_value = (gateway or "all").lower()
+        models = get_cached_models(gateway_value)
+
+        if not models:
+            raise HTTPException(status_code=503, detail="Models data unavailable")
+
+        # Filter models by developer/provider
+        developer_lower = developer_name.lower()
+        filtered_models = []
+
+        for model in models:
+            model_id = (model.get("id") or "").lower()
+            provider_slug = (model.get("provider_slug") or "").lower()
+
+            # Check if model ID starts with developer name (e.g., "anthropic/claude-3")
+            # or if provider_slug matches
+            if model_id.startswith(f"{developer_lower}/") or provider_slug == developer_lower:
+                filtered_models.append(model)
+
+        if not filtered_models:
+            logger.warning(f"No models found for developer: {developer_name}")
+            return {
+                "developer": developer_name,
+                "models": [],
+                "total": 0,
+                "count": 0,
+                "offset": offset,
+                "limit": limit
+            }
+
+        total_models = len(filtered_models)
+        logger.info(f"Found {total_models} models for developer '{developer_name}'")
+
+        # Apply pagination
+        if offset:
+            filtered_models = filtered_models[offset:]
+        if limit:
+            filtered_models = filtered_models[:limit]
+
+        # Enhance models with provider info and HuggingFace data
+        providers = get_cached_providers()
+        enhanced_providers = enhance_providers_with_logos_and_sites(providers or [])
+
+        enhanced_models = []
+        for model in filtered_models:
+            enhanced_model = enhance_model_with_provider_info(model, enhanced_providers)
+            if include_huggingface and enhanced_model.get('hugging_face_id'):
+                enhanced_model = enhance_model_with_huggingface_data(enhanced_model)
+            enhanced_models.append(enhanced_model)
+
+        return {
+            "developer": developer_name,
+            "models": enhanced_models,
+            "total": total_models,
+            "count": len(enhanced_models),
+            "offset": offset,
+            "limit": limit,
+            "gateway": gateway_value
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get models for developer {developer_name}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get developer models: {str(e)}")
