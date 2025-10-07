@@ -9,6 +9,13 @@ import secrets
 
 logger = logging.getLogger(__name__)
 
+# near the top of the module
+def _pct(used: int, limit: Optional[int]) -> Optional[float]:
+    if not limit:
+        return None
+    return round(min(100.0, (used / float(limit)) * 100.0), 6)
+
+
 def check_key_name_uniqueness(user_id: int, key_name: str, exclude_key_id: Optional[int] = None) -> bool:
     """Check if a key name is unique within the user's scope"""
     try:
@@ -211,10 +218,10 @@ def get_user_api_keys(user_id: int) -> List[Dict[str, Any]]:
                 if key.get('max_requests'):
                     requests_remaining = max(0, key['max_requests'] - key['requests_used'])
 
-                # Calculate usage percentage
+                # Calculate usage percentage (rounded)
                 usage_percentage = None
                 if key.get('max_requests') and key.get('requests_used'):
-                    usage_percentage = min(100, (key['requests_used'] / key['max_requests']) * 100)
+                    usage_percentage = _pct(key.get('requests_used', 0), key['max_requests'])
 
                 key_data = {
                     'id': key['id'],
@@ -505,12 +512,12 @@ def get_api_key_usage_stats(api_key: str) -> Dict[str, Any]:
             key_data = key_result.data[0]
 
             # Calculate requests remaining and usage percentage
-            requests_remaining = None
-            usage_percentage = None
+            requests_remaining = max(0, key_data['max_requests'] - key_data.get('requests_used', 0))
+            usage_percentage = _pct(key_data.get('requests_used', 0), key_data['max_requests'])
 
             if key_data.get('max_requests'):
                 requests_remaining = max(0, key_data['max_requests'] - key_data.get('requests_used', 0))
-                usage_percentage = min(100, (key_data.get('requests_used', 0) / key_data['max_requests']) * 100)
+                usage_percentage = _pct(key_data.get('requests_used', 0), key_data['max_requests'])
 
             return {
                 'api_key': api_key,
@@ -545,12 +552,12 @@ def get_api_key_usage_stats(api_key: str) -> Dict[str, Any]:
             key_data = key_result.data[0]
 
             # Calculate requests remaining and usage percentage
-            requests_remaining = None
-            usage_percentage = None
+            requests_remaining = max(0, key_data['max_requests'] - key_data.get('requests_used', 0))
+            usage_percentage = _pct(key_data.get('requests_used', 0), key_data['max_requests'])
 
             if key_data.get('max_requests'):
                 requests_remaining = max(0, key_data['max_requests'] - key_data.get('requests_count', 0))
-                usage_percentage = min(100, (key_data.get('requests_count', 0) / key_data['max_requests']) * 100)
+                usage_percentage = _pct(key_data.get('requests_count', 0), key_data['max_requests'])
 
             return {
                 'api_key': api_key,
@@ -761,10 +768,10 @@ def get_api_key_by_id(key_id: int, user_id: int) -> Optional[Dict[str, Any]]:
         if key_data.get('max_requests'):
             requests_remaining = max(0, key_data['max_requests'] - key_data.get('requests_used', 0))
 
-        # Calculate usage percentage
+        # Calculate usage percentage (rounded)
         usage_percentage = None
         if key_data.get('max_requests') and key_data.get('requests_used'):
-            usage_percentage = min(100, (key_data.get('requests_used', 0) / key_data['max_requests']) * 100)
+            usage_percentage = _pct(key_data.get('requests_used', 0), key_data['max_requests'])
 
         return {
             'id': key_data['id'],
@@ -815,7 +822,7 @@ def get_user_all_api_keys_usage(user_id: int) -> Dict[str, Any]:
 
             if key_data.get('max_requests'):
                 requests_remaining = max(0, key_data['max_requests'] - key_data.get('requests_used', 0))
-                usage_percentage = min(100, (key_data.get('requests_used', 0) / key_data['max_requests']) * 100)
+                usage_percentage = _pct(key_data.get('requests_used', 0), key_data['max_requests'])
 
             key_usage = {
                 'key_id': key_data['id'],

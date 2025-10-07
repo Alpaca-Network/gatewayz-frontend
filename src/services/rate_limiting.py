@@ -361,34 +361,36 @@ class SlidingWindowRateLimiter:
             "remaining_tokens": config.tokens_per_minute - minute_tokens - tokens_used,
             "reset_time": now.replace(second=0, microsecond=0) + timedelta(minutes=1)
         }
-    
+
     async def _check_local_sliding_window(
-        self, 
-        api_key: str, 
-        config: RateLimitConfig, 
-        tokens_used: int, 
-        now: datetime, 
-        window_start: datetime
+            self,
+            api_key: str,
+            config: RateLimitConfig,
+            tokens_used: int,
+            now: datetime,
+            window_start: datetime
     ) -> Dict[str, Any]:
         """Check sliding window using local cache (fallback)"""
         if api_key not in self.local_cache:
+            # tokens: deque of (timestamp, amount)
             self.local_cache[api_key] = {
                 "requests": deque(),
                 "tokens": deque()
             }
-        
+
         cache = self.local_cache[api_key]
-        
+
         # Clean old entries
         while cache["requests"] and cache["requests"][0] < window_start:
             cache["requests"].popleft()
-        while cache["tokens"] and cache["tokens"][0] < window_start:
+        while cache["tokens"] and cache["tokens"][0][0] < window_start:
             cache["tokens"].popleft()
-        
-        # Check limits
+
+        # Current usage in window
         current_requests = len(cache["requests"])
-        current_tokens = sum(cache["tokens"])
-        
+        current_tokens = sum(amount for ts, amount in cache["tokens"])
+
+        # Limits
         if current_requests >= config.requests_per_minute:
             return {
                 "allowed": False,
@@ -398,7 +400,7 @@ class SlidingWindowRateLimiter:
                 "retry_after": 60,
                 "reason": "Minute request limit exceeded"
             }
-        
+
         if current_tokens + tokens_used > config.tokens_per_minute:
             return {
                 "allowed": False,
@@ -408,18 +410,18 @@ class SlidingWindowRateLimiter:
                 "retry_after": 60,
                 "reason": "Minute token limit exceeded"
             }
-        
-        # Add current request
+
+        # Record this request
         cache["requests"].append(now)
-        cache["tokens"].append(tokens_used)
-        
+        cache["tokens"].append((now, tokens_used))
+
         return {
             "allowed": True,
             "remaining_requests": config.requests_per_minute - current_requests - 1,
             "remaining_tokens": config.tokens_per_minute - current_tokens - tokens_used,
             "reset_time": now.replace(second=0, microsecond=0) + timedelta(minutes=1)
         }
-    
+
     async def increment_concurrent_requests(self, api_key: str):
         """Increment concurrent request counter"""
         self.concurrent_requests[api_key] += 1

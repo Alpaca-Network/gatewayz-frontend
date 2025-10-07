@@ -12,6 +12,24 @@ from src.supabase_config import get_supabase_client
 
 logger = logging.getLogger(__name__)
 
+def _parse_trial_end_utc(s: str) -> datetime:
+    s = s.strip()
+    if "T" not in s:
+        # Date-only -> use end of that day UTC (friendliest interpretation)
+        d = datetime.fromisoformat(s)
+        return datetime(d.year, d.month, d.day, 23, 59, 59, tzinfo=timezone.utc)
+    # Full datetime
+    if s.endswith("Z"):
+        dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+    else:
+        dt = datetime.fromisoformat(s)
+    # Ensure UTC-aware
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+    return dt
+
 def validate_trial_access(api_key: str) -> Dict[str, Any]:
     """Validate trial access for an API key - simplified version"""
     try:
@@ -43,26 +61,11 @@ def validate_trial_access(api_key: str) -> Dict[str, Any]:
         
         # Check if trial is expired
         trial_end_date = key_data.get('trial_end_date')
+        trial_end_date = key_data.get('trial_end_date')
         if trial_end_date:
             try:
-                # Parse the trial end date - handle both ISO format and simple format
-                if 'T' in trial_end_date:
-                    # ISO format
-                    if trial_end_date.endswith('Z'):
-                        trial_end = datetime.fromisoformat(trial_end_date.replace('Z', '+00:00'))
-                    else:
-                        trial_end = datetime.fromisoformat(trial_end_date)
-                    
-                    # Convert to naive UTC datetime for comparison
-                    if trial_end.tzinfo is not None:
-                        trial_end = trial_end.replace(tzinfo=None)
-                else:
-                    # Simple format (YYYY-MM-DD)
-                    trial_end = datetime.fromisoformat(trial_end_date)
-                
-                # Get current UTC time (naive)
+                trial_end = _parse_trial_end_utc(trial_end_date)
                 now = datetime.now(timezone.utc)
-                
                 if trial_end <= now:
                     return {
                         'is_valid': False,
@@ -73,7 +76,7 @@ def validate_trial_access(api_key: str) -> Dict[str, Any]:
                     }
             except Exception as e:
                 logger.warning(f"Error parsing trial end date '{trial_end_date}': {e}")
-                # If we can't parse the date, assume trial is not expired
+                # Keep previous behavior: assume not expired on parse failure
         
         # Check trial limits
         trial_used_tokens = key_data.get('trial_used_tokens', 0)

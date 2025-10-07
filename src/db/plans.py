@@ -54,35 +54,52 @@ def get_plan_by_id(plan_id: int) -> Optional[Dict[str, Any]]:
 
 
 def get_user_plan(user_id: int) -> Optional[Dict[str, Any]]:
-    """Get current active plan for user"""
+
+
+    """Get current active plan for user (robust: never silently falls back to trial)"""
     try:
         client = get_supabase_client()
 
-        # Get active user plan
-        user_plan_result = client.table('user_plans').select('*').eq('user_id', user_id).eq('is_active', True).execute()
-
+        user_plan_result = client.table('user_plans').select('*') \
+            .eq('user_id', user_id).eq('is_active', True).execute()
         if not user_plan_result.data:
             return None
 
         user_plan = user_plan_result.data[0]
 
-        # Get plan details
-        plan_result = client.table('plans').select('*').eq('id', user_plan['plan_id']).execute()
+        # Reuse helper so feature normalization is consistent
+        plan = get_plan_by_id(user_plan['plan_id'])
 
-        if not plan_result.data:
-            return None
+        if not plan:
+            # Fallback: still surface the existence of an active user_plan
+            return {
+                'user_plan_id': user_plan['id'],
+                'user_id': user_id,
+                'plan_id': user_plan['plan_id'],
+                'plan_name': 'Unknown',
+                'plan_description': '',
+                'daily_request_limit': 100,
+                'monthly_request_limit': 1000,
+                'daily_token_limit': 10000,
+                'monthly_token_limit': 100000,
+                'price_per_month': 0,
+                'features': [],
+                'start_date': user_plan['start_date'],
+                'end_date': user_plan['end_date'],
+                'is_active': True
+            }
 
-        plan = plan_result.data[0]
-
-        # Handle features field - convert from dict to list if needed
         features = plan.get('features', [])
         if isinstance(features, dict):
-            # Convert dict to list of feature names
             features = list(features.keys())
         elif not isinstance(features, list):
             features = []
 
-        # Combine user plan and plan data
+        logger.info("get_user_plan: user=%s", user_id)
+        logger.info(" -> found active user_plans: %s", bool(user_plan_result.data))
+        if user_plan_result.data:
+            logger.info(" -> plan lookup id=%s", user_plan_result.data[0]['plan_id'])
+            logger.info(" -> plan found: %s", bool(plan))
         return {
             'user_plan_id': user_plan['id'],
             'user_id': user_id,
@@ -99,10 +116,10 @@ def get_user_plan(user_id: int) -> Optional[Dict[str, Any]]:
             'end_date': user_plan['end_date'],
             'is_active': user_plan['is_active']
         }
-
     except Exception as e:
         logger.error(f"Error getting user plan for user {user_id}: {e}")
         return None
+
 
 
 def assign_user_plan(user_id: int, plan_id: int, duration_months: int = 1) -> bool:
@@ -153,8 +170,74 @@ def check_plan_entitlements(user_id: int, required_feature: str = None) -> Dict[
     try:
         user_plan = get_user_plan(user_id)
 
+        # If get_user_plan() failed, inspect user_plans directly to avoid dropping to trial by mistake
         if not user_plan:
-            # No active plan - trial limits
+            client = get_supabase_client()
+            up_rs = client.table('user_plans').select('*').eq('user_id', user_id).eq('is_active', True).execute()
+
+            if up_rs.data:
+                up = up_rs.data[0]
+                end_str = up.get('end_date')
+                end_dt = None
+                if end_str:
+                    try:
+                        end_dt = datetime.fromisoformat(end_str.replace('Z', '+00:00'))
+                    except Exception:
+                        end_dt = None
+
+                now = datetime.now(timezone.utc)
+
+                # If expired, mark expired and return the expired payload
+                if end_dt and end_dt < now:
+                    client.table('user_plans').update({'is_active': False}).eq('id', up['id']).execute()
+                    client.table('users').update({'subscription_status': 'expired'}).eq('id', user_id).execute()
+                    return {
+                        'has_plan': False,
+                        'plan_expired': True,
+                        'daily_request_limit': 100,
+                        'monthly_request_limit': 1000,
+                        'daily_token_limit': 10000,
+                        'monthly_token_limit': 100000,
+                        'features': ['basic_models'],
+                        'plan_name': 'Expired',
+                        'can_access_feature': required_feature in ['basic_models'] if required_feature else True
+                    }
+
+                # ACTIVE PLAN FALLBACK: try to load the plan and return has_plan=True
+                plan = get_plan_by_id(up['plan_id'])
+                if plan:
+                    features = plan.get('features', [])
+                    if isinstance(features, dict):
+                        features = list(features.keys())
+                    elif not isinstance(features, list):
+                        features = []
+
+                    return {
+                        'has_plan': True,
+                        'plan_name': plan['name'],
+                        'daily_request_limit': plan['daily_request_limit'],
+                        'monthly_request_limit': plan['monthly_request_limit'],
+                        'daily_token_limit': plan['daily_token_limit'],
+                        'monthly_token_limit': plan['monthly_token_limit'],
+                        'features': features,
+                        'can_access_feature': (required_feature in features) if required_feature else True,
+                        'plan_expires': up['end_date'],
+                    }
+
+                # If we still can't get the plan row, assume an active-but-unknown plan with conservative defaults
+                return {
+                    'has_plan': True,
+                    'plan_name': 'Unknown',
+                    'daily_request_limit': 100,
+                    'monthly_request_limit': 1000,
+                    'daily_token_limit': 10000,
+                    'monthly_token_limit': 100000,
+                    'features': [],
+                    'can_access_feature': (required_feature is None),  # no features to gate
+                    'plan_expires': up.get('end_date'),
+                }
+
+            # Truly no active plan → trial defaults
             return {
                 'has_plan': False,
                 'daily_request_limit': 100,
@@ -166,16 +249,13 @@ def check_plan_entitlements(user_id: int, required_feature: str = None) -> Dict[
                 'can_access_feature': required_feature in ['basic_models'] if required_feature else True
             }
 
-        # Check if plan is expired
+        # We have a combined user_plan (happy path)
         end_date = datetime.fromisoformat(user_plan['end_date'].replace('Z', '+00:00'))
-        now = datetime.now(timezone.utc).replace(tzinfo=end_date.tzinfo)
-
+        now = datetime.now(timezone.utc)
         if end_date < now:
-            # Expired plan - revert to trial
             client = get_supabase_client()
             client.table('user_plans').update({'is_active': False}).eq('id', user_plan['user_plan_id']).execute()
             client.table('users').update({'subscription_status': 'expired'}).eq('id', user_id).execute()
-
             return {
                 'has_plan': False,
                 'plan_expired': True,
@@ -188,7 +268,6 @@ def check_plan_entitlements(user_id: int, required_feature: str = None) -> Dict[
                 'can_access_feature': required_feature in ['basic_models'] if required_feature else True
             }
 
-        # Active plan - handle features field conversion
         features = user_plan.get('features', [])
         if isinstance(features, dict):
             features = list(features.keys())
@@ -203,13 +282,13 @@ def check_plan_entitlements(user_id: int, required_feature: str = None) -> Dict[
             'daily_token_limit': user_plan['daily_token_limit'],
             'monthly_token_limit': user_plan['monthly_token_limit'],
             'features': features,
-            'can_access_feature': required_feature in features if required_feature else True,
+            'can_access_feature': (required_feature in features) if required_feature else True,
             'plan_expires': user_plan['end_date']
         }
 
     except Exception as e:
         logger.error(f"Error checking plan entitlements for user {user_id}: {e}")
-        # Return safe defaults on error
+        # Safe defaults on error
         return {
             'has_plan': False,
             'daily_request_limit': 100,
