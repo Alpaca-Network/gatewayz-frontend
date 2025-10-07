@@ -39,6 +39,7 @@ class PrivySigninRequest(BaseModel):
 class PrivyAuthRequest(BaseModel):
     user: PrivyUserData
     token: str
+    email: Optional[str] = None  # Optional top-level email field for frontend to send
     privy_access_token: Optional[str] = None
     refresh_token: Optional[str] = None
     session_update_action: Optional[str] = None

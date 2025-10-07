@@ -1,5 +1,6 @@
 import logging
 import datetime
+import requests
 from datetime import datetime, timezone
 
 from src.enhanced_notification_service import enhanced_notification_service
@@ -23,21 +24,49 @@ async def privy_auth(request: PrivyAuthRequest):
         logger.info(f"Privy auth request for user: {request.user.id}")
 
         # Extract user info from Privy linked accounts
-        email = None
+        # Priority: 1) Top-level email from request, 2) Email from linked accounts, 3) Fetch from Privy API
+        email = request.email  # Start with top-level email if provided by frontend
         display_name = None
         auth_method = AuthMethod.EMAIL  # Default
 
-        for account in request.user.linked_accounts:
-            if account.type == "email" and account.email:
-                email = account.email
-                auth_method = AuthMethod.EMAIL
-            elif account.type == "google_oauth" and account.email:
-                email = account.email
-                display_name = account.name
-                auth_method = AuthMethod.GOOGLE
-            elif account.type == "github" and account.name:
-                display_name = account.name
-                auth_method = AuthMethod.GITHUB
+        # Try to extract from linked accounts if not provided at top level
+        if not email:
+            for account in request.user.linked_accounts:
+                if account.type == "email" and account.email:
+                    email = account.email
+                    auth_method = AuthMethod.EMAIL
+                elif account.type == "google_oauth" and account.email:
+                    email = account.email
+                    display_name = account.name
+                    auth_method = AuthMethod.GOOGLE
+                elif account.type == "github" and account.name:
+                    display_name = account.name
+                    auth_method = AuthMethod.GITHUB
+
+        # If still no email found, try to fetch from Privy API using the token
+        if not email and request.token:
+            try:
+                logger.info(f"No email in request or linked_accounts, fetching from Privy API for user {request.user.id}")
+                headers = {
+                    "Authorization": f"Bearer {request.token}",
+                    "privy-app-id": "cmg8fkib300g3l40dbs6autqe"  # Your Privy app ID from the JWT
+                }
+                response = requests.get(f"https://auth.privy.io/api/v1/users/{request.user.id}", headers=headers, timeout=5)
+                if response.status_code == 200:
+                    user_data = response.json()
+                    logger.info(f"Privy API response: {user_data}")
+                    # Extract email from linked accounts in the API response
+                    for acc in user_data.get('linked_accounts', []):
+                        if acc.get('type') == 'email' and acc.get('address'):
+                            email = acc['address']
+                            logger.info(f"Found email from Privy API: {email}")
+                            break
+                else:
+                    logger.warning(f"Privy API returned status {response.status_code}")
+            except Exception as e:
+                logger.error(f"Error fetching user data from Privy API: {e}")
+
+        logger.info(f"Email extraction result for user {request.user.id}: {email}")
 
         # Generate username from email or privy ID (for fallback check)
         username = email.split('@')[0] if email else f"user_{request.user.id[:8]}"
