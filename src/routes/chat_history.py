@@ -17,10 +17,10 @@ from src.db.users import get_user
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(prefix="/v1/chat", tags=["chat-history"])
 
 
-@router.post("/sessions", response_model=ChatSessionResponse, tags=["chat-history"])
+@router.post("/sessions", response_model=ChatSessionResponse)
 async def create_session(
     request: CreateChatSessionRequest,
     api_key: str = Depends(get_api_key)
@@ -50,7 +50,7 @@ async def create_session(
         raise HTTPException(status_code=500, detail=f"Failed to create chat session: {str(e)}")
 
 
-@router.get("/sessions", response_model=ChatSessionsListResponse, tags=["chat-history"])
+@router.get("/sessions", response_model=ChatSessionsListResponse)
 async def get_sessions(
     api_key: str = Depends(get_api_key),
     limit: int = Query(50, ge=1, le=100),
@@ -82,7 +82,7 @@ async def get_sessions(
         raise HTTPException(status_code=500, detail=f"Failed to get chat sessions: {str(e)}")
 
 
-@router.get("/sessions/{session_id}", response_model=ChatSessionResponse, tags=["chat-history"])
+@router.get("/sessions/{session_id}", response_model=ChatSessionResponse)
 async def get_session(
     session_id: int,
     api_key: str = Depends(get_api_key)
@@ -113,7 +113,7 @@ async def get_session(
         raise HTTPException(status_code=500, detail=f"Failed to get chat session: {str(e)}")
 
 
-@router.put("/sessions/{session_id}", response_model=ChatSessionResponse, tags=["chat-history"])
+@router.put("/sessions/{session_id}", response_model=ChatSessionResponse)
 async def update_session(
     session_id: int,
     request: UpdateChatSessionRequest,
@@ -153,7 +153,7 @@ async def update_session(
         raise HTTPException(status_code=500, detail=f"Failed to update chat session: {str(e)}")
 
 
-@router.delete("/sessions/{session_id}", tags=["chat-history"])
+@router.delete("/sessions/{session_id}")
 async def delete_session(
     session_id: int,
     api_key: str = Depends(get_api_key)
@@ -183,7 +183,7 @@ async def delete_session(
         raise HTTPException(status_code=500, detail=f"Failed to delete chat session: {str(e)}")
 
 
-@router.get("/stats", response_model=ChatSessionStatsResponse, tags=["chat-history"])
+@router.get("/stats", response_model=ChatSessionStatsResponse)
 async def get_stats(api_key: str = Depends(get_api_key)):
     """Get chat session statistics for the authenticated user"""
     try:
@@ -206,7 +206,7 @@ async def get_stats(api_key: str = Depends(get_api_key)):
         raise HTTPException(status_code=500, detail=f"Failed to get chat stats: {str(e)}")
 
 
-@router.post("/search", response_model=ChatSessionsListResponse, tags=["chat-history"])
+@router.post("/search", response_model=ChatSessionsListResponse)
 async def search_sessions(
     request: SearchChatSessionsRequest,
     api_key: str = Depends(get_api_key)
@@ -237,7 +237,7 @@ async def search_sessions(
         raise HTTPException(status_code=500, detail=f"Failed to search chat sessions: {str(e)}")
 
 
-@router.post("/sessions/{session_id}/messages", tags=["chat-history"])
+@router.post("/sessions/{session_id}/messages")
 async def save_message(
     session_id: int,
     role: str = Query(..., description="Message role: 'user' or 'assistant'"),
