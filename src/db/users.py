@@ -152,6 +152,23 @@ def get_user_by_privy_id(privy_user_id: str) -> Optional[Dict[str, Any]]:
         return None
 
 
+def get_user_by_username(username: str) -> Optional[Dict[str, Any]]:
+    """Get user by username"""
+    try:
+        client = get_supabase_client()
+
+        result = client.table('users').select('*').eq('username', username).execute()
+
+        if result.data:
+            return result.data[0]
+
+        return None
+
+    except Exception as e:
+        logger.error(f"Error getting user by username: {e}")
+        return None
+
+
 def add_credits_to_user(
     user_id: int,
     credits: float,

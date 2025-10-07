@@ -39,8 +39,26 @@ async def privy_auth(request: PrivyAuthRequest):
                 display_name = account.name
                 auth_method = AuthMethod.GITHUB
 
+        # Generate username from email or privy ID (for fallback check)
+        username = email.split('@')[0] if email else f"user_{request.user.id[:8]}"
+
         # Check if user already exists by privy_user_id
         existing_user = get_user_by_privy_id(request.user.id)
+
+        # Fallback: check by username if privy_user_id lookup failed
+        if not existing_user:
+            from src.db.users import get_user_by_username
+            existing_user = get_user_by_username(username)
+            if existing_user:
+                logger.warning(f"User found by username '{username}' but not by privy_user_id. Updating privy_user_id...")
+                # Update the existing user with the privy_user_id
+                try:
+                    client = get_supabase_client()
+                    client.table('users').update({'privy_user_id': request.user.id}).eq('id', existing_user['id']).execute()
+                    existing_user['privy_user_id'] = request.user.id
+                    logger.info(f"Updated user {existing_user['id']} with privy_user_id")
+                except Exception as e:
+                    logger.error(f"Failed to update privy_user_id: {e}")
 
         if existing_user:
             # Existing user - return their info
@@ -83,10 +101,7 @@ async def privy_auth(request: PrivyAuthRequest):
             # New user - create account
             logger.info(f"Creating new Privy user: {request.user.id}")
 
-            # Generate username from email or privy ID
-            username = email.split('@')[0] if email else f"user_{request.user.id[:8]}"
-
-            # Create user with Privy ID
+            # Create user with Privy ID (username already generated above)
             user_data = create_enhanced_user(
                 username=username,
                 email=email or f"{request.user.id}@privy.user",
