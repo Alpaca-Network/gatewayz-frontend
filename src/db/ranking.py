@@ -5,13 +5,16 @@ from src.supabase_config import get_supabase_client
 logger = logging.getLogger(__name__)
 
 
-def get_all_latest_models(limit: Optional[int] = None, offset: Optional[int] = None) -> List[Dict[str, Any]]:
-    """Get all data from openrouter_models table for ranking page with logo URLs"""
+def get_all_latest_models(
+    limit: Optional[int] = None, 
+    offset: Optional[int] = None
+) -> List[Dict[str, Any]]:
+    """Get all data from latest_models table for ranking page with logo URLs"""
     try:
         client = get_supabase_client()
         
         # Build query with optional pagination
-        query = client.table('openrouter_models').select('*')
+        query = client.table('latest_models').select('*')
         
         # Apply ordering by rank (ascending order - rank 1 first)
         query = query.order('rank', desc=False)
@@ -25,7 +28,7 @@ def get_all_latest_models(limit: Optional[int] = None, offset: Optional[int] = N
         result = query.execute()
         
         if not result.data:
-            logger.info("No models found in openrouter_models table")
+            logger.info("No models found in latest_models table")
             return []
         
         # Enhance models with logo URLs if not present
@@ -41,7 +44,7 @@ def get_all_latest_models(limit: Optional[int] = None, offset: Optional[int] = N
             
             enhanced_models.append(enhanced_model)
         
-        logger.info(f"Retrieved {len(enhanced_models)} models from openrouter_models table with logo URLs")
+        logger.info(f"Retrieved {len(enhanced_models)} models from latest_models table with logo URLs")
         return enhanced_models
         
     except Exception as e:

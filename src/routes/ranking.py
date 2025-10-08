@@ -2,7 +2,7 @@ import logging
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Query
 from src.db.ranking import (
-    get_all_latest_models, 
+    get_all_latest_models,
     get_all_latest_apps,
 )
 
@@ -18,11 +18,11 @@ async def get_ranking_models(
     limit: Optional[int] = Query(None, description="Limit number of results"),
     offset: Optional[int] = Query(0, description="Offset for pagination")
 ):
-    """Get all models from openrouter_models table for ranking page with logo URLs"""
+    """Get all models from latest_models table for ranking page with logo URLs"""
     try:        
         # Get models with pagination support
         models = get_all_latest_models(limit=limit, offset=offset)
-        logger.info(f"Retrieved {len(models)} models from openrouter_models table")
+        logger.info(f"Retrieved {len(models)} models from latest_models table")
         
         return {
             "success": True,
