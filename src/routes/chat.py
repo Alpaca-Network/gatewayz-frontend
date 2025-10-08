@@ -1,5 +1,6 @@
-import logging, asyncio, time
+import logging, asyncio, time, json
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from typing import Optional
 import httpx
 
@@ -10,8 +11,8 @@ from src.db.users import get_user, deduct_credits, record_usage
 from src.db.chat_history import create_chat_session, save_chat_message, get_chat_session
 from src.schemas import ProxyRequest
 from src.security.deps import get_api_key
-from src.services.openrouter_client import make_openrouter_request_openai, process_openrouter_response
-from src.services.portkey_client import make_portkey_request_openai, process_portkey_response
+from src.services.openrouter_client import make_openrouter_request_openai, process_openrouter_response, make_openrouter_request_openai_stream
+from src.services.portkey_client import make_portkey_request_openai, process_portkey_response, make_portkey_request_openai_stream
 from src.services.rate_limiting import get_rate_limit_manager
 from src.services.trial_validation import validate_trial_access, track_trial_usage
 from src.services.pricing import calculate_cost
@@ -24,6 +25,137 @@ def mask_key(k: str) -> str:
 
 async def _to_thread(func, *args, **kwargs):
     return await asyncio.to_thread(func, *args, **kwargs)
+
+async def stream_generator(stream, user, api_key, model, trial, environment_tag, session_id, messages):
+    """Generate SSE stream from OpenAI stream response"""
+    accumulated_content = ""
+    prompt_tokens = 0
+    completion_tokens = 0
+    total_tokens = 0
+    start_time = time.monotonic()
+
+    try:
+        for chunk in stream:
+            # Extract chunk data
+            chunk_dict = {
+                "id": chunk.id,
+                "object": chunk.object,
+                "created": chunk.created,
+                "model": chunk.model,
+                "choices": []
+            }
+
+            for choice in chunk.choices:
+                choice_dict = {
+                    "index": choice.index,
+                    "delta": {},
+                    "finish_reason": choice.finish_reason
+                }
+
+                if hasattr(choice.delta, 'role') and choice.delta.role:
+                    choice_dict["delta"]["role"] = choice.delta.role
+                if hasattr(choice.delta, 'content') and choice.delta.content:
+                    choice_dict["delta"]["content"] = choice.delta.content
+                    accumulated_content += choice.delta.content
+
+                chunk_dict["choices"].append(choice_dict)
+
+            # Check for usage in chunk (some providers send it in final chunk)
+            if hasattr(chunk, 'usage') and chunk.usage:
+                prompt_tokens = chunk.usage.prompt_tokens
+                completion_tokens = chunk.usage.completion_tokens
+                total_tokens = chunk.usage.total_tokens
+
+            # Send SSE event
+            yield f"data: {json.dumps(chunk_dict)}\n\n"
+
+        # If no usage was provided, estimate based on content
+        if total_tokens == 0:
+            # Rough estimate: 1 token ≈ 4 characters
+            completion_tokens = max(1, len(accumulated_content) // 4)
+            prompt_tokens = max(1, sum(len(m.get("content", "")) for m in messages) // 4)
+            total_tokens = prompt_tokens + completion_tokens
+
+        elapsed = max(0.001, time.monotonic() - start_time)
+
+        # Post-stream processing: plan limits, usage tracking, credits
+        post_plan = await _to_thread(enforce_plan_limits, user["id"], total_tokens, environment_tag)
+        if not post_plan.get("allowed", False):
+            error_chunk = {
+                "error": {
+                    "message": f"Plan limit exceeded: {post_plan.get('reason', 'unknown')}",
+                    "type": "plan_limit_exceeded"
+                }
+            }
+            yield f"data: {json.dumps(error_chunk)}\n\n"
+            yield "data: [DONE]\n\n"
+            return
+
+        if trial.get("is_trial") and not trial.get("is_expired"):
+            try:
+                await _to_thread(track_trial_usage, api_key, total_tokens, 1)
+            except Exception as e:
+                logger.warning("Failed to track trial usage: %s", e)
+
+        if not trial.get("is_trial", False):
+            cost = calculate_cost(model, prompt_tokens, completion_tokens)
+
+            try:
+                await _to_thread(deduct_credits, api_key, cost, f"API usage - {model}", {
+                    "model": model,
+                    "total_tokens": total_tokens,
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "cost_usd": cost,
+                })
+                await _to_thread(record_usage, user["id"], api_key, model, total_tokens, cost, int(elapsed * 1000))
+                await _to_thread(update_rate_limit_usage, api_key, total_tokens)
+            except ValueError as e:
+                error_chunk = {
+                    "error": {
+                        "message": str(e),
+                        "type": "insufficient_credits"
+                    }
+                }
+                yield f"data: {json.dumps(error_chunk)}\n\n"
+                yield "data: [DONE]\n\n"
+                return
+            except Exception as e:
+                logger.error("Usage recording error: %s", e)
+
+        await _to_thread(increment_api_key_usage, api_key)
+
+        # Save chat history
+        if session_id:
+            try:
+                session = await _to_thread(get_chat_session, session_id, user["id"])
+                if session:
+                    last_user = None
+                    for m in reversed(messages):
+                        if m.get("role") == "user":
+                            last_user = m
+                            break
+                    if last_user:
+                        await _to_thread(save_chat_message, session_id, "user", last_user.get("content",""), model, 0)
+
+                    if accumulated_content:
+                        await _to_thread(save_chat_message, session_id, "assistant", accumulated_content, model, total_tokens)
+            except Exception as e:
+                logger.warning("Failed to save chat history: %s", e)
+
+        # Send final done message
+        yield "data: [DONE]\n\n"
+
+    except Exception as e:
+        logger.error(f"Streaming error: {e}")
+        error_chunk = {
+            "error": {
+                "message": "Streaming error occurred",
+                "type": "stream_error"
+            }
+        }
+        yield f"data: {json.dumps(error_chunk)}\n\n"
+        yield "data: [DONE]\n\n"
 
 @router.post("/v1/chat/completions", tags=["chat"])
 async def chat_completions(
@@ -94,7 +226,51 @@ async def chat_completions(
 
         provider = (req.provider or "openrouter").lower()
 
-        # === 3) Call upstream with explicit timeout ===
+        # === 3) Call upstream (streaming or non-streaming) ===
+        if req.stream:
+            # Handle streaming response
+            try:
+                if provider == "portkey":
+                    portkey_provider = req.portkey_provider or "openai"
+                    portkey_virtual_key = getattr(req, "portkey_virtual_key", None)
+                    stream = await _to_thread(
+                        make_portkey_request_openai_stream, messages, model, portkey_provider, portkey_virtual_key, **optional
+                    )
+                else:
+                    stream = await _to_thread(make_openrouter_request_openai_stream, messages, model, **optional)
+
+                return StreamingResponse(
+                    stream_generator(stream, user, api_key, model, trial, environment_tag, session_id, messages),
+                    media_type="text/event-stream"
+                )
+            except httpx.TimeoutException as e:
+                logger.warning("Upstream timeout (%s): %s", provider, e)
+                raise HTTPException(status_code=504, detail="Upstream timeout")
+            except httpx.HTTPStatusError as e:
+                status = e.response.status_code
+                retry_after = e.response.headers.get("retry-after")
+                if status == 429:
+                    raise HTTPException(
+                        status_code=429,
+                        detail="Upstream rate limit exceeded",
+                        headers={"Retry-After": retry_after} if retry_after else None
+                    )
+                elif status in (401, 403):
+                    raise HTTPException(status_code=500, detail="OpenRouter authentication error")
+                elif 400 <= status < 500:
+                    raise HTTPException(status_code=400, detail="Upstream rejected the request")
+                else:
+                    raise HTTPException(status_code=502, detail="Upstream service error")
+            except httpx.RequestError as e:
+                logger.warning("Upstream network error (%s): %s", provider, e)
+                raise HTTPException(status_code=503, detail="OpenRouter service unavailable")
+            except asyncio.TimeoutError:
+                raise HTTPException(status_code=504, detail="Upstream timeout")
+            except Exception as e:
+                logger.error("Unexpected upstream error: %s", e)
+                raise HTTPException(status_code=502, detail="Upstream error")
+
+        # Non-streaming response
         start = time.monotonic()
         try:
             if provider == "portkey":
