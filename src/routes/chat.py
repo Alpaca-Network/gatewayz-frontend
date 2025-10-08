@@ -13,6 +13,7 @@ from src.schemas import ProxyRequest
 from src.security.deps import get_api_key
 from src.services.openrouter_client import make_openrouter_request_openai, process_openrouter_response, make_openrouter_request_openai_stream
 from src.services.portkey_client import make_portkey_request_openai, process_portkey_response, make_portkey_request_openai_stream
+from src.services.featherless_client import make_featherless_request_openai, process_featherless_response, make_featherless_request_openai_stream
 from src.services.rate_limiting import get_rate_limit_manager
 from src.services.trial_validation import validate_trial_access, track_trial_usage
 from src.services.pricing import calculate_cost
@@ -236,6 +237,8 @@ async def chat_completions(
                     stream = await _to_thread(
                         make_portkey_request_openai_stream, messages, model, portkey_provider, portkey_virtual_key, **optional
                     )
+                elif provider == "featherless":
+                    stream = await _to_thread(make_featherless_request_openai_stream, messages, model, **optional)
                 else:
                     stream = await _to_thread(make_openrouter_request_openai_stream, messages, model, **optional)
 
@@ -281,6 +284,12 @@ async def chat_completions(
                     timeout=30
                 )
                 processed = await _to_thread(process_portkey_response, resp_raw)
+            elif provider == "featherless":
+                resp_raw = await asyncio.wait_for(
+                    _to_thread(make_featherless_request_openai, messages, model, **optional),
+                    timeout=30
+                )
+                processed = await _to_thread(process_featherless_response, resp_raw)
             else:
                 resp_raw = await asyncio.wait_for(
                     _to_thread(make_openrouter_request_openai, messages, model, **optional),
