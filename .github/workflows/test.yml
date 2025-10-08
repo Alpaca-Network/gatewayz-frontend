@@ -39,11 +39,13 @@ jobs:
 
     - name: Set test environment variables
       run: |
-        echo "SUPABASE_URL=https://test.supabase.co" >> $GITHUB_ENV
-        echo "SUPABASE_KEY=test-key" >> $GITHUB_ENV
-        echo "OPENROUTER_API_KEY=test-openrouter-key" >> $GITHUB_ENV
-        echo "ENCRYPTION_KEY=test-encryption-key-32-bytes-long!" >> $GITHUB_ENV
-        echo "PORTKEY_API_KEY=test-portkey-key" >> $GITHUB_ENV
+        echo "SUPABASE_URL=${{ secrets.SUPABASE_URL }}" >> $GITHUB_ENV
+        echo "SUPABASE_KEY=${{ secrets.SUPABASE_KEY }}" >> $GITHUB_ENV
+        echo "OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}" >> $GITHUB_ENV
+        echo "ENCRYPTION_KEY=${{ secrets.ENCRYPTION_KEY || 'test-encryption-key-32-bytes-long!' }}" >> $GITHUB_ENV
+        echo "PORTKEY_API_KEY=${{ secrets.PORTKEY_API_KEY || 'test-portkey-key' }}" >> $GITHUB_ENV
+        echo "RESEND_API_KEY=${{ secrets.RESEND_API_KEY || 'test-resend-key' }}" >> $GITHUB_ENV
+        echo "ADMIN_API_KEY=${{ secrets.ADMIN_API_KEY || 'test-admin-key' }}" >> $GITHUB_ENV
 
     - name: Run tests with pytest
       run: |
@@ -82,11 +84,13 @@ jobs:
 
     - name: Set test environment variables
       run: |
-        echo "SUPABASE_URL=https://test.supabase.co" >> $GITHUB_ENV
-        echo "SUPABASE_KEY=test-key" >> $GITHUB_ENV
-        echo "OPENROUTER_API_KEY=test-openrouter-key" >> $GITHUB_ENV
-        echo "ENCRYPTION_KEY=test-encryption-key-32-bytes-long!" >> $GITHUB_ENV
-        echo "PORTKEY_API_KEY=test-portkey-key" >> $GITHUB_ENV
+        echo "SUPABASE_URL=${{ secrets.SUPABASE_URL }}" >> $GITHUB_ENV
+        echo "SUPABASE_KEY=${{ secrets.SUPABASE_KEY }}" >> $GITHUB_ENV
+        echo "OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}" >> $GITHUB_ENV
+        echo "ENCRYPTION_KEY=${{ secrets.ENCRYPTION_KEY || 'test-encryption-key-32-bytes-long!' }}" >> $GITHUB_ENV
+        echo "PORTKEY_API_KEY=${{ secrets.PORTKEY_API_KEY || 'test-portkey-key' }}" >> $GITHUB_ENV
+        echo "RESEND_API_KEY=${{ secrets.RESEND_API_KEY || 'test-resend-key' }}" >> $GITHUB_ENV
+        echo "ADMIN_API_KEY=${{ secrets.ADMIN_API_KEY || 'test-admin-key' }}" >> $GITHUB_ENV
 
     - name: Run critical tests only
       run: |

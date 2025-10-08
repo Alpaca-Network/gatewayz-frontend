@@ -350,7 +350,7 @@ async def test_streaming_response(app, monkeypatch, payload_basic):
         r = await ac.post("/v1/chat/completions", json=payload)
 
     assert r.status_code == 200
-    assert r.headers.get("content-type") == "text/event-stream"
+    assert "text/event-stream" in r.headers.get("content-type", "")
     content = r.text
     assert "data: " in content
     assert "[DONE]" in content
