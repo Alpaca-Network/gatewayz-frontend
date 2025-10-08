@@ -62,7 +62,8 @@ class _TableQuery:
             if "id" not in r:
                 r["id"] = len(table) + 1
             table.append(r)
-        return _Result(copy.deepcopy(rows))
+        self._result_data = copy.deepcopy(rows)
+        return self
 
     def update(self, data):
         table = self._store.setdefault(self._name, [])
@@ -73,7 +74,8 @@ class _TableQuery:
                 newrow.update(copy.deepcopy(data))
                 table[i] = newrow
                 matched.append(newrow)
-        return _Result(copy.deepcopy(matched))
+        self._result_data = copy.deepcopy(matched)
+        return self
 
     def delete(self):
         table = self._store.setdefault(self._name, [])
@@ -85,10 +87,16 @@ class _TableQuery:
             else:
                 keep.append(row)
         self._store[self._name] = keep
-        return _Result(copy.deepcopy(deleted))
+        self._result_data = copy.deepcopy(deleted)
+        return self
 
     # Read
     def execute(self):
+        # If this is a mutation result, return that data
+        if hasattr(self, '_result_data'):
+            return _Result(self._result_data)
+
+        # Otherwise, execute the query
         rows = copy.deepcopy(self._store.get(self._name, []))
         # filter
         rows = [r for r in rows if _match(r, self._filters)]

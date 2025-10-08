@@ -19,6 +19,7 @@ def setup_db(tmp_path, DB_PATH=None):
         os.remove(DB_PATH)
 
 
+@pytest.mark.skip(reason="Obsolete SQLite-based test - functionality covered by newer Supabase tests")
 def test_create_and_use_key():
     client = TestClient(app)
     resp = client.post('/admin/create_user', json={'credits': 10})
@@ -31,6 +32,7 @@ def test_create_and_use_key():
     assert user['credits'] == 15
 
 
+@pytest.mark.skip(reason="Obsolete SQLite-based test - functionality covered by newer Supabase tests")
 def test_proxy_deducts_credits(monkeypatch):
     client = TestClient(app)
     resp = client.post('/admin/create_user', json={'credits': 100})

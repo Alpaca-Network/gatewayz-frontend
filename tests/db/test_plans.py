@@ -347,8 +347,8 @@ def test_enforce_plan_limits_checks_and_env_multiplier(mod, fake_supabase):
     # Create a real plan with low limits, and record usage right at the edge
     fake_supabase.table("plans").insert({
         "id": 66, "name": "Low", "is_active": True,
-        "daily_request_limit": 2, "monthly_request_limit": 5,
-        "daily_token_limit": 100, "monthly_token_limit": 200,
+        "daily_request_limit": 10, "monthly_request_limit": 50,
+        "daily_token_limit": 100, "monthly_token_limit": 2000,
         "price_per_month": 1, "features": ["basic_models"]
     }).execute()
     now = datetime.now(timezone.utc)
@@ -359,19 +359,25 @@ def test_enforce_plan_limits_checks_and_env_multiplier(mod, fake_supabase):
         "is_active": True
     }).execute()
 
-    # Current usage: 2 requests today, 2 req this month, tokens 90 today, 90 month
+    # Current usage: 2 requests today, tokens 90 today (request limit not exceeded, token limit will be)
     today = now.replace(hour=3, minute=0, second=0, microsecond=0)
     fake_supabase.table("usage_records").insert([
         {"user_id": 606, "timestamp": today.isoformat(), "tokens_used": 40},
         {"user_id": 606, "timestamp": (today + timedelta(hours=1)).isoformat(), "tokens_used": 50},
     ]).execute()
 
-    # live env: next request + 15 tokens -> daily tokens would exceed (90 + 15 > 100)
+    # live env: next request + 15 tokens -> daily tokens would exceed (90 + 15 > 100), request limit OK (2+1 < 10)
     not_ok = mod.enforce_plan_limits(606, tokens_requested=15, environment_tag="live")
     assert not_ok["allowed"] is False
     assert "Daily token limit exceeded" in not_ok["reason"]
 
-    # test env halves limits -> 2 req/day -> effective 1; we already have 2 -> should fail on requests
+    # test env halves limits -> 10 req/day -> effective 5; we already have 2 -> should still be OK
+    # But let's add 4 more requests to hit the limit
+    for i in range(4):
+        fake_supabase.table("usage_records").insert({
+            "user_id": 606, "timestamp": (today + timedelta(hours=2+i)).isoformat(), "tokens_used": 1
+        }).execute()
+    # Now we have 6 requests, test env limit is 5 (10/2), so next request should fail
     not_ok2 = mod.enforce_plan_limits(606, tokens_requested=1, environment_tag="test")
     assert not_ok2["allowed"] is False
     assert "Daily request limit exceeded" in not_ok2["reason"]

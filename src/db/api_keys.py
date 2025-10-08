@@ -675,8 +675,8 @@ def update_api_key(api_key: str, user_id: int, updates: Dict[str, Any]) -> bool:
 def validate_api_key_permissions(api_key: str, required_permission: str, resource: str) -> bool:
     """Validate if an API key has the required permission for a resource"""
     try:
-        # Temporary keys (gw_temp_* or gw_live_*) are session keys stored in users table and have full permissions
-        if api_key.startswith('gw_temp_') or api_key.startswith('gw_live_'):
+        # Temporary session keys (gw_temp_*) have full permissions
+        if api_key.startswith('gw_temp_'):
             logger.info(f"Granting full permissions to session key: {api_key[:15]}...")
             return True
 
