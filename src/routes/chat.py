@@ -218,6 +218,33 @@ async def chat_completions(
 
         # === 2) Build upstream request ===
         messages = [m.model_dump() for m in req.messages]
+
+        # === 2.1) Inject conversation history if session_id provided ===
+        if session_id:
+            try:
+                from src.db.chat_history import get_chat_session
+
+                # Fetch the session with its message history
+                session = await _to_thread(get_chat_session, session_id, user['id'])
+
+                if session and session.get('messages'):
+                    # Transform DB messages to OpenAI format and prepend to current messages
+                    history_messages = [
+                        {"role": msg["role"], "content": msg["content"]}
+                        for msg in session['messages']
+                    ]
+
+                    # Prepend history to incoming messages
+                    messages = history_messages + messages
+
+                    logger.info(f"Injected {len(history_messages)} messages from session {session_id}")
+                else:
+                    logger.debug(f"No history found for session {session_id} or session doesn't exist")
+
+            except Exception as e:
+                # Don't fail the request if history fetch fails
+                logger.warning(f"Failed to fetch chat history for session {session_id}: {e}")
+
         model = req.model
         optional = {}
         for name in ("max_tokens", "temperature", "top_p", "frequency_penalty", "presence_penalty"):
