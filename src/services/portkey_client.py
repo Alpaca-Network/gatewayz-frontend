@@ -121,3 +121,27 @@ def process_portkey_response(response):
     except Exception as e:
         logger.error(f"Failed to process Portkey response: {e}")
         raise
+
+
+def make_portkey_request_openai_stream(messages, model, provider: str = "openai", virtual_key: str = None, **kwargs):
+    """Make streaming request to Portkey using OpenAI client
+
+    Args:
+        messages: List of message objects
+        model: Model name to use
+        provider: AI provider (e.g., "openai", "anthropic", "google-ai")
+        virtual_key: Optional Portkey virtual key ID for secure key vault usage
+        **kwargs: Additional parameters like max_tokens, temperature, etc.
+    """
+    try:
+        client = get_portkey_client(provider, virtual_key)
+        stream = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            stream=True,
+            **kwargs
+        )
+        return stream
+    except Exception as e:
+        logger.error(f"Portkey streaming request failed: {e}")
+        raise
