@@ -56,10 +56,15 @@ class _FakeTable:
 class _FakeSupabase:
     def __init__(self, rows_by_key):
         self._rows = rows_by_key
+        self._legacy_rows = {}  # For legacy users table
 
     def table(self, name):
-        assert name == "api_keys_new"
-        return _FakeTable(self._rows)
+        if name == "api_keys_new":
+            return _FakeTable(self._rows)
+        elif name == "users":
+            return _FakeTable(self._legacy_rows)
+        else:
+            raise ValueError(f"Unexpected table: {name}")
 
 
 # ----------------------------- tests: validate_trial_access -----------------------------
