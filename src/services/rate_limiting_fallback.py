@@ -18,13 +18,13 @@ logger = logging.getLogger(__name__)
 @dataclass
 class RateLimitConfig:
     """Rate limit configuration"""
-    requests_per_minute: int = 60
+    requests_per_minute: int = 250
     requests_per_hour: int = 1000
     requests_per_day: int = 10000
     tokens_per_minute: int = 10000
     tokens_per_hour: int = 100000
     tokens_per_day: int = 500000
-    burst_limit: int = 10
+    burst_limit: int = 500
     concurrency_limit: int = 5
     window_size_seconds: int = 60
 
