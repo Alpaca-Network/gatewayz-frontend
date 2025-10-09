@@ -65,9 +65,11 @@ def create_app() -> FastAPI:
     logger.info("🚀 Loading application routes...")
 
     # Define all routes to load
+    # IMPORTANT: chat must be before catalog to avoid /v1/responses being caught by /model/{provider}/{model}
     routes_to_load = [
         ("health", "Health Check"),
         ("ping", "Ping Service"),
+        ("chat", "Chat Completions"),  # Moved before catalog
         ("catalog", "Model Catalog"),
         ("root", "Root/Home"),
         ("auth", "Authentication"),
@@ -79,7 +81,6 @@ def create_app() -> FastAPI:
         ("plans", "Subscription Plans"),
         ("rate_limits", "Rate Limiting"),
         ("payments", "Stripe Payments"),
-        ("chat", "Chat Completions"),
         ("chat_history", "Chat History"),
         ("ranking", "Model Ranking"),
         ("activity", "Activity Tracking"),
@@ -97,8 +98,12 @@ def create_app() -> FastAPI:
             module = __import__(f"src.routes.{module_name}", fromlist=['router'])
             router = getattr(module, 'router')
 
-            # Include the router
-            app.include_router(router)
+            # Include the router with catalog-specific prefix to avoid route conflicts
+            if module_name == "catalog":
+                # Add /catalog prefix to avoid /model/* catching /v1/* routes
+                app.include_router(router, prefix="/catalog")
+            else:
+                app.include_router(router)
 
             # Log success
             logger.info(f"  ✅ {display_name} ({module_name})")

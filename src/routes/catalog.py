@@ -333,13 +333,17 @@ async def get_models(
         raise HTTPException(status_code=500, detail="Failed to get models")
 
 
-@router.get("/model/{provider_name}/{model_name}", tags=["models"])
+@router.get("/model/{provider_name:path}/{model_name:path}", tags=["models"])
 async def get_specific_model(
     provider_name: str,
     model_name: str,
     include_huggingface: bool = Query(True, description="Include Hugging Face metrics if available"),
 ):
     """Get specific model data of a given provider with detailed information"""
+    # Prevent this route from catching /v1/* API endpoints
+    if provider_name == "v1":
+        raise HTTPException(status_code=404, detail=f"Model {provider_name}/{model_name} not found")
+
     try:
         model_data = fetch_specific_model_from_openrouter(provider_name, model_name)
         if not model_data:
