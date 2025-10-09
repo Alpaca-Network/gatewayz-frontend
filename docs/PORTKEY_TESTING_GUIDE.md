@@ -24,6 +24,7 @@ Set provider API keys in your environment:
 PORTKEY_API_KEY=your_portkey_key
 PROVIDER_OPENAI_API_KEY=your_openai_key
 PROVIDER_ANTHROPIC_API_KEY=your_anthropic_key
+DEEPINFRA_API_KEY=your_deepinfra_key  # For DeepInfra models
 ```
 
 ### Option 2: Portkey Virtual Keys (Recommended for Production)
@@ -111,7 +112,49 @@ curl -X POST 'https://api.gatewayz.ai/v1/chat/completions' \
   }'
 ```
 
-### Test 4: Streaming via Portkey
+### Test 4: DeepInfra (jondurbin/airoboros) via Portkey
+
+```bash
+curl -X POST 'https://api.gatewayz.ai/v1/chat/completions' \
+  -H 'Authorization: Bearer YOUR_GATEWAYZ_API_KEY' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "jondurbin/airoboros-l2-70b-gpt4-1.4.1",
+    "provider": "portkey",
+    "portkey_provider": "deepinfra",
+    "messages": [
+      {"role": "user", "content": "Hello! Introduce yourself in one sentence."}
+    ],
+    "max_tokens": 100
+  }'
+```
+
+**Expected Response:**
+```json
+{
+  "id": "chatcmpl-...",
+  "object": "chat.completion",
+  "created": 1234567890,
+  "model": "jondurbin/airoboros-l2-70b-gpt4-1.4.1",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "I'm Airoboros, an AI assistant trained to be helpful, harmless, and honest."
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 12,
+    "completion_tokens": 15,
+    "total_tokens": 27
+  }
+}
+```
+
+### Test 5: Streaming via Portkey
 
 ```bash
 curl -X POST 'https://api.gatewayz.ai/v1/chat/completions' \
@@ -163,6 +206,7 @@ data: [DONE]
 ### Currently Tested
 - ✅ **openai** - GPT-3.5, GPT-4, GPT-4 Turbo
 - ✅ **anthropic** - Claude 3 (Opus, Sonnet, Haiku)
+- ✅ **deepinfra** - DeepInfra models (Llama, Mistral, jondurbin/airoboros, etc.)
 
 ### Supported (Add Provider Key)
 - **google-ai** - Gemini models (set `PROVIDER_GOOGLE_AI_KEY`)

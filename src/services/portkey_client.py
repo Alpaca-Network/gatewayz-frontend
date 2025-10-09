@@ -48,6 +48,8 @@ def get_portkey_client(provider: str = "openai", virtual_key: str = None):
                 provider_api_key = Config.PROVIDER_OPENAI_API_KEY
             elif provider == "anthropic":
                 provider_api_key = Config.PROVIDER_ANTHROPIC_API_KEY
+            elif provider == "deepinfra":
+                provider_api_key = Config.DEEPINFRA_API_KEY
             # Add more providers as needed
 
             if not provider_api_key:
