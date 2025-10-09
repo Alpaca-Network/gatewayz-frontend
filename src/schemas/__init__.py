@@ -124,6 +124,23 @@ from src.schemas.proxy import (
     ProxyRequest,
 )
 
+# Coupon models
+from src.schemas.coupons import (
+    CouponScope,
+    CouponType,
+    CreatorType,
+    CreateCouponRequest,
+    RedeemCouponRequest,
+    UpdateCouponRequest,
+    CouponResponse,
+    AvailableCouponResponse,
+    RedemptionResponse,
+    RedemptionHistoryResponse,
+    CouponAnalyticsResponse,
+    CouponStatsResponse,
+    ListCouponsResponse,
+)
+
 
 __all__ = [
     # Common
