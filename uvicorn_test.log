@@ -1,0 +1,72 @@
+INFO:     Will watch for changes in these directories: ['/Users/vaughn/Documents/GitHub/gatewayz-backend']
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [73819] using StatReload
+INFO:src.main:🚀 Loading application routes...
+INFO:src.main:  ✅ Health Check (health)
+WARNING:root:psycopg2 not installed. PostgreSQL features will be unavailable.
+INFO:src.main:  ✅ Ping Service (ping)
+INFO:src.main:  ✅ Model Catalog (catalog)
+INFO:src.main:  ✅ Root/Home (root)
+INFO:httpx:HTTP Request: GET https://poxomztzvdkxxpqotybo.supabase.co/rest/v1/users?select=%2A&limit=1 "HTTP/1.1 200 OK"
+INFO:src.main:  ✅ Authentication (auth)
+INFO:src.main:  ✅ User Management (users)
+INFO:src.main:  ✅ API Key Management (api_keys)
+INFO:src.main:  ✅ Admin Operations (admin)
+INFO:src.main:  ✅ Audit Logs (audit)
+INFO:src.main:  ✅ Notifications (notifications)
+INFO:src.main:  ✅ Subscription Plans (plans)
+INFO:src.main:  ✅ Rate Limiting (rate_limits)
+ERROR:src.main:  ❌ Stripe Payments (payments) - Error: STRIPE_SECRET_KEY not found in environment variables
+INFO:src.main:  ✅ Chat Completions (chat)
+INFO:src.main:  ✅ Chat History (chat_history)
+INFO:src.main:  ✅ Model Ranking (ranking)
+INFO:src.main:  ✅ Activity Tracking (activity)
+INFO:src.main:
+📊 Route Loading Summary:
+INFO:src.main:   ✅ Loaded: 16
+WARNING:src.main:   ❌ Failed: 1
+INFO:src.main:   📍 Total: 17
+INFO:     Started server process [73844]
+INFO:     Waiting for application startup.
+INFO:src.main:
+🔧 Initializing application...
+INFO:src.main:  ⚙️  Validating configuration...
+INFO:src.main:  ✅ Configuration validated
+INFO:src.main:  🗄️  Initializing database...
+INFO:httpx:HTTP Request: GET https://poxomztzvdkxxpqotybo.supabase.co/rest/v1/users?select=%2A&limit=1 "HTTP/1.1 200 OK"
+INFO:src.main:  ✅ Database initialized
+INFO:src.main:
+🎉 Application startup complete!
+INFO:src.main:📍 API Documentation: http://localhost:8000/docs
+INFO:src.main:📍 Health Check: http://localhost:8000/health
+
+INFO:     Application startup complete.
+INFO:httpx:HTTP Request: GET https://poxomztzvdkxxpqotybo.supabase.co/rest/v1/api_keys_new?select=%2A&api_key=eq.gw_live_gf5JbnbpbwLYO0emfRYGmrb_UV5WK1KPp1h3HxZQw9o "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET https://poxomztzvdkxxpqotybo.supabase.co/rest/v1/api_keys?select=%2A&api_key=eq.gw_live_gf5JbnbpbwLYO0emfRYGmrb_UV5WK1KPp1h3HxZQw9o "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET https://poxomztzvdkxxpqotybo.supabase.co/rest/v1/api_keys_new?select=%2A&api_key=eq.gw_live_gf5JbnbpbwLYO0emfRYGmrb_UV5WK1KPp1h3HxZQw9o "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET https://poxomztzvdkxxpqotybo.supabase.co/rest/v1/users?select=%2A&api_key=eq.gw_live_gf5JbnbpbwLYO0emfRYGmrb_UV5WK1KPp1h3HxZQw9o "HTTP/1.1 200 OK"
+2025-10-07 22:20:21,365 - AUDIT - WARNING - SECURITY_VIOLATION - Type: INVALID_API_KEY, User: None, KeyID: None, Details: Invalid API key, IP: 127.0.0.1
+WARNING:audit:SECURITY_VIOLATION - Type: INVALID_API_KEY, User: None, KeyID: None, Details: Invalid API key, IP: 127.0.0.1
+INFO:     127.0.0.1:50315 - "POST /v1/chat/completions HTTP/1.1" 401 Unauthorized
+INFO:httpx:HTTP Request: GET https://poxomztzvdkxxpqotybo.supabase.co/rest/v1/api_keys_new?select=%2A&api_key=eq.gw_live_gf5JbnbpbwLYO0emfRYGmrb_UV5WK1KPp1h3HxZQw9o "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET https://poxomztzvdkxxpqotybo.supabase.co/rest/v1/api_keys?select=%2A&api_key=eq.gw_live_gf5JbnbpbwLYO0emfRYGmrb_UV5WK1KPp1h3HxZQw9o "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET https://poxomztzvdkxxpqotybo.supabase.co/rest/v1/api_keys_new?select=%2A&api_key=eq.gw_live_gf5JbnbpbwLYO0emfRYGmrb_UV5WK1KPp1h3HxZQw9o "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET https://poxomztzvdkxxpqotybo.supabase.co/rest/v1/users?select=%2A&api_key=eq.gw_live_gf5JbnbpbwLYO0emfRYGmrb_UV5WK1KPp1h3HxZQw9o "HTTP/1.1 200 OK"
+2025-10-07 22:20:22,085 - AUDIT - WARNING - SECURITY_VIOLATION - Type: INVALID_API_KEY, User: None, KeyID: None, Details: Invalid API key, IP: 127.0.0.1
+WARNING:audit:SECURITY_VIOLATION - Type: INVALID_API_KEY, User: None, KeyID: None, Details: Invalid API key, IP: 127.0.0.1
+INFO:     127.0.0.1:50322 - "POST /v1/chat/completions HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:50378 - "GET /api/users/me HTTP/1.1" 404 Not Found
+INFO:httpx:HTTP Request: GET https://poxomztzvdkxxpqotybo.supabase.co/rest/v1/api_keys_new?select=%2A&api_key=eq.gw_live_qPKTsUInGXXyX5tI15Ymr1Xdqu5MX4NLUyamf6T2_w0 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET https://poxomztzvdkxxpqotybo.supabase.co/rest/v1/api_keys?select=%2A&api_key=eq.gw_live_qPKTsUInGXXyX5tI15Ymr1Xdqu5MX4NLUyamf6T2_w0 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET https://poxomztzvdkxxpqotybo.supabase.co/rest/v1/api_keys_new?select=%2A&api_key=eq.gw_live_qPKTsUInGXXyX5tI15Ymr1Xdqu5MX4NLUyamf6T2_w0 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET https://poxomztzvdkxxpqotybo.supabase.co/rest/v1/users?select=%2A&api_key=eq.gw_live_qPKTsUInGXXyX5tI15Ymr1Xdqu5MX4NLUyamf6T2_w0 "HTTP/1.1 200 OK"
+2025-10-07 22:21:12,355 - AUDIT - WARNING - SECURITY_VIOLATION - Type: INVALID_API_KEY, User: None, KeyID: None, Details: Invalid API key, IP: 127.0.0.1
+WARNING:audit:SECURITY_VIOLATION - Type: INVALID_API_KEY, User: None, KeyID: None, Details: Invalid API key, IP: 127.0.0.1
+INFO:     127.0.0.1:50589 - "POST /v1/chat/completions HTTP/1.1" 401 Unauthorized
+INFO:httpx:HTTP Request: GET https://poxomztzvdkxxpqotybo.supabase.co/rest/v1/api_keys_new?select=%2A&api_key=eq.gw_live_qPKTsUInGXXyX5tI15Ymr1Xdqu5MX4NLUyamf6T2_w0 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET https://poxomztzvdkxxpqotybo.supabase.co/rest/v1/api_keys?select=%2A&api_key=eq.gw_live_qPKTsUInGXXyX5tI15Ymr1Xdqu5MX4NLUyamf6T2_w0 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET https://poxomztzvdkxxpqotybo.supabase.co/rest/v1/api_keys_new?select=%2A&api_key=eq.gw_live_qPKTsUInGXXyX5tI15Ymr1Xdqu5MX4NLUyamf6T2_w0 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET https://poxomztzvdkxxpqotybo.supabase.co/rest/v1/users?select=%2A&api_key=eq.gw_live_qPKTsUInGXXyX5tI15Ymr1Xdqu5MX4NLUyamf6T2_w0 "HTTP/1.1 200 OK"
+2025-10-07 22:21:13,108 - AUDIT - WARNING - SECURITY_VIOLATION - Type: INVALID_API_KEY, User: None, KeyID: None, Details: Invalid API key, IP: 127.0.0.1
+WARNING:audit:SECURITY_VIOLATION - Type: INVALID_API_KEY, User: None, KeyID: None, Details: Invalid API key, IP: 127.0.0.1
+INFO:     127.0.0.1:50597 - "POST /v1/chat/completions HTTP/1.1" 401 Unauthorized
