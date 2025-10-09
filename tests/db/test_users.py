@@ -219,10 +219,12 @@ class SupabaseStub:
 def sb(monkeypatch):
     # import module under test
     import src.db.users as users_mod
+    import src.db.api_keys as api_keys_mod
 
     stub = SupabaseStub()
-    # basic seed
-    monkeypatch.setattr("src.supabase_config.get_supabase_client", lambda: stub)
+    # Patch in the modules where it's actually used (not just where it's defined)
+    monkeypatch.setattr(users_mod, "get_supabase_client", lambda: stub)
+    monkeypatch.setattr(api_keys_mod, "get_supabase_client", lambda: stub)
 
     # fake credit transaction module used inside functions via local import
     tx_log = []

@@ -75,3 +75,19 @@ def process_openrouter_response(response):
     except Exception as e:
         logger.error(f"Failed to process OpenRouter response: {e}")
         raise
+
+
+def make_openrouter_request_openai_stream(messages, model, **kwargs):
+    """Make streaming request to OpenRouter using OpenAI client"""
+    try:
+        client = get_openrouter_client()
+        stream = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            stream=True,
+            **kwargs
+        )
+        return stream
+    except Exception as e:
+        logger.error(f"OpenRouter streaming request failed: {e}")
+        raise

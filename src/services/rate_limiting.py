@@ -23,13 +23,13 @@ logger = logging.getLogger(__name__)
 @dataclass
 class RateLimitConfig:
     """Rate limit configuration for a specific key"""
-    requests_per_minute: int = 100
+    requests_per_minute: int = 250
     requests_per_hour: int = 1000
     requests_per_day: int = 10000
     tokens_per_minute: int = 10000
     tokens_per_hour: int = 100000
     tokens_per_day: int = 1000000
-    burst_limit: int = 250  # Maximum burst requests
+    burst_limit: int = 500  # Maximum burst requests
     concurrency_limit: int = 5  # Maximum concurrent requests
     window_size_seconds: int = 60  # Sliding window size
 
@@ -47,13 +47,13 @@ class RateLimitResult:
 
 # Default configurations
 DEFAULT_CONFIG = RateLimitConfig(
-    requests_per_minute=100,
+    requests_per_minute=250,
     requests_per_hour=1000,
     requests_per_day=10000,
     tokens_per_minute=10000,
     tokens_per_hour=100000,
     tokens_per_day=1000000,
-    burst_limit=250,
+    burst_limit=500,
     concurrency_limit=5
 )
 
@@ -120,7 +120,6 @@ class SlidingWindowRateLimiter:
             # Use the fallback rate limiting system
             result = await self.fallback_manager.check_rate_limit(
                 api_key=api_key,
-                config=config,
                 tokens_used=tokens_used
             )
 
@@ -458,13 +457,13 @@ class RateLimitManager:
             config_data = get_rate_limit_config(api_key)
             if config_data:
                 return RateLimitConfig(
-                    requests_per_minute=config_data.get('requests_per_minute', 100),
+                    requests_per_minute=config_data.get('requests_per_minute', 250),
                     requests_per_hour=config_data.get('requests_per_hour', 1000),
                     requests_per_day=config_data.get('requests_per_day', 10000),
                     tokens_per_minute=config_data.get('tokens_per_minute', 10000),
                     tokens_per_hour=config_data.get('tokens_per_hour', 100000),
                     tokens_per_day=config_data.get('tokens_per_day', 1000000),
-                    burst_limit=config_data.get('burst_limit', 20),
+                    burst_limit=config_data.get('burst_limit', 500),
                     concurrency_limit=config_data.get('concurrency_limit', 5),
                     window_size_seconds=config_data.get('window_size_seconds', 60)
                 )
@@ -476,14 +475,8 @@ class RateLimitManager:
 
     async def increment_request(self, api_key: str, config: RateLimitConfig, tokens_used: int = 0):
         """Increment request count (handled by fallback system)"""
-        try:
-            await self.fallback_manager.increment_request(
-                api_key=api_key,
-                config=config,
-                tokens_used=tokens_used
-            )
-        except Exception as e:
-            logger.error(f"Failed to increment request count for key {api_key[:10]}...: {e}")
+        # Note: Fallback manager doesn't have increment_request, it's handled in check_rate_limit
+        pass
     
     async def check_rate_limit(
         self, 
@@ -522,15 +515,12 @@ class RateLimitManager:
 
     async def get_rate_limit_status(self, api_key: str, config: RateLimitConfig) -> Dict[str, Any]:
         """Get current rate limit status"""
-        try:
-            return await self.fallback_manager.get_rate_limit_status(api_key, config)
-        except Exception as e:
-            logger.error(f"Failed to get rate limit status for key {api_key[:10]}...: {e}")
-            return {
-                "requests_remaining": config.requests_per_minute,
-                "tokens_remaining": config.tokens_per_minute,
-                "reset_time": int((datetime.utcnow() + timedelta(minutes=1)).timestamp())
-            }
+        # Fallback manager doesn't have get_rate_limit_status, return default
+        return {
+            "requests_remaining": config.requests_per_minute,
+            "tokens_remaining": config.tokens_per_minute,
+            "reset_time": int((datetime.now(timezone.utc) + timedelta(minutes=1)).timestamp())
+        }
 
 # Global rate limiter instance
 _rate_limiter = None

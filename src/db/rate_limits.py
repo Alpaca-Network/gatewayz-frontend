@@ -161,11 +161,10 @@ def update_rate_limit_usage(api_key: str, tokens_used: int) -> None:
             return
 
         user_id = user['id']
-        now = datetime.now(datetime.UTC)
+        now = datetime.now(timezone.utc)
 
-        # Ensure timestamp is timezone-aware
-        from datetime import timezone
-        timestamp = now.replace(tzinfo=timezone.utc).isoformat()
+        # Timestamp is already timezone-aware
+        timestamp = now.isoformat()
 
         # Calculate window starts
         minute_start = now.replace(second=0, microsecond=0).replace(tzinfo=timezone.utc).isoformat()

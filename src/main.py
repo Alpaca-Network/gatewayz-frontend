@@ -83,6 +83,9 @@ def create_app() -> FastAPI:
         ("chat_history", "Chat History"),
         ("ranking", "Model Ranking"),
         ("activity", "Activity Tracking"),
+        ("coupons", "Coupon Management"),
+        ("roles", "Role Management"),
+
     ]
 
     loaded_count = 0
@@ -132,6 +135,8 @@ def create_app() -> FastAPI:
 
     # ==================== Startup Event ====================
 
+    # In the on_startup event, add this after database initialization:
+
     @app.on_event("startup")
     async def on_startup():
         logger.info("\n🔧 Initializing application...")
@@ -151,6 +156,33 @@ def create_app() -> FastAPI:
 
             except Exception as db_e:
                 logger.warning(f"  ⚠️  Database initialization warning: {db_e}")
+
+            # Set default admin user
+            try:
+                from src.db.roles import update_user_role, get_user_role, UserRole
+                from src.supabase_config import get_supabase_client
+
+                ADMIN_EMAIL = "radarmine1@gmail.com"
+
+                client = get_supabase_client()
+                result = client.table('users').select('id, role').eq('email', ADMIN_EMAIL).execute()
+
+                if result.data:
+                    user = result.data[0]
+                    current_role = user.get('role', 'user')
+
+                    if current_role != UserRole.ADMIN:
+                        update_user_role(
+                            user_id=user['id'],
+                            new_role=UserRole.ADMIN,
+                            reason="Default admin setup on startup"
+                        )
+                        logger.info(f"  ✅ Set {ADMIN_EMAIL} as admin")
+                    else:
+                        logger.info(f"  ℹ️  {ADMIN_EMAIL} is already admin")
+
+            except Exception as admin_e:
+                logger.warning(f"  ⚠️  Admin setup warning: {admin_e}")
 
         except Exception as e:
             logger.error(f"  ❌ Startup initialization failed: {e}")

@@ -168,7 +168,8 @@ class SupabaseStub:
 def sb(monkeypatch):
     import src.db.chat_history as ch
     stub = SupabaseStub()
-    monkeypatch.setattr("src.supabase_config.get_supabase_client", lambda: stub)
+    # Patch in the module where it's actually used
+    monkeypatch.setattr(ch, "get_supabase_client", lambda: stub)
     return stub
 
 def iso_now():

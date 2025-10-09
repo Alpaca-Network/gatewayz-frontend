@@ -293,8 +293,64 @@ async def test_saves_chat_history_when_session_id(app, happy_patches, payload_ba
     async with AsyncClient(app=app, base_url="http://test") as ac:
         r = await ac.post("/v1/chat/completions?session_id=123", json=payload)
     assert r.status_code == 200
-    # Your current code saves only messages[0] (“first user”) + assistant
+    # Your current code saves only messages[0] ("first user") + assistant
     saved = happy_patches["saved"]
     assert len(saved) == 2
     assert saved[0][0] == 123 and saved[0][1] == "user"
     assert saved[1][0] == 123 and saved[1][1] == "assistant"
+
+@pytest.mark.anyio
+async def test_streaming_response(app, monkeypatch, payload_basic):
+    # Mock a streaming response
+    monkeypatch.setattr(api, "get_user", lambda k: {"id": 1, "credits": 100.0, "environment_tag": "live"})
+    monkeypatch.setattr(api, "enforce_plan_limits", lambda uid, tok, env: {"allowed": True})
+    monkeypatch.setattr(api, "validate_trial_access", lambda k: {"is_valid": True, "is_trial": False})
+    mgr = _RateLimitMgr(True, True)
+    monkeypatch.setattr(api, "get_rate_limit_manager", lambda: mgr)
+
+    # Mock streaming response
+    class MockStreamChunk:
+        def __init__(self, content, finish_reason=None):
+            self.id = "chatcmpl-123"
+            self.object = "chat.completion.chunk"
+            self.created = 1234567890
+            self.model = "test-model"
+            self.choices = [MockChoice(content, finish_reason)]
+            self.usage = None
+
+    class MockChoice:
+        def __init__(self, content, finish_reason=None):
+            self.index = 0
+            self.delta = MockDelta(content)
+            self.finish_reason = finish_reason
+
+    class MockDelta:
+        def __init__(self, content):
+            self.content = content
+            self.role = "assistant" if content else None
+
+    def make_stream(*args, **kwargs):
+        return [
+            MockStreamChunk("Hello"),
+            MockStreamChunk(" streaming"),
+            MockStreamChunk(" world!", "stop")
+        ]
+
+    monkeypatch.setattr(api, "make_openrouter_request_openai_stream", make_stream)
+    monkeypatch.setattr(api, "calculate_cost", lambda m, p, c: 0.001)
+    monkeypatch.setattr(api, "deduct_credits", lambda *a, **k: None)
+    monkeypatch.setattr(api, "record_usage", lambda *a, **k: None)
+    monkeypatch.setattr(api, "update_rate_limit_usage", lambda *a, **k: None)
+    monkeypatch.setattr(api, "increment_api_key_usage", lambda *a: None)
+
+    payload = dict(payload_basic)
+    payload["stream"] = True
+
+    async with AsyncClient(app=app, base_url="http://test") as ac:
+        r = await ac.post("/v1/chat/completions", json=payload)
+
+    assert r.status_code == 200
+    assert "text/event-stream" in r.headers.get("content-type", "")
+    content = r.text
+    assert "data: " in content
+    assert "[DONE]" in content

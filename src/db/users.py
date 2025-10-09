@@ -36,7 +36,7 @@ def create_enhanced_user(username: str, email: str, auth_method: str, credits: i
             user_data['privy_user_id'] = privy_user_id
 
         # Create user account with a temporary API key (will be replaced)
-        user_data['api_key'] = f"gw_temp_{secrets.token_urlsafe(16)}"
+        user_data['api_key'] = f"gw_live_{secrets.token_urlsafe(16)}"
         user_result = client.table('users').insert(user_data).execute()
 
         if not user_result.data:
