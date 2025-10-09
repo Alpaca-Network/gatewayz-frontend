@@ -138,15 +138,16 @@ def normalize_portkey_model(portkey_model: dict) -> dict:
     model_handle = slug.split("/")[-1]
     display_name = model_handle.replace("-", " ").replace("_", " ").title()
 
-    description = f"Portkey catalog entry for {slug}. Additional metadata sync is pending."
+    description = f"Portkey catalog entry for {slug}. Pricing data not available from Portkey API."
 
+    # Use null for unknown pricing (Portkey API doesn't provide pricing)
     pricing = {
-        "prompt": "0",
-        "completion": "0",
-        "request": "0",
-        "image": "0",
-        "web_search": "0",
-        "internal_reasoning": "0"
+        "prompt": None,
+        "completion": None,
+        "request": None,
+        "image": None,
+        "web_search": None,
+        "internal_reasoning": None
     }
 
     architecture = {
@@ -223,15 +224,16 @@ def normalize_featherless_model(featherless_model: dict) -> dict:
     model_handle = model_id
     display_name = model_id.replace("-", " ").replace("_", " ").title()
 
-    description = f"Featherless catalog entry for {model_id}. Additional metadata sync is pending."
+    description = f"Featherless catalog entry for {model_id}. Pricing data not available from Featherless API."
 
+    # Use null for unknown pricing (Featherless API doesn't provide pricing)
     pricing = {
-        "prompt": "0",
-        "completion": "0",
-        "request": "0",
-        "image": "0",
-        "web_search": "0",
-        "internal_reasoning": "0"
+        "prompt": None,
+        "completion": None,
+        "request": None,
+        "image": None,
+        "web_search": None,
+        "internal_reasoning": None
     }
 
     architecture = {
