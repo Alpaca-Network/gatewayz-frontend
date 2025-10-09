@@ -1,28 +1,27 @@
-# Setup
+# Setup Guide
+
+This guide will help you set up the AI Gateway for local development and production deployment.
 
 ## Prerequisites
 
-### System Requirements
-- **Python**: 3.11+ (required for FastAPI and modern async features)
-- **Operating System**: Windows, macOS, or Linux
-- **Memory**: Minimum 512MB RAM (1GB+ recommended for production)
-- **Storage**: 100MB for application files
+- Python 3.8 or higher
+- pip (Python package manager)
+- Git
+- Supabase account
+- (Optional) Redis for caching
+- (Optional) Stripe account for payments
 
-### External Services
-- **Supabase Project**: Database and authentication service
-- **OpenRouter API Key**: AI model access credentials
-- **Resend API Key**: Email delivery service for notifications
-- **Domain** (optional): For production deployment
+## Local Development Setup
 
-## Installation
+### 1. Clone the Repository
 
-### 1. Clone Repository
 ```bash
-git clone <repository-url>
-cd gateway
+git clone https://github.com/your-org/api-gateway-vercel.git
+cd api-gateway-vercel/gateway
 ```
 
 ### 2. Create Virtual Environment
+
 ```bash
 # Create virtual environment
 python -m venv .venv
@@ -35,237 +34,374 @@ source .venv/bin/activate
 ```
 
 ### 3. Install Dependencies
+
 ```bash
 pip install -r requirements.txt
 ```
 
 ### 4. Environment Configuration
-Create a `.env` file in the project root:
-```bash
-cp ..env.example ..env  # If example exists
-# Or create manually
-touch ..env
-```
 
-## Environment Variables
+Create a `.env` file in the root directory:
 
-### Required Variables
 ```env
-# Supabase Configuration
-SUPABASE_URL=https://your-project.supabase.co
+# Database Configuration
+SUPABASE_URL=your_supabase_url
 SUPABASE_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
 
-# OpenRouter Configuration
-OPENROUTER_API_KEY=sk-or-v1-your_openrouter_key
+# API Configuration
+OPENROUTER_API_KEY=your_openrouter_api_key
+PORTKEY_API_KEY=your_portkey_api_key
+FEATHERLESS_API_KEY=your_featherless_api_key
+CHUTES_API_KEY=your_chutes_api_key
 
-# Email Configuration (for notifications)
-RESEND_API_KEY=re_your_resend_api_key
+# Email Configuration
+RESEND_API_KEY=your_resend_api_key
 FROM_EMAIL=noreply@yourdomain.com
-APP_NAME=AI Gateway
-APP_URL=https://yourdomain.com
+
+# Payment Configuration (Optional)
+STRIPE_SECRET_KEY=your_stripe_secret_key
+STRIPE_WEBHOOK_SECRET=your_stripe_webhook_secret
+STRIPE_PUBLISHABLE_KEY=your_stripe_publishable_key
+
+# Redis Configuration (Optional)
+REDIS_URL=redis://localhost:6379
+
+# Security Configuration
+SECRET_KEY=your_secret_key_for_encryption
+ADMIN_API_KEY=your_admin_api_key
+
+# Environment
+ENVIRONMENT=development
 ```
 
-### Optional Variables
-```env
-# OpenRouter Site Information
-OPENROUTER_SITE_URL=https://your-site.com
-OPENROUTER_SITE_NAME=Your Site Name
+### 5. Database Setup
 
-# Vercel Deployment (automatically set)
-VERCEL=1
-```
+#### Supabase Setup
 
-### Environment Validation
-The application validates required environment variables on startup:
-- **Local Development**: All required variables must be present
-- **Vercel Deployment**: Validation is skipped to prevent startup failures
-- **Error Handling**: Clear error messages for missing variables
+1. Create a new project at [supabase.com](https://supabase.com)
+2. Go to Settings > API to get your URL and keys
+3. Run the database migrations (if any)
 
-## Database Setup
+#### Database Tables
 
-### Supabase Tables
-The application expects the following tables in your Supabase project:
+The following tables are required:
 
-#### Core Tables
-- **users**: User accounts and profiles
-  - `id`, `username`, `email`, `credits`, `api_key`
-  - `auth_method`, `subscription_status`, `is_active`
-  - `created_at`, `updated_at`, `registration_date`
+- `users` - User accounts and profiles
+- `api_keys` - Legacy API key storage
+- `api_keys_new` - Enhanced API key system
+- `plans` - Subscription plans
+- `user_plans` - User plan assignments
+- `usage_records` - Usage tracking
+- `rate_limit_configs` - Rate limiting
+- `trial_records` - Free trial management
+- `payment_records` - Payment history
+- `coupons` - Discount codes
+- `referrals` - Referral tracking
+- `chat_sessions` - Chat history
+- `latest_models` - Model ranking data
+- `openrouter_models` - OpenRouter model data
+- `audit_logs` - Security audit logs
 
-- **api_keys**: API key management
-  - `id`, `user_id`, `api_key`, `key_name`, `environment_tag`
-  - `scope_permissions`, `is_active`, `is_primary`
-  - `expiration_date`, `max_requests`, `requests_used`
-  - `ip_allowlist`, `domain_referrers`
-  - `created_at`, `updated_at`, `last_used_at`
+### 6. Run the Application
 
-- **api_keys_new**: Enhanced API key system (Phase 4)
-  - Same structure as `api_keys` with additional security features
-
-#### Supporting Tables
-- **rate_limit_configs**: Per-user rate limiting
-- **usage_records**: Comprehensive usage tracking
-- **plans**: Subscription plan definitions
-- **user_plans**: User plan assignments and history
-- **audit_logs**: Security event logging
-
-#### Notification Tables
-- **notification_preferences**: User email notification settings
-- **notifications**: Email notification records and status
-- **notification_templates**: Professional HTML email templates
-- **password_reset_tokens**: Secure password reset tokens
-
-### Database Initialization
-The application automatically initializes database connections on startup:
-- **Connection Testing**: Validates Supabase connectivity
-- **Error Handling**: Graceful failure with clear error messages
-- **Health Checks**: Database status included in health endpoint
-
-## Running the Application
-
-### Local Development
 ```bash
 # Start the development server
-uvicorn app:app --reload --host 0.0.0.0 --port 8000
+python main.py
 
-# Or with specific configuration
-uvicorn app:app --reload --host 127.0.0.1 --port 8000 --log-level info
+# Or use uvicorn directly
+uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-### Access Points
-- **API Documentation**: http://localhost:8000/docs
-- **ReDoc Documentation**: http://localhost:8000/redoc
-- **OpenAPI Schema**: http://localhost:8000/openapi.json
-- **Health Check**: http://localhost:8000/health
+The API will be available at `http://localhost:8000`
 
-### Production Mode
+### 7. Verify Installation
+
 ```bash
-# Production server (no reload)
-uvicorn app:app --host 0.0.0.0 --port 8000 --workers 4
-```
-
-## Verification
-
-### 1. Health Check
-```bash
+# Check health endpoint
 curl http://localhost:8000/health
-```
-Expected response:
-```json
-{
-  "status": "healthy",
-  "database": "connected",
-  "openrouter": "connected",
-  "user_count": 0,
-  "timestamp": "2024-01-01T00:00:00.000000"
-}
+
+# Check available models
+curl http://localhost:8000/models
+
+# Check API documentation
+open http://localhost:8000/docs
 ```
 
-### 2. API Documentation
-Visit http://localhost:8000/docs to verify:
-- All endpoints are listed
-- Authentication is working
-- Database connections are active
+## Production Deployment
 
-### 3. Test API Key Creation
-```bash
-# Register a test user
-curl -X POST http://localhost:8000/create \
-  -H "Content-Type: application/json" \
-  -d '{
-    "username": "testuser",
-    "email": "test@example.com",
-    "auth_method": "email",
-    "initial_credits": 1000
-  }'
-```
+### Vercel Deployment
+
+1. **Install Vercel CLI**:
+   ```bash
+   npm i -g vercel
+   ```
+
+2. **Configure Vercel**:
+   ```bash
+   vercel
+   ```
+
+3. **Set Environment Variables**:
+   ```bash
+   vercel env add SUPABASE_URL
+   vercel env add SUPABASE_KEY
+   vercel env add OPENROUTER_API_KEY
+   # ... add all required environment variables
+   ```
+
+4. **Deploy**:
+   ```bash
+   vercel --prod
+   ```
+
+### Railway Deployment
+
+1. **Connect Repository**:
+   - Go to [railway.app](https://railway.app)
+   - Connect your GitHub repository
+
+2. **Set Environment Variables**:
+   - Add all required environment variables in Railway dashboard
+
+3. **Deploy**:
+   - Railway will automatically deploy on push to main branch
+
+### Docker Deployment
+
+1. **Create Dockerfile**:
+   ```dockerfile
+   FROM python:3.9-slim
+
+   WORKDIR /app
+
+   COPY requirements.txt .
+   RUN pip install -r requirements.txt
+
+   COPY . .
+
+   CMD ["python", "main.py"]
+   ```
+
+2. **Build and Run**:
+   ```bash
+   docker build -t ai-gateway .
+   docker run -p 8000:8000 --env-file .env ai-gateway
+   ```
+
+### Kubernetes Deployment
+
+1. **Create Deployment YAML**:
+   ```yaml
+   apiVersion: apps/v1
+   kind: Deployment
+   metadata:
+     name: ai-gateway
+   spec:
+     replicas: 3
+     selector:
+       matchLabels:
+         app: ai-gateway
+     template:
+       metadata:
+         labels:
+           app: ai-gateway
+       spec:
+         containers:
+         - name: ai-gateway
+           image: your-registry/ai-gateway:latest
+           ports:
+           - containerPort: 8000
+           env:
+           - name: SUPABASE_URL
+             valueFrom:
+               secretKeyRef:
+                 name: ai-gateway-secrets
+                 key: supabase-url
+   ```
+
+2. **Apply Configuration**:
+   ```bash
+   kubectl apply -f deployment.yaml
+   ```
+
+## Configuration
+
+### Environment Variables
+
+| Variable | Description | Required | Default |
+|----------|-------------|----------|---------|
+| `SUPABASE_URL` | Supabase project URL | Yes | - |
+| `SUPABASE_KEY` | Supabase anon key | Yes | - |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key | Yes | - |
+| `OPENROUTER_API_KEY` | OpenRouter API key | Yes | - |
+| `PORTKEY_API_KEY` | Portkey API key | No | - |
+| `FEATHERLESS_API_KEY` | Featherless API key | No | - |
+| `CHUTES_API_KEY` | Chutes API key | No | - |
+| `RESEND_API_KEY` | Resend email API key | No | - |
+| `FROM_EMAIL` | From email address | No | noreply@example.com |
+| `STRIPE_SECRET_KEY` | Stripe secret key | No | - |
+| `STRIPE_WEBHOOK_SECRET` | Stripe webhook secret | No | - |
+| `REDIS_URL` | Redis connection URL | No | - |
+| `SECRET_KEY` | Secret key for encryption | Yes | - |
+| `ADMIN_API_KEY` | Admin API key | Yes | - |
+| `ENVIRONMENT` | Environment (dev/staging/prod) | No | development |
+
+### Database Configuration
+
+The application uses Supabase as the primary database. Ensure you have:
+
+1. **Proper permissions** for all tables
+2. **Row Level Security (RLS)** enabled where appropriate
+3. **Indexes** on frequently queried columns
+4. **Backup strategy** in place
+
+### Security Configuration
+
+1. **API Key Security**:
+   - Use strong, randomly generated API keys
+   - Implement proper key rotation
+   - Monitor key usage
+
+2. **Rate Limiting**:
+   - Configure appropriate rate limits
+   - Monitor for abuse
+   - Implement IP-based blocking if needed
+
+3. **CORS Configuration**:
+   - Set appropriate CORS origins for production
+   - Avoid using wildcard (*) in production
+
+## Monitoring and Logging
+
+### Health Checks
+
+The application provides several health check endpoints:
+
+- `GET /health` - Basic health check
+- `GET /ping` - Ping with statistics
+- `GET /admin/monitor` - Detailed system monitoring (admin only)
+
+### Logging
+
+Logs are structured and include:
+
+- Request/response information
+- Error details
+- Security events
+- Performance metrics
+
+### Monitoring
+
+Recommended monitoring tools:
+
+- **Application Performance**: New Relic, DataDog, or similar
+- **Error Tracking**: Sentry or similar
+- **Uptime Monitoring**: Pingdom, UptimeRobot, or similar
+- **Log Aggregation**: ELK Stack, Splunk, or similar
 
 ## Troubleshooting
 
 ### Common Issues
 
-#### Database Connection Failed
-- Verify `SUPABASE_URL` and `SUPABASE_KEY` are correct
-- Check Supabase project is active
-- Ensure database tables exist
+1. **Database Connection Errors**:
+   - Check Supabase credentials
+   - Verify network connectivity
+   - Check database permissions
 
-#### OpenRouter Connection Failed
-- Verify `OPENROUTER_API_KEY` is valid
-- Check OpenRouter account has sufficient credits
-- Test API key with OpenRouter directly
+2. **API Key Validation Errors**:
+   - Verify API key format
+   - Check key permissions
+   - Ensure key is active
 
-#### Missing Environment Variables
-- Ensure `.env` file exists in project root
-- Check all required variables are set
-- Restart application after environment changes
+3. **Rate Limiting Issues**:
+   - Check rate limit configuration
+   - Verify user plan limits
+   - Monitor for abuse
 
-#### Port Already in Use
-```bash
-# Find process using port 8000
-lsof -i :8000  # macOS/Linux
-netstat -ano | findstr :8000  # Windows
+4. **External API Errors**:
+   - Check provider API keys
+   - Verify provider status
+   - Check rate limits
 
-# Kill process or use different port
-uvicorn app:app --reload --port 8001
+### Debug Mode
+
+Enable debug mode for detailed logging:
+
+```env
+ENVIRONMENT=development
+LOG_LEVEL=DEBUG
 ```
 
-### Logs and Debugging
-- **Application Logs**: Check console output for errors
-- **Database Logs**: Check Supabase dashboard
-- **OpenRouter Logs**: Check OpenRouter dashboard
-- **Email Logs**: Check Resend dashboard for email delivery
-- **Health Endpoint**: Monitor system status
+### Performance Optimization
 
-## Email Setup
+1. **Database Optimization**:
+   - Add appropriate indexes
+   - Optimize queries
+   - Use connection pooling
 
-### Resend Configuration
-1. **Create Resend Account**: Sign up at [resend.com](https://resend.com)
-2. **Get API Key**: Generate API key from dashboard
-3. **Verify Domain**: Add and verify your sending domain
-4. **Configure Environment**: Add `RESEND_API_KEY` to environment variables
+2. **Caching**:
+   - Enable Redis caching
+   - Cache model lists
+   - Cache user data
 
-### Email Templates
-The application includes professional email templates for:
-- **Welcome Emails**: New user onboarding
-- **Password Reset**: Secure password reset with tokens
-- **Low Balance Alerts**: Credit depletion warnings
-- **Trial Expiry**: Trial expiration reminders
-- **Usage Reports**: Monthly usage analytics
-- **API Key Notifications**: Security alerts for key creation
+3. **Rate Limiting**:
+   - Implement proper rate limiting
+   - Use Redis for distributed rate limiting
+   - Monitor and adjust limits
 
-### Email Security
-- **No API Key Exposure**: API keys are never included in emails
-- **Dashboard Access**: Sensitive information accessed through secure dashboard
-- **Token-Based Reset**: Password reset uses secure, time-limited tokens
-- **Professional Design**: Mobile-responsive, branded email templates
+## Development Workflow
 
-## Development Tools
+### Code Structure
 
-### Recommended Extensions
-- **Python**: Language support and debugging
-- **FastAPI**: API development tools
-- **REST Client**: API testing (VS Code)
-- **Postman**: API testing and documentation
+The project follows a modular structure:
 
-### Testing
-```bash
-# Run tests (if available)
-python -m pytest tests/
+- `src/main.py` - FastAPI application
+- `src/routes/` - API endpoints
+- `src/db/` - Database operations
+- `src/schemas/` - Pydantic models
+- `src/security/` - Security utilities
+- `src/services/` - Business logic
 
-# Test specific endpoint
-curl -X GET http://localhost:8000/models
-```
+### Adding New Features
 
-## Next Steps
+1. **Create Database Models**:
+   - Add to appropriate schema file
+   - Update database functions
 
-1. **Configure Production**: Set up production environment variables
-2. **Deploy**: Follow deployment guide for your platform
-3. **Monitor**: Set up monitoring and alerting
-4. **Scale**: Configure for production load
-5. **Security**: Review security settings and best practices
+2. **Create API Endpoints**:
+   - Add to appropriate route file
+   - Implement proper validation
+   - Add error handling
+
+3. **Add Tests**:
+   - Unit tests for business logic
+   - Integration tests for API endpoints
+   - End-to-end tests for workflows
+
+### Code Quality
+
+- Use type hints
+- Follow PEP 8 style guide
+- Add docstrings to functions
+- Write comprehensive tests
+- Use linting tools (flake8, black)
 
 ## Support
 
-- **Documentation**: Check other docs in this directory
-- **Issues**: Report issues in the project repository
-- **Community**: Join discussions and get help
+For support and questions:
+
+- **Documentation**: Check this documentation
+- **Issues**: Create GitHub issues
+- **Discussions**: Use GitHub discussions
+- **Email**: support@yourdomain.com
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests
+5. Submit a pull request
+
+See [Contributing Guide](contributing.md) for detailed instructions.

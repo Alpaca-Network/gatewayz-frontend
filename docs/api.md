@@ -1,335 +1,935 @@
 # API Reference
 
-Base URL: `http://localhost:8000` (local) or your deployed URL
+## Base URL
+
+```
+https://your-domain.com
+```
 
 ## Authentication
-All protected endpoints require HTTP Bearer authentication:
+
+All API endpoints (except public ones) require authentication using an API key in the Authorization header:
+
+```http
+Authorization: Bearer gw_live_your_api_key_here
 ```
-Authorization: Bearer YOUR_API_KEY
-```
+
+### API Key Types
+
+- **Live Keys**: `gw_live_*` - Production environment
+- **Test Keys**: `gw_test_*` - Testing environment  
+- **Staging Keys**: `gw_staging_*` - Staging environment
+- **Development Keys**: `gw_dev_*` - Development environment
 
 ## Public Endpoints
 
 ### Health Check
-**GET** `/health`
-- Returns system status, database connectivity, Gatewayz status, user count, and timestamp
-- No authentication required
 
-### Models
-**GET** `/models`
-- Returns available AI models from Gatewayz with pricing, capabilities, and provider information
-- Cached for 5 minutes with automatic refresh
-- No authentication required
+```http
+GET /health
+```
 
-**GET** `/models/providers`
-- Returns provider statistics across all available models
-- Includes model counts, suggested models, pricing availability, and official provider URLs
-- Uses OpenRouter's official providers API for accurate site URLs and policy links
-- **Includes provider logo URLs** using hybrid approach (manual mapping + Clearbit API)
-- No authentication required
+Returns system health status.
 
-**GET** `/providers`
-- Returns available providers directly from OpenRouter API
-- Includes official provider information, privacy policies, terms of service, and status pages
-- No authentication required
-
-Example response for `/models/providers`:
+**Response:**
 ```json
 {
-  "status": "success",
-  "provider_statistics": {
-    "total_providers": 15,
-    "total_models": 324,
-    "suggested_models": 12,
-    "pricing_available": 324,
-    "providers": {
-      "openai": {
-        "name": "OpenAI",
-        "model_count": 12,
-        "suggested_models": 5,
-        "logo_url": "https://cdn.jsdelivr.net/gh/simple-icons/simple-icons@develop/icons/openai.svg",
-        "site_url": "https://openai.com",
-        "privacy_policy_url": "https://openai.com/policies/privacy-policy/",
-        "terms_of_service_url": "https://openai.com/policies/row-terms-of-use/",
-        "status_page_url": "https://status.openai.com/"
-      },
-      "anthropic": {
-        "name": "Anthropic",
-        "model_count": 8,
-        "suggested_models": 2,
-        "logo_url": "https://cdn.jsdelivr.net/gh/simple-icons/simple-icons@develop/icons/anthropic.svg",
-        "site_url": "https://www.anthropic.com",
-        "privacy_policy_url": "https://www.anthropic.com/privacy",
-        "terms_of_service_url": "https://www.anthropic.com/terms",
-        "status_page_url": "https://status.anthropic.com/"
-      }
-    }
-  },
-  "timestamp": "2024-01-15T10:30:00Z"
+  "status": "healthy",
+  "timestamp": "2024-01-01T00:00:00Z",
+  "version": "2.0.1"
 }
 ```
 
-Example response for `/providers`:
+### Ping Service
+
+```http
+GET /ping
+```
+
+Returns ping statistics and system information.
+
+**Response:**
 ```json
 {
-  "status": "success",
-  "total_providers": 25,
-  "providers": [
+  "status": "pong",
+  "timestamp": "2024-01-01T00:00:00Z",
+  "uptime": 3600,
+  "version": "2.0.1"
+}
+```
+
+### Get Available Models
+
+```http
+GET /models
+```
+
+Returns list of available AI models.
+
+**Query Parameters:**
+- `provider` (optional): Filter by provider (openrouter, portkey, featherless, chutes)
+- `limit` (optional): Limit number of results
+- `offset` (optional): Offset for pagination
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "openai/gpt-4",
+      "name": "GPT-4",
+      "provider": "openai",
+      "context_length": 8192,
+      "pricing": {
+        "prompt": 0.00003,
+        "completion": 0.00006
+      }
+    }
+  ],
+  "count": 1
+}
+```
+
+### Get Model Providers
+
+```http
+GET /models/providers
+```
+
+Returns provider statistics and information.
+
+**Query Parameters:**
+- `moderated_only` (optional): Filter for moderated providers only
+- `limit` (optional): Limit number of results
+- `offset` (optional): Offset for pagination
+- `gateway` (optional): Gateway to use (openrouter, portkey, featherless, chutes, all)
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
     {
       "name": "OpenAI",
       "slug": "openai",
-      "privacy_policy_url": "https://openai.com/policies/privacy-policy/",
-      "terms_of_service_url": "https://openai.com/policies/row-terms-of-use/",
-      "status_page_url": "https://status.openai.com/"
-    },
-    {
-      "name": "Anthropic",
-      "slug": "anthropic",
-      "privacy_policy_url": "https://www.anthropic.com/privacy",
-      "terms_of_service_url": "https://www.anthropic.com/terms",
-      "status_page_url": "https://status.anthropic.com/"
+      "description": "OpenAI models",
+      "model_count": 10,
+      "official_url": "https://openai.com"
     }
   ],
-  "timestamp": "2024-01-15T10:30:00Z"
+  "count": 1
 }
 ```
 
-**Note**: Logo URLs are still not provided by OpenRouter API, but site URLs and policy links are now accurately sourced from OpenRouter's official providers API.
+### Get Model Rankings
 
-## User Endpoints
+```http
+GET /ranking/models
+```
 
-### Authentication & Registration
-**POST** `/create`
-- Create API key for user after dashboard login
-- Automatically sends welcome email with account details
-- Request body: `UserRegistrationRequest`
-- Returns: `UserRegistrationResponse` with primary API key
+Returns ranked list of models for the ranking page.
 
-**POST** `/auth/password-reset`
-- Request password reset email with secure token
-- Request body: `email` (string)
-- Returns: Success message (doesn't reveal if email exists)
+**Query Parameters:**
+- `limit` (optional): Limit number of results
+- `offset` (optional): Offset for pagination
 
-**POST** `/auth/reset-password`
-- Reset password using secure token from email
-- Request body: `token` (string), `new_password` (string)
-- Returns: Success message
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "rank": 1,
+      "model_name": "GPT-4",
+      "author": "openai",
+      "logo_url": "https://www.google.com/s2/favicons?domain=openai.com&sz=128",
+      "tokens": "8.2B tokens",
+      "trend_percentage": "5%",
+      "trend_direction": "up"
+    }
+  ],
+  "count": 1,
+  "has_logo_urls": true
+}
+```
 
-### User Management
-**GET** `/user/balance`
-- Get current user balance and account status
-- Returns: masked API key, credits, user ID, status
+## Authentication Endpoints
 
-**GET** `/user/monitor`
-- Get comprehensive usage metrics and rate limits
-- Returns: current credits, usage statistics, rate limit information
+### Privy Authentication
 
-**GET** `/user/limit`
-- Get current user rate limits and usage status
-- Returns: current limits, usage status, reset times
+```http
+POST /auth/privy
+```
 
-### Profile Management
-**GET** `/user/profile`
-- Get user profile information
-- Returns: `UserProfileResponse`
+Authenticate using Privy authentication.
 
-**PUT** `/user/profile`
-- Update user profile information
-- Request body: `UserProfileUpdate`
-- Returns: `UserProfileResponse`
+**Request Body:**
+```json
+{
+  "token": "privy_token_here",
+  "auth_method": "google"
+}
+```
 
-**DELETE** `/user/account`
-- Delete user account and all associated data
-- Request body: `DeleteAccountRequest` (confirmation required)
-- Returns: `DeleteAccountResponse`
+**Response:**
+```json
+{
+  "success": true,
+  "user_id": "123",
+  "username": "user@example.com",
+  "email": "user@example.com",
+  "api_key": "gw_live_...",
+  "credits": 10.0,
+  "subscription_status": "trial"
+}
+```
 
-### API Key Management
-**POST** `/user/api-keys`
-- Create new API key with enhanced security features
-- Request body: `CreateApiKeyRequest`
-- Features: IP allowlist, domain restrictions, expiration, usage limits, audit logging
-- Returns: new API key with security configuration
+### Get User Balance
 
-**GET** `/user/api-keys`
-- List all API keys for authenticated user
-- Returns: `ListApiKeysResponse` with security status for each key
+```http
+GET /user/balance
+```
 
-**PUT** `/user/api-keys/{key_id}`
-- Update or rotate existing API key
-- Request body: `UpdateApiKeyRequest`
-- Actions: update, rotate, bulk_rotate
-- Returns: `UpdateApiKeyResponse`
+Get user's current credit balance and status.
 
-**DELETE** `/user/api-keys/{key_id}`
-- Delete specific API key
-- Request body: `DeleteApiKeyRequest` (confirmation required)
-- Returns: `DeleteApiKeyResponse`
+**Response:**
+```json
+{
+  "api_key": "gw_live_...",
+  "credits": 10.0,
+  "status": "active",
+  "user_id": 123
+}
+```
 
-**GET** `/user/api-keys/usage`
-- Get usage statistics for all user API keys
+## API Key Management
 
-### Notifications & Email
-**POST** `/user/notifications/send-usage-report`
-- Send monthly usage report email
-- Request body: `month` (string, format: YYYY-MM)
-- Returns: Success message
+### Create API Key
 
-**POST** `/user/notifications/test`
-- Test notification templates
-- Request body: `notification_type` (query parameter)
-- Available types: low_balance, trial_expiring, subscription_expiring
-- Returns: Test notification sent confirmation
+```http
+POST /user/api-keys
+```
 
-**GET** `/user/notifications/preferences`
-- Get user notification preferences
-- Returns: `NotificationPreferences` with email settings
+Create a new API key for the user.
 
-**PUT** `/user/notifications/preferences`
-- Update user notification preferences
-- Request body: `UpdateNotificationPreferencesRequest`
-- Returns: Updated preferences
+**Request Body:**
+```json
+{
+  "key_name": "My API Key",
+  "environment_tag": "live",
+  "scope_permissions": {
+    "read": ["*"],
+    "write": ["*"]
+  }
+}
+```
 
-**GET** `/user/api-keys/audit-logs`
-- Get audit logs for security monitoring (Phase 4 feature)
-- Query parameters: `key_id`, `action`, `start_date`, `end_date`, `limit`
-- Returns: audit logs with security events
+**Response:**
+```json
+{
+  "success": true,
+  "api_key": "gw_live_...",
+  "key_name": "My API Key",
+  "environment_tag": "live",
+  "created_at": "2024-01-01T00:00:00Z"
+}
+```
 
-### Plan Management
-**GET** `/plans`
-- Get all available subscription plans
-- Returns: `List[PlanResponse]`
+### List API Keys
 
-**GET** `/plans/{plan_id}`
-- Get specific plan by ID
-- Returns: `PlanResponse`
+```http
+GET /user/api-keys
+```
 
-**GET** `/user/plan`
-- Get current user's active plan
-- Returns: `UserPlanResponse`
+Get all API keys for the current user.
 
-**GET** `/user/plan/usage`
-- Get user's plan usage and limits
-- Returns: `PlanUsageResponse`
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": 1,
+      "key_name": "My API Key",
+      "api_key": "gw_live_...",
+      "environment_tag": "live",
+      "is_active": true,
+      "created_at": "2024-01-01T00:00:00Z"
+    }
+  ],
+  "count": 1
+}
+```
 
-**GET** `/user/plan/entitlements`
-- Check user's plan entitlements
-- Query parameter: `feature` (optional)
-- Returns: `PlanEntitlementsResponse`
+### Update API Key
 
-**GET** `/user/environment-usage`
-- Get user's usage breakdown by environment
-- Returns: environment-specific usage statistics
+```http
+PUT /user/api-keys/{key_id}
+```
+
+Update an existing API key.
+
+**Request Body:**
+```json
+{
+  "key_name": "Updated Key Name",
+  "is_active": true
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "API key updated successfully"
+}
+```
+
+### Delete API Key
+
+```http
+DELETE /user/api-keys/{key_id}
+```
+
+Delete an API key.
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "API key deleted successfully"
+}
+```
+
+## Chat Endpoints
+
+### Chat Completions
+
+```http
+POST /v1/chat/completions
+```
+
+OpenAI-compatible chat completions endpoint.
+
+**Request Body:**
+```json
+{
+  "model": "openai/gpt-4",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Hello, world!"
+    }
+  ],
+  "max_tokens": 100,
+  "temperature": 0.7
+}
+```
+
+**Query Parameters:**
+- `session_id` (optional): Chat session ID to save messages to
+
+**Response:**
+```json
+{
+  "id": "chatcmpl-123",
+  "object": "chat.completion",
+  "created": 1677652288,
+  "model": "openai/gpt-4",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "Hello! How can I help you today?"
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 10,
+    "completion_tokens": 20,
+    "total_tokens": 30
+  }
+}
+```
+
+### Unified Responses
+
+```http
+POST /v1/responses
+```
+
+Unified response API endpoint (OpenAI v1/responses compatible).
+
+**Request Body:**
+```json
+{
+  "model": "openai/gpt-4",
+  "input": "Hello, world!",
+  "max_tokens": 100,
+  "temperature": 0.7,
+  "response_format": {
+    "type": "json_object"
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "id": "resp-123",
+  "object": "response",
+  "created": 1677652288,
+  "model": "openai/gpt-4",
+  "output": "Hello! How can I help you today?",
+  "usage": {
+    "prompt_tokens": 10,
+    "completion_tokens": 20,
+    "total_tokens": 30
+  }
+}
+```
+
+### Image Generation
+
+```http
+POST /images/generate
+```
+
+Generate images using AI models.
+
+**Request Body:**
+```json
+{
+  "prompt": "A beautiful sunset over mountains",
+  "model": "stability-ai/stable-diffusion-xl",
+  "size": "1024x1024",
+  "quality": "standard"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "url": "https://example.com/generated-image.jpg",
+      "revised_prompt": "A beautiful sunset over mountains with dramatic lighting"
+    }
+  ]
+}
+```
+
+## Chat History Management
+
+### Create Chat Session
+
+```http
+POST /chat/sessions
+```
+
+Create a new chat session.
+
+**Request Body:**
+```json
+{
+  "name": "My Chat Session",
+  "description": "Discussion about AI"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "session_id": 123,
+  "name": "My Chat Session",
+  "created_at": "2024-01-01T00:00:00Z"
+}
+```
+
+### List Chat Sessions
+
+```http
+GET /chat/sessions
+```
+
+Get all chat sessions for the current user.
+
+**Query Parameters:**
+- `limit` (optional): Limit number of results
+- `offset` (optional): Offset for pagination
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": 123,
+      "name": "My Chat Session",
+      "message_count": 10,
+      "created_at": "2024-01-01T00:00:00Z",
+      "updated_at": "2024-01-01T00:00:00Z"
+    }
+  ],
+  "count": 1
+}
+```
+
+### Get Chat Session
+
+```http
+GET /chat/sessions/{session_id}
+```
+
+Get a specific chat session with messages.
+
+**Response:**
+```json
+{
+  "success": true,
+  "session": {
+    "id": 123,
+    "name": "My Chat Session",
+    "messages": [
+      {
+        "id": 1,
+        "role": "user",
+        "content": "Hello!",
+        "created_at": "2024-01-01T00:00:00Z"
+      },
+      {
+        "id": 2,
+        "role": "assistant",
+        "content": "Hi there!",
+        "created_at": "2024-01-01T00:00:01Z"
+      }
+    ]
+  }
+}
+```
+
+### Delete Chat Session
+
+```http
+DELETE /chat/sessions/{session_id}
+```
+
+Delete a chat session.
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Chat session deleted successfully"
+}
+```
+
+## Subscription Plans
+
+### Get All Plans
+
+```http
+GET /plans
+```
+
+Get all available subscription plans.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": 1,
+      "plan_name": "Free",
+      "plan_type": "free",
+      "description": "Free tier with limited usage",
+      "monthly_price": 0.0,
+      "daily_request_limit": 100,
+      "monthly_request_limit": 1000,
+      "features": ["Basic chat", "Limited models"]
+    }
+  ],
+  "count": 1
+}
+```
+
+### Get Plan Details
+
+```http
+GET /plans/{plan_id}
+```
+
+Get details for a specific plan.
+
+**Response:**
+```json
+{
+  "success": true,
+  "plan": {
+    "id": 1,
+    "plan_name": "Pro",
+    "plan_type": "subscription",
+    "description": "Professional plan",
+    "monthly_price": 29.99,
+    "daily_request_limit": 10000,
+    "monthly_request_limit": 100000,
+    "features": ["All models", "Priority support", "Advanced analytics"]
+  }
+}
+```
+
+### Get User Plan
+
+```http
+GET /user/plan
+```
+
+Get the current user's subscription plan.
+
+**Response:**
+```json
+{
+  "success": true,
+  "plan": {
+    "id": 1,
+    "plan_name": "Pro",
+    "status": "active",
+    "start_date": "2024-01-01T00:00:00Z",
+    "end_date": "2024-02-01T00:00:00Z"
+  }
+}
+```
+
+## Free Trials
+
+### Start Trial
+
+```http
+POST /trials/start
+```
+
+Start a free trial for the user.
+
+**Request Body:**
+```json
+{
+  "trial_type": "standard"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "trial_id": 123,
+  "start_date": "2024-01-01T00:00:00Z",
+  "end_date": "2024-01-04T00:00:00Z",
+  "credits": 10.0,
+  "max_requests": 1000
+}
+```
+
+### Get Trial Status
+
+```http
+GET /trials/status
+```
+
+Get the current user's trial status.
+
+**Response:**
+```json
+{
+  "success": true,
+  "trial": {
+    "is_active": true,
+    "remaining_credits": 8.5,
+    "remaining_requests": 750,
+    "end_date": "2024-01-04T00:00:00Z"
+  }
+}
+```
+
+### Convert Trial
+
+```http
+POST /trials/convert
+```
+
+Convert a trial to a paid subscription.
+
+**Request Body:**
+```json
+{
+  "plan_id": 2
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Trial converted successfully",
+  "new_plan": "Pro"
+}
+```
+
+## Payment Processing
+
+### Create Checkout Session
+
+```http
+POST /api/stripe/checkout
+```
+
+Create a Stripe checkout session for credit purchase.
+
+**Request Body:**
+```json
+{
+  "amount": 50.00,
+  "currency": "usd",
+  "success_url": "https://example.com/success",
+  "cancel_url": "https://example.com/cancel"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "checkout_url": "https://checkout.stripe.com/...",
+  "session_id": "cs_123"
+}
+```
+
+### Create Payment Intent
+
+```http
+POST /api/stripe/payment-intent
+```
+
+Create a Stripe payment intent.
+
+**Request Body:**
+```json
+{
+  "amount": 50.00,
+  "currency": "usd"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "client_secret": "pi_123_secret_...",
+  "payment_intent_id": "pi_123"
+}
+```
 
 ## Admin Endpoints
 
-### User Management
-**POST** `/admin/add_credits`
-- Add credits to existing user
-- Request body: `AddCreditsRequest`
-- Returns: success status and new balance
+### Create User Account
 
-**GET** `/admin/balance`
-- Get all user balances and API keys
-- Returns: list of all users with their balances
-
-**GET** `/admin/monitor`
-- Get system-wide monitoring dashboard
-- Returns: `AdminMonitorResponse` with comprehensive metrics
-
-### Rate Limiting
-**POST** `/admin/limit`
-- Set rate limits for specific user
-- Request body: `SetRateLimitRequest`
-- Returns: updated rate limit configuration
-
-### Plan Management
-**POST** `/admin/assign-plan`
-- Assign plan to user (Admin only)
-- Request body: `AssignPlanRequest`
-- Returns: assignment confirmation
-
-### Notifications & Email
-**GET** `/admin/notifications/stats`
-- Get notification statistics and metrics
-- Returns: `NotificationStats` with email delivery statistics
-
-### Cache Management
-**POST** `/admin/refresh-models`
-- Force refresh model cache
-- Returns: cache refresh status
-
-**GET** `/admin/cache-status`
-- Get model cache status information
-- Returns: cache statistics and health
-
-## Chat Completions
-
-### OpenAI-Compatible Proxy
-**POST** `/v1/chat/completions`
-- OpenAI-compatible endpoint proxied to Gatewayz
-- Request body: `ProxyRequest`
-- Features: credit deduction, rate limiting, plan enforcement, usage tracking
-- Returns: OpenAI-compatible response with gateway usage information
-
-Example:
-```bash
-curl -X POST http://localhost:8000/v1/chat/completions \
-  -H "Authorization: Bearer YOUR_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "deepseek/deepseek-r1-0528",
-    "messages": [{"role": "user", "content": "Hello"}],
-    "max_tokens": 100,
-    "temperature": 0.7
-  }'
+```http
+POST /admin/create
 ```
 
-## Error Codes
+Create a new user account (admin only).
 
-| Code | Description |
-|------|-------------|
-| 400 | Bad Request - Invalid input or validation error |
-| 401 | Unauthorized - Invalid, inactive, or expired API key |
-| 402 | Payment Required - Insufficient credits |
-| 403 | Forbidden - IP/domain restrictions or insufficient permissions |
-| 404 | Not Found - Resource not found |
-| 429 | Too Many Requests - Rate limit or plan limit exceeded |
-| 500 | Internal Server Error - Server-side error |
-| 503 | Service Unavailable - Gatewayz service unavailable |
+**Request Body:**
+```json
+{
+  "username": "newuser@example.com",
+  "email": "newuser@example.com",
+  "auth_method": "email",
+  "environment_tag": "live"
+}
+```
 
-## Security Features
+**Response:**
+```json
+{
+  "success": true,
+  "user_id": 123,
+  "username": "newuser@example.com",
+  "api_key": "gw_live_...",
+  "credits": 10.0
+}
+```
 
-### Phase 4 Security Enhancements
-- **IP Allowlist**: Restrict API key usage to specific IP addresses
-- **Domain Restrictions**: Limit API key usage to specific domains
-- **Key Rotation**: Rotate API keys with new credentials
-- **Bulk Operations**: Rotate multiple keys simultaneously
-- **Audit Logging**: Comprehensive security event tracking
-- **Usage Monitoring**: Real-time usage tracking and analytics
-- **Plan Enforcement**: Automatic plan limit enforcement
-- **Enhanced Validation**: Multi-layer API key validation
+### System Monitoring
 
-### API Key Formats
-- **Live**: `gw_live_*`
-- **Test**: `gw_test_*`
-- **Staging**: `gw_staging_*`
-- **Development**: `gw_dev_*`
+```http
+GET /admin/monitor
+```
 
-## Rate Limiting
+Get system monitoring data (admin only).
 
-The API implements comprehensive rate limiting:
-- **Per-minute limits**: Requests and tokens per minute
-- **Per-hour limits**: Requests and tokens per hour  
-- **Per-day limits**: Requests and tokens per day
-- **Plan-based limits**: Subscription plan enforcement
-- **Key-specific limits**: Individual API key restrictions
+**Response:**
+```json
+{
+  "success": true,
+  "system": {
+    "status": "healthy",
+    "uptime": 3600,
+    "active_users": 150,
+    "total_requests": 10000
+  },
+  "database": {
+    "status": "connected",
+    "response_time": 5
+  }
+}
+```
 
-## Usage Tracking
+### Add Credits
 
-All API usage is tracked with:
-- Token consumption per request
-- Cost calculation and credit deduction
-- Model-specific usage statistics
-- Environment-based usage breakdown
-- Real-time monitoring and analytics
+```http
+POST /admin/add_credits
+```
 
+Add credits to a user account (admin only).
+
+**Request Body:**
+```json
+{
+  "user_id": 123,
+  "credits": 50.0,
+  "reason": "Support credit"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Credits added successfully",
+  "new_balance": 60.0
+}
+```
+
+## Error Handling
+
+### Error Response Format
+
+All errors follow this format:
+
+```json
+{
+  "detail": "Error message",
+  "status_code": 400,
+  "timestamp": "2024-01-01T00:00:00Z"
+}
+```
+
+### Common Error Codes
+
+- **400 Bad Request**: Invalid request data
+- **401 Unauthorized**: Invalid or missing API key
+- **403 Forbidden**: Insufficient permissions
+- **404 Not Found**: Resource not found
+- **429 Too Many Requests**: Rate limit exceeded
+- **500 Internal Server Error**: Server error
+
+### Rate Limiting
+
+Rate limits are applied per API key:
+
+- **Free Plan**: 100 requests/hour
+- **Pro Plan**: 10,000 requests/hour
+- **Enterprise Plan**: 100,000 requests/hour
+
+Rate limit headers are included in responses:
+
+```http
+X-RateLimit-Limit: 1000
+X-RateLimit-Remaining: 999
+X-RateLimit-Reset: 1640995200
+```
+
+## Webhooks
+
+### Stripe Webhook
+
+```http
+POST /api/stripe/webhook
+```
+
+Handles Stripe webhook events for payment processing.
+
+**Headers:**
+```http
+Stripe-Signature: t=1234567890,v1=...
+Content-Type: application/json
+```
+
+**Supported Events:**
+- `checkout.session.completed`
+- `payment_intent.succeeded`
+- `payment_intent.payment_failed`
+- `charge.refunded`
+
+## SDKs and Libraries
+
+### Python
+
+```python
+import requests
+
+# Set your API key
+headers = {
+    "Authorization": "Bearer gw_live_your_api_key_here",
+    "Content-Type": "application/json"
+}
+
+# Make a chat completion request
+response = requests.post(
+    "https://your-domain.com/v1/chat/completions",
+    headers=headers,
+    json={
+        "model": "openai/gpt-4",
+        "messages": [{"role": "user", "content": "Hello!"}]
+    }
+)
+
+print(response.json())
+```
+
+### JavaScript
+
+```javascript
+const response = await fetch('https://your-domain.com/v1/chat/completions', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer gw_live_your_api_key_here',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    model: 'openai/gpt-4',
+    messages: [{ role: 'user', content: 'Hello!' }]
+  })
+});
+
+const data = await response.json();
+console.log(data);
+```
+
+### cURL
+
+```bash
+curl -X POST "https://your-domain.com/v1/chat/completions" \
+  -H "Authorization: Bearer gw_live_your_api_key_here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "openai/gpt-4",
+    "messages": [{"role": "user", "content": "Hello!"}]
+  }'
+```
