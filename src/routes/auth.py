@@ -10,6 +10,7 @@ from src.schemas import PrivyAuthResponse, PrivyAuthRequest, AuthMethod, UserReg
     UserRegistrationRequest
 from src.supabase_config import get_supabase_client
 from src.db.users import get_user_by_privy_id, create_enhanced_user
+from src.db.activity import log_activity
 
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
@@ -136,6 +137,27 @@ async def privy_auth(request: PrivyAuthRequest):
             else:
                 logger.warning(f"No email found for user {existing_user['id']}, skipping welcome email")
 
+            # Log authentication activity
+            try:
+                log_activity(
+                    user_id=existing_user['id'],
+                    model="auth",
+                    provider="Privy",
+                    tokens=0,
+                    cost=0.0,
+                    speed=0.0,
+                    finish_reason="login",
+                    app="Auth",
+                    metadata={
+                        "action": "login",
+                        "auth_method": auth_method.value if hasattr(auth_method, 'value') else str(auth_method),
+                        "privy_user_id": request.user.id,
+                        "is_new_user": False
+                    }
+                )
+            except Exception as e:
+                logger.warning(f"Failed to log auth activity: {e}")
+
             return PrivyAuthResponse(
                 success=True,
                 message="Login successful",
@@ -182,6 +204,28 @@ async def privy_auth(request: PrivyAuthRequest):
                     logger.warning(f"Failed to send welcome email: {e}")
 
             logger.info(f"New Privy user created: {user_data['user_id']}")
+
+            # Log registration activity
+            try:
+                log_activity(
+                    user_id=user_data['user_id'],
+                    model="auth",
+                    provider="Privy",
+                    tokens=0,
+                    cost=0.0,
+                    speed=0.0,
+                    finish_reason="register",
+                    app="Auth",
+                    metadata={
+                        "action": "register",
+                        "auth_method": auth_method.value if hasattr(auth_method, 'value') else str(auth_method),
+                        "privy_user_id": request.user.id,
+                        "is_new_user": True,
+                        "initial_credits": user_data['credits']
+                    }
+                )
+            except Exception as e:
+                logger.warning(f"Failed to log registration activity: {e}")
 
             return PrivyAuthResponse(
                 success=True,

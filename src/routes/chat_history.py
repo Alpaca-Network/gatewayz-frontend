@@ -13,6 +13,7 @@ from src.schemas.chat import (
 )
 from src.security.deps import get_api_key
 from src.db.users import get_user
+from src.db.activity import log_activity
 
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
@@ -39,7 +40,27 @@ async def create_session(
         )
         
         logger.info(f"Created chat session {session['id']} for user {user['id']}")
-        
+
+        # Log session creation activity
+        try:
+            log_activity(
+                user_id=user['id'],
+                model=request.model or "session",
+                provider="Chat History",
+                tokens=0,
+                cost=0.0,
+                speed=0.0,
+                finish_reason="session_created",
+                app="Chat",
+                metadata={
+                    "action": "create_session",
+                    "session_id": session['id'],
+                    "session_title": request.title
+                }
+            )
+        except Exception as e:
+            logger.warning(f"Failed to log session creation activity: {e}")
+
         return ChatSessionResponse(
             success=True,
             data=session,

@@ -9,6 +9,7 @@ from src.db.plans import enforce_plan_limits
 from src.db.rate_limits import create_rate_limit_alert, update_rate_limit_usage
 from src.db.users import get_user, deduct_credits, record_usage
 from src.db.chat_history import create_chat_session, save_chat_message, get_chat_session
+from src.db.activity import log_activity, get_provider_from_model
 from src.schemas import ProxyRequest, ResponseRequest, InputMessage
 from src.security.deps import get_api_key
 from src.services.openrouter_client import make_openrouter_request_openai, process_openrouter_response, make_openrouter_request_openai_stream
@@ -125,6 +126,32 @@ async def stream_generator(stream, user, api_key, model, trial, environment_tag,
                 logger.error("Usage recording error: %s", e)
 
         await _to_thread(increment_api_key_usage, api_key)
+
+        # Log activity for streaming
+        try:
+            provider_name = get_provider_from_model(model)
+            speed = total_tokens / elapsed if elapsed > 0 else 0
+            cost = calculate_cost(model, prompt_tokens, completion_tokens) if not trial.get("is_trial", False) else 0.0
+            await _to_thread(
+                log_activity,
+                user_id=user["id"],
+                model=model,
+                provider=provider_name,
+                tokens=total_tokens,
+                cost=cost,
+                speed=speed,
+                finish_reason="stop",
+                app="API",
+                metadata={
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "endpoint": "/v1/chat/completions",
+                    "stream": True,
+                    "session_id": session_id
+                }
+            )
+        except Exception as e:
+            logger.warning(f"Failed to log activity: {e}")
 
         # Save chat history
         if session_id:
@@ -426,6 +453,30 @@ async def chat_completions(
             await _to_thread(update_rate_limit_usage, api_key, total_tokens)
 
         await _to_thread(increment_api_key_usage, api_key)
+
+        # === 4.5) Log activity for tracking and analytics ===
+        try:
+            provider_name = get_provider_from_model(model)
+            speed = total_tokens / elapsed if elapsed > 0 else 0
+            await _to_thread(
+                log_activity,
+                user_id=user["id"],
+                model=model,
+                provider=provider_name,
+                tokens=total_tokens,
+                cost=cost if not trial.get("is_trial", False) else 0.0,
+                speed=speed,
+                finish_reason=processed.get("choices", [{}])[0].get("finish_reason", "stop"),
+                app="API",
+                metadata={
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "endpoint": "/v1/chat/completions",
+                    "session_id": session_id
+                }
+            )
+        except Exception as e:
+            logger.warning(f"Failed to log activity: {e}")
 
         # === 5) History (use the last user message in this request only) ===
         if session_id:
@@ -764,6 +815,30 @@ async def unified_responses(
             await _to_thread(update_rate_limit_usage, api_key, total_tokens)
 
         await _to_thread(increment_api_key_usage, api_key)
+
+        # === 4.5) Log activity for tracking and analytics ===
+        try:
+            provider_name = get_provider_from_model(model)
+            speed = total_tokens / elapsed if elapsed > 0 else 0
+            await _to_thread(
+                log_activity,
+                user_id=user["id"],
+                model=model,
+                provider=provider_name,
+                tokens=total_tokens,
+                cost=cost if not trial.get("is_trial", False) else 0.0,
+                speed=speed,
+                finish_reason=processed.get("choices", [{}])[0].get("finish_reason", "stop"),
+                app="API",
+                metadata={
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "endpoint": "/v1/responses",
+                    "session_id": session_id
+                }
+            )
+        except Exception as e:
+            logger.warning(f"Failed to log activity: {e}")
 
         # === 5) History ===
         if session_id:
