@@ -252,7 +252,24 @@ async def chat_completions(
             if val is not None:
                 optional[name] = val
 
+        # Auto-detect provider if not specified
         provider = (req.provider or "openrouter").lower()
+        if not req.provider:
+            # Try to detect provider from model ID
+            from src.services.models import get_cached_models
+
+            # Check Featherless first (largest catalog)
+            featherless_models = get_cached_models("featherless") or []
+            if any(m.get("id") == model for m in featherless_models):
+                provider = "featherless"
+                logger.info(f"Auto-detected provider 'featherless' for model {model}")
+            else:
+                # Check Portkey
+                portkey_models = get_cached_models("portkey") or []
+                if any(m.get("id") == model for m in portkey_models):
+                    provider = "portkey"
+                    logger.info(f"Auto-detected provider 'portkey' for model {model}")
+                # Otherwise default to openrouter (already set)
 
         # === 3) Call upstream (streaming or non-streaming) ===
         if req.stream:

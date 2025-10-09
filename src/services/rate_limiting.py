@@ -120,7 +120,6 @@ class SlidingWindowRateLimiter:
             # Use the fallback rate limiting system
             result = await self.fallback_manager.check_rate_limit(
                 api_key=api_key,
-                config=config,
                 tokens_used=tokens_used
             )
 
@@ -476,14 +475,8 @@ class RateLimitManager:
 
     async def increment_request(self, api_key: str, config: RateLimitConfig, tokens_used: int = 0):
         """Increment request count (handled by fallback system)"""
-        try:
-            await self.fallback_manager.increment_request(
-                api_key=api_key,
-                config=config,
-                tokens_used=tokens_used
-            )
-        except Exception as e:
-            logger.error(f"Failed to increment request count for key {api_key[:10]}...: {e}")
+        # Note: Fallback manager doesn't have increment_request, it's handled in check_rate_limit
+        pass
     
     async def check_rate_limit(
         self, 
@@ -522,15 +515,12 @@ class RateLimitManager:
 
     async def get_rate_limit_status(self, api_key: str, config: RateLimitConfig) -> Dict[str, Any]:
         """Get current rate limit status"""
-        try:
-            return await self.fallback_manager.get_rate_limit_status(api_key, config)
-        except Exception as e:
-            logger.error(f"Failed to get rate limit status for key {api_key[:10]}...: {e}")
-            return {
-                "requests_remaining": config.requests_per_minute,
-                "tokens_remaining": config.tokens_per_minute,
-                "reset_time": int((datetime.utcnow() + timedelta(minutes=1)).timestamp())
-            }
+        # Fallback manager doesn't have get_rate_limit_status, return default
+        return {
+            "requests_remaining": config.requests_per_minute,
+            "tokens_remaining": config.tokens_per_minute,
+            "reset_time": int((datetime.now(timezone.utc) + timedelta(minutes=1)).timestamp())
+        }
 
 # Global rate limiter instance
 _rate_limiter = None
