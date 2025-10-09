@@ -122,6 +122,10 @@ from src.schemas.admin import (
 from src.schemas.proxy import (
     Message,
     ProxyRequest,
+    ResponseRequest,
+    InputMessage,
+    ResponseFormat,
+    ResponseFormatType,
 )
 
 # Coupon models
@@ -203,4 +207,8 @@ __all__ = [
     # Proxy
     "ProxyRequest",
     "Message",
+    "ResponseRequest",
+    "InputMessage",
+    "ResponseFormat",
+    "ResponseFormatType",
 ]
