@@ -1,3 +1,4 @@
+# Core dependencies - Updated 2025-10-09 to fix Railway cache issue
 fastapi==0.104.1
 uvicorn==0.24.0
 httpx==0.27.0
