@@ -112,11 +112,16 @@ def fetch_models_from_portkey():
 
         payload = response.json()
         raw_models = payload.get("data", [])
-        normalized_models = [normalize_portkey_model(model) for model in raw_models if model]
+
+        # Get OpenRouter models for pricing cross-reference
+        openrouter_models = get_cached_models("openrouter") or []
+
+        normalized_models = [normalize_portkey_model(model, openrouter_models) for model in raw_models if model]
 
         _portkey_models_cache["data"] = normalized_models
         _portkey_models_cache["timestamp"] = datetime.now(timezone.utc)
 
+        logger.info(f"Fetched {len(normalized_models)} Portkey models with pricing cross-reference")
         return _portkey_models_cache["data"]
     except httpx.HTTPStatusError as e:
         logger.error(f"Portkey HTTP error: {e.response.status_code} - {e.response.text}")
@@ -126,7 +131,7 @@ def fetch_models_from_portkey():
         return None
 
 
-def normalize_portkey_model(portkey_model: dict) -> dict:
+def normalize_portkey_model(portkey_model: dict, openrouter_models: list = None) -> dict:
     """Normalize Portkey catalog entries to resemble OpenRouter model shape"""
     slug = portkey_model.get("slug") or portkey_model.get("canonical_slug") or portkey_model.get("id")
     if not slug:
@@ -138,17 +143,50 @@ def normalize_portkey_model(portkey_model: dict) -> dict:
     model_handle = slug.split("/")[-1]
     display_name = model_handle.replace("-", " ").replace("_", " ").title()
 
-    description = f"Portkey catalog entry for {slug}. Pricing data not available from Portkey API."
+    # Try to find matching OpenRouter model for pricing
+    pricing = None
+    description_suffix = "Pricing data not available from Portkey API."
 
-    # Use null for unknown pricing (Portkey API doesn't provide pricing)
-    pricing = {
-        "prompt": None,
-        "completion": None,
-        "request": None,
-        "image": None,
-        "web_search": None,
-        "internal_reasoning": None
-    }
+    if openrouter_models:
+        # Clean up the slug for matching
+        clean_slug = slug.lstrip("@").split(":")[0]  # Remove @ prefix and :free/:extended suffixes
+
+        # Try multiple matching strategies
+        for or_model in openrouter_models:
+            or_slug = or_model.get("id", "")
+            or_slug_clean = or_slug.split(":")[0]
+
+            # Strategy 1: Exact match
+            if or_slug.lower() == slug.lower():
+                pricing = or_model.get("pricing")
+                description_suffix = "Pricing from OpenRouter (exact match)."
+                break
+
+            # Strategy 2: Match without prefixes/suffixes
+            if or_slug_clean.lower() == clean_slug.lower():
+                pricing = or_model.get("pricing")
+                description_suffix = "Pricing from OpenRouter (approximate match)."
+                break
+
+            # Strategy 3: Match canonical slug
+            or_canonical = or_model.get("canonical_slug", "")
+            if or_canonical and or_canonical.lower() == clean_slug.lower():
+                pricing = or_model.get("pricing")
+                description_suffix = "Pricing from OpenRouter (canonical match)."
+                break
+
+    # If no match found, use null
+    if not pricing:
+        pricing = {
+            "prompt": None,
+            "completion": None,
+            "request": None,
+            "image": None,
+            "web_search": None,
+            "internal_reasoning": None
+        }
+
+    description = f"Portkey catalog entry for {slug}. {description_suffix}"
 
     architecture = {
         "modality": "text->text",
