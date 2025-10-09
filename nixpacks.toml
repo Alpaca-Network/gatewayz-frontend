@@ -3,10 +3,9 @@ nixPkgs = ['python312']
 
 [phases.install]
 cmds = [
-  'echo "Cache bust: 2025-10-09-v2"',
+  'echo "Cache bust: 2025-10-09-v3"',
   'rm -rf /opt/venv',
   'python -m venv --copies /opt/venv',
-  '. /opt/venv/bin/activate && pip install --no-cache-dir --force-reinstall httpx==0.27.0 openai==1.44.0',
   '. /opt/venv/bin/activate && pip install --no-cache-dir -r requirements.txt'
 ]
 
