@@ -6,7 +6,8 @@ from datetime import datetime, timezone
 from src.enhanced_notification_service import enhanced_notification_service
 from fastapi import APIRouter, HTTPException
 
-from src.schemas import PrivyAuthResponse, PrivyAuthRequest, AuthMethod
+from src.schemas import PrivyAuthResponse, PrivyAuthRequest, AuthMethod, UserRegistrationResponse, \
+    UserRegistrationRequest
 from src.supabase_config import get_supabase_client
 from src.db.users import get_user_by_privy_id, create_enhanced_user
 
@@ -199,6 +200,72 @@ async def privy_auth(request: PrivyAuthRequest):
     except Exception as e:
         logger.error(f"Privy authentication failed: {e}")
         raise HTTPException(status_code=500, detail=f"Authentication failed: {str(e)}")
+
+
+@router.post("/auth/register", response_model=UserRegistrationResponse, tags=["authentication"])
+async def register_user(request: UserRegistrationRequest):
+    """Register a new user with username and email"""
+    try:
+        logger.info(f"Registration request for: {request.username} ({request.email})")
+
+        client = get_supabase_client()
+
+        # Check if email already exists
+        existing_email = client.table('users').select('id').eq('email', request.email).execute()
+        if existing_email.data:
+            raise HTTPException(status_code=400, detail="User with this email already exists")
+
+        # Check if username already exists
+        existing_username = client.table('users').select('id').eq('username', request.username).execute()
+        if existing_username.data:
+            raise HTTPException(status_code=400, detail="Username already taken")
+
+        # Create user
+        user_data = create_enhanced_user(
+            username=request.username,
+            email=request.email,
+            auth_method=request.auth_method,
+            privy_user_id=None,  # No Privy for direct registration
+            credits=10  # $10 starting credits
+        )
+
+        # Send welcome email
+        try:
+            success = enhanced_notification_service.send_welcome_email(
+                user_id=user_data['user_id'],
+                username=user_data['username'],
+                email=request.email,
+                credits=user_data['credits']
+            )
+
+            if success:
+                from src.db.users import mark_welcome_email_sent
+                mark_welcome_email_sent(user_data['user_id'])
+                logger.info(f"Welcome email sent to {request.email}")
+        except Exception as e:
+            logger.warning(f"Failed to send welcome email: {e}")
+
+        logger.info(f"User registered successfully: {user_data['user_id']}")
+
+        return UserRegistrationResponse(
+            user_id=user_data['user_id'],
+            username=user_data['username'],
+            email=request.email,
+            api_key=user_data['primary_api_key'],
+            credits=user_data['credits'],
+            environment_tag=request.environment_tag,
+            scope_permissions=user_data.get('scope_permissions', {}),
+            auth_method=request.auth_method,
+            subscription_status="free",
+            message="Account created successfully",
+            timestamp=datetime.now(timezone.utc)
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Registration failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Registration failed: {str(e)}")
 
 
 @router.post("/auth/password-reset", tags=["authentication"])

@@ -2,30 +2,22 @@ import datetime
 import logging
 
 from src.config import Config
-from src.db.api_keys import increment_api_key_usage
-from src.db.plans import enforce_plan_limits
-from src.db.rate_limits import set_user_rate_limits, get_user_rate_limits, create_rate_limit_alert, \
-    update_rate_limit_usage
+
+from src.db.rate_limits import set_user_rate_limits, get_user_rate_limits
 from src.db.trials import get_trial_analytics
-from src.db.users import create_enhanced_user, get_user, add_credits_to_user, get_all_users, get_admin_monitor_data, \
-    deduct_credits, record_usage
+from src.db.users import create_enhanced_user, get_user, add_credits_to_user, get_all_users, get_admin_monitor_data
 from src.enhanced_notification_service import enhanced_notification_service
 from src.cache import _provider_cache, _huggingface_cache, _models_cache
 from fastapi import APIRouter
 from datetime import datetime, timezone
 
 import httpx
-from fastapi import Depends, HTTPException
+from fastapi import  HTTPException
 
-from src.schemas import UserRegistrationResponse, UserRegistrationRequest, AddCreditsRequest, SetRateLimitRequest, \
-    ProxyRequest
-from src.security.deps import get_api_key
+from src.schemas import UserRegistrationResponse, UserRegistrationRequest, AddCreditsRequest, SetRateLimitRequest
 
 from src.services.models import fetch_huggingface_model, get_cached_models, enhance_model_with_provider_info
-from src.services.openrouter_client import make_openrouter_request_openai, process_openrouter_response
 from src.services.providers import get_cached_providers, fetch_providers_from_openrouter
-from src.services.rate_limiting import get_rate_limit_manager
-from src.services.trial_validation import validate_trial_access, track_trial_usage
 
 # Initialize logging
 logging.basicConfig(level=logging.ERROR)

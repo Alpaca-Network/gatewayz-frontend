@@ -36,7 +36,7 @@ from src.schemas.coupons import (
     CouponStatsResponse,
     ListCouponsResponse
 )
-from src.security.deps import get_api_key
+from src.security.deps import get_api_key, get_current_user, require_admin
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +51,7 @@ router = APIRouter()
 async def redeem_coupon_endpoint(
         request: Request,
         redemption_request: RedeemCouponRequest,
-        api_key: str = Depends(get_api_key)
+        user: dict = Depends(get_current_user)
 ):
     """
     Redeem a coupon code
@@ -62,11 +62,6 @@ async def redeem_coupon_endpoint(
     - Records the redemption
     """
     try:
-        # Get user from API key
-        user = get_user(api_key)
-        if not user:
-            raise HTTPException(status_code=401, detail="Invalid API key")
-
         user_id = user['id']
 
         # Get client info for audit
@@ -97,7 +92,7 @@ async def redeem_coupon_endpoint(
 
 
 @router.get("/coupons/available", response_model=List[AvailableCouponResponse], tags=["coupons"])
-async def get_available_coupons(api_key: str = Depends(get_api_key)):
+async def get_available_coupons(user: dict = Depends(get_current_user)):
     """
     Get all coupons available for the current user
 
@@ -106,11 +101,6 @@ async def get_available_coupons(api_key: str = Depends(get_api_key)):
     - Global coupons not yet redeemed by this user
     """
     try:
-        # Get user from API key
-        user = get_user(api_key)
-        if not user:
-            raise HTTPException(status_code=401, detail="Invalid API key")
-
         user_id = user['id']
 
         # Get available coupons
@@ -128,7 +118,7 @@ async def get_available_coupons(api_key: str = Depends(get_api_key)):
 @router.get("/coupons/history", response_model=RedemptionHistoryResponse, tags=["coupons"])
 async def get_redemption_history(
         limit: int = 50,
-        api_key: str = Depends(get_api_key)
+        user: dict = Depends(get_current_user)
 ):
     """
     Get redemption history for the current user
@@ -136,11 +126,6 @@ async def get_redemption_history(
     Shows all coupons the user has redeemed with details
     """
     try:
-        # Get user from API key
-        user = get_user(api_key)
-        if not user:
-            raise HTTPException(status_code=401, detail="Invalid API key")
-
         user_id = user['id']
 
         # Get redemption history
@@ -184,7 +169,7 @@ async def get_redemption_history(
 @router.post("/admin/coupons", response_model=CouponResponse, tags=["admin", "coupons"])
 async def create_coupon_endpoint(
         coupon_request: CreateCouponRequest,
-        api_key: str = Depends(get_api_key)
+        user: dict = Depends(require_admin)
 ):
     """
     Create a new coupon (Admin only)
@@ -193,15 +178,6 @@ async def create_coupon_endpoint(
     - Global: available to all users, one-time per user
     """
     try:
-        # Get user from API key
-        user = get_user(api_key)
-        if not user:
-            raise HTTPException(status_code=401, detail="Invalid API key")
-
-        # TODO: Add admin role check here
-        # For now, any authenticated user can create coupons
-        # In production, add: if user.get('role') != 'admin': raise HTTPException(403)
-
         created_by = user['id']
 
         # Create coupon
@@ -240,7 +216,7 @@ async def list_coupons_endpoint(
         is_active: Optional[bool] = None,
         limit: int = 100,
         offset: int = 0,
-        api_key: str = Depends(get_api_key)
+        user: dict = Depends(require_admin)
 ):
     """
     List all coupons with filters (Admin only)
@@ -253,13 +229,6 @@ async def list_coupons_endpoint(
     - offset: Pagination offset
     """
     try:
-        # Get user from API key
-        user = get_user(api_key)
-        if not user:
-            raise HTTPException(status_code=401, detail="Invalid API key")
-
-        # TODO: Add admin role check
-
         # List coupons
         coupons = list_coupons(
             scope=scope,
@@ -286,17 +255,10 @@ async def list_coupons_endpoint(
 @router.get("/admin/coupons/{coupon_id}", response_model=CouponResponse, tags=["admin", "coupons"])
 async def get_coupon_endpoint(
         coupon_id: int,
-        api_key: str = Depends(get_api_key)
+        user: dict = Depends(require_admin)
 ):
     """Get a specific coupon by ID (Admin only)"""
     try:
-        # Get user from API key
-        user = get_user(api_key)
-        if not user:
-            raise HTTPException(status_code=401, detail="Invalid API key")
-
-        # TODO: Add admin role check
-
         coupon = get_coupon_by_id(coupon_id)
 
         if not coupon:
@@ -315,17 +277,10 @@ async def get_coupon_endpoint(
 async def update_coupon_endpoint(
         coupon_id: int,
         update_request: UpdateCouponRequest,
-        api_key: str = Depends(get_api_key)
+        user: dict = Depends(require_admin)
 ):
     """Update a coupon (Admin only)"""
     try:
-        # Get user from API key
-        user = get_user(api_key)
-        if not user:
-            raise HTTPException(status_code=401, detail="Invalid API key")
-
-        # TODO: Add admin role check
-
         # Prepare updates
         updates = update_request.dict(exclude_unset=True)
 
@@ -350,17 +305,10 @@ async def update_coupon_endpoint(
 @router.delete("/admin/coupons/{coupon_id}", tags=["admin", "coupons"])
 async def deactivate_coupon_endpoint(
         coupon_id: int,
-        api_key: str = Depends(get_api_key)
+        user: dict = Depends(require_admin)
 ):
     """Deactivate a coupon (Admin only)"""
     try:
-        # Get user from API key
-        user = get_user(api_key)
-        if not user:
-            raise HTTPException(status_code=401, detail="Invalid API key")
-
-        # TODO: Add admin role check
-
         success = deactivate_coupon(coupon_id)
 
         if not success:
@@ -378,17 +326,10 @@ async def deactivate_coupon_endpoint(
 @router.get("/admin/coupons/{coupon_id}/analytics", response_model=CouponAnalyticsResponse, tags=["admin", "coupons"])
 async def get_coupon_analytics_endpoint(
         coupon_id: int,
-        api_key: str = Depends(get_api_key)
+        user: dict = Depends(require_admin)
 ):
     """Get detailed analytics for a coupon (Admin only)"""
     try:
-        # Get user from API key
-        user = get_user(api_key)
-        if not user:
-            raise HTTPException(status_code=401, detail="Invalid API key")
-
-        # TODO: Add admin role check
-
         analytics = get_coupon_analytics(coupon_id)
 
         if not analytics:
@@ -412,16 +353,9 @@ async def get_coupon_analytics_endpoint(
 
 
 @router.get("/admin/coupons/stats/overview", response_model=CouponStatsResponse, tags=["admin", "coupons"])
-async def get_coupon_stats_endpoint(api_key: str = Depends(get_api_key)):
+async def get_coupon_stats_endpoint(user: dict = Depends(require_admin)):
     """Get system-wide coupon statistics (Admin only)"""
     try:
-        # Get user from API key
-        user = get_user(api_key)
-        if not user:
-            raise HTTPException(status_code=401, detail="Invalid API key")
-
-        # TODO: Add admin role check
-
         stats = get_all_coupons_stats()
 
         return CouponStatsResponse(**stats)
