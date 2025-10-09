@@ -83,6 +83,7 @@ def create_app() -> FastAPI:
         ("chat_history", "Chat History"),
         ("ranking", "Model Ranking"),
         ("activity", "Activity Tracking"),
+        ("coupons", "Coupon Management"),
     ]
 
     loaded_count = 0
