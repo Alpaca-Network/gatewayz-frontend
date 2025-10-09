@@ -1,7 +1,7 @@
 # Core dependencies - Updated 2025-10-09 to fix Railway dependency conflict
 fastapi==0.104.1
 uvicorn==0.24.0
-httpx==0.24.1
+httpx==0.26.0
 pydantic[email]==2.5.0
 supabase==2.12.0
 python-dotenv==1.0.0

@@ -3,7 +3,7 @@ nixPkgs = ['python312']
 
 [phases.install]
 cmds = [
-  'echo "Cache bust: 2025-10-09-v3"',
+  'echo "Cache bust: 2025-10-09-v4"',
   'rm -rf /opt/venv',
   'python -m venv --copies /opt/venv',
   '. /opt/venv/bin/activate && pip install --no-cache-dir -r requirements.txt'
