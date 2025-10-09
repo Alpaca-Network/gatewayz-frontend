@@ -1,0 +1,8 @@
+[build]
+builder = "NIXPACKS"
+buildCommand = "pip install --no-cache-dir --force-reinstall httpx==0.27.0 openai==1.44.0 && pip install --no-cache-dir -r requirements.txt"
+
+[deploy]
+startCommand = "uvicorn src.main:app --host 0.0.0.0 --port ${PORT:-8000}"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
