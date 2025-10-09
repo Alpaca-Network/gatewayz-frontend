@@ -83,19 +83,17 @@ def merge_provider_lists(*provider_lists: List[List[dict]]) -> List[dict]:
     return list(merged.values())
 
 
-def merge_models_by_slug(primary: List[dict], secondary: List[dict]) -> List[dict]:
+def merge_models_by_slug(*model_lists: List[dict]) -> List[dict]:
+    """Merge multiple model lists by slug, avoiding duplicates"""
     merged = []
     seen = set()
-    for model in primary or []:
-        key = (model.get("canonical_slug") or model.get("id") or "").lower()
-        seen.add(key)
-        merged.append(model)
-    for model in secondary or []:
-        key = (model.get("canonical_slug") or model.get("id") or "").lower()
-        if key in seen:
-            continue
-        seen.add(key)
-        merged.append(model)
+    for model_list in model_lists:
+        for model in model_list or []:
+            key = (model.get("canonical_slug") or model.get("id") or "").lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(model)
     return merged
 
 
@@ -107,7 +105,7 @@ async def get_providers(
     offset: Optional[int] = Query(0, description="Offset for pagination"),
     gateway: Optional[str] = Query(
         "openrouter",
-        description="Gateway to use: 'openrouter', 'portkey', or 'all'",
+        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'chutes', or 'all'",
     ),
 ):
     """Get all available provider list with detailed metric data including model count and logo URLs"""
@@ -189,7 +187,7 @@ async def get_models(
     ),
     gateway: Optional[str] = Query(
         "openrouter",
-        description="Gateway to use: 'openrouter', 'portkey', or 'all'",
+        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'chutes', or 'all'",
     ),
 ):
     """Get all metric data of available models with optional filtering, pagination, Hugging Face integration, and provider logos"""
@@ -203,6 +201,8 @@ async def get_models(
 
         openrouter_models: List[dict] = []
         portkey_models: List[dict] = []
+        featherless_models: List[dict] = []
+        chutes_models: List[dict] = []
 
         if gateway_value in ("openrouter", "all"):
             openrouter_models = get_cached_models("openrouter") or []
@@ -216,12 +216,28 @@ async def get_models(
                 logger.error("No Portkey models data available from cache")
                 raise HTTPException(status_code=503, detail="Models data unavailable")
 
+        if gateway_value in ("featherless", "all"):
+            featherless_models = get_cached_models("featherless") or []
+            if gateway_value == "featherless" and not featherless_models:
+                logger.error("No Featherless models data available from cache")
+                raise HTTPException(status_code=503, detail="Models data unavailable")
+
+        if gateway_value in ("chutes", "all"):
+            chutes_models = get_cached_models("chutes") or []
+            if gateway_value == "chutes" and not chutes_models:
+                logger.error("No Chutes models data available from cache")
+                raise HTTPException(status_code=503, detail="Models data unavailable")
+
         if gateway_value == "openrouter":
             models = openrouter_models
         elif gateway_value == "portkey":
             models = portkey_models
+        elif gateway_value == "featherless":
+            models = featherless_models
+        elif gateway_value == "chutes":
+            models = chutes_models
         else:
-            models = merge_models_by_slug(openrouter_models, portkey_models)
+            models = merge_models_by_slug(openrouter_models, portkey_models, featherless_models, chutes_models)
 
         if not models:
             logger.error("No models data available after applying gateway selection")
@@ -242,6 +258,18 @@ async def get_models(
         if gateway_value in ("portkey", "all"):
             models_for_providers = portkey_models if gateway_value == "all" else models
             provider_groups.append(derive_portkey_providers(models_for_providers))
+
+        if gateway_value in ("featherless", "all"):
+            models_for_providers = featherless_models if gateway_value == "all" else models
+            featherless_providers = derive_portkey_providers(models_for_providers)
+            annotated_featherless = annotate_provider_sources(featherless_providers, "featherless")
+            provider_groups.append(annotated_featherless)
+
+        if gateway_value in ("chutes", "all"):
+            models_for_providers = chutes_models if gateway_value == "all" else models
+            chutes_providers = derive_portkey_providers(models_for_providers)
+            annotated_chutes = annotate_provider_sources(chutes_providers, "chutes")
+            provider_groups.append(annotated_chutes)
 
         enhanced_providers = merge_provider_lists(*provider_groups)
         logger.info(f"Retrieved {len(enhanced_providers)} enhanced providers from cache")
@@ -279,7 +307,9 @@ async def get_models(
         note = {
             "openrouter": "OpenRouter catalog",
             "portkey": "Portkey catalog",
-            "all": "Combined OpenRouter and Portkey catalog",
+            "featherless": "Featherless catalog",
+            "chutes": "Chutes.ai catalog",
+            "all": "Combined OpenRouter, Portkey, Featherless, and Chutes catalog",
         }.get(gateway_value, "OpenRouter catalog")
 
         result = {

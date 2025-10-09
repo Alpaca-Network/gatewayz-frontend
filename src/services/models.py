@@ -1,8 +1,11 @@
 import datetime
 import logging
+import json
+import os
+from pathlib import Path
 
 from src.config import Config
-from src.cache import _huggingface_cache, _models_cache, _portkey_models_cache
+from src.cache import _huggingface_cache, _models_cache, _portkey_models_cache, _featherless_models_cache, _chutes_models_cache
 from fastapi import APIRouter
 from datetime import datetime, timezone
 
@@ -28,10 +31,28 @@ def get_cached_models(gateway: str = "openrouter"):
                     return cache["data"]
             return fetch_models_from_portkey()
 
+        if gateway == "featherless":
+            cache = _featherless_models_cache
+            if cache["data"] and cache["timestamp"]:
+                cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
+                if cache_age < cache["ttl"]:
+                    return cache["data"]
+            return fetch_models_from_featherless()
+
+        if gateway == "chutes":
+            cache = _chutes_models_cache
+            if cache["data"] and cache["timestamp"]:
+                cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
+                if cache_age < cache["ttl"]:
+                    return cache["data"]
+            return fetch_models_from_chutes()
+
         if gateway == "all":
             openrouter_models = get_cached_models("openrouter") or []
             portkey_models = get_cached_models("portkey") or []
-            return openrouter_models + portkey_models
+            featherless_models = get_cached_models("featherless") or []
+            chutes_models = get_cached_models("chutes") or []
+            return openrouter_models + portkey_models + featherless_models + chutes_models
 
         # Default to OpenRouter
         if _models_cache["data"] and _models_cache["timestamp"]:
@@ -156,6 +177,218 @@ def normalize_portkey_model(portkey_model: dict) -> dict:
         "model_logo_url": None,
         "source_gateway": "portkey",
         "raw_portkey": portkey_model
+    }
+
+
+def fetch_models_from_featherless():
+    """Fetch models from Featherless API and normalize to the catalog schema"""
+    try:
+        if not Config.FEATHERLESS_API_KEY:
+            logger.error("Featherless API key not configured")
+            return None
+
+        headers = {
+            "Authorization": f"Bearer {Config.FEATHERLESS_API_KEY}"
+        }
+
+        response = httpx.get("https://api.featherless.ai/v1/models", headers=headers, timeout=30.0)
+        response.raise_for_status()
+
+        payload = response.json()
+        raw_models = payload.get("data", [])
+        normalized_models = [normalize_featherless_model(model) for model in raw_models if model]
+
+        _featherless_models_cache["data"] = normalized_models
+        _featherless_models_cache["timestamp"] = datetime.now(timezone.utc)
+
+        return _featherless_models_cache["data"]
+    except httpx.HTTPStatusError as e:
+        logger.error(f"Featherless HTTP error: {e.response.status_code} - {e.response.text}")
+        return None
+    except Exception as e:
+        logger.error(f"Failed to fetch models from Featherless: {e}")
+        return None
+
+
+def normalize_featherless_model(featherless_model: dict) -> dict:
+    """Normalize Featherless catalog entries to resemble OpenRouter model shape"""
+    model_id = featherless_model.get("id", "")
+    if not model_id:
+        return {"source_gateway": "featherless", "raw_featherless": featherless_model or {}}
+
+    # Extract provider slug (everything before the last slash)
+    provider_slug = model_id.split("/")[0] if "/" in model_id else "featherless"
+
+    # Model handle is the full ID
+    model_handle = model_id
+    display_name = model_id.replace("-", " ").replace("_", " ").title()
+
+    description = f"Featherless catalog entry for {model_id}. Additional metadata sync is pending."
+
+    pricing = {
+        "prompt": "0",
+        "completion": "0",
+        "request": "0",
+        "image": "0",
+        "web_search": "0",
+        "internal_reasoning": "0"
+    }
+
+    architecture = {
+        "modality": "text->text",
+        "input_modalities": ["text"],
+        "output_modalities": ["text"],
+        "tokenizer": None,
+        "instruct_type": None
+    }
+
+    return {
+        "id": model_id,
+        "slug": model_id,
+        "canonical_slug": model_id,
+        "hugging_face_id": None,
+        "name": display_name,
+        "created": featherless_model.get("created"),
+        "description": description,
+        "context_length": 0,
+        "architecture": architecture,
+        "pricing": pricing,
+        "top_provider": None,
+        "per_request_limits": None,
+        "supported_parameters": [],
+        "default_parameters": {},
+        "provider_slug": provider_slug,
+        "provider_site_url": None,
+        "model_logo_url": None,
+        "source_gateway": "featherless",
+        "raw_featherless": featherless_model
+    }
+
+
+def fetch_models_from_chutes():
+    """Fetch models from Chutes static catalog or API"""
+    try:
+        # First, try to load from static catalog file
+        catalog_path = Path(__file__).parent.parent / "data" / "chutes_catalog.json"
+
+        if catalog_path.exists():
+            logger.info(f"Loading Chutes models from static catalog: {catalog_path}")
+            with open(catalog_path, 'r') as f:
+                raw_models = json.load(f)
+
+            normalized_models = [normalize_chutes_model(model) for model in raw_models if model]
+
+            _chutes_models_cache["data"] = normalized_models
+            _chutes_models_cache["timestamp"] = datetime.now(timezone.utc)
+
+            logger.info(f"Loaded {len(normalized_models)} models from Chutes static catalog")
+            return _chutes_models_cache["data"]
+
+        # If static catalog doesn't exist, try API (if key is configured)
+        if Config.CHUTES_API_KEY:
+            logger.info("Attempting to fetch Chutes models from API")
+            return fetch_models_from_chutes_api()
+
+        logger.warning("Chutes catalog file not found and no API key configured")
+        return None
+
+    except Exception as e:
+        logger.error(f"Failed to fetch models from Chutes: {e}")
+        return None
+
+
+def fetch_models_from_chutes_api():
+    """Fetch models from Chutes API (if available)"""
+    try:
+        if not Config.CHUTES_API_KEY:
+            logger.error("Chutes API key not configured")
+            return None
+
+        # This is a placeholder for future API integration
+        # For now, we're using the static catalog
+        logger.warning("Chutes API integration not yet implemented, using static catalog")
+        return None
+
+    except Exception as e:
+        logger.error(f"Failed to fetch models from Chutes API: {e}")
+        return None
+
+
+def normalize_chutes_model(chutes_model: dict) -> dict:
+    """Normalize Chutes catalog entries to resemble OpenRouter model shape"""
+    model_id = chutes_model.get("id", "")
+    if not model_id:
+        return {"source_gateway": "chutes", "raw_chutes": chutes_model or {}}
+
+    provider_slug = chutes_model.get("provider", "chutes")
+    model_type = chutes_model.get("type", "LLM")
+    pricing_per_hour = chutes_model.get("pricing_per_hour", 0.0)
+
+    # Convert hourly pricing to per-token pricing (rough estimate)
+    # Assume ~1M tokens per hour at average speed
+    prompt_price = str(pricing_per_hour / 1000000) if pricing_per_hour > 0 else "0"
+
+    display_name = chutes_model.get("name", model_id.replace("-", " ").replace("_", " ").title())
+
+    description = f"Chutes.ai hosted {model_type} model: {model_id}. Pricing: ${pricing_per_hour}/hr."
+
+    # Determine modality based on type
+    modality_map = {
+        "LLM": "text->text",
+        "Image Generation": "text->image",
+        "Text to Speech": "text->audio",
+        "Speech to Text": "audio->text",
+        "Video": "text->video",
+        "Music Generation": "text->audio",
+        "Embeddings": "text->embedding",
+        "Content Moderation": "text->text",
+        "Other": "multimodal"
+    }
+
+    modality = modality_map.get(model_type, "text->text")
+
+    pricing = {
+        "prompt": prompt_price,
+        "completion": prompt_price,
+        "request": "0",
+        "image": str(pricing_per_hour) if model_type == "Image Generation" else "0",
+        "web_search": "0",
+        "internal_reasoning": "0",
+        "hourly_rate": str(pricing_per_hour)
+    }
+
+    architecture = {
+        "modality": modality,
+        "input_modalities": ["text"],
+        "output_modalities": ["text"],
+        "tokenizer": None,
+        "instruct_type": None
+    }
+
+    tags = chutes_model.get("tags", [])
+
+    return {
+        "id": model_id,
+        "slug": model_id,
+        "canonical_slug": model_id,
+        "hugging_face_id": None,
+        "name": display_name,
+        "created": None,
+        "description": description,
+        "context_length": 0,
+        "architecture": architecture,
+        "pricing": pricing,
+        "top_provider": None,
+        "per_request_limits": None,
+        "supported_parameters": [],
+        "default_parameters": {},
+        "provider_slug": provider_slug,
+        "provider_site_url": None,
+        "model_logo_url": None,
+        "source_gateway": "chutes",
+        "model_type": model_type,
+        "tags": tags,
+        "raw_chutes": chutes_model
     }
 
 

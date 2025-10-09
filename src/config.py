@@ -28,6 +28,9 @@ class Config:
 
     # Featherless.ai Configuration
     FEATHERLESS_API_KEY = os.environ.get("FEATHERLESS_API_KEY")
+
+    # Chutes.ai Configuration
+    CHUTES_API_KEY = os.environ.get("CHUTES_API_KEY")
     
     @classmethod
     def validate(cls):
