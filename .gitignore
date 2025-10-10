@@ -32,8 +32,6 @@ __pycache__
 *.md
 !docs/**/*.md
 
-# sql files
-*.sql
 
 # bat files
 
