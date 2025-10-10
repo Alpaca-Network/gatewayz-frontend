@@ -430,6 +430,14 @@ class SlidingWindowRateLimiter:
         if api_key in self.concurrent_requests:
             self.concurrent_requests[api_key] = max(0, self.concurrent_requests[api_key] - 1)
 
+    async def release_concurrent_request(self, api_key: str):
+        """Release concurrency slot for a key"""
+        await self.decrement_concurrent_requests(api_key)
+        try:
+            await self.fallback_manager.release_concurrent_request(api_key)
+        except Exception as exc:
+            logger.debug("Fallback concurrency release failed for %s: %s", api_key[:10], exc)
+
 class RateLimitManager:
     """Manager for rate limiting with per-key configuration"""
     
@@ -493,6 +501,14 @@ class RateLimitManager:
         self.key_configs[api_key] = config
         # Also update in database
         await self._save_key_config_to_db(api_key, config)
+    
+    async def release_concurrency(self, api_key: str):
+        """Release concurrency slot for a key"""
+        await self.rate_limiter.release_concurrent_request(api_key)
+        try:
+            await self.fallback_manager.release_concurrent_request(api_key)
+        except Exception as exc:
+            logger.debug("Fallback concurrency release failed for %s: %s", api_key[:10], exc)
     
     async def _save_key_config_to_db(self, api_key: str, config: RateLimitConfig):
         """Save rate limit configuration to database"""

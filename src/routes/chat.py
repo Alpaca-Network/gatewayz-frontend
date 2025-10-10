@@ -28,13 +28,14 @@ def mask_key(k: str) -> str:
 async def _to_thread(func, *args, **kwargs):
     return await asyncio.to_thread(func, *args, **kwargs)
 
-async def stream_generator(stream, user, api_key, model, trial, environment_tag, session_id, messages):
+async def stream_generator(stream, user, api_key, model, trial, environment_tag, session_id, messages, rate_limit_mgr=None):
     """Generate SSE stream from OpenAI stream response"""
     accumulated_content = ""
     prompt_tokens = 0
     completion_tokens = 0
     total_tokens = 0
     start_time = time.monotonic()
+    release_required = rate_limit_mgr is not None and not trial.get("is_trial", False)
 
     try:
         for chunk in stream:
@@ -225,7 +226,9 @@ async def chat_completions(
                 raise HTTPException(status_code=403, detail=trial.get("error", "Access denied"))
 
         rate_limit_mgr = get_rate_limit_manager()
-        if not trial.get("is_trial", False):
+        should_release_concurrency = not trial.get("is_trial", False)
+        stream_release_handled = False
+        if should_release_concurrency:
             rl_pre = await rate_limit_mgr.check_rate_limit(api_key, tokens_used=0)
             if not rl_pre.allowed:
                 await _to_thread(create_rate_limit_alert, api_key, "rate_limit_exceeded", {
@@ -298,6 +301,7 @@ async def chat_completions(
                     logger.info(f"Auto-detected provider 'portkey' for model {model}")
                 # Otherwise default to openrouter (already set)
 
+
         # === 3) Call upstream (streaming or non-streaming) ===
         if req.stream:
             # Handle streaming response
@@ -313,8 +317,9 @@ async def chat_completions(
                 else:
                     stream = await _to_thread(make_openrouter_request_openai_stream, messages, model, **optional)
 
+                stream_release_handled = True
                 return StreamingResponse(
-                    stream_generator(stream, user, api_key, model, trial, environment_tag, session_id, messages),
+                    stream_generator(stream, user, api_key, model, trial, environment_tag, session_id, messages, rate_limit_mgr),
                     media_type="text/event-stream"
                 )
             except httpx.TimeoutException as e:
@@ -415,7 +420,11 @@ async def chat_completions(
             except Exception as e:
                 logger.warning("Failed to track trial usage: %s", e)
 
-        if not trial.get("is_trial", False):
+        if should_release_concurrency and rate_limit_mgr:
+            try:
+                await rate_limit_mgr.release_concurrency(api_key)
+            except Exception as exc:
+                logger.debug("Failed to release concurrency before final check for %s: %s", mask_key(api_key), exc)
             rl_final = await rate_limit_mgr.check_rate_limit(api_key, tokens_used=total_tokens)
             if not rl_final.allowed:
                 await _to_thread(create_rate_limit_alert, api_key, "rate_limit_exceeded", {
@@ -538,6 +547,10 @@ async def unified_responses(
     """
     logger.info("unified_responses start (api_key=%s, model=%s)", mask_key(api_key), req.model)
 
+    rate_limit_mgr = None
+    should_release_concurrency = False
+    stream_release_handled = False
+
     try:
         # === 1) User + plan/trial prechecks ===
         user = await _to_thread(get_user, api_key)
@@ -658,7 +671,7 @@ async def unified_responses(
                 # Use the same stream_generator but transform output format
                 async def response_stream_generator():
                     """Transform chat/completions stream to responses format"""
-                    async for chunk_data in stream_generator(stream, user, api_key, model, trial, environment_tag, session_id, messages):
+                    async for chunk_data in stream_generator(stream, user, api_key, model, trial, environment_tag, session_id, messages, rate_limit_mgr):
                         # Parse the SSE data
                         if chunk_data.startswith("data: "):
                             data_str = chunk_data[6:].strip()
@@ -701,6 +714,7 @@ async def unified_responses(
                         else:
                             yield chunk_data
 
+                stream_release_handled = True
                 return StreamingResponse(
                     response_stream_generator(),
                     media_type="text/event-stream"
@@ -905,3 +919,9 @@ async def unified_responses(
     except Exception as e:
         logger.exception("Unhandled server error in unified_responses")
         raise HTTPException(status_code=500, detail="Internal server error")
+    finally:
+        if should_release_concurrency and rate_limit_mgr and (not req.stream or not stream_release_handled):
+            try:
+                await rate_limit_mgr.release_concurrency(api_key)
+            except Exception as exc:
+                logger.debug("Failed to release concurrency for %s: %s", mask_key(api_key), exc)
