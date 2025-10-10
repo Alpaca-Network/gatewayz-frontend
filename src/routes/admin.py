@@ -8,13 +8,13 @@ from src.db.trials import get_trial_analytics
 from src.db.users import create_enhanced_user, get_user, add_credits_to_user, get_all_users, get_admin_monitor_data
 from src.enhanced_notification_service import enhanced_notification_service
 from src.cache import _provider_cache, _huggingface_cache, _models_cache
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException
 from datetime import datetime, timezone
 
 import httpx
-from fastapi import  HTTPException
 
 from src.schemas import UserRegistrationResponse, UserRegistrationRequest, AddCreditsRequest, SetRateLimitRequest
+from src.security.deps import require_admin, get_current_user
 
 from src.services.models import fetch_huggingface_model, get_cached_models, enhance_model_with_provider_info
 from src.services.providers import get_cached_providers, fetch_providers_from_openrouter
@@ -79,7 +79,7 @@ async def create_api_key(request: UserRegistrationRequest):
 
 # Admin endpoints
 @router.post("/admin/add_credits", tags=["admin"])
-async def admin_add_credits(req: AddCreditsRequest):
+async def admin_add_credits(req: AddCreditsRequest, admin_user: dict = Depends(require_admin)):
     try:
         user = get_user(req.api_key)
         if not user:
@@ -107,7 +107,7 @@ async def admin_add_credits(req: AddCreditsRequest):
 
 
 @router.get("/admin/balance", tags=["admin"])
-async def admin_get_all_balances():
+async def admin_get_all_balances(admin_user: dict = Depends(require_admin)):
     try:
         users = get_all_users()
 
@@ -132,7 +132,7 @@ async def admin_get_all_balances():
 
 
 @router.get("/admin/monitor", tags=["admin"])
-async def admin_monitor():
+async def admin_monitor(admin_user: dict = Depends(require_admin)):
     try:
         monitor_data = get_admin_monitor_data()
 
@@ -164,7 +164,7 @@ async def admin_monitor():
 
 
 @router.post("/admin/limit", tags=["admin"])
-async def admin_set_rate_limit(req: SetRateLimitRequest):
+async def admin_set_rate_limit(req: SetRateLimitRequest, admin_user: dict = Depends(require_admin)):
     try:
         set_user_rate_limits(req.api_key, req.rate_limits.model_dump())
 
@@ -197,7 +197,7 @@ async def admin_set_rate_limit(req: SetRateLimitRequest):
 
 # Admin cache management endpoints
 @router.post("/admin/refresh-providers", tags=["admin"])
-async def admin_refresh_providers():
+async def admin_refresh_providers(admin_user: dict = Depends(require_admin)):
     try:
         # Invalidate provider cache to force refresh
         _provider_cache["data"] = None
@@ -218,7 +218,7 @@ async def admin_refresh_providers():
 
 
 @router.get("/admin/cache-status", tags=["admin"])
-async def admin_cache_status():
+async def admin_cache_status(admin_user: dict = Depends(require_admin)):
     try:
         cache_age = None
         if _provider_cache["timestamp"]:
@@ -242,7 +242,7 @@ async def admin_cache_status():
 
 
 @router.get("/admin/huggingface-cache-status", tags=["admin"])
-async def admin_huggingface_cache_status():
+async def admin_huggingface_cache_status(admin_user: dict = Depends(require_admin)):
     """Get Hugging Face cache status and statistics"""
     try:
         cache_age = None
@@ -265,7 +265,7 @@ async def admin_huggingface_cache_status():
 
 
 @router.post("/admin/refresh-huggingface-cache", tags=["admin"])
-async def admin_refresh_huggingface_cache():
+async def admin_refresh_huggingface_cache(admin_user: dict = Depends(require_admin)):
     """Clear Hugging Face cache to force refresh on the next request"""
     try:
         _huggingface_cache["data"] = {}
@@ -282,7 +282,7 @@ async def admin_refresh_huggingface_cache():
 
 
 @router.get("/admin/test-huggingface/{hugging_face_id}", tags=["admin"])
-async def admin_test_huggingface( hugging_face_id: str = "openai/gpt-oss-120b"):
+async def admin_test_huggingface(hugging_face_id: str = "openai/gpt-oss-120b", admin_user: dict = Depends(require_admin)):
     """Test Hugging Face API response for debugging"""
     try:
         hf_data = fetch_huggingface_model(hugging_face_id)
@@ -316,7 +316,7 @@ async def admin_test_huggingface( hugging_face_id: str = "openai/gpt-oss-120b"):
 
 
 @router.get("/admin/debug-models", tags=["admin"])
-async def admin_debug_models():
+async def admin_debug_models(admin_user: dict = Depends(require_admin)):
     """Debug models and providers data for troubleshooting"""
     try:
         # Get raw data
@@ -547,7 +547,7 @@ async def test_openrouter_providers():
 
 
 @router.get("/admin/trial/analytics", tags=["admin"])
-async def get_trial_analytics_admin():
+async def get_trial_analytics_admin(admin_user: dict = Depends(require_admin)):
     """Get trial analytics and conversion metrics for admin"""
     try:
         analytics = get_trial_analytics()

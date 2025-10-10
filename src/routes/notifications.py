@@ -9,7 +9,7 @@ from src.enhanced_notification_service import enhanced_notification_service
 from fastapi import APIRouter, Query
 from datetime import datetime, timezone
 from fastapi import Depends, HTTPException
-from src.security.deps import get_api_key
+from src.security.deps import get_api_key, require_admin
 from src.schemas.notification import NotificationPreferences, UpdateNotificationPreferencesRequest, \
     NotificationType, SendNotificationRequest, NotificationChannel, NotificationStats
 from src.services.notification import notification_service
@@ -203,7 +203,7 @@ async def send_usage_report(
 
 
 @router.get("/admin/notifications/stats", response_model=NotificationStats, tags=["admin"])
-async def get_notification_stats():
+async def get_notification_stats(admin_user: dict = Depends(require_admin)):
     """Get notification statistics for admin"""
     try:
         client = get_supabase_client()
@@ -256,7 +256,7 @@ async def get_notification_stats():
 
 
 @router.post("/admin/notifications/process", tags=["admin"])
-async def process_notifications():
+async def process_notifications(admin_user: dict = Depends(require_admin)):
     """Process all pending notifications (admin only)"""
     try:
         stats = notification_service.process_notifications()

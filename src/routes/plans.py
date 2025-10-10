@@ -10,7 +10,7 @@ from src.db.plans import get_all_plans, get_plan_by_id, get_user_plan, get_user_
 from src.db.rate_limits import get_environment_usage_summary
 from src.db.users import get_user
 from src.schemas import PlanResponse, UserPlanResponse, PlanUsageResponse, PlanEntitlementsResponse, AssignPlanRequest
-from src.security.deps import get_api_key
+from src.security.deps import get_api_key, require_admin
 from fastapi import APIRouter
 
 # Initialize logging
@@ -150,7 +150,7 @@ async def get_user_plan_entitlements(api_key: str = Depends(get_api_key), featur
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.post("/admin/assign-plan", tags=["admin"])
-async def assign_plan_to_user(request: AssignPlanRequest):
+async def assign_plan_to_user(request: AssignPlanRequest, admin_user: dict = Depends(require_admin)):
     """Assign a plan to a user (Admin only)"""
     try:
         success = assign_user_plan(request.user_id, request.plan_id, request.duration_months)
