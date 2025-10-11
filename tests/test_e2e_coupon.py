@@ -47,9 +47,12 @@ def test_api_keys(supabase_client, test_prefix):
         api_key = f"sk-test-{test_prefix}-{username_suffix}"
         key_data = {
             "user_id": user['id'],
-            "key_value": api_key,
-            "name": f"Test Key {username_suffix}",
+            "api_key": api_key,
+            "key_name": f"Test Key {username_suffix}",
             "is_primary": True,
+            "is_active": True,
+            "environment_tag": "test",
+            "scope_permissions": ["chat", "images"],
             "created_at": datetime.utcnow().isoformat(),
         }
 
@@ -83,9 +86,56 @@ def test_api_keys(supabase_client, test_prefix):
 
 
 @pytest.fixture
-def admin_api_key():
-    """Admin API key from environment"""
-    return os.environ.get("ADMIN_API_KEY", "admin_key_placeholder")
+def admin_api_key(supabase_client, test_prefix):
+    """Create an admin user with API key for testing"""
+    admin_username = f"{test_prefix}_admin_user"
+    admin_email = f"{admin_username}@test.example.com"
+    admin_api_key_value = f"sk-admin-{test_prefix}"
+
+    # Create admin user
+    admin_user_data = {
+        "username": admin_username,
+        "email": admin_email,
+        "credits": 1000,
+        "role": "admin",
+        "created_at": datetime.utcnow().isoformat(),
+    }
+
+    admin_user_result = supabase_client.table("users").insert(admin_user_data).execute()
+
+    if not admin_user_result.data:
+        raise Exception("Failed to create admin user")
+
+    admin_user = admin_user_result.data[0]
+    admin_user_id = admin_user['id']
+
+    # Create API key for admin
+    admin_key_data = {
+        "user_id": admin_user_id,
+        "api_key": admin_api_key_value,
+        "key_name": "Admin Test Key",
+        "is_primary": True,
+        "is_active": True,
+        "environment_tag": "test",
+        "scope_permissions": ["chat", "images", "admin"],
+        "created_at": datetime.utcnow().isoformat(),
+    }
+
+    admin_key_result = supabase_client.table("api_keys_new").insert(admin_key_data).execute()
+
+    if not admin_key_result.data:
+        raise Exception("Failed to create admin API key")
+
+    admin_key_id = admin_key_result.data[0]['id']
+
+    yield admin_api_key_value
+
+    # Cleanup
+    try:
+        supabase_client.table("api_keys_new").delete().eq("id", admin_key_id).execute()
+        supabase_client.table("users").delete().eq("id", admin_user_id).execute()
+    except Exception as e:
+        print(f"Cleanup error for admin user: {e}")
 
 
 @pytest.fixture
@@ -120,7 +170,7 @@ class TestCouponAdminEndpoints:
 
         response = client.post(
             "/admin/coupons",
-            headers={"X-API-Key": admin_api_key},
+            headers={"Authorization": f"Bearer {admin_api_key}"},
             json={
                 "code": code,
                 "value_usd": 10.00,
@@ -153,7 +203,7 @@ class TestCouponAdminEndpoints:
 
         response = client.post(
             "/admin/coupons",
-            headers={"X-API-Key": admin_api_key},
+            headers={"Authorization": f"Bearer {admin_api_key}"},
             json={
                 "code": code,
                 "value_usd": 25.00,
@@ -183,7 +233,7 @@ class TestCouponAdminEndpoints:
 
         response = client.post(
             "/admin/coupons",
-            headers={"X-API-Key": admin_api_key},
+            headers={"Authorization": f"Bearer {admin_api_key}"},
             json={
                 "code": code,
                 "value_usd": -10.00,
@@ -203,7 +253,7 @@ class TestCouponAdminEndpoints:
 
         response = client.post(
             "/admin/coupons",
-            headers={"X-API-Key": admin_api_key},
+            headers={"Authorization": f"Bearer {admin_api_key}"},
             json={
                 "code": code,
                 "value_usd": 10.00,
@@ -224,7 +274,7 @@ class TestCouponAdminEndpoints:
 
         create_response = client.post(
             "/admin/coupons",
-            headers={"X-API-Key": admin_api_key},
+            headers={"Authorization": f"Bearer {admin_api_key}"},
             json={
                 "code": code,
                 "value_usd": 5.00,
@@ -240,7 +290,7 @@ class TestCouponAdminEndpoints:
         # List coupons
         response = client.get(
             "/admin/coupons",
-            headers={"X-API-Key": admin_api_key}
+            headers={"Authorization": f"Bearer {admin_api_key}"}
         )
 
         assert response.status_code == 200
@@ -256,7 +306,7 @@ class TestCouponAdminEndpoints:
         """Test listing coupons with filters"""
         response = client.get(
             "/admin/coupons?scope=global&is_active=true&limit=10",
-            headers={"X-API-Key": admin_api_key}
+            headers={"Authorization": f"Bearer {admin_api_key}"}
         )
 
         assert response.status_code == 200
@@ -276,7 +326,7 @@ class TestCouponAdminEndpoints:
 
         create_response = client.post(
             "/admin/coupons",
-            headers={"X-API-Key": admin_api_key},
+            headers={"Authorization": f"Bearer {admin_api_key}"},
             json={
                 "code": code,
                 "value_usd": 15.00,
@@ -293,7 +343,7 @@ class TestCouponAdminEndpoints:
         # Get coupon by ID
         response = client.get(
             f"/admin/coupons/{coupon_id}",
-            headers={"X-API-Key": admin_api_key}
+            headers={"Authorization": f"Bearer {admin_api_key}"}
         )
 
         assert response.status_code == 200
@@ -307,7 +357,7 @@ class TestCouponAdminEndpoints:
         """Test getting a coupon that doesn't exist"""
         response = client.get(
             "/admin/coupons/999999999",
-            headers={"X-API-Key": admin_api_key}
+            headers={"Authorization": f"Bearer {admin_api_key}"}
         )
 
         assert response.status_code == 404
@@ -320,7 +370,7 @@ class TestCouponAdminEndpoints:
 
         create_response = client.post(
             "/admin/coupons",
-            headers={"X-API-Key": admin_api_key},
+            headers={"Authorization": f"Bearer {admin_api_key}"},
             json={
                 "code": code,
                 "value_usd": 10.00,
@@ -338,7 +388,7 @@ class TestCouponAdminEndpoints:
         # Update description
         response = client.patch(
             f"/admin/coupons/{coupon_id}",
-            headers={"X-API-Key": admin_api_key},
+            headers={"Authorization": f"Bearer {admin_api_key}"},
             json={"description": "Updated description"}
         )
 
@@ -355,7 +405,7 @@ class TestCouponAdminEndpoints:
 
         create_response = client.post(
             "/admin/coupons",
-            headers={"X-API-Key": admin_api_key},
+            headers={"Authorization": f"Bearer {admin_api_key}"},
             json={
                 "code": code,
                 "value_usd": 10.00,
@@ -372,7 +422,7 @@ class TestCouponAdminEndpoints:
         # Deactivate
         response = client.delete(
             f"/admin/coupons/{coupon_id}",
-            headers={"X-API-Key": admin_api_key}
+            headers={"Authorization": f"Bearer {admin_api_key}"}
         )
 
         assert response.status_code == 200
@@ -383,7 +433,7 @@ class TestCouponAdminEndpoints:
         # Verify it's deactivated
         get_response = client.get(
             f"/admin/coupons/{coupon_id}",
-            headers={"X-API-Key": admin_api_key}
+            headers={"Authorization": f"Bearer {admin_api_key}"}
         )
 
         assert get_response.json()["is_active"] is False
@@ -402,7 +452,7 @@ class TestCouponUserEndpoints:
 
         global_response = client.post(
             "/admin/coupons",
-            headers={"X-API-Key": admin_api_key},
+            headers={"Authorization": f"Bearer {admin_api_key}"},
             json={
                 "code": global_code,
                 "value_usd": 10.00,
@@ -418,7 +468,7 @@ class TestCouponUserEndpoints:
         user_code = f"AVAILUSER{test_prefix}"
         user_response = client.post(
             "/admin/coupons",
-            headers={"X-API-Key": admin_api_key},
+            headers={"Authorization": f"Bearer {admin_api_key}"},
             json={
                 "code": user_code,
                 "value_usd": 20.00,
@@ -434,7 +484,7 @@ class TestCouponUserEndpoints:
         # Get available coupons
         response = client.get(
             "/coupons/available",
-            headers={"X-API-Key": user["api_key"]}
+            headers={"Authorization": f"Bearer {user["api_key"]}"}
         )
 
         assert response.status_code == 200
@@ -462,7 +512,7 @@ class TestCouponUserEndpoints:
 
         create_response = client.post(
             "/admin/coupons",
-            headers={"X-API-Key": admin_api_key},
+            headers={"Authorization": f"Bearer {admin_api_key}"},
             json={
                 "code": code,
                 "value_usd": 15.00,
@@ -477,7 +527,7 @@ class TestCouponUserEndpoints:
         # Redeem coupon
         response = client.post(
             "/coupons/redeem",
-            headers={"X-API-Key": user["api_key"]},
+            headers={"Authorization": f"Bearer {user["api_key"]}"},
             json={"code": code}
         )
 
@@ -500,7 +550,7 @@ class TestCouponUserEndpoints:
 
         create_response = client.post(
             "/admin/coupons",
-            headers={"X-API-Key": admin_api_key},
+            headers={"Authorization": f"Bearer {admin_api_key}"},
             json={
                 "code": code,
                 "value_usd": 25.00,
@@ -516,7 +566,7 @@ class TestCouponUserEndpoints:
         # Redeem coupon
         response = client.post(
             "/coupons/redeem",
-            headers={"X-API-Key": user["api_key"]},
+            headers={"Authorization": f"Bearer {user["api_key"]}"},
             json={"code": code}
         )
 
@@ -537,7 +587,7 @@ class TestCouponUserEndpoints:
 
         create_response = client.post(
             "/admin/coupons",
-            headers={"X-API-Key": admin_api_key},
+            headers={"Authorization": f"Bearer {admin_api_key}"},
             json={
                 "code": code,
                 "value_usd": 10.00,
@@ -552,7 +602,7 @@ class TestCouponUserEndpoints:
         # First redemption - should succeed
         first_response = client.post(
             "/coupons/redeem",
-            headers={"X-API-Key": user["api_key"]},
+            headers={"Authorization": f"Bearer {user["api_key"]}"},
             json={"code": code}
         )
 
@@ -562,7 +612,7 @@ class TestCouponUserEndpoints:
         # Second redemption - should fail
         second_response = client.post(
             "/coupons/redeem",
-            headers={"X-API-Key": user["api_key"]},
+            headers={"Authorization": f"Bearer {user["api_key"]}"},
             json={"code": code}
         )
 
@@ -578,7 +628,7 @@ class TestCouponUserEndpoints:
 
         response = client.post(
             "/coupons/redeem",
-            headers={"X-API-Key": user["api_key"]},
+            headers={"Authorization": f"Bearer {user["api_key"]}"},
             json={"code": "INVALID-NOTEXIST"}
         )
 
@@ -598,7 +648,7 @@ class TestCouponUserEndpoints:
 
         create_response = client.post(
             "/admin/coupons",
-            headers={"X-API-Key": admin_api_key},
+            headers={"Authorization": f"Bearer {admin_api_key}"},
             json={
                 "code": code,
                 "value_usd": 10.00,
@@ -613,7 +663,7 @@ class TestCouponUserEndpoints:
         # Try to redeem
         response = client.post(
             "/coupons/redeem",
-            headers={"X-API-Key": user["api_key"]},
+            headers={"Authorization": f"Bearer {user["api_key"]}"},
             json={"code": code}
         )
 
@@ -632,7 +682,7 @@ class TestCouponUserEndpoints:
 
         create_response = client.post(
             "/admin/coupons",
-            headers={"X-API-Key": admin_api_key},
+            headers={"Authorization": f"Bearer {admin_api_key}"},
             json={
                 "code": code,
                 "value_usd": 10.00,
@@ -649,13 +699,13 @@ class TestCouponUserEndpoints:
         # Deactivate it
         client.delete(
             f"/admin/coupons/{coupon_id}",
-            headers={"X-API-Key": admin_api_key}
+            headers={"Authorization": f"Bearer {admin_api_key}"}
         )
 
         # Try to redeem
         response = client.post(
             "/coupons/redeem",
-            headers={"X-API-Key": user["api_key"]},
+            headers={"Authorization": f"Bearer {user["api_key"]}"},
             json={"code": code}
         )
 
@@ -674,7 +724,7 @@ class TestCouponUserEndpoints:
 
         create_response = client.post(
             "/admin/coupons",
-            headers={"X-API-Key": admin_api_key},
+            headers={"Authorization": f"Bearer {admin_api_key}"},
             json={
                 "code": code,
                 "value_usd": 10.00,
@@ -689,14 +739,14 @@ class TestCouponUserEndpoints:
         # Redeem it
         client.post(
             "/coupons/redeem",
-            headers={"X-API-Key": user["api_key"]},
+            headers={"Authorization": f"Bearer {user["api_key"]}"},
             json={"code": code}
         )
 
         # Get history
         response = client.get(
             "/coupons/history",
-            headers={"X-API-Key": user["api_key"]}
+            headers={"Authorization": f"Bearer {user["api_key"]}"}
         )
 
         assert response.status_code == 200
@@ -714,7 +764,7 @@ class TestCouponUserEndpoints:
 
         response = client.get(
             "/coupons/history?limit=5",
-            headers={"X-API-Key": user["api_key"]}
+            headers={"Authorization": f"Bearer {user["api_key"]}"}
         )
 
         assert response.status_code == 200
@@ -737,7 +787,7 @@ class TestCouponAnalytics:
 
         create_response = client.post(
             "/admin/coupons",
-            headers={"X-API-Key": admin_api_key},
+            headers={"Authorization": f"Bearer {admin_api_key}"},
             json={
                 "code": code,
                 "value_usd": 10.00,
@@ -754,14 +804,14 @@ class TestCouponAnalytics:
         # Redeem it
         client.post(
             "/coupons/redeem",
-            headers={"X-API-Key": user["api_key"]},
+            headers={"Authorization": f"Bearer {user["api_key"]}"},
             json={"code": code}
         )
 
         # Get analytics
         response = client.get(
             f"/admin/coupons/{coupon_id}/analytics",
-            headers={"X-API-Key": admin_api_key}
+            headers={"Authorization": f"Bearer {admin_api_key}"}
         )
 
         assert response.status_code == 200
@@ -783,7 +833,7 @@ class TestCouponAnalytics:
         """Test getting system-wide coupon statistics"""
         response = client.get(
             "/admin/coupons/stats/overview",
-            headers={"X-API-Key": admin_api_key}
+            headers={"Authorization": f"Bearer {admin_api_key}"}
         )
 
         assert response.status_code == 200
@@ -842,7 +892,7 @@ class TestCouponEdgeCases:
 
         create_response = client.post(
             "/admin/coupons",
-            headers={"X-API-Key": admin_api_key},
+            headers={"Authorization": f"Bearer {admin_api_key}"},
             json={
                 "code": code,
                 "value_usd": 20.00,
@@ -858,7 +908,7 @@ class TestCouponEdgeCases:
         # Try to redeem with user2
         response = client.post(
             "/coupons/redeem",
-            headers={"X-API-Key": user2["api_key"]},
+            headers={"Authorization": f"Bearer {user2['api_key']}"},
             json={"code": code}
         )
 
