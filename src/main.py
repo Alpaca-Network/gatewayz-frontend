@@ -85,6 +85,7 @@ def create_app() -> FastAPI:
         ("ranking", "Model Ranking"),
         ("activity", "Activity Tracking"),
         ("coupons", "Coupon Management"),
+        ("referral", "Referral System"),
         ("roles", "Role Management"),
         ("transaction_analytics", "Transaction Analytics"),
 

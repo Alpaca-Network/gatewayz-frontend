@@ -319,6 +319,46 @@ class StripeService:
 
             logger.info(f"Checkout completed: Added {amount_dollars} credits to user {user_id}")
 
+            # Check for referral bonus (first purchase of $10+)
+            try:
+                from src.services.referral import apply_referral_bonus, mark_first_purchase
+                from src.supabase_config import get_supabase_client
+
+                client = get_supabase_client()
+                user_result = client.table('users').select('*').eq('id', user_id).execute()
+
+                if user_result.data:
+                    user = user_result.data[0]
+                    has_made_first_purchase = user.get('has_made_first_purchase', False)
+                    referred_by_code = user.get('referred_by_code')
+
+                    # Apply referral bonus if:
+                    # 1. This is first purchase
+                    # 2. User was referred by someone
+                    # 3. Purchase is $10 or more
+                    if not has_made_first_purchase and referred_by_code and amount_dollars >= 10.0:
+                        success, error_msg, bonus_data = apply_referral_bonus(
+                            user_id=user_id,
+                            referral_code=referred_by_code,
+                            purchase_amount=amount_dollars
+                        )
+
+                        if success:
+                            logger.info(
+                                f"Referral bonus applied! User {user_id} and referrer both received "
+                                f"${bonus_data['user_bonus']} (code: {referred_by_code})"
+                            )
+                        else:
+                            logger.warning(f"Failed to apply referral bonus for user {user_id}: {error_msg}")
+
+                    # Mark first purchase regardless of referral
+                    if not has_made_first_purchase:
+                        mark_first_purchase(user_id)
+
+            except Exception as referral_error:
+                # Don't fail the payment if referral bonus fails
+                logger.error(f"Error processing referral bonus: {referral_error}", exc_info=True)
+
         except Exception as e:
             logger.error(f"Error handling checkout completed: {e}")
             raise

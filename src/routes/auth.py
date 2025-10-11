@@ -264,6 +264,18 @@ async def register_user(request: UserRegistrationRequest):
         if existing_username.data:
             raise HTTPException(status_code=400, detail="Username already taken")
 
+        # Validate referral code if provided
+        referral_code_valid = False
+        if request.referral_code:
+            from src.services.referral import validate_referral_code
+            # We can't validate yet since user doesn't exist, so just check if code exists
+            referrer_result = client.table('users').select('id').eq('referral_code', request.referral_code).execute()
+            if referrer_result.data:
+                referral_code_valid = True
+                logger.info(f"Valid referral code provided: {request.referral_code}")
+            else:
+                logger.warning(f"Invalid referral code provided: {request.referral_code}")
+
         # Create user
         user_data = create_enhanced_user(
             username=request.username,
@@ -272,6 +284,16 @@ async def register_user(request: UserRegistrationRequest):
             privy_user_id=None,  # No Privy for direct registration
             credits=10  # $10 starting credits
         )
+
+        # Store referral code if valid (bonus will be applied on first purchase)
+        if referral_code_valid and request.referral_code:
+            try:
+                client.table('users').update({
+                    'referred_by_code': request.referral_code
+                }).eq('id', user_data['user_id']).execute()
+                logger.info(f"Stored referral code {request.referral_code} for user {user_data['user_id']}")
+            except Exception as e:
+                logger.error(f"Failed to store referral code: {e}")
 
         # Send welcome email
         try:
