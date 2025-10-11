@@ -1,5 +1,6 @@
 .vercel
 .venv
+venv
 .env
 
 # Python
