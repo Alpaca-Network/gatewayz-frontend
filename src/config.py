@@ -32,6 +32,9 @@ class Config:
     # Chutes.ai Configuration
     CHUTES_API_KEY = os.environ.get("CHUTES_API_KEY")
     
+    # OpenRouter Analytics Cookie (for transaction analytics API)
+    OPENROUTER_COOKIE = os.environ.get("OPENROUTER_COOKIE")
+    
     @classmethod
     def validate(cls):
         """Validate that all required environment variables are set"""

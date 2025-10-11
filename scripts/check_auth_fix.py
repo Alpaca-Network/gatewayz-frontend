@@ -2,6 +2,10 @@
 """
 Test script to verify the API key auth fix
 """
+import os
+import sys
+# Add parent directory to path to import src modules
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.db.users import get_user, get_user_by_id
 from src.supabase_config import get_supabase_client

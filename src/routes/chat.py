@@ -165,7 +165,17 @@ async def stream_generator(stream, user, api_key, model, trial, environment_tag,
                             last_user = m
                             break
                     if last_user:
-                        await _to_thread(save_chat_message, session_id, "user", last_user.get("content",""), model, 0)
+                        # Extract text content from multimodal content if needed
+                        user_content = last_user.get("content", "")
+                        if isinstance(user_content, list):
+                            # Extract text from multimodal content
+                            text_parts = []
+                            for item in user_content:
+                                if isinstance(item, dict) and item.get("type") == "text":
+                                    text_parts.append(item.get("text", ""))
+                            user_content = " ".join(text_parts) if text_parts else "[multimodal content]"
+
+                        await _to_thread(save_chat_message, session_id, "user", user_content, model, 0)
 
                     if accumulated_content:
                         await _to_thread(save_chat_message, session_id, "assistant", accumulated_content, model, total_tokens)
@@ -601,13 +611,43 @@ async def unified_responses(
 
         # === 2) Transform 'input' to 'messages' format for upstream ===
         messages = []
-        for inp_msg in req.input:
-            # Convert InputMessage to standard message format
-            if isinstance(inp_msg.content, str):
-                messages.append({"role": inp_msg.role, "content": inp_msg.content})
-            else:
-                # Multimodal content - pass through as-is
-                messages.append({"role": inp_msg.role, "content": inp_msg.content})
+        try:
+            for inp_msg in req.input:
+                # Convert InputMessage to standard message format
+                if isinstance(inp_msg.content, str):
+                    messages.append({"role": inp_msg.role, "content": inp_msg.content})
+                elif isinstance(inp_msg.content, list):
+                    # Multimodal content - transform to OpenAI format
+                    transformed_content = []
+                    for item in inp_msg.content:
+                        if isinstance(item, dict):
+                            # Map input types to OpenAI chat format
+                            if item.get("type") == "input_text":
+                                transformed_content.append({
+                                    "type": "text",
+                                    "text": item.get("text", "")
+                                })
+                            elif item.get("type") == "input_image_url":
+                                transformed_content.append({
+                                    "type": "image_url",
+                                    "image_url": item.get("image_url", {})
+                                })
+                            elif item.get("type") in ("text", "image_url"):
+                                # Already in correct format
+                                transformed_content.append(item)
+                            else:
+                                logger.warning(f"Unknown content type: {item.get('type')}")
+                                transformed_content.append(item)
+                        else:
+                            logger.warning(f"Invalid content item (not a dict): {type(item)}")
+
+                    messages.append({"role": inp_msg.role, "content": transformed_content})
+                else:
+                    logger.error(f"Invalid content type: {type(inp_msg.content)}")
+                    raise HTTPException(status_code=400, detail=f"Invalid content type: {type(inp_msg.content)}")
+        except Exception as e:
+            logger.error(f"Error transforming input to messages: {e}, input: {req.input}")
+            raise HTTPException(status_code=400, detail=f"Invalid input format: {str(e)}")
 
         # === 2.1) Inject conversation history if session_id provided ===
         if session_id:
@@ -865,7 +905,17 @@ async def unified_responses(
                             last_user = m
                             break
                     if last_user:
-                        await _to_thread(save_chat_message, session_id, "user", last_user.get("content",""), model, 0)
+                        # Extract text content from multimodal content if needed
+                        user_content = last_user.get("content", "")
+                        if isinstance(user_content, list):
+                            # Extract text from multimodal content
+                            text_parts = []
+                            for item in user_content:
+                                if isinstance(item, dict) and item.get("type") == "text":
+                                    text_parts.append(item.get("text", ""))
+                            user_content = " ".join(text_parts) if text_parts else "[multimodal content]"
+
+                        await _to_thread(save_chat_message, session_id, "user", user_content, model, 0)
 
                     assistant_content = processed.get("choices", [{}])[0].get("message", {}).get("content", "")
                     if assistant_content:

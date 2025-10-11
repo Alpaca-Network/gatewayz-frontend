@@ -24,7 +24,13 @@
       "Bash(railway list:*)",
       "Bash(railway up:*)",
       "Bash(railway domain:*)",
-      "Bash(railway variables:*)"
+      "Bash(railway variables:*)",
+      "Bash(gh pr checkout:*)",
+      "Bash(python -m pytest tests/test_referral.py -v)",
+      "Bash(python tests/test_user.py)",
+      "Bash(python -m pytest tests/ -v --tb=short)",
+      "Bash(git mv:*)",
+      "Bash(python:*)"
     ],
     "deny": [],
     "ask": []
