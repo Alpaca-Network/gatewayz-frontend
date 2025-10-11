@@ -708,6 +708,7 @@ def validate_api_key_permissions(api_key: str, required_permission: str, resourc
             return False
 
         # Primary keys (auto-generated for new users) have full permissions
+        # This is the most important check - primary keys should ALWAYS have full access
         if key_data.get('is_primary', False):
             logger.info(f"Granting full permissions to primary key: {api_key[:15]}...")
             return True
@@ -719,6 +720,7 @@ def validate_api_key_permissions(api_key: str, required_permission: str, resourc
 
         # If no permissions set, grant default access (for backward compatibility)
         if not scope_permissions or scope_permissions == {}:
+            logger.info(f"No scope permissions set, granting default access for {api_key[:15]}...")
             return True
 
         # Check if the required permission exists
@@ -728,12 +730,15 @@ def validate_api_key_permissions(api_key: str, required_permission: str, resourc
             if isinstance(allowed_resources, list):
                 # Check if resource is in the allowed list or if wildcard (*) is allowed
                 has_permission = '*' in allowed_resources or resource in allowed_resources
+                logger.info(f"Permission check result for {api_key[:15]}...: {has_permission}")
                 return has_permission
             elif isinstance(allowed_resources, str):
                 # Single resource or wildcard
                 has_permission = allowed_resources == '*' or allowed_resources == resource
+                logger.info(f"Permission check result for {api_key[:15]}...: {has_permission}")
                 return has_permission
 
+        logger.warning(f"Permission denied for {api_key[:15]}... - required: {required_permission} on {resource}, available: {scope_permissions}")
         return False
 
     except Exception as e:
