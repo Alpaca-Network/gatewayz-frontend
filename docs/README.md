@@ -79,7 +79,7 @@ The API will be available at `http://localhost:8000`
 | `SECRET_KEY` | Secret key for encryption | Yes |
 | `ADMIN_API_KEY` | Admin API key | Yes |
 
-See [Setup Guide](docs/setup.md) for complete configuration details.
+See [Setup Guide](setup.md) for complete configuration details.
 
 ## 📚 API Documentation
 
@@ -109,7 +109,7 @@ See [Setup Guide](docs/setup.md) for complete configuration details.
 - `GET /user/plan` - Get user's current plan
 - `POST /trials/start` - Start free trial
 
-See [API Reference](docs/api.md) for complete documentation.
+See [API Reference](api.md) for complete documentation.
 
 ## 🏗️ Architecture
 
@@ -134,7 +134,7 @@ src/
 - **Stripe**: Payment processing
 - **Resend**: Email delivery service
 
-See [Architecture](docs/architecture.md) for detailed information.
+See [Architecture](architecture.md) for detailed information.
 
 ## 🚀 Deployment
 
@@ -215,7 +215,7 @@ pytest tests/test_api.py
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
-See [Contributing Guide](docs/contributing.md) for detailed instructions.
+See [Contributing Guide](contributing.md) for detailed instructions.
 
 ## 📄 License
 
