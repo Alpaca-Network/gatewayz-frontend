@@ -682,8 +682,8 @@ def validate_api_key_permissions(api_key: str, required_permission: str, resourc
 
         client = get_supabase_client()
 
-        # Get the API key record
-        key_result = client.table('api_keys_new').select('scope_permissions, is_active').eq('api_key',
+        # Get the API key record with is_primary flag
+        key_result = client.table('api_keys_new').select('scope_permissions, is_active, is_primary').eq('api_key',
                                                                                             api_key).execute()
 
         if not key_result.data:
@@ -701,6 +701,11 @@ def validate_api_key_permissions(api_key: str, required_permission: str, resourc
         if not key_data.get('is_active', True):
             logger.warning(f"API key is inactive: {api_key[:10]}...")
             return False
+
+        # Primary keys (auto-generated for new users) have full permissions
+        if key_data.get('is_primary', False):
+            logger.info(f"Granting full permissions to primary key: {api_key[:15]}...")
+            return True
 
         # Get scope permissions
         scope_permissions = key_data.get('scope_permissions', {})
