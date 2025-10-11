@@ -675,6 +675,8 @@ def update_api_key(api_key: str, user_id: int, updates: Dict[str, Any]) -> bool:
 def validate_api_key_permissions(api_key: str, required_permission: str, resource: str) -> bool:
     """Validate if an API key has the required permission for a resource"""
     try:
+        logger.info(f"Validating permissions for API key {api_key[:15]}... - Required: {required_permission} on {resource}")
+
         # Temporary session keys (gw_temp_*) have full permissions
         if api_key.startswith('gw_temp_'):
             logger.info(f"Granting full permissions to session key: {api_key[:15]}...")
@@ -688,14 +690,17 @@ def validate_api_key_permissions(api_key: str, required_permission: str, resourc
 
         if not key_result.data:
             # Fallback to legacy key check
+            logger.info(f"API key {api_key[:15]}... not found in api_keys_new, checking legacy table")
             legacy_result = client.table('api_keys').select('scope_permissions, is_active').eq('api_key',
                                                                                                api_key).execute()
             if not legacy_result.data:
-                logger.warning(f"API key not found: {api_key[:10]}...")
+                logger.warning(f"API key not found in any table: {api_key[:10]}...")
                 return False
             key_data = legacy_result.data[0]
+            logger.info(f"Found in legacy table - is_active: {key_data.get('is_active')}, has is_primary: False (legacy)")
         else:
             key_data = key_result.data[0]
+            logger.info(f"Found in api_keys_new - is_active: {key_data.get('is_active')}, is_primary: {key_data.get('is_primary', False)}")
 
         # Check if key is active
         if not key_data.get('is_active', True):
@@ -706,6 +711,8 @@ def validate_api_key_permissions(api_key: str, required_permission: str, resourc
         if key_data.get('is_primary', False):
             logger.info(f"Granting full permissions to primary key: {api_key[:15]}...")
             return True
+        else:
+            logger.info(f"Not a primary key, checking scope_permissions: {key_data.get('scope_permissions', {})}")
 
         # Get scope permissions
         scope_permissions = key_data.get('scope_permissions', {})
