@@ -165,7 +165,17 @@ async def stream_generator(stream, user, api_key, model, trial, environment_tag,
                             last_user = m
                             break
                     if last_user:
-                        await _to_thread(save_chat_message, session_id, "user", last_user.get("content",""), model, 0)
+                        # Extract text content from multimodal content if needed
+                        user_content = last_user.get("content", "")
+                        if isinstance(user_content, list):
+                            # Extract text from multimodal content
+                            text_parts = []
+                            for item in user_content:
+                                if isinstance(item, dict) and item.get("type") == "text":
+                                    text_parts.append(item.get("text", ""))
+                            user_content = " ".join(text_parts) if text_parts else "[multimodal content]"
+
+                        await _to_thread(save_chat_message, session_id, "user", user_content, model, 0)
 
                     if accumulated_content:
                         await _to_thread(save_chat_message, session_id, "assistant", accumulated_content, model, total_tokens)
@@ -895,7 +905,17 @@ async def unified_responses(
                             last_user = m
                             break
                     if last_user:
-                        await _to_thread(save_chat_message, session_id, "user", last_user.get("content",""), model, 0)
+                        # Extract text content from multimodal content if needed
+                        user_content = last_user.get("content", "")
+                        if isinstance(user_content, list):
+                            # Extract text from multimodal content
+                            text_parts = []
+                            for item in user_content:
+                                if isinstance(item, dict) and item.get("type") == "text":
+                                    text_parts.append(item.get("text", ""))
+                            user_content = " ".join(text_parts) if text_parts else "[multimodal content]"
+
+                        await _to_thread(save_chat_message, session_id, "user", user_content, model, 0)
 
                     assistant_content = processed.get("choices", [{}])[0].get("message", {}).get("content", "")
                     if assistant_content:
