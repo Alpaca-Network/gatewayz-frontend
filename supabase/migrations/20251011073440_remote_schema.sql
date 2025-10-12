@@ -908,11 +908,13 @@ alter table "public"."users" add column "referral_code" character varying(8);
 
 alter table "public"."users" add column "referred_by_code" character varying(8);
 
-alter table "public"."users" alter column "role" set default 'user'::character varying;
+-- alter table "public"."users" alter column "role" set default 'user'::character varying; -- Commented out: type conversion below handles this
 
 alter table "public"."users" alter column "role" drop not null;
 
 alter table "public"."users" alter column "role" set data type character varying(20) using "role"::character varying(20);
+
+alter table "public"."users" alter column "role" set default 'user'::character varying;
 
 alter sequence "public"."referrals_id_seq" owned by "public"."referrals"."id";
 

@@ -7,7 +7,7 @@ from src.enhanced_notification_service import enhanced_notification_service
 from fastapi import APIRouter, HTTPException
 
 from src.schemas import PrivyAuthResponse, PrivyAuthRequest, AuthMethod, UserRegistrationResponse, \
-    UserRegistrationRequest
+    UserRegistrationRequest, SubscriptionStatus
 from src.supabase_config import get_supabase_client
 from src.db.users import get_user_by_privy_id, create_enhanced_user
 from src.db.activity import log_activity
@@ -181,7 +181,7 @@ async def privy_auth(request: PrivyAuthRequest):
                 email=email or f"{request.user.id}@privy.user",
                 auth_method=auth_method,
                 privy_user_id=request.user.id,
-                credits=10  # $10 worth of credits for new users
+                credits=0  # Users start with $0
             )
 
             # Send welcome email if we have an email
@@ -282,7 +282,7 @@ async def register_user(request: UserRegistrationRequest):
             email=request.email,
             auth_method=request.auth_method,
             privy_user_id=None,  # No Privy for direct registration
-            credits=10  # $10 starting credits
+            credits=0  # Users start with $0
         )
 
         # Store referral code if valid (bonus will be applied on first purchase)
@@ -322,7 +322,7 @@ async def register_user(request: UserRegistrationRequest):
             environment_tag=request.environment_tag,
             scope_permissions=user_data.get('scope_permissions', {}),
             auth_method=request.auth_method,
-            subscription_status="free",
+            subscription_status=SubscriptionStatus.TRIAL,
             message="Account created successfully",
             timestamp=datetime.now(timezone.utc)
         )

@@ -125,6 +125,78 @@ def get_user_transactions(
         return []
 
 
+def add_credits(
+        api_key: str,
+        amount: float,
+        description: str,
+        metadata: Optional[Dict[str, Any]] = None,
+        transaction_type: str = TransactionType.BONUS,
+        user_id: Optional[int] = None
+) -> bool:
+    """
+    Add credits to a user's account
+
+    Args:
+        api_key: User's API key (optional if user_id is provided)
+        amount: Amount of credits to add (must be positive)
+        description: Human-readable description of the credit addition
+        metadata: Optional additional data as JSON
+        transaction_type: Type of transaction (defaults to BONUS)
+        user_id: Optional user ID (if provided, will use this instead of looking up by api_key)
+
+    Returns:
+        True if credits were added successfully, False otherwise
+    """
+    try:
+        if amount <= 0:
+            logger.error(f"Cannot add negative or zero credits: {amount}")
+            return False
+
+        client = get_supabase_client()
+
+        # Get user by ID if provided, otherwise by API key
+        if user_id:
+            user_result = client.table('users').select('id, credits').eq('id', user_id).execute()
+        else:
+            user_result = client.table('users').select('id, credits').eq('api_key', api_key).execute()
+
+        if not user_result.data:
+            logger.error(f"User not found for {'user_id: ' + str(user_id) if user_id else 'API key: ' + api_key[:15] + '...'}")
+            return False
+
+        user = user_result.data[0]
+        resolved_user_id = user['id']
+        balance_before = float(user.get('credits', 0) or 0)
+        balance_after = balance_before + amount
+
+        # Update user's credits (using same column as payment system)
+        update_result = client.table('users').update({
+            'credits': balance_after
+        }).eq('id', resolved_user_id).execute()
+
+        if not update_result.data:
+            logger.error(f"Failed to update balance for user {resolved_user_id}")
+            return False
+
+        # Log the transaction
+        log_credit_transaction(
+            user_id=resolved_user_id,
+            amount=amount,
+            transaction_type=transaction_type,
+            description=description,
+            balance_before=balance_before,
+            balance_after=balance_after,
+            metadata=metadata
+        )
+
+        logger.info(f"Added {amount} credits to user {resolved_user_id}. New balance: {balance_after}")
+        return True
+
+    except Exception as e:
+        logger.error(f"Error adding credits: {e}", exc_info=True)
+        return False
+
+
 def get_transaction_summary(user_id: int) -> Dict[str, Any]:
     """
     Get summary of credit transactions for a user

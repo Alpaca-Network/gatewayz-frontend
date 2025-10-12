@@ -24,8 +24,8 @@ class User(db.Model):
     # Referral code that this user owns
     referral_code = db.Column(db.String(8), unique=True, nullable=False)
 
-    # Balance in dollars (can be used for discounts)
-    balance = db.Column(db.Float, default=0.0)
+    # Credits in dollars (can be used for API calls)
+    credits = db.Column(db.Float, default=0.0)
 
     # Track if user has made their first purchase
     has_made_first_purchase = db.Column(db.Boolean, default=False)
@@ -60,7 +60,7 @@ class User(db.Model):
             'email': self.email,
             'username': self.username,
             'referral_code': self.referral_code,
-            'balance': self.balance,
+            'credits': self.credits,
             'has_made_first_purchase': self.has_made_first_purchase,
             'referred_by_code': self.referred_by_code,
             'remaining_referral_uses': self.get_remaining_referral_uses(),

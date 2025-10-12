@@ -85,9 +85,10 @@ def validate_referral_code(referral_code: str, user_id: int) -> Tuple[bool, Opti
         if user.get('has_made_first_purchase', False):
             return False, "Referral code can only be used on first purchase", None
 
-        # Check if user already used a referral code
-        if user.get('referred_by_code'):
-            return False, "You have already used a referral code", None
+        # Check if user already used a DIFFERENT referral code
+        # Note: If they're using the same code they registered with, that's OK for first purchase bonus
+        if user.get('referred_by_code') and user.get('referred_by_code') != referral_code:
+            return False, "You have already used a different referral code", None
 
         # Check how many times this referral code has been used
         usage_count_result = client.table('referrals').select('id', count='exact').eq(
@@ -152,8 +153,8 @@ def apply_referral_bonus(
             return False, "Failed to create referral record", None
 
         # Add credits to both users using the credit transaction system
-        # Add $10 to the new user (refereed)
-        add_credits(
+        # Add $10 to the new user (referee)
+        referee_success = add_credits(
             user['api_key'],
             REFERRAL_BONUS,
             f"Referral bonus - using code {referral_code}",
@@ -161,11 +162,13 @@ def apply_referral_bonus(
                 'referral_code': referral_code,
                 'referrer_id': referrer['id'],
                 'type': 'referral_bonus_referee'
-            }
+            },
+            user_id=user_id  # Pass user_id directly to avoid stale data from API key lookup
         )
+        logger.info(f"Referee (user {user_id}) credit addition: {'SUCCESS' if referee_success else 'FAILED'}")
 
         # Add $10 to the referrer
-        add_credits(
+        referrer_success = add_credits(
             referrer['api_key'],
             REFERRAL_BONUS,
             f"Referral bonus - user referred by code {referral_code}",
@@ -173,33 +176,33 @@ def apply_referral_bonus(
                 'referral_code': referral_code,
                 'referred_user_id': user_id,
                 'type': 'referral_bonus_referrer'
-            }
+            },
+            user_id=referrer['id']  # Pass user_id directly to avoid stale data from API key lookup
         )
+        logger.info(f"Referrer (user {referrer['id']}) credit addition: {'SUCCESS' if referrer_success else 'FAILED'}")
 
         # Update referred_by_code for the new user
         client.table('users').update({
             'referred_by_code': referral_code
         }).eq('id', user_id).execute()
 
-        # Update balances (for tracking)
-        client.table('users').update({
-            'balance': (user.get('balance', 0) or 0) + REFERRAL_BONUS
-        }).eq('id', user_id).execute()
-
-        client.table('users').update({
-            'balance': (referrer.get('balance', 0) or 0) + REFERRAL_BONUS
-        }).eq('id', referrer['id']).execute()
+        # Note: Balances are already updated by add_credits() calls above
+        # No need to update them again here
 
         logger.info(
             f"Applied referral bonus: ${REFERRAL_BONUS} to user {user_id} and "
             f"${REFERRAL_BONUS} to referrer {referrer['id']}"
         )
 
+        # Fetch fresh balance data after credits have been added
+        user_fresh = client.table('users').select('credits').eq('id', user_id).execute()
+        referrer_fresh = client.table('users').select('credits').eq('id', referrer['id']).execute()
+
         bonus_data = {
             'user_bonus': REFERRAL_BONUS,
             'referrer_bonus': REFERRAL_BONUS,
-            'user_new_balance': (user.get('balance', 0) or 0) + REFERRAL_BONUS,
-            'referrer_new_balance': (referrer.get('balance', 0) or 0) + REFERRAL_BONUS,
+            'user_new_balance': float(user_fresh.data[0]['credits']) if user_fresh.data else 0,
+            'referrer_new_balance': float(referrer_fresh.data[0]['credits']) if referrer_fresh.data else 0,
             'referrer_username': referrer.get('username', 'Unknown'),
             'referrer_email': referrer.get('email', 'Unknown')
         }
@@ -263,7 +266,7 @@ def get_referral_stats(user_id: int) -> Optional[Dict[str, Any]]:
             'remaining_uses': remaining_uses,
             'max_uses': MAX_REFERRAL_USES,
             'total_earned': float(total_earned),
-            'current_balance': float(user.get('balance', 0) or 0),
+            'current_balance': float(user.get('credits', 0) or 0),
             'referred_by_code': user.get('referred_by_code'),
             'referrals': referral_details
         }
