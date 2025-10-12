@@ -546,6 +546,32 @@ async def test_openrouter_providers():
 
 
 
+@router.post("/admin/clear-rate-limit-cache", tags=["admin"])
+async def admin_clear_rate_limit_cache(admin_user: dict = Depends(require_admin)):
+    """Clear rate limit configuration cache to force reload from database"""
+    try:
+        from src.services.rate_limiting import get_rate_limit_manager, _rate_limit_manager, _rate_limiter
+
+        # Clear the cached rate limit manager
+        manager = get_rate_limit_manager()
+        if manager:
+            manager.key_configs.clear()
+            logger.info("Cleared rate limit manager key_configs cache")
+
+        # Clear the LRU cache by clearing the function cache
+        get_rate_limit_manager.cache_clear()
+
+        return {
+            "status": "success",
+            "message": "Rate limit cache cleared successfully. New requests will reload configuration.",
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to clear rate limit cache: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to clear rate limit cache: {str(e)}")
+
+
 @router.get("/admin/trial/analytics", tags=["admin"])
 async def get_trial_analytics_admin(admin_user: dict = Depends(require_admin)):
     """Get trial analytics and conversion metrics for admin"""
