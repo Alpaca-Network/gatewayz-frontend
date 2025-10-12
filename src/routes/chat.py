@@ -769,12 +769,26 @@ async def unified_responses(
                         raise HTTPException(status_code=429, detail="Upstream rate limit exceeded")
                     elif status in (401, 403):
                         raise HTTPException(status_code=500, detail="Upstream authentication error")
+                    elif status in (404,):
+                        # Model not found - return 404 instead of 500
+                        raise HTTPException(status_code=404, detail=f"Model {model} not found or unavailable on {provider}")
                     elif 400 <= status < 500:
                         raise HTTPException(status_code=400, detail="Upstream rejected the request")
                     else:
                         raise HTTPException(status_code=502, detail="Upstream service error")
                 else:
                     raise HTTPException(status_code=503, detail="Upstream service unavailable")
+            except Exception as e:
+                # Catch all other exceptions (e.g., from OpenAI client library)
+                error_msg = str(e).lower()
+                if "not found" in error_msg or "model" in error_msg and ("unavailable" in error_msg or "does not exist" in error_msg):
+                    logger.warning(f"Model not found or unavailable: {model} on {provider} - {e}")
+                    raise HTTPException(status_code=404, detail=f"Model {model} not found or unavailable on {provider}")
+                elif "timeout" in error_msg:
+                    raise HTTPException(status_code=504, detail="Upstream timeout")
+                else:
+                    logger.error(f"Unexpected error calling {provider} for model {model}: {e}")
+                    raise HTTPException(status_code=502, detail=f"Error communicating with upstream provider: {str(e)}")
 
         # Non-streaming response
         start = time.monotonic()
@@ -808,12 +822,26 @@ async def unified_responses(
                     raise HTTPException(status_code=429, detail="Upstream rate limit exceeded")
                 elif status in (401, 403):
                     raise HTTPException(status_code=500, detail="Upstream authentication error")
+                elif status in (404,):
+                    # Model not found - return 404 instead of 500
+                    raise HTTPException(status_code=404, detail=f"Model {model} not found or unavailable on {provider}")
                 elif 400 <= status < 500:
                     raise HTTPException(status_code=400, detail="Upstream rejected the request")
                 else:
                     raise HTTPException(status_code=502, detail="Upstream service error")
             else:
                 raise HTTPException(status_code=503, detail="Upstream service unavailable")
+        except Exception as e:
+            # Catch all other exceptions (e.g., from OpenAI client library)
+            error_msg = str(e).lower()
+            if "not found" in error_msg or "model" in error_msg and ("unavailable" in error_msg or "does not exist" in error_msg):
+                logger.warning(f"Model not found or unavailable: {model} on {provider} - {e}")
+                raise HTTPException(status_code=404, detail=f"Model {model} not found or unavailable on {provider}")
+            elif "timeout" in error_msg:
+                raise HTTPException(status_code=504, detail="Upstream timeout")
+            else:
+                logger.error(f"Unexpected error calling {provider} for model {model}: {e}")
+                raise HTTPException(status_code=502, detail=f"Error communicating with upstream provider: {str(e)}")
 
         elapsed = max(0.001, time.monotonic() - start)
 
