@@ -65,6 +65,27 @@ class StripeService:
             if not user:
                 raise ValueError(f"User {user_id} not found")
 
+            # Extract real email if stored email is a Privy DID
+            user_email = user.get('email', '')
+            if user_email.startswith('did:privy:'):
+                logger.warning(f"User {user_id} has Privy DID as email: {user_email}")
+                # Try to get email from Privy linked accounts via Supabase
+                from src.supabase_config import get_supabase_client
+                client = get_supabase_client()
+                user_result = client.table('users').select('privy_user_id').eq('id', user_id).execute()
+                if user_result.data and user_result.data[0].get('privy_user_id'):
+                    privy_user_id = user_result.data[0]['privy_user_id']
+                    logger.info(f"Found privy_user_id for user {user_id}: {privy_user_id}")
+                    # For now, use request.customer_email if available, otherwise generic email
+                    if request.customer_email:
+                        user_email = request.customer_email
+                    else:
+                        # If no customer_email in request, we can't get real email without Privy token
+                        user_email = None
+                        logger.warning(f"No customer_email in request for user {user_id} with Privy DID")
+                else:
+                    user_email = None
+
             # Create payment record
             payment = create_payment(
                 user_id=user_id,
@@ -113,7 +134,7 @@ class StripeService:
                 mode='payment',
                 success_url=success_url,
                 cancel_url=cancel_url,
-                customer_email=request.customer_email or user.get('email'),
+                customer_email=request.customer_email or user_email,
                 client_reference_id=str(user_id),
                 metadata={
                     'user_id': str(user_id),
