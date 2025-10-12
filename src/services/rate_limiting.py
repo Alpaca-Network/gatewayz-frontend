@@ -30,7 +30,7 @@ class RateLimitConfig:
     tokens_per_hour: int = 100000
     tokens_per_day: int = 1000000
     burst_limit: int = 500  # Maximum burst requests
-    concurrency_limit: int = 5  # Maximum concurrent requests
+    concurrency_limit: int = 50  # Maximum concurrent requests
     window_size_seconds: int = 60  # Sliding window size
 
 @dataclass
@@ -54,7 +54,7 @@ DEFAULT_CONFIG = RateLimitConfig(
     tokens_per_hour=100000,
     tokens_per_day=1000000,
     burst_limit=500,
-    concurrency_limit=5
+    concurrency_limit=50
 )
 
 class SlidingWindowRateLimiter:

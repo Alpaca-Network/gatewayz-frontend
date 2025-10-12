@@ -304,7 +304,7 @@ def get_rate_limit_config(api_key: str) -> Optional[Dict[str, Any]]:
             'tokens_per_hour': 100000,
             'tokens_per_day': 1000000,
             'burst_limit': 10,
-            'concurrency_limit': 5,
+            'concurrency_limit': 50,
             'window_size_seconds': 60
         }
 
