@@ -472,7 +472,7 @@ class RateLimitManager:
                     tokens_per_hour=config_data.get('tokens_per_hour', 100000),
                     tokens_per_day=config_data.get('tokens_per_day', 1000000),
                     burst_limit=config_data.get('burst_limit', 500),
-                    concurrency_limit=config_data.get('concurrency_limit', 5),
+                    concurrency_limit=config_data.get('concurrency_limit', 50),
                     window_size_seconds=config_data.get('window_size_seconds', 60)
                 )
         except Exception as e:
