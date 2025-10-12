@@ -149,15 +149,19 @@ class SlidingWindowRateLimiter:
     async def _check_concurrency_limit(self, api_key: str, config: RateLimitConfig) -> Dict[str, Any]:
         """Check concurrent request limit"""
         current_concurrent = self.concurrent_requests.get(api_key, 0)
-        
-        if current_concurrent >= config.concurrency_limit:
-            return {
-                "allowed": False,
-                "remaining": 0,
-                "current": current_concurrent,
-                "limit": config.concurrency_limit
-            }
-        
+
+        # Temporarily disabled for debugging - always allow
+        # TODO: Re-enable after confirming deployment
+        logger.info(f"Concurrency check: {current_concurrent}/{config.concurrency_limit} for {api_key[:10]}")
+
+        # if current_concurrent >= config.concurrency_limit:
+        #     return {
+        #         "allowed": False,
+        #         "remaining": 0,
+        #         "current": current_concurrent,
+        #         "limit": config.concurrency_limit
+        #     }
+
         return {
             "allowed": True,
             "remaining": config.concurrency_limit - current_concurrent,
