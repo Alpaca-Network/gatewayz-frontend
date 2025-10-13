@@ -456,6 +456,236 @@ def fetch_specific_model_from_openrouter(provider_name: str, model_name: str):
         return None
 
 
+def fetch_specific_model_from_portkey(provider_name: str, model_name: str):
+    """Fetch specific model data from Portkey by searching cached models"""
+    try:
+        # Construct the model ID
+        model_id = f"{provider_name}/{model_name}"
+        
+        # First check cache
+        portkey_models = get_cached_models("portkey")
+        if portkey_models:
+            for model in portkey_models:
+                if model.get("id", "").lower() == model_id.lower():
+                    return model
+        
+        # If not in cache, try to fetch fresh data
+        fresh_models = fetch_models_from_portkey()
+        if fresh_models:
+            for model in fresh_models:
+                if model.get("id", "").lower() == model_id.lower():
+                    return model
+        
+        logger.warning(f"Model {model_id} not found in Portkey catalog")
+        return None
+    except Exception as e:
+        logger.error(f"Failed to fetch specific model {provider_name}/{model_name} from Portkey: {e}")
+        return None
+
+
+def fetch_specific_model_from_featherless(provider_name: str, model_name: str):
+    """Fetch specific model data from Featherless by searching cached models"""
+    try:
+        # Construct the model ID
+        model_id = f"{provider_name}/{model_name}"
+        
+        # First check cache
+        featherless_models = get_cached_models("featherless")
+        if featherless_models:
+            for model in featherless_models:
+                if model.get("id", "").lower() == model_id.lower():
+                    return model
+        
+        # If not in cache, try to fetch fresh data
+        fresh_models = fetch_models_from_featherless()
+        if fresh_models:
+            for model in fresh_models:
+                if model.get("id", "").lower() == model_id.lower():
+                    return model
+        
+        logger.warning(f"Model {model_id} not found in Featherless catalog")
+        return None
+    except Exception as e:
+        logger.error(f"Failed to fetch specific model {provider_name}/{model_name} from Featherless: {e}")
+        return None
+
+
+def fetch_specific_model_from_deepinfra(provider_name: str, model_name: str):
+    """Fetch specific model data from DeepInfra API"""
+    try:
+        if not Config.DEEPINFRA_API_KEY:
+            logger.error("DeepInfra API key not configured")
+            return None
+
+        headers = {
+            "Authorization": f"Bearer {Config.DEEPINFRA_API_KEY}",
+            "Content-Type": "application/json"
+        }
+
+        # Construct the model ID
+        model_id = f"{provider_name}/{model_name}"
+
+        # DeepInfra uses standard /v1/models endpoint
+        response = httpx.get("https://api.deepinfra.com/v1/openai/models", headers=headers, timeout=20.0)
+        response.raise_for_status()
+
+        models_data = response.json()
+        models = models_data.get("data", [])
+        
+        # Search for the specific model
+        for model in models:
+            if model.get("id", "").lower() == model_id.lower():
+                # Normalize to our schema
+                return normalize_deepinfra_model(model)
+        
+        logger.warning(f"Model {model_id} not found in DeepInfra catalog")
+        return None
+    except Exception as e:
+        logger.error(f"Failed to fetch specific model {provider_name}/{model_name} from DeepInfra: {e}")
+        return None
+
+
+def normalize_deepinfra_model(deepinfra_model: dict) -> dict:
+    """Normalize DeepInfra model to our schema"""
+    model_id = deepinfra_model.get("id", "")
+    if not model_id:
+        return {"source_gateway": "deepinfra", "raw_deepinfra": deepinfra_model or {}}
+
+    provider_slug = model_id.split("/")[0] if "/" in model_id else "deepinfra"
+    display_name = model_id.replace("-", " ").replace("_", " ").title()
+
+    description = f"DeepInfra hosted model: {model_id}. Pricing data may vary by region and usage."
+
+    pricing = {
+        "prompt": None,
+        "completion": None,
+        "request": None,
+        "image": None,
+        "web_search": None,
+        "internal_reasoning": None
+    }
+
+    architecture = {
+        "modality": "text->text",
+        "input_modalities": ["text"],
+        "output_modalities": ["text"],
+        "tokenizer": None,
+        "instruct_type": None
+    }
+
+    return {
+        "id": model_id,
+        "slug": model_id,
+        "canonical_slug": model_id,
+        "hugging_face_id": None,
+        "name": display_name,
+        "created": deepinfra_model.get("created"),
+        "description": description,
+        "context_length": 0,
+        "architecture": architecture,
+        "pricing": pricing,
+        "top_provider": None,
+        "per_request_limits": None,
+        "supported_parameters": [],
+        "default_parameters": {},
+        "provider_slug": provider_slug,
+        "provider_site_url": None,
+        "model_logo_url": None,
+        "source_gateway": "deepinfra",
+        "raw_deepinfra": deepinfra_model
+    }
+
+
+def fetch_specific_model_from_chutes(provider_name: str, model_name: str):
+    """Fetch specific model data from Chutes by searching cached models"""
+    try:
+        # Construct the model ID
+        model_id = f"{provider_name}/{model_name}"
+        
+        # First check cache
+        chutes_models = get_cached_models("chutes")
+        if chutes_models:
+            for model in chutes_models:
+                if model.get("id", "").lower() == model_id.lower():
+                    return model
+        
+        # If not in cache, try to fetch fresh data
+        fresh_models = fetch_models_from_chutes()
+        if fresh_models:
+            for model in fresh_models:
+                if model.get("id", "").lower() == model_id.lower():
+                    return model
+        
+        logger.warning(f"Model {model_id} not found in Chutes catalog")
+        return None
+    except Exception as e:
+        logger.error(f"Failed to fetch specific model {provider_name}/{model_name} from Chutes: {e}")
+        return None
+
+
+def detect_model_gateway(provider_name: str, model_name: str) -> str:
+    """Detect which gateway a model belongs to by searching all caches
+    
+    Returns:
+        Gateway name: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', or None
+    """
+    try:
+        model_id = f"{provider_name}/{model_name}".lower()
+        
+        # Check each gateway's cache
+        gateways = ["openrouter", "portkey", "featherless", "chutes"]
+        
+        for gateway in gateways:
+            models = get_cached_models(gateway)
+            if models:
+                for model in models:
+                    if model.get("id", "").lower() == model_id:
+                        return gateway
+        
+        # Default to openrouter if not found
+        return "openrouter"
+    except Exception as e:
+        logger.error(f"Error detecting gateway for model {provider_name}/{model_name}: {e}")
+        return "openrouter"
+
+
+def fetch_specific_model(provider_name: str, model_name: str, gateway: str = None):
+    """Fetch specific model from the appropriate gateway
+    
+    Args:
+        provider_name: Provider name (e.g., 'openai', 'anthropic')
+        model_name: Model name (e.g., 'gpt-4', 'claude-3')
+        gateway: Optional gateway override. If not provided, auto-detects
+        
+    Returns:
+        Model data dict or None if not found
+    """
+    try:
+        # If gateway not specified, detect it
+        if not gateway:
+            gateway = detect_model_gateway(provider_name, model_name)
+        
+        gateway = gateway.lower()
+        
+        # Fetch from appropriate gateway
+        if gateway == "openrouter":
+            return fetch_specific_model_from_openrouter(provider_name, model_name)
+        elif gateway == "portkey":
+            return fetch_specific_model_from_portkey(provider_name, model_name)
+        elif gateway == "featherless":
+            return fetch_specific_model_from_featherless(provider_name, model_name)
+        elif gateway == "deepinfra":
+            return fetch_specific_model_from_deepinfra(provider_name, model_name)
+        elif gateway == "chutes":
+            return fetch_specific_model_from_chutes(provider_name, model_name)
+        else:
+            logger.warning(f"Unknown gateway: {gateway}, defaulting to OpenRouter")
+            return fetch_specific_model_from_openrouter(provider_name, model_name)
+    except Exception as e:
+        logger.error(f"Failed to fetch specific model {provider_name}/{model_name} from gateway {gateway}: {e}")
+        return None
+
+
 def get_cached_huggingface_model(hugging_face_id: str):
     """Get cached Hugging Face model data or fetch if not cached"""
     try:

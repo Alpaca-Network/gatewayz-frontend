@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from fastapi import  HTTPException
 
 from src.services.models import get_cached_models, enhance_model_with_provider_info, \
-    get_model_count_by_provider, enhance_model_with_huggingface_data, fetch_specific_model_from_openrouter
+    get_model_count_by_provider, enhance_model_with_huggingface_data, fetch_specific_model
 from src.services.providers import get_cached_providers, \
     enhance_providers_with_logos_and_sites
 
@@ -338,37 +338,83 @@ async def get_specific_model(
     provider_name: str,
     model_name: str,
     include_huggingface: bool = Query(True, description="Include Hugging Face metrics if available"),
+    gateway: Optional[str] = Query(
+        None,
+        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', or auto-detect if not specified",
+    ),
 ):
-    """Get specific model data of a given provider with detailed information"""
+    """Get specific model data of a given provider with detailed information from any gateway
+    
+    This endpoint supports fetching model data from multiple model providers:
+    - OpenRouter: Full model endpoint data including performance metrics
+    - Portkey: Model catalog data with cross-referenced pricing
+    - Featherless: Model catalog data  
+    - DeepInfra: Model catalog data from DeepInfra's API
+    - Chutes: Model catalog data from Chutes.ai
+    
+    If gateway is not specified, it will automatically detect which gateway the model belongs to.
+    
+    Examples:
+        GET /catalog/model/openai/gpt-4?gateway=openrouter
+        GET /catalog/model/anthropic/claude-3?gateway=portkey
+        GET /catalog/model/meta-llama/llama-3?gateway=featherless
+        GET /catalog/model/meta-llama/Meta-Llama-3.1-8B-Instruct?gateway=deepinfra
+    """
     # Prevent this route from catching /v1/* API endpoints
     if provider_name == "v1":
         raise HTTPException(status_code=404, detail=f"Model {provider_name}/{model_name} not found")
 
     try:
-        model_data = fetch_specific_model_from_openrouter(provider_name, model_name)
+        # Fetch model data from appropriate gateway
+        model_data = fetch_specific_model(provider_name, model_name, gateway)
+        
         if not model_data:
-            raise HTTPException(status_code=404, detail=f"Model {provider_name}/{model_name} not found")
+            gateway_msg = f" from gateway '{gateway}'" if gateway else ""
+            raise HTTPException(
+                status_code=404, 
+                detail=f"Model {provider_name}/{model_name} not found{gateway_msg}"
+            )
 
-        # Get enhanced providers data (same as /provider endpoint)
-        providers = get_cached_providers()
-        if not providers:
-            raise HTTPException(status_code=503, detail="Provider data unavailable")
+        # Determine which gateway was used
+        detected_gateway = model_data.get("source_gateway", gateway or "openrouter")
 
-        # Enhance provider data with site_url and logo_url (same logic as /provider endpoint)
-        enhanced_providers = enhance_providers_with_logos_and_sites(providers)
+        # Get enhanced providers data for all gateways
+        provider_groups: List[List[dict]] = []
+        
+        # Always try to get OpenRouter providers for cross-reference
+        openrouter_providers = get_cached_providers()
+        if openrouter_providers:
+            enhanced_openrouter = annotate_provider_sources(
+                enhance_providers_with_logos_and_sites(openrouter_providers),
+                "openrouter",
+            )
+            provider_groups.append(enhanced_openrouter)
+        
+        # Add providers from other gateways based on detected gateway
+        if detected_gateway in ["portkey", "featherless", "deepinfra", "chutes"]:
+            # Get models from the detected gateway to derive providers
+            gateway_models = get_cached_models(detected_gateway)
+            if gateway_models:
+                derived_providers = derive_portkey_providers(gateway_models)
+                annotated_providers = annotate_provider_sources(derived_providers, detected_gateway)
+                provider_groups.append(annotated_providers)
+        
+        # Merge all provider data
+        enhanced_providers = merge_provider_lists(*provider_groups) if provider_groups else []
 
         # Enhance with provider information and logos
         if isinstance(model_data, dict):
             model_data = enhance_model_with_provider_info(model_data, enhanced_providers)
 
             # Then enhance with Hugging Face data if requested
-            if include_huggingface:
+            if include_huggingface and model_data.get('hugging_face_id'):
                 model_data = enhance_model_with_huggingface_data(model_data)
 
         return {
             "data": model_data,
             "provider": provider_name,
             "model": model_name,
+            "gateway": detected_gateway,
             "include_huggingface": include_huggingface,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
