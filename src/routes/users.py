@@ -175,6 +175,11 @@ async def get_user_profile_endpoint(api_key: str = Depends(get_api_key)):
             raise HTTPException(status_code=500, detail="Failed to retrieve user profile")
 
         logger.info(f"Profile retrieved successfully for user {user.get('id')}")
+
+        # Ensure credits is an integer for Pydantic validation
+        if profile and 'credits' in profile:
+            profile['credits'] = int(profile['credits'])
+
         return profile
 
     except HTTPException:
