@@ -50,9 +50,18 @@ def create_app() -> FastAPI:
     )
 
     # Add CORS middleware
+    # Note: When allow_credentials=True, allow_origins cannot be ["*"]
+    # Must specify exact origins for security
+    allowed_origins = [
+        "https://gatewayz.ai",
+        "https://beta.gatewayz.ai",
+        "http://localhost:3000",
+        "http://localhost:3001",
+    ]
+
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=allowed_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
