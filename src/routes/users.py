@@ -12,7 +12,7 @@ from src.security.deps import get_api_key
 from fastapi import APIRouter
 
 # Initialize logging
-logging.basicConfig(level=logging.ERROR)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -160,21 +160,33 @@ async def user_get_rate_limits(api_key: str = Depends(get_api_key)):
 async def get_user_profile_endpoint(api_key: str = Depends(get_api_key)):
     """Get user profile information"""
     try:
+        logger.info(f"Getting user profile for API key: {api_key[:10]}...")
+
         user = get_user(api_key)
         if not user:
+            logger.warning(f"User not found for API key: {api_key[:10]}...")
             raise HTTPException(status_code=401, detail="Invalid API key")
+
+        logger.info(f"User found: {user.get('id')}, fetching profile...")
 
         profile = get_user_profile(api_key)
         if not profile:
+            logger.error(f"Failed to get profile for user {user.get('id')}")
             raise HTTPException(status_code=500, detail="Failed to retrieve user profile")
+
+        logger.info(f"Profile retrieved successfully for user {user.get('id')}")
+
+        # Ensure credits is an integer for Pydantic validation
+        if profile and 'credits' in profile:
+            profile['credits'] = int(profile['credits'])
 
         return profile
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error getting user profile: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        logger.error(f"Error getting user profile: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
 @router.put("/user/profile", response_model=UserProfileResponse, tags=["authentication"])
