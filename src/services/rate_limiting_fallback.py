@@ -93,7 +93,8 @@ class InMemoryRateLimiter:
             # All checks passed - increment counters
             self.request_windows[api_key].append(current_time)
             self.token_windows[api_key].append((current_time, tokens_used))
-            self.concurrent_requests[api_key] += 1
+            # Concurrency tracking disabled - don't increment
+            # self.concurrent_requests[api_key] += 1
             
             # Calculate remaining limits
             remaining_requests = max(0, config.requests_per_minute - len(self.request_windows[api_key]))
