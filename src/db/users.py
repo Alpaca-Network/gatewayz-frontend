@@ -659,9 +659,13 @@ def update_user_profile(api_key: str, profile_data: Dict[str, Any]) -> Dict[str,
 def get_user_profile(api_key: str) -> Dict[str, Any]:
     """Get user profile information"""
     try:
+        logger.info(f"get_user_profile called for API key: {api_key[:10]}...")
         user = get_user(api_key)
         if not user:
+            logger.warning(f"get_user returned None for API key: {api_key[:10]}...")
             return None
+
+        logger.info(f"Building profile for user {user.get('id')}")
 
         # Return profile data
         profile = {
@@ -673,17 +677,17 @@ def get_user_profile(api_key: str) -> Dict[str, Any]:
             "username": user.get("username"),
             "email": user.get("email"),
             "auth_method": user.get("auth_method"),
-
             "subscription_status": user.get("subscription_status"),
             "trial_expires_at": user.get("trial_expires_at"),
             "is_active": user.get("is_active"),
             "registration_date": user.get("registration_date")
         }
 
+        logger.info(f"Profile built successfully for user {user.get('id')}")
         return profile
 
     except Exception as e:
-        logger.error(f"Failed to get user profile: {e}")
+        logger.error(f"Failed to get user profile: {e}", exc_info=True)
         return None
 
 
