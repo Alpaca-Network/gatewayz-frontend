@@ -13,6 +13,8 @@ import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/comp
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import {
   Plus,
   Search,
@@ -392,85 +394,147 @@ const SessionListItem = ({
     onDeleteSession: (sessionId: string) => void;
 }) => {
     const [menuOpen, setMenuOpen] = React.useState(false);
+    const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
+    const [renameDialogOpen, setRenameDialogOpen] = React.useState(false);
+    const [renameValue, setRenameValue] = React.useState('');
+
+    const handleRenameClick = () => {
+        setRenameValue(session.title);
+        setRenameDialogOpen(true);
+        setMenuOpen(false);
+    };
+
+    const handleRenameConfirm = () => {
+        if (renameValue.trim() && renameValue !== session.title) {
+            onRenameSession(session.id, renameValue.trim());
+        }
+        setRenameDialogOpen(false);
+    };
+
+    const handleDeleteClick = () => {
+        setDeleteDialogOpen(true);
+        setMenuOpen(false);
+    };
+
+    const handleDeleteConfirm = () => {
+        onDeleteSession(session.id);
+        setDeleteDialogOpen(false);
+    };
 
     return (
-        <li key={session.id} className="group relative min-w-0 w-full">
-            <div
-                className="flex items-start justify-between gap-2 w-full"
-                onContextMenu={(e) => {
-                    e.preventDefault();
-                    setMenuOpen(true);
-                }}
-            >
-                <Button
-                    variant={activeSessionId === session.id ? "secondary" : "ghost"}
-                    className="flex-1 min-w-0 justify-start items-start text-left flex flex-col h-auto py-1.5 pl-2 pr-3 rounded-lg"
-                    onClick={() => switchToSession(session.id)}
+        <>
+            <li key={session.id} className="group relative min-w-0 w-full">
+                <div
+                    className={`flex items-start justify-between gap-2 w-full px-2 py-1.5 rounded-lg transition-colors ${
+                        activeSessionId === session.id 
+                            ? 'bg-secondary' 
+                            : 'hover:bg-accent'
+                    }`}
+                    onContextMenu={(e) => {
+                        e.preventDefault();
+                        setMenuOpen(true);
+                    }}
                 >
-                    <span
-                        className="font-medium text-sm leading-[1.3] block break-words w-full"
-                        style={{
-                            display: '-webkit-box',
-                            WebkitLineClamp: 2,
-                            WebkitBoxOrient: 'vertical' as const,
-                            overflow: 'hidden',
-                            wordBreak: 'break-word',
-                            overflowWrap: 'break-word'
-                        }}
+                    <button
+                        className="flex-1 min-w-0 justify-start items-start text-left flex flex-col h-auto"
+                        onClick={() => switchToSession(session.id)}
                     >
-                        {session.title}
-                    </span>
-                    <span className="text-xs text-muted-foreground truncate leading-tight mt-0.5 block w-full">
-                        {formatDistanceToNow(session.startTime, { addSuffix: true })}
-                    </span>
-                </Button>
+                        <span className="font-medium text-sm leading-tight block truncate w-full">
+                            {session.title}
+                        </span>
+                        <span className="text-xs text-muted-foreground truncate leading-tight mt-0.5 block w-full">
+                            {formatDistanceToNow(session.startTime, { addSuffix: true })}
+                        </span>
+                    </button>
 
-                {/* Three dots menu stays visible and aligned */}
-                <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
-                    <DropdownMenuTrigger asChild>
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 hover:bg-muted rounded-md shrink-0 self-start mt-1"
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setMenuOpen(true);
+                    {/* Three dots menu stays visible and aligned */}
+                    <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+                        <DropdownMenuTrigger asChild>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 hover:bg-muted rounded-md shrink-0 self-start opacity-0 group-hover:opacity-100 transition-opacity"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setMenuOpen(true);
+                                }}
+                            >
+                                <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48">
+                            <DropdownMenuItem onClick={handleRenameClick}>
+                                <Pencil className="h-4 w-4 mr-2" />
+                                Rename
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                onClick={handleDeleteClick}
+                                className="text-destructive focus:text-destructive"
+                            >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Delete
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                </div>
+            </li>
+
+            {/* Rename Dialog */}
+            <Dialog open={renameDialogOpen} onOpenChange={setRenameDialogOpen}>
+                <DialogContent className="sm:max-w-[425px]">
+                    <DialogHeader>
+                        <DialogTitle>Rename Chat</DialogTitle>
+                        <DialogDescription>
+                            Enter a new name for this chat session.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                        <Input
+                            id="name"
+                            value={renameValue}
+                            onChange={(e) => setRenameValue(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    handleRenameConfirm();
+                                }
                             }}
-                        >
-                            <MoreHorizontal className="h-4 w-4" />
+                            placeholder="Chat name"
+                            className="col-span-3"
+                            autoFocus
+                        />
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setRenameDialogOpen(false)}>
+                            Cancel
                         </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-48">
-                        <DropdownMenuItem
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                const newTitle = prompt('Rename chat:', session.title);
-                                if (newTitle && newTitle.trim() && newTitle !== session.title) {
-                                    onRenameSession(session.id, newTitle.trim());
-                                }
-                                setMenuOpen(false);
-                            }}
+                        <Button onClick={handleRenameConfirm}>
+                            Save
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Delete Confirmation Dialog */}
+            <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Delete Chat</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Are you sure you want to delete "{session.title}"? This action cannot be undone.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={handleDeleteConfirm}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                         >
-                            <Pencil className="h-4 w-4 mr-2" />
-                            Rename
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                if (confirm('Are you sure you want to delete this chat?')) {
-                                    onDeleteSession(session.id);
-                                }
-                                setMenuOpen(false);
-                            }}
-                            className="text-destructive focus:text-destructive"
-                        >
-                            <Trash2 className="h-4 w-4 mr-2" />
                             Delete
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
-            </div>
-        </li>
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+        </>
     );
 };
 
@@ -526,7 +590,7 @@ const ChatSidebar = ({ sessions, activeSessionId, switchToSession, createNewChat
 
         </div>
 
-        <ScrollArea className="flex-grow overflow-hidden">
+        <div className="flex-grow overflow-y-auto">
             {Object.keys(groupedSessions).length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-32 text-center">
                     <p className="text-sm text-muted-foreground">No conversations yet</p>
@@ -551,7 +615,7 @@ const ChatSidebar = ({ sessions, activeSessionId, switchToSession, createNewChat
                     </div>
                 ))
             )}
-        </ScrollArea>
+        </div>
     </aside>
     )
 }
