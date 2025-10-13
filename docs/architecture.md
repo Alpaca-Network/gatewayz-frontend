@@ -2,316 +2,1036 @@
 
 ## System Overview
 
-The AI Gateway is a production-ready FastAPI application that provides a unified interface for accessing multiple AI models through various providers (OpenRouter, Portkey, Featherless, Chutes), with comprehensive credit management, rate limiting, and security features.
+The AI Gateway (Gatewayz) is a production-ready, enterprise-grade FastAPI application that provides a unified interface for accessing multiple AI models through various providers. It features comprehensive credit management, rate limiting, security features, and advanced functionality for production use.
+
+**Version**: 2.0.1  
+**Framework**: FastAPI 0.104.1  
+**Language**: Python 3.8+
+
+## Architecture Principles
+
+The AI Gateway is built on the following principles:
+
+1. **Modularity**: Clear separation of concerns with distinct layers
+2. **Scalability**: Designed to handle high traffic and scale horizontally
+3. **Security**: Security-first approach with encryption, authentication, and audit logging
+4. **Reliability**: Fault-tolerant design with proper error handling
+5. **Maintainability**: Clean code structure with comprehensive documentation
+6. **Performance**: Optimized for low latency with caching and efficient database queries
+
+## High-Level Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        External Clients                          │
+│              (Web Apps, Mobile Apps, CLI Tools)                  │
+└────────────────────────┬────────────────────────────────────────┘
+                         │
+                         │ HTTPS / REST API
+                         │
+┌────────────────────────▼────────────────────────────────────────┐
+│                      FastAPI Gateway                             │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │                 Middleware Layer                          │   │
+│  │  • CORS Handler                                           │   │
+│  │  • Authentication & Authorization                         │   │
+│  │  • Rate Limiting                                          │   │
+│  │  • Request/Response Logging                               │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                                                                   │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │                 Route Layer                               │   │
+│  │  • Chat Endpoints        • Admin Endpoints                │   │
+│  │  • Auth Endpoints        • Payment Endpoints              │   │
+│  │  • User Endpoints        • Referral Endpoints             │   │
+│  │  • Catalog Endpoints     • Activity Endpoints             │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                                                                   │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │                 Service Layer                             │   │
+│  │  • OpenRouter Client     • Pricing Service                │   │
+│  │  • Portkey Client        • Payment Service                │   │
+│  │  • Featherless Client    • Notification Service           │   │
+│  │  • Image Gen Client      • Analytics Service              │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                                                                   │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │                 Database Layer                            │   │
+│  │  • User Management       • Coupon Management              │   │
+│  │  • API Key Management    • Referral Management            │   │
+│  │  • Plan Management       • Chat History                   │   │
+│  │  • Payment Records       • Activity Logging               │   │
+│  └──────────────────────────────────────────────────────────┘   │
+└─────────────────────┬───────────────┬───────────────────────────┘
+                      │               │
+        ┌─────────────▼───────────┐   │
+        │      Supabase           │   │
+        │   (PostgreSQL)          │   │
+        │  • User Data            │   │
+        │  • API Keys             │   │
+        │  • Usage Records        │   │
+        │  • Audit Logs           │   │
+        └─────────────────────────┘   │
+                                      │
+┌─────────────────────────────────────▼───────────────────────────┐
+│                    External Services                             │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
+│  │  OpenRouter  │  │    Portkey    │  │ Featherless  │          │
+│  └──────────────┘  └──────────────┘  └──────────────┘          │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
+│  │    Chutes    │  │    Stripe     │  │    Resend    │          │
+│  └──────────────┘  └──────────────┘  └──────────────┘          │
+│  ┌──────────────┐                                                │
+│  │    Redis     │  (Optional - Caching & Rate Limiting)          │
+│  └──────────────┘                                                │
+└──────────────────────────────────────────────────────────────────┘
+```
 
 ## Project Structure
 
-The project follows a modular architecture with clear separation of concerns:
+The project follows a clean, modular architecture with clear separation of concerns:
 
 ```
-src/
-├── main.py                 # FastAPI application entry point
-├── config.py              # Configuration management
-├── models.py              # Legacy models (being phased out)
-├── supabase_config.py     # Database configuration
-├── db_security.py         # Security utilities
-├── enhanced_notification_service.py  # Email service
-├── db/                    # Database layer
-│   ├── __init__.py
-│   ├── api_keys.py        # API key management
-│   ├── users.py           # User management
-│   ├── plans.py           # Subscription plans
-│   ├── payments.py        # Payment processing
-│   ├── ranking.py         # Model ranking system
-│   ├── rate_limits.py     # Rate limiting
-│   ├── trials.py          # Free trial management
-│   ├── chat_history.py    # Chat session management
-│   ├── coupons.py         # Coupon system
-│   ├── roles.py           # Role-based access control
-│   ├── activity.py        # Activity tracking
-│   ├── credit_transactions.py  # Credit management
-│   └── referral.py        # Referral system
-├── routes/                # API endpoints
-│   ├── __init__.py
-│   ├── health.py          # Health checks
-│   ├── ping.py            # Ping service
-│   ├── chat.py            # Chat completions
-│   ├── catalog.py         # Model catalog
-│   ├── auth.py            # Authentication
-│   ├── users.py           # User management
-│   ├── api_keys.py        # API key management
-│   ├── admin.py           # Admin operations
-│   ├── plans.py           # Subscription plans
-│   ├── payments.py        # Payment processing
-│   ├── ranking.py         # Model ranking
-│   ├── notifications.py   # Notifications
-│   ├── chat_history.py    # Chat history
-│   ├── images.py          # Image generation
-│   ├── coupons.py         # Coupon management
-│   ├── roles.py           # Role management
-│   ├── activity.py        # Activity tracking
-│   ├── audit.py           # Audit logs
-│   └── referral.py        # Referral system
-├── schemas/               # Pydantic models
-│   ├── __init__.py
-│   ├── common.py          # Common enums and types
-│   ├── auth.py            # Authentication models
-│   ├── users.py           # User models
-│   ├── api_keys.py        # API key models
-│   ├── plans.py           # Plan models
-│   ├── payments.py        # Payment models
-│   ├── trials.py          # Trial models
-│   ├── admin.py           # Admin models
-│   ├── proxy.py           # Proxy request models
-│   ├── chat.py            # Chat models
-│   ├── coupons.py         # Coupon models
-│   └── notification.py    # Notification models
-├── security/              # Security layer
-│   ├── __init__.py
-│   ├── security.py        # Security utilities
-│   └── deps.py            # Security dependencies
-├── services/              # Business logic services
-│   ├── __init__.py
-│   ├── openrouter_client.py    # OpenRouter integration
-│   ├── portkey_client.py       # Portkey integration
-│   ├── featherless_client.py   # Featherless integration
-│   ├── image_generation_client.py  # Image generation
-│   ├── payments.py             # Payment processing
-│   ├── notification.py         # Notification service
-│   ├── rate_limiting.py        # Rate limiting
-│   ├── trial_service.py        # Trial management
-│   ├── trial_validation.py     # Trial validation
-│   ├── professional_email_templates.py  # Email templates
-│   ├── analytics.py            # Analytics
-│   ├── pricing.py              # Pricing calculations
-│   ├── providers.py            # Provider management
-│   └── referral.py             # Referral system
-├── trials/                # Trial-specific modules
-└── utils/                 # Utility functions
+gateway/
+├── api/
+│   └── index.py                    # Vercel serverless function entry point
+├── src/
+│   ├── main.py                     # FastAPI application factory
+│   ├── config.py                   # Configuration management
+│   ├── models.py                   # Legacy models (being phased out)
+│   ├── supabase_config.py          # Database client initialization
+│   ├── db_config.py                # Database configuration
+│   ├── db_security.py              # Security utilities
+│   ├── redis_config.py             # Redis configuration
+│   ├── cache.py                    # Caching utilities
+│   ├── enhanced_notification_service.py  # Email service
+│   │
+│   ├── db/                         # Database Access Layer
+│   │   ├── __init__.py
+│   │   ├── users.py                # User CRUD operations
+│   │   ├── api_keys.py             # API key management
+│   │   ├── plans.py                # Subscription plans
+│   │   ├── payments.py             # Payment records
+│   │   ├── ranking.py              # Model ranking
+│   │   ├── rate_limits.py          # Rate limit configs
+│   │   ├── trials.py               # Free trial management
+│   │   ├── chat_history.py         # Chat session management
+│   │   ├── coupons.py              # Coupon management
+│   │   ├── roles.py                # Role-based access control
+│   │   ├── activity.py             # Activity tracking
+│   │   ├── credit_transactions.py  # Credit transactions
+│   │   ├── referral.py             # Referral system
+│   │   └── ping.py                 # Ping statistics
+│   │
+│   ├── routes/                     # API Route Handlers
+│   │   ├── __init__.py
+│   │   ├── root.py                 # Root/welcome endpoint
+│   │   ├── health.py               # Health check endpoints
+│   │   ├── ping.py                 # Ping service
+│   │   ├── chat.py                 # Chat completions & responses
+│   │   ├── catalog.py              # Model catalog
+│   │   ├── auth.py                 # Authentication
+│   │   ├── users.py                # User management
+│   │   ├── api_keys.py             # API key endpoints
+│   │   ├── admin.py                # Admin operations
+│   │   ├── plans.py                # Subscription plans
+│   │   ├── payments.py             # Payment processing
+│   │   ├── ranking.py              # Model ranking
+│   │   ├── notifications.py        # Notification management
+│   │   ├── chat_history.py         # Chat history endpoints
+│   │   ├── images.py               # Image generation
+│   │   ├── coupons.py              # Coupon endpoints
+│   │   ├── roles.py                # Role management
+│   │   ├── activity.py             # Activity endpoints
+│   │   ├── audit.py                # Audit log endpoints
+│   │   ├── rate_limits.py          # Rate limit management
+│   │   ├── referral.py             # Referral endpoints
+│   │   └── transaction_analytics.py # Transaction analytics
+│   │
+│   ├── schemas/                    # Pydantic Models
+│   │   ├── __init__.py
+│   │   ├── common.py               # Common enums and types
+│   │   ├── auth.py                 # Authentication models
+│   │   ├── users.py                # User models
+│   │   ├── api_keys.py             # API key models
+│   │   ├── plans.py                # Plan models
+│   │   ├── payments.py             # Payment models
+│   │   ├── trials.py               # Trial models
+│   │   ├── admin.py                # Admin models
+│   │   ├── proxy.py                # Proxy request models
+│   │   ├── chat.py                 # Chat models
+│   │   ├── coupons.py              # Coupon models
+│   │   └── notification.py         # Notification models
+│   │
+│   ├── security/                   # Security Layer
+│   │   ├── __init__.py
+│   │   ├── security.py             # Encryption, hashing, key generation
+│   │   └── deps.py                 # Security dependencies (auth)
+│   │
+│   ├── services/                   # Business Logic Layer
+│   │   ├── __init__.py
+│   │   ├── openrouter_client.py    # OpenRouter API integration
+│   │   ├── portkey_client.py       # Portkey API integration
+│   │   ├── featherless_client.py   # Featherless API integration
+│   │   ├── image_generation_client.py # Image generation
+│   │   ├── payments.py             # Payment processing logic
+│   │   ├── notification.py         # Notification service
+│   │   ├── rate_limiting.py        # Rate limiting logic
+│   │   ├── rate_limiting_fallback.py # Fallback rate limiting
+│   │   ├── trial_service.py        # Trial management
+│   │   ├── trial_validation.py     # Trial validation
+│   │   ├── professional_email_templates.py # Email templates
+│   │   ├── analytics.py            # Analytics service
+│   │   ├── pricing.py              # Pricing calculations
+│   │   ├── providers.py            # Provider management
+│   │   ├── referral.py             # Referral logic
+│   │   ├── roles.py                # Role management
+│   │   ├── models.py               # Model management
+│   │   └── ping.py                 # Ping service
+│   │
+│   ├── trials/                     # Trial-specific modules
+│   │
+│   └── utils/                      # Utility Functions
+│       └── reset_welcome_emails.py
+│
+├── tests/                          # Test Suite
+│   ├── conftest.py                 # Pytest configuration
+│   ├── db/                         # Database tests
+│   ├── routes/                     # Route tests
+│   ├── security/                   # Security tests
+│   ├── services/                   # Service tests
+│   └── ...                         # Other test files
+│
+├── supabase/                       # Supabase Configuration
+│   ├── config.toml                 # Supabase project config
+│   └── migrations/                 # Database migrations
+│       ├── 20251009030427_remote_schema.sql
+│       ├── 20251009040000_add_coupon_system.sql
+│       ├── 20251009050000_add_pingpong_stats_table.sql
+│       ├── 20251009060000_add_user_roles.sql
+│       ├── 20251011_fix_permissions.sql
+│       ├── 20251011073440_remote_schema.sql
+│       └── 20251012_consolidate_balance_to_credits.sql
+│
+├── scripts/                        # Utility Scripts
+│   ├── add_logo_url_field.py
+│   ├── check_auth_fix.py
+│   ├── fix_primary_api_keys.py
+│   └── ...
+│
+├── docs/                           # Documentation
+├── migrations/                     # Legacy migrations
+├── requirements.txt                # Python dependencies
+├── runtime.txt                     # Python version for deployment
+├── vercel.json                     # Vercel configuration
+├── railway.json                    # Railway configuration
+├── railway.toml                    # Railway TOML config
+├── Procfile                        # Heroku process file
+├── pytest.ini                      # Pytest configuration
+└── start.sh                        # Start script
 ```
 
 ## Core Components
 
-### FastAPI Application (`src/main.py`)
-- **Framework**: FastAPI 0.104.1 with automatic OpenAPI documentation
+### 1. FastAPI Application (`src/main.py`)
+
+The main application entry point that:
+- Creates and configures the FastAPI app
+- Registers all route handlers
+- Configures middleware (CORS, authentication)
+- Handles startup and shutdown events
+- Manages application lifecycle
+
+Key features:
 - **Title**: "Gatewayz Universal Inference API"
 - **Version**: 2.0.1
-- **CORS**: Enabled for all origins (configurable for production)
-- **Authentication**: HTTP Bearer token authentication with API key validation
+- **CORS**: Enabled for all origins (configurable)
+- **Authentication**: HTTP Bearer token
 - **Route Organization**: Modular route loading system
 
-### Database Layer
-- **Primary Database**: Supabase (PostgreSQL)
-- **Configuration**: `supabase_config.py` - Client initialization and connection management
-- **Data Access**: Modular database functions in `src/db/`
-- **Security**: `db_security.py` - Advanced security features and audit logging
+### 2. Database Layer (`src/db/`)
 
-### External Integrations
-- **OpenRouter API**: AI model access via OpenAI SDK
-  - Base URL: `https://openrouter.ai/api/v1`
-  - Headers: HTTP-Referer and X-Title for identification
-  - Model caching with 5-minute TTL
-- **Portkey API**: Alternative AI model provider
-- **Featherless API**: Additional model provider
-- **Chutes API**: Model provider with custom catalog
-- **Supabase**: Database and real-time features
-  - User management and authentication
-  - API key storage and validation
-  - Usage tracking and analytics
-- **Resend**: Professional email delivery service
-  - Email notifications and templates
-  - Secure password reset tokens
-  - Usage reports and alerts
-- **Stripe**: Payment processing
+Handles all database operations with Supabase (PostgreSQL):
+
+- **users.py**: User account management
+  - Create, read, update user profiles
+  - Credit management
+  - User authentication methods
+
+- **api_keys.py**: API key lifecycle management
+  - Create encrypted API keys
+  - Validate and authenticate keys
+  - Track key usage
+  - Key rotation and expiration
+
+- **plans.py**: Subscription plan management
+  - Define subscription plans
+  - Assign plans to users
+  - Track plan history
+
+- **payments.py**: Payment transaction management
+  - Record payments
+  - Track credit purchases
+  - Payment history
+
+- **chat_history.py**: Chat session management
+  - Create and manage chat sessions
+  - Store message history
+  - Automatic history injection
+
+- **coupons.py**: Coupon and discount management
+  - Create and validate coupons
+  - Apply discounts
+  - Track coupon usage
+
+- **referral.py**: Referral program management
+  - Generate referral codes
+  - Track referrals
+  - Calculate rewards
+
+- **activity.py**: Activity tracking
+  - Log user activities
+  - Track API usage
+  - Generate analytics
+
+### 3. Route Layer (`src/routes/`)
+
+Defines all API endpoints:
+
+#### Public Routes
+- **root.py**: Welcome page
+- **health.py**: Health checks
+- **ping.py**: Ping with statistics
+- **catalog.py**: Model catalog and provider info
+
+#### Authentication Routes
+- **auth.py**: Privy authentication, user login
+- **users.py**: User profile management
+- **api_keys.py**: API key management
+
+#### Core Functionality Routes
+- **chat.py**: Chat completions, unified responses
+- **images.py**: Image generation
+- **chat_history.py**: Chat session management
+
+#### Admin Routes
+- **admin.py**: Admin operations
+- **audit.py**: Audit log access
+- **transaction_analytics.py**: Transaction analytics
+
+#### Feature Routes
+- **plans.py**: Subscription plans
+- **payments.py**: Payment processing
+- **coupons.py**: Coupon management
+- **referral.py**: Referral system
+- **roles.py**: Role management
+- **rate_limits.py**: Rate limit configuration
+- **ranking.py**: Model ranking
+- **activity.py**: Activity tracking
+- **notifications.py**: Notification management
+
+### 4. Schema Layer (`src/schemas/`)
+
+Pydantic models for request/response validation:
+
+- **Type Safety**: Strong typing for all data structures
+- **Validation**: Automatic data validation
+- **Serialization**: JSON serialization/deserialization
+- **Documentation**: Automatic API documentation generation
+
+Key schemas:
+- Authentication models (login, registration)
+- User models (profile, settings)
+- API key models (creation, update)
+- Chat models (messages, sessions)
+- Payment models (transactions, subscriptions)
+- Admin models (monitoring, analytics)
+
+### 5. Security Layer (`src/security/`)
+
+Comprehensive security implementation:
+
+#### security.py
+- **Encryption**: Fernet encryption for sensitive data
+- **Hashing**: HMAC-SHA256 for API key validation
+- **Key Generation**: Secure random key generation
+- **Password Hashing**: Bcrypt for password storage (if used)
+
+#### deps.py
+- **Authentication**: Bearer token authentication
+- **Authorization**: Role-based access control
+- **API Key Validation**: Multi-layer validation with fallbacks
+- **Rate Limiting**: Request rate limiting
+- **IP Allowlists**: IP-based access control
+- **Domain Restrictions**: Referer-based control
+
+Security features:
+- API key prefixes: `gw_live_`, `gw_test_`, `gw_staging_`, `gw_dev_`
+- Encrypted storage of sensitive data
+- Audit logging of security events
+- Failed authentication tracking
+- Automatic key expiration
+
+### 6. Service Layer (`src/services/`)
+
+Business logic implementation:
+
+#### Provider Clients
+- **openrouter_client.py**: OpenRouter API integration
+  - Model list caching (5-minute TTL)
+  - OpenAI SDK integration
+  - Request/response handling
+  
+- **portkey_client.py**: Portkey API integration
+  - Multi-provider access
+  - Request routing
+  
+- **featherless_client.py**: Featherless API integration
+  - Specialized model access
+  
+- **image_generation_client.py**: Image generation
+  - Multiple provider support
+  - Image storage handling
+
+#### Business Services
+- **payments.py**: Payment processing logic
+  - Stripe integration
   - Credit purchases
   - Subscription management
+  
+- **pricing.py**: Pricing calculations
+  - Token-based pricing
+  - Credit calculations
+  - Cost estimation
+  
+- **notification.py**: Notification service
+  - Email templates
+  - Delivery tracking
+  - Notification preferences
+  
+- **rate_limiting.py**: Rate limiting logic
+  - Redis-based rate limiting
+  - Per-user and per-key limits
+  - Sliding window algorithm
+  
+- **analytics.py**: Analytics service
+  - Usage tracking
+  - Performance metrics
+  - Business intelligence
+  
+- **trial_service.py**: Trial management
+  - Trial creation and tracking
+  - Usage monitoring
+  - Conversion tracking
+  
+- **referral.py**: Referral logic
+  - Code generation
+  - Reward calculation
+  - Tracking and attribution
+
+## Technology Stack
+
+### Backend Framework
+- **FastAPI 0.104.1**
+  - Modern, fast web framework
+  - Automatic API documentation (OpenAPI/Swagger)
+  - Async support for high performance
+  - Type hints for better IDE support
+  - Pydantic integration for validation
+
+### Web Server
+- **Uvicorn 0.24.0**
+  - ASGI server for async Python
+  - High performance
+  - WebSocket support
+  - Production-ready
+
+### Database
+- **Supabase (PostgreSQL)**
+  - Managed PostgreSQL database
+  - Real-time subscriptions
+  - Row Level Security (RLS)
+  - Automatic API generation
+  - Built-in authentication
+
+### Data Validation
+- **Pydantic 2.5.0**
+  - Data validation using Python type hints
+  - Automatic JSON schema generation
+  - Fast and efficient
+  - Great error messages
+
+### Caching & Rate Limiting
+- **Redis 5.0.1** (Optional)
+  - In-memory data store
+  - Rate limiting
+  - Session storage
+  - Caching layer
+
+### Payment Processing
+- **Stripe 13.0.1**
+  - Payment processing
+  - Subscription management
   - Webhook handling
+  - Invoice generation
 
-### Security Module (`src/security/`)
-- **Advanced Security Manager**: Secure key hashing and encryption
-- **Audit Logging**: Comprehensive security event tracking
-- **Key Management**: HMAC-SHA256 hashing, Fernet encryption
-- **API Key Validation**: Multi-layer validation with fallbacks
-- **Rate Limiting**: Per-user and per-key rate limiting
-- **IP Allowlists**: IP-based access control
-- **Domain Restrictions**: Referer-based access control
+### Email Delivery
+- **Resend 0.8.0**
+  - Transactional email service
+  - Template support
+  - Delivery tracking
+  - Developer-friendly API
 
-## API Endpoints
+### Security
+- **Cryptography 41.0.7**
+  - Fernet encryption
+  - HMAC hashing
+  - Secure key generation
+  - Industry-standard algorithms
 
-### Public Endpoints
-- `GET /health` - System health check
-- `GET /ping` - Ping service with statistics
-- `GET /models` - Available AI models
-- `GET /models/providers` - Provider statistics
-- `GET /ranking/models` - Model ranking data
+### AI Provider Integration
+- **OpenAI SDK 1.3.0**
+  - OpenAI API client
+  - Used for OpenRouter integration
+  - Streaming support
+  - Function calling
 
-### Authentication Endpoints
-- `POST /auth/privy` - Privy authentication
-- `GET /user/balance` - User credit balance
-- `POST /user/api-keys` - Create API key
-- `GET /user/api-keys` - List user API keys
-- `PUT /user/api-keys/{key_id}` - Update API key
-- `DELETE /user/api-keys/{key_id}` - Delete API key
+### HTTP Client
+- **HTTPX 0.26.0**
+  - Async HTTP client
+  - HTTP/2 support
+  - Connection pooling
+  - Timeout handling
 
-### Chat Endpoints
-- `POST /v1/chat/completions` - OpenAI-compatible chat completions
-- `POST /v1/responses` - Unified response API
-- `POST /images/generate` - Image generation
-- `POST /chat/sessions` - Create chat session
-- `GET /chat/sessions` - List chat sessions
-- `GET /chat/sessions/{session_id}` - Get chat session
-- `DELETE /chat/sessions/{session_id}` - Delete chat session
-
-### Admin Endpoints
-- `POST /admin/create` - Create user account
-- `GET /admin/monitor` - System monitoring
-- `POST /admin/add_credits` - Add credits to user
-- `GET /admin/usage` - Usage analytics
-- `POST /admin/rate-limits` - Set rate limits
-- `GET /admin/audit-logs` - Audit logs
-
-### Payment Endpoints
-- `POST /api/stripe/webhook` - Stripe webhook
-- `POST /api/stripe/checkout` - Create checkout session
-- `POST /api/stripe/payment-intent` - Create payment intent
-- `POST /api/stripe/refund` - Process refund
-
-### Plan Management
-- `GET /plans` - List subscription plans
-- `GET /plans/{plan_id}` - Get plan details
-- `GET /user/plan` - Get user's current plan
-- `POST /plans/assign` - Assign plan to user
-
-### Trial Management
-- `POST /trials/start` - Start free trial
-- `GET /trials/status` - Get trial status
-- `POST /trials/convert` - Convert trial to paid
-- `POST /trials/track-usage` - Track trial usage
-
-## Data Models
-
-### Core Models
-- **User Management**: Registration, profiles, authentication methods
-- **API Keys**: Creation, management, security features, usage tracking
-- **Plans**: Subscription management, entitlements, usage limits
-- **Usage Tracking**: Comprehensive metrics and analytics
-- **Rate Limiting**: Multi-tier rate limiting configuration
-- **Notifications**: Email templates, preferences, delivery tracking
-- **Trials**: Free trial management and conversion
-- **Payments**: Stripe integration, credit purchases
-- **Coupons**: Discount and promotion system
-- **Roles**: Role-based access control
-- **Referrals**: Referral tracking and rewards
-
-### Request/Response Models
-- **Pydantic Models**: Type-safe request/response validation
-- **Enum Types**: Auth methods, payment methods, subscription status
-- **Optional Fields**: Flexible update operations
-- **Validation**: Email validation, date handling, credit management
+### Testing
+- **Pytest 7.4.3**
+  - Testing framework
+  - Fixtures and mocking
+  - Coverage reporting
+  - Async test support
 
 ## Data Flow
 
-### Request Processing
-1. **Authentication**: API key validation via `get_api_key` dependency
-2. **Authorization**: Permission checks and rate limit validation
-3. **Business Logic**: Database operations via modular `db/` functions
-4. **External Calls**: AI model requests via provider clients
-5. **Usage Tracking**: Credit deduction and usage recording
-6. **Response**: Formatted response with gateway metadata
+### Request Processing Flow
 
-### Security Flow
-1. **Key Validation**: Multi-layer API key validation
-2. **IP/Domain Checks**: Allowlist enforcement
-3. **Rate Limiting**: Per-key and per-user limits
-4. **Plan Enforcement**: Subscription limit validation
-5. **Audit Logging**: Security event recording
-6. **Usage Monitoring**: Real-time analytics
+```
+1. Client Request
+   ↓
+2. CORS Middleware
+   ↓
+3. Authentication Middleware
+   │  • Extract Bearer token
+   │  • Validate API key
+   │  • Load user context
+   ↓
+4. Rate Limiting
+   │  • Check rate limits
+   │  • Increment counters
+   │  • Reject if exceeded
+   ↓
+5. Route Handler
+   │  • Parse request
+   │  • Validate data
+   │  • Business logic
+   ↓
+6. Service Layer
+   │  • Provider selection
+   │  • API calls
+   │  • Data processing
+   ↓
+7. Database Operations
+   │  • Save usage record
+   │  • Update credits
+   │  • Log activity
+   ↓
+8. Response Formation
+   │  • Format response
+   │  • Add metadata
+   │  • Return to client
+   ↓
+9. Audit Logging
+   │  • Log request/response
+   │  • Track security events
+```
+
+### Chat Completion Flow
+
+```
+1. Client sends chat completion request
+   ↓
+2. Authenticate API key
+   ↓
+3. Check user credits
+   ↓
+4. Check rate limits
+   ↓
+5. Load chat history (if session provided)
+   ↓
+6. Select provider based on model
+   ↓
+7. Call provider API
+   │  • OpenRouter
+   │  • Portkey
+   │  • Featherless
+   │  • Chutes
+   ↓
+8. Process response
+   ↓
+9. Calculate costs
+   ↓
+10. Deduct credits
+   ↓
+11. Save to chat history
+   ↓
+12. Create usage record
+   ↓
+13. Return response to client
+```
+
+### Authentication Flow
+
+```
+1. Client provides API key in Authorization header
+   ↓
+2. Extract Bearer token
+   ↓
+3. Validate key format (prefix check)
+   ↓
+4. Query database for key details
+   ↓
+5. Validate key:
+   │  • Not expired
+   │  • Not revoked
+   │  • Has required permissions
+   │  • IP allowed (if configured)
+   │  • Domain allowed (if configured)
+   ↓
+6. Load user context
+   ↓
+7. Check user status:
+   │  • Account active
+   │  • Has credits
+   │  • Not banned
+   ↓
+8. Inject user context into request
+```
 
 ## Database Schema
 
 ### Core Tables
-- **users**: User accounts, profiles, credits, authentication
-- **api_keys**: Legacy API key management
-- **api_keys_new**: Enhanced API key system with security features
-- **rate_limit_configs**: Per-user rate limiting
-- **usage_records**: Comprehensive usage tracking
-- **plans**: Subscription plan definitions
-- **user_plans**: User plan assignments and history
-- **audit_logs**: Security event logging
-- **trial_records**: Free trial management
-- **payment_records**: Payment transaction history
-- **coupons**: Discount and promotion codes
-- **referrals**: Referral tracking
-- **chat_sessions**: Chat conversation management
-- **latest_models**: Model ranking and metadata
-- **openrouter_models**: OpenRouter model data
+
+#### users
+```sql
+- id (uuid, primary key)
+- email (text, unique)
+- credits (decimal) -- Unified credit balance
+- privy_id (text, unique) -- Privy authentication ID
+- role (text) -- User role (admin, user, etc.)
+- created_at (timestamp)
+- updated_at (timestamp)
+- is_active (boolean)
+- referral_code (text, unique) -- User's referral code
+```
+
+#### api_keys_new (Enhanced API Key System)
+```sql
+- id (uuid, primary key)
+- user_id (uuid, foreign key -> users)
+- key_hash (text) -- HMAC-SHA256 hash
+- encrypted_key (text) -- Fernet encrypted
+- prefix (text) -- Key prefix (gw_live_, etc.)
+- name (text) -- User-friendly name
+- scopes (jsonb) -- Permissions array
+- rate_limit (integer) -- Requests per minute
+- ip_allowlist (jsonb) -- Allowed IPs
+- domain_restrictions (jsonb) -- Allowed domains
+- expires_at (timestamp)
+- last_used_at (timestamp)
+- is_active (boolean)
+- created_at (timestamp)
+- updated_at (timestamp)
+```
+
+#### plans
+```sql
+- id (uuid, primary key)
+- name (text)
+- description (text)
+- price (decimal)
+- credits_included (decimal)
+- rate_limit_per_minute (integer)
+- features (jsonb)
+- is_active (boolean)
+- created_at (timestamp)
+```
+
+#### user_plans
+```sql
+- id (uuid, primary key)
+- user_id (uuid, foreign key -> users)
+- plan_id (uuid, foreign key -> plans)
+- status (text) -- active, cancelled, expired
+- started_at (timestamp)
+- ends_at (timestamp)
+- auto_renew (boolean)
+```
+
+#### usage_records
+```sql
+- id (uuid, primary key)
+- user_id (uuid, foreign key -> users)
+- api_key_id (uuid, foreign key -> api_keys_new)
+- model (text)
+- provider (text)
+- input_tokens (integer)
+- output_tokens (integer)
+- total_tokens (integer)
+- cost (decimal)
+- request_type (text) -- chat, image, etc.
+- created_at (timestamp)
+```
+
+#### chat_sessions
+```sql
+- id (uuid, primary key)
+- user_id (uuid, foreign key -> users)
+- title (text)
+- model (text)
+- provider (text)
+- created_at (timestamp)
+- updated_at (timestamp)
+```
+
+#### chat_messages
+```sql
+- id (uuid, primary key)
+- session_id (uuid, foreign key -> chat_sessions)
+- role (text) -- user, assistant, system
+- content (text)
+- tokens (integer)
+- created_at (timestamp)
+```
+
+#### coupons
+```sql
+- id (uuid, primary key)
+- code (text, unique)
+- discount_type (text) -- percentage, fixed
+- discount_value (decimal)
+- max_uses (integer)
+- uses_count (integer)
+- valid_from (timestamp)
+- valid_to (timestamp)
+- is_active (boolean)
+- created_at (timestamp)
+```
+
+#### referrals
+```sql
+- id (uuid, primary key)
+- referrer_id (uuid, foreign key -> users)
+- referred_id (uuid, foreign key -> users)
+- referral_code (text)
+- reward_amount (decimal)
+- status (text) -- pending, completed, paid
+- created_at (timestamp)
+- completed_at (timestamp)
+```
+
+#### audit_logs
+```sql
+- id (uuid, primary key)
+- user_id (uuid, foreign key -> users)
+- action (text)
+- resource_type (text)
+- resource_id (text)
+- details (jsonb)
+- ip_address (text)
+- user_agent (text)
+- created_at (timestamp)
+```
 
 ### Relationships
-- Users have many API keys
-- Users have one active plan
-- API keys have usage records
-- Plans have rate limit configurations
-- Users have trial records
-- Users have payment records
-- Users have referral records
 
-## Security Features
+```
+users (1) ─── (M) api_keys_new
+users (1) ─── (M) usage_records
+users (1) ─── (M) chat_sessions
+users (1) ─── (1) user_plans
+users (1) ─── (M) referrals (as referrer)
+users (1) ─── (M) referrals (as referred)
+
+chat_sessions (1) ─── (M) chat_messages
+plans (1) ─── (M) user_plans
+
+api_keys_new (1) ─── (M) usage_records
+```
+
+## External Integrations
+
+### AI Model Providers
+
+#### OpenRouter
+- **Base URL**: `https://openrouter.ai/api/v1`
+- **Authentication**: Bearer token
+- **Features**: Access to 100+ AI models
+- **Integration**: OpenAI SDK compatible
+- **Caching**: Model list cached for 5 minutes
+
+#### Portkey
+- **Features**: Multi-provider routing
+- **Integration**: Custom client implementation
+- **Use Case**: Alternative provider access
+
+#### Featherless
+- **Features**: Specialized model access
+- **Integration**: Custom client implementation
+- **Use Case**: Specific model variants
+
+#### Chutes
+- **Features**: Custom model catalog
+- **Integration**: Custom client implementation
+- **Use Case**: Chutes-specific models
+
+### Payment Processing
+
+#### Stripe
+- **Integration**: Stripe SDK 13.0.1
+- **Features**:
+  - Credit purchases
+  - Subscription management
+  - Webhook handling
+  - Invoice generation
+  - Payment history
+- **Webhooks**:
+  - `payment_intent.succeeded`
+  - `charge.succeeded`
+  - `customer.subscription.created`
+  - `customer.subscription.updated`
+  - `customer.subscription.deleted`
+
+### Email Service
+
+#### Resend
+- **Integration**: Resend SDK 0.8.0
+- **Features**:
+  - Transactional emails
+  - Template support
+  - Delivery tracking
+  - Bounce handling
+- **Email Types**:
+  - Welcome emails
+  - Password resets
+  - Usage alerts
+  - Payment confirmations
+  - Trial expiration notices
+
+### Authentication
+
+#### Privy
+- **Integration**: Custom implementation
+- **Features**:
+  - Email authentication
+  - Social login
+  - Wallet authentication
+  - User management
+- **Use Case**: Primary authentication method
+
+## Security Architecture
 
 ### API Key Management
-- **Prefix-based identification**: `gw_live_`, `gw_test_`, `gw_staging_`, `gw_dev_`
-- **Secure generation**: Cryptographically secure random keys
-- **Encryption**: Fernet encryption for sensitive data
-- **Rotation**: Automatic key rotation capabilities
-- **Scope permissions**: Granular permission system
-- **Expiration**: Time-based key expiration
-- **Rate limiting**: Per-key request limits
 
-### Authentication & Authorization
-- **Multi-provider support**: OpenRouter, Portkey, Featherless, Chutes
-- **Bearer token authentication**: HTTP Authorization header
-- **Session management**: Temporary session keys
-- **Role-based access**: Admin, user, and custom roles
-- **IP allowlists**: IP-based access control
-- **Domain restrictions**: Referer-based access control
+```
+Key Generation:
+1. Generate random 32-byte key
+2. Create key prefix (gw_live_, gw_test_, etc.)
+3. Combine prefix + base64(random_bytes)
+4. Hash key with HMAC-SHA256 for validation
+5. Encrypt key with Fernet for storage
+6. Store hash and encrypted key in database
 
-### Audit & Monitoring
-- **Comprehensive logging**: All API interactions logged
-- **Security events**: Failed authentication attempts tracked
-- **Usage analytics**: Real-time usage monitoring
-- **Performance metrics**: Response time and error tracking
-- **Alert system**: Automated security alerts
+Key Validation:
+1. Extract key from Authorization header
+2. Hash provided key with HMAC-SHA256
+3. Query database for matching hash
+4. Decrypt stored key for verification
+5. Check expiration, permissions, IP, domain
+6. Return user context or error
+```
 
-## Deployment
+### Encryption
 
-### Environment Configuration
-- **Development**: Local development with hot reload
-- **Staging**: Pre-production testing environment
-- **Production**: Live production environment
-- **Environment-specific**: API key prefixes and configurations
+- **Algorithm**: Fernet (symmetric encryption)
+- **Key Derivation**: SECRET_KEY from environment
+- **Use Cases**:
+  - API key storage
+  - Sensitive user data
+  - Payment information
 
-### Platform Support
-- **Vercel**: Primary deployment platform
-- **Railway**: Alternative deployment option
-- **Heroku**: Legacy deployment support
-- **Docker**: Containerized deployment
-- **Kubernetes**: Scalable deployment option
+### Authentication
 
-## Monitoring & Operations
+- **Method**: HTTP Bearer token
+- **Format**: `Authorization: Bearer gw_live_...`
+- **Validation**: Multi-layer with fallbacks
+- **Session**: Stateless (no session storage)
+
+### Authorization
+
+- **Role-Based**: Admin, user, custom roles
+- **Scope-Based**: API key permissions
+- **Resource-Based**: User can only access own resources
+
+### Audit Logging
+
+- **Logged Events**:
+  - Authentication attempts
+  - API key operations
+  - Credit changes
+  - Admin actions
+  - Security events
+- **Retention**: Configurable
+- **Access**: Admin only
+
+## Deployment Architecture
+
+### Vercel Deployment
+
+```
+Client Request
+    ↓
+Vercel Edge Network
+    ↓
+Serverless Function (api/index.py)
+    ↓
+FastAPI Application
+    ↓
+Supabase Database
+    ↓
+External Services
+```
+
+### Railway Deployment
+
+```
+Client Request
+    ↓
+Railway Load Balancer
+    ↓
+Docker Container (main.py)
+    ↓
+FastAPI Application
+    ↓
+Supabase Database
+    ↓
+External Services
+```
+
+### Docker Deployment
+
+```
+Docker Host
+├── ai-gateway container
+│   ├── Python 3.9
+│   ├── FastAPI app
+│   └── Uvicorn server
+└── redis container (optional)
+```
+
+## Performance Considerations
+
+### Caching Strategy
+
+1. **Model Lists**: Cached for 5 minutes
+2. **User Data**: Cached per request
+3. **Provider Status**: Cached for 1 minute
+4. **Rate Limit Counters**: Redis with TTL
+
+### Database Optimization
+
+1. **Indexes**:
+   - User email (unique)
+   - API key hash (unique)
+   - Usage records (user_id, created_at)
+   - Chat sessions (user_id, created_at)
+
+2. **Connection Pooling**:
+   - Supabase client manages connections
+   - Automatic reconnection
+
+3. **Query Optimization**:
+   - Selective field loading
+   - Pagination for large datasets
+   - Efficient join strategies
+
+### Rate Limiting
+
+- **Algorithm**: Sliding window
+- **Storage**: Redis (if available) or in-memory
+- **Granularity**: Per-user and per-key
+- **Limits**: Configurable per plan
+
+## Monitoring & Observability
 
 ### Health Checks
-- **System health**: Database connectivity, external service status
-- **Performance metrics**: Response times, error rates
-- **Resource usage**: Memory, CPU, database connections
-- **Alert system**: Automated monitoring and alerting
+
+- **`/health`**: Basic health check
+- **`/ping`**: Ping with statistics
+- **`/admin/monitor`**: Detailed system monitoring
 
 ### Logging
-- **Structured logging**: JSON-formatted logs
-- **Log levels**: DEBUG, INFO, WARNING, ERROR, CRITICAL
-- **Log aggregation**: Centralized log collection
-- **Log retention**: Configurable log retention policies
 
-### Analytics
-- **Usage tracking**: Per-user and per-model usage
-- **Performance metrics**: Response times and throughput
-- **Error tracking**: Error rates and types
-- **Business metrics**: Revenue, user growth, conversion rates
+- **Level**: INFO (production), DEBUG (development)
+- **Format**: Structured JSON logs
+- **Includes**:
+  - Request ID
+  - User ID
+  - API key ID
+  - Execution time
+  - Error details
+
+### Metrics
+
+- Request count
+- Response time (p50, p95, p99)
+- Error rate
+- Credit usage
+- Model usage distribution
+- Provider distribution
+
+## Scalability
+
+### Horizontal Scaling
+
+- Stateless design allows multiple instances
+- Load balancing across instances
+- Shared database and cache
+
+### Vertical Scaling
+
+- Increase instance resources
+- Database connection pool sizing
+- Cache memory allocation
+
+### Database Scaling
+
+- Supabase handles scaling
+- Read replicas for heavy read loads
+- Connection pooling
+
+## Future Architecture Improvements
+
+### Phase 2
+- GraphQL API endpoint
+- WebSocket support for streaming
+- Advanced caching strategies
+- Custom model fine-tuning
+
+### Phase 3
+- Multi-tenant architecture
+- Advanced load balancing
+- Model performance benchmarking
+- Distributed tracing
+
+---
+
+This architecture is designed to be robust, scalable, and maintainable while providing excellent performance and security for production use.

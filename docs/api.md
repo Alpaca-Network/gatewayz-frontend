@@ -933,3 +933,733 @@ curl -X POST "https://your-domain.com/v1/chat/completions" \
     "messages": [{"role": "user", "content": "Hello!"}]
   }'
 ```
+
+## Referral System
+
+### Get Referral Code
+
+```http
+GET /referrals/code
+```
+
+Get user's referral code and statistics.
+
+**Headers:**
+```http
+Authorization: Bearer gw_live_your_api_key_here
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "referral_code": "ABC123",
+  "total_referrals": 5,
+  "total_rewards": 50.0,
+  "pending_rewards": 10.0
+}
+```
+
+### Apply Referral Code
+
+```http
+POST /referrals/apply
+```
+
+Apply a referral code for a new user.
+
+**Headers:**
+```http
+Authorization: Bearer gw_live_your_api_key_here
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "referral_code": "ABC123"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Referral code applied successfully",
+  "reward_amount": 10.0,
+  "credits_added": 10.0
+}
+```
+
+### Get Referral Statistics
+
+```http
+GET /referrals/stats
+```
+
+Get detailed referral statistics.
+
+**Headers:**
+```http
+Authorization: Bearer gw_live_your_api_key_here
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "total_referrals": 5,
+  "active_referrals": 3,
+  "total_rewards": 50.0,
+  "pending_rewards": 10.0,
+  "conversion_rate": 0.6,
+  "recent_referrals": [
+    {
+      "id": "ref_123",
+      "referred_email": "user@example.com",
+      "status": "completed",
+      "reward_amount": 10.0,
+      "created_at": "2024-01-01T00:00:00Z"
+    }
+  ]
+}
+```
+
+### Get Referral History
+
+```http
+GET /referrals/history
+```
+
+Get complete referral history.
+
+**Headers:**
+```http
+Authorization: Bearer gw_live_your_api_key_here
+```
+
+**Query Parameters:**
+- `limit` (optional): Number of results (default: 50)
+- `offset` (optional): Pagination offset (default: 0)
+- `status` (optional): Filter by status (pending, completed, paid)
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "ref_123",
+      "referral_code": "ABC123",
+      "referred_user_id": "user_456",
+      "status": "completed",
+      "reward_amount": 10.0,
+      "created_at": "2024-01-01T00:00:00Z",
+      "completed_at": "2024-01-02T00:00:00Z"
+    }
+  ],
+  "total": 5,
+  "limit": 50,
+  "offset": 0
+}
+```
+
+## Coupon System
+
+### Create Coupon (Admin)
+
+```http
+POST /coupons
+```
+
+Create a new coupon code.
+
+**Headers:**
+```http
+Authorization: Bearer admin_api_key_here
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "code": "WELCOME10",
+  "discount_type": "percentage",
+  "discount_value": 10,
+  "max_uses": 100,
+  "valid_from": "2024-01-01T00:00:00Z",
+  "valid_to": "2024-12-31T23:59:59Z",
+  "description": "Welcome discount for new users"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "coupon": {
+    "id": "coupon_123",
+    "code": "WELCOME10",
+    "discount_type": "percentage",
+    "discount_value": 10,
+    "max_uses": 100,
+    "uses_count": 0,
+    "is_active": true,
+    "created_at": "2024-01-01T00:00:00Z"
+  }
+}
+```
+
+### List Coupons (Admin)
+
+```http
+GET /coupons
+```
+
+List all coupons.
+
+**Headers:**
+```http
+Authorization: Bearer admin_api_key_here
+```
+
+**Query Parameters:**
+- `is_active` (optional): Filter by active status
+- `limit` (optional): Number of results
+- `offset` (optional): Pagination offset
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "coupon_123",
+      "code": "WELCOME10",
+      "discount_type": "percentage",
+      "discount_value": 10,
+      "max_uses": 100,
+      "uses_count": 25,
+      "is_active": true,
+      "valid_from": "2024-01-01T00:00:00Z",
+      "valid_to": "2024-12-31T23:59:59Z"
+    }
+  ],
+  "total": 10
+}
+```
+
+### Apply Coupon
+
+```http
+POST /coupons/apply
+```
+
+Apply a coupon code to user's account.
+
+**Headers:**
+```http
+Authorization: Bearer gw_live_your_api_key_here
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "code": "WELCOME10"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Coupon applied successfully",
+  "discount_amount": 10.0,
+  "credits_added": 10.0,
+  "new_balance": 20.0
+}
+```
+
+### Get Coupon Details
+
+```http
+GET /coupons/{code}
+```
+
+Get details for a specific coupon.
+
+**Headers:**
+```http
+Authorization: Bearer gw_live_your_api_key_here
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "coupon": {
+    "code": "WELCOME10",
+    "discount_type": "percentage",
+    "discount_value": 10,
+    "is_active": true,
+    "valid_from": "2024-01-01T00:00:00Z",
+    "valid_to": "2024-12-31T23:59:59Z",
+    "description": "Welcome discount for new users"
+  }
+}
+```
+
+## Role Management (Admin)
+
+### Get User Role
+
+```http
+GET /roles/{user_id}
+```
+
+Get role information for a specific user.
+
+**Headers:**
+```http
+Authorization: Bearer admin_api_key_here
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "user_id": "user_123",
+  "role": "user",
+  "permissions": ["api:read", "api:write"],
+  "assigned_at": "2024-01-01T00:00:00Z"
+}
+```
+
+### Update User Role
+
+```http
+PUT /roles/{user_id}
+```
+
+Update user's role.
+
+**Headers:**
+```http
+Authorization: Bearer admin_api_key_here
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "role": "admin",
+  "reason": "Promoted to admin"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Role updated successfully",
+  "user_id": "user_123",
+  "old_role": "user",
+  "new_role": "admin",
+  "updated_at": "2024-01-01T00:00:00Z"
+}
+```
+
+### List User Roles
+
+```http
+GET /roles
+```
+
+List all users and their roles.
+
+**Headers:**
+```http
+Authorization: Bearer admin_api_key_here
+```
+
+**Query Parameters:**
+- `role` (optional): Filter by role
+- `limit` (optional): Number of results
+- `offset` (optional): Pagination offset
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "user_id": "user_123",
+      "email": "user@example.com",
+      "role": "admin",
+      "assigned_at": "2024-01-01T00:00:00Z"
+    }
+  ],
+  "total": 50
+}
+```
+
+## Activity Tracking
+
+### Log Activity
+
+```http
+POST /activity/log
+```
+
+Log a user activity event.
+
+**Headers:**
+```http
+Authorization: Bearer gw_live_your_api_key_here
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "event_type": "api_call",
+  "event_data": {
+    "model": "openai/gpt-4",
+    "tokens": 100,
+    "cost": 0.01
+  },
+  "metadata": {
+    "ip_address": "192.168.1.1",
+    "user_agent": "Mozilla/5.0..."
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "activity_id": "activity_123",
+  "timestamp": "2024-01-01T00:00:00Z"
+}
+```
+
+### Get Activity History
+
+```http
+GET /activity/history
+```
+
+Get user's activity history.
+
+**Headers:**
+```http
+Authorization: Bearer gw_live_your_api_key_here
+```
+
+**Query Parameters:**
+- `event_type` (optional): Filter by event type
+- `start_date` (optional): Start date (ISO 8601)
+- `end_date` (optional): End date (ISO 8601)
+- `limit` (optional): Number of results (default: 50)
+- `offset` (optional): Pagination offset (default: 0)
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "activity_123",
+      "event_type": "api_call",
+      "event_data": {
+        "model": "openai/gpt-4",
+        "tokens": 100,
+        "cost": 0.01
+      },
+      "timestamp": "2024-01-01T00:00:00Z"
+    }
+  ],
+  "total": 100,
+  "limit": 50,
+  "offset": 0
+}
+```
+
+### Get Activity Statistics
+
+```http
+GET /activity/stats
+```
+
+Get aggregated activity statistics.
+
+**Headers:**
+```http
+Authorization: Bearer gw_live_your_api_key_here
+```
+
+**Query Parameters:**
+- `start_date` (optional): Start date (ISO 8601)
+- `end_date` (optional): End date (ISO 8601)
+- `group_by` (optional): Group by (day, week, month)
+
+**Response:**
+```json
+{
+  "success": true,
+  "statistics": {
+    "total_requests": 1000,
+    "total_tokens": 50000,
+    "total_cost": 5.0,
+    "average_tokens_per_request": 50,
+    "by_model": {
+      "openai/gpt-4": 500,
+      "openai/gpt-3.5-turbo": 500
+    },
+    "by_day": [
+      {
+        "date": "2024-01-01",
+        "requests": 100,
+        "tokens": 5000,
+        "cost": 0.5
+      }
+    ]
+  }
+}
+```
+
+## Transaction Analytics (Admin)
+
+### Get Transaction Analytics
+
+```http
+GET /admin/transaction-analytics
+```
+
+Get comprehensive transaction analytics.
+
+**Headers:**
+```http
+Authorization: Bearer admin_api_key_here
+```
+
+**Query Parameters:**
+- `start_date` (optional): Start date (ISO 8601)
+- `end_date` (optional): End date (ISO 8601)
+- `user_id` (optional): Filter by user
+- `model` (optional): Filter by model
+- `provider` (optional): Filter by provider
+
+**Response:**
+```json
+{
+  "success": true,
+  "analytics": {
+    "total_transactions": 10000,
+    "total_revenue": 5000.0,
+    "total_credits_used": 50000,
+    "average_transaction_value": 0.5,
+    "by_model": {
+      "openai/gpt-4": {
+        "count": 5000,
+        "revenue": 2500.0,
+        "credits": 25000
+      }
+    },
+    "by_provider": {
+      "openrouter": {
+        "count": 7000,
+        "revenue": 3500.0
+      }
+    },
+    "by_user_tier": {
+      "free": {
+        "count": 3000,
+        "revenue": 0
+      },
+      "pro": {
+        "count": 5000,
+        "revenue": 3000.0
+      }
+    },
+    "time_series": [
+      {
+        "date": "2024-01-01",
+        "transactions": 100,
+        "revenue": 50.0
+      }
+    ]
+  }
+}
+```
+
+## Rate Limit Management (Admin)
+
+### Get Rate Limits
+
+```http
+GET /admin/rate-limits/{user_id}
+```
+
+Get rate limit configuration for a user.
+
+**Headers:**
+```http
+Authorization: Bearer admin_api_key_here
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "user_id": "user_123",
+  "rate_limits": {
+    "requests_per_minute": 100,
+    "requests_per_hour": 5000,
+    "requests_per_day": 100000,
+    "custom_limits": {
+      "chat_completions": 50,
+      "image_generation": 10
+    }
+  },
+  "current_usage": {
+    "requests_this_minute": 10,
+    "requests_this_hour": 500,
+    "requests_this_day": 5000
+  }
+}
+```
+
+### Set Rate Limits
+
+```http
+POST /admin/rate-limits
+```
+
+Set custom rate limits for a user.
+
+**Headers:**
+```http
+Authorization: Bearer admin_api_key_here
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "user_id": "user_123",
+  "requests_per_minute": 100,
+  "requests_per_hour": 5000,
+  "requests_per_day": 100000,
+  "reason": "Premium customer"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Rate limits updated successfully",
+  "user_id": "user_123",
+  "rate_limits": {
+    "requests_per_minute": 100,
+    "requests_per_hour": 5000,
+    "requests_per_day": 100000
+  }
+}
+```
+
+## Audit Logs (Admin)
+
+### Get Audit Logs
+
+```http
+GET /admin/audit-logs
+```
+
+Get system audit logs.
+
+**Headers:**
+```http
+Authorization: Bearer admin_api_key_here
+```
+
+**Query Parameters:**
+- `user_id` (optional): Filter by user
+- `action` (optional): Filter by action type
+- `resource_type` (optional): Filter by resource type
+- `start_date` (optional): Start date
+- `end_date` (optional): End date
+- `limit` (optional): Number of results (default: 100)
+- `offset` (optional): Pagination offset (default: 0)
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "log_123",
+      "user_id": "user_123",
+      "action": "api_key_created",
+      "resource_type": "api_key",
+      "resource_id": "key_456",
+      "details": {
+        "key_name": "Production Key",
+        "scopes": ["api:read", "api:write"]
+      },
+      "ip_address": "192.168.1.1",
+      "user_agent": "Mozilla/5.0...",
+      "timestamp": "2024-01-01T00:00:00Z"
+    }
+  ],
+  "total": 1000,
+  "limit": 100,
+  "offset": 0
+}
+```
+
+---
+
+## Best Practices
+
+### API Key Security
+- Never expose API keys in client-side code
+- Use environment variables for API keys
+- Rotate keys regularly
+- Use the minimum required permissions
+- Monitor key usage for anomalies
+
+### Rate Limiting
+- Implement exponential backoff for rate limit errors
+- Monitor rate limit headers in responses
+- Cache responses when appropriate
+- Use bulk operations when available
+
+### Error Handling
+- Always check response status codes
+- Implement retry logic for transient errors
+- Log errors for debugging
+- Provide meaningful error messages to users
+
+### Performance
+- Use streaming for long responses
+- Implement proper pagination
+- Cache frequently accessed data
+- Use compression for large payloads
+
+---
+
+## Support
+
+For API support:
+- **Documentation**: [Full Documentation](README.md)
+- **Issues**: [GitHub Issues](https://github.com/your-org/api-gateway-vercel/issues)
+- **Email**: support@yourdomain.com
+
+---
+
+**API Version**: 2.0.1  
+**Last Updated**: October 2025
