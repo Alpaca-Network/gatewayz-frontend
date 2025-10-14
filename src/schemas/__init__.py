@@ -126,6 +126,10 @@ from src.schemas.proxy import (
     InputMessage,
     ResponseFormat,
     ResponseFormatType,
+    # Anthropic Messages API
+    ContentBlock,
+    AnthropicMessage,
+    MessagesRequest,
 )
 
 # Coupon models
@@ -211,4 +215,8 @@ __all__ = [
     "InputMessage",
     "ResponseFormat",
     "ResponseFormatType",
+    # Anthropic Messages API
+    "ContentBlock",
+    "AnthropicMessage",
+    "MessagesRequest",
 ]

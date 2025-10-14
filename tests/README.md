@@ -4,8 +4,22 @@ Comprehensive test suite for the Gatewayz API Gateway backend to ensure all endp
 
 ## Test Structure
 
+### ⭐ `test_endpoint_regression.py` (NEW - CRITICAL)
+**Regression tests to prevent breaking changes**. This is the most important test file - it ensures all critical endpoints continue working when new code is added:
+- **Health & Status**: `/health`, `/ping`, root endpoint
+- **Chat Completions**: `/v1/chat/completions` (legacy API)
+- **Unified Responses**: `/v1/responses` (new unified API)
+- **Streaming**: Both streaming endpoints
+- **Authentication**: User balance, profile, monitoring
+- **API Keys**: Create, list, delete keys
+- **Payments**: Stripe checkout, webhooks, payment history
+- **Chat History**: Session management
+- **Admin**: User management, credit operations
+- **Catalog**: Model and provider listings
+- **Ranking**: Model and app rankings
+
 ### `test_endpoints.py`
-Comprehensive endpoint tests covering:
+General endpoint tests covering:
 - **Health Endpoints**: `/health`, `/ping`, root endpoint
 - **Authentication**: `/auth`, `/user/balance`, user profile
 - **Chat Completions**: `/v1/chat/completions` (most critical)
@@ -20,7 +34,32 @@ Comprehensive endpoint tests covering:
 ### `test_app.py`
 Legacy tests for basic functionality (maintained for compatibility)
 
+## Quick Start
+
+```bash
+# Run regression tests (most important)
+pytest tests/test_endpoint_regression.py -v
+
+# Or use the test runner script
+python run_regression_tests.py
+```
+
 ## Running Tests
+
+### Regression Tests (RECOMMENDED)
+```bash
+# All regression tests
+pytest tests/test_endpoint_regression.py -v
+
+# Only critical endpoints (chat, auth, payments)
+python run_regression_tests.py --critical
+
+# Only chat endpoints
+python run_regression_tests.py --chat
+
+# With coverage
+python run_regression_tests.py --coverage
+```
 
 ### Run All Tests
 ```bash
@@ -30,6 +69,7 @@ pytest tests/ -v
 ### Run Specific Test File
 ```bash
 pytest tests/test_endpoints.py -v
+pytest tests/test_endpoint_regression.py -v
 ```
 
 ### Run Specific Test Class

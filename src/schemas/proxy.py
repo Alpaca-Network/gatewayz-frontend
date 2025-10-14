@@ -66,3 +66,54 @@ class ResponseRequest(BaseModel):
 
     class Config:
         extra = "allow"
+
+
+# ============================================================================
+# Anthropic Messages API Schemas
+# ============================================================================
+
+class ContentBlock(BaseModel):
+    """Content block for Anthropic Messages API"""
+    type: str  # "text", "image", etc.
+    text: Optional[str] = None
+    source: Optional[Dict[str, Any]] = None  # For image blocks
+
+    class Config:
+        extra = "allow"
+
+
+class AnthropicMessage(BaseModel):
+    """Message format for Anthropic Messages API"""
+    role: str  # "user" or "assistant"
+    content: Union[str, List[ContentBlock]]  # String or content blocks
+
+
+class MessagesRequest(BaseModel):
+    """
+    Anthropic Messages API request schema (Claude API compatible).
+    Endpoint: POST /v1/messages
+
+    Key differences from OpenAI:
+    - Uses 'messages' array (like OpenAI) but 'system' is separate parameter
+    - 'max_tokens' is REQUIRED (not optional)
+    - Content can be string or array of content blocks
+    - No frequency_penalty or presence_penalty
+    """
+    model: str  # e.g., "claude-sonnet-4-5-20250929"
+    messages: List[AnthropicMessage]
+    max_tokens: int  # REQUIRED for Anthropic API
+    system: Optional[str] = None  # System prompt (separate from messages)
+    temperature: Optional[float] = 1.0
+    top_p: Optional[float] = None
+    top_k: Optional[int] = None  # Anthropic-specific
+    stop_sequences: Optional[List[str]] = None
+    stream: Optional[bool] = False
+    metadata: Optional[Dict[str, Any]] = None
+
+    # Gateway-specific fields (not part of Anthropic API)
+    provider: Optional[str] = "openrouter"
+    portkey_provider: Optional[str] = "openai"
+    portkey_virtual_key: Optional[str] = None
+
+    class Config:
+        extra = "allow"
