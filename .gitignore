@@ -41,3 +41,4 @@ __pycache__
 
 server.log
 nul
+.claude/settings.local.json

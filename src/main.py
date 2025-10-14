@@ -114,6 +114,9 @@ def create_app() -> FastAPI:
             if module_name == "catalog":
                 # Add /catalog prefix to avoid /model/* catching /v1/* routes
                 app.include_router(router, prefix="/catalog")
+                public_router = getattr(module, "public_router", None)
+                if public_router:
+                    app.include_router(public_router)
             else:
                 app.include_router(router)
 

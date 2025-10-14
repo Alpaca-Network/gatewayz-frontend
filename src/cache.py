@@ -36,3 +36,9 @@ _chutes_models_cache = {
     "timestamp": None,
     "ttl": 3600  # 1 hour TTL for Chutes catalog
 }
+
+_groq_models_cache = {
+    "data": None,
+    "timestamp": None,
+    "ttl": 1800  # 30 minute TTL for Groq catalog
+}

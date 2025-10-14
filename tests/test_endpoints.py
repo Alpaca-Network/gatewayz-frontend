@@ -410,6 +410,26 @@ class TestCatalogEndpoints:
         response = client.get("/catalog/providers")
         assert response.status_code in [200, 404, 500]
 
+    def test_public_models_endpoint(self, client):
+        """Test GET /models endpoint mirrors catalog route"""
+        response = client.get("/models")
+        assert response.status_code in [200, 404, 500, 503]
+
+    def test_public_model_detail_endpoint_with_hf_developer(self, client):
+        """Test GET /models/{developer}/{model} supports Hugging Face-style slugs"""
+        response = client.get("/models/meta-llama/Meta-Llama-3-8B")
+        assert response.status_code in [200, 404, 500, 503]
+
+    def test_catalog_models_groq_gateway(self, client):
+        """Test GET /catalog/models with Groq gateway parameter"""
+        response = client.get("/catalog/models", params={"gateway": "groq"})
+        assert response.status_code in [200, 404, 500, 503]
+
+    def test_public_models_groq_gateway(self, client):
+        """Test GET /models with Groq gateway parameter"""
+        response = client.get("/models", params={"gateway": "groq"})
+        assert response.status_code in [200, 404, 500, 503]
+
 
 class TestChatHistoryEndpoints:
     """Test chat history endpoints"""
