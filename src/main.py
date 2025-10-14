@@ -177,7 +177,6 @@ def create_app() -> FastAPI:
             try:
                 from src.db.roles import update_user_role, get_user_role, UserRole
                 from src.supabase_config import get_supabase_client
-                from src.config import Config
 
                 ADMIN_EMAIL = Config.ADMIN_EMAIL
 
