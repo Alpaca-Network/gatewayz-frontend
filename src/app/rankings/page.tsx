@@ -120,9 +120,11 @@ export default function RankingsPage() {
         return acc;
       }, [] as ModelData[]);
 
-    return uniqueModels
-      .sort((a, b) => a.rank - b.rank) // ascending order
-      .slice(0, selectedTopModelsCount);
+    const sortedModels = uniqueModels.sort((a, b) => a.rank - b.rank);
+    const topModels = sortedModels.slice(0, selectedTopModelsCount);
+    const topTenModels = sortedModels.slice(0, 10);
+
+    return { topModels, topTenModels };
   }, [selectedTopModelsCount, selectedTimeRangeForModels, models])
 
   const filteredApps = useMemo(() => {
@@ -148,14 +150,14 @@ export default function RankingsPage() {
              <div className="mb-2">
                <h3 className="text-base font-semibold">Top 10 Models - Tokens Generated</h3>
              </div>
-             <TokenStackedBarChart rankingData={filteredModels} />
+             <TokenStackedBarChart rankingData={filteredModels.topTenModels} />
            </Card>
          </div>
 
          {/* Category Stacked Area Chart */}
          <div className="mb-12">
            <Card className="p-6">
-             <CategoryStackedAreaChart rankingData={filteredModels} />
+             <CategoryStackedAreaChart rankingData={filteredModels.topTenModels} />
            </Card>
          </div>
 
@@ -216,12 +218,12 @@ export default function RankingsPage() {
                   </div>
                 </Card>
               ))
-            ) : filteredModels.length === 0 ? (
+            ) : filteredModels.topModels.length === 0 ? (
               <Card className="p-6">
                 <p className="text-center text-muted-foreground">No models found for the selected time period.</p>
               </Card>
             ) : (
-              filteredModels.map((model, index) => (
+              filteredModels.topModels.map((model, index) => (
                 <Card key={index} className="p-0 overflow-hidden">
                   <div className="ranking-row">
                       {/* Rank - 2 columns on mobile (col-span-2), 2 on desktop */}
