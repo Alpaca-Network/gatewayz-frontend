@@ -10,7 +10,7 @@ from src.db.rate_limits import create_rate_limit_alert, update_rate_limit_usage
 from src.db.users import get_user, deduct_credits, record_usage
 from src.db.chat_history import create_chat_session, save_chat_message, get_chat_session
 from src.db.activity import log_activity, get_provider_from_model
-from src.schemas import ProxyRequest, ResponseRequest, InputMessage
+from src.schemas import ProxyRequest, ResponseRequest, InputMessage, MessagesRequest
 from src.security.deps import get_api_key
 from src.services.openrouter_client import make_openrouter_request_openai, process_openrouter_response, make_openrouter_request_openai_stream
 from src.services.portkey_client import make_portkey_request_openai, process_portkey_response, make_portkey_request_openai_stream

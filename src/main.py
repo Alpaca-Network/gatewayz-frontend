@@ -74,11 +74,12 @@ def create_app() -> FastAPI:
     logger.info("🚀 Loading application routes...")
 
     # Define all routes to load
-    # IMPORTANT: chat must be before catalog to avoid /v1/responses being caught by /model/{provider}/{model}
+    # IMPORTANT: chat & messages must be before catalog to avoid /v1/* being caught by /model/{provider}/{model}
     routes_to_load = [
         ("health", "Health Check"),
         ("ping", "Ping Service"),
         ("chat", "Chat Completions"),  # Moved before catalog
+        ("messages", "Anthropic Messages API"),  # Claude-compatible endpoint
         ("catalog", "Model Catalog"),
         ("root", "Root/Home"),
         ("auth", "Authentication"),
