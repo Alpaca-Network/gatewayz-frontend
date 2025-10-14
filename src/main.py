@@ -177,25 +177,29 @@ def create_app() -> FastAPI:
             try:
                 from src.db.roles import update_user_role, get_user_role, UserRole
                 from src.supabase_config import get_supabase_client
+                from src.config import Config
 
-                ADMIN_EMAIL = "radarmine1@gmail.com"
+                ADMIN_EMAIL = Config.ADMIN_EMAIL
 
-                client = get_supabase_client()
-                result = client.table('users').select('id, role').eq('email', ADMIN_EMAIL).execute()
+                if not ADMIN_EMAIL:
+                    logger.warning("  ⚠️  ADMIN_EMAIL not configured in environment variables")
+                else:
+                    client = get_supabase_client()
+                    result = client.table('users').select('id, role').eq('email', ADMIN_EMAIL).execute()
 
-                if result.data:
-                    user = result.data[0]
-                    current_role = user.get('role', 'user')
+                    if result.data:
+                        user = result.data[0]
+                        current_role = user.get('role', 'user')
 
-                    if current_role != UserRole.ADMIN:
-                        update_user_role(
-                            user_id=user['id'],
-                            new_role=UserRole.ADMIN,
-                            reason="Default admin setup on startup"
-                        )
-                        logger.info(f"  ✅ Set {ADMIN_EMAIL} as admin")
-                    else:
-                        logger.info(f"  ℹ️  {ADMIN_EMAIL} is already admin")
+                        if current_role != UserRole.ADMIN:
+                            update_user_role(
+                                user_id=user['id'],
+                                new_role=UserRole.ADMIN,
+                                reason="Default admin setup on startup"
+                            )
+                            logger.info(f"  ✅ Set {ADMIN_EMAIL} as admin")
+                        else:
+                            logger.info(f"  ℹ️  {ADMIN_EMAIL} is already admin")
 
             except Exception as admin_e:
                 logger.warning(f"  ⚠️  Admin setup warning: {admin_e}")

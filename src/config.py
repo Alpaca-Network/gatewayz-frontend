@@ -35,6 +35,9 @@ class Config:
     # OpenRouter Analytics Cookie (for transaction analytics API)
     OPENROUTER_COOKIE = os.environ.get("OPENROUTER_COOKIE")
     
+    # Admin Configuration
+    ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL")
+    
     @classmethod
     def validate(cls):
         """Validate that all required environment variables are set"""
