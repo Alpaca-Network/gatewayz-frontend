@@ -28,7 +28,7 @@ def mask_key(k: str) -> str:
 async def _to_thread(func, *args, **kwargs):
     return await asyncio.to_thread(func, *args, **kwargs)
 
-async def stream_generator(stream, user, api_key, model, trial, environment_tag, session_id, messages, rate_limit_mgr=None):
+async def stream_generator(stream, user, api_key, model, trial, environment_tag, session_id, messages, rate_limit_mgr=None, provider="openrouter"):
     """Generate SSE stream from OpenAI stream response"""
     accumulated_content = ""
     prompt_tokens = 0
@@ -148,7 +148,8 @@ async def stream_generator(stream, user, api_key, model, trial, environment_tag,
                     "completion_tokens": completion_tokens,
                     "endpoint": "/v1/chat/completions",
                     "stream": True,
-                    "session_id": session_id
+                    "session_id": session_id,
+                    "gateway": provider  # Track which gateway was used
                 }
             )
         except Exception as e:
@@ -329,7 +330,7 @@ async def chat_completions(
 
                 stream_release_handled = True
                 return StreamingResponse(
-                    stream_generator(stream, user, api_key, model, trial, environment_tag, session_id, messages, rate_limit_mgr),
+                    stream_generator(stream, user, api_key, model, trial, environment_tag, session_id, messages, rate_limit_mgr, provider),
                     media_type="text/event-stream"
                 )
             except httpx.TimeoutException as e:
@@ -491,7 +492,8 @@ async def chat_completions(
                     "prompt_tokens": prompt_tokens,
                     "completion_tokens": completion_tokens,
                     "endpoint": "/v1/chat/completions",
-                    "session_id": session_id
+                    "session_id": session_id,
+                    "gateway": provider  # Track which gateway was used
                 }
             )
         except Exception as e:
@@ -916,7 +918,8 @@ async def unified_responses(
                     "prompt_tokens": prompt_tokens,
                     "completion_tokens": completion_tokens,
                     "endpoint": "/v1/responses",
-                    "session_id": session_id
+                    "session_id": session_id,
+                    "gateway": provider  # Track which gateway was used
                 }
             )
         except Exception as e:

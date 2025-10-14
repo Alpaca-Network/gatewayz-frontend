@@ -1,6 +1,6 @@
 import datetime
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 
 from fastapi import APIRouter, Query
 from datetime import datetime, timezone
@@ -11,6 +11,10 @@ from src.services.models import get_cached_models, enhance_model_with_provider_i
     get_model_count_by_provider, enhance_model_with_huggingface_data, fetch_specific_model
 from src.services.providers import get_cached_providers, \
     enhance_providers_with_logos_and_sites
+from src.db.gateway_analytics import (
+    get_provider_stats, get_gateway_stats, get_trending_models,
+    get_all_gateways_summary, get_top_models_by_provider
+)
 
 
 # Initialize logging
@@ -524,3 +528,597 @@ async def get_developer_models(
     except Exception as e:
         logger.error(f"Failed to get models for developer {developer_name}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get developer models: {str(e)}")
+
+
+# ==================== NEW: Gateway & Provider Statistics Endpoints ====================
+
+@router.get("/provider/{provider_name}/stats", tags=["statistics"])
+async def get_provider_statistics(
+    provider_name: str,
+    gateway: Optional[str] = Query(None, description="Filter by specific gateway"),
+    time_range: str = Query("24h", description="Time range: '1h', '24h', '7d', '30d', 'all'")
+):
+    """
+    Get comprehensive statistics for a specific provider
+    
+    This endpoint provides usage statistics for a provider across all or a specific gateway.
+    **This fixes the "Total Tokens: 0" and "Top Model: N/A" issues in your UI!**
+    
+    Args:
+        provider_name: Provider name (e.g., 'openai', 'anthropic', 'meta-llama')
+        gateway: Optional gateway filter
+        time_range: Time range for statistics
+    
+    Returns:
+        Provider statistics including:
+        - Total requests and tokens
+        - Total cost and averages
+        - Top model used
+        - Model breakdown
+        - Speed metrics
+        
+    Example:
+        GET /catalog/provider/openai/stats?time_range=24h
+        GET /catalog/provider/anthropic/stats?gateway=portkey&time_range=7d
+    """
+    try:
+        logger.info(f"Fetching stats for provider: {provider_name}, gateway: {gateway}, time_range: {time_range}")
+        
+        stats = get_provider_stats(
+            provider_name=provider_name,
+            gateway=gateway,
+            time_range=time_range
+        )
+        
+        if "error" in stats:
+            raise HTTPException(status_code=500, detail=stats["error"])
+        
+        return {
+            "success": True,
+            "data": stats,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get provider stats for {provider_name}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get provider statistics: {str(e)}")
+
+
+@router.get("/gateway/{gateway}/stats", tags=["statistics"])
+async def get_gateway_statistics(
+    gateway: str,
+    time_range: str = Query("24h", description="Time range: '1h', '24h', '7d', '30d', 'all'")
+):
+    """
+    Get comprehensive statistics for a specific gateway
+    
+    This endpoint provides usage statistics for a gateway (e.g., openrouter, portkey, deepinfra).
+    **This fixes the "Top Provider: N/A" issue in your UI!**
+    
+    Args:
+        gateway: Gateway name ('openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes')
+        time_range: Time range for statistics
+        
+    Returns:
+        Gateway statistics including:
+        - Total requests, tokens, and cost
+        - Unique users, models, and providers
+        - Top provider used through this gateway
+        - Provider breakdown
+        - Performance metrics
+        
+    Example:
+        GET /catalog/gateway/openrouter/stats?time_range=24h
+        GET /catalog/gateway/deepinfra/stats?time_range=7d
+    """
+    try:
+        logger.info(f"Fetching stats for gateway: {gateway}, time_range: {time_range}")
+        
+        # Validate gateway
+        valid_gateways = ["openrouter", "portkey", "featherless", "deepinfra", "chutes"]
+        if gateway.lower() not in valid_gateways:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid gateway. Must be one of: {', '.join(valid_gateways)}"
+            )
+        
+        stats = get_gateway_stats(
+            gateway=gateway,
+            time_range=time_range
+        )
+        
+        if "error" in stats:
+            raise HTTPException(status_code=500, detail=stats["error"])
+        
+        return {
+            "success": True,
+            "data": stats,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get gateway stats for {gateway}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get gateway statistics: {str(e)}")
+
+
+@router.get("/models/trending", tags=["statistics"])
+async def get_trending_models_endpoint(
+    gateway: Optional[str] = Query("all", description="Gateway filter or 'all'"),
+    time_range: str = Query("24h", description="Time range: '1h', '24h', '7d', '30d'"),
+    limit: int = Query(10, description="Number of models to return", ge=1, le=100),
+    sort_by: str = Query("requests", description="Sort by: 'requests', 'tokens', 'users'")
+):
+    """
+    Get trending models based on usage
+    
+    This endpoint returns the most popular models sorted by usage metrics.
+    **This helps populate "Top Model" in your UI!**
+    
+    Args:
+        gateway: Gateway filter ('all' for all gateways)
+        time_range: Time range for trending calculation
+        limit: Number of models to return
+        sort_by: Sort criteria ('requests', 'tokens', 'users')
+        
+    Returns:
+        List of trending models with statistics
+        
+    Example:
+        GET /catalog/models/trending?time_range=24h&limit=10
+        GET /catalog/models/trending?gateway=deepinfra&sort_by=tokens
+    """
+    try:
+        logger.info(f"Fetching trending models: gateway={gateway}, time_range={time_range}, sort_by={sort_by}")
+        
+        # Validate sort_by
+        valid_sort = ["requests", "tokens", "users"]
+        if sort_by not in valid_sort:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid sort_by. Must be one of: {', '.join(valid_sort)}"
+            )
+        
+        trending = get_trending_models(
+            gateway=gateway,
+            time_range=time_range,
+            limit=limit,
+            sort_by=sort_by
+        )
+        
+        return {
+            "success": True,
+            "data": trending,
+            "count": len(trending),
+            "gateway": gateway,
+            "time_range": time_range,
+            "sort_by": sort_by,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get trending models: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get trending models: {str(e)}")
+
+
+@router.get("/gateways/summary", tags=["statistics"])
+async def get_all_gateways_summary_endpoint(
+    time_range: str = Query("24h", description="Time range: '1h', '24h', '7d', '30d', 'all'")
+):
+    """
+    Get summary statistics for all gateways
+    
+    This endpoint provides a comprehensive overview of usage across all gateways.
+    **Perfect for dashboard overview showing all providers!**
+    
+    Args:
+        time_range: Time range for statistics
+        
+    Returns:
+        Dictionary with statistics for each gateway and overall totals
+        
+    Example:
+        GET /catalog/gateways/summary?time_range=24h
+    """
+    try:
+        logger.info(f"Fetching summary for all gateways: time_range={time_range}")
+        
+        summary = get_all_gateways_summary(time_range=time_range)
+        
+        if "error" in summary:
+            raise HTTPException(status_code=500, detail=summary["error"])
+        
+        return {
+            "success": True,
+            "data": summary,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get gateways summary: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get gateways summary: {str(e)}")
+
+
+@router.get("/provider/{provider_name}/top-models", tags=["statistics"])
+async def get_provider_top_models_endpoint(
+    provider_name: str,
+    limit: int = Query(5, description="Number of models to return", ge=1, le=20),
+    time_range: str = Query("24h", description="Time range: '1h', '24h', '7d', '30d', 'all'")
+):
+    """
+    Get top models for a specific provider
+    
+    This endpoint returns the most used models from a provider.
+    
+    Args:
+        provider_name: Provider name (e.g., 'openai', 'anthropic')
+        limit: Number of models to return
+        time_range: Time range for statistics
+        
+    Returns:
+        List of top models with usage statistics
+        
+    Example:
+        GET /catalog/provider/openai/top-models?limit=5&time_range=7d
+    """
+    try:
+        logger.info(f"Fetching top models for provider: {provider_name}")
+        
+        top_models = get_top_models_by_provider(
+            provider_name=provider_name,
+            limit=limit,
+            time_range=time_range
+        )
+        
+        return {
+            "success": True,
+            "provider": provider_name,
+            "data": top_models,
+            "count": len(top_models),
+            "time_range": time_range,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get top models for {provider_name}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get top models: {str(e)}")
+
+
+# ==================== NEW: Model Comparison Endpoints ====================
+
+@router.get("/model/{provider_name}/{model_name}/compare", tags=["comparison"])
+async def compare_model_across_gateways(
+    provider_name: str,
+    model_name: str,
+    gateways: Optional[str] = Query("all", description="Comma-separated gateways or 'all'")
+):
+    """
+    Compare the same model across different gateways
+    
+    This endpoint fetches the same model from multiple gateways and compares:
+    - Pricing (if available)
+    - Availability
+    - Features/capabilities
+    - Provider information
+    
+    Args:
+        provider_name: Provider name (e.g., 'openai', 'anthropic')
+        model_name: Model name (e.g., 'gpt-4', 'claude-3')
+        gateways: Comma-separated list of gateways or 'all'
+        
+    Returns:
+        Comparison data across gateways with recommendation
+        
+    Example:
+        GET /catalog/model/openai/gpt-4/compare
+        GET /catalog/model/anthropic/claude-3/compare?gateways=openrouter,portkey
+    """
+    try:
+        logger.info(f"Comparing model {provider_name}/{model_name} across gateways")
+        
+        # Parse gateways list
+        if gateways and gateways.lower() != "all":
+            gateway_list = [g.strip().lower() for g in gateways.split(",")]
+        else:
+            gateway_list = ["openrouter", "portkey", "featherless", "deepinfra", "chutes"]
+        
+        model_id = f"{provider_name}/{model_name}"
+        comparisons = []
+        
+        # Fetch model from each gateway
+        for gateway in gateway_list:
+            try:
+                model_data = fetch_specific_model(provider_name, model_name, gateway)
+                
+                if model_data:
+                    # Extract relevant comparison data
+                    pricing = model_data.get("pricing", {})
+                    
+                    comparison = {
+                        "gateway": gateway,
+                        "available": True,
+                        "model_id": model_data.get("id"),
+                        "name": model_data.get("name"),
+                        "pricing": {
+                            "prompt": pricing.get("prompt"),
+                            "completion": pricing.get("completion"),
+                            "prompt_cost_per_1m": pricing.get("prompt"),
+                            "completion_cost_per_1m": pricing.get("completion")
+                        },
+                        "context_length": model_data.get("context_length", 0),
+                        "architecture": model_data.get("architecture", {}),
+                        "provider_site_url": model_data.get("provider_site_url"),
+                        "source_gateway": model_data.get("source_gateway")
+                    }
+                    
+                    comparisons.append(comparison)
+                else:
+                    comparisons.append({
+                        "gateway": gateway,
+                        "available": False,
+                        "model_id": model_id,
+                        "name": f"{provider_name}/{model_name}",
+                        "pricing": None,
+                        "context_length": None,
+                        "architecture": None,
+                        "provider_site_url": None,
+                        "source_gateway": gateway
+                    })
+                    
+            except Exception as e:
+                logger.warning(f"Failed to fetch model from {gateway}: {e}")
+                comparisons.append({
+                    "gateway": gateway,
+                    "available": False,
+                    "error": str(e),
+                    "model_id": model_id
+                })
+        
+        # Calculate recommendation based on pricing
+        recommendation = _calculate_recommendation(comparisons)
+        
+        # Calculate potential savings
+        savings_info = _calculate_savings(comparisons)
+        
+        return {
+            "success": True,
+            "model_id": model_id,
+            "provider": provider_name,
+            "model": model_name,
+            "comparisons": comparisons,
+            "recommendation": recommendation,
+            "savings": savings_info,
+            "available_count": sum(1 for c in comparisons if c.get("available")),
+            "total_gateways_checked": len(comparisons),
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to compare model {provider_name}/{model_name}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to compare model: {str(e)}")
+
+
+@router.post("/models/batch-compare", tags=["comparison"])
+async def batch_compare_models(
+    model_ids: List[str] = Query(..., description="List of model IDs (e.g., ['openai/gpt-4', 'anthropic/claude-3'])"),
+    criteria: str = Query("price", description="Comparison criteria: 'price', 'context', 'availability'")
+):
+    """
+    Compare multiple models at once
+    
+    This endpoint allows comparing multiple models based on specific criteria.
+    
+    Args:
+        model_ids: List of model IDs in format "provider/model"
+        criteria: Comparison criteria
+        
+    Returns:
+        Comparison data for all models
+        
+    Example:
+        POST /catalog/models/batch-compare?model_ids=openai/gpt-4&model_ids=anthropic/claude-3&criteria=price
+    """
+    try:
+        logger.info(f"Batch comparing {len(model_ids)} models by {criteria}")
+        
+        results = []
+        
+        for model_id in model_ids:
+            # Parse model_id
+            if "/" not in model_id:
+                results.append({
+                    "model_id": model_id,
+                    "error": "Invalid model ID format. Expected 'provider/model'"
+                })
+                continue
+            
+            provider_name, model_name = model_id.split("/", 1)
+            
+            try:
+                # Get model from all gateways
+                all_gateways = ["openrouter", "portkey", "featherless"]
+                models_data = []
+                
+                for gateway in all_gateways:
+                    model_data = fetch_specific_model(provider_name, model_name, gateway)
+                    if model_data:
+                        models_data.append({
+                            "gateway": gateway,
+                            "data": model_data
+                        })
+                
+                if models_data:
+                    # Extract comparison data based on criteria
+                    if criteria == "price":
+                        comparison_data = _extract_price_comparison(models_data)
+                    elif criteria == "context":
+                        comparison_data = _extract_context_comparison(models_data)
+                    elif criteria == "availability":
+                        comparison_data = _extract_availability_comparison(models_data, all_gateways)
+                    else:
+                        comparison_data = {"error": f"Unknown criteria: {criteria}"}
+                    
+                    results.append({
+                        "model_id": model_id,
+                        "comparison": comparison_data,
+                        "gateways_available": len(models_data)
+                    })
+                else:
+                    results.append({
+                        "model_id": model_id,
+                        "error": "Model not found in any gateway"
+                    })
+                    
+            except Exception as e:
+                logger.error(f"Error comparing {model_id}: {e}")
+                results.append({
+                    "model_id": model_id,
+                    "error": str(e)
+                })
+        
+        return {
+            "success": True,
+            "criteria": criteria,
+            "models_compared": len(model_ids),
+            "results": results,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed batch comparison: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to batch compare models: {str(e)}")
+
+
+# Helper functions for model comparison
+
+def _calculate_recommendation(comparisons: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Calculate which gateway is recommended based on pricing"""
+    available = [c for c in comparisons if c.get("available")]
+    
+    if not available:
+        return {"gateway": None, "reason": "Model not available in any gateway"}
+    
+    # Filter out comparisons without pricing
+    with_pricing = [
+        c for c in available 
+        if c.get("pricing") and c["pricing"].get("prompt") and c["pricing"].get("completion")
+    ]
+    
+    if not with_pricing:
+        return {
+            "gateway": available[0]["gateway"],
+            "reason": "First available gateway (pricing data not available)"
+        }
+    
+    # Calculate total cost (prompt + completion) for comparison
+    for comp in with_pricing:
+        try:
+            prompt_price = float(comp["pricing"]["prompt"]) if comp["pricing"]["prompt"] else 0
+            completion_price = float(comp["pricing"]["completion"]) if comp["pricing"]["completion"] else 0
+            comp["_total_cost"] = prompt_price + completion_price
+        except (ValueError, TypeError):
+            comp["_total_cost"] = float('inf')
+    
+    # Find cheapest
+    cheapest = min(with_pricing, key=lambda x: x.get("_total_cost", float('inf')))
+    
+    return {
+        "gateway": cheapest["gateway"],
+        "reason": f"Lowest pricing (${cheapest['_total_cost']}/1M tokens combined)",
+        "pricing": cheapest["pricing"]
+    }
+
+
+def _calculate_savings(comparisons: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Calculate potential savings"""
+    available = [c for c in comparisons if c.get("available") and c.get("pricing")]
+    
+    if len(available) < 2:
+        return {
+            "potential_savings": 0.0,
+            "most_expensive_gateway": None,
+            "cheapest_gateway": None
+        }
+    
+    # Calculate total costs
+    costs = []
+    for comp in available:
+        try:
+            pricing = comp["pricing"]
+            if pricing and pricing.get("prompt") and pricing.get("completion"):
+                prompt = float(pricing["prompt"])
+                completion = float(pricing["completion"])
+                total = prompt + completion
+                costs.append({
+                    "gateway": comp["gateway"],
+                    "total_cost": total
+                })
+        except (ValueError, TypeError):
+            continue
+    
+    if len(costs) < 2:
+        return {
+            "potential_savings": 0.0,
+            "most_expensive_gateway": None,
+            "cheapest_gateway": None
+        }
+    
+    cheapest = min(costs, key=lambda x: x["total_cost"])
+    most_expensive = max(costs, key=lambda x: x["total_cost"])
+    
+    savings_amount = most_expensive["total_cost"] - cheapest["total_cost"]
+    savings_percent = (savings_amount / most_expensive["total_cost"]) * 100 if most_expensive["total_cost"] > 0 else 0
+    
+    return {
+        "potential_savings_per_1m_tokens": round(savings_amount, 4),
+        "savings_percentage": round(savings_percent, 2),
+        "cheapest_gateway": cheapest["gateway"],
+        "cheapest_cost": round(cheapest["total_cost"], 4),
+        "most_expensive_gateway": most_expensive["gateway"],
+        "most_expensive_cost": round(most_expensive["total_cost"], 4)
+    }
+
+
+def _extract_price_comparison(models_data: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Extract price comparison data"""
+    prices = {}
+    for item in models_data:
+        gateway = item["gateway"]
+        model = item["data"]
+        pricing = model.get("pricing", {})
+        prices[gateway] = {
+            "prompt": pricing.get("prompt"),
+            "completion": pricing.get("completion")
+        }
+    return prices
+
+
+def _extract_context_comparison(models_data: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Extract context length comparison data"""
+    contexts = {}
+    for item in models_data:
+        gateway = item["gateway"]
+        model = item["data"]
+        contexts[gateway] = model.get("context_length", 0)
+    return contexts
+
+
+def _extract_availability_comparison(models_data: List[Dict[str, Any]], all_gateways: List[str]) -> Dict[str, bool]:
+    """Extract availability comparison data"""
+    availability = {gateway: False for gateway in all_gateways}
+    for item in models_data:
+        availability[item["gateway"]] = True
+    return availability

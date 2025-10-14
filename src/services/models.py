@@ -8,6 +8,7 @@ from src.config import Config
 from src.cache import _huggingface_cache, _models_cache, _portkey_models_cache, _featherless_models_cache, _chutes_models_cache
 from fastapi import APIRouter
 from datetime import datetime, timezone
+from src.services.pricing_lookup import enrich_model_with_pricing
 
 import httpx
 
@@ -282,7 +283,7 @@ def normalize_featherless_model(featherless_model: dict) -> dict:
         "instruct_type": None
     }
 
-    return {
+    normalized = {
         "id": model_id,
         "slug": model_id,
         "canonical_slug": model_id,
@@ -303,6 +304,9 @@ def normalize_featherless_model(featherless_model: dict) -> dict:
         "source_gateway": "featherless",
         "raw_featherless": featherless_model
     }
+    
+    # Enrich with manual pricing if available
+    return enrich_model_with_pricing(normalized, "featherless")
 
 
 def fetch_models_from_chutes():
@@ -407,7 +411,7 @@ def normalize_chutes_model(chutes_model: dict) -> dict:
 
     tags = chutes_model.get("tags", [])
 
-    return {
+    normalized = {
         "id": model_id,
         "slug": model_id,
         "canonical_slug": model_id,
@@ -430,6 +434,9 @@ def normalize_chutes_model(chutes_model: dict) -> dict:
         "tags": tags,
         "raw_chutes": chutes_model
     }
+    
+    # Enrich with manual pricing if available (overrides hourly pricing)
+    return enrich_model_with_pricing(normalized, "chutes")
 
 
 def fetch_specific_model_from_openrouter(provider_name: str, model_name: str):
@@ -573,7 +580,7 @@ def normalize_deepinfra_model(deepinfra_model: dict) -> dict:
         "instruct_type": None
     }
 
-    return {
+    normalized = {
         "id": model_id,
         "slug": model_id,
         "canonical_slug": model_id,
@@ -594,6 +601,9 @@ def normalize_deepinfra_model(deepinfra_model: dict) -> dict:
         "source_gateway": "deepinfra",
         "raw_deepinfra": deepinfra_model
     }
+    
+    # Enrich with manual pricing if available
+    return enrich_model_with_pricing(normalized, "deepinfra")
 
 
 def fetch_specific_model_from_chutes(provider_name: str, model_name: str):
