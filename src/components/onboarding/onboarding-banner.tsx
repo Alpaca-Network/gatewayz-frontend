@@ -24,12 +24,14 @@ export function OnboardingBanner() {
     const completed = localStorage.getItem('gatewayz_onboarding_completed');
     if (completed) {
       setVisible(false);
+      document.documentElement.classList.remove('has-onboarding-banner');
       return;
     }
 
     // Don't show on onboarding page itself or home page
     if (pathname === '/onboarding' || pathname === '/') {
       setVisible(false);
+      document.documentElement.classList.remove('has-onboarding-banner');
       return;
     }
 
@@ -71,11 +73,29 @@ export function OnboardingBanner() {
     setNextTask(incomplete || null);
 
     // Show banner if there are incomplete tasks
-    setVisible(!!incomplete);
+    const shouldShow = !!incomplete;
+    setVisible(shouldShow);
+    
+    // Add/remove class to document element for CSS targeting
+    if (shouldShow) {
+      document.documentElement.classList.add('has-onboarding-banner');
+      document.documentElement.style.setProperty('--sidebar-top', '130px');
+      document.documentElement.style.setProperty('--sidebar-height', 'calc(100vh - 130px)');
+      console.log('Added has-onboarding-banner class and set sidebar position');
+    } else {
+      document.documentElement.classList.remove('has-onboarding-banner');
+      document.documentElement.style.setProperty('--sidebar-top', '65px');
+      document.documentElement.style.setProperty('--sidebar-height', 'calc(100vh - 65px)');
+      console.log('Removed has-onboarding-banner class and reset sidebar position');
+    }
   }, [pathname]);
 
   const handleDismiss = () => {
     setVisible(false);
+    document.documentElement.classList.remove('has-onboarding-banner');
+    document.documentElement.style.setProperty('--sidebar-top', '65px');
+    document.documentElement.style.setProperty('--sidebar-height', 'calc(100vh - 65px)');
+    console.log('Removed has-onboarding-banner class (dismissed) and reset sidebar position');
     // Remember dismissal for this session
     sessionStorage.setItem('onboarding_banner_dismissed', 'true');
   };
