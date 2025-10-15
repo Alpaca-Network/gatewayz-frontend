@@ -1,28 +1,21 @@
 # Portkey Integration Testing Guide
 
-Portkey sits in front of the upstream model providers and now relies on **virtual keys**
-for all traffic. This guide shows how to wire up the required environment variables,
-exercise the Gateway API, and use the official Portkey Node.js SDK for local smoke tests.
+Portkey sits in front of upstream model providers and routes requests using the `@provider/model`
+syntax. This guide shows how to configure Portkey, test the integration, and use it in production.
 
 ## 1. Required Environment Variables
 
-Export the following before running tests, scripts, or the API locally:
+Only the Portkey API key is required. Models are specified using the `@provider/model` format:
 
 ```bash
-export PORTKEY_API_KEY=pk_live_xxx
-export PORTKEY_VIRTUAL_KEY_OPENAI=vk_live_xxx     # or PORTKEY_VIRTUAL_KEY
-# Optional: provider-specific overrides
-# export PORTKEY_VIRTUAL_KEY_ANTHROPIC=vk_live_yyy
-# export PORTKEY_VIRTUAL_KEY_DEEPINFRA=vk_live_zzz
+export PORTKEY_API_KEY=your_portkey_api_key
 ```
 
-- `PORTKEY_API_KEY` identifies your Portkey workspace.
-- `PORTKEY_VIRTUAL_KEY_*` selects which credential from the Portkey vault is used for
-  each provider. If only `PORTKEY_VIRTUAL_KEY` is present it is treated as the default
-  for every provider.
+- `PORTKEY_API_KEY` identifies your Portkey workspace and provides access to all configured providers
 
-The Gateway will return `400` (“Portkey virtual key not provided”) if these values are
-missing or misconfigured.
+**Note:** Virtual keys are managed in the Portkey dashboard and automatically used when you
+reference models with the `@provider/model` syntax. You do NOT need to set virtual key
+environment variables.
 
 ## 2. Install the Portkey Node.js SDK
 
@@ -48,39 +41,19 @@ scope, quotas, or upstream availability without going through the Gateway.
 
 ## 3. Testing via the Gateway API
 
-### OpenAI through Portkey
+### OpenRouter via Portkey
 
 ```bash
 curl -X POST 'https://api.gatewayz.ai/v1/chat/completions' \
   -H 'Authorization: Bearer YOUR_GATEWAYZ_API_KEY' \
   -H 'Content-Type: application/json' \
   -d '{
-    "model": "gpt-3.5-turbo",
+    "model": "@openrouter/openai/gpt-3.5-turbo",
     "provider": "portkey",
-    "portkey_provider": "openai",
-    "portkey_virtual_key": "vk_live_xxx",
     "messages": [
       {"role": "user", "content": "Say hello in 5 words."}
     ],
     "max_tokens": 50
-  }'
-```
-
-### Anthropic (Claude) via Portkey
-
-```bash
-curl -X POST 'https://api.gatewayz.ai/v1/chat/completions' \
-  -H 'Authorization: Bearer YOUR_GATEWAYZ_API_KEY' \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "model": "claude-3-sonnet-20240229",
-    "provider": "portkey",
-    "portkey_provider": "anthropic",
-    "portkey_virtual_key": "vk_live_anthropic",
-    "messages": [
-      {"role": "user", "content": "What is 2 + 2?"}
-    ],
-    "max_tokens": 100
   }'
 ```
 
@@ -91,14 +64,28 @@ curl -X POST 'https://api.gatewayz.ai/v1/chat/completions' \
   -H 'Authorization: Bearer YOUR_GATEWAYZ_API_KEY' \
   -H 'Content-Type: application/json' \
   -d '{
-    "model": "jondurbin/airoboros-l2-70b-gpt4-1.4.1",
+    "model": "@deepinfra/meta-llama/Meta-Llama-3.1-8B-Instruct",
     "provider": "portkey",
-    "portkey_provider": "deepinfra",
-    "portkey_virtual_key": "vk_live_deepinfra",
     "messages": [
       {"role": "user", "content": "Introduce yourself in one sentence."}
     ],
     "max_tokens": 120
+  }'
+```
+
+### X.AI (Grok) via Portkey
+
+```bash
+curl -X POST 'https://api.gatewayz.ai/v1/chat/completions' \
+  -H 'Authorization: Bearer YOUR_GATEWAYZ_API_KEY' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "@xai/grok-beta",
+    "provider": "portkey",
+    "messages": [
+      {"role": "user", "content": "What is 2 + 2?"}
+    ],
+    "max_tokens": 100
   }'
 ```
 
@@ -109,10 +96,8 @@ curl -X POST 'https://api.gatewayz.ai/v1/chat/completions' \
   -H 'Authorization: Bearer YOUR_GATEWAYZ_API_KEY' \
   -H 'Content-Type: application/json' \
   -d '{
-    "model": "gpt-3.5-turbo",
+    "model": "@deepinfra/zai-org/GLM-4.5-Air",
     "provider": "portkey",
-    "portkey_provider": "openai",
-    "portkey_virtual_key": "vk_live_xxx",
     "messages": [
       {"role": "user", "content": "Stream a haiku about debugging."}
     ],
@@ -145,24 +130,40 @@ async function chatViaPortkey(apiKey: string, body: Record<string, unknown>) {
 }
 
 await chatViaPortkey(process.env.GATEWAYZ_API_KEY!, {
-  model: 'gpt-3.5-turbo',
+  model: '@openrouter/openai/gpt-3.5-turbo',
   provider: 'portkey',
-  portkey_provider: 'openai',
-  portkey_virtual_key: process.env.PORTKEY_VIRTUAL_KEY_OPENAI,
   messages: [{ role: 'user', content: 'Hello!' }],
 });
 ```
 
-## 5. Troubleshooting Checklist
+## 5. Supported Provider Slugs
 
-- **400 – Portkey virtual key not provided**: Ensure the appropriate
-  `PORTKEY_VIRTUAL_KEY_*` environment variable is set or sent in the payload.
-- **403 – Not authenticated**: Verify the Gateway API key in the `Authorization` header.
-- **502 – error code: 502**: Usually indicates that Portkey rejected the upstream call.
-  Confirm the virtual key has access to the requested provider/model and that the
-  provider has available quota.
-- **Still stuck?** Use `node examples/portkey-node-client.mjs` with increased log output
-  to isolate whether the failure occurs inside Portkey or at the Gateway layer.
+Portkey supports the following provider slugs (use with `@provider/model` format):
+
+- `openrouter` - OpenRouter aggregated models
+- `deepinfra` - DeepInfra models
+- `xai` - X.AI (Grok) models
+- `cerebras` - Cerebras models
+- `hug` - HuggingFace models
+- `novita` - Novita AI models
+- `nebius` - Nebius AI models
+
+**Example models:**
+- `@openrouter/openai/gpt-3.5-turbo`
+- `@deepinfra/meta-llama/Meta-Llama-3.1-8B-Instruct`
+- `@deepinfra/zai-org/GLM-4.5-Air`
+- `@xai/grok-beta`
+
+## 6. Troubleshooting Checklist
+
+- **400 – Invalid model format**: Ensure you're using the `@provider/model` format
+- **400 – Following keys are not valid**: The provider slug may be incorrect or the
+  virtual key for that provider is not configured in your Portkey dashboard
+- **403 – Not authenticated**: Verify the Gateway API key in the `Authorization` header
+- **502 – Upstream error**: The provider may be experiencing issues or your Portkey
+  account may not have access to the requested model
+- **Still stuck?** Use `node examples/portkey-node-client.mjs` or run
+  `pytest tests/test_portkey.py -v` to test the integration
 
 With these steps you can validate Portkey end-to-end, whether you are scripting directly
-against Portkey, sending traffic through the Gateway, or running regression tests.**
+against Portkey, sending traffic through the Gateway, or running regression tests.
