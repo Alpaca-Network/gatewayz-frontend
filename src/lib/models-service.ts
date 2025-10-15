@@ -23,7 +23,7 @@ function transformModel(model: any, gateway: string) {
 
 export async function getModelsForGateway(gateway: string, limit?: number) {
   // Validate gateway
-  const validGateways = ['openrouter', 'portkey', 'featherless', 'chutes', 'all'];
+  const validGateways = ['openrouter', 'portkey', 'featherless', 'chutes', 'fireworks', 'all'];
   if (!validGateways.includes(gateway)) {
     throw new Error('Invalid gateway');
   }
@@ -61,16 +61,28 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
   }
 
   // Fallback to static data
-  // Distribute models across gateways for testing
-  const modelsPerGateway = Math.ceil(models.length / 3);
   let gatewayModels;
 
-  if (gateway === 'openrouter') {
-    gatewayModels = models.slice(0, modelsPerGateway);
-  } else if (gateway === 'portkey') {
-    gatewayModels = models.slice(modelsPerGateway, modelsPerGateway * 2);
+  if (gateway === 'all') {
+    // Return all models when gateway is 'all'
+    gatewayModels = models;
   } else {
-    gatewayModels = models.slice(modelsPerGateway * 2);
+    // Distribute models across gateways for testing
+    const modelsPerGateway = Math.ceil(models.length / 5);
+    
+    if (gateway === 'openrouter') {
+      gatewayModels = models.slice(0, modelsPerGateway);
+    } else if (gateway === 'portkey') {
+      gatewayModels = models.slice(modelsPerGateway, modelsPerGateway * 2);
+    } else if (gateway === 'featherless') {
+      gatewayModels = models.slice(modelsPerGateway * 2, modelsPerGateway * 3);
+    } else if (gateway === 'chutes') {
+      gatewayModels = models.slice(modelsPerGateway * 3, modelsPerGateway * 4);
+    } else if (gateway === 'fireworks') {
+      gatewayModels = models.slice(modelsPerGateway * 4);
+    } else {
+      gatewayModels = models; // Default to all models
+    }
   }
 
   const transformedModels = gatewayModels.map(m => transformModel(m, gateway));
