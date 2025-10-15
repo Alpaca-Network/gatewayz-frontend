@@ -57,7 +57,8 @@
       "Bash(echo $env:GATEWAYZ_API_KEY)",
       "Bash(git revert:*)",
       "Bash(del nul)",
-      "Bash(del claude-codenul)"
+      "Bash(del claude-codenul)",
+      "Bash(npx:*)"
     ],
     "deny": [],
     "ask": []
