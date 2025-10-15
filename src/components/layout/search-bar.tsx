@@ -58,11 +58,14 @@ export function SearchBar() {
 
                 // Fetch from API in background
                 setLoading(true);
-                const [openrouterRes, portkeyRes, featherlessRes, fireworksRes] = await Promise.allSettled([
+                const [openrouterRes, portkeyRes, featherlessRes, chutesRes, fireworksRes, togetherRes, groqRes] = await Promise.allSettled([
                     fetch(`/api/models?gateway=openrouter`),
                     fetch(`/api/models?gateway=portkey`),
                     fetch(`/api/models?gateway=featherless`),
-                    fetch(`/api/models?gateway=fireworks`)
+                    fetch(`/api/models?gateway=chutes`),
+                    fetch(`/api/models?gateway=fireworks`),
+                    fetch(`/api/models?gateway=together`),
+                    fetch(`/api/models?gateway=groq`)
                 ]);
 
                 const getData = async (result: PromiseSettledResult<Response>) => {
@@ -77,14 +80,17 @@ export function SearchBar() {
                     return [];
                 };
 
-                const [openrouterData, portkeyData, featherlessData, fireworksData] = await Promise.all([
+                const [openrouterData, portkeyData, featherlessData, chutesData, fireworksData, togetherData, groqData] = await Promise.all([
                     getData(openrouterRes),
                     getData(portkeyRes),
                     getData(featherlessRes),
-                    getData(fireworksRes)
+                    getData(chutesRes),
+                    getData(fireworksRes),
+                    getData(togetherRes),
+                    getData(groqRes)
                 ]);
 
-                const combinedModels = [...openrouterData, ...portkeyData, ...featherlessData, ...fireworksData];
+                const combinedModels = [...openrouterData, ...portkeyData, ...featherlessData, ...chutesData, ...fireworksData, ...togetherData, ...groqData];
 
                 // Deduplicate by ID
                 const uniqueModelsMap = new Map();

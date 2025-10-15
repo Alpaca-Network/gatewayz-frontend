@@ -240,11 +240,14 @@ export default function ModelProfilePage() {
                     ]);
                 };
 
-                const [openrouterRes, portkeyRes, featherlessRes, fireworksRes] = await Promise.allSettled([
+                const [openrouterRes, portkeyRes, featherlessRes, chutesRes, fireworksRes, togetherRes, groqRes] = await Promise.allSettled([
                     fetchWithTimeout(`/api/models?gateway=openrouter`),
                     fetchWithTimeout(`/api/models?gateway=portkey`),
                     fetchWithTimeout(`/api/models?gateway=featherless`),
-                    fetchWithTimeout(`/api/models?gateway=fireworks`)
+                    fetchWithTimeout(`/api/models?gateway=chutes`),
+                    fetchWithTimeout(`/api/models?gateway=fireworks`),
+                    fetchWithTimeout(`/api/models?gateway=together`),
+                    fetchWithTimeout(`/api/models?gateway=groq`)
                 ]);
 
                 const getData = async (result: PromiseSettledResult<Response>) => {
@@ -260,11 +263,14 @@ export default function ModelProfilePage() {
                     return [];
                 };
 
-                const [openrouterData, portkeyData, featherlessData, fireworksData] = await Promise.all([
+                const [openrouterData, portkeyData, featherlessData, chutesData, fireworksData, togetherData, groqData] = await Promise.all([
                     getData(openrouterRes),
                     getData(portkeyRes),
                     getData(featherlessRes),
-                    getData(fireworksRes)
+                    getData(chutesRes),
+                    getData(fireworksRes),
+                    getData(togetherRes),
+                    getData(groqRes)
                 ]);
 
                 // Combine models from all gateways
@@ -272,7 +278,10 @@ export default function ModelProfilePage() {
                     ...openrouterData,
                     ...portkeyData,
                     ...featherlessData,
-                    ...fireworksData
+                    ...chutesData,
+                    ...fireworksData,
+                    ...togetherData,
+                    ...groqData
                 ];
 
                 // Deduplicate models by ID - keep the first occurrence
@@ -330,7 +339,10 @@ export default function ModelProfilePage() {
                     if (openrouterData.some((m: Model) => m.id === modelId)) providers.push('openrouter');
                     if (portkeyData.some((m: Model) => m.id === modelId)) providers.push('portkey');
                     if (featherlessData.some((m: Model) => m.id === modelId)) providers.push('featherless');
+                    if (chutesData.some((m: Model) => m.id === modelId)) providers.push('chutes');
                     if (fireworksData.some((m: Model) => m.id === modelId)) providers.push('fireworks');
+                    if (togetherData.some((m: Model) => m.id === modelId)) providers.push('together');
+                    if (groqData.some((m: Model) => m.id === modelId)) providers.push('groq');
                     setModelProviders(providers);
                 }
             } catch (error) {
@@ -669,13 +681,19 @@ console.log(response.choices[0].message.content);`
                                         openrouter: 'OpenRouter',
                                         portkey: 'Portkey',
                                         featherless: 'Featherless',
-                                        fireworks: 'Fireworks'
+                                        chutes: 'Chutes',
+                                        fireworks: 'Fireworks',
+                                        together: 'Together AI',
+                                        groq: 'Groq'
                                     };
                                     const providerLogos: Record<string, string> = {
                                         openrouter: '/openrouter-logo.svg',
                                         portkey: '/portkey-logo.svg',
                                         featherless: '/featherless-logo.svg',
-                                        fireworks: '/fireworks-logo.svg'
+                                        chutes: '/chutes-logo.svg',
+                                        fireworks: '/fireworks-logo.svg',
+                                        together: '/together-logo.svg',
+                                        groq: '/groq-logo.svg'
                                     };
 
                                     return (
