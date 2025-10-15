@@ -31,38 +31,43 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
   }
 
   const limitParam = limit ? `&limit=${limit}` : '';
-  console.log(`Models Service - Attempting backend: ${API_BASE_URL}/catalog/models?gateway=${gateway}${limitParam}`);
+  const url = `${API_BASE_URL}/catalog/models?gateway=${gateway}${limitParam}`;
+  
+  console.log(`[Models Service] Fetching from live API: ${url}`);
 
-  // Try backend first
+  // Try live API first (primary source)
   try {
-    const url = `${API_BASE_URL}/catalog/models?gateway=${gateway}${limitParam}`;
     const response = await fetch(url, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json'
       },
-      signal: AbortSignal.timeout(15000) // 15 second timeout - increased for better reliability
+      cache: 'no-store', // Ensure fresh data from API
+      signal: AbortSignal.timeout(10000) // 10 second timeout - API is now stable
     });
 
     if (response.ok) {
       const data = await response.json();
-      console.log(`Models Service - Backend success: ${data.data?.length || 0} models from ${gateway} gateway`);
-
-      // Validate that we got actual data
+      
+      // Validate response structure and data
       if (data.data && Array.isArray(data.data) && data.data.length > 0) {
+        console.log(`[Models Service] ✓ Live API success: ${data.data.length} models from ${gateway} gateway`);
         return data;
       } else {
-        console.log(`Models Service - Backend returned empty data, using fallback`);
+        console.warn(`[Models Service] ⚠ API returned empty data array, falling back to static data`);
       }
     } else {
-      console.log(`Models Service - Backend returned ${response.status}, using fallback`);
+      console.warn(`[Models Service] ⚠ API returned status ${response.status}: ${response.statusText}, falling back to static data`);
     }
-  } catch (backendError) {
-    console.log(`Models Service - Backend error:`, backendError);
-    console.log(`Models Service - Using static fallback data`);
+  } catch (backendError: any) {
+    const errorMsg = backendError?.name === 'TimeoutError'
+      ? 'API request timed out after 10s'
+      : backendError?.message || 'Unknown error';
+    console.warn(`[Models Service] ⚠ API error: ${errorMsg}, falling back to static data`);
   }
 
-  // Fallback to static data
+  // Fallback to static data (only used if API fails)
+  console.log(`[Models Service] Using static fallback data for gateway: ${gateway}`);
   let transformedModels;
 
   if (gateway === 'all') {
@@ -101,6 +106,8 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
     transformedModels = gatewayModels.map(m => transformModel(m, gateway));
   }
 
+  console.log(`[Models Service] Returning ${transformedModels.length} models from fallback data`);
+  
   return {
     data: transformedModels
   };
