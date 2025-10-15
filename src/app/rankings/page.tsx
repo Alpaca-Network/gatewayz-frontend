@@ -10,6 +10,7 @@ import TokenStackedBarChart from '@/components/TokenStackedBarChart';
 import CategoryStackedAreaChart from '@/components/CategoryStackedAreaChart';
 import { API_BASE_URL } from '@/lib/config';
 import { extractTokenValue } from '@/lib/utils';
+import Link from 'next/link';
 
 export interface ModelData {
   id: number;
@@ -237,7 +238,10 @@ export default function RankingsPage() {
 
                     {/* AI Model - 7 columns on mobile (col-span-7), 6 on desktop */}
                     <div className="col-span-7 lg:col-span-6">
-                      <div className="flex items-center gap-2">
+                      <Link
+                        href={`/models/${model.author.toLowerCase()}/${model.model_name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
+                        className="flex items-center gap-2 hover:underline"
+                      >
                         {model.logo_url ? (
                           <div className='ranking-logo'>
                             <img
@@ -260,7 +264,7 @@ export default function RankingsPage() {
                           </div>
                         )}
                         <span className="font-medium text-xs leading-tight truncate">{model.model_name}</span>
-                      </div>
+                      </Link>
                     </div>
 
                     {/* Model Org - hidden on mobile, 3 columns on desktop */}
