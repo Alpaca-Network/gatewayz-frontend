@@ -1014,6 +1014,11 @@ def fetch_specific_model_from_groq(provider_name: str, model_name: str):
                     return model
 
         logger.warning(f"Model {model_id} not found in Groq catalog")
+        return None
+    except Exception as e:
+        logger.error(f"Failed to fetch specific model {provider_name}/{model_name} from Groq: {e}")
+        return None
+
 
 def fetch_specific_model_from_fireworks(provider_name: str, model_name: str):
     """Fetch specific model data from Fireworks by searching cached models"""
@@ -1036,10 +1041,6 @@ def fetch_specific_model_from_fireworks(provider_name: str, model_name: str):
         return None
     except Exception as e:
         logger.error(f"Failed to fetch specific model {provider_name}/{model_name} from Fireworks: {e}")
-        return None
-        return None
-    except Exception as e:
-        logger.error(f"Failed to fetch specific model {provider_name}/{model_name} from Groq: {e}")
         return None
 
 
