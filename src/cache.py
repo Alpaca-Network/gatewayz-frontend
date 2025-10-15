@@ -48,3 +48,9 @@ _fireworks_models_cache = {
     "timestamp": None,
     "ttl": 1800  # 30 minute TTL for Fireworks catalog
 }
+
+_together_models_cache = {
+    "data": None,
+    "timestamp": None,
+    "ttl": 1800  # 30 minute TTL for Together catalog
+}

@@ -16,6 +16,7 @@ from src.services.openrouter_client import make_openrouter_request_openai, proce
 from src.services.portkey_client import make_portkey_request_openai, process_portkey_response, make_portkey_request_openai_stream
 from src.services.featherless_client import make_featherless_request_openai, process_featherless_response, make_featherless_request_openai_stream
 from src.services.fireworks_client import make_fireworks_request_openai, process_fireworks_response, make_fireworks_request_openai_stream
+from src.services.together_client import make_together_request_openai, process_together_response, make_together_request_openai_stream
 from src.services.rate_limiting import get_rate_limit_manager
 from src.services.trial_validation import validate_trial_access, track_trial_usage
 from src.services.pricing import calculate_cost
@@ -312,12 +313,18 @@ async def chat_completions(
                     provider = "fireworks"
                     logger.info(f"Auto-detected provider 'fireworks' for model {model}")
                 else:
-                    # Check Portkey
-                    portkey_models = get_cached_models("portkey") or []
-                    if any(m.get("id") == model for m in portkey_models):
-                        provider = "portkey"
-                        logger.info(f"Auto-detected provider 'portkey' for model {model}")
-                    # Otherwise default to openrouter (already set)
+                    # Check Together
+                    together_models = get_cached_models("together") or []
+                    if any(m.get("id") == model for m in together_models):
+                        provider = "together"
+                        logger.info(f"Auto-detected provider 'together' for model {model}")
+                    else:
+                        # Check Portkey
+                        portkey_models = get_cached_models("portkey") or []
+                        if any(m.get("id") == model for m in portkey_models):
+                            provider = "portkey"
+                            logger.info(f"Auto-detected provider 'portkey' for model {model}")
+                        # Otherwise default to openrouter (already set)
 
 
         # === 3) Call upstream (streaming or non-streaming) ===
@@ -339,6 +346,8 @@ async def chat_completions(
                     stream = await _to_thread(make_featherless_request_openai_stream, messages, model, **optional)
                 elif provider == "fireworks":
                     stream = await _to_thread(make_fireworks_request_openai_stream, messages, model, **optional)
+                elif provider == "together":
+                    stream = await _to_thread(make_together_request_openai_stream, messages, model, **optional)
                 else:
                     stream = await _to_thread(make_openrouter_request_openai_stream, messages, model, **optional)
 
@@ -406,6 +415,12 @@ async def chat_completions(
                     timeout=30
                 )
                 processed = await _to_thread(process_fireworks_response, resp_raw)
+            elif provider == "together":
+                resp_raw = await asyncio.wait_for(
+                    _to_thread(make_together_request_openai, messages, model, **optional),
+                    timeout=30
+                )
+                processed = await _to_thread(process_together_response, resp_raw)
             else:
                 resp_raw = await asyncio.wait_for(
                     _to_thread(make_openrouter_request_openai, messages, model, **optional),
@@ -727,10 +742,15 @@ async def unified_responses(
                     provider = "fireworks"
                     logger.info(f"Auto-detected provider 'fireworks' for model {model}")
                 else:
-                    portkey_models = get_cached_models("portkey") or []
-                    if any(m.get("id") == model for m in portkey_models):
-                        provider = "portkey"
-                        logger.info(f"Auto-detected provider 'portkey' for model {model}")
+                    together_models = get_cached_models("together") or []
+                    if any(m.get("id") == model for m in together_models):
+                        provider = "together"
+                        logger.info(f"Auto-detected provider 'together' for model {model}")
+                    else:
+                        portkey_models = get_cached_models("portkey") or []
+                        if any(m.get("id") == model for m in portkey_models):
+                            provider = "portkey"
+                            logger.info(f"Auto-detected provider 'portkey' for model {model}")
 
         # === 3) Call upstream (streaming or non-streaming) ===
         if req.stream:
@@ -744,6 +764,8 @@ async def unified_responses(
                     stream = await _to_thread(make_featherless_request_openai_stream, messages, model, **optional)
                 elif provider == "fireworks":
                     stream = await _to_thread(make_fireworks_request_openai_stream, messages, model, **optional)
+                elif provider == "together":
+                    stream = await _to_thread(make_together_request_openai_stream, messages, model, **optional)
                 else:
                     stream = await _to_thread(make_openrouter_request_openai_stream, messages, model, **optional)
 
@@ -851,6 +873,12 @@ async def unified_responses(
                     timeout=30
                 )
                 processed = await _to_thread(process_fireworks_response, resp_raw)
+            elif provider == "together":
+                resp_raw = await asyncio.wait_for(
+                    _to_thread(make_together_request_openai, messages, model, **optional),
+                    timeout=30
+                )
+                processed = await _to_thread(process_together_response, resp_raw)
             else:
                 resp_raw = await asyncio.wait_for(
                     _to_thread(make_openrouter_request_openai, messages, model, **optional),

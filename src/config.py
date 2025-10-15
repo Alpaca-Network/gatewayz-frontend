@@ -41,6 +41,9 @@ class Config:
     # Fireworks.ai Configuration
     FIREWORKS_API_KEY = os.environ.get("FIREWORKS_API_KEY")
 
+    # Together.ai Configuration
+    TOGETHER_API_KEY = os.environ.get("TOGETHER_API_KEY")
+
     # Groq Configuration
     GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
     
