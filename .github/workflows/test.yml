@@ -42,10 +42,10 @@ jobs:
         echo "SUPABASE_URL=${{ secrets.SUPABASE_URL }}" >> $GITHUB_ENV
         echo "SUPABASE_KEY=${{ secrets.SUPABASE_KEY }}" >> $GITHUB_ENV
         echo "OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}" >> $GITHUB_ENV
-        echo "ENCRYPTION_KEY=${{ secrets.ENCRYPTION_KEY || 'test-encryption-key-32-bytes-long!' }}" >> $GITHUB_ENV
-        echo "PORTKEY_API_KEY=${{ secrets.PORTKEY_API_KEY || 'test-portkey-key' }}" >> $GITHUB_ENV
-        echo "RESEND_API_KEY=${{ secrets.RESEND_API_KEY || 'test-resend-key' }}" >> $GITHUB_ENV
-        echo "ADMIN_API_KEY=${{ secrets.ADMIN_API_KEY || 'test-admin-key' }}" >> $GITHUB_ENV
+        echo "ENCRYPTION_KEY=${{ secrets.ENCRYPTION_KEY }}" >> $GITHUB_ENV
+        echo "PORTKEY_API_KEY=${{ secrets.PORTKEY_API_KEY }}" >> $GITHUB_ENV
+        echo "RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}" >> $GITHUB_ENV
+        echo "ADMIN_API_KEY=${{ secrets.ADMIN_API_KEY }}" >> $GITHUB_ENV
 
     - name: Run tests with pytest
       run: |
@@ -87,10 +87,10 @@ jobs:
         echo "SUPABASE_URL=${{ secrets.SUPABASE_URL }}" >> $GITHUB_ENV
         echo "SUPABASE_KEY=${{ secrets.SUPABASE_KEY }}" >> $GITHUB_ENV
         echo "OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}" >> $GITHUB_ENV
-        echo "ENCRYPTION_KEY=${{ secrets.ENCRYPTION_KEY || 'test-encryption-key-32-bytes-long!' }}" >> $GITHUB_ENV
-        echo "PORTKEY_API_KEY=${{ secrets.PORTKEY_API_KEY || 'test-portkey-key' }}" >> $GITHUB_ENV
-        echo "RESEND_API_KEY=${{ secrets.RESEND_API_KEY || 'test-resend-key' }}" >> $GITHUB_ENV
-        echo "ADMIN_API_KEY=${{ secrets.ADMIN_API_KEY || 'test-admin-key' }}" >> $GITHUB_ENV
+        echo "ENCRYPTION_KEY=${{ secrets.ENCRYPTION_KEY }}" >> $GITHUB_ENV
+        echo "PORTKEY_API_KEY=${{ secrets.PORTKEY_API_KEY }}" >> $GITHUB_ENV
+        echo "RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}" >> $GITHUB_ENV
+        echo "ADMIN_API_KEY=${{ secrets.ADMIN_API_KEY }}" >> $GITHUB_ENV
 
     - name: Run critical tests only
       run: |
@@ -102,3 +102,47 @@ jobs:
       if: failure()
       run: |
         echo "::error::Critical tests failed! Check the test output above."
+
+  regression-tests:
+    runs-on: ubuntu-latest
+    name: Endpoint Regression Tests
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-asyncio httpx
+
+    - name: Set test environment variables
+      run: |
+        echo "SUPABASE_URL=${{ secrets.SUPABASE_URL }}" >> $GITHUB_ENV
+        echo "SUPABASE_KEY=${{ secrets.SUPABASE_KEY }}" >> $GITHUB_ENV
+        echo "OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}" >> $GITHUB_ENV
+        echo "ENCRYPTION_KEY=${{ secrets.ENCRYPTION_KEY }}" >> $GITHUB_ENV
+        echo "PORTKEY_API_KEY=${{ secrets.PORTKEY_API_KEY }}" >> $GITHUB_ENV
+        echo "FEATHERLESS_API_KEY=${{ secrets.FEATHERLESS_API_KEY }}" >> $GITHUB_ENV
+        echo "RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}" >> $GITHUB_ENV
+        echo "ADMIN_API_KEY=${{ secrets.ADMIN_API_KEY }}" >> $GITHUB_ENV
+
+    - name: Run endpoint regression tests
+      run: |
+        pytest tests/test_endpoint_regression.py -v --tb=short
+
+    - name: Test critical chat endpoints
+      run: |
+        pytest tests/test_endpoint_regression.py::TestChatCompletionsEndpoints -v --tb=short
+        pytest tests/test_endpoint_regression.py::TestUnifiedResponsesEndpoint -v --tb=short
+
+    - name: Fail if any endpoint missing
+      if: failure()
+      run: |
+        echo "::error::Endpoint regression tests failed! An endpoint may have been removed or broken."
+        exit 1

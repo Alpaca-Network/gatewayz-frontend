@@ -6,9 +6,11 @@ from datetime import datetime, timezone
 from src.enhanced_notification_service import enhanced_notification_service
 from fastapi import APIRouter, HTTPException
 
-from src.schemas import PrivyAuthResponse, PrivyAuthRequest, AuthMethod
+from src.schemas import PrivyAuthResponse, PrivyAuthRequest, AuthMethod, UserRegistrationResponse, \
+    UserRegistrationRequest, SubscriptionStatus
 from src.supabase_config import get_supabase_client
 from src.db.users import get_user_by_privy_id, create_enhanced_user
+from src.db.activity import log_activity
 
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
@@ -135,6 +137,27 @@ async def privy_auth(request: PrivyAuthRequest):
             else:
                 logger.warning(f"No email found for user {existing_user['id']}, skipping welcome email")
 
+            # Log authentication activity
+            try:
+                log_activity(
+                    user_id=existing_user['id'],
+                    model="auth",
+                    provider="Privy",
+                    tokens=0,
+                    cost=0.0,
+                    speed=0.0,
+                    finish_reason="login",
+                    app="Auth",
+                    metadata={
+                        "action": "login",
+                        "auth_method": auth_method.value if hasattr(auth_method, 'value') else str(auth_method),
+                        "privy_user_id": request.user.id,
+                        "is_new_user": False
+                    }
+                )
+            except Exception as e:
+                logger.warning(f"Failed to log auth activity: {e}")
+
             return PrivyAuthResponse(
                 success=True,
                 message="Login successful",
@@ -158,7 +181,7 @@ async def privy_auth(request: PrivyAuthRequest):
                 email=email or f"{request.user.id}@privy.user",
                 auth_method=auth_method,
                 privy_user_id=request.user.id,
-                credits=10  # $10 worth of credits for new users
+                credits=0  # Users start with $0
             )
 
             # Send welcome email if we have an email
@@ -182,6 +205,28 @@ async def privy_auth(request: PrivyAuthRequest):
 
             logger.info(f"New Privy user created: {user_data['user_id']}")
 
+            # Log registration activity
+            try:
+                log_activity(
+                    user_id=user_data['user_id'],
+                    model="auth",
+                    provider="Privy",
+                    tokens=0,
+                    cost=0.0,
+                    speed=0.0,
+                    finish_reason="register",
+                    app="Auth",
+                    metadata={
+                        "action": "register",
+                        "auth_method": auth_method.value if hasattr(auth_method, 'value') else str(auth_method),
+                        "privy_user_id": request.user.id,
+                        "is_new_user": True,
+                        "initial_credits": user_data['credits']
+                    }
+                )
+            except Exception as e:
+                logger.warning(f"Failed to log registration activity: {e}")
+
             return PrivyAuthResponse(
                 success=True,
                 message="Account created successfully",
@@ -199,6 +244,94 @@ async def privy_auth(request: PrivyAuthRequest):
     except Exception as e:
         logger.error(f"Privy authentication failed: {e}")
         raise HTTPException(status_code=500, detail=f"Authentication failed: {str(e)}")
+
+
+@router.post("/auth/register", response_model=UserRegistrationResponse, tags=["authentication"])
+async def register_user(request: UserRegistrationRequest):
+    """Register a new user with username and email"""
+    try:
+        logger.info(f"Registration request for: {request.username} ({request.email})")
+
+        client = get_supabase_client()
+
+        # Check if email already exists
+        existing_email = client.table('users').select('id').eq('email', request.email).execute()
+        if existing_email.data:
+            raise HTTPException(status_code=400, detail="User with this email already exists")
+
+        # Check if username already exists
+        existing_username = client.table('users').select('id').eq('username', request.username).execute()
+        if existing_username.data:
+            raise HTTPException(status_code=400, detail="Username already taken")
+
+        # Validate referral code if provided
+        referral_code_valid = False
+        if request.referral_code:
+            from src.services.referral import validate_referral_code
+            # We can't validate yet since user doesn't exist, so just check if code exists
+            referrer_result = client.table('users').select('id').eq('referral_code', request.referral_code).execute()
+            if referrer_result.data:
+                referral_code_valid = True
+                logger.info(f"Valid referral code provided: {request.referral_code}")
+            else:
+                logger.warning(f"Invalid referral code provided: {request.referral_code}")
+
+        # Create user
+        user_data = create_enhanced_user(
+            username=request.username,
+            email=request.email,
+            auth_method=request.auth_method,
+            privy_user_id=None,  # No Privy for direct registration
+            credits=0  # Users start with $0
+        )
+
+        # Store referral code if valid (bonus will be applied on first purchase)
+        if referral_code_valid and request.referral_code:
+            try:
+                client.table('users').update({
+                    'referred_by_code': request.referral_code
+                }).eq('id', user_data['user_id']).execute()
+                logger.info(f"Stored referral code {request.referral_code} for user {user_data['user_id']}")
+            except Exception as e:
+                logger.error(f"Failed to store referral code: {e}")
+
+        # Send welcome email
+        try:
+            success = enhanced_notification_service.send_welcome_email(
+                user_id=user_data['user_id'],
+                username=user_data['username'],
+                email=request.email,
+                credits=user_data['credits']
+            )
+
+            if success:
+                from src.db.users import mark_welcome_email_sent
+                mark_welcome_email_sent(user_data['user_id'])
+                logger.info(f"Welcome email sent to {request.email}")
+        except Exception as e:
+            logger.warning(f"Failed to send welcome email: {e}")
+
+        logger.info(f"User registered successfully: {user_data['user_id']}")
+
+        return UserRegistrationResponse(
+            user_id=user_data['user_id'],
+            username=user_data['username'],
+            email=request.email,
+            api_key=user_data['primary_api_key'],
+            credits=user_data['credits'],
+            environment_tag=request.environment_tag,
+            scope_permissions=user_data.get('scope_permissions', {}),
+            auth_method=request.auth_method,
+            subscription_status=SubscriptionStatus.TRIAL,
+            message="Account created successfully",
+            timestamp=datetime.now(timezone.utc)
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Registration failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Registration failed: {str(e)}")
 
 
 @router.post("/auth/password-reset", tags=["authentication"])

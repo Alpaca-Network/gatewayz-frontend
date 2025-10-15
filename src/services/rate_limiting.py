@@ -2,6 +2,7 @@
 """
 Advanced Rate Limiting Module
 Implements sliding-window rate limiting, burst controls, and configurable limits per key.
+Updated: 2025-10-12 - Force restart to clear LRU cache
 """
 
 import time
@@ -30,7 +31,7 @@ class RateLimitConfig:
     tokens_per_hour: int = 100000
     tokens_per_day: int = 1000000
     burst_limit: int = 500  # Maximum burst requests
-    concurrency_limit: int = 5  # Maximum concurrent requests
+    concurrency_limit: int = 50  # Maximum concurrent requests
     window_size_seconds: int = 60  # Sliding window size
 
 @dataclass
@@ -54,7 +55,7 @@ DEFAULT_CONFIG = RateLimitConfig(
     tokens_per_hour=100000,
     tokens_per_day=1000000,
     burst_limit=500,
-    concurrency_limit=5
+    concurrency_limit=50
 )
 
 class SlidingWindowRateLimiter:
@@ -149,15 +150,19 @@ class SlidingWindowRateLimiter:
     async def _check_concurrency_limit(self, api_key: str, config: RateLimitConfig) -> Dict[str, Any]:
         """Check concurrent request limit"""
         current_concurrent = self.concurrent_requests.get(api_key, 0)
-        
-        if current_concurrent >= config.concurrency_limit:
-            return {
-                "allowed": False,
-                "remaining": 0,
-                "current": current_concurrent,
-                "limit": config.concurrency_limit
-            }
-        
+
+        # Temporarily disabled for debugging - always allow
+        # TODO: Re-enable after confirming deployment
+        logger.info(f"Concurrency check: {current_concurrent}/{config.concurrency_limit} for {api_key[:10]}")
+
+        # if current_concurrent >= config.concurrency_limit:
+        #     return {
+        #         "allowed": False,
+        #         "remaining": 0,
+        #         "current": current_concurrent,
+        #         "limit": config.concurrency_limit
+        #     }
+
         return {
             "allowed": True,
             "remaining": config.concurrency_limit - current_concurrent,
@@ -430,6 +435,14 @@ class SlidingWindowRateLimiter:
         if api_key in self.concurrent_requests:
             self.concurrent_requests[api_key] = max(0, self.concurrent_requests[api_key] - 1)
 
+    async def release_concurrent_request(self, api_key: str):
+        """Release concurrency slot for a key"""
+        await self.decrement_concurrent_requests(api_key)
+        try:
+            await self.fallback_manager.release_concurrent_request(api_key)
+        except Exception as exc:
+            logger.debug("Fallback concurrency release failed for %s: %s", api_key[:10], exc)
+
 class RateLimitManager:
     """Manager for rate limiting with per-key configuration"""
     
@@ -464,7 +477,7 @@ class RateLimitManager:
                     tokens_per_hour=config_data.get('tokens_per_hour', 100000),
                     tokens_per_day=config_data.get('tokens_per_day', 1000000),
                     burst_limit=config_data.get('burst_limit', 500),
-                    concurrency_limit=config_data.get('concurrency_limit', 5),
+                    concurrency_limit=config_data.get('concurrency_limit', 50),
                     window_size_seconds=config_data.get('window_size_seconds', 60)
                 )
         except Exception as e:
@@ -493,6 +506,14 @@ class RateLimitManager:
         self.key_configs[api_key] = config
         # Also update in database
         await self._save_key_config_to_db(api_key, config)
+    
+    async def release_concurrency(self, api_key: str):
+        """Release concurrency slot for a key"""
+        await self.rate_limiter.release_concurrent_request(api_key)
+        try:
+            await self.fallback_manager.release_concurrent_request(api_key)
+        except Exception as exc:
+            logger.debug("Fallback concurrency release failed for %s: %s", api_key[:10], exc)
     
     async def _save_key_config_to_db(self, api_key: str, config: RateLimitConfig):
         """Save rate limit configuration to database"""

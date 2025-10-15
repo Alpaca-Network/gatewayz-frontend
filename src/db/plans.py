@@ -89,6 +89,7 @@ def get_user_plan(user_id: int) -> Optional[Dict[str, Any]]:
                 'monthly_request_limit': DEFAULT_MONTHLY_REQUEST_LIMIT,
                 'daily_token_limit': DEFAULT_DAILY_TOKEN_LIMIT,
                 'monthly_token_limit': DEFAULT_MONTHLY_TOKEN_LIMIT,
+
                 'price_per_month': 0,
                 'features': [],
                 'start_date': user_plan['start_date'],
@@ -382,6 +383,9 @@ def enforce_plan_limits(user_id: int, tokens_requested: int = 0, environment_tag
         effective_monthly_request_limit = int(usage_data['limits']['monthly_request_limit'] * env_multiplier)
         effective_daily_token_limit = int(usage_data['limits']['daily_token_limit'] * env_multiplier)
         effective_monthly_token_limit = int(usage_data['limits']['monthly_token_limit'] * env_multiplier)
+
+        if environment_tag == 'live' and effective_daily_token_limit < 25_000:
+            effective_daily_token_limit = 25_000
 
         # Check if adding this request would exceed limits
         new_daily_tokens = usage_data['usage']['daily_tokens'] + tokens_requested

@@ -65,6 +65,27 @@ class StripeService:
             if not user:
                 raise ValueError(f"User {user_id} not found")
 
+            # Extract real email if stored email is a Privy DID
+            user_email = user.get('email', '')
+            if user_email.startswith('did:privy:'):
+                logger.warning(f"User {user_id} has Privy DID as email: {user_email}")
+                # Try to get email from Privy linked accounts via Supabase
+                from src.supabase_config import get_supabase_client
+                client = get_supabase_client()
+                user_result = client.table('users').select('privy_user_id').eq('id', user_id).execute()
+                if user_result.data and user_result.data[0].get('privy_user_id'):
+                    privy_user_id = user_result.data[0]['privy_user_id']
+                    logger.info(f"Found privy_user_id for user {user_id}: {privy_user_id}")
+                    # For now, use request.customer_email if available, otherwise generic email
+                    if request.customer_email:
+                        user_email = request.customer_email
+                    else:
+                        # If no customer_email in request, we can't get real email without Privy token
+                        user_email = None
+                        logger.warning(f"No customer_email in request for user {user_id} with Privy DID")
+                else:
+                    user_email = None
+
             # Create payment record
             payment = create_payment(
                 user_id=user_id,
@@ -113,7 +134,7 @@ class StripeService:
                 mode='payment',
                 success_url=success_url,
                 cancel_url=cancel_url,
-                customer_email=request.customer_email or user.get('email'),
+                customer_email=request.customer_email or user_email,
                 client_reference_id=str(user_id),
                 metadata={
                     'user_id': str(user_id),
@@ -318,6 +339,46 @@ class StripeService:
             )
 
             logger.info(f"Checkout completed: Added {amount_dollars} credits to user {user_id}")
+
+            # Check for referral bonus (first purchase of $10+)
+            try:
+                from src.services.referral import apply_referral_bonus, mark_first_purchase
+                from src.supabase_config import get_supabase_client
+
+                client = get_supabase_client()
+                user_result = client.table('users').select('*').eq('id', user_id).execute()
+
+                if user_result.data:
+                    user = user_result.data[0]
+                    has_made_first_purchase = user.get('has_made_first_purchase', False)
+                    referred_by_code = user.get('referred_by_code')
+
+                    # Apply referral bonus if:
+                    # 1. This is first purchase
+                    # 2. User was referred by someone
+                    # 3. Purchase is $10 or more
+                    if not has_made_first_purchase and referred_by_code and amount_dollars >= 10.0:
+                        success, error_msg, bonus_data = apply_referral_bonus(
+                            user_id=user_id,
+                            referral_code=referred_by_code,
+                            purchase_amount=amount_dollars
+                        )
+
+                        if success:
+                            logger.info(
+                                f"Referral bonus applied! User {user_id} and referrer both received "
+                                f"${bonus_data['user_bonus']} (code: {referred_by_code})"
+                            )
+                        else:
+                            logger.warning(f"Failed to apply referral bonus for user {user_id}: {error_msg}")
+
+                    # Mark first purchase regardless of referral
+                    if not has_made_first_purchase:
+                        mark_first_purchase(user_id)
+
+            except Exception as referral_error:
+                # Don't fail the payment if referral bonus fails
+                logger.error(f"Error processing referral bonus: {referral_error}", exc_info=True)
 
         except Exception as e:
             logger.error(f"Error handling checkout completed: {e}")

@@ -334,35 +334,32 @@ def get_user_count() -> int:
 
 
 def record_usage(user_id: int, api_key: str, model: str, tokens_used: int, cost: float = 0.0, latency_ms: int = None) -> None:
+    """
+    Record usage in the usage_records table.
+    Note: latency_ms is accepted for backward compatibility but not stored (column doesn't exist in DB).
+    Use activity_log for detailed metrics including latency and gateway info.
+    """
     try:
         client = get_supabase_client()
-
-        # Generate a unique request ID
-        import uuid
-        request_id = str(uuid.uuid4())
 
         # Ensure timestamp is timezone-aware
         from datetime import timezone
         timestamp = datetime.now(timezone.utc).replace(tzinfo=timezone.utc).isoformat()
 
+        # Only include columns that exist in the schema
         usage_data = {
             'user_id': user_id,
             'api_key': api_key,
             'model': model,
             'tokens_used': tokens_used,
             'cost': cost,
-            'request_id': request_id,
             'timestamp': timestamp
         }
-
-        # Add latency if provided
-        if latency_ms is not None:
-            usage_data['latency_ms'] = latency_ms
 
         result = client.table('usage_records').insert(usage_data).execute()
 
         logger.info(
-            f"Usage recorded successfully: user_id={user_id}, api_key={api_key[:20]}..., model={model}, tokens={tokens_used}, cost={cost}, latency_ms={latency_ms}, request_id={request_id}")
+            f"Usage recorded successfully: user_id={user_id}, api_key={api_key[:20]}..., model={model}, tokens={tokens_used}, cost={cost}")
 
     except Exception as e:
         logger.error(f"Failed to record usage: {e}")
@@ -659,9 +656,13 @@ def update_user_profile(api_key: str, profile_data: Dict[str, Any]) -> Dict[str,
 def get_user_profile(api_key: str) -> Dict[str, Any]:
     """Get user profile information"""
     try:
+        logger.info(f"get_user_profile called for API key: {api_key[:10]}...")
         user = get_user(api_key)
         if not user:
+            logger.warning(f"get_user returned None for API key: {api_key[:10]}...")
             return None
+
+        logger.info(f"Building profile for user {user.get('id')}")
 
         # Return profile data
         profile = {
@@ -673,17 +674,17 @@ def get_user_profile(api_key: str) -> Dict[str, Any]:
             "username": user.get("username"),
             "email": user.get("email"),
             "auth_method": user.get("auth_method"),
-
             "subscription_status": user.get("subscription_status"),
             "trial_expires_at": user.get("trial_expires_at"),
             "is_active": user.get("is_active"),
             "registration_date": user.get("registration_date")
         }
 
+        logger.info(f"Profile built successfully for user {user.get('id')}")
         return profile
 
     except Exception as e:
-        logger.error(f"Failed to get user profile: {e}")
+        logger.error(f"Failed to get user profile: {e}", exc_info=True)
         return None
 
 

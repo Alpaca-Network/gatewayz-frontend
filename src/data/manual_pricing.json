@@ -1,0 +1,88 @@
+{
+  "deepinfra": {
+    "meta-llama/Meta-Llama-3.1-8B-Instruct": {
+      "prompt": "0.055",
+      "completion": "0.055",
+      "request": "0",
+      "image": "0"
+    },
+    "meta-llama/Meta-Llama-3.1-70B-Instruct": {
+      "prompt": "0.35",
+      "completion": "0.40",
+      "request": "0",
+      "image": "0"
+    },
+    "meta-llama/Meta-Llama-3.1-405B-Instruct": {
+      "prompt": "2.70",
+      "completion": "2.70",
+      "request": "0",
+      "image": "0"
+    },
+    "mistralai/Mixtral-8x22B-Instruct-v0.1": {
+      "prompt": "0.65",
+      "completion": "0.65",
+      "request": "0",
+      "image": "0"
+    },
+    "Qwen/Qwen2.5-72B-Instruct": {
+      "prompt": "0.35",
+      "completion": "0.40",
+      "request": "0",
+      "image": "0"
+    }
+  },
+  "featherless": {
+    "meta-llama/Meta-Llama-3.1-8B-Instruct": {
+      "prompt": "0.05",
+      "completion": "0.05",
+      "request": "0",
+      "image": "0"
+    },
+    "meta-llama/Meta-Llama-3.1-70B-Instruct": {
+      "prompt": "0.35",
+      "completion": "0.35",
+      "request": "0",
+      "image": "0"
+    },
+    "mistralai/Mistral-7B-Instruct-v0.3": {
+      "prompt": "0.05",
+      "completion": "0.05",
+      "request": "0",
+      "image": "0"
+    },
+    "google/gemma-2-9b-it": {
+      "prompt": "0.05",
+      "completion": "0.05",
+      "request": "0",
+      "image": "0"
+    }
+  },
+  "chutes": {
+    "stability-ai/sdxl": {
+      "prompt": "0",
+      "completion": "0",
+      "request": "0.02",
+      "image": "0.02",
+      "pricing_model": "per_image"
+    },
+    "runwayml/stable-diffusion-v1-5": {
+      "prompt": "0",
+      "completion": "0",
+      "request": "0.01",
+      "image": "0.01",
+      "pricing_model": "per_image"
+    }
+  },
+  "_metadata": {
+    "last_updated": "2025-01-15",
+    "note": "Manual pricing data for providers that don't expose pricing via API",
+    "sources": [
+      "https://deepinfra.com/pricing",
+      "https://featherless.ai/pricing",
+      "https://chutes.ai/pricing"
+    ],
+    "currency": "USD",
+    "units": "per 1M tokens (unless specified otherwise)"
+  }
+}
+

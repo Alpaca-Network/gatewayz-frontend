@@ -50,9 +50,18 @@ def create_app() -> FastAPI:
     )
 
     # Add CORS middleware
+    # Note: When allow_credentials=True, allow_origins cannot be ["*"]
+    # Must specify exact origins for security
+    allowed_origins = [
+        "https://gatewayz.ai",
+        "https://beta.gatewayz.ai",
+        "http://localhost:3000",
+        "http://localhost:3001",
+    ]
+
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=allowed_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -65,10 +74,14 @@ def create_app() -> FastAPI:
     logger.info("🚀 Loading application routes...")
 
     # Define all routes to load
+    # IMPORTANT: chat & messages must be before catalog to avoid /v1/* being caught by /model/{provider}/{model}
     routes_to_load = [
         ("health", "Health Check"),
         ("ping", "Ping Service"),
+        ("chat", "Chat Completions"),  # Moved before catalog
+        ("messages", "Anthropic Messages API"),  # Claude-compatible endpoint
         ("catalog", "Model Catalog"),
+        ("system", "System & Health"),  # Cache management and health monitoring
         ("root", "Root/Home"),
         ("auth", "Authentication"),
         ("users", "User Management"),
@@ -79,10 +92,14 @@ def create_app() -> FastAPI:
         ("plans", "Subscription Plans"),
         ("rate_limits", "Rate Limiting"),
         ("payments", "Stripe Payments"),
-        ("chat", "Chat Completions"),
         ("chat_history", "Chat History"),
         ("ranking", "Model Ranking"),
         ("activity", "Activity Tracking"),
+        ("coupons", "Coupon Management"),
+        ("referral", "Referral System"),
+        ("roles", "Role Management"),
+        ("transaction_analytics", "Transaction Analytics"),
+
     ]
 
     loaded_count = 0
@@ -94,7 +111,7 @@ def create_app() -> FastAPI:
             module = __import__(f"src.routes.{module_name}", fromlist=['router'])
             router = getattr(module, 'router')
 
-            # Include the router
+            # Include the router (all routes now follow clean REST patterns)
             app.include_router(router)
 
             # Log success
@@ -132,6 +149,8 @@ def create_app() -> FastAPI:
 
     # ==================== Startup Event ====================
 
+    # In the on_startup event, add this after database initialization:
+
     @app.on_event("startup")
     async def on_startup():
         logger.info("\n🔧 Initializing application...")
@@ -151,6 +170,36 @@ def create_app() -> FastAPI:
 
             except Exception as db_e:
                 logger.warning(f"  ⚠️  Database initialization warning: {db_e}")
+
+            # Set default admin user
+            try:
+                from src.db.roles import update_user_role, get_user_role, UserRole
+                from src.supabase_config import get_supabase_client
+
+                ADMIN_EMAIL = Config.ADMIN_EMAIL
+
+                if not ADMIN_EMAIL:
+                    logger.warning("  ⚠️  ADMIN_EMAIL not configured in environment variables")
+                else:
+                    client = get_supabase_client()
+                    result = client.table('users').select('id, role').eq('email', ADMIN_EMAIL).execute()
+
+                    if result.data:
+                        user = result.data[0]
+                        current_role = user.get('role', 'user')
+
+                        if current_role != UserRole.ADMIN:
+                            update_user_role(
+                                user_id=user['id'],
+                                new_role=UserRole.ADMIN,
+                                reason="Default admin setup on startup"
+                            )
+                            logger.info(f"  ✅ Set {ADMIN_EMAIL} as admin")
+                        else:
+                            logger.info(f"  ℹ️  {ADMIN_EMAIL} is already admin")
+
+            except Exception as admin_e:
+                logger.warning(f"  ⚠️  Admin setup warning: {admin_e}")
 
         except Exception as e:
             logger.error(f"  ❌ Startup initialization failed: {e}")

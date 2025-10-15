@@ -1,102 +1,115 @@
 import logging
+from typing import Optional
 
+from fastapi import APIRouter
 from openai import OpenAI
 
 from src.config import Config
 
-from fastapi import APIRouter
 
-# Initialize logging
 logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+PORTKEY_BASE_URL = "https://api.portkey.ai/v1"
 
-def get_portkey_client(provider: str = "openai", virtual_key: str = None):
-    """Get Portkey client with proper configuration
 
-    Args:
-        provider: The AI provider to use (e.g., "openai", "anthropic", "google-ai", etc.)
-        virtual_key: Optional Portkey virtual key ID. If provided, uses Portkey's virtual key vault.
-                    Otherwise, uses provider API key from environment variables.
+def _resolve_portkey_slug(provider: Optional[str], override: Optional[str]) -> Optional[str]:
+    slug = override or Config.get_portkey_virtual_key(provider)
+    if slug:
+        return slug.lstrip("@")
+    if provider:
+        return provider.lstrip("@")
+    return None
 
-    Note: Portkey supports two authentication methods:
-    1. Virtual Keys (recommended): Store provider API keys in Portkey's secure vault and use virtual key ID
-    2. Direct Provider Keys: Provide provider API keys directly via environment variables (PROVIDER_OPENAI_API_KEY, etc.)
-    """
+
+def _format_portkey_model(model: str, slug: Optional[str]) -> str:
+    if not model:
+        raise ValueError("Model name is required for Portkey requests")
+
+    trimmed = model.strip()
+    if not trimmed:
+        raise ValueError("Model name is required for Portkey requests")
+
+    # Already namespaced
+    if trimmed.startswith("@"):
+        return trimmed
+
+    if "/" in trimmed:
+        prefix, _ = trimmed.split("/", 1)
+        if prefix.startswith("@"):
+            return trimmed
+        if slug and prefix == slug:
+            return f"@{trimmed}"
+        # Assume caller supplied provider slug without '@'
+        return f"@{trimmed}"
+
+    if slug:
+        return f"@{slug}/{trimmed}"
+
+    # Fallback: return raw model, Portkey will attempt to resolve default
+    return trimmed
+
+
+def get_portkey_client(provider: Optional[str] = None, virtual_key: Optional[str] = None) -> OpenAI:
+    if not Config.PORTKEY_API_KEY:
+        raise ValueError("Portkey API key not configured")
+
+    headers = {
+        "x-portkey-api-key": Config.PORTKEY_API_KEY,
+    }
+
+    resolved_virtual_key = virtual_key or Config.get_portkey_virtual_key(provider)
+    if resolved_virtual_key:
+        headers["x-portkey-virtual-key"] = resolved_virtual_key
+
+    if provider:
+        headers["x-portkey-provider"] = provider
+
+    return OpenAI(
+        base_url=PORTKEY_BASE_URL,
+        api_key=Config.PORTKEY_API_KEY,
+        default_headers=headers,
+    )
+
+
+def make_portkey_request_openai(messages, model, provider: Optional[str] = None, virtual_key: Optional[str] = None, **kwargs):
     try:
-        if not Config.PORTKEY_API_KEY:
-            raise ValueError("Portkey API key not configured")
+        resolved_slug = _resolve_portkey_slug(provider, virtual_key)
+        formatted_model = _format_portkey_model(model, resolved_slug)
 
-        # Method 1: Using Portkey Virtual Keys (recommended)
-        if virtual_key:
-            return OpenAI(
-                base_url="https://api.portkey.ai/v1",
-                api_key="portkey",  # Dummy key when using virtual keys
-                default_headers={
-                    "x-portkey-api-key": Config.PORTKEY_API_KEY,
-                    "x-portkey-virtual-key": virtual_key
-                }
-            )
-
-        # Method 2: Using direct provider API keys
-        else:
-            # Get the provider-specific API key from environment
-            provider_api_key = None
-            if provider == "openai":
-                provider_api_key = Config.PROVIDER_OPENAI_API_KEY
-            elif provider == "anthropic":
-                provider_api_key = Config.PROVIDER_ANTHROPIC_API_KEY
-            elif provider == "deepinfra":
-                provider_api_key = Config.DEEPINFRA_API_KEY
-            # Add more providers as needed
-
-            if not provider_api_key:
-                raise ValueError(
-                    f"Provider API key not configured for {provider}. "
-                    f"Either set PROVIDER_{provider.upper()}_API_KEY environment variable "
-                    f"or use Portkey virtual keys by providing a virtual_key parameter."
-                )
-
-            return OpenAI(
-                base_url="https://api.portkey.ai/v1",
-                api_key=provider_api_key,  # The provider's actual API key
-                default_headers={
-                    "x-portkey-api-key": Config.PORTKEY_API_KEY,
-                    "x-portkey-provider": provider
-                }
-            )
-    except Exception as e:
-        logger.error(f"Failed to initialize Portkey client: {e}")
+        client = get_portkey_client(provider, virtual_key)
+        response = client.chat.completions.create(
+            model=formatted_model,
+            messages=messages,
+            **kwargs,
+        )
+        return response
+    except Exception as exc:
+        logger.error(f"Portkey request failed: {exc}")
         raise
 
 
-def make_portkey_request_openai(messages, model, provider: str = "openai", virtual_key: str = None, **kwargs):
-    """Make request to Portkey using OpenAI client
-
-    Args:
-        messages: List of message objects
-        model: Model name to use
-        provider: AI provider (e.g., "openai", "anthropic", "google-ai")
-        virtual_key: Optional Portkey virtual key ID for secure key vault usage
-        **kwargs: Additional parameters like max_tokens, temperature, etc.
-    """
+def make_portkey_request_openai_stream(messages, model, provider: Optional[str] = None, virtual_key: Optional[str] = None, **kwargs):
     try:
+        resolved_slug = _resolve_portkey_slug(provider, virtual_key)
+        formatted_model = _format_portkey_model(model, resolved_slug)
+
         client = get_portkey_client(provider, virtual_key)
-        response = client.chat.completions.create(
-            model=model,
+        stream = client.chat.completions.create(
+            model=formatted_model,
             messages=messages,
-            **kwargs
+            stream=True,
+            **kwargs,
         )
-        return response
-    except Exception as e:
-        logger.error(f"Portkey request failed: {e}")
+        return stream
+    except Exception as exc:
+        logger.error(f"Portkey streaming request failed: {exc}")
         raise
 
 
 def process_portkey_response(response):
-    """Process Portkey response to extract relevant data"""
     try:
         return {
             "id": response.id,
@@ -108,42 +121,20 @@ def process_portkey_response(response):
                     "index": choice.index,
                     "message": {
                         "role": choice.message.role,
-                        "content": choice.message.content
+                        "content": choice.message.content,
                     },
-                    "finish_reason": choice.finish_reason
+                    "finish_reason": choice.finish_reason,
                 }
                 for choice in response.choices
             ],
             "usage": {
                 "prompt_tokens": response.usage.prompt_tokens,
                 "completion_tokens": response.usage.completion_tokens,
-                "total_tokens": response.usage.total_tokens
-            } if response.usage else {}
+                "total_tokens": response.usage.total_tokens,
+            }
+            if response.usage
+            else {},
         }
-    except Exception as e:
-        logger.error(f"Failed to process Portkey response: {e}")
-        raise
-
-
-def make_portkey_request_openai_stream(messages, model, provider: str = "openai", virtual_key: str = None, **kwargs):
-    """Make streaming request to Portkey using OpenAI client
-
-    Args:
-        messages: List of message objects
-        model: Model name to use
-        provider: AI provider (e.g., "openai", "anthropic", "google-ai")
-        virtual_key: Optional Portkey virtual key ID for secure key vault usage
-        **kwargs: Additional parameters like max_tokens, temperature, etc.
-    """
-    try:
-        client = get_portkey_client(provider, virtual_key)
-        stream = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            stream=True,
-            **kwargs
-        )
-        return stream
-    except Exception as e:
-        logger.error(f"Portkey streaming request failed: {e}")
+    except Exception as exc:
+        logger.error(f"Failed to process Portkey response: {exc}")
         raise

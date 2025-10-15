@@ -9,7 +9,7 @@ from src.db.api_keys import get_api_key_by_id
 from src.db.rate_limits import get_user_rate_limit_configs, get_rate_limit_usage_stats, update_rate_limit_config, \
     bulk_update_rate_limit_configs, get_rate_limit_config, get_system_rate_limit_stats, get_rate_limit_alerts
 from src.db.users import get_user
-from src.security.deps import get_api_key
+from src.security.deps import get_api_key, require_admin
 from fastapi import APIRouter
 
 # Initialize logging
@@ -209,7 +209,7 @@ async def get_api_key_rate_limit_usage(
 
 
 @router.get("/admin/rate-limits/system", tags=["admin"])
-async def get_system_rate_limits():
+async def get_system_rate_limits(admin_user: dict = Depends(require_admin)):
     """Get system-wide rate limiting statistics"""
     try:
         stats = get_system_rate_limit_stats()
@@ -230,6 +230,7 @@ async def get_rate_limit_alerts_endpoint(
         api_key: Optional[str] = None,
         resolved: bool = False,
         limit: int = 100,
+        admin_user: dict = Depends(require_admin)
 ):
     """Get rate limit alerts for monitoring"""
     try:

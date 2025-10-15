@@ -5,9 +5,19 @@ import os
 from pathlib import Path
 
 from src.config import Config
-from src.cache import _huggingface_cache, _models_cache, _portkey_models_cache, _featherless_models_cache, _chutes_models_cache
+from src.cache import (
+    _huggingface_cache,
+    _models_cache,
+    _portkey_models_cache,
+    _featherless_models_cache,
+    _chutes_models_cache,
+    _groq_models_cache,
+    _fireworks_models_cache,
+    _together_models_cache,
+)
 from fastapi import APIRouter
 from datetime import datetime, timezone
+from src.services.pricing_lookup import enrich_model_with_pricing
 
 import httpx
 
@@ -47,12 +57,39 @@ def get_cached_models(gateway: str = "openrouter"):
                     return cache["data"]
             return fetch_models_from_chutes()
 
+        if gateway == "groq":
+            cache = _groq_models_cache
+            if cache["data"] and cache["timestamp"]:
+                cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
+                if cache_age < cache["ttl"]:
+                    return cache["data"]
+            return fetch_models_from_groq()
+
+        if gateway == "fireworks":
+            cache = _fireworks_models_cache
+            if cache["data"] and cache["timestamp"]:
+                cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
+                if cache_age < cache["ttl"]:
+                    return cache["data"]
+            return fetch_models_from_fireworks()
+
+        if gateway == "together":
+            cache = _together_models_cache
+            if cache["data"] and cache["timestamp"]:
+                cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
+                if cache_age < cache["ttl"]:
+                    return cache["data"]
+            return fetch_models_from_together()
+
         if gateway == "all":
             openrouter_models = get_cached_models("openrouter") or []
             portkey_models = get_cached_models("portkey") or []
             featherless_models = get_cached_models("featherless") or []
             chutes_models = get_cached_models("chutes") or []
-            return openrouter_models + portkey_models + featherless_models + chutes_models
+            groq_models = get_cached_models("groq") or []
+            fireworks_models = get_cached_models("fireworks") or []
+            together_models = get_cached_models("together") or []
+            return openrouter_models + portkey_models + featherless_models + chutes_models + groq_models + fireworks_models + together_models
 
         # Default to OpenRouter
         if _models_cache["data"] and _models_cache["timestamp"]:
@@ -282,7 +319,7 @@ def normalize_featherless_model(featherless_model: dict) -> dict:
         "instruct_type": None
     }
 
-    return {
+    normalized = {
         "id": model_id,
         "slug": model_id,
         "canonical_slug": model_id,
@@ -303,6 +340,9 @@ def normalize_featherless_model(featherless_model: dict) -> dict:
         "source_gateway": "featherless",
         "raw_featherless": featherless_model
     }
+    
+    # Enrich with manual pricing if available
+    return enrich_model_with_pricing(normalized, "featherless")
 
 
 def fetch_models_from_chutes():
@@ -351,6 +391,42 @@ def fetch_models_from_chutes_api():
 
     except Exception as e:
         logger.error(f"Failed to fetch models from Chutes API: {e}")
+        return None
+
+
+def fetch_models_from_groq():
+    """Fetch models from Groq API and normalize to the catalog schema"""
+    try:
+        if not Config.GROQ_API_KEY:
+            logger.error("Groq API key not configured")
+            return None
+
+        headers = {
+            "Authorization": f"Bearer {Config.GROQ_API_KEY}",
+            "Content-Type": "application/json",
+        }
+
+        response = httpx.get(
+            "https://api.groq.com/openai/v1/models",
+            headers=headers,
+            timeout=20.0,
+        )
+        response.raise_for_status()
+
+        payload = response.json()
+        raw_models = payload.get("data", [])
+        normalized_models = [normalize_groq_model(model) for model in raw_models if model]
+
+        _groq_models_cache["data"] = normalized_models
+        _groq_models_cache["timestamp"] = datetime.now(timezone.utc)
+
+        logger.info(f"Fetched {len(normalized_models)} Groq models")
+        return _groq_models_cache["data"]
+    except httpx.HTTPStatusError as e:
+        logger.error(f"Groq HTTP error: {e.response.status_code} - {e.response.text}")
+        return None
+    except Exception as e:
+        logger.error(f"Failed to fetch models from Groq: {e}")
         return None
 
 
@@ -407,7 +483,7 @@ def normalize_chutes_model(chutes_model: dict) -> dict:
 
     tags = chutes_model.get("tags", [])
 
-    return {
+    normalized = {
         "id": model_id,
         "slug": model_id,
         "canonical_slug": model_id,
@@ -430,6 +506,173 @@ def normalize_chutes_model(chutes_model: dict) -> dict:
         "tags": tags,
         "raw_chutes": chutes_model
     }
+    
+    # Enrich with manual pricing if available (overrides hourly pricing)
+    return enrich_model_with_pricing(normalized, "chutes")
+
+
+def normalize_groq_model(groq_model: dict) -> dict:
+    """Normalize Groq catalog entries to resemble OpenRouter model shape"""
+    model_id = groq_model.get("id")
+    if not model_id:
+        return {"source_gateway": "groq", "raw_groq": groq_model or {}}
+
+    slug = f"groq/{model_id}"
+    provider_slug = "groq"
+
+    display_name = groq_model.get("display_name") or model_id.replace("-", " ").replace("_", " ").title()
+    owned_by = groq_model.get("owned_by")
+    base_description = groq_model.get("description") or f"Groq hosted model {model_id}."
+    if owned_by and owned_by.lower() not in base_description.lower():
+        description = f"{base_description} Owned by {owned_by}."
+    else:
+        description = base_description
+
+    metadata = groq_model.get("metadata") or {}
+    hugging_face_id = metadata.get("huggingface_repo")
+
+    context_length = metadata.get("context_length") or groq_model.get("context_length") or 0
+
+    pricing = {
+        "prompt": None,
+        "completion": None,
+        "request": None,
+        "image": None,
+        "web_search": None,
+        "internal_reasoning": None,
+    }
+
+    architecture = {
+        "modality": metadata.get("modality", "text->text"),
+        "input_modalities": metadata.get("input_modalities") or ["text"],
+        "output_modalities": metadata.get("output_modalities") or ["text"],
+        "tokenizer": metadata.get("tokenizer"),
+        "instruct_type": metadata.get("instruct_type"),
+    }
+
+    normalized = {
+        "id": slug,
+        "slug": slug,
+        "canonical_slug": slug,
+        "hugging_face_id": hugging_face_id,
+        "name": display_name,
+        "created": groq_model.get("created"),
+        "description": description,
+        "context_length": context_length,
+        "architecture": architecture,
+        "pricing": pricing,
+        "top_provider": None,
+        "per_request_limits": None,
+        "supported_parameters": metadata.get("supported_parameters", []),
+        "default_parameters": metadata.get("default_parameters", {}),
+        "provider_slug": provider_slug,
+        "provider_site_url": "https://groq.com",
+        "model_logo_url": metadata.get("model_logo_url"),
+        "source_gateway": "groq",
+        "raw_groq": groq_model,
+    }
+
+    return enrich_model_with_pricing(normalized, "groq")
+
+
+def fetch_models_from_fireworks():
+    """Fetch models from Fireworks API and normalize to the catalog schema"""
+    try:
+        if not Config.FIREWORKS_API_KEY:
+            logger.error("Fireworks API key not configured")
+            return None
+
+        headers = {
+            "Authorization": f"Bearer {Config.FIREWORKS_API_KEY}",
+            "Content-Type": "application/json",
+        }
+
+        response = httpx.get(
+            "https://api.fireworks.ai/inference/v1/models",
+            headers=headers,
+            timeout=20.0,
+        )
+        response.raise_for_status()
+
+        payload = response.json()
+        raw_models = payload.get("data", [])
+        normalized_models = [normalize_fireworks_model(model) for model in raw_models if model]
+
+        _fireworks_models_cache["data"] = normalized_models
+        _fireworks_models_cache["timestamp"] = datetime.now(timezone.utc)
+
+        logger.info(f"Fetched {len(normalized_models)} Fireworks models")
+        return _fireworks_models_cache["data"]
+    except httpx.HTTPStatusError as e:
+        logger.error(f"Fireworks HTTP error: {e.response.status_code} - {e.response.text}")
+        return None
+    except Exception as e:
+        logger.error(f"Failed to fetch models from Fireworks: {e}")
+        return None
+
+
+def normalize_fireworks_model(fireworks_model: dict) -> dict:
+    """Normalize Fireworks catalog entries to resemble OpenRouter model shape"""
+    model_id = fireworks_model.get("id")
+    if not model_id:
+        return {"source_gateway": "fireworks", "raw_fireworks": fireworks_model or {}}
+
+    # Fireworks uses format like "accounts/fireworks/models/deepseek-v3p1"
+    # We'll keep the full ID as-is
+    slug = model_id
+    provider_slug = "fireworks"
+
+    display_name = fireworks_model.get("display_name") or model_id.split("/")[-1].replace("-", " ").replace("_", " ").title()
+    owned_by = fireworks_model.get("owned_by")
+    base_description = fireworks_model.get("description") or f"Fireworks hosted model {model_id}."
+    if owned_by and owned_by.lower() not in base_description.lower():
+        description = f"{base_description} Owned by {owned_by}."
+    else:
+        description = base_description
+
+    metadata = fireworks_model.get("metadata") or {}
+    context_length = metadata.get("context_length") or fireworks_model.get("context_length") or 0
+
+    pricing = {
+        "prompt": None,
+        "completion": None,
+        "request": None,
+        "image": None,
+        "web_search": None,
+        "internal_reasoning": None,
+    }
+
+    architecture = {
+        "modality": metadata.get("modality", "text->text"),
+        "input_modalities": metadata.get("input_modalities") or ["text"],
+        "output_modalities": metadata.get("output_modalities") or ["text"],
+        "tokenizer": metadata.get("tokenizer"),
+        "instruct_type": metadata.get("instruct_type"),
+    }
+
+    normalized = {
+        "id": slug,
+        "slug": slug,
+        "canonical_slug": slug,
+        "hugging_face_id": None,
+        "name": display_name,
+        "created": fireworks_model.get("created"),
+        "description": description,
+        "context_length": context_length,
+        "architecture": architecture,
+        "pricing": pricing,
+        "top_provider": None,
+        "per_request_limits": None,
+        "supported_parameters": metadata.get("supported_parameters", []),
+        "default_parameters": metadata.get("default_parameters", {}),
+        "provider_slug": provider_slug,
+        "provider_site_url": "https://fireworks.ai",
+        "model_logo_url": None,
+        "source_gateway": "fireworks",
+        "raw_fireworks": fireworks_model,
+    }
+
+    return enrich_model_with_pricing(normalized, "fireworks")
 
 
 def fetch_specific_model_from_openrouter(provider_name: str, model_name: str):
@@ -453,6 +696,418 @@ def fetch_specific_model_from_openrouter(provider_name: str, model_name: str):
         return model_data.get("data")
     except Exception as e:
         logger.error(f"Failed to fetch specific model {provider_name}/{model_name} from OpenRouter: {e}")
+        return None
+
+
+
+def fetch_models_from_together():
+    """Fetch models from Together.ai API and normalize to the catalog schema"""
+    try:
+        if not Config.TOGETHER_API_KEY:
+            logger.error("Together API key not configured")
+            return None
+
+        headers = {
+            "Authorization": f"Bearer {Config.TOGETHER_API_KEY}",
+            "Content-Type": "application/json",
+        }
+
+        response = httpx.get(
+            "https://api.together.xyz/v1/models",
+            headers=headers,
+            timeout=20.0,
+        )
+        response.raise_for_status()
+
+        payload = response.json()
+        # Together API returns a list directly, not wrapped in {"data": [...]}
+        raw_models = payload if isinstance(payload, list) else payload.get("data", [])
+        normalized_models = [normalize_together_model(model) for model in raw_models if model]
+
+        _together_models_cache["data"] = normalized_models
+        _together_models_cache["timestamp"] = datetime.now(timezone.utc)
+
+        logger.info(f"Fetched {len(normalized_models)} Together models")
+        return _together_models_cache["data"]
+    except httpx.HTTPStatusError as e:
+        logger.error(f"Together HTTP error: {e.response.status_code} - {e.response.text}")
+        return None
+    except Exception as e:
+        logger.error(f"Failed to fetch models from Together: {e}")
+        return None
+
+
+def normalize_together_model(together_model: dict) -> dict:
+    """Normalize Together catalog entries to resemble OpenRouter model shape"""
+    model_id = together_model.get("id")
+    if not model_id:
+        return {"source_gateway": "together", "raw_together": together_model or {}}
+
+    slug = model_id
+    provider_slug = "together"
+
+    display_name = together_model.get("display_name") or model_id.replace("/", " / ").replace("-", " ").replace("_", " ").title()
+    owned_by = together_model.get("owned_by") or together_model.get("organization")
+    base_description = together_model.get("description") or f"Together hosted model {model_id}."
+    if owned_by and owned_by.lower() not in base_description.lower():
+        description = f"{base_description} Owned by {owned_by}."
+    else:
+        description = base_description
+
+    context_length = together_model.get("context_length", 0)
+
+    pricing = {
+        "prompt": None,
+        "completion": None,
+        "request": None,
+        "image": None,
+        "web_search": None,
+        "internal_reasoning": None,
+    }
+
+    # Extract pricing if available
+    pricing_info = together_model.get("pricing", {})
+    if pricing_info:
+        pricing["prompt"] = pricing_info.get("input")
+        pricing["completion"] = pricing_info.get("output")
+
+    architecture = {
+        "modality": "text->text",
+        "input_modalities": ["text"],
+        "output_modalities": ["text"],
+        "tokenizer": together_model.get("config", {}).get("tokenizer"),
+        "instruct_type": None,
+    }
+
+    normalized = {
+        "id": slug,
+        "slug": slug,
+        "canonical_slug": slug,
+        "hugging_face_id": None,
+        "name": display_name,
+        "created": together_model.get("created"),
+        "description": description,
+        "context_length": context_length,
+        "architecture": architecture,
+        "pricing": pricing,
+        "top_provider": None,
+        "per_request_limits": None,
+        "supported_parameters": [],
+        "default_parameters": {},
+        "provider_slug": provider_slug,
+        "provider_site_url": "https://together.ai",
+        "model_logo_url": None,
+        "source_gateway": "together",
+        "raw_together": together_model,
+    }
+
+    return enrich_model_with_pricing(normalized, "together")
+
+
+def fetch_specific_model_from_together(provider_name: str, model_name: str):
+    """Fetch specific model data from Together by searching cached models"""
+    try:
+        model_id = f"{provider_name}/{model_name}"
+
+        together_models = get_cached_models("together")
+        if together_models:
+            for model in together_models:
+                if model.get("id", "").lower() == model_id.lower():
+                    return model
+
+        fresh_models = fetch_models_from_together()
+        if fresh_models:
+            for model in fresh_models:
+                if model.get("id", "").lower() == model_id.lower():
+                    return model
+
+        logger.warning(f"Model {model_id} not found in Together catalog")
+        return None
+    except Exception as e:
+        logger.error(f"Failed to fetch specific model {provider_name}/{model_name} from Together: {e}")
+        return None
+def fetch_specific_model_from_portkey(provider_name: str, model_name: str):
+    """Fetch specific model data from Portkey by searching cached models"""
+    try:
+        # Construct the model ID
+        model_id = f"{provider_name}/{model_name}"
+        
+        # First check cache
+        portkey_models = get_cached_models("portkey")
+        if portkey_models:
+            for model in portkey_models:
+                if model.get("id", "").lower() == model_id.lower():
+                    return model
+        
+        # If not in cache, try to fetch fresh data
+        fresh_models = fetch_models_from_portkey()
+        if fresh_models:
+            for model in fresh_models:
+                if model.get("id", "").lower() == model_id.lower():
+                    return model
+        
+        logger.warning(f"Model {model_id} not found in Portkey catalog")
+        return None
+    except Exception as e:
+        logger.error(f"Failed to fetch specific model {provider_name}/{model_name} from Portkey: {e}")
+        return None
+
+
+def fetch_specific_model_from_featherless(provider_name: str, model_name: str):
+    """Fetch specific model data from Featherless by searching cached models"""
+    try:
+        # Construct the model ID
+        model_id = f"{provider_name}/{model_name}"
+        
+        # First check cache
+        featherless_models = get_cached_models("featherless")
+        if featherless_models:
+            for model in featherless_models:
+                if model.get("id", "").lower() == model_id.lower():
+                    return model
+        
+        # If not in cache, try to fetch fresh data
+        fresh_models = fetch_models_from_featherless()
+        if fresh_models:
+            for model in fresh_models:
+                if model.get("id", "").lower() == model_id.lower():
+                    return model
+        
+        logger.warning(f"Model {model_id} not found in Featherless catalog")
+        return None
+    except Exception as e:
+        logger.error(f"Failed to fetch specific model {provider_name}/{model_name} from Featherless: {e}")
+        return None
+
+
+def fetch_specific_model_from_deepinfra(provider_name: str, model_name: str):
+    """Fetch specific model data from DeepInfra API"""
+    try:
+        if not Config.DEEPINFRA_API_KEY:
+            logger.error("DeepInfra API key not configured")
+            return None
+
+        headers = {
+            "Authorization": f"Bearer {Config.DEEPINFRA_API_KEY}",
+            "Content-Type": "application/json"
+        }
+
+        # Construct the model ID
+        model_id = f"{provider_name}/{model_name}"
+
+        # DeepInfra uses standard /v1/models endpoint
+        response = httpx.get("https://api.deepinfra.com/v1/openai/models", headers=headers, timeout=20.0)
+        response.raise_for_status()
+
+        models_data = response.json()
+        models = models_data.get("data", [])
+        
+        # Search for the specific model
+        for model in models:
+            if model.get("id", "").lower() == model_id.lower():
+                # Normalize to our schema
+                return normalize_deepinfra_model(model)
+        
+        logger.warning(f"Model {model_id} not found in DeepInfra catalog")
+        return None
+    except Exception as e:
+        logger.error(f"Failed to fetch specific model {provider_name}/{model_name} from DeepInfra: {e}")
+        return None
+
+
+def normalize_deepinfra_model(deepinfra_model: dict) -> dict:
+    """Normalize DeepInfra model to our schema"""
+    model_id = deepinfra_model.get("id", "")
+    if not model_id:
+        return {"source_gateway": "deepinfra", "raw_deepinfra": deepinfra_model or {}}
+
+    provider_slug = model_id.split("/")[0] if "/" in model_id else "deepinfra"
+    display_name = model_id.replace("-", " ").replace("_", " ").title()
+
+    description = f"DeepInfra hosted model: {model_id}. Pricing data may vary by region and usage."
+
+    pricing = {
+        "prompt": None,
+        "completion": None,
+        "request": None,
+        "image": None,
+        "web_search": None,
+        "internal_reasoning": None
+    }
+
+    architecture = {
+        "modality": "text->text",
+        "input_modalities": ["text"],
+        "output_modalities": ["text"],
+        "tokenizer": None,
+        "instruct_type": None
+    }
+
+    normalized = {
+        "id": model_id,
+        "slug": model_id,
+        "canonical_slug": model_id,
+        "hugging_face_id": None,
+        "name": display_name,
+        "created": deepinfra_model.get("created"),
+        "description": description,
+        "context_length": 0,
+        "architecture": architecture,
+        "pricing": pricing,
+        "top_provider": None,
+        "per_request_limits": None,
+        "supported_parameters": [],
+        "default_parameters": {},
+        "provider_slug": provider_slug,
+        "provider_site_url": None,
+        "model_logo_url": None,
+        "source_gateway": "deepinfra",
+        "raw_deepinfra": deepinfra_model
+    }
+    
+    # Enrich with manual pricing if available
+    return enrich_model_with_pricing(normalized, "deepinfra")
+
+
+def fetch_specific_model_from_chutes(provider_name: str, model_name: str):
+    """Fetch specific model data from Chutes by searching cached models"""
+    try:
+        # Construct the model ID
+        model_id = f"{provider_name}/{model_name}"
+        
+        # First check cache
+        chutes_models = get_cached_models("chutes")
+        if chutes_models:
+            for model in chutes_models:
+                if model.get("id", "").lower() == model_id.lower():
+                    return model
+        
+        # If not in cache, try to fetch fresh data
+        fresh_models = fetch_models_from_chutes()
+        if fresh_models:
+            for model in fresh_models:
+                if model.get("id", "").lower() == model_id.lower():
+                    return model
+        
+        logger.warning(f"Model {model_id} not found in Chutes catalog")
+        return None
+    except Exception as e:
+        logger.error(f"Failed to fetch specific model {provider_name}/{model_name} from Chutes: {e}")
+        return None
+
+
+def fetch_specific_model_from_groq(provider_name: str, model_name: str):
+    """Fetch specific model data from Groq by searching cached models"""
+    try:
+        model_id = f"{provider_name}/{model_name}"
+
+        groq_models = get_cached_models("groq")
+        if groq_models:
+            for model in groq_models:
+                if model.get("id", "").lower() == model_id.lower():
+                    return model
+
+        fresh_models = fetch_models_from_groq()
+        if fresh_models:
+            for model in fresh_models:
+                if model.get("id", "").lower() == model_id.lower():
+                    return model
+
+        logger.warning(f"Model {model_id} not found in Groq catalog")
+        return None
+    except Exception as e:
+        logger.error(f"Failed to fetch specific model {provider_name}/{model_name} from Groq: {e}")
+        return None
+
+
+def fetch_specific_model_from_fireworks(provider_name: str, model_name: str):
+    """Fetch specific model data from Fireworks by searching cached models"""
+    try:
+        model_id = f"{provider_name}/{model_name}"
+
+        fireworks_models = get_cached_models("fireworks")
+        if fireworks_models:
+            for model in fireworks_models:
+                if model.get("id", "").lower() == model_id.lower():
+                    return model
+
+        fresh_models = fetch_models_from_fireworks()
+        if fresh_models:
+            for model in fresh_models:
+                if model.get("id", "").lower() == model_id.lower():
+                    return model
+
+        logger.warning(f"Model {model_id} not found in Fireworks catalog")
+        return None
+    except Exception as e:
+        logger.error(f"Failed to fetch specific model {provider_name}/{model_name} from Fireworks: {e}")
+        return None
+
+
+def detect_model_gateway(provider_name: str, model_name: str) -> str:
+    """Detect which gateway a model belongs to by searching all caches
+    
+    Returns:
+        Gateway name: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', 'groq', 'fireworks', or None
+    """
+    try:
+        model_id = f"{provider_name}/{model_name}".lower()
+        
+        # Check each gateway's cache
+        gateways = ["openrouter", "portkey", "featherless", "chutes", "groq", "fireworks"]
+        
+        for gateway in gateways:
+            models = get_cached_models(gateway)
+            if models:
+                for model in models:
+                    if model.get("id", "").lower() == model_id:
+                        return gateway
+        
+        # Default to openrouter if not found
+        return "openrouter"
+    except Exception as e:
+        logger.error(f"Error detecting gateway for model {provider_name}/{model_name}: {e}")
+        return "openrouter"
+
+
+def fetch_specific_model(provider_name: str, model_name: str, gateway: str = None):
+    """Fetch specific model from the appropriate gateway
+    
+    Args:
+        provider_name: Provider name (e.g., 'openai', 'anthropic')
+        model_name: Model name (e.g., 'gpt-4', 'claude-3')
+        gateway: Optional gateway override. If not provided, auto-detects
+        
+    Returns:
+        Model data dict or None if not found
+    """
+    try:
+        # If gateway not specified, detect it
+        if not gateway:
+            gateway = detect_model_gateway(provider_name, model_name)
+        
+        gateway = gateway.lower()
+        
+        # Fetch from appropriate gateway
+        if gateway == "openrouter":
+            return fetch_specific_model_from_openrouter(provider_name, model_name)
+        elif gateway == "portkey":
+            return fetch_specific_model_from_portkey(provider_name, model_name)
+        elif gateway == "featherless":
+            return fetch_specific_model_from_featherless(provider_name, model_name)
+        elif gateway == "deepinfra":
+            return fetch_specific_model_from_deepinfra(provider_name, model_name)
+        elif gateway == "chutes":
+            return fetch_specific_model_from_chutes(provider_name, model_name)
+        elif gateway == "groq":
+            return fetch_specific_model_from_groq(provider_name, model_name)
+        elif gateway == "fireworks":
+            return fetch_specific_model_from_fireworks(provider_name, model_name)
+        else:
+            logger.warning(f"Unknown gateway: {gateway}, defaulting to OpenRouter")
+            return fetch_specific_model_from_openrouter(provider_name, model_name)
+    except Exception as e:
+        logger.error(f"Failed to fetch specific model {provider_name}/{model_name} from gateway {gateway}: {e}")
         return None
 
 

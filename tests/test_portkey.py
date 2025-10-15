@@ -1,0 +1,130 @@
+"""
+Test script to verify Portkey integration
+"""
+import os
+import sys
+
+# Add src to path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+
+from src.config import Config
+from src.services.portkey_client import make_portkey_request_openai, process_portkey_response
+
+
+def test_portkey_chat_completion():
+    """Test a simple chat completion request via Portkey"""
+    print("=" * 60)
+    print("Testing Portkey Chat Completion")
+    print("=" * 60)
+
+    # Check configuration
+    print(f"\nPortkey API Key configured: {bool(Config.PORTKEY_API_KEY)}")
+
+    # Test messages
+    messages = [
+        {"role": "user", "content": "Say 'Hello from Portkey!' in exactly those words."}
+    ]
+
+    # Use @provider/model format as shown in Portkey docs
+    model = "@deepinfra/zai-org/GLM-4.5-Air"
+    
+    print(f"\nModel: {model}")
+    print(f"Messages: {messages}")
+
+    try:
+        print("\nSending request to Portkey...")
+        response = make_portkey_request_openai(
+            messages=messages,
+            model=model,
+            provider=None,  # No provider needed with @provider/model format
+            max_tokens=50
+        )
+
+        print("SUCCESS: Received response from Portkey")
+
+        # Process response
+        processed = process_portkey_response(response)
+
+        print(f"\nProcessed Response:")
+        print(f"  ID: {processed['id']}")
+        print(f"  Model: {processed['model']}")
+        print(f"  Usage: {processed['usage']}")
+        print(f"  Content: {processed['choices'][0]['message']['content']}")
+
+        return True
+
+    except Exception as e:
+        print(f"\nERROR: Failed to make Portkey request: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
+def test_provider_comparison():
+    """Test different providers through Portkey"""
+    print("\n" + "=" * 60)
+    print("Testing Multiple Providers via Portkey")
+    print("=" * 60)
+
+    models_to_test = [
+        # DeepInfra models
+        ("@deepinfra/zai-org/GLM-4.5-Air", "DeepInfra - GLM-4.5-Air"),
+        ("@deepinfra/meta-llama/Meta-Llama-3.1-8B-Instruct", "DeepInfra - Llama 3.1"),
+        
+        # OpenRouter models
+        ("@openrouter/openai/gpt-3.5-turbo", "OpenRouter - GPT-3.5"),
+        
+        # X.AI models (updated to grok-3 as grok-beta is deprecated)
+        ("@xai/grok-3", "X.AI - Grok 3"),
+        
+        # Cerebras models
+        ("@cerebras/llama3.1-8b", "Cerebras - Llama 3.1 8B"),
+        
+        # HuggingFace models - Note: May require specific model availability in Portkey
+        # Commenting out due to 404 errors - provider may need additional setup
+        # ("@hug/microsoft/Phi-3-mini-4k-instruct", "HuggingFace - Phi-3 Mini"),
+        
+        # Novita models
+        ("@novita/meta-llama/llama-3.1-8b-instruct", "Novita - Llama 3.1"),
+        
+        # Nebius models
+        ("@nebius/meta-llama/Meta-Llama-3.1-8B-Instruct", "Nebius - Llama 3.1"),
+    ]
+
+    for model, description in models_to_test:
+        print(f"\nTesting {description}...")
+        print(f"  Model: {model}")
+
+        messages = [
+            {"role": "user", "content": "Say 'Hello from Portkey!' in 5 words or less"}
+        ]
+
+        try:
+            response = make_portkey_request_openai(
+                messages=messages,
+                model=model,
+                provider=None,  # No provider needed with @provider/model format
+                max_tokens=30
+            )
+
+            processed = process_portkey_response(response)
+            print(f"  SUCCESS: {processed['choices'][0]['message']['content'][:50]}...")
+
+        except Exception as e:
+            print(f"  ERROR: {e}")
+
+
+if __name__ == "__main__":
+    print("Portkey Integration Test Suite")
+    print("=" * 60)
+
+    # Test 1: Basic chat completion
+    success = test_portkey_chat_completion()
+
+    # Test 2: Multiple providers (if first test passed)
+    if success:
+        test_provider_comparison()
+
+    print("\n" + "=" * 60)
+    print("Tests completed!")
+    print("=" * 60)

@@ -122,6 +122,31 @@ from src.schemas.admin import (
 from src.schemas.proxy import (
     Message,
     ProxyRequest,
+    ResponseRequest,
+    InputMessage,
+    ResponseFormat,
+    ResponseFormatType,
+    # Anthropic Messages API
+    ContentBlock,
+    AnthropicMessage,
+    MessagesRequest,
+)
+
+# Coupon models
+from src.schemas.coupons import (
+    CouponScope,
+    CouponType,
+    CreatorType,
+    CreateCouponRequest,
+    RedeemCouponRequest,
+    UpdateCouponRequest,
+    CouponResponse,
+    AvailableCouponResponse,
+    RedemptionResponse,
+    RedemptionHistoryResponse,
+    CouponAnalyticsResponse,
+    CouponStatsResponse,
+    ListCouponsResponse,
 )
 
 
@@ -186,4 +211,12 @@ __all__ = [
     # Proxy
     "ProxyRequest",
     "Message",
+    "ResponseRequest",
+    "InputMessage",
+    "ResponseFormat",
+    "ResponseFormatType",
+    # Anthropic Messages API
+    "ContentBlock",
+    "AnthropicMessage",
+    "MessagesRequest",
 ]
