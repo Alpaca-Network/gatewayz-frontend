@@ -60,8 +60,13 @@ const ApiModelCard = ({ model }: { model: ApiModel }) => {
   const outputCost = (parseFloat(model.pricing?.completion || '0') * 1000000).toFixed(2);
   const contextK = model.context_length > 0 ? Math.round(model.context_length / 1000) : 0;
 
+  // Preserve literal slash in URL (e.g., "provider/model-name")
+  const modelUrl = model.id.includes('/')
+    ? `/models/${model.id}`
+    : `/models/${encodeURIComponent(model.id)}`;
+
   return (
-    <Link href={`/models/${encodeURIComponent(model.id)}`}>
+    <Link href={modelUrl}>
       <Card className="p-6 flex flex-col h-full hover:border-primary transition-colors">
         <div className="flex justify-between items-start gap-3 mb-3">
           <div className="min-w-0 flex-1">

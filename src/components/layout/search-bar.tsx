@@ -157,10 +157,16 @@ export function SearchBar() {
                     </p>
                     <div className="flex flex-col">
                         {filteredModels.length > 0 ? (
-                            filteredModels.map(model => (
+                            filteredModels.map(model => {
+                                // Split model ID to preserve literal slash in URL (e.g., "provider/model-name")
+                                const modelUrl = model.id.includes('/')
+                                    ? `/models/${model.id}`
+                                    : `/models/${encodeURIComponent(model.id)}`;
+                                
+                                return (
                                 <Link
                                     key={model.id}
-                                    href={`/models/${encodeURIComponent(model.id)}`}
+                                    href={modelUrl}
                                     className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-accent"
                                     onClick={() => {
                                         setOpen(false);
@@ -173,7 +179,8 @@ export function SearchBar() {
                                         <span className="text-xs text-muted-foreground truncate">{model.id}</span>
                                     </div>
                                 </Link>
-                            ))
+                                );
+                            })
                         ) : searchTerm ? (
                             <div className="px-3 py-4 text-sm text-muted-foreground text-center">
                                 No models found for "{searchTerm}"

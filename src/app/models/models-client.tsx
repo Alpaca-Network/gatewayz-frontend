@@ -62,8 +62,13 @@ const ModelCard = ({ model }: { model: Model }) => {
                           model.description?.toLowerCase().includes('multilingual') ||
                           model.description?.toLowerCase().includes('multi-lingual'));
 
+  // Preserve literal slash in URL (e.g., "provider/model-name")
+  const modelUrl = model.id.includes('/')
+    ? `/models/${model.id}`
+    : `/models/${encodeURIComponent(model.id)}`;
+
   return (
-    <Link href={`/models/${encodeURIComponent(model.id)}`} className="h-full block">
+    <Link href={modelUrl} className="h-full block">
       <Card className="p-6 flex flex-col h-full hover:border-primary transition-colors overflow-hidden">
         {/* Model name and badges */}
         <div className="flex items-start gap-2 mb-3 min-w-0">
