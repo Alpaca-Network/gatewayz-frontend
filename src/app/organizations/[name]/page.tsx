@@ -191,11 +191,11 @@ export default function OrganizationPage() {
     const fetchModels = async () => {
       try {
         setLoading(true);
-        const response = await fetch(`${API_BASE_URL}/catalog/models?developer=${encodeURIComponent(organizationName.toLowerCase())}`);
+        const response = await fetch(`${API_BASE_URL}/models?developer=${encodeURIComponent(organizationName.toLowerCase())}`);
         const data = await response.json();
         const models = data.data || [];
 
-        console.log(`API returned ${models.length} models for ${organizationName} from catalog endpoint`);
+        console.log(`API returned ${models.length} models for ${organizationName} from models endpoint`);
 
         // Client-side filtering to ensure only models from this organization are shown
         // The model ID typically starts with "org-name/" or the model has a provider_slug matching the org

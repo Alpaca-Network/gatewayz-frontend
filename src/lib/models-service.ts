@@ -31,7 +31,7 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
   }
 
   const limitParam = limit ? `&limit=${limit}` : '';
-  const url = `${API_BASE_URL}/catalog/models?gateway=${gateway}${limitParam}`;
+  const url = `${API_BASE_URL}/models?gateway=${gateway}${limitParam}`;
   
   console.log(`[Models Service] Fetching from live API: ${url}`);
 

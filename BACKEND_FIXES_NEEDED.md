@@ -3,10 +3,10 @@
 ## ✅ Models API Endpoint - WORKING
 
 ### Endpoint
-`GET /catalog/models`
+`GET /models`
 
 ### Description
-The backend has a fully functional models catalog endpoint that returns all 6,946 models across all gateways.
+The backend has a fully functional models endpoint that returns all 6,946 models across all gateways.
 
 ### Parameters
 - `gateway` (optional): Filter models by gateway
@@ -51,24 +51,24 @@ The backend has a fully functional models catalog endpoint that returns all 6,94
 ```
 
 ### Frontend Integration
-The frontend now correctly uses `/catalog/models` endpoint through:
-- `src/lib/models-service.ts` - Core service that calls `/catalog/models`
+The frontend now correctly uses `/models` endpoint through:
+- `src/lib/models-service.ts` - Core service that calls `/models`
 - `src/app/api/models/route.ts` - API proxy that uses the models service
 - `src/app/models/page.tsx` - Models browse page (optimized to use `gateway=all`)
 
 ### Examples
 ```bash
 # Get all models (recommended)
-curl "https://api.gatewayz.ai/catalog/models?gateway=all"
+curl "https://api.gatewayz.ai/models?gateway=all"
 
 # Get OpenRouter models only
-curl "https://api.gatewayz.ai/catalog/models?gateway=openrouter"
+curl "https://api.gatewayz.ai/models?gateway=openrouter"
 
 # Get models with pagination
-curl "https://api.gatewayz.ai/catalog/models?gateway=all&limit=100&offset=0"
+curl "https://api.gatewayz.ai/models?gateway=all&limit=100&offset=0"
 
 # Get models from specific provider
-curl "https://api.gatewayz.ai/catalog/models?gateway=all&provider=anthropic"
+curl "https://api.gatewayz.ai/models?gateway=all&provider=anthropic"
 ```
 
 ---
