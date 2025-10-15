@@ -22,7 +22,7 @@ logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-public_router = APIRouter(prefix="/models")
+public_router = APIRouter()
 
 
 def normalize_developer_segment(value: Optional[str]) -> Optional[str]:
@@ -1086,7 +1086,8 @@ async def batch_compare_models(
 
 
 # Public /models routes mirroring Hugging Face-style paths
-@public_router.get("", tags=["models"])
+@public_router.get("/models", tags=["models"])
+@public_router.get("/catalog/models", tags=["models"])
 async def public_get_models(
     provider: Optional[str] = Query(None, description="Filter models by provider"),
     limit: Optional[int] = Query(None, description="Limit number of results"),
@@ -1108,7 +1109,8 @@ async def public_get_models(
     )
 
 
-@public_router.get("/trending", tags=["statistics"])
+@public_router.get("/models/trending", tags=["statistics"])
+@public_router.get("/catalog/models/trending", tags=["statistics"])
 async def public_get_trending_models(
     gateway: Optional[str] = Query("all", description="Gateway filter or 'all'"),
     time_range: str = Query("24h", description="Time range: '1h', '24h', '7d', '30d'"),
@@ -1123,7 +1125,8 @@ async def public_get_trending_models(
     )
 
 
-@public_router.post("/batch-compare", tags=["comparison"])
+@public_router.post("/models/batch-compare", tags=["comparison"])
+@public_router.post("/catalog/models/batch-compare", tags=["comparison"])
 async def public_batch_compare_models(
     model_ids: List[str] = Query(..., description="List of model IDs (e.g., ['openai/gpt-4', 'anthropic/claude-3'])"),
     criteria: str = Query("price", description="Comparison criteria: 'price', 'context', 'availability'"),
@@ -1131,7 +1134,8 @@ async def public_batch_compare_models(
     return await batch_compare_models(model_ids=model_ids, criteria=criteria)
 
 
-@public_router.get("/{provider_name}/{model_name:path}/compare", tags=["comparison"])
+@public_router.get("/models/{provider_name}/{model_name:path}/compare", tags=["comparison"])
+@public_router.get("/catalog/model/{provider_name:path}/{model_name:path}/compare", tags=["comparison"])
 async def public_compare_model_across_gateways(
     provider_name: str,
     model_name: str,
@@ -1144,7 +1148,8 @@ async def public_compare_model_across_gateways(
     )
 
 
-@public_router.get("/{provider_name}/{model_name:path}", tags=["models"])
+@public_router.get("/models/{provider_name}/{model_name:path}", tags=["models"])
+@public_router.get("/catalog/model/{provider_name:path}/{model_name:path}", tags=["models"])
 async def public_get_specific_model(
     provider_name: str,
     model_name: str,
@@ -1162,7 +1167,8 @@ async def public_get_specific_model(
     )
 
 
-@public_router.get("/{developer_name}", tags=["models"])
+@public_router.get("/models/{developer_name}", tags=["models"])
+@public_router.get("/catalog/developer/{developer_name}/models", tags=["models"])
 async def public_get_developer_models(
     developer_name: str,
     limit: Optional[int] = Query(None, description="Limit number of results"),

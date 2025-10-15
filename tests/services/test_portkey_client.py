@@ -1,8 +1,7 @@
-# tests/services/test_portkey_client_unit.py
 import importlib
 import pytest
 
-MODULE_PATH = "src.services.portkey_client"  # change if needed
+MODULE_PATH = "src.services.portkey_client"
 
 
 @pytest.fixture
@@ -10,11 +9,10 @@ def mod():
     return importlib.import_module(MODULE_PATH)
 
 
-# ---------- Fakes to avoid network ----------
 class FakeCompletions:
     def __init__(self):
         self.calls = []
-        self.return_value = object()  # sentinel
+        self.return_value = object()
 
     def create(self, **kwargs):
         self.calls.append(kwargs)
@@ -34,155 +32,89 @@ class FakeOpenAI:
         self.chat = FakeChat()
 
 
-# ----------------- get_portkey_client -----------------
-
-def test_get_portkey_client_virtual_key_success(monkeypatch, mod):
-    # Arrange config
+def test_get_portkey_client_adds_headers(monkeypatch, mod):
     monkeypatch.setattr(mod.Config, "PORTKEY_API_KEY", "pk_live_123")
-    monkeypatch.setattr(mod.Config, "PROVIDER_OPENAI_API_KEY", None, raising=False)
-    monkeypatch.setattr(mod.Config, "PROVIDER_ANTHROPIC_API_KEY", None, raising=False)
 
     created = []
-    monkeypatch.setattr(mod, "OpenAI", lambda **kw: created.append(FakeOpenAI(**kw)) or created[-1])
 
-    # Act
-    client = mod.get_portkey_client(provider="openai", virtual_key="vk_abc")
+    def fake_openai(**kwargs):
+        created.append(FakeOpenAI(**kwargs))
+        return created[-1]
 
-    # Assert
-    assert isinstance(client, FakeOpenAI)
-    assert client.base_url == "https://api.portkey.ai/v1"
-    assert client.api_key == "portkey"  # dummy key in virtual-key mode
-    hdrs = client.default_headers
-    assert hdrs["x-portkey-api-key"] == "pk_live_123"
-    assert hdrs["x-portkey-virtual-key"] == "vk_abc"
-    assert "x-portkey-provider" not in hdrs  # not used in virtual-key mode
+    monkeypatch.setattr(mod, "OpenAI", fake_openai)
 
-
-def test_get_portkey_client_direct_openai_success(monkeypatch, mod):
-    monkeypatch.setattr(mod.Config, "PORTKEY_API_KEY", "pk_live_123")
-    monkeypatch.setattr(mod.Config, "PROVIDER_OPENAI_API_KEY", "sk-openai-xxx", raising=False)
-
-    created = []
-    monkeypatch.setattr(mod, "OpenAI", lambda **kw: created.append(FakeOpenAI(**kw)) or created[-1])
-
-    client = mod.get_portkey_client(provider="openai", virtual_key=None)
+    client = mod.get_portkey_client(provider="openai", virtual_key="vk_slug")
 
     assert isinstance(client, FakeOpenAI)
-    assert client.base_url == "https://api.portkey.ai/v1"
-    assert client.api_key == "sk-openai-xxx"
-    hdrs = client.default_headers
-    assert hdrs["x-portkey-api-key"] == "pk_live_123"
-    assert hdrs["x-portkey-provider"] == "openai"
-    assert "x-portkey-virtual-key" not in hdrs
+    assert client.base_url == mod.PORTKEY_BASE_URL
+    assert client.api_key == "pk_live_123"
+    assert client.default_headers["x-portkey-api-key"] == "pk_live_123"
+    assert client.default_headers["x-portkey-virtual-key"] == "vk_slug"
+    assert client.default_headers["x-portkey-provider"] == "openai"
 
 
-def test_get_portkey_client_direct_anthropic_success(monkeypatch, mod):
+def test_get_portkey_client_without_virtual_key(monkeypatch, mod):
     monkeypatch.setattr(mod.Config, "PORTKEY_API_KEY", "pk_live_123")
-    monkeypatch.setattr(mod.Config, "PROVIDER_ANTHROPIC_API_KEY", "sk-anthropic-xyz", raising=False)
+    monkeypatch.setattr(mod.Config, "get_portkey_virtual_key", lambda provider: None)
 
     created = []
     monkeypatch.setattr(mod, "OpenAI", lambda **kw: created.append(FakeOpenAI(**kw)) or created[-1])
 
     client = mod.get_portkey_client(provider="anthropic", virtual_key=None)
 
-    assert isinstance(client, FakeOpenAI)
-    assert client.api_key == "sk-anthropic-xyz"
+    assert "x-portkey-virtual-key" not in client.default_headers
     assert client.default_headers["x-portkey-provider"] == "anthropic"
 
 
-def test_get_portkey_client_missing_portkey_key_raises(monkeypatch, mod):
+def test_get_portkey_client_missing_api_key(monkeypatch, mod):
     monkeypatch.setattr(mod.Config, "PORTKEY_API_KEY", None)
     with pytest.raises(ValueError):
-        mod.get_portkey_client(provider="openai", virtual_key="vk_abc")
+        mod.get_portkey_client()
 
 
-def test_get_portkey_client_missing_provider_key_raises(monkeypatch, mod):
-    # Direct provider mode without provider key -> error
-    monkeypatch.setattr(mod.Config, "PORTKEY_API_KEY", "pk_live_123")
-    monkeypatch.setattr(mod.Config, "PROVIDER_OPENAI_API_KEY", None, raising=False)
+def test_make_portkey_request_openai_formats_model(monkeypatch, mod):
+    fake_client = FakeOpenAI()
+    monkeypatch.setattr(mod, "get_portkey_client", lambda provider, virtual_key: fake_client)
 
-    with pytest.raises(ValueError) as ei:
-        mod.get_portkey_client(provider="openai", virtual_key=None)
-    assert "PROVIDER_OPENAI_API_KEY" in str(ei.value)
+    messages = [{"role": "user", "content": "Hi"}]
+    response = mod.make_portkey_request_openai(
+        messages,
+        "gpt-3.5-turbo",
+        provider="openai",
+        virtual_key="vk-openai",
+        temperature=0.7,
+    )
 
-
-# ----------------- make_portkey_request_openai -----------------
-
-def test_make_portkey_request_openai_forwards_args_virtual(monkeypatch, mod):
-    fake = FakeOpenAI()
-    monkeypatch.setattr(mod, "get_portkey_client", lambda provider, virtual_key: fake)
-
-    messages = [{"role": "user", "content": "Hello"}]
-    model = "provider/model"
-    kwargs = {"temperature": 0.7, "max_tokens": 256, "top_p": 0.9}
-
-    resp = mod.make_portkey_request_openai(messages, model, provider="openai", virtual_key="vk_abc", **kwargs)
-
-    assert resp is fake.chat.completions.return_value
-    assert len(fake.chat.completions.calls) == 1
-    call = fake.chat.completions.calls[0]
-    assert call["model"] == model
-    assert call["messages"] == messages
-    for k, v in kwargs.items():
-        assert call[k] == v
+    assert response is fake_client.chat.completions.return_value
+    call = fake_client.chat.completions.calls[0]
+    assert call["model"] == "@openai/gpt-3.5-turbo"
+    assert call["temperature"] == 0.7
 
 
-# ----------------- process_portkey_response -----------------
+def test_make_portkey_request_openai_keeps_prefixed_model(monkeypatch, mod):
+    fake_client = FakeOpenAI()
+    monkeypatch.setattr(mod, "get_portkey_client", lambda provider, virtual_key: fake_client)
 
-def test_process_portkey_response_happy(mod):
-    class _Msg:
-        def __init__(self, role, content):
-            self.role = role
-            self.content = content
+    mod.make_portkey_request_openai(
+        [{"role": "user", "content": "Hi"}],
+        "@openrouter/openai/gpt-3.5-turbo",
+        provider="openai",
+    )
 
-    class _Choice:
-        def __init__(self, idx, role, content, finish):
-            self.index = idx
-            self.message = _Msg(role, content)
-            self.finish_reason = finish
-
-    class _Usage:
-        def __init__(self, p, c, t):
-            self.prompt_tokens = p
-            self.completion_tokens = c
-            self.total_tokens = t
-
-    class _Resp:
-        id = "cmpl-1"
-        object = "chat.completion"
-        created = 1720000123
-        model = "provider/model"
-        choices = [
-            _Choice(0, "assistant", "hi", "stop"),
-            _Choice(1, "assistant", "more", "length"),
-        ]
-        usage = _Usage(11, 22, 33)
-
-    out = mod.process_portkey_response(_Resp)
-    assert out["id"] == "cmpl-1"
-    assert out["choices"][0]["message"]["content"] == "hi"
-    assert out["usage"]["total_tokens"] == 33
+    call = fake_client.chat.completions.calls[0]
+    assert call["model"] == "@openrouter/openai/gpt-3.5-turbo"
 
 
-def test_process_portkey_response_no_usage(mod):
-    class _Msg:
-        def __init__(self, role, content):
-            self.role = role
-            self.content = content
+def test_make_portkey_request_openai_stream(monkeypatch, mod):
+    fake_client = FakeOpenAI()
+    monkeypatch.setattr(mod, "get_portkey_client", lambda provider, virtual_key: fake_client)
 
-    class _Choice:
-        def __init__(self, idx):
-            self.index = idx
-            self.message = _Msg("assistant", "ok")
-            self.finish_reason = "stop"
+    stream = mod.make_portkey_request_openai_stream(
+        [{"role": "user", "content": "Hi"}],
+        "openai/gpt-4o-mini",
+        provider="openai",
+    )
 
-    class _Resp:
-        id = "cmpl-2"
-        object = "chat.completion"
-        created = 1720000456
-        model = "m"
-        choices = [_Choice(0)]
-        usage = None
-
-    out = mod.process_portkey_response(_Resp)
-    assert out["usage"] == {}
+    assert stream is fake_client.chat.completions.return_value
+    call = fake_client.chat.completions.calls[0]
+    assert call["model"] == "@openai/gpt-4o-mini"

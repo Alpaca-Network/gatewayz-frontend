@@ -59,12 +59,12 @@ PROVIDER_ANTHROPIC_API_KEY=sk-ant-...
 
 #### ✨ NEW: Fireworks.ai
 ```
-FIREWORKS_API_KEY=fw_3ZeXf1gzksiisA9c29eKcprp
+FIREWORKS_API_KEY=your-fireworks-api-key
 ```
 
 #### ✨ NEW: Together.ai
 ```
-TOGETHER_API_KEY=tgp_v1_QATbNpiLZItdUCEf7OBk5qBTLY-wX9p5_If4jIN9vnM
+TOGETHER_API_KEY=your-together-api-key
 ```
 
 #### Featherless
@@ -114,11 +114,17 @@ HUG_API_KEY=your-hug-api-key
 If you already have Railway deployed, you only need to add these NEW secrets:
 
 ```bash
-# Fireworks.ai Integration
-FIREWORKS_API_KEY=fw_3ZeXf1gzksiisA9c29eKcprp
+# Fireworks.ai Integration (38 models)
+FIREWORKS_API_KEY=your-fireworks-api-key
 
-# Together.ai Integration  
-TOGETHER_API_KEY=tgp_v1_QATbNpiLZItdUCEf7OBk5qBTLY-wX9p5_If4jIN9vnM
+# Together.ai Integration (100+ models)
+TOGETHER_API_KEY=your-together-api-key
+
+# Featherless Integration (100+ models)
+FEATHERLESS_API_KEY=your-featherless-api-key
+
+# Groq Integration
+GROQ_API_KEY=your-groq-api-key
 ```
 
 ## Verification After Deployment
@@ -152,11 +158,11 @@ curl https://your-railway-app.up.railway.app/catalog/models?gateway=all
 9. FRONTEND_URL
 10. FIREWORKS_API_KEY ✨ NEW
 11. TOGETHER_API_KEY ✨ NEW
+12. FEATHERLESS_API_KEY ✨ UPDATED
+13. GROQ_API_KEY ✨ UPDATED
 
 ### Optional (for additional provider support)
-- FEATHERLESS_API_KEY
-- CHUTES_API_KEY
-- GROQ_API_KEY
+- CHUTES_API_KEY (already configured)
 - Other provider keys as needed
 
 ## Security Notes
