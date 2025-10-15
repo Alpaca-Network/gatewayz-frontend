@@ -42,3 +42,9 @@ _groq_models_cache = {
     "timestamp": None,
     "ttl": 1800  # 30 minute TTL for Groq catalog
 }
+
+_fireworks_models_cache = {
+    "data": None,
+    "timestamp": None,
+    "ttl": 1800  # 30 minute TTL for Fireworks catalog
+}

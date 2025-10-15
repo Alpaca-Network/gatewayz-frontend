@@ -38,6 +38,9 @@ class Config:
     # Chutes.ai Configuration
     CHUTES_API_KEY = os.environ.get("CHUTES_API_KEY")
 
+    # Fireworks.ai Configuration
+    FIREWORKS_API_KEY = os.environ.get("FIREWORKS_API_KEY")
+
     # Groq Configuration
     GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
     

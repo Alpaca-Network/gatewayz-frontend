@@ -12,6 +12,7 @@ from src.cache import (
     _featherless_models_cache,
     _chutes_models_cache,
     _groq_models_cache,
+    _fireworks_models_cache,
 )
 from fastapi import APIRouter
 from datetime import datetime, timezone
@@ -63,13 +64,22 @@ def get_cached_models(gateway: str = "openrouter"):
                     return cache["data"]
             return fetch_models_from_groq()
 
+        if gateway == "fireworks":
+            cache = _fireworks_models_cache
+            if cache["data"] and cache["timestamp"]:
+                cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
+                if cache_age < cache["ttl"]:
+                    return cache["data"]
+            return fetch_models_from_fireworks()
+
         if gateway == "all":
             openrouter_models = get_cached_models("openrouter") or []
             portkey_models = get_cached_models("portkey") or []
             featherless_models = get_cached_models("featherless") or []
             chutes_models = get_cached_models("chutes") or []
             groq_models = get_cached_models("groq") or []
-            return openrouter_models + portkey_models + featherless_models + chutes_models + groq_models
+            fireworks_models = get_cached_models("fireworks") or []
+            return openrouter_models + portkey_models + featherless_models + chutes_models + groq_models + fireworks_models
 
         # Default to OpenRouter
         if _models_cache["data"] and _models_cache["timestamp"]:
@@ -555,6 +565,106 @@ def normalize_groq_model(groq_model: dict) -> dict:
     return enrich_model_with_pricing(normalized, "groq")
 
 
+def fetch_models_from_fireworks():
+    """Fetch models from Fireworks API and normalize to the catalog schema"""
+    try:
+        if not Config.FIREWORKS_API_KEY:
+            logger.error("Fireworks API key not configured")
+            return None
+
+        headers = {
+            "Authorization": f"Bearer {Config.FIREWORKS_API_KEY}",
+            "Content-Type": "application/json",
+        }
+
+        response = httpx.get(
+            "https://api.fireworks.ai/inference/v1/models",
+            headers=headers,
+            timeout=20.0,
+        )
+        response.raise_for_status()
+
+        payload = response.json()
+        raw_models = payload.get("data", [])
+        normalized_models = [normalize_fireworks_model(model) for model in raw_models if model]
+
+        _fireworks_models_cache["data"] = normalized_models
+        _fireworks_models_cache["timestamp"] = datetime.now(timezone.utc)
+
+        logger.info(f"Fetched {len(normalized_models)} Fireworks models")
+        return _fireworks_models_cache["data"]
+    except httpx.HTTPStatusError as e:
+        logger.error(f"Fireworks HTTP error: {e.response.status_code} - {e.response.text}")
+        return None
+    except Exception as e:
+        logger.error(f"Failed to fetch models from Fireworks: {e}")
+        return None
+
+
+def normalize_fireworks_model(fireworks_model: dict) -> dict:
+    """Normalize Fireworks catalog entries to resemble OpenRouter model shape"""
+    model_id = fireworks_model.get("id")
+    if not model_id:
+        return {"source_gateway": "fireworks", "raw_fireworks": fireworks_model or {}}
+
+    # Fireworks uses format like "accounts/fireworks/models/deepseek-v3p1"
+    # We'll keep the full ID as-is
+    slug = model_id
+    provider_slug = "fireworks"
+
+    display_name = fireworks_model.get("display_name") or model_id.split("/")[-1].replace("-", " ").replace("_", " ").title()
+    owned_by = fireworks_model.get("owned_by")
+    base_description = fireworks_model.get("description") or f"Fireworks hosted model {model_id}."
+    if owned_by and owned_by.lower() not in base_description.lower():
+        description = f"{base_description} Owned by {owned_by}."
+    else:
+        description = base_description
+
+    metadata = fireworks_model.get("metadata") or {}
+    context_length = metadata.get("context_length") or fireworks_model.get("context_length") or 0
+
+    pricing = {
+        "prompt": None,
+        "completion": None,
+        "request": None,
+        "image": None,
+        "web_search": None,
+        "internal_reasoning": None,
+    }
+
+    architecture = {
+        "modality": metadata.get("modality", "text->text"),
+        "input_modalities": metadata.get("input_modalities") or ["text"],
+        "output_modalities": metadata.get("output_modalities") or ["text"],
+        "tokenizer": metadata.get("tokenizer"),
+        "instruct_type": metadata.get("instruct_type"),
+    }
+
+    normalized = {
+        "id": slug,
+        "slug": slug,
+        "canonical_slug": slug,
+        "hugging_face_id": None,
+        "name": display_name,
+        "created": fireworks_model.get("created"),
+        "description": description,
+        "context_length": context_length,
+        "architecture": architecture,
+        "pricing": pricing,
+        "top_provider": None,
+        "per_request_limits": None,
+        "supported_parameters": metadata.get("supported_parameters", []),
+        "default_parameters": metadata.get("default_parameters", {}),
+        "provider_slug": provider_slug,
+        "provider_site_url": "https://fireworks.ai",
+        "model_logo_url": None,
+        "source_gateway": "fireworks",
+        "raw_fireworks": fireworks_model,
+    }
+
+    return enrich_model_with_pricing(normalized, "fireworks")
+
+
 def fetch_specific_model_from_openrouter(provider_name: str, model_name: str):
     """Fetch specific model data from OpenRouter API"""
     try:
@@ -767,6 +877,29 @@ def fetch_specific_model_from_groq(provider_name: str, model_name: str):
                     return model
 
         logger.warning(f"Model {model_id} not found in Groq catalog")
+
+def fetch_specific_model_from_fireworks(provider_name: str, model_name: str):
+    """Fetch specific model data from Fireworks by searching cached models"""
+    try:
+        model_id = f"{provider_name}/{model_name}"
+
+        fireworks_models = get_cached_models("fireworks")
+        if fireworks_models:
+            for model in fireworks_models:
+                if model.get("id", "").lower() == model_id.lower():
+                    return model
+
+        fresh_models = fetch_models_from_fireworks()
+        if fresh_models:
+            for model in fresh_models:
+                if model.get("id", "").lower() == model_id.lower():
+                    return model
+
+        logger.warning(f"Model {model_id} not found in Fireworks catalog")
+        return None
+    except Exception as e:
+        logger.error(f"Failed to fetch specific model {provider_name}/{model_name} from Fireworks: {e}")
+        return None
         return None
     except Exception as e:
         logger.error(f"Failed to fetch specific model {provider_name}/{model_name} from Groq: {e}")
@@ -777,13 +910,13 @@ def detect_model_gateway(provider_name: str, model_name: str) -> str:
     """Detect which gateway a model belongs to by searching all caches
     
     Returns:
-        Gateway name: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', 'groq', or None
+        Gateway name: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', 'groq', 'fireworks', or None
     """
     try:
         model_id = f"{provider_name}/{model_name}".lower()
         
         # Check each gateway's cache
-        gateways = ["openrouter", "portkey", "featherless", "chutes", "groq"]
+        gateways = ["openrouter", "portkey", "featherless", "chutes", "groq", "fireworks"]
         
         for gateway in gateways:
             models = get_cached_models(gateway)
@@ -830,6 +963,8 @@ def fetch_specific_model(provider_name: str, model_name: str, gateway: str = Non
             return fetch_specific_model_from_chutes(provider_name, model_name)
         elif gateway == "groq":
             return fetch_specific_model_from_groq(provider_name, model_name)
+        elif gateway == "fireworks":
+            return fetch_specific_model_from_fireworks(provider_name, model_name)
         else:
             logger.warning(f"Unknown gateway: {gateway}, defaulting to OpenRouter")
             return fetch_specific_model_from_openrouter(provider_name, model_name)
