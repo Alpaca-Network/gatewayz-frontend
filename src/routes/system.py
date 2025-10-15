@@ -74,13 +74,26 @@ async def get_cache_status():
                 cache_age_seconds = None
                 is_stale = False
                 if timestamp:
-                    age = datetime.now(timezone.utc).timestamp() - timestamp
+                    # Handle both float timestamp and datetime object
+                    if isinstance(timestamp, datetime):
+                        age = (datetime.now(timezone.utc) - timestamp).total_seconds()
+                    else:
+                        # Assume it's a float (unix timestamp)
+                        age = datetime.now(timezone.utc).timestamp() - timestamp
                     cache_age_seconds = int(age)
                     is_stale = age > ttl
                 
+                # Convert timestamp to ISO format string
+                last_refresh = None
+                if timestamp:
+                    if isinstance(timestamp, datetime):
+                        last_refresh = timestamp.isoformat()
+                    else:
+                        last_refresh = datetime.fromtimestamp(timestamp, tz=timezone.utc).isoformat()
+                
                 cache_status[gateway] = {
                     "models_cached": len(models) if models else 0,
-                    "last_refresh": datetime.fromtimestamp(timestamp, tz=timezone.utc).isoformat() if timestamp else None,
+                    "last_refresh": last_refresh,
                     "ttl_seconds": ttl,
                     "cache_age_seconds": cache_age_seconds,
                     "status": "stale" if is_stale else ("healthy" if models else "empty"),
@@ -106,13 +119,25 @@ async def get_cache_status():
             cache_age_seconds = None
             is_stale = False
             if timestamp:
-                age = datetime.now(timezone.utc).timestamp() - timestamp
+                # Handle both float timestamp and datetime object
+                if isinstance(timestamp, datetime):
+                    age = (datetime.now(timezone.utc) - timestamp).total_seconds()
+                else:
+                    age = datetime.now(timezone.utc).timestamp() - timestamp
                 cache_age_seconds = int(age)
                 is_stale = age > ttl
             
+            # Convert timestamp to ISO format string
+            last_refresh = None
+            if timestamp:
+                if isinstance(timestamp, datetime):
+                    last_refresh = timestamp.isoformat()
+                else:
+                    last_refresh = datetime.fromtimestamp(timestamp, tz=timezone.utc).isoformat()
+            
             cache_status["providers"] = {
                 "providers_cached": len(providers) if providers else 0,
-                "last_refresh": datetime.fromtimestamp(timestamp, tz=timezone.utc).isoformat() if timestamp else None,
+                "last_refresh": last_refresh,
                 "ttl_seconds": ttl,
                 "cache_age_seconds": cache_age_seconds,
                 "status": "stale" if is_stale else ("healthy" if providers else "empty"),
