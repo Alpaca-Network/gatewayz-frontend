@@ -1,0 +1,228 @@
+{
+  "portkey": {
+    "total": 500,
+    "valid": 476,
+    "invalid": 24,
+    "warnings": 0,
+    "invalid_models": [
+      {
+        "id": "qwen-3-coder-480b",
+        "issue": "Missing slash separator (should be provider/model)"
+      },
+      {
+        "id": "qwen-3-32b",
+        "issue": "Missing slash separator (should be provider/model)"
+      },
+      {
+        "id": "qwen-3-235b-a22b-thinking-2507",
+        "issue": "Missing slash separator (should be provider/model)"
+      },
+      {
+        "id": "qwen-3-235b-a22b-instruct-2507",
+        "issue": "Missing slash separator (should be provider/model)"
+      },
+      {
+        "id": "llama3.1-8b",
+        "issue": "Missing slash separator (should be provider/model)"
+      },
+      {
+        "id": "llama-4-scout-17b-16e-instruct",
+        "issue": "Missing slash separator (should be provider/model)"
+      },
+      {
+        "id": "llama-4-maverick-17b-128e-instruct",
+        "issue": "Missing slash separator (should be provider/model)"
+      },
+      {
+        "id": "llama-3.3-70b",
+        "issue": "Missing slash separator (should be provider/model)"
+      },
+      {
+        "id": "grok-vision-beta",
+        "issue": "Missing slash separator (should be provider/model)"
+      },
+      {
+        "id": "grok-code-fast-1",
+        "issue": "Missing slash separator (should be provider/model)"
+      },
+      {
+        "id": "grok-beta",
+        "issue": "Missing slash separator (should be provider/model)"
+      },
+      {
+        "id": "grok-4-latest",
+        "issue": "Missing slash separator (should be provider/model)"
+      },
+      {
+        "id": "grok-4-0709",
+        "issue": "Missing slash separator (should be provider/model)"
+      },
+      {
+        "id": "grok-4",
+        "issue": "Missing slash separator (should be provider/model)"
+      },
+      {
+        "id": "grok-3-mini-latest",
+        "issue": "Missing slash separator (should be provider/model)"
+      },
+      {
+        "id": "grok-3-mini-fast-latest",
+        "issue": "Missing slash separator (should be provider/model)"
+      },
+      {
+        "id": "grok-3-mini-fast-beta",
+        "issue": "Missing slash separator (should be provider/model)"
+      },
+      {
+        "id": "grok-3-mini-beta",
+        "issue": "Missing slash separator (should be provider/model)"
+      },
+      {
+        "id": "grok-3-latest",
+        "issue": "Missing slash separator (should be provider/model)"
+      },
+      {
+        "id": "grok-3-fast-latest",
+        "issue": "Missing slash separator (should be provider/model)"
+      },
+      {
+        "id": "grok-3-fast-beta",
+        "issue": "Missing slash separator (should be provider/model)"
+      },
+      {
+        "id": "grok-2-vision-1212",
+        "issue": "Missing slash separator (should be provider/model)"
+      },
+      {
+        "id": "grok-2-1212",
+        "issue": "Missing slash separator (should be provider/model)"
+      },
+      {
+        "id": "gpt-oss-120b",
+        "issue": "Missing slash separator (should be provider/model)"
+      }
+    ],
+    "warning_models": []
+  },
+  "openrouter": {
+    "total": 334,
+    "valid": 334,
+    "invalid": 0,
+    "warnings": 0,
+    "invalid_models": [],
+    "warning_models": []
+  },
+  "deepinfra": {
+    "total": 334,
+    "valid": 334,
+    "invalid": 0,
+    "warnings": 0,
+    "invalid_models": [],
+    "warning_models": []
+  },
+  "chutes": {
+    "total": 104,
+    "valid": 80,
+    "invalid": 24,
+    "warnings": 0,
+    "invalid_models": [
+      {
+        "id": "iLustMix",
+        "issue": "Missing slash separator (should be provider/model)"
+      },
+      {
+        "id": "hidream",
+        "issue": "Missing slash separator (should be provider/model)"
+      },
+      {
+        "id": "qwen-image-edit-2509",
+        "issue": "Missing slash separator (should be provider/model)"
+      },
+      {
+        "id": "qwen-image",
+        "issue": "Missing slash separator (should be provider/model)"
+      },
+      {
+        "id": "whisper-large-v3",
+        "issue": "Missing slash separator (should be provider/model)"
+      },
+      {
+        "id": "chroma",
+        "issue": "Missing slash separator (should be provider/model)"
+      },
+      {
+        "id": "csm-1b",
+        "issue": "Missing slash separator (should be provider/model)"
+      },
+      {
+        "id": "musetalk",
+        "issue": "Missing slash separator (should be provider/model)"
+      },
+      {
+        "id": "FLUX.1-schnell",
+        "issue": "Missing slash separator (should be provider/model)"
+      },
+      {
+        "id": "FLUX.1-dev",
+        "issue": "Missing slash separator (should be provider/model)"
+      },
+      {
+        "id": "nsfw-classifier",
+        "issue": "Missing slash separator (should be provider/model)"
+      },
+      {
+        "id": "wan2.1-14b",
+        "issue": "Missing slash separator (should be provider/model)"
+      },
+      {
+        "id": "kokoro",
+        "issue": "Missing slash separator (should be provider/model)"
+      },
+      {
+        "id": "JuggernautXL",
+        "issue": "Missing slash separator (should be provider/model)"
+      },
+      {
+        "id": "neta-lumina",
+        "issue": "Missing slash separator (should be provider/model)"
+      },
+      {
+        "id": "nova-anime3d-xl",
+        "issue": "Missing slash separator (should be provider/model)"
+      },
+      {
+        "id": "nova-cartoon-xl",
+        "issue": "Missing slash separator (should be provider/model)"
+      },
+      {
+        "id": "HassakuXL",
+        "issue": "Missing slash separator (should be provider/model)"
+      },
+      {
+        "id": "orphic-lora",
+        "issue": "Missing slash separator (should be provider/model)"
+      },
+      {
+        "id": "Illustrij",
+        "issue": "Missing slash separator (should be provider/model)"
+      },
+      {
+        "id": "Animij",
+        "issue": "Missing slash separator (should be provider/model)"
+      },
+      {
+        "id": "NovaFurryXL",
+        "issue": "Missing slash separator (should be provider/model)"
+      },
+      {
+        "id": "diffrhythm",
+        "issue": "Missing slash separator (should be provider/model)"
+      },
+      {
+        "id": "hate-speech-detector",
+        "issue": "Missing slash separator (should be provider/model)"
+      }
+    ],
+    "warning_models": []
+  }
+}

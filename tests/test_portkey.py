@@ -25,11 +25,10 @@ def test_portkey_chat_completion():
         {"role": "user", "content": "Say 'Hello from Portkey!' in exactly those words."}
     ]
 
-    model = "gpt-3.5-turbo"
-    provider = "openai"
-
+    # Use @provider/model format as shown in Portkey docs
+    model = "@deepinfra/zai-org/GLM-4.5-Air"
+    
     print(f"\nModel: {model}")
-    print(f"Provider: {provider}")
     print(f"Messages: {messages}")
 
     try:
@@ -37,7 +36,7 @@ def test_portkey_chat_completion():
         response = make_portkey_request_openai(
             messages=messages,
             model=model,
-            provider=provider,
+            provider=None,  # No provider needed with @provider/model format
             max_tokens=50
         )
 
@@ -67,23 +66,44 @@ def test_provider_comparison():
     print("Testing Multiple Providers via Portkey")
     print("=" * 60)
 
-    providers_to_test = [
-        ("openai", "gpt-3.5-turbo"),
-        # Add more providers as needed
+    models_to_test = [
+        # DeepInfra models
+        ("@deepinfra/zai-org/GLM-4.5-Air", "DeepInfra - GLM-4.5-Air"),
+        ("@deepinfra/meta-llama/Meta-Llama-3.1-8B-Instruct", "DeepInfra - Llama 3.1"),
+        
+        # OpenRouter models
+        ("@openrouter/openai/gpt-3.5-turbo", "OpenRouter - GPT-3.5"),
+        
+        # X.AI models (updated to grok-3 as grok-beta is deprecated)
+        ("@xai/grok-3", "X.AI - Grok 3"),
+        
+        # Cerebras models
+        ("@cerebras/llama3.1-8b", "Cerebras - Llama 3.1 8B"),
+        
+        # HuggingFace models - Note: May require specific model availability in Portkey
+        # Commenting out due to 404 errors - provider may need additional setup
+        # ("@hug/microsoft/Phi-3-mini-4k-instruct", "HuggingFace - Phi-3 Mini"),
+        
+        # Novita models
+        ("@novita/meta-llama/llama-3.1-8b-instruct", "Novita - Llama 3.1"),
+        
+        # Nebius models
+        ("@nebius/meta-llama/Meta-Llama-3.1-8B-Instruct", "Nebius - Llama 3.1"),
     ]
 
-    for provider, model in providers_to_test:
-        print(f"\nTesting {provider} with model {model}...")
+    for model, description in models_to_test:
+        print(f"\nTesting {description}...")
+        print(f"  Model: {model}")
 
         messages = [
-            {"role": "user", "content": f"Say 'Hello from {provider}!'"}
+            {"role": "user", "content": "Say 'Hello from Portkey!' in 5 words or less"}
         ]
 
         try:
             response = make_portkey_request_openai(
                 messages=messages,
                 model=model,
-                provider=provider,
+                provider=None,  # No provider needed with @provider/model format
                 max_tokens=30
             )
 

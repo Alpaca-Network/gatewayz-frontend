@@ -14,35 +14,37 @@ import { Portkey } from "portkey-ai";
 
 const PORTKEY_API_KEY = process.env.PORTKEY_API_KEY;
 const PORTKEY_VIRTUAL_KEY =
-  process.env.PORTKEY_VIRTUAL_KEY_OPENAI ?? process.env.PORTKEY_VIRTUAL_KEY;
+  process.env.PORTKEY_VIRTUAL_KEY_OPENAI ?? process.env.PORTKEY_VIRTUAL_KEY ?? null;
+const PORTKEY_PROVIDER_SLUG =
+  process.env.PORTKEY_PROVIDER_SLUG ?? PORTKEY_VIRTUAL_KEY ?? "openai";
 
 if (!PORTKEY_API_KEY) {
   console.error("PORTKEY_API_KEY is not set. Please export it before running this script.");
   process.exit(1);
 }
 
-if (!PORTKEY_VIRTUAL_KEY) {
-  console.error(
-    "No Portkey virtual key found. Export PORTKEY_VIRTUAL_KEY_OPENAI or PORTKEY_VIRTUAL_KEY."
-  );
-  process.exit(1);
-}
-
 const portkey = new Portkey({
   apiKey: PORTKEY_API_KEY,
-  virtualKey: PORTKEY_VIRTUAL_KEY,
+  virtualKey: PORTKEY_VIRTUAL_KEY ?? undefined,
   baseURL: process.env.PORTKEY_BASE_URL ?? "https://api.portkey.ai/v1",
 });
 
 async function main() {
-  const model = process.env.PORTKEY_MODEL ?? "gpt-3.5-turbo";
+  const baseModel = process.env.PORTKEY_MODEL ?? "gpt-3.5-turbo";
+  const providerSlug = PORTKEY_PROVIDER_SLUG.replace(/^@/, "");
+
+  let model;
+  if (baseModel.startsWith("@")) {
+    model = baseModel;
+  } else if (baseModel.includes("/")) {
+    model = baseModel.startsWith("@") ? baseModel : `@${baseModel}`;
+  } else {
+    model = `@${providerSlug}/${baseModel}`;
+  }
   const completion = await portkey.chat.completions.create({
     model,
     messages: [
-      {
-        role: "user",
-        content: "Give me a one sentence status update from Portkey.",
-      },
+      { role: "user", content: "Give me a one sentence status update from Portkey." },
     ],
   });
 

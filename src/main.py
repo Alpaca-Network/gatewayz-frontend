@@ -110,15 +110,8 @@ def create_app() -> FastAPI:
             module = __import__(f"src.routes.{module_name}", fromlist=['router'])
             router = getattr(module, 'router')
 
-            # Include the router with catalog-specific prefix to avoid route conflicts
-            if module_name == "catalog":
-                # Add /catalog prefix to avoid /model/* catching /v1/* routes
-                app.include_router(router, prefix="/catalog")
-                public_router = getattr(module, "public_router", None)
-                if public_router:
-                    app.include_router(public_router)
-            else:
-                app.include_router(router)
+            # Include the router (all routes now follow clean REST patterns)
+            app.include_router(router)
 
             # Log success
             logger.info(f"  ✅ {display_name} ({module_name})")

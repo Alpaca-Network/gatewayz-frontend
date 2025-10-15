@@ -1,0 +1,73 @@
+{
+  "test_time": "2025-10-15T00:59:05.526030",
+  "prod_url": "https://api.gatewayz.ai",
+  "total_tests": 7,
+  "passed": 0,
+  "failed": 7,
+  "success_rate": 0.0,
+  "results": [
+    {
+      "gateway": "openrouter",
+      "status_code": 404,
+      "success": false,
+      "response_time_ms": 279,
+      "error": "{\"detail\":\"Not Found\"}",
+      "model_count": 0,
+      "sample_models": []
+    },
+    {
+      "gateway": "portkey",
+      "status_code": 404,
+      "success": false,
+      "response_time_ms": 257,
+      "error": "{\"detail\":\"Not Found\"}",
+      "model_count": 0,
+      "sample_models": []
+    },
+    {
+      "gateway": "chutes",
+      "status_code": 404,
+      "success": false,
+      "response_time_ms": 253,
+      "error": "{\"detail\":\"Not Found\"}",
+      "model_count": 0,
+      "sample_models": []
+    },
+    {
+      "gateway": "featherless",
+      "status_code": 404,
+      "success": false,
+      "response_time_ms": 271,
+      "error": "{\"detail\":\"Not Found\"}",
+      "model_count": 0,
+      "sample_models": []
+    },
+    {
+      "gateway": "together",
+      "status_code": 404,
+      "success": false,
+      "response_time_ms": 265,
+      "error": "{\"detail\":\"Not Found\"}",
+      "model_count": 0,
+      "sample_models": []
+    },
+    {
+      "gateway": "fireworks",
+      "status_code": 404,
+      "success": false,
+      "response_time_ms": 294,
+      "error": "{\"detail\":\"Not Found\"}",
+      "model_count": 0,
+      "sample_models": []
+    },
+    {
+      "gateway": "groq",
+      "status_code": 404,
+      "success": false,
+      "response_time_ms": 270,
+      "error": "{\"detail\":\"Not Found\"}",
+      "model_count": 0,
+      "sample_models": []
+    }
+  ]
+}

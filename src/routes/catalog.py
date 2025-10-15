@@ -21,8 +21,8 @@ from src.db.gateway_analytics import (
 logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 
+# Single router for all model catalog endpoints
 router = APIRouter()
-public_router = APIRouter(prefix="/models")
 
 
 def normalize_developer_segment(value: Optional[str]) -> Optional[str]:
@@ -130,7 +130,7 @@ async def get_providers(
     offset: Optional[int] = Query(0, description="Offset for pagination"),
     gateway: Optional[str] = Query(
         "openrouter",
-        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'chutes', 'groq', or 'all'",
+        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'chutes', 'groq', 'fireworks', 'together', or 'all'",
     ),
 ):
     """Get all available provider list with detailed metric data including model count and logo URLs"""
@@ -202,7 +202,11 @@ async def get_providers(
         raise HTTPException(status_code=500, detail="Failed to get providers")
 
 
-@router.get("/models", tags=["models"])
+# ============================================================================
+# INTERNAL HELPER FUNCTIONS (Used by public API endpoints below)
+# These functions contain the actual logic but are not directly exposed as routes
+# ============================================================================
+
 async def get_models(
     provider: Optional[str] = Query(None, description="Filter models by provider"),
     limit: Optional[int] = Query(None, description="Limit number of results"),
@@ -212,7 +216,7 @@ async def get_models(
     ),
     gateway: Optional[str] = Query(
         "openrouter",
-        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'chutes', 'groq', or 'all'",
+        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'chutes', 'groq', 'fireworks', 'together', or 'all'",
     ),
 ):
     """Get all metric data of available models with optional filtering, pagination, Hugging Face integration, and provider logos"""
@@ -230,6 +234,8 @@ async def get_models(
         featherless_models: List[dict] = []
         chutes_models: List[dict] = []
         groq_models: List[dict] = []
+        fireworks_models: List[dict] = []
+        together_models: List[dict] = []
 
         if gateway_value in ("openrouter", "all"):
             openrouter_models = get_cached_models("openrouter") or []
@@ -261,6 +267,18 @@ async def get_models(
                 logger.error("No Groq models data available from cache")
                 raise HTTPException(status_code=503, detail="Models data unavailable")
 
+        if gateway_value in ("fireworks", "all"):
+            fireworks_models = get_cached_models("fireworks") or []
+            if gateway_value == "fireworks" and not fireworks_models:
+                logger.error("No Fireworks models data available from cache")
+                raise HTTPException(status_code=503, detail="Models data unavailable")
+
+        if gateway_value in ("together", "all"):
+            together_models = get_cached_models("together") or []
+            if gateway_value == "together" and not together_models:
+                logger.error("No Together models data available from cache")
+                raise HTTPException(status_code=503, detail="Models data unavailable")
+
         if gateway_value == "openrouter":
             models = openrouter_models
         elif gateway_value == "portkey":
@@ -271,8 +289,12 @@ async def get_models(
             models = chutes_models
         elif gateway_value == "groq":
             models = groq_models
+        elif gateway_value == "fireworks":
+            models = fireworks_models
+        elif gateway_value == "together":
+            models = together_models
         else:
-            models = merge_models_by_slug(openrouter_models, portkey_models, featherless_models, chutes_models, groq_models)
+            models = merge_models_by_slug(openrouter_models, portkey_models, featherless_models, chutes_models, groq_models, fireworks_models, together_models)
 
         if not models:
             logger.error("No models data available after applying gateway selection")
@@ -311,6 +333,18 @@ async def get_models(
             groq_providers = derive_portkey_providers(models_for_providers)
             annotated_groq = annotate_provider_sources(groq_providers, "groq")
             provider_groups.append(annotated_groq)
+
+        if gateway_value in ("fireworks", "all"):
+            models_for_providers = fireworks_models if gateway_value == "all" else models
+            fireworks_providers = derive_portkey_providers(models_for_providers)
+            annotated_fireworks = annotate_provider_sources(fireworks_providers, "fireworks")
+            provider_groups.append(annotated_fireworks)
+
+        if gateway_value in ("together", "all"):
+            models_for_providers = together_models if gateway_value == "all" else models
+            together_providers = derive_portkey_providers(models_for_providers)
+            annotated_together = annotate_provider_sources(together_providers, "together")
+            provider_groups.append(annotated_together)
 
         enhanced_providers = merge_provider_lists(*provider_groups)
         logger.info(f"Retrieved {len(enhanced_providers)} enhanced providers from cache")
@@ -351,7 +385,9 @@ async def get_models(
             "featherless": "Featherless catalog",
             "chutes": "Chutes.ai catalog",
             "groq": "Groq catalog",
-            "all": "Combined OpenRouter, Portkey, Featherless, Chutes, and Groq catalog",
+            "fireworks": "Fireworks catalog",
+            "together": "Together catalog",
+            "all": "Combined OpenRouter, Portkey, Featherless, Chutes, Groq, Fireworks, and Together catalog",
         }.get(gateway_value, "OpenRouter catalog")
 
         result = {
@@ -375,14 +411,13 @@ async def get_models(
         raise HTTPException(status_code=500, detail="Failed to get models")
 
 
-@router.get("/model/{provider_name:path}/{model_name:path}", tags=["models"])
 async def get_specific_model(
     provider_name: str,
     model_name: str,
     include_huggingface: bool = Query(True, description="Include Hugging Face metrics if available"),
     gateway: Optional[str] = Query(
         None,
-        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', 'groq', or auto-detect if not specified",
+        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', 'groq', 'fireworks', 'together', or auto-detect if not specified",
     ),
 ):
     """Get specific model data of a given provider with detailed information from any gateway
@@ -439,7 +474,7 @@ async def get_specific_model(
             provider_groups.append(enhanced_openrouter)
         
         # Add providers from other gateways based on detected gateway
-        if detected_gateway in ["portkey", "featherless", "deepinfra", "chutes", "groq"]:
+        if detected_gateway in ["portkey", "featherless", "deepinfra", "chutes", "groq", "fireworks", "together"]:
             # Get models from the detected gateway to derive providers
             gateway_models = get_cached_models(detected_gateway)
             if gateway_models:
@@ -474,7 +509,6 @@ async def get_specific_model(
         raise HTTPException(status_code=500, detail="Failed to get model data")
 
 
-@router.get("/developer/{developer_name}/models", tags=["models"])
 async def get_developer_models(
     developer_name: str,
     limit: Optional[int] = Query(None, description="Limit number of results"),
@@ -662,7 +696,7 @@ async def get_gateway_statistics(
         logger.info(f"Fetching stats for gateway: {gateway}, time_range: {time_range}")
         
         # Validate gateway
-        valid_gateways = ["openrouter", "portkey", "featherless", "deepinfra", "chutes", "groq"]
+        valid_gateways = ["openrouter", "portkey", "featherless", "deepinfra", "chutes", "groq", "fireworks", "together"]
         if gateway.lower() not in valid_gateways:
             raise HTTPException(
                 status_code=400,
@@ -690,7 +724,6 @@ async def get_gateway_statistics(
         raise HTTPException(status_code=500, detail=f"Failed to get gateway statistics: {str(e)}")
 
 
-@router.get("/models/trending", tags=["statistics"])
 async def get_trending_models_endpoint(
     gateway: Optional[str] = Query("all", description="Gateway filter or 'all'"),
     time_range: str = Query("24h", description="Time range: '1h', '24h', '7d', '30d'"),
@@ -841,7 +874,6 @@ async def get_provider_top_models_endpoint(
 
 # ==================== NEW: Model Comparison Endpoints ====================
 
-@router.get("/model/{provider_name}/{model_name}/compare", tags=["comparison"])
 async def compare_model_across_gateways(
     provider_name: str,
     model_name: str,
@@ -877,7 +909,7 @@ async def compare_model_across_gateways(
         if gateways and gateways.lower() != "all":
             gateway_list = [g.strip().lower() for g in gateways.split(",")]
         else:
-            gateway_list = ["openrouter", "portkey", "featherless", "deepinfra", "chutes", "groq"]
+            gateway_list = ["openrouter", "portkey", "featherless", "deepinfra", "chutes", "groq", "fireworks", "together"]
         
         model_id = f"{provider_name}/{model_name}"
         comparisons = []
@@ -957,7 +989,6 @@ async def compare_model_across_gateways(
         raise HTTPException(status_code=500, detail=f"Failed to compare model: {str(e)}")
 
 
-@router.post("/models/batch-compare", tags=["comparison"])
 async def batch_compare_models(
     model_ids: List[str] = Query(..., description="List of model IDs (e.g., ['openai/gpt-4', 'anthropic/claude-3'])"),
     criteria: str = Query("price", description="Comparison criteria: 'price', 'context', 'availability'")
@@ -998,7 +1029,7 @@ async def batch_compare_models(
             
             try:
                 # Get model from all gateways
-                all_gateways = ["openrouter", "portkey", "featherless", "groq"]
+                all_gateways = ["openrouter", "portkey", "featherless", "groq", "fireworks", "together"]
                 models_data = []
                 
                 for gateway in all_gateways:
@@ -1053,9 +1084,13 @@ async def batch_compare_models(
         raise HTTPException(status_code=500, detail=f"Failed to batch compare models: {str(e)}")
 
 
-# Public /models routes mirroring Hugging Face-style paths
-@public_router.get("", tags=["models"])
-async def public_get_models(
+# ============================================================================
+# PUBLIC API ENDPOINTS - Unified /models routes
+# These are the actual FastAPI route handlers exposed to clients
+# ============================================================================
+
+@router.get("/models", tags=["models"])
+async def get_all_models(
     provider: Optional[str] = Query(None, description="Filter models by provider"),
     limit: Optional[int] = Query(None, description="Limit number of results"),
     offset: Optional[int] = Query(0, description="Offset for pagination"),
@@ -1064,7 +1099,7 @@ async def public_get_models(
     ),
     gateway: Optional[str] = Query(
         "openrouter",
-        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'chutes', 'groq', or 'all'",
+        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'chutes', 'groq', 'fireworks', 'together', or 'all'",
     ),
 ):
     return await get_models(
@@ -1076,8 +1111,8 @@ async def public_get_models(
     )
 
 
-@public_router.get("/trending", tags=["statistics"])
-async def public_get_trending_models(
+@router.get("/models/trending", tags=["statistics"])
+async def get_trending_models_api(
     gateway: Optional[str] = Query("all", description="Gateway filter or 'all'"),
     time_range: str = Query("24h", description="Time range: '1h', '24h', '7d', '30d'"),
     limit: int = Query(10, description="Number of models to return", ge=1, le=100),
@@ -1091,16 +1126,16 @@ async def public_get_trending_models(
     )
 
 
-@public_router.post("/batch-compare", tags=["comparison"])
-async def public_batch_compare_models(
+@router.post("/models/batch-compare", tags=["comparison"])
+async def batch_compare_models_api(
     model_ids: List[str] = Query(..., description="List of model IDs (e.g., ['openai/gpt-4', 'anthropic/claude-3'])"),
     criteria: str = Query("price", description="Comparison criteria: 'price', 'context', 'availability'"),
 ):
     return await batch_compare_models(model_ids=model_ids, criteria=criteria)
 
 
-@public_router.get("/{provider_name}/{model_name:path}/compare", tags=["comparison"])
-async def public_compare_model_across_gateways(
+@router.get("/models/{provider_name}/{model_name:path}/compare", tags=["comparison"])
+async def compare_model_gateways_api(
     provider_name: str,
     model_name: str,
     gateways: Optional[str] = Query("all", description="Comma-separated gateways or 'all'"),
@@ -1112,14 +1147,14 @@ async def public_compare_model_across_gateways(
     )
 
 
-@public_router.get("/{provider_name}/{model_name:path}", tags=["models"])
-async def public_get_specific_model(
+@router.get("/models/{provider_name}/{model_name:path}", tags=["models"])
+async def get_specific_model_api(
     provider_name: str,
     model_name: str,
     include_huggingface: bool = Query(True, description="Include Hugging Face metrics if available"),
     gateway: Optional[str] = Query(
         None,
-        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', 'groq', or auto-detect if not specified",
+        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', 'groq', 'fireworks', 'together', or auto-detect if not specified",
     ),
 ):
     return await get_specific_model(
@@ -1130,8 +1165,8 @@ async def public_get_specific_model(
     )
 
 
-@public_router.get("/{developer_name}", tags=["models"])
-async def public_get_developer_models(
+@router.get("/models/{developer_name}", tags=["models"])
+async def get_developer_models_api(
     developer_name: str,
     limit: Optional[int] = Query(None, description="Limit number of results"),
     offset: Optional[int] = Query(0, description="Offset for pagination"),
