@@ -60,7 +60,7 @@ export function OnboardingBanner() {
       },
       {
         id: 'credits',
-        title: 'Add More Credits',
+        title: 'Add $10 and get a bonus $10 in free credits on your first top up!',
         path: '/settings/credits',
         completed: taskState.credits || false,
       },
