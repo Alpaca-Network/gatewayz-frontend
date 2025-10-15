@@ -720,7 +720,8 @@ def fetch_models_from_together():
         response.raise_for_status()
 
         payload = response.json()
-        raw_models = payload.get("data", [])
+        # Together API returns a list directly, not wrapped in {"data": [...]}
+        raw_models = payload if isinstance(payload, list) else payload.get("data", [])
         normalized_models = [normalize_together_model(model) for model in raw_models if model]
 
         _together_models_cache["data"] = normalized_models
