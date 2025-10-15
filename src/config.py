@@ -18,6 +18,7 @@ class Config:
 
     # Portkey Configuration
     PORTKEY_API_KEY = os.environ.get("PORTKEY_API_KEY")
+    PORTKEY_DEFAULT_VIRTUAL_KEY = os.environ.get("PORTKEY_VIRTUAL_KEY")
 
     # Provider API Keys (for use with Portkey)
     PROVIDER_OPENAI_API_KEY = os.environ.get("PROVIDER_OPENAI_API_KEY")
@@ -25,18 +26,47 @@ class Config:
 
     # DeepInfra Configuration (for direct API access)
     DEEPINFRA_API_KEY = os.environ.get("DEEPINFRA_API_KEY")
+    XAI_API_KEY = os.environ.get("XAI_API_KEY")
+    NOVITA_API_KEY = os.environ.get("NOVITA_API_KEY")
+    NEBIUS_API_KEY = os.environ.get("NEBIUS_API_KEY")
+    CEREBRAS_API_KEY = os.environ.get("CEREBRAS_API_KEY")
+    HUG_API_KEY = os.environ.get("HUG_API_KEY")
 
     # Featherless.ai Configuration
     FEATHERLESS_API_KEY = os.environ.get("FEATHERLESS_API_KEY")
 
     # Chutes.ai Configuration
     CHUTES_API_KEY = os.environ.get("CHUTES_API_KEY")
+
+    # Groq Configuration
+    GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
     
     # OpenRouter Analytics Cookie (for transaction analytics API)
     OPENROUTER_COOKIE = os.environ.get("OPENROUTER_COOKIE")
     
     # Admin Configuration
     ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL")
+
+    @classmethod
+    def get_portkey_virtual_key(cls, provider: str | None = None) -> str | None:
+        """
+        Resolve Portkey virtual key for a provider.
+
+        Order of precedence:
+        1. Explicit provider-specific env: PORTKEY_VIRTUAL_KEY_<PROVIDER>
+           (provider name uppercased with non-alphanumeric replaced by underscores)
+        2. PORTKEY_VIRTUAL_KEY (generic default)
+        """
+        if not provider:
+            return cls.PORTKEY_DEFAULT_VIRTUAL_KEY
+
+        normalized = "".join(
+            ch if ch.isalnum() else "_"
+            for ch in provider.upper()
+        )
+        env_name = f"PORTKEY_VIRTUAL_KEY_{normalized}"
+        provider_specific = os.environ.get(env_name)
+        return provider_specific or cls.PORTKEY_DEFAULT_VIRTUAL_KEY
     
     @classmethod
     def validate(cls):

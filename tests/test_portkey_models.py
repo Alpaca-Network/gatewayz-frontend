@@ -18,38 +18,32 @@ def test_portkey_models():
     # Check environment variables
     print("\n1️⃣  Checking Portkey Configuration...")
     portkey_key = os.getenv("PORTKEY_API_KEY")
-    provider_openai_key = os.getenv("PROVIDER_OPENAI_API_KEY")
+    portkey_virtual_key = (
+        os.getenv("PORTKEY_VIRTUAL_KEY_OPENAI")
+        or os.getenv("PORTKEY_VIRTUAL_KEY")
+    )
 
     if portkey_key:
         print(f"   ✅ PORTKEY_API_KEY: {portkey_key[:10]}...")
     else:
         print("   ❌ PORTKEY_API_KEY: Not configured")
 
-    if provider_openai_key:
-        print(f"   ✅ PROVIDER_OPENAI_API_KEY: {provider_openai_key[:10]}...")
+    if portkey_virtual_key:
+        print(f"   ✅ PORTKEY_VIRTUAL_KEY_OPENAI: {portkey_virtual_key[:10]}...")
     else:
-        print("   ⚠️  PROVIDER_OPENAI_API_KEY: Not configured (will need virtual keys)")
+        print("   ❌ PORTKEY_VIRTUAL_KEY(_OPENAI): Not configured")
+        print("      → Store your provider key in Portkey and export the virtual key.")
 
     # Test Portkey client initialization
     print("\n2️⃣  Testing Portkey Client Initialization...")
     try:
         from src.services.portkey_client import get_portkey_client
 
-        # Test with direct provider key if available
-        if provider_openai_key:
-            try:
-                client = get_portkey_client(provider="openai")
-                print("   ✅ Portkey client (direct OpenAI key): Initialized")
-            except Exception as e:
-                print(f"   ❌ Failed: {e}")
-
-        # Test with virtual key (dummy for now)
-        try:
-            # This will fail without valid virtual key, but tests the code path
-            # In production, you'd use: client = get_portkey_client(provider="openai", virtual_key="your-virtual-key-id")
-            print("   ℹ️  Virtual key support: Available (requires valid virtual key ID)")
-        except Exception as e:
-            print(f"   ℹ️  Virtual key note: {e}")
+        if portkey_virtual_key:
+            client = get_portkey_client(provider="openai", virtual_key=portkey_virtual_key)
+            print("   ✅ Portkey client (virtual key): Initialized")
+        else:
+            print("   ⚠️  Skipped Portkey client init (virtual key missing)")
 
     except Exception as e:
         print(f"   ❌ Import failed: {e}")
@@ -63,13 +57,14 @@ def test_portkey_models():
         messages = [{"role": "user", "content": "Say 'Hello from Portkey!' in 5 words or less"}]
         model = "gpt-3.5-turbo"
 
-        if provider_openai_key:
+        if portkey_virtual_key:
             print(f"   📤 Sending test request to {model} via Portkey...")
             response = make_portkey_request_openai(
                 messages=messages,
                 model=model,
                 provider="openai",
-                max_tokens=50
+                max_tokens=50,
+                virtual_key=portkey_virtual_key
             )
 
             processed = process_portkey_response(response)
@@ -79,8 +74,8 @@ def test_portkey_models():
             print(f"   📊 Tokens: {processed['usage']['total_tokens']}")
 
         else:
-            print("   ⚠️  Skipped (no PROVIDER_OPENAI_API_KEY)")
-            print("   💡 To test: Set PROVIDER_OPENAI_API_KEY or use Portkey virtual keys")
+            print("   ⚠️  Skipped (no PORTKEY virtual key)")
+            print("   💡 To test: Configure PORTKEY_VIRTUAL_KEY or PORTKEY_VIRTUAL_KEY_OPENAI")
 
     except Exception as e:
         print(f"   ❌ Request failed: {e}")
@@ -92,13 +87,14 @@ def test_portkey_models():
     try:
         from src.services.portkey_client import make_portkey_request_openai_stream
 
-        if provider_openai_key:
+        if portkey_virtual_key:
             print(f"   📤 Sending streaming test request...")
             stream = make_portkey_request_openai_stream(
                 messages=messages,
                 model=model,
                 provider="openai",
-                max_tokens=50
+                max_tokens=50,
+                virtual_key=portkey_virtual_key
             )
 
             print("   ✅ Stream initialized!")
@@ -114,7 +110,7 @@ def test_portkey_models():
             print(f"   ✅ Streaming complete! ({len(content)} chars)")
 
         else:
-            print("   ⚠️  Skipped (no PROVIDER_OPENAI_API_KEY)")
+            print("   ⚠️  Skipped (no PORTKEY virtual key)")
 
     except Exception as e:
         print(f"   ❌ Streaming failed: {e}")
@@ -132,6 +128,7 @@ def test_portkey_models():
     print('       "model": "gpt-3.5-turbo",')
     print('       "provider": "portkey",')
     print('       "portkey_provider": "openai",')
+    print('       "portkey_virtual_key": "vk_xxx",')
     print('       "messages": [{"role": "user", "content": "Hello"}]')
     print("     }'")
     print("   ```")
@@ -159,8 +156,7 @@ def test_portkey_models():
     print("   • To use Portkey in chat completions, set:")
     print('     "provider": "portkey"')
     print('     "portkey_provider": "openai"  (or "anthropic", etc.)')
-    print("   • For virtual keys, add:")
-    print('     "portkey_virtual_key": "your-virtual-key-id"')
+    print("   • Provide a Portkey virtual key via request field or env variables")
     print("\n" + "=" * 60)
 
 if __name__ == "__main__":

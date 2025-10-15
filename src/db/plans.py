@@ -80,7 +80,7 @@ def get_user_plan(user_id: int) -> Optional[Dict[str, Any]]:
                 'plan_description': '',
                 'daily_request_limit': 100,
                 'monthly_request_limit': 1000,
-                'daily_token_limit': 10000,
+                'daily_token_limit': 25000,
                 'monthly_token_limit': 100000,
                 'price_per_month': 0,
                 'features': [],
@@ -196,7 +196,7 @@ def check_plan_entitlements(user_id: int, required_feature: str = None) -> Dict[
                         'plan_expired': True,
                         'daily_request_limit': 100,
                         'monthly_request_limit': 1000,
-                        'daily_token_limit': 10000,
+                        'daily_token_limit': 25000,
                         'monthly_token_limit': 100000,
                         'features': ['basic_models'],
                         'plan_name': 'Expired',
@@ -230,7 +230,7 @@ def check_plan_entitlements(user_id: int, required_feature: str = None) -> Dict[
                     'plan_name': 'Unknown',
                     'daily_request_limit': 100,
                     'monthly_request_limit': 1000,
-                    'daily_token_limit': 10000,
+                    'daily_token_limit': 25000,
                     'monthly_token_limit': 100000,
                     'features': [],
                     'can_access_feature': (required_feature is None),  # no features to gate
@@ -242,7 +242,7 @@ def check_plan_entitlements(user_id: int, required_feature: str = None) -> Dict[
                 'has_plan': False,
                 'daily_request_limit': 100,
                 'monthly_request_limit': 1000,
-                'daily_token_limit': 10000,
+                'daily_token_limit': 25000,
                 'monthly_token_limit': 100000,
                 'features': ['basic_models'],
                 'plan_name': 'Trial',
@@ -261,7 +261,7 @@ def check_plan_entitlements(user_id: int, required_feature: str = None) -> Dict[
                 'plan_expired': True,
                 'daily_request_limit': 100,
                 'monthly_request_limit': 1000,
-                'daily_token_limit': 10000,
+                'daily_token_limit': 25000,
                 'monthly_token_limit': 100000,
                 'features': ['basic_models'],
                 'plan_name': 'Expired',
@@ -293,7 +293,7 @@ def check_plan_entitlements(user_id: int, required_feature: str = None) -> Dict[
             'has_plan': False,
             'daily_request_limit': 100,
             'monthly_request_limit': 1000,
-            'daily_token_limit': 10000,
+                    'daily_token_limit': 25000,
             'monthly_token_limit': 100000,
             'features': ['basic_models'],
             'plan_name': 'Error',
@@ -375,6 +375,9 @@ def enforce_plan_limits(user_id: int, tokens_requested: int = 0, environment_tag
         effective_monthly_request_limit = int(usage_data['limits']['monthly_request_limit'] * env_multiplier)
         effective_daily_token_limit = int(usage_data['limits']['daily_token_limit'] * env_multiplier)
         effective_monthly_token_limit = int(usage_data['limits']['monthly_token_limit'] * env_multiplier)
+
+        if environment_tag == 'live' and effective_daily_token_limit < 25_000:
+            effective_daily_token_limit = 25_000
 
         # Check if adding this request would exceed limits
         new_daily_tokens = usage_data['usage']['daily_tokens'] + tokens_requested

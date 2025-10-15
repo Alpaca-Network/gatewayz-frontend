@@ -318,10 +318,9 @@ async def chat_completions(
             # Handle streaming response
             try:
                 if provider == "portkey":
-                    portkey_provider = req.portkey_provider or "openai"
-                    portkey_virtual_key = getattr(req, "portkey_virtual_key", None)
+                    model = f"@{req.portkey_provider or 'openai'}/{model}"
                     stream = await _to_thread(
-                        make_portkey_request_openai_stream, messages, model, portkey_provider, portkey_virtual_key, **optional
+                        make_portkey_request_openai_stream, messages, model, **optional
                     )
                 elif provider == "featherless":
                     stream = await _to_thread(make_featherless_request_openai_stream, messages, model, **optional)
@@ -333,6 +332,8 @@ async def chat_completions(
                     stream_generator(stream, user, api_key, model, trial, environment_tag, session_id, messages, rate_limit_mgr, provider),
                     media_type="text/event-stream"
                 )
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e))
             except httpx.TimeoutException as e:
                 logger.warning("Upstream timeout (%s): %s", provider, e)
                 raise HTTPException(status_code=504, detail="Upstream timeout")
@@ -364,10 +365,9 @@ async def chat_completions(
         start = time.monotonic()
         try:
             if provider == "portkey":
-                portkey_provider = req.portkey_provider or "openai"
-                portkey_virtual_key = getattr(req, "portkey_virtual_key", None)
+                model = f"@{req.portkey_provider or 'openai'}/{model}"
                 resp_raw = await asyncio.wait_for(
-                    _to_thread(make_portkey_request_openai, messages, model, portkey_provider, portkey_virtual_key, **optional),
+                    _to_thread(make_portkey_request_openai, messages, model, **optional),
                     timeout=30
                 )
                 processed = await _to_thread(process_portkey_response, resp_raw)
@@ -383,6 +383,8 @@ async def chat_completions(
                     timeout=30
                 )
                 processed = await _to_thread(process_openrouter_response, resp_raw)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
         except httpx.TimeoutException as e:
             logger.warning("Upstream timeout (%s): %s", provider, e)
             raise HTTPException(status_code=504, detail="Upstream timeout")
@@ -700,10 +702,9 @@ async def unified_responses(
         if req.stream:
             try:
                 if provider == "portkey":
-                    portkey_provider = req.portkey_provider or "openai"
-                    portkey_virtual_key = getattr(req, "portkey_virtual_key", None)
+                    model = f"@{req.portkey_provider or 'openai'}/{model}"
                     stream = await _to_thread(
-                        make_portkey_request_openai_stream, messages, model, portkey_provider, portkey_virtual_key, **optional
+                        make_portkey_request_openai_stream, messages, model, **optional
                     )
                 elif provider == "featherless":
                     stream = await _to_thread(make_featherless_request_openai_stream, messages, model, **optional)
@@ -796,10 +797,9 @@ async def unified_responses(
         start = time.monotonic()
         try:
             if provider == "portkey":
-                portkey_provider = req.portkey_provider or "openai"
-                portkey_virtual_key = getattr(req, "portkey_virtual_key", None)
+                model = f"@{req.portkey_provider or 'openai'}/{model}"
                 resp_raw = await asyncio.wait_for(
-                    _to_thread(make_portkey_request_openai, messages, model, portkey_provider, portkey_virtual_key, **optional),
+                    _to_thread(make_portkey_request_openai, messages, model, **optional),
                     timeout=30
                 )
                 processed = await _to_thread(process_portkey_response, resp_raw)
