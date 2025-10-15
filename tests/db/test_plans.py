@@ -243,6 +243,8 @@ def test_check_plan_entitlements_no_plan_defaults(mod, fake_supabase):
     out = mod.check_plan_entitlements(user_id=111)
     assert out["has_plan"] is False
     assert out["daily_request_limit"] == 100
+    assert out["daily_token_limit"] == 500_000
+    assert out["monthly_token_limit"] == 15_000_000
     assert "basic_models" in out["features"]
 
 

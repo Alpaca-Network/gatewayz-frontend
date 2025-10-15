@@ -6,6 +6,13 @@ from src.supabase_config import get_supabase_client
 
 logger = logging.getLogger(__name__)
 
+# Default entitlements used when a plan cannot be resolved from the database.
+DEFAULT_DAILY_REQUEST_LIMIT = 100
+DEFAULT_MONTHLY_REQUEST_LIMIT = 1000
+DEFAULT_DAILY_TOKEN_LIMIT = 500_000
+DEFAULT_MONTHLY_TOKEN_LIMIT = 15_000_000
+DEFAULT_TRIAL_FEATURES = ['basic_models']
+
 def get_all_plans() -> List[Dict[str, Any]]:
     """Get all available subscription plans"""
     try:
@@ -78,10 +85,10 @@ def get_user_plan(user_id: int) -> Optional[Dict[str, Any]]:
                 'plan_id': user_plan['plan_id'],
                 'plan_name': 'Unknown',
                 'plan_description': '',
-                'daily_request_limit': 100,
-                'monthly_request_limit': 1000,
-                'daily_token_limit': 10000,
-                'monthly_token_limit': 100000,
+                'daily_request_limit': DEFAULT_DAILY_REQUEST_LIMIT,
+                'monthly_request_limit': DEFAULT_MONTHLY_REQUEST_LIMIT,
+                'daily_token_limit': DEFAULT_DAILY_TOKEN_LIMIT,
+                'monthly_token_limit': DEFAULT_MONTHLY_TOKEN_LIMIT,
                 'price_per_month': 0,
                 'features': [],
                 'start_date': user_plan['start_date'],
@@ -194,13 +201,13 @@ def check_plan_entitlements(user_id: int, required_feature: str = None) -> Dict[
                     return {
                         'has_plan': False,
                         'plan_expired': True,
-                        'daily_request_limit': 100,
-                        'monthly_request_limit': 1000,
-                        'daily_token_limit': 10000,
-                        'monthly_token_limit': 100000,
-                        'features': ['basic_models'],
+                        'daily_request_limit': DEFAULT_DAILY_REQUEST_LIMIT,
+                        'monthly_request_limit': DEFAULT_MONTHLY_REQUEST_LIMIT,
+                        'daily_token_limit': DEFAULT_DAILY_TOKEN_LIMIT,
+                        'monthly_token_limit': DEFAULT_MONTHLY_TOKEN_LIMIT,
+                        'features': DEFAULT_TRIAL_FEATURES.copy(),
                         'plan_name': 'Expired',
-                        'can_access_feature': required_feature in ['basic_models'] if required_feature else True
+                        'can_access_feature': required_feature in DEFAULT_TRIAL_FEATURES if required_feature else True
                     }
 
                 # ACTIVE PLAN FALLBACK: try to load the plan and return has_plan=True
@@ -228,10 +235,10 @@ def check_plan_entitlements(user_id: int, required_feature: str = None) -> Dict[
                 return {
                     'has_plan': True,
                     'plan_name': 'Unknown',
-                    'daily_request_limit': 100,
-                    'monthly_request_limit': 1000,
-                    'daily_token_limit': 10000,
-                    'monthly_token_limit': 100000,
+                    'daily_request_limit': DEFAULT_DAILY_REQUEST_LIMIT,
+                    'monthly_request_limit': DEFAULT_MONTHLY_REQUEST_LIMIT,
+                    'daily_token_limit': DEFAULT_DAILY_TOKEN_LIMIT,
+                    'monthly_token_limit': DEFAULT_MONTHLY_TOKEN_LIMIT,
                     'features': [],
                     'can_access_feature': (required_feature is None),  # no features to gate
                     'plan_expires': up.get('end_date'),
@@ -240,13 +247,13 @@ def check_plan_entitlements(user_id: int, required_feature: str = None) -> Dict[
             # Truly no active plan → trial defaults
             return {
                 'has_plan': False,
-                'daily_request_limit': 100,
-                'monthly_request_limit': 1000,
-                'daily_token_limit': 10000,
-                'monthly_token_limit': 100000,
-                'features': ['basic_models'],
+                'daily_request_limit': DEFAULT_DAILY_REQUEST_LIMIT,
+                'monthly_request_limit': DEFAULT_MONTHLY_REQUEST_LIMIT,
+                'daily_token_limit': DEFAULT_DAILY_TOKEN_LIMIT,
+                'monthly_token_limit': DEFAULT_MONTHLY_TOKEN_LIMIT,
+                'features': DEFAULT_TRIAL_FEATURES.copy(),
                 'plan_name': 'Trial',
-                'can_access_feature': required_feature in ['basic_models'] if required_feature else True
+                'can_access_feature': required_feature in DEFAULT_TRIAL_FEATURES if required_feature else True
             }
 
         # We have a combined user_plan (happy path)
@@ -259,13 +266,13 @@ def check_plan_entitlements(user_id: int, required_feature: str = None) -> Dict[
             return {
                 'has_plan': False,
                 'plan_expired': True,
-                'daily_request_limit': 100,
-                'monthly_request_limit': 1000,
-                'daily_token_limit': 10000,
-                'monthly_token_limit': 100000,
-                'features': ['basic_models'],
+                'daily_request_limit': DEFAULT_DAILY_REQUEST_LIMIT,
+                'monthly_request_limit': DEFAULT_MONTHLY_REQUEST_LIMIT,
+                'daily_token_limit': DEFAULT_DAILY_TOKEN_LIMIT,
+                'monthly_token_limit': DEFAULT_MONTHLY_TOKEN_LIMIT,
+                'features': DEFAULT_TRIAL_FEATURES.copy(),
                 'plan_name': 'Expired',
-                'can_access_feature': required_feature in ['basic_models'] if required_feature else True
+                'can_access_feature': required_feature in DEFAULT_TRIAL_FEATURES if required_feature else True
             }
 
         features = user_plan.get('features', [])
@@ -291,11 +298,11 @@ def check_plan_entitlements(user_id: int, required_feature: str = None) -> Dict[
         # Safe defaults on error
         return {
             'has_plan': False,
-            'daily_request_limit': 100,
-            'monthly_request_limit': 1000,
-            'daily_token_limit': 10000,
-            'monthly_token_limit': 100000,
-            'features': ['basic_models'],
+            'daily_request_limit': DEFAULT_DAILY_REQUEST_LIMIT,
+            'monthly_request_limit': DEFAULT_MONTHLY_REQUEST_LIMIT,
+            'daily_token_limit': DEFAULT_DAILY_TOKEN_LIMIT,
+            'monthly_token_limit': DEFAULT_MONTHLY_TOKEN_LIMIT,
+            'features': DEFAULT_TRIAL_FEATURES.copy(),
             'plan_name': 'Error',
             'can_access_feature': False
         }
