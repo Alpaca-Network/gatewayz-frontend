@@ -63,14 +63,22 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
   }
 
   // Fallback to static data
-  let gatewayModels;
+  let transformedModels;
 
   if (gateway === 'all') {
-    // Return all models when gateway is 'all'
-    gatewayModels = models;
-  } else {
-    // Distribute models across gateways for testing
+    // Distribute all models across different gateways
     const modelsPerGateway = Math.ceil(models.length / 5);
+    const gateways = ['openrouter', 'portkey', 'featherless', 'chutes', 'fireworks'];
+    
+    transformedModels = models.map((model, index) => {
+      const gatewayIndex = Math.floor(index / modelsPerGateway);
+      const assignedGateway = gateways[Math.min(gatewayIndex, gateways.length - 1)];
+      return transformModel(model, assignedGateway);
+    });
+  } else {
+    // Get models for specific gateway
+    const modelsPerGateway = Math.ceil(models.length / 5);
+    let gatewayModels;
     
     if (gateway === 'openrouter') {
       gatewayModels = models.slice(0, modelsPerGateway);
@@ -85,9 +93,9 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
     } else {
       gatewayModels = models; // Default to all models
     }
+    
+    transformedModels = gatewayModels.map(m => transformModel(m, gateway));
   }
-
-  const transformedModels = gatewayModels.map(m => transformModel(m, gateway));
 
   return {
     data: transformedModels
