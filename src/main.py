@@ -81,6 +81,7 @@ def create_app() -> FastAPI:
         ("chat", "Chat Completions"),  # Moved before catalog
         ("messages", "Anthropic Messages API"),  # Claude-compatible endpoint
         ("catalog", "Model Catalog"),
+        ("system", "System & Health"),  # Cache management and health monitoring
         ("root", "Root/Home"),
         ("auth", "Authentication"),
         ("users", "User Management"),

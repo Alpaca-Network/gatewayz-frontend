@@ -1182,6 +1182,199 @@ async def get_developer_models_api(
     )
 
 
+@router.get("/models/search", tags=["models"])
+async def search_models(
+    q: Optional[str] = Query(None, description="Search query (searches in model name, provider, description)"),
+    modality: Optional[str] = Query(None, description="Filter by modality: text, image, audio, video, multimodal"),
+    min_context: Optional[int] = Query(None, description="Minimum context window size (tokens)"),
+    max_context: Optional[int] = Query(None, description="Maximum context window size (tokens)"),
+    min_price: Optional[float] = Query(None, description="Minimum price per token (USD)"),
+    max_price: Optional[float] = Query(None, description="Maximum price per token (USD)"),
+    gateway: Optional[str] = Query("all", description="Gateway filter: openrouter, portkey, featherless, deepinfra, chutes, groq, fireworks, together, or all"),
+    sort_by: str = Query("price", description="Sort by: price, context, popularity, name"),
+    order: str = Query("asc", description="Sort order: asc or desc"),
+    limit: int = Query(20, description="Number of results", ge=1, le=100),
+    offset: int = Query(0, description="Pagination offset", ge=0)
+):
+    """
+    Advanced model search with multiple filters.
+    
+    This endpoint allows you to search and filter models across all gateways
+    with powerful query capabilities.
+    
+    **Examples:**
+    - Search for cheap models: `?max_price=0.0001&sort_by=price`
+    - Find models with large context: `?min_context=100000&sort_by=context&order=desc`
+    - Search by name: `?q=gpt-4&gateway=openrouter`
+    - Filter by modality: `?modality=image&sort_by=popularity`
+    
+    **Returns:**
+    - List of models matching the criteria
+    - Total count of matching models
+    - Applied filters
+    """
+    try:
+        # Get all models from specified gateways
+        all_models = []
+        gateway_value = gateway.lower() if gateway else "all"
+        
+        # Fetch from selected gateways
+        if gateway_value in ("openrouter", "all"):
+            openrouter_models = get_cached_models("openrouter") or []
+            all_models.extend(openrouter_models)
+        
+        if gateway_value in ("portkey", "all"):
+            portkey_models = get_cached_models("portkey") or []
+            all_models.extend(portkey_models)
+        
+        if gateway_value in ("featherless", "all"):
+            featherless_models = get_cached_models("featherless") or []
+            all_models.extend(featherless_models)
+        
+        if gateway_value in ("deepinfra", "all"):
+            deepinfra_models = get_cached_models("deepinfra") or []
+            all_models.extend(deepinfra_models)
+        
+        if gateway_value in ("chutes", "all"):
+            chutes_models = get_cached_models("chutes") or []
+            all_models.extend(chutes_models)
+        
+        if gateway_value in ("groq", "all"):
+            groq_models = get_cached_models("groq") or []
+            all_models.extend(groq_models)
+        
+        if gateway_value in ("fireworks", "all"):
+            fireworks_models = get_cached_models("fireworks") or []
+            all_models.extend(fireworks_models)
+        
+        if gateway_value in ("together", "all"):
+            together_models = get_cached_models("together") or []
+            all_models.extend(together_models)
+        
+        # Apply filters
+        filtered_models = all_models
+        
+        # Text search filter
+        if q:
+            q_lower = q.lower()
+            filtered_models = [
+                m for m in filtered_models
+                if (q_lower in m.get("id", "").lower() or
+                    q_lower in m.get("name", "").lower() or
+                    q_lower in m.get("description", "").lower() or
+                    q_lower in str(m.get("provider", "")).lower())
+            ]
+        
+        # Modality filter
+        if modality:
+            modality_lower = modality.lower()
+            filtered_models = [
+                m for m in filtered_models
+                if modality_lower in str(m.get("modality", "text")).lower() or
+                   modality_lower in str(m.get("architecture", {}).get("modality", "text")).lower()
+            ]
+        
+        # Context window filters
+        if min_context is not None:
+            filtered_models = [
+                m for m in filtered_models
+                if m.get("context_length", 0) >= min_context
+            ]
+        
+        if max_context is not None:
+            filtered_models = [
+                m for m in filtered_models
+                if m.get("context_length", float('inf')) <= max_context
+            ]
+        
+        # Price filters (check pricing data)
+        if min_price is not None or max_price is not None:
+            def get_model_price(model):
+                pricing = model.get("pricing", {})
+                if isinstance(pricing, dict):
+                    prompt_price = pricing.get("prompt")
+                    completion_price = pricing.get("completion")
+                    if prompt_price and completion_price:
+                        # Return average price
+                        return (float(prompt_price) + float(completion_price)) / 2
+                return None
+            
+            if min_price is not None:
+                filtered_models = [
+                    m for m in filtered_models
+                    if (price := get_model_price(m)) is not None and price >= min_price
+                ]
+            
+            if max_price is not None:
+                filtered_models = [
+                    m for m in filtered_models
+                    if (price := get_model_price(m)) is not None and price <= max_price
+                ]
+        
+        # Sorting
+        def get_sort_key(model):
+            if sort_by == "price":
+                pricing = model.get("pricing", {})
+                if isinstance(pricing, dict):
+                    prompt = pricing.get("prompt", 0)
+                    completion = pricing.get("completion", 0)
+                    if prompt and completion:
+                        return (float(prompt) + float(completion)) / 2
+                return float('inf')  # Put models without pricing at the end
+            
+            elif sort_by == "context":
+                return model.get("context_length", 0)
+            
+            elif sort_by == "popularity":
+                # Use ranking if available, otherwise 0
+                return model.get("rank", model.get("ranking", 0))
+            
+            elif sort_by == "name":
+                return model.get("name", model.get("id", ""))
+            
+            return 0
+        
+        # Sort
+        reverse = (order.lower() == "desc")
+        if sort_by == "name":
+            # String sorting
+            filtered_models.sort(key=get_sort_key, reverse=reverse)
+        else:
+            # Numeric sorting
+            filtered_models.sort(key=get_sort_key, reverse=reverse)
+        
+        # Apply pagination
+        total_count = len(filtered_models)
+        paginated_models = filtered_models[offset:offset + limit]
+        
+        return {
+            "success": True,
+            "data": paginated_models,
+            "meta": {
+                "total": total_count,
+                "limit": limit,
+                "offset": offset,
+                "returned": len(paginated_models),
+                "filters_applied": {
+                    "query": q,
+                    "modality": modality,
+                    "min_context": min_context,
+                    "max_context": max_context,
+                    "min_price": min_price,
+                    "max_price": max_price,
+                    "gateway": gateway,
+                    "sort_by": sort_by,
+                    "order": order
+                }
+            },
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+    
+    except Exception as e:
+        logger.error(f"Failed to search models: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to search models: {str(e)}")
+
+
 # Helper functions for model comparison
 
 def _calculate_recommendation(comparisons: List[Dict[str, Any]]) -> Dict[str, Any]:
