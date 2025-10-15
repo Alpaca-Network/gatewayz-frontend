@@ -14,10 +14,12 @@ function transformModel(model: any, gateway: string) {
       completion: model.outputCost.toString()
     },
     architecture: {
-      input_modalities: model.modalities.map((m: string) => m.toLowerCase())
+      input_modalities: model.modalities.map((m: string) => m.toLowerCase()),
+      output_modalities: ['text'] // Default output modality
     },
     supported_parameters: model.supportedParameters,
-    provider_slug: model.developer
+    provider_slug: model.developer,
+    source_gateway: gateway === 'all' ? 'openrouter' : gateway // Set gateway source for filtering
   };
 }
 
