@@ -80,6 +80,50 @@ def derive_portkey_providers(models: List[dict]) -> List[dict]:
     return list(providers.values())
 
 
+def derive_providers_from_models(models: List[dict], gateway_name: str) -> List[dict]:
+    """
+    Generic function to derive provider list from model list for any gateway.
+    Used for gateways that don't have a dedicated provider endpoint.
+    """
+    providers: Dict[str, dict] = {}
+    for model in models or []:
+        # Try different fields to get provider name
+        provider_slug = None
+        
+        # Try provider_slug field
+        provider_slug = model.get("provider_slug") or model.get("provider")
+        
+        # Try extracting from model ID (format: provider/model-name)
+        if not provider_slug:
+            model_id = model.get("id", "")
+            if "/" in model_id:
+                provider_slug = model_id.split("/")[0]
+        
+        # Try name field
+        if not provider_slug:
+            name = model.get("name", "")
+            if "/" in name:
+                provider_slug = name.split("/")[0]
+        
+        if not provider_slug:
+            continue
+        
+        # Clean up slug
+        provider_slug = provider_slug.lstrip("@").lower()
+        
+        if provider_slug not in providers:
+            providers[provider_slug] = {
+                "slug": provider_slug,
+                "site_url": model.get("provider_site_url"),
+                "logo_url": model.get("model_logo_url") or model.get("logo_url"),
+                "moderated_by_openrouter": False,
+                "source_gateway": gateway_name,
+                "source_gateways": [gateway_name],
+            }
+    
+    return list(providers.values())
+
+
 def merge_provider_lists(*provider_lists: List[List[dict]]) -> List[dict]:
     merged: Dict[str, dict] = {}
     for providers in provider_lists:
@@ -159,6 +203,21 @@ async def get_providers(
             if gateway_value == "portkey" and not portkey_models:
                 raise HTTPException(status_code=503, detail="Portkey models data unavailable")
 
+        # Add support for other gateways
+        other_gateways = ["featherless", "deepinfra", "chutes", "groq", "fireworks", "together"]
+        all_models = {}  # Track models for each gateway
+        
+        for gw in other_gateways:
+            if gateway_value in (gw, "all"):
+                gw_models = get_cached_models(gw) or []
+                all_models[gw] = gw_models
+                if gw_models:
+                    derived_providers = derive_providers_from_models(gw_models, gw)
+                    provider_groups.append(derived_providers)
+                elif gateway_value == gw:
+                    # Only raise error if specifically requesting this gateway
+                    raise HTTPException(status_code=503, detail=f"{gw.capitalize()} models data unavailable")
+
         if not provider_groups:
             raise HTTPException(status_code=503, detail="Provider data unavailable")
 
@@ -169,6 +228,10 @@ async def get_providers(
             models_for_counts.extend(openrouter_models)
         if gateway_value in ("portkey", "all"):
             models_for_counts.extend(portkey_models)
+        # Add models from other gateways for counting
+        for gw, models in all_models.items():
+            if gateway_value in (gw, "all"):
+                models_for_counts.extend(models)
 
         if moderated_only:
             combined_providers = [
