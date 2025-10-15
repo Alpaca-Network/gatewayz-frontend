@@ -117,7 +117,7 @@ const CategoryStackedAreaChart = ({ rankingData }: CategoryStackedAreaChartProps
         <div>
           <h3 className="text-lg font-semibold">Categories</h3>
           <p className="text-sm text-muted-foreground">
-            Compare models by usecase on OpenRouter
+            Compare models by usecase
           </p>
         </div>
         <Select value={timeRange} onValueChange={(value: any) => setTimeRange(value)}>
