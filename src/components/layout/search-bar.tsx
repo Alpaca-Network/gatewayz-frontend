@@ -58,10 +58,11 @@ export function SearchBar() {
 
                 // Fetch from API in background
                 setLoading(true);
-                const [openrouterRes, portkeyRes, featherlessRes] = await Promise.allSettled([
+                const [openrouterRes, portkeyRes, featherlessRes, fireworksRes] = await Promise.allSettled([
                     fetch(`/api/models?gateway=openrouter`),
                     fetch(`/api/models?gateway=portkey`),
-                    fetch(`/api/models?gateway=featherless`)
+                    fetch(`/api/models?gateway=featherless`),
+                    fetch(`/api/models?gateway=fireworks`)
                 ]);
 
                 const getData = async (result: PromiseSettledResult<Response>) => {
@@ -76,13 +77,14 @@ export function SearchBar() {
                     return [];
                 };
 
-                const [openrouterData, portkeyData, featherlessData] = await Promise.all([
+                const [openrouterData, portkeyData, featherlessData, fireworksData] = await Promise.all([
                     getData(openrouterRes),
                     getData(portkeyRes),
-                    getData(featherlessRes)
+                    getData(featherlessRes),
+                    getData(fireworksRes)
                 ]);
 
-                const combinedModels = [...openrouterData, ...portkeyData, ...featherlessData];
+                const combinedModels = [...openrouterData, ...portkeyData, ...featherlessData, ...fireworksData];
 
                 // Deduplicate by ID
                 const uniqueModelsMap = new Map();

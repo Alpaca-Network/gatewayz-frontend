@@ -240,10 +240,11 @@ export default function ModelProfilePage() {
                     ]);
                 };
 
-                const [openrouterRes, portkeyRes, featherlessRes] = await Promise.allSettled([
+                const [openrouterRes, portkeyRes, featherlessRes, fireworksRes] = await Promise.allSettled([
                     fetchWithTimeout(`/api/models?gateway=openrouter`),
                     fetchWithTimeout(`/api/models?gateway=portkey`),
-                    fetchWithTimeout(`/api/models?gateway=featherless`)
+                    fetchWithTimeout(`/api/models?gateway=featherless`),
+                    fetchWithTimeout(`/api/models?gateway=fireworks`)
                 ]);
 
                 const getData = async (result: PromiseSettledResult<Response>) => {
@@ -259,17 +260,19 @@ export default function ModelProfilePage() {
                     return [];
                 };
 
-                const [openrouterData, portkeyData, featherlessData] = await Promise.all([
+                const [openrouterData, portkeyData, featherlessData, fireworksData] = await Promise.all([
                     getData(openrouterRes),
                     getData(portkeyRes),
-                    getData(featherlessRes)
+                    getData(featherlessRes),
+                    getData(fireworksRes)
                 ]);
 
                 // Combine models from all gateways
                 const allModels = [
                     ...openrouterData,
                     ...portkeyData,
-                    ...featherlessData
+                    ...featherlessData,
+                    ...fireworksData
                 ];
 
                 // Deduplicate models by ID - keep the first occurrence
@@ -327,6 +330,7 @@ export default function ModelProfilePage() {
                     if (openrouterData.some((m: Model) => m.id === modelId)) providers.push('openrouter');
                     if (portkeyData.some((m: Model) => m.id === modelId)) providers.push('portkey');
                     if (featherlessData.some((m: Model) => m.id === modelId)) providers.push('featherless');
+                    if (fireworksData.some((m: Model) => m.id === modelId)) providers.push('fireworks');
                     setModelProviders(providers);
                 }
             } catch (error) {
@@ -664,12 +668,14 @@ console.log(response.choices[0].message.content);`
                                     const providerNames: Record<string, string> = {
                                         openrouter: 'OpenRouter',
                                         portkey: 'Portkey',
-                                        featherless: 'Featherless'
+                                        featherless: 'Featherless',
+                                        fireworks: 'Fireworks'
                                     };
                                     const providerLogos: Record<string, string> = {
                                         openrouter: '/openrouter-logo.svg',
                                         portkey: '/portkey-logo.svg',
-                                        featherless: '/featherless-logo.svg'
+                                        featherless: '/featherless-logo.svg',
+                                        fireworks: '/fireworks-logo.svg'
                                     };
 
                                     return (
