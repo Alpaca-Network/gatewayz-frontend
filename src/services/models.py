@@ -140,10 +140,9 @@ def fetch_models_from_portkey():
             logger.error("Portkey API key not configured")
             return None
 
-        # Try both header formats - Portkey accepts either
         headers = {
-            "Authorization": f"Bearer {Config.PORTKEY_API_KEY}",
-            "x-portkey-api-key": Config.PORTKEY_API_KEY
+            "x-portkey-api-key": Config.PORTKEY_API_KEY,
+            "Content-Type": "application/json"
         }
 
         # Fetch all pages of models
