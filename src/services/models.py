@@ -155,52 +155,23 @@ def fetch_models_from_portkey():
             "Content-Type": "application/json"
         }
 
-        # Fetch all pages of models
-        all_raw_models = []
-        limit = 500  # Max per page
-        offset = 0
-        max_iterations = 20  # Safety limit to prevent infinite loops
-        iteration = 0
+        # Portkey API returns all models in a single request (no pagination support)
+        url = "https://api.portkey.ai/v1/models"
+        logger.info(f"Fetching Portkey models from {url}")
 
-        while iteration < max_iterations:
-            url = f"https://api.portkey.ai/v1/models?limit={limit}&offset={offset}"
-            logger.info(f"Fetching Portkey models: offset={offset}, limit={limit}")
+        response = httpx.get(url, headers=headers, timeout=20.0)
+        response.raise_for_status()
 
-            response = httpx.get(url, headers=headers, timeout=20.0)
-            response.raise_for_status()
+        payload = response.json()
+        logger.info(f"Portkey API response structure: {json.dumps({k: type(v).__name__ for k, v in payload.items()}, indent=2)}")
 
-            payload = response.json()
-            logger.debug(f"Portkey API response keys: {list(payload.keys())}")
-
-            raw_models = payload.get("data", [])
-
-            # Debug: log response structure
-            if iteration == 0:
-                logger.info(f"Portkey API response structure: {json.dumps({k: type(v).__name__ for k, v in payload.items()}, indent=2)}")
-
-            if not raw_models:
-                # No more models to fetch
-                logger.info(f"No more models to fetch at offset {offset}")
-                break
-
-            all_raw_models.extend(raw_models)
-            logger.info(f"Fetched {len(raw_models)} models (total so far: {len(all_raw_models)})")
-
-            # Check if there are more models to fetch
-            if len(raw_models) < limit:
-                # Last page (fewer models than limit)
-                logger.info(f"Reached last page: got {len(raw_models)} models (limit: {limit})")
-                break
-
-            offset += limit
-            iteration += 1
-
-        logger.info(f"Finished fetching Portkey models: {len(all_raw_models)} total models across {iteration + 1} pages")
+        raw_models = payload.get("data", [])
+        logger.info(f"Fetched {len(raw_models)} models from Portkey")
 
         # Get OpenRouter models for pricing cross-reference
         openrouter_models = get_cached_models("openrouter") or []
 
-        normalized_models = [normalize_portkey_model(model, openrouter_models) for model in all_raw_models if model]
+        normalized_models = [normalize_portkey_model(model, openrouter_models) for model in raw_models if model]
 
         _portkey_models_cache["data"] = normalized_models
         _portkey_models_cache["timestamp"] = datetime.now(timezone.utc)
