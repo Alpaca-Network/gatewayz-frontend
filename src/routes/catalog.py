@@ -15,6 +15,10 @@ from src.db.gateway_analytics import (
     get_provider_stats, get_gateway_stats, get_trending_models,
     get_all_gateways_summary, get_top_models_by_provider
 )
+from src.services.modelz_client import (
+    fetch_modelz_tokens, get_modelz_model_ids, check_model_exists_on_modelz,
+    get_modelz_model_details
+)
 
 
 # Initialize logging
@@ -1558,3 +1562,192 @@ def _extract_availability_comparison(models_data: List[Dict[str, Any]], all_gate
     for item in models_data:
         availability[item["gateway"]] = True
     return availability
+
+
+# ============================================================================
+# MODELZ INTEGRATION ENDPOINTS
+# ============================================================================
+
+@router.get("/modelz/models")
+async def get_modelz_models(
+    is_graduated: Optional[bool] = Query(
+        None, 
+        description="Filter for graduated (singularity) models: true=graduated only, false=non-graduated only, null=all models"
+    )
+):
+    """
+    Get models that exist on Modelz with optional graduation filter.
+    
+    This endpoint bridges Gatewayz with Modelz by fetching model token data
+    from the Modelz API and applying the same filters as the original Modelz API.
+    
+    Query Parameters:
+    - is_graduated: Filter for graduated models
+      - true: Only graduated/singularity models
+      - false: Only non-graduated models  
+      - null: All models (default)
+    
+    Returns:
+    - List of models with their token data from Modelz
+    - Includes model IDs, graduation status, and other metadata
+    """
+    try:
+        logger.info(f"Fetching Modelz models with is_graduated={is_graduated}")
+        
+        # Fetch token data from Modelz API
+        tokens = await fetch_modelz_tokens(is_graduated)
+        
+        # Transform the data to a consistent format
+        models = []
+        for token in tokens:
+            model_data = {
+                "model_id": (
+                    token.get("Token") or
+                    token.get("model_id") or 
+                    token.get("modelId") or 
+                    token.get("id") or 
+                    token.get("name") or
+                    token.get("model")
+                ),
+                "is_graduated": token.get("isGraduated") or token.get("is_graduated"),
+                "token_data": token,
+                "source": "modelz",
+                "has_token": True
+            }
+            
+            # Only include models with valid model IDs
+            if model_data["model_id"]:
+                models.append(model_data)
+        
+        logger.info(f"Successfully processed {len(models)} models from Modelz")
+        
+        return {
+            "models": models,
+            "total_count": len(models),
+            "filter": {
+                "is_graduated": is_graduated,
+                "description": (
+                    "All models" if is_graduated is None else
+                    "Graduated models only" if is_graduated else
+                    "Non-graduated models only"
+                )
+            },
+            "source": "modelz",
+            "api_reference": "https://backend.alpacanetwork.ai/api/tokens"
+        }
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions from the client
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error in get_modelz_models: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch models from Modelz: {str(e)}"
+        )
+
+
+@router.get("/modelz/ids")
+async def get_modelz_model_ids_endpoint(
+    is_graduated: Optional[bool] = Query(
+        None, 
+        description="Filter for graduated models: true=graduated only, false=non-graduated only, null=all models"
+    )
+):
+    """
+    Get a list of model IDs that exist on Modelz.
+    
+    This is a lightweight endpoint that returns only the model IDs,
+    useful for checking which models have tokens on Modelz.
+    
+    Query Parameters:
+    - is_graduated: Filter for graduated models (same as /models/modelz)
+    
+    Returns:
+    - List of model IDs from Modelz
+    """
+    try:
+        logger.info(f"Fetching Modelz model IDs with is_graduated={is_graduated}")
+        
+        model_ids = await get_modelz_model_ids(is_graduated)
+        
+        return {
+            "model_ids": model_ids,
+            "total_count": len(model_ids),
+            "filter": {
+                "is_graduated": is_graduated,
+                "description": (
+                    "All models" if is_graduated is None else
+                    "Graduated models only" if is_graduated else
+                    "Non-graduated models only"
+                )
+            },
+            "source": "modelz"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error in get_modelz_model_ids_endpoint: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch model IDs from Modelz: {str(e)}"
+        )
+
+
+@router.get("/modelz/check/{model_id}")
+async def check_model_on_modelz(
+    model_id: str,
+    is_graduated: Optional[bool] = Query(
+        None, 
+        description="Filter for graduated models when checking"
+    )
+):
+    """
+    Check if a specific model exists on Modelz.
+    
+    Path Parameters:
+    - model_id: The model ID to check
+    
+    Query Parameters:
+    - is_graduated: Filter for graduated models when checking
+    
+    Returns:
+    - Boolean indicating if model exists on Modelz
+    - Additional model details if found
+    """
+    try:
+        logger.info(f"Checking if model '{model_id}' exists on Modelz with is_graduated={is_graduated}")
+        
+        exists = await check_model_exists_on_modelz(model_id, is_graduated)
+        
+        result = {
+            "model_id": model_id,
+            "exists_on_modelz": exists,
+            "filter": {
+                "is_graduated": is_graduated,
+                "description": (
+                    "All models" if is_graduated is None else
+                    "Graduated models only" if is_graduated else
+                    "Non-graduated models only"
+                )
+            },
+            "source": "modelz"
+        }
+        
+        # If model exists, get additional details
+        if exists:
+            model_details = await get_modelz_model_details(model_id)
+            if model_details:
+                result["model_details"] = model_details
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error in check_model_on_modelz: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to check model on Modelz: {str(e)}"
+        )
