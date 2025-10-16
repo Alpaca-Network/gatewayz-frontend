@@ -256,8 +256,14 @@ def deduct_credits(api_key: str, tokens: float, description: str = "API usage", 
         description: Description of the usage
         metadata: Optional metadata (model used, tokens, etc.)
     """
-    if tokens <= 0:
-        raise ValueError("Tokens must be positive")
+    # Allow very small amounts but not exactly 0 or negative
+    if tokens < 0:
+        raise ValueError("Credits cannot be negative")
+
+    # If tokens is 0 or very small (less than $0.000001), skip deduction but log usage
+    if tokens < 0.000001:
+        logger.info(f"Skipping credit deduction for minimal amount: ${tokens:.10f}")
+        return
 
     try:
         from src.db.credit_transactions import log_credit_transaction, TransactionType
