@@ -168,15 +168,27 @@ export class ChatHistoryAPI {
    * Saves a message to a chat session
    */
   async saveMessage(
-    sessionId: number, 
-    role: 'user' | 'assistant', 
-    content: string, 
-    model?: string, 
+    sessionId: number,
+    role: 'user' | 'assistant',
+    content: string,
+    model?: string,
     tokens?: number
   ): Promise<ChatMessage> {
-    const response = await fetch(`${this.baseUrl}/sessions/${sessionId}/messages`, {
+    let url = `${this.baseUrl}/sessions/${sessionId}/messages`;
+
+    // Add privy_user_id to query string for consistency with other methods
+    if (this.privyUserId) {
+      const separator = url.includes('?') ? '&' : '?';
+      url += `${separator}privy_user_id=${encodeURIComponent(this.privyUserId)}`;
+    }
+
+    console.log('ChatHistoryAPI.saveMessage - URL:', url);
+    console.log('ChatHistoryAPI.saveMessage - Role:', role);
+    console.log('ChatHistoryAPI.saveMessage - Content length:', content.length);
+
+    const response = await fetch(url, {
       method: 'POST',
-      headers: { 
+      headers: {
         'Authorization': `Bearer ${this.apiKey}`,
         'Content-Type': 'application/json'
       },
@@ -188,12 +200,16 @@ export class ChatHistoryAPI {
       })
     });
 
+    console.log('ChatHistoryAPI.saveMessage - Response status:', response.status);
+
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || 'Failed to save message');
+      const error = await response.json().catch(() => ({}));
+      console.error('ChatHistoryAPI.saveMessage - Error response:', error);
+      throw new Error(error.detail || `Failed to save message (${response.status}): ${response.statusText}`);
     }
 
     const result = await response.json();
+    console.log('ChatHistoryAPI.saveMessage - Success');
     return result.data;
   }
 

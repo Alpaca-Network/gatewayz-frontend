@@ -1526,14 +1526,33 @@ function ChatPageContent() {
         setLoading(true);
 
         try {
+            console.log('🚀 Starting handleSendMessage - Core auth check:', {
+                hasApiKey: !!apiKey,
+                hasUserData: !!userData,
+                hasPrivyUserId: !!userData?.privy_user_id,
+                userDataKeys: userData ? Object.keys(userData) : []
+            });
+
             // Auth is already checked at the beginning of handleSendMessage
             const privyUserId = userData.privy_user_id;
 
             // Call backend API directly with privy_user_id and session_id query parameters
             const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
 
+            console.log('🔧 API Configuration:', {
+                apiBaseUrl,
+                privyUserId: privyUserId ? `${privyUserId.substring(0, 20)}...` : 'NO_ID',
+                activeSessionId: currentSessionId
+            });
+
             // Get current session to find API session ID
             const currentSession = sessions.find(s => s.id === currentSessionId);
+            console.log('📋 Current session found:', {
+                hasSession: !!currentSession,
+                sessionId: currentSession?.id,
+                apiSessionId: currentSession?.apiSessionId,
+                messagesCount: currentSession?.messages?.length || 0
+            });
 
             // Save the user message to the backend first
             if (currentSession?.apiSessionId) {
@@ -1728,7 +1747,20 @@ function ChatPageContent() {
                     content: mapToResponsesContent(messageContent)
                 });
 
-                console.log('Conversation history for API:', conversationHistory);
+                console.log('📝 Conversation history for API:', {
+                    messagesCount: conversationHistory.length,
+                    hasImages: conversationHistory.some(msg =>
+                        Array.isArray(msg.content) && msg.content.some((c: any) => c.type === 'image_url')
+                    ),
+                    sample: conversationHistory.map((msg: any) => ({
+                        role: msg.role,
+                        contentLength: typeof msg.content === 'string'
+                            ? msg.content.length
+                            : Array.isArray(msg.content)
+                                ? msg.content.map((c: any) => c.type).join(', ')
+                                : 'unknown'
+                    }))
+                });
 
                 const requestBody: any = {
                     model: modelValue,
@@ -1747,15 +1779,33 @@ function ChatPageContent() {
                     };
                 }
 
+                console.log('📨 Request body prepared:', {
+                    model: requestBody.model,
+                    hasPortkeyProvider: !!requestBody.portkey_provider,
+                    hasMetadata: !!requestBody.metadata,
+                    stream: requestBody.stream,
+                    inputLength: requestBody.input?.length || 0,
+                    url: url
+                });
+
                 // Accumulate content locally to avoid state closure issues
                 let accumulatedContent = '';
                 let accumulatedReasoning = '';
 
+                console.log('🌊 Starting to stream response...');
                 for await (const chunk of streamChatResponse(
                     url,
                     apiKey,
                     requestBody
                 )) {
+                    console.log('📥 Received chunk:', {
+                        hasContent: !!chunk.content,
+                        contentLength: chunk.content?.length || 0,
+                        hasReasoning: !!chunk.reasoning,
+                        reasoningLength: chunk.reasoning?.length || 0,
+                        isDone: chunk.done,
+                        status: chunk.status
+                    });
                     if (chunk.status === 'rate_limit_retry') {
                         const waitSeconds = Math.max(1, Math.ceil((chunk.retryAfterMs ?? 0) / 1000));
                         setRateLimitCountdown(waitSeconds);
@@ -1873,14 +1923,29 @@ function ChatPageContent() {
 
             } catch (streamError) {
                 setIsStreamingResponse(false);
-                console.error('Streaming error:', streamError);
+                console.error('❌ Streaming error occurred:', streamError);
+                console.error('Full error object:', {
+                    name: streamError instanceof Error ? streamError.name : 'unknown',
+                    message: streamError instanceof Error ? streamError.message : String(streamError),
+                    stack: streamError instanceof Error ? streamError.stack : undefined,
+                    type: typeof streamError,
+                    keys: Object.keys(streamError instanceof Error ? streamError : {})
+                });
 
                 const errorMessage = streamError instanceof Error ? streamError.message : 'Failed to get response';
+                console.error('Error message for analysis:', errorMessage);
 
                 // Check if this is a 500 error or 404 error (model unavailable) and attempt fallback
                 const is500Error = errorMessage.includes('500') || errorMessage.includes('Internal server error') || errorMessage.includes('Server error');
                 const is404Error = errorMessage.includes('404') || errorMessage.includes('not found') || errorMessage.includes('unavailable');
                 const shouldFallback = is500Error || is404Error;
+
+                console.log('Error analysis:', {
+                    is500Error,
+                    is404Error,
+                    shouldFallback,
+                    selectedModelValue: selectedModel.value
+                });
 
                 if (shouldFallback && selectedModel) {
                     // Define fallback models in order of preference (using top-ranked models):
