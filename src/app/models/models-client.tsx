@@ -441,7 +441,7 @@ export default function ModelsClient({ initialModels }: { initialModels: Model[]
 
   return (
     <SidebarProvider>
-      <div className="relative flex min-h-[calc(100vh-theme(spacing.14))] justify-center overflow-x-hidden">
+      <div className="relative flex w-full min-h-[calc(100vh-theme(spacing.14))] justify-center overflow-x-hidden">
         <Sidebar
           variant="sidebar"
           collapsible="offcanvas"
@@ -714,7 +714,7 @@ export default function ModelsClient({ initialModels }: { initialModels: Model[]
             className={
               layout === 'grid'
                 ? 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 lg:gap-6 overflow-x-hidden'
-                : 'flex flex-col gap-4 lg:gap-6 max-w-5xl overflow-x-hidden'
+                : 'flex flex-col gap-4 lg:gap-6 overflow-x-hidden'
             }
             key={`models-${filteredModels.length}-${debouncedSearchTerm}`}
           >
