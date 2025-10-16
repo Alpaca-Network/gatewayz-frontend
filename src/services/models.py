@@ -159,10 +159,17 @@ def fetch_models_from_portkey():
             response.raise_for_status()
 
             payload = response.json()
+            logger.debug(f"Portkey API response keys: {list(payload.keys())}")
+
             raw_models = payload.get("data", [])
+
+            # Debug: log response structure
+            if iteration == 0:
+                logger.info(f"Portkey API response structure: {json.dumps({k: type(v).__name__ for k, v in payload.items()}, indent=2)}")
 
             if not raw_models:
                 # No more models to fetch
+                logger.info(f"No more models to fetch at offset {offset}")
                 break
 
             all_raw_models.extend(raw_models)
@@ -171,6 +178,7 @@ def fetch_models_from_portkey():
             # Check if there are more models to fetch
             if len(raw_models) < limit:
                 # Last page (fewer models than limit)
+                logger.info(f"Reached last page: got {len(raw_models)} models (limit: {limit})")
                 break
 
             offset += limit
@@ -192,7 +200,7 @@ def fetch_models_from_portkey():
         logger.error(f"Portkey HTTP error: {e.response.status_code} - {e.response.text}")
         return None
     except Exception as e:
-        logger.error(f"Failed to fetch models from Portkey: {e}")
+        logger.error(f"Failed to fetch models from Portkey: {e}", exc_info=True)
         return None
 
 
