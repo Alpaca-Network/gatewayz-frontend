@@ -288,7 +288,9 @@ async def chat_completions(
                 # Don't fail the request if history fetch fails
                 logger.warning(f"Failed to fetch chat history for session {session_id}: {e}")
 
-        model = req.model
+        # Store original model for response
+        original_model = req.model
+
         optional = {}
         for name in ("max_tokens", "temperature", "top_p", "frequency_penalty", "presence_penalty"):
             val = getattr(req, name, None)
@@ -298,33 +300,32 @@ async def chat_completions(
         # Auto-detect provider if not specified
         provider = (req.provider or "openrouter").lower()
         if not req.provider:
-            # Try to detect provider from model ID
-            from src.services.models import get_cached_models
-
-            # Check Featherless first (largest catalog)
-            featherless_models = get_cached_models("featherless") or []
-            if any(m.get("id") == model for m in featherless_models):
-                provider = "featherless"
-                logger.info(f"Auto-detected provider 'featherless' for model {model}")
+            # Try to detect provider from model ID using the transformation module
+            from src.services.model_transformations import detect_provider_from_model_id
+            detected_provider = detect_provider_from_model_id(original_model)
+            if detected_provider:
+                provider = detected_provider
+                logger.info(f"Auto-detected provider '{provider}' for model {original_model}")
             else:
-                # Check Fireworks
-                fireworks_models = get_cached_models("fireworks") or []
-                if any(m.get("id") == model for m in fireworks_models):
-                    provider = "fireworks"
-                    logger.info(f"Auto-detected provider 'fireworks' for model {model}")
-                else:
-                    # Check Together
-                    together_models = get_cached_models("together") or []
-                    if any(m.get("id") == model for m in together_models):
-                        provider = "together"
-                        logger.info(f"Auto-detected provider 'together' for model {model}")
-                    else:
-                        # Check Portkey
-                        portkey_models = get_cached_models("portkey") or []
-                        if any(m.get("id") == model for m in portkey_models):
-                            provider = "portkey"
-                            logger.info(f"Auto-detected provider 'portkey' for model {model}")
-                        # Otherwise default to openrouter (already set)
+                # Fallback to checking cached models
+                from src.services.models import get_cached_models
+                from src.services.model_transformations import transform_model_id
+
+                # Try each provider with transformation
+                for test_provider in ["featherless", "fireworks", "together", "portkey"]:
+                    transformed = transform_model_id(original_model, test_provider)
+                    provider_models = get_cached_models(test_provider) or []
+                    if any(m.get("id") == transformed for m in provider_models):
+                        provider = test_provider
+                        logger.info(f"Auto-detected provider '{provider}' for model {original_model} (transformed to {transformed})")
+                        break
+                # Otherwise default to openrouter (already set)
+
+        # Transform model ID to provider-specific format
+        from src.services.model_transformations import transform_model_id
+        model = transform_model_id(original_model, provider)
+        if model != original_model:
+            logger.info(f"Transformed model ID from '{original_model}' to '{model}' for provider {provider}")
 
 
         # === 3) Call upstream (streaming or non-streaming) ===
@@ -711,7 +712,9 @@ async def unified_responses(
             except Exception as e:
                 logger.warning(f"Failed to fetch chat history for session {session_id}: {e}")
 
-        model = req.model
+        # Store original model for response
+        original_model = req.model
+
         optional = {}
         for name in ("max_tokens", "temperature", "top_p", "frequency_penalty", "presence_penalty"):
             val = getattr(req, name, None)
@@ -728,29 +731,34 @@ async def unified_responses(
                     "json_schema": req.response_format.json_schema
                 }
 
-        # Auto-detect provider
+        # Auto-detect provider if not specified
         provider = (req.provider or "openrouter").lower()
         if not req.provider:
-            from src.services.models import get_cached_models
-            featherless_models = get_cached_models("featherless") or []
-            if any(m.get("id") == model for m in featherless_models):
-                provider = "featherless"
-                logger.info(f"Auto-detected provider 'featherless' for model {model}")
+            # Try to detect provider from model ID using the transformation module
+            from src.services.model_transformations import detect_provider_from_model_id
+            detected_provider = detect_provider_from_model_id(original_model)
+            if detected_provider:
+                provider = detected_provider
+                logger.info(f"Auto-detected provider '{provider}' for model {original_model}")
             else:
-                fireworks_models = get_cached_models("fireworks") or []
-                if any(m.get("id") == model for m in fireworks_models):
-                    provider = "fireworks"
-                    logger.info(f"Auto-detected provider 'fireworks' for model {model}")
-                else:
-                    together_models = get_cached_models("together") or []
-                    if any(m.get("id") == model for m in together_models):
-                        provider = "together"
-                        logger.info(f"Auto-detected provider 'together' for model {model}")
-                    else:
-                        portkey_models = get_cached_models("portkey") or []
-                        if any(m.get("id") == model for m in portkey_models):
-                            provider = "portkey"
-                            logger.info(f"Auto-detected provider 'portkey' for model {model}")
+                # Fallback to checking cached models
+                from src.services.models import get_cached_models
+                from src.services.model_transformations import transform_model_id
+
+                # Try each provider with transformation
+                for test_provider in ["featherless", "fireworks", "together", "portkey"]:
+                    transformed = transform_model_id(original_model, test_provider)
+                    provider_models = get_cached_models(test_provider) or []
+                    if any(m.get("id") == transformed for m in provider_models):
+                        provider = test_provider
+                        logger.info(f"Auto-detected provider '{provider}' for model {original_model} (transformed to {transformed})")
+                        break
+
+        # Transform model ID to provider-specific format
+        from src.services.model_transformations import transform_model_id
+        model = transform_model_id(original_model, provider)
+        if model != original_model:
+            logger.info(f"Transformed model ID from '{original_model}' to '{model}' for provider {provider}")
 
         # === 3) Call upstream (streaming or non-streaming) ===
         if req.stream:
