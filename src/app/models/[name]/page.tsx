@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useParams } from 'next/navigation';
@@ -7,24 +6,29 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend } from 'recharts';
-import { addDays, format } from 'date-fns';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { ProvidersDisplay } from '@/components/models/provider-card';
-import { Maximize, Copy, Check } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Copy, Check } from 'lucide-react';
 import { providerData } from '@/lib/provider-data';
-import { generateChartData, generateStatsTable } from '@/lib/data';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import ReactMarkdown from "react-markdown";
 import { cn } from '@/lib/utils';
-import { stringToColor } from '@/lib/utils';
-import { API_BASE_URL } from '@/lib/config';
 import { models as staticModels } from '@/lib/models-data';
 import { getApiKey } from '@/lib/api';
+import dynamic from 'next/dynamic';
+import { Skeleton } from '@/components/ui/skeleton';
 
 // Lazy load heavy components
-const TopAppsTable = lazy(() => import('@/components/dashboard/top-apps-table'));
+const ProvidersDisplay = dynamic(() => import('@/components/models/provider-card').then(mod => ({ default: mod.ProvidersDisplay })), {
+    ssr: false,
+    loading: () => <ProvidersLoading />
+});
+
+const ReactMarkdown = dynamic(() => import('react-markdown'), {
+    ssr: false,
+    loading: () => <Skeleton className="h-20 w-full" />
+});
+
+// Lazy load chart components only when needed
+const ActivityTab = lazy(() => import('./activity-tab'));
+const AppsTab = lazy(() => import('./apps-tab'));
 
 interface Model {
   id: string;
@@ -42,106 +46,70 @@ interface Model {
   provider_slug: string;
 }
 
-const Section = ({ title, description, children, className }: { title: string, description?: string, children: React.ReactNode, className?: string }) => (
-    <section className={cn("py-8", className)}>
-        <h2 className="text-2xl font-semibold">{title}</h2>
-        {description && <p className="text-muted-foreground mt-2">{description}</p>}
-        <div className="mt-6">{children}</div>
-    </section>
-);
-
-const ChartCard = ({ modelName, title, dataKey, yAxisFormatter }: { modelName: string, title: string; dataKey: "throughput" | "latency"; yAxisFormatter: (value: any) => string; }) => {
-    const providers = useMemo(() => providerData[modelName] || [], [modelName]);
-    const chartData = useMemo(() => generateChartData(providers, dataKey), [providers, dataKey]);
-    const statsTable = useMemo(() => generateStatsTable(providers, dataKey), [providers, dataKey]);
-    
-    return (
-        <Dialog>
-            <Card>
-                <CardHeader className="flex flex-row items-center justify-between pb-2">
-                    <CardTitle className="text-base font-medium">{title}</CardTitle>
-                    <DialogTrigger asChild>
-                         <Button variant="ghost" size="icon" className="w-6 h-6">
-                            <Maximize className="h-4 w-4 text-muted-foreground" />
-                        </Button>
-                    </DialogTrigger>
-                </CardHeader>
-                <CardContent>
-                     <div className="h-[200px]">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <LineChart data={chartData}>
-                                <Tooltip
-                                    formatter={(value, name) => [`${value}${dataKey === 'latency' ? 's' : ' tps'}`, name]}
-                                    labelFormatter={(label) => format(new Date(label), "PPP")}
-                                     contentStyle={{
-                                        backgroundColor: 'hsl(var(--background))',
-                                        borderColor: 'hsl(var(--border))',
-                                      }}
-                                />
-                                {providers.map((p, i) => (
-                                     <Line key={p.name} type="monotone" dataKey={p.name} stroke={`hsl(var(--chart-${(i % 5) + 1}))`} dot={false} strokeWidth={2} />
-                                ))}
-                                <XAxis dataKey="date" tickLine={false} axisLine={false} tick={false} />
-                                <YAxis tickLine={false} axisLine={false} tickFormatter={yAxisFormatter} />
-                            </LineChart>
-                        </ResponsiveContainer>
-                    </div>
-                </CardContent>
-            </Card>
-             <DialogContent className="max-w-4xl h-auto flex flex-col bg-card text-card-foreground">
-                <DialogHeader>
-                    <DialogTitle>{title}</DialogTitle>
-                     <p className="text-sm text-muted-foreground">Median {title} of the top providers for this model.</p>
-                </DialogHeader>
-                <div className="flex-grow my-4">
-                    <ResponsiveContainer width="100%" height={300}>
-                        <LineChart data={chartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                             <XAxis dataKey="date" tickFormatter={(label) => format(new Date(label), 'MMM d')} />
-                             <YAxis tickFormatter={yAxisFormatter} />
-                            <Tooltip
-                                formatter={(value, name) => [`${value}${dataKey === 'latency' ? 's' : ' tps'}`, name]}
-                                labelFormatter={(label) => format(new Date(label), "PPP")}
-                                 contentStyle={{
-                                    backgroundColor: 'hsl(var(--background))',
-                                    borderColor: 'hsl(var(--border))',
-                                  }}
-                             />
-                            <Legend />
-                            {providers.map((p, i) => (
-                                <Line key={p.name} type="monotone" dataKey={p.name} stroke={`hsl(var(--chart-${(i % 5) + 1}))`} />
-                            ))}
-                        </LineChart>
-                    </ResponsiveContainer>
-                </div>
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>Provider</TableHead>
-                            <TableHead className="text-right">Min {title}</TableHead>
-                            <TableHead className="text-right">Max {title}</TableHead>
-                            <TableHead className="text-right">Avg {title}</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {statsTable.map(stat => (
-                            <TableRow key={stat.provider}>
-                                <TableCell className="font-medium">{stat.provider}</TableCell>
-                                <TableCell className="text-right">{stat.min.toFixed(2)}{dataKey === 'latency' ? 's' : ' tps'}</TableCell>
-                                <TableCell className="text-right">{stat.max.toFixed(2)}{dataKey === 'latency' ? 's' : ' tps'}</TableCell>
-                                <TableCell className="text-right">{stat.avg.toFixed(2)}{dataKey === 'latency' ? 's' : ' tps'}</TableCell>
-                            </TableRow>
-                        ))}
-                    </TableBody>
-                </Table>
-            </DialogContent>
-        </Dialog>
-    )
-}
-
 type TabType = 'Providers' | 'Activity' | 'Apps' | 'Use Model';
 
-// Transform static model to API format
+// Loading skeleton for providers
+const ProvidersLoading = () => (
+    <div className="space-y-4">
+        {[1, 2, 3].map(i => (
+            <Card key={i} className="p-4">
+                <div className="flex items-center gap-4">
+                    <Skeleton className="h-12 w-12 rounded-full" />
+                    <div className="flex-grow space-y-2">
+                        <Skeleton className="h-4 w-32" />
+                        <Skeleton className="h-3 w-24" />
+                    </div>
+                    <div className="grid grid-cols-4 gap-4">
+                        {[1, 2, 3, 4].map(j => (
+                            <div key={j} className="space-y-1">
+                                <Skeleton className="h-3 w-16" />
+                                <Skeleton className="h-4 w-12" />
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </Card>
+        ))}
+    </div>
+);
+
+// Model page skeleton
+const ModelPageSkeleton = () => (
+    <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 max-w-screen-2xl">
+        <header className="mb-8">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="flex-1 space-y-3">
+                    <Skeleton className="h-10 w-64" />
+                    <Skeleton className="h-4 w-48" />
+                    <Skeleton className="h-8 w-96" />
+                    <div className="flex gap-2">
+                        <Skeleton className="h-6 w-16" />
+                        <Skeleton className="h-6 w-20" />
+                    </div>
+                </div>
+                <div className="flex gap-2">
+                    <Skeleton className="h-10 w-24" />
+                    <Skeleton className="h-10 w-32" />
+                </div>
+            </div>
+            <Skeleton className="h-20 w-full mt-6" />
+        </header>
+
+        <nav className="border-b mb-8">
+            <div className="flex gap-6">
+                {['Use Model', 'Providers', 'Activity', 'Apps'].map(item => (
+                    <Skeleton key={item} className="h-10 w-24" />
+                ))}
+            </div>
+        </nav>
+
+        <main>
+            <Skeleton className="h-96 w-full" />
+        </main>
+    </div>
+);
+
+// Optimized transform function - only transform when needed
 function transformStaticModel(staticModel: typeof staticModels[0]): Model {
     return {
         id: `${staticModel.developer}/${staticModel.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
@@ -160,10 +128,16 @@ function transformStaticModel(staticModel: typeof staticModels[0]): Model {
     };
 }
 
+// Create a Map for O(1) lookup performance
+const staticModelsMap = new Map<string, typeof staticModels[0]>();
+staticModels.forEach(model => {
+    const id = `${model.developer}/${model.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+    staticModelsMap.set(id, model);
+});
+
 export default function ModelProfilePage() {
     const params = useParams();
     const [model, setModel] = useState<Model | null>(null);
-    const [allModels, setAllModels] = useState<Model[]>([]);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<TabType>('Use Model');
     const [copiedStates, setCopiedStates] = useState<{ [key: string]: boolean }>({});
@@ -184,169 +158,90 @@ export default function ModelProfilePage() {
     }, [params.name]);
 
     useEffect(() => {
-        const CACHE_KEY = 'gatewayz_models_cache_v4_all_gateways';
-        const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
-        let mounted = true;
-
-        // Load static data immediately for instant page render (only if found)
-        const staticModelsTransformed = staticModels.map(transformStaticModel);
-        const staticFoundModel = staticModelsTransformed.find((m: Model) => m.id === modelId);
-
-        if (staticFoundModel && mounted) {
-            setModel(staticFoundModel);
-            setAllModels(staticModelsTransformed);
+        if (!modelId) {
             setLoading(false);
+            return;
         }
-        // If not found in static data, keep loading=true until API data arrives
 
-        const fetchModels = async () => {
-            try {
-                // Check cache first
-                const cached = localStorage.getItem(CACHE_KEY);
-                let models: Model[] = [];
+        // Optimized: O(1) lookup instead of O(n) search
+        const staticModel = staticModelsMap.get(modelId);
 
-                if (cached) {
-                    try {
-                        const { data, timestamp } = JSON.parse(cached);
-                        if (Date.now() - timestamp < CACHE_DURATION) {
-                            models = data;
-                            if (mounted) {
-                                setAllModels(models);
-                                const foundModel = models.find((m: Model) => m.id === modelId);
-                                if (foundModel) {
-                                    setModel(foundModel);
-                                    setLoading(false);
-                                    return; // Only return if model was found in cache
-                                }
-                                // If model not found in cache, continue to fetch from API
-                                console.log(`Model ${modelId} not in cache, fetching from API...`);
-                            }
-                        }
-                    } catch (e) {
-                        console.log('Cache parse error:', e);
-                    }
-                }
+        if (staticModel) {
+            // Transform only the model we need
+            setModel(transformStaticModel(staticModel));
+            setLoading(false);
+            return;
+        }
 
-                // Fetch from all gateways to get all models via frontend API proxy
-                // Add timeout to prevent hanging
-                const fetchWithTimeout = (url: string, timeout = 10000) => {
-                    return Promise.race([
-                        fetch(url),
-                        new Promise<Response>((_, reject) =>
-                            setTimeout(() => reject(new Error('Request timeout')), timeout)
-                        )
-                    ]);
-                };
+        // Only fetch from API if not in static data
+        const fetchModelFromAPI = async () => {
+        const CACHE_KEY = `gatewayz_model_${modelId}`;
+        const CACHE_DURATION = 30 * 60 * 1000; // 30 minutes
 
-                const [openrouterRes, portkeyRes, featherlessRes] = await Promise.allSettled([
-                    fetchWithTimeout(`/api/models?gateway=openrouter`),
-                    fetchWithTimeout(`/api/models?gateway=portkey`),
-                    fetchWithTimeout(`/api/models?gateway=featherless`)
-                ]);
-
-                const getData = async (result: PromiseSettledResult<Response>) => {
-                    if (result.status === 'fulfilled') {
-                        try {
-                            const data = await result.value.json();
-                            return data.data || [];
-                        } catch (e) {
-                            console.log('Error parsing gateway response:', e);
-                            return [];
-                        }
-                    }
-                    return [];
-                };
-
-                const [openrouterData, portkeyData, featherlessData] = await Promise.all([
-                    getData(openrouterRes),
-                    getData(portkeyRes),
-                    getData(featherlessRes)
-                ]);
-
-                // Combine models from all gateways
-                const allModels = [
-                    ...openrouterData,
-                    ...portkeyData,
-                    ...featherlessData
-                ];
-
-                // Deduplicate models by ID - keep the first occurrence
-                const uniqueModelsMap = new Map();
-                allModels.forEach((model: any) => {
-                    if (!uniqueModelsMap.has(model.id)) {
-                        uniqueModelsMap.set(model.id, model);
-                    }
-                });
-                models = Array.from(uniqueModelsMap.values());
-
-                // Try to cache the result with compression (only essential fields)
+        try {
+            // Check individual model cache first
+            const cached = localStorage.getItem(CACHE_KEY);
+            if (cached) {
                 try {
-                    // Only cache essential fields to reduce size
-                    const compactModels = models.map((m: Model) => ({
-                        id: m.id,
-                        name: m.name,
-                        description: m.description.substring(0, 200), // Truncate descriptions
-                        context_length: m.context_length,
-                        pricing: m.pricing,
-                        architecture: m.architecture,
-                        supported_parameters: m.supported_parameters,
-                        provider_slug: m.provider_slug
-                    }));
-
-                    localStorage.setItem(CACHE_KEY, JSON.stringify({
-                        data: compactModels,
-                        timestamp: Date.now()
-                    }));
+                    const { data, timestamp } = JSON.parse(cached);
+                    if (Date.now() - timestamp < CACHE_DURATION) {
+                        setModel(data);
+                        setLoading(false);
+                        return;
+                    }
                 } catch (e) {
-                    // If still too large, don't cache at all (we have static fallback)
-                    console.log('Cache skipped (storage quota), using static data fallback');
-                    try {
-                        localStorage.removeItem(CACHE_KEY);
-                        localStorage.removeItem('gatewayz_models_cache'); // Old cache key
-                    } catch (clearError) {
-                        // Ignore cleanup errors
-                    }
-                }
-
-                if (mounted) {
-                    setAllModels(models);
-                    const foundModel = models.find((m: Model) => m.id === modelId);
-                    // Update if found, or set to null if not found (after API fetch completes)
-                    if (foundModel) {
-                        setModel(foundModel);
-                    } else if (!staticFoundModel) {
-                        // Model not in static data and not in API - show "not found"
-                        setModel(null);
-                    }
-                    setLoading(false);
-                }
-            } catch (error) {
-                console.log('Failed to fetch models:', error);
-                if (mounted && !staticFoundModel) {
-                    setLoading(false);
+                    console.log('Cache parse error:', e);
                 }
             }
-        };
 
-        // Fetch API data in background (non-blocking)
-        fetchModels();
+            // Fetch only from one gateway first (fastest)
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
 
-        return () => {
-            mounted = false;
-        };
+            try {
+                const response = await fetch(`/api/models?gateway=openrouter`, {
+                    signal: controller.signal
+                });
+
+                clearTimeout(timeoutId);
+
+                if (response.ok) {
+                    const data = await response.json();
+                    const models = data.data || [];
+                    const foundModel = models.find((m: Model) => m.id === modelId);
+
+                    if (foundModel) {
+                        setModel(foundModel);
+                        // Cache the individual model
+                        try {
+                            localStorage.setItem(CACHE_KEY, JSON.stringify({
+                                data: foundModel,
+                                timestamp: Date.now()
+                            }));
+                        } catch (e) {
+                            // Ignore cache errors
+                        }
+                    }
+                }
+            } finally {
+                clearTimeout(timeoutId);
+            }
+        } catch (error) {
+            console.log('Failed to fetch model:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+        fetchModelFromAPI();
     }, [modelId]);
-
-    const relatedModels = useMemo(() => {
-      if(!model) return [];
-      return allModels.filter(m => m.provider_slug === model.provider_slug && m.id !== model.id).slice(0,3);
-    }, [model, allModels]);
 
     const copyToClipboard = async (text: string, id: string) => {
         try {
             await navigator.clipboard.writeText(text);
-            setCopiedStates({ ...copiedStates, [id]: true });
+            setCopiedStates(prev => ({ ...prev, [id]: true }));
             setTimeout(() => {
-                setCopiedStates({ ...copiedStates, [id]: false });
+                setCopiedStates(prev => ({ ...prev, [id]: false }));
             }, 2000);
         } catch (error) {
             console.error('Failed to copy:', error);
@@ -354,20 +249,101 @@ export default function ModelProfilePage() {
     };
 
     if (loading) {
-        return (
-            <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 text-center flex-1">
-                <p className="text-muted-foreground">Loading model...</p>
-            </div>
-        );
+        return <ModelPageSkeleton />;
     }
 
     if (!model) {
         return (
             <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 text-center">
                 <h1 className="text-2xl font-bold">Model not found.</h1>
+                <p className="text-muted-foreground mt-2">The model "{modelId}" could not be found.</p>
+                <Link href="/models">
+                    <Button className="mt-4">Browse Models</Button>
+                </Link>
             </div>
         );
     }
+
+    // Code examples moved to separate memo to avoid recalculation
+    const codeExamples = useMemo(() => ({
+        curl: `curl -X POST https://api.gatewayz.ai/v1/chat/completions \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer ${apiKey}" \\
+  -d '{
+    "model": "${model.id}",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Hello! What can you help me with?"
+      }
+    ]
+  }'`,
+        python: `import requests
+import json
+
+response = requests.post(
+    url="https://api.gatewayz.ai/v1/chat/completions",
+    headers={
+        "Authorization": "Bearer ${apiKey}",
+        "Content-Type": "application/json"
+    },
+    data=json.dumps({
+        "model": "${model.id}",
+        "messages": [
+            {
+                "role": "user",
+                "content": "Hello! What can you help me with?"
+            }
+        ]
+    })
+)
+
+print(response.json())`,
+        'openai-python': `from openai import OpenAI
+
+client = OpenAI(
+    base_url="https://api.gatewayz.ai/v1",
+    api_key="${apiKey}"
+)
+
+completion = client.chat.completions.create(
+    model="${model.id}",
+    messages=[
+        {"role": "user", "content": "Hello! What can you help me with?"}
+    ]
+)
+
+print(completion.choices[0].message.content)`,
+        typescript: `fetch("https://api.gatewayz.ai/v1/chat/completions", {
+  method: "POST",
+  headers: {
+    "Authorization": "Bearer ${apiKey}",
+    "Content-Type": "application/json"
+  },
+  body: JSON.stringify({
+    "model": "${model.id}",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Hello! What can you help me with?"
+      }
+    ]
+  })
+});`,
+        'openai-typescript': `import OpenAI from 'openai';
+
+const client = new OpenAI({
+  apiKey: "${apiKey}",
+  baseURL: "https://api.gatewayz.ai/v1"
+});
+
+const response = await client.chat.completions.create({
+  model: "${model.id}",
+  messages: [{ role: "user", content: "Hello! What can you help me with?" }]
+});
+
+console.log(response.choices[0].message.content);`
+    }), [apiKey, model.id]);
 
     return (
       <TooltipProvider>
@@ -409,17 +385,19 @@ export default function ModelProfilePage() {
                     </div>
                 </div>
                  <div className="mt-6 text-muted-foreground leading-relaxed">
-                    <ReactMarkdown
-                        components={{
-                        a: ({ children, ...props }) => (
-                            <span className="text-blue-600 underline cursor-pointer" {...props}>
-                            {children}
-                            </span>
-                        ),
-                        }}
-                    >
-                        {model.description}
-                    </ReactMarkdown>
+                    <Suspense fallback={<Skeleton className="h-20 w-full" />}>
+                        <ReactMarkdown
+                            components={{
+                            a: ({ children, ...props }) => (
+                                <span className="text-blue-600 underline cursor-pointer" {...props}>
+                                {children}
+                                </span>
+                            ),
+                            }}
+                        >
+                            {model.description}
+                        </ReactMarkdown>
+                    </Suspense>
                 </div>
             </header>
 
@@ -455,170 +433,63 @@ export default function ModelProfilePage() {
 
                         {/* Language Selector */}
                         <div className="flex gap-2 mb-4 flex-wrap">
-                            <Button
-                                variant={selectedLanguage === 'curl' ? 'default' : 'outline'}
-                                size="sm"
-                                onClick={() => setSelectedLanguage('curl')}
-                            >
-                                cURL
-                            </Button>
-                            <Button
-                                variant={selectedLanguage === 'python' ? 'default' : 'outline'}
-                                size="sm"
-                                onClick={() => setSelectedLanguage('python')}
-                            >
-                                Python
-                            </Button>
-                            <Button
-                                variant={selectedLanguage === 'openai-python' ? 'default' : 'outline'}
-                                size="sm"
-                                onClick={() => setSelectedLanguage('openai-python')}
-                            >
-                                OpenAI Python
-                            </Button>
-                            <Button
-                                variant={selectedLanguage === 'typescript' ? 'default' : 'outline'}
-                                size="sm"
-                                onClick={() => setSelectedLanguage('typescript')}
-                            >
-                                TypeScript
-                            </Button>
-                            <Button
-                                variant={selectedLanguage === 'openai-typescript' ? 'default' : 'outline'}
-                                size="sm"
-                                onClick={() => setSelectedLanguage('openai-typescript')}
-                            >
-                                OpenAI TypeScript
-                            </Button>
+                            {(['curl', 'python', 'openai-python', 'typescript', 'openai-typescript'] as const).map(lang => (
+                                <Button
+                                    key={lang}
+                                    variant={selectedLanguage === lang ? 'default' : 'outline'}
+                                    size="sm"
+                                    onClick={() => setSelectedLanguage(lang)}
+                                >
+                                    {lang === 'curl' ? 'cURL' :
+                                     lang === 'python' ? 'Python' :
+                                     lang === 'openai-python' ? 'OpenAI Python' :
+                                     lang === 'typescript' ? 'TypeScript' :
+                                     'OpenAI TypeScript'}
+                                </Button>
+                            ))}
                         </div>
 
                         {/* Code Example */}
                         <div className="mb-6">
-                            {(() => {
-                                const codeExamples = {
-                                    curl: `curl -X POST https://api.gatewayz.ai/v1/chat/completions \\
-  -H "Content-Type: application/json" \\
-  -H "Authorization: Bearer ${apiKey}" \\
-  -d '{
-    "model": "${model.id}",
-    "messages": [
-      {
-        "role": "user",
-        "content": "Hello! What can you help me with?"
-      }
-    ]
-  }'`,
-                                    python: `import requests
-import json
-
-response = requests.post(
-    url="https://api.gatewayz.ai/v1/chat/completions",
-    headers={
-        "Authorization": "Bearer ${apiKey}",
-        "Content-Type": "application/json"
-    },
-    data=json.dumps({
-        "model": "${model.id}",
-        "messages": [
-            {
-                "role": "user",
-                "content": "Hello! What can you help me with?"
-            }
-        ]
-    })
-)
-
-print(response.json())`,
-                                    'openai-python': `from openai import OpenAI
-
-client = OpenAI(
-    base_url="https://api.gatewayz.ai/v1",
-    api_key="${apiKey}"
-)
-
-completion = client.chat.completions.create(
-    model="${model.id}",
-    messages=[
-        {"role": "user", "content": "Hello! What can you help me with?"}
-    ]
-)
-
-print(completion.choices[0].message.content)`,
-                                    typescript: `fetch("https://api.gatewayz.ai/v1/chat/completions", {
-  method: "POST",
-  headers: {
-    "Authorization": "Bearer ${apiKey}",
-    "Content-Type": "application/json"
-  },
-  body: JSON.stringify({
-    "model": "${model.id}",
-    "messages": [
-      {
-        "role": "user",
-        "content": "Hello! What can you help me with?"
-      }
-    ]
-  })
-});`,
-                                    'openai-typescript': `import OpenAI from 'openai';
-
-const client = new OpenAI({
-  apiKey: "${apiKey}",
-  baseURL: "https://api.gatewayz.ai/v1"
-});
-
-const response = await client.chat.completions.create({
-  model: "${model.id}",
-  messages: [{ role: "user", content: "Hello! What can you help me with?" }]
-});
-
-console.log(response.choices[0].message.content);`
-                                };
-
-                                const currentCode = codeExamples[selectedLanguage];
-
-                                return (
-                                    <div className="rounded-xl overflow-hidden shadow-lg border border-gray-800 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-                                        {/* Terminal Header */}
-                                        <div className="flex items-center justify-between px-4 py-3 bg-slate-950/50 border-b border-slate-700">
-                                            <div className="flex items-center gap-2">
-                                                <div className="flex gap-1.5">
-                                                    <div className="w-3 h-3 rounded-full bg-red-500/80"></div>
-                                                    <div className="w-3 h-3 rounded-full bg-yellow-500/80"></div>
-                                                    <div className="w-3 h-3 rounded-full bg-green-500/80"></div>
-                                                </div>
-                                                <span className="text-xs text-slate-400 ml-3 font-mono">terminal</span>
-                                            </div>
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                onClick={() => copyToClipboard(currentCode, selectedLanguage)}
-                                                className="text-slate-300 hover:text-white"
-                                            >
-                                                {copiedStates[selectedLanguage] ? (
-                                                    <>
-                                                        <Check className="h-4 w-4 mr-2" />
-                                                        Copied!
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <Copy className="h-4 w-4 mr-2" />
-                                                        Copy
-                                                    </>
-                                                )}
-                                            </Button>
+                            <div className="rounded-xl overflow-hidden shadow-lg border border-gray-800 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+                                {/* Terminal Header */}
+                                <div className="flex items-center justify-between px-4 py-3 bg-slate-950/50 border-b border-slate-700">
+                                    <div className="flex items-center gap-2">
+                                        <div className="flex gap-1.5">
+                                            <div className="w-3 h-3 rounded-full bg-red-500/80"></div>
+                                            <div className="w-3 h-3 rounded-full bg-yellow-500/80"></div>
+                                            <div className="w-3 h-3 rounded-full bg-green-500/80"></div>
                                         </div>
-                                        {/* Code Display */}
-                                        <div className="bg-slate-950/80 p-6">
-                                            <pre className="text-sm leading-relaxed font-mono text-cyan-400 overflow-x-auto">
-                                                <code>{currentCode}</code>
-                                            </pre>
-                                        </div>
-                                        {/* Bottom gradient */}
-                                        <div className="h-1 bg-gradient-to-r from-cyan-500 via-purple-500 to-pink-500"></div>
+                                        <span className="text-xs text-slate-400 ml-3 font-mono">terminal</span>
                                     </div>
-                                );
-                            })()}
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => copyToClipboard(codeExamples[selectedLanguage], selectedLanguage)}
+                                        className="text-slate-300 hover:text-white"
+                                    >
+                                        {copiedStates[selectedLanguage] ? (
+                                            <>
+                                                <Check className="h-4 w-4 mr-2" />
+                                                Copied!
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Copy className="h-4 w-4 mr-2" />
+                                                Copy
+                                            </>
+                                        )}
+                                    </Button>
+                                </div>
+                                {/* Code Display */}
+                                <div className="bg-slate-950/80 p-6">
+                                    <pre className="text-sm leading-relaxed font-mono text-cyan-400 overflow-x-auto">
+                                        <code>{codeExamples[selectedLanguage]}</code>
+                                    </pre>
+                                </div>
+                                {/* Bottom gradient */}
+                                <div className="h-1 bg-gradient-to-r from-cyan-500 via-purple-500 to-pink-500"></div>
+                            </div>
                         </div>
 
                         {/* Get API Key CTA */}
@@ -651,124 +522,22 @@ console.log(response.choices[0].message.content);`
                             </p>
                         </div>
 
-                        <ProvidersDisplay modelName={model.name} />
+                        <Suspense fallback={<ProvidersLoading />}>
+                            <ProvidersDisplay modelName={model.name} />
+                        </Suspense>
                     </div>
                 )}
 
                 {activeTab === 'Activity' && (
-                    <div>
-                        <div className="flex items-center justify-between mb-6">
-                            <h2 className="text-2xl font-bold">Recent Activity Of {model.name}</h2>
-                        </div>
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="text-sm text-muted-foreground">Total usage per day on Gatewayz</CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="h-[400px]">
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <AreaChart data={generateChartData([], 'throughput').slice(0,90)}>
-                                            <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                            <XAxis
-                                                dataKey="date"
-                                                tickFormatter={(label) => format(new Date(label), 'MMM d')}
-                                                tick={{ fontSize: 12 }}
-                                            />
-                                            <YAxis
-                                                tickFormatter={(value) => `${(value / 1000000).toFixed(1)}M`}
-                                                tick={{ fontSize: 12 }}
-                                            />
-                                            <Tooltip
-                                                formatter={(value: any) => [`${(value / 1000000).toFixed(2)}M`, "Usage"]}
-                                                labelFormatter={(label) => format(new Date(label), "PPP")}
-                                                contentStyle={{
-                                                    backgroundColor: 'hsl(var(--background))',
-                                                    borderColor: 'hsl(var(--border))',
-                                                }}
-                                            />
-                                            <Legend />
-                                            <Area
-                                                type="monotone"
-                                                dataKey="value"
-                                                name="Prompt Tokens"
-                                                stroke="#3b82f6"
-                                                fill="#3b82f6"
-                                                fillOpacity={0.6}
-                                                strokeWidth={2}
-                                            />
-                                            <Area
-                                                type="monotone"
-                                                dataKey="value2"
-                                                name="Completion Tokens"
-                                                stroke="#9ca3af"
-                                                fill="#9ca3af"
-                                                fillOpacity={0.3}
-                                                strokeWidth={2}
-                                            />
-                                        </AreaChart>
-                                    </ResponsiveContainer>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    </div>
+                    <Suspense fallback={<Skeleton className="h-96 w-full" />}>
+                        <ActivityTab modelName={model.name} />
+                    </Suspense>
                 )}
 
                 {activeTab === 'Apps' && (
-                    <div>
-                        <div className="flex items-center justify-between mb-6">
-                            <h2 className="text-2xl font-bold">Top Apps Using {model.name}</h2>
-                            <div className="flex items-center gap-4">
-                                <select className="border rounded px-3 py-2 text-sm">
-                                    <option>Top This Year</option>
-                                    <option>Top This Month</option>
-                                    <option>Top This Week</option>
-                                </select>
-                                <select className="border rounded px-3 py-2 text-sm">
-                                    <option>Sort By: All</option>
-                                    <option>Sort By: Tokens</option>
-                                    <option>Sort By: Growth</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                            {[1,2,3,4,5,6,7,8].map((i) => (
-                                <Card key={i} className="hover:shadow-lg transition-shadow">
-                                    <CardContent className="p-4">
-                                        <div className="flex items-start justify-between mb-3">
-                                            <div className="flex items-center gap-2">
-                                                <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center border">
-                                                    <img src="/Google_Logo-black.svg" alt="Google" className="w-6 h-6" />
-                                                </div>
-                                                <div>
-                                                    <h3 className="font-semibold">Google</h3>
-                                                    <span className="text-xs text-muted-foreground">#{i}</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <p className="text-xs text-muted-foreground mb-3 line-clamp-2">
-                                            Autonomous Coding Agent That Is...
-                                        </p>
-                                        <div className="space-y-2">
-                                            <div>
-                                                <span className="text-2xl font-bold">21.7B</span>
-                                                <p className="text-xs text-muted-foreground">Tokens Generated</p>
-                                            </div>
-                                            <div className="text-green-600 font-semibold text-sm">
-                                                +13.06%
-                                                <span className="text-xs text-muted-foreground ml-1">Weekly Growth</span>
-                                            </div>
-                                        </div>
-                                        <Button variant="outline" size="sm" className="w-full mt-4">
-                                            View App →
-                                        </Button>
-                                    </CardContent>
-                                </Card>
-                            ))}
-                        </div>
-                        <div className="text-center mt-8">
-                            <Button variant="outline">Load More</Button>
-                        </div>
-                    </div>
+                    <Suspense fallback={<Skeleton className="h-96 w-full" />}>
+                        <AppsTab modelName={model.name} />
+                    </Suspense>
                 )}
 
             </main>
@@ -776,5 +545,3 @@ console.log(response.choices[0].message.content);`
         </TooltipProvider>
     );
 }
-
-    
