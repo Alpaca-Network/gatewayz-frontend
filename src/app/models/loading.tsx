@@ -44,7 +44,7 @@ const ModelCardSkeleton = () => {
 export default function ModelsLoading() {
   return (
     <SidebarProvider>
-      <div className="relative flex h-[calc(100vh-theme(spacing.14))]">
+      <div className="relative flex w-full h-[calc(100vh-theme(spacing.14))]">
         <Sidebar
           variant="sidebar"
           collapsible="icon"
