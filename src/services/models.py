@@ -190,8 +190,12 @@ def fetch_models_from_deepinfra():
     """Fetch models from DeepInfra API and normalize to the catalog schema"""
     try:
         if not Config.DEEPINFRA_API_KEY:
-            logger.error("DeepInfra API key not configured")
+            logger.error("DeepInfra API key not configured - please set DEEPINFRA_API_KEY environment variable")
             return None
+
+        # Log that we're attempting to fetch
+        api_key_preview = Config.DEEPINFRA_API_KEY[:5] + "***" if Config.DEEPINFRA_API_KEY else "NONE"
+        logger.info(f"DeepInfra API key found (preview: {api_key_preview})")
 
         headers = {
             "Authorization": f"Bearer {Config.DEEPINFRA_API_KEY}",
@@ -203,6 +207,8 @@ def fetch_models_from_deepinfra():
         logger.info(f"Fetching DeepInfra models from {url}")
 
         response = httpx.get(url, headers=headers, timeout=20.0)
+
+        logger.info(f"DeepInfra API response status: {response.status_code}")
         response.raise_for_status()
 
         payload = response.json()
@@ -216,7 +222,7 @@ def fetch_models_from_deepinfra():
         _deepinfra_models_cache["data"] = normalized_models
         _deepinfra_models_cache["timestamp"] = datetime.now(timezone.utc)
 
-        logger.info(f"Cached {len(normalized_models)} DeepInfra models")
+        logger.info(f"Successfully cached {len(normalized_models)} DeepInfra models")
         return _deepinfra_models_cache["data"]
     except httpx.HTTPStatusError as e:
         logger.error(f"DeepInfra HTTP error: {e.response.status_code} - {e.response.text}")
