@@ -144,21 +144,49 @@ def fetch_models_from_portkey():
             "x-portkey-api-key": Config.PORTKEY_API_KEY
         }
 
-        response = httpx.get("https://api.portkey.ai/v1/models", headers=headers, timeout=20.0)
-        response.raise_for_status()
+        # Fetch all pages of models
+        all_raw_models = []
+        limit = 500  # Max per page
+        offset = 0
+        max_iterations = 20  # Safety limit to prevent infinite loops
+        iteration = 0
 
-        payload = response.json()
-        raw_models = payload.get("data", [])
+        while iteration < max_iterations:
+            url = f"https://api.portkey.ai/v1/models?limit={limit}&offset={offset}"
+            logger.info(f"Fetching Portkey models: offset={offset}, limit={limit}")
+
+            response = httpx.get(url, headers=headers, timeout=20.0)
+            response.raise_for_status()
+
+            payload = response.json()
+            raw_models = payload.get("data", [])
+
+            if not raw_models:
+                # No more models to fetch
+                break
+
+            all_raw_models.extend(raw_models)
+            logger.info(f"Fetched {len(raw_models)} models (total so far: {len(all_raw_models)})")
+
+            # Check if there are more models to fetch
+            if len(raw_models) < limit:
+                # Last page (fewer models than limit)
+                break
+
+            offset += limit
+            iteration += 1
+
+        logger.info(f"Finished fetching Portkey models: {len(all_raw_models)} total models across {iteration + 1} pages")
 
         # Get OpenRouter models for pricing cross-reference
         openrouter_models = get_cached_models("openrouter") or []
 
-        normalized_models = [normalize_portkey_model(model, openrouter_models) for model in raw_models if model]
+        normalized_models = [normalize_portkey_model(model, openrouter_models) for model in all_raw_models if model]
 
         _portkey_models_cache["data"] = normalized_models
         _portkey_models_cache["timestamp"] = datetime.now(timezone.utc)
 
-        logger.info(f"Fetched {len(normalized_models)} Portkey models with pricing cross-reference")
+        logger.info(f"Cached {len(normalized_models)} Portkey models with pricing cross-reference")
         return _portkey_models_cache["data"]
     except httpx.HTTPStatusError as e:
         logger.error(f"Portkey HTTP error: {e.response.status_code} - {e.response.text}")
