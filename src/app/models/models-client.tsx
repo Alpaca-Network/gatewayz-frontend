@@ -50,7 +50,7 @@ interface Model {
   created?: number;
 }
 
-const ModelCard = ({ model }: { model: Model }) => {
+const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
   const isFree = parseFloat(model.pricing?.prompt || '0') === 0 && parseFloat(model.pricing?.completion || '0') === 0;
   const inputCost = (parseFloat(model.pricing?.prompt || '0') * 1000000).toFixed(2);
   const outputCost = (parseFloat(model.pricing?.completion || '0') * 1000000).toFixed(2);
@@ -107,7 +107,7 @@ const ModelCard = ({ model }: { model: Model }) => {
       </Card>
     </Link>
   );
-};
+});
 
 export default function ModelsClient({ initialModels }: { initialModels: Model[] }) {
   const router = useRouter();
@@ -157,26 +157,29 @@ export default function ModelsClient({ initialModels }: { initialModels: Model[]
 
   // Mark explore task as complete in onboarding when page loads
   useEffect(() => {
-    try {
-      const savedTasks = localStorage.getItem('gatewayz_onboarding_tasks');
-      if (savedTasks) {
-        const taskState = JSON.parse(savedTasks);
-        if (!taskState.explore) {
-          taskState.explore = true;
-          localStorage.setItem('gatewayz_onboarding_tasks', JSON.stringify(taskState));
-          console.log('Onboarding - Explore task marked as complete');
+    // Only run on client side to prevent hydration errors
+    if (typeof window !== 'undefined') {
+      try {
+        const savedTasks = localStorage.getItem('gatewayz_onboarding_tasks');
+        if (savedTasks) {
+          const taskState = JSON.parse(savedTasks);
+          if (!taskState.explore) {
+            taskState.explore = true;
+            localStorage.setItem('gatewayz_onboarding_tasks', JSON.stringify(taskState));
+            console.log('Onboarding - Explore task marked as complete');
+          }
         }
+      } catch (error) {
+        console.error('Failed to update onboarding task:', error);
       }
-    } catch (error) {
-      console.error('Failed to update onboarding task:', error);
     }
   }, []); // Run once on mount
 
-  // Debounce search input
+  // Debounce search input - reduced from 150ms to 100ms for faster response
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearchTerm(searchTerm);
-    }, 150);
+    }, 100);
 
     return () => clearTimeout(timer);
   }, [searchTerm]);
@@ -758,7 +761,7 @@ const FilterSlider = ({ label, value, onValueChange, min, max, step, unit }: { l
     );
 };
 
-const FilterRangeSlider = React.memo(({ label, value, onValueChange, min, max, step, unit }: { label: string, value: [number, number], onValueChange: (value: [number, number]) => void, min: number, max: number, step: number, unit: string }) => {
+const FilterRangeSlider = React.memo(function FilterRangeSlider({ label, value, onValueChange, min, max, step, unit }: { label: string, value: [number, number], onValueChange: (value: [number, number]) => void, min: number, max: number, step: number, unit: string }) {
     return (
         <SidebarGroup>
             <SidebarGroupLabel>{label}</SidebarGroupLabel>

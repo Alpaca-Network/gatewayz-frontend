@@ -286,7 +286,7 @@ $config = @{
         @{
             name = "gatewayz"
             api_base_url = "https://api.gatewayz.ai/v1/chat/completions"
-            api_key = "`$GATEWAYZ_API_KEY"
+            api_key = $ApiKey
             models = @(
                 "x-ai/grok-code-fast-1",
                 "x-ai/grok-3-turbo-preview",

@@ -166,15 +166,20 @@ export default function ModelProfilePage() {
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<TabType>('Use Model');
     const [copiedStates, setCopiedStates] = useState<{ [key: string]: boolean }>({});
-    const [apiKey, setApiKey] = useState('YOUR_API_KEY');
+    const [apiKey, setApiKey] = useState('gw_live_YOUR_API_KEY_HERE');
     const [selectedLanguage, setSelectedLanguage] = useState<'curl' | 'python' | 'openai-python' | 'typescript' | 'openai-typescript'>('curl');
     const [modelProviders, setModelProviders] = useState<string[]>([]);
+    const [loadingProviders, setLoadingProviders] = useState(true);
 
     // Load API key from storage
     useEffect(() => {
         const userApiKey = getApiKey();
+        console.log('Loading user API key:', userApiKey ? 'Found' : 'Not found');
         if (userApiKey) {
             setApiKey(userApiKey);
+        } else {
+            // If no API key, show a placeholder that indicates the format
+            setApiKey('gw_live_YOUR_API_KEY_HERE');
         }
     }, []);
 
@@ -203,6 +208,7 @@ export default function ModelProfilePage() {
 
         const fetchModels = async () => {
             try {
+                console.log(`[ModelProfilePage] Starting to fetch gateway data for model: ${modelId}`);
                 // Check cache first
                 const cached = localStorage.getItem(CACHE_KEY);
                 let models: Model[] = [];
@@ -240,26 +246,59 @@ export default function ModelProfilePage() {
                     ]);
                 };
 
+                console.log(`[ModelProfilePage] Fetching from all gateway APIs...`);
                 const [openrouterRes, portkeyRes, featherlessRes, chutesRes, fireworksRes, togetherRes, groqRes] = await Promise.allSettled([
-                    fetchWithTimeout(`/api/models?gateway=openrouter`),
-                    fetchWithTimeout(`/api/models?gateway=portkey`),
-                    fetchWithTimeout(`/api/models?gateway=featherless`),
-                    fetchWithTimeout(`/api/models?gateway=chutes`),
-                    fetchWithTimeout(`/api/models?gateway=fireworks`),
-                    fetchWithTimeout(`/api/models?gateway=together`),
-                    fetchWithTimeout(`/api/models?gateway=groq`)
+                    fetchWithTimeout(`/api/models?gateway=openrouter`).catch(err => {
+                        console.error('OpenRouter fetch error:', err);
+                        return null;
+                    }),
+                    fetchWithTimeout(`/api/models?gateway=portkey`).catch(err => {
+                        console.error('Portkey fetch error:', err);
+                        return null;
+                    }),
+                    fetchWithTimeout(`/api/models?gateway=featherless`).catch(err => {
+                        console.error('Featherless fetch error:', err);
+                        return null;
+                    }),
+                    fetchWithTimeout(`/api/models?gateway=chutes`).catch(err => {
+                        console.error('Chutes fetch error:', err);
+                        return null;
+                    }),
+                    fetchWithTimeout(`/api/models?gateway=fireworks`).catch(err => {
+                        console.error('Fireworks fetch error:', err);
+                        return null;
+                    }),
+                    fetchWithTimeout(`/api/models?gateway=together`).catch(err => {
+                        console.error('Together fetch error:', err);
+                        return null;
+                    }),
+                    fetchWithTimeout(`/api/models?gateway=groq`).catch(err => {
+                        console.error('Groq fetch error:', err);
+                        return null;
+                    })
                 ]);
+                console.log(`[ModelProfilePage] Gateway API responses:`, {
+                    openrouter: openrouterRes?.status,
+                    portkey: portkeyRes?.status,
+                    featherless: featherlessRes?.status,
+                    chutes: chutesRes?.status,
+                    fireworks: fireworksRes?.status,
+                    together: togetherRes?.status,
+                    groq: groqRes?.status
+                });
 
-                const getData = async (result: PromiseSettledResult<Response>) => {
-                    if (result.status === 'fulfilled') {
+                const getData = async (result: PromiseSettledResult<Response | null>) => {
+                    if (result.status === 'fulfilled' && result.value) {
                         try {
                             const data = await result.value.json();
+                            console.log(`Gateway data parsed, models count:`, data.data?.length || 0);
                             return data.data || [];
                         } catch (e) {
                             console.log('Error parsing gateway response:', e);
                             return [];
                         }
                     }
+                    console.log('Gateway fetch was not successful:', result.status);
                     return [];
                 };
 
@@ -335,20 +374,48 @@ export default function ModelProfilePage() {
                     setLoading(false);
 
                     // Determine which gateways support this model
+                    // Use case-insensitive comparison and also check for alternative ID formats
                     const providers: string[] = [];
-                    if (openrouterData.some((m: Model) => m.id === modelId)) providers.push('openrouter');
-                    if (portkeyData.some((m: Model) => m.id === modelId)) providers.push('portkey');
-                    if (featherlessData.some((m: Model) => m.id === modelId)) providers.push('featherless');
-                    if (chutesData.some((m: Model) => m.id === modelId)) providers.push('chutes');
-                    if (fireworksData.some((m: Model) => m.id === modelId)) providers.push('fireworks');
-                    if (togetherData.some((m: Model) => m.id === modelId)) providers.push('together');
-                    if (groqData.some((m: Model) => m.id === modelId)) providers.push('groq');
+                    const modelIdLower = modelId.toLowerCase();
+
+                    // Helper function to check if model exists in gateway data
+                    const hasModel = (data: Model[], gateway: string) => {
+                        const found = data.some((m: Model) => {
+                            // Check exact match (case-insensitive)
+                            if (m.id.toLowerCase() === modelIdLower) return true;
+                            // Check if IDs match after normalization (handle different separators)
+                            const normalizedModelId = modelIdLower.replace(/[_\-\/]/g, '');
+                            const normalizedDataId = m.id.toLowerCase().replace(/[_\-\/]/g, '');
+                            if (normalizedModelId === normalizedDataId) return true;
+                            // Check if the model name matches (as a fallback)
+                            if (m.name && m.name.toLowerCase() === model?.name?.toLowerCase()) return true;
+                            return false;
+                        });
+                        if (found) {
+                            console.log(`Model ${modelId} found in ${gateway}`);
+                        }
+                        return found;
+                    };
+
+                    if (hasModel(openrouterData, 'openrouter')) providers.push('openrouter');
+                    if (hasModel(portkeyData, 'portkey')) providers.push('portkey');
+                    if (hasModel(featherlessData, 'featherless')) providers.push('featherless');
+                    if (hasModel(chutesData, 'chutes')) providers.push('chutes');
+                    if (hasModel(fireworksData, 'fireworks')) providers.push('fireworks');
+                    if (hasModel(togetherData, 'together')) providers.push('together');
+                    if (hasModel(groqData, 'groq')) providers.push('groq');
+
+                    console.log(`Model ${modelId} available in gateways:`, providers);
                     setModelProviders(providers);
+                    setLoadingProviders(false);
                 }
             } catch (error) {
                 console.log('Failed to fetch models:', error);
-                if (mounted && !staticFoundModel) {
-                    setLoading(false);
+                if (mounted) {
+                    setLoadingProviders(false);
+                    if (!staticFoundModel) {
+                        setLoading(false);
+                    }
                 }
             }
         };
@@ -517,6 +584,21 @@ export default function ModelProfilePage() {
                             </Button>
                         </div>
 
+                        {/* API Key Status */}
+                        {apiKey === 'gw_live_YOUR_API_KEY_HERE' && (
+                            <Card className="mb-4 border-amber-500/50 bg-amber-50/10">
+                                <CardContent className="p-4">
+                                    <div className="flex items-center gap-2 text-amber-600">
+                                        <span className="text-sm">⚠️ No API key found. </span>
+                                        <Link href="/settings/keys" className="text-sm underline hover:text-amber-700">
+                                            Get your API key
+                                        </Link>
+                                        <span className="text-sm"> to use these examples.</span>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        )}
+
                         {/* Code Example */}
                         <div className="mb-6">
                             {(() => {
@@ -670,11 +752,19 @@ console.log(response.choices[0].message.content);`
                 {activeTab === 'Providers' && (
                     <div>
                         <div className="flex items-center justify-between mb-6">
-                            <h2 className="text-2xl font-bold">Providers for {model.name}</h2>
-                            <p className="text-sm text-muted-foreground">{modelProviders.length} Gateway{modelProviders.length !== 1 ? 's' : ''}</p>
+                            <h2 className="text-2xl font-bold">Gateways Offering {model.name}</h2>
+                            {!loadingProviders && (
+                                <p className="text-sm text-muted-foreground">
+                                    Available on {modelProviders.length} Gateway{modelProviders.length !== 1 ? 's' : ''}
+                                </p>
+                            )}
                         </div>
 
-                        {modelProviders.length > 0 ? (
+                        {loadingProviders ? (
+                            <Card className="p-8 text-center">
+                                <p className="text-muted-foreground">Loading gateway availability...</p>
+                            </Card>
+                        ) : modelProviders.length > 0 ? (
                             <div className="space-y-4">
                                 {modelProviders.map(provider => {
                                     const providerNames: Record<string, string> = {
