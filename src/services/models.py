@@ -14,6 +14,7 @@ from src.cache import (
     _groq_models_cache,
     _fireworks_models_cache,
     _together_models_cache,
+    _deepinfra_models_cache,
 )
 from fastapi import APIRouter
 from datetime import datetime, timezone
@@ -81,15 +82,24 @@ def get_cached_models(gateway: str = "openrouter"):
                     return cache["data"]
             return fetch_models_from_together()
 
+        if gateway == "deepinfra":
+            cache = _deepinfra_models_cache
+            if cache["data"] and cache["timestamp"]:
+                cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
+                if cache_age < cache["ttl"]:
+                    return cache["data"]
+            return fetch_models_from_deepinfra()
+
         if gateway == "all":
             openrouter_models = get_cached_models("openrouter") or []
             portkey_models = get_cached_models("portkey") or []
             featherless_models = get_cached_models("featherless") or []
+            deepinfra_models = get_cached_models("deepinfra") or []
             chutes_models = get_cached_models("chutes") or []
             groq_models = get_cached_models("groq") or []
             fireworks_models = get_cached_models("fireworks") or []
             together_models = get_cached_models("together") or []
-            return openrouter_models + portkey_models + featherless_models + chutes_models + groq_models + fireworks_models + together_models
+            return openrouter_models + portkey_models + featherless_models + deepinfra_models + chutes_models + groq_models + fireworks_models + together_models
 
         # Default to OpenRouter
         if _models_cache["data"] and _models_cache["timestamp"]:
@@ -202,6 +212,73 @@ def fetch_models_from_portkey():
         return None
     except Exception as e:
         logger.error(f"Failed to fetch models from Portkey: {e}", exc_info=True)
+        return None
+
+
+def fetch_models_from_deepinfra():
+    """Fetch models from DeepInfra API and normalize to the catalog schema"""
+    try:
+        if not Config.DEEPINFRA_API_KEY:
+            logger.error("DeepInfra API key not configured")
+            return None
+
+        headers = {
+            "Authorization": f"Bearer {Config.DEEPINFRA_API_KEY}",
+            "Content-Type": "application/json"
+        }
+
+        # Fetch all pages of models with pagination
+        all_raw_models = []
+        limit = 100  # DeepInfra page size
+        offset = 0
+        max_iterations = 50  # Safety limit
+        iteration = 0
+
+        while iteration < max_iterations:
+            url = f"https://api.deepinfra.com/v1/openai/models?limit={limit}&offset={offset}"
+            logger.info(f"Fetching DeepInfra models: offset={offset}, limit={limit}")
+
+            response = httpx.get(url, headers=headers, timeout=20.0)
+            response.raise_for_status()
+
+            payload = response.json()
+            raw_models = payload.get("data", [])
+
+            # Debug: log response structure on first iteration
+            if iteration == 0:
+                logger.info(f"DeepInfra API response structure: {json.dumps({k: type(v).__name__ for k, v in payload.items()}, indent=2)}")
+
+            if not raw_models:
+                # No more models to fetch
+                logger.info(f"No more models to fetch at offset {offset}")
+                break
+
+            all_raw_models.extend(raw_models)
+            logger.info(f"Fetched {len(raw_models)} models (total so far: {len(all_raw_models)})")
+
+            # Check if there are more models to fetch
+            if len(raw_models) < limit:
+                # Last page (fewer models than limit)
+                logger.info(f"Reached last page: got {len(raw_models)} models (limit: {limit})")
+                break
+
+            offset += limit
+            iteration += 1
+
+        logger.info(f"Finished fetching DeepInfra models: {len(all_raw_models)} total models across {iteration + 1} pages")
+
+        normalized_models = [normalize_deepinfra_model(model) for model in all_raw_models if model]
+
+        _deepinfra_models_cache["data"] = normalized_models
+        _deepinfra_models_cache["timestamp"] = datetime.now(timezone.utc)
+
+        logger.info(f"Cached {len(normalized_models)} DeepInfra models")
+        return _deepinfra_models_cache["data"]
+    except httpx.HTTPStatusError as e:
+        logger.error(f"DeepInfra HTTP error: {e.response.status_code} - {e.response.text}")
+        return None
+    except Exception as e:
+        logger.error(f"Failed to fetch models from DeepInfra: {e}", exc_info=True)
         return None
 
 
