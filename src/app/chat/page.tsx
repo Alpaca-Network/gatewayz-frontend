@@ -53,6 +53,8 @@ import 'katex/dist/katex.min.css';
 import { usePrivy } from '@privy-io/react-auth';
 import { streamChatResponse } from '@/lib/streaming';
 import { ReasoningDisplay } from '@/components/chat/reasoning-display';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 
 type Message = {
     role: 'user' | 'assistant';
@@ -140,6 +142,22 @@ const mockChatSessions: ChatSession[] = [
     }
 ];
 
+// Helper function to safely parse dates from backend
+const parseBackendDate = (dateString: string, fieldName: string, sessionId?: number): Date => {
+    if (!dateString) {
+        console.warn(`Empty ${fieldName} for session ${sessionId || 'unknown'}`);
+        return new Date(); // Fallback to current time
+    }
+    
+    const parsedDate = new Date(dateString);
+    if (isNaN(parsedDate.getTime())) {
+        console.warn(`Invalid ${fieldName} date for session ${sessionId || 'unknown'}:`, dateString);
+        return new Date(); // Fallback to current time
+    }
+    
+    return parsedDate;
+};
+
 // API helper functions for chat history integration
 const apiHelpers = {
     // Load chat sessions from API (without messages for faster initial load)
@@ -161,18 +179,31 @@ const apiHelpers = {
             const apiSessions = await chatAPI.getSessions(50, 0);
 
             // Map sessions WITHOUT loading messages (for faster initial load)
-            const sessions = apiSessions.map((apiSession) => ({
-                id: `api-${apiSession.id}`,
-                title: apiSession.title,
-                startTime: new Date(apiSession.created_at),
-                createdAt: new Date(apiSession.created_at),
-                updatedAt: new Date(apiSession.updated_at),
-                userId: userId,
-                apiSessionId: apiSession.id,
-                messages: [] // Empty initially, will load on demand
-            }));
+            const sessions = apiSessions.map((apiSession) => {
+                // Use helper function to safely parse dates
+                const createdAt = parseBackendDate(apiSession.created_at, 'created_at', apiSession.id);
+                const updatedAt = parseBackendDate(apiSession.updated_at, 'updated_at', apiSession.id);
+                
+                return {
+                    id: `api-${apiSession.id}`,
+                    title: apiSession.title,
+                    startTime: createdAt, // Use created_at as startTime for consistency
+                    createdAt: createdAt,
+                    updatedAt: updatedAt,
+                    userId: userId,
+                    apiSessionId: apiSession.id,
+                    messages: [] // Empty initially, will load on demand
+                };
+            });
 
             console.log(`Chat sessions - Loaded ${sessions.length} sessions (messages will load on demand)`);
+            console.log('Chat sessions - Sample session dates:', sessions.slice(0, 2).map(s => ({
+                id: s.id,
+                title: s.title,
+                startTime: s.startTime.toISOString(),
+                createdAt: s.createdAt.toISOString(),
+                updatedAt: s.updatedAt.toISOString()
+            })));
             return sessions;
         } catch (error) {
             console.error('Failed to load chat sessions from API:', error);
@@ -247,12 +278,16 @@ const apiHelpers = {
             console.log('Create session - Making API request to createSession');
             const apiSession = await chatAPI.createSession(title, model);
             
+            // Use helper function to safely parse dates
+            const createdAt = parseBackendDate(apiSession.created_at, 'created_at', apiSession.id);
+            const updatedAt = parseBackendDate(apiSession.updated_at, 'updated_at', apiSession.id);
+            
             return {
                 id: `api-${apiSession.id}`,
                 title: apiSession.title,
-                startTime: new Date(apiSession.created_at),
-                createdAt: new Date(apiSession.created_at),
-                updatedAt: new Date(apiSession.updated_at),
+                startTime: createdAt, // Use created_at as startTime for consistency
+                createdAt: createdAt,
+                updatedAt: updatedAt,
                 userId: 'user-1',
                 apiSessionId: apiSession.id,
                 messages: []
@@ -392,85 +427,148 @@ const SessionListItem = ({
     onDeleteSession: (sessionId: string) => void;
 }) => {
     const [menuOpen, setMenuOpen] = React.useState(false);
+    const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
+    const [renameDialogOpen, setRenameDialogOpen] = React.useState(false);
+    const [renameValue, setRenameValue] = React.useState('');
+
+    const handleRenameClick = () => {
+        setRenameValue(session.title);
+        setRenameDialogOpen(true);
+        setMenuOpen(false);
+    };
+
+    const handleRenameConfirm = () => {
+        if (renameValue.trim() && renameValue !== session.title) {
+            onRenameSession(session.id, renameValue.trim());
+        }
+        setRenameDialogOpen(false);
+    };
+
+    const handleDeleteClick = () => {
+        setDeleteDialogOpen(true);
+        setMenuOpen(false);
+    };
+
+    const handleDeleteConfirm = () => {
+        onDeleteSession(session.id);
+        setDeleteDialogOpen(false);
+    };
 
     return (
+        <>
         <li key={session.id} className="group relative min-w-0 w-full">
             <div
-                className="flex items-start justify-between gap-2 w-full"
+                className={`flex items-start justify-between gap-2 w-full px-2 py-1.5 rounded-lg transition-colors ${
+                    activeSessionId === session.id 
+                        ? 'bg-secondary' 
+                        : 'hover:bg-accent'
+                }`}
                 onContextMenu={(e) => {
                     e.preventDefault();
                     setMenuOpen(true);
                 }}
-            >
-                <Button
-                    variant={activeSessionId === session.id ? "secondary" : "ghost"}
-                    className="flex-1 min-w-0 justify-start items-start text-left flex flex-col h-auto py-1.5 pl-2 pr-3 rounded-lg"
-                    onClick={() => switchToSession(session.id)}
                 >
-                    <span
-                        className="font-medium text-sm leading-[1.3] block break-words w-full"
-                        style={{
-                            display: '-webkit-box',
-                            WebkitLineClamp: 2,
-                            WebkitBoxOrient: 'vertical' as const,
-                            overflow: 'hidden',
-                            wordBreak: 'break-word',
-                            overflowWrap: 'break-word'
-                        }}
+                   <button
+                        className="flex-1 min-w-0 justify-start items-start text-left flex flex-col h-auto"
+                        onClick={() => switchToSession(session.id)}
                     >
-                        {session.title}
-                    </span>
-                    <span className="text-xs text-muted-foreground truncate leading-tight mt-0.5 block w-full">
-                        {formatDistanceToNow(session.startTime, { addSuffix: true })}
-                    </span>
-                </Button>
+                        <span className="font-medium text-sm leading-tight block truncate w-full">
+                            {session.title}
+                        </span>
+                        <span className="text-xs text-muted-foreground truncate leading-tight mt-0.5 block w-full">
+                            {formatDistanceToNow(session.startTime, { addSuffix: true })}
+                        </span>
+                    </button>
 
-                {/* Three dots menu stays visible and aligned */}
-                <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
-                    <DropdownMenuTrigger asChild>
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 hover:bg-muted rounded-md shrink-0 self-start mt-1"
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setMenuOpen(true);
+                    {/* Three dots menu stays visible and aligned */}
+                    <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+                        <DropdownMenuTrigger asChild>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 hover:bg-muted rounded-md shrink-0 self-start opacity-0 group-hover:opacity-100 transition-opacity"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setMenuOpen(true);
+                                }}
+                            >
+                                <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48">
+                            <DropdownMenuItem onClick={handleRenameClick}>
+                                <Pencil className="h-4 w-4 mr-2" />
+                                Rename
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                onClick={handleDeleteClick}
+                                className="text-destructive focus:text-destructive"
+                            >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Delete
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                </div>
+            </li>
+
+            {/* Rename Dialog */}
+            <Dialog open={renameDialogOpen} onOpenChange={setRenameDialogOpen}>
+                <DialogContent className="sm:max-w-[425px]">
+                    <DialogHeader>
+                        <DialogTitle>Rename Chat</DialogTitle>
+                        <DialogDescription>
+                            Enter a new name for this chat session.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                        <Input
+                            id="name"
+                            value={renameValue}
+                            onChange={(e) => setRenameValue(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    handleRenameConfirm();
+                                }
+                                setMenuOpen(false);
                             }}
-                        >
-                            <MoreHorizontal className="h-4 w-4" />
+                            placeholder="Chat name"
+                            className="col-span-3"
+                            autoFocus
+                        />
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setRenameDialogOpen(false)}>
+                            Cancel
                         </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-48">
-                        <DropdownMenuItem
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                const newTitle = prompt('Rename chat:', session.title);
-                                if (newTitle && newTitle.trim() && newTitle !== session.title) {
-                                    onRenameSession(session.id, newTitle.trim());
-                                }
-                                setMenuOpen(false);
-                            }}
+                        <Button onClick={handleRenameConfirm}>
+                            Save
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Delete Confirmation Dialog */}
+            <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Delete Chat</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Are you sure you want to delete "{session.title}"? This action cannot be undone.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={handleDeleteConfirm}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                         >
-                            <Pencil className="h-4 w-4 mr-2" />
-                            Rename
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                if (confirm('Are you sure you want to delete this chat?')) {
-                                    onDeleteSession(session.id);
-                                }
-                                setMenuOpen(false);
-                            }}
-                            className="text-destructive focus:text-destructive"
-                        >
-                            <Trash2 className="h-4 w-4 mr-2" />
                             Delete
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
-            </div>
-        </li>
+                            </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+        </>
     );
 };
 
@@ -526,7 +624,7 @@ const ChatSidebar = ({ sessions, activeSessionId, switchToSession, createNewChat
 
         </div>
 
-        <ScrollArea className="flex-grow overflow-hidden">
+        <div className="flex-grow overflow-y-auto">
             {Object.keys(groupedSessions).length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-32 text-center">
                     <p className="text-sm text-muted-foreground">No conversations yet</p>
@@ -551,7 +649,7 @@ const ChatSidebar = ({ sessions, activeSessionId, switchToSession, createNewChat
                     </div>
                 ))
             )}
-        </ScrollArea>
+        </div>
     </aside>
     )
 }
@@ -814,6 +912,40 @@ function ChatPageContent() {
     // Trigger for forcing session reload after API key becomes available
     const [authReady, setAuthReady] = useState(false);
 
+    // Test backend connectivity function
+    const testBackendConnectivity = async () => {
+        const apiKey = getApiKey();
+        const userData = getUserData();
+        
+        if (!apiKey || !userData?.privy_user_id) {
+            console.error('❌ Cannot test backend - missing API key or user data');
+            return false;
+        }
+
+        try {
+            console.log('🧪 Testing backend connectivity...');
+            const chatAPI = new ChatHistoryAPI(apiKey, undefined, userData.privy_user_id);
+            
+            // Test 1: Get sessions (this is the most important one)
+            const sessions = await chatAPI.getSessions(5, 0);
+            console.log('✅ Backend test - Get sessions:', sessions);
+            
+            // Test 2: Get stats (skip if it fails due to backend bug)
+            try {
+                const stats = await chatAPI.getStats();
+                console.log('✅ Backend test - Get stats:', stats);
+            } catch (statsError) {
+                console.warn('⚠️ Backend test - Get stats failed (backend bug):', statsError);
+                console.log('ℹ️ This is a known backend issue with the stats endpoint, but sessions should work fine');
+            }
+            
+            return true;
+        } catch (error) {
+            console.error('❌ Backend test failed:', error);
+            return false;
+        }
+    };
+
     // Handle model and message from URL parameters
     useEffect(() => {
         if (!searchParams) return;
@@ -980,6 +1112,71 @@ function ChatPageContent() {
         };
 
         loadSessions();
+        
+        // Test backend connectivity after loading sessions
+        setTimeout(() => {
+            testBackendConnectivity();
+        }, 1000);
+        
+        // Make test function available globally for manual testing
+        (window as any).testChatBackend = testBackendConnectivity;
+        
+        // Add a test date parsing function
+        (window as any).testDateParsing = () => {
+            const testDates = [
+                '2024-01-01T12:00:00Z',
+                '2024-01-01T12:00:00.000Z',
+                '2024-01-01T12:00:00+00:00',
+                'invalid-date',
+                '',
+                null,
+                undefined
+            ];
+            
+            console.log('🧪 Testing date parsing...');
+            testDates.forEach((dateStr, index) => {
+                const result = parseBackendDate(dateStr as string, 'test_field', index);
+                console.log(`Test ${index}: "${dateStr}" → ${result.toISOString()}`);
+            });
+        };
+        
+        // Add a test message saving function
+        (window as any).testMessageSaving = async () => {
+            const apiKey = getApiKey();
+            const userData = getUserData();
+            const currentSession = sessions.find(s => s.id === activeSessionId);
+            
+            if (!apiKey || !userData?.privy_user_id || !currentSession?.apiSessionId) {
+                console.error('❌ Cannot test message saving - missing requirements:', {
+                    hasApiKey: !!apiKey,
+                    hasUserData: !!userData?.privy_user_id,
+                    hasSessionId: !!currentSession?.apiSessionId,
+                    activeSessionId,
+                    sessions: sessions.length
+                });
+                return false;
+            }
+            
+            try {
+                console.log('🧪 Testing message saving...');
+                const chatAPI = new ChatHistoryAPI(apiKey, undefined, userData.privy_user_id);
+                
+                // Try to save a test message
+                const result = await chatAPI.saveMessage(
+                    currentSession.apiSessionId,
+                    'user',
+                    'Test message from console',
+                    'openai/gpt-3.5-turbo',
+                    undefined
+                );
+                
+                console.log('✅ Test message saved successfully:', result);
+                return true;
+            } catch (error) {
+                console.error('❌ Test message saving failed:', error);
+                return false;
+            }
+        };
     }, [ready, authenticated, authReady]);
 
     // Handle rate limit countdown timer
@@ -1336,27 +1533,43 @@ function ChatPageContent() {
             // Save the user message to the backend first
             if (currentSession?.apiSessionId) {
                 try {
-                    console.log('Saving user message to backend:', {
+                    console.log('🔄 Attempting to save user message to backend:', {
                         sessionId: currentSession.apiSessionId,
                         content: userMessage.substring(0, 100) + '...',
                         model: selectedModel.value,
-                        hasImage: !!userImage
+                        hasImage: !!userImage,
+                        apiKey: apiKey ? `${apiKey.substring(0, 10)}...` : 'NO_API_KEY',
+                        privyUserId: userData.privy_user_id
                     });
                     
                     const chatAPI = new ChatHistoryAPI(apiKey, undefined, userData.privy_user_id);
-                    await chatAPI.saveMessage(
+                    const result = await chatAPI.saveMessage(
                         currentSession.apiSessionId,
                         'user',
                         userMessage,
                         selectedModel.value,
                         undefined // Token count not calculated yet
                     );
-                    console.log('✅ User message saved to backend successfully');
+                    console.log('✅ User message saved to backend successfully:', result);
                 } catch (error) {
                     console.error('❌ Failed to save user message to backend:', error);
+                    console.error('Error details:', {
+                        message: error instanceof Error ? error.message : String(error),
+                        stack: error instanceof Error ? error.stack : undefined,
+                        sessionId: currentSession.apiSessionId,
+                        hasApiKey: !!apiKey,
+                        hasPrivyUserId: !!userData.privy_user_id
+                    });
                     // Continue with the request even if saving fails
                 }
+            } else {
+                console.warn('⚠️ Cannot save user message - no API session ID:', {
+                    currentSession,
+                    sessionId: currentSession?.apiSessionId,
+                    currentSessionId
+                });
             }
+
             const sessionIdParam = currentSession?.apiSessionId ? `&session_id=${currentSession.apiSessionId}` : '';
             const url = `${apiBaseUrl}/v1/responses?privy_user_id=${encodeURIComponent(privyUserId)}${sessionIdParam}`;
 
@@ -1582,28 +1795,45 @@ function ChatPageContent() {
                 setIsStreamingResponse(false);
 
                 const finalContent = accumulatedContent;
+                console.log({finalContent});
 
                 // Save the assistant's response to the backend
                 if (currentSession?.apiSessionId && finalContent) {
                     try {
-                        console.log('Saving assistant message to backend:', {
+                        console.log('🔄 Attempting to save assistant message to backend:', {
                             sessionId: currentSession.apiSessionId,
                             content: finalContent.substring(0, 100) + '...',
-                            model: modelValue
+                            model: modelValue,
+                            apiKey: apiKey ? `${apiKey.substring(0, 10)}...` : 'NO_API_KEY',
+                            privyUserId: userData.privy_user_id
                         });
                         
                         const chatAPI = new ChatHistoryAPI(apiKey, undefined, userData.privy_user_id);
-                        await chatAPI.saveMessage(
+                        const result = await chatAPI.saveMessage(
                             currentSession.apiSessionId,
                             'assistant',
                             finalContent,
                             modelValue,
                             undefined // Token count not available from streaming
                         );
-                        console.log('✅ Assistant message saved to backend successfully');
+                        console.log('✅ Assistant message saved to backend successfully:', result);
                     } catch (error) {
                         console.error('❌ Failed to save assistant message to backend:', error);
+                        console.error('Error details:', {
+                            message: error instanceof Error ? error.message : String(error),
+                            stack: error instanceof Error ? error.stack : undefined,
+                            sessionId: currentSession.apiSessionId,
+                            hasApiKey: !!apiKey,
+                            hasPrivyUserId: !!userData.privy_user_id
+                        });
                     }
+                } else {
+                    console.warn('⚠️ Cannot save assistant message:', {
+                        hasSessionId: !!currentSession?.apiSessionId,
+                        hasContent: !!finalContent,
+                        currentSession,
+                        finalContentLength: finalContent?.length || 0
+                    });
                 }
 
                 // Update session title in API if this is the first message
