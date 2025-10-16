@@ -173,7 +173,7 @@ CONFIG_FILE="$CONFIG_DIR/config.json"
 
 mkdir -p "$CONFIG_DIR"
 
-cat > "$CONFIG_FILE" << 'EOF'
+cat > "$CONFIG_FILE" <<EOF
 {
   "LOG": true,
   "LOG_LEVEL": "info",
