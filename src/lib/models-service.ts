@@ -42,8 +42,9 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
       headers: {
         'Content-Type': 'application/json'
       },
-      cache: 'no-store', // Ensure fresh data from API
-      signal: AbortSignal.timeout(10000) // 10 second timeout - API is now stable
+      // Use Next.js revalidation instead of no-store for better performance
+      next: { revalidate: 60 }, // Cache for 60 seconds
+      signal: AbortSignal.timeout(15000) // 15 second timeout for larger requests
     });
 
     if (response.ok) {
