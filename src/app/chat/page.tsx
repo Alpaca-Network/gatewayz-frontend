@@ -1279,8 +1279,14 @@ function ChatPageContent() {
             creatingSessionRef.current = true;
             // Create new session using API helper
             const newSession = await apiHelpers.createChatSession('Untitled Chat', selectedModel?.value);
+
+            // FIX: Set active session immediately with the created session object
+            // Don't rely on setSessions completing before switchToSession is called
+            setActiveSessionId(newSession.id);
+
+            // Then update the sessions list
             setSessions(prev => [newSession, ...prev]);
-            switchToSession(newSession.id);
+
             creatingSessionRef.current = false;
         } catch (error) {
             creatingSessionRef.current = false;
