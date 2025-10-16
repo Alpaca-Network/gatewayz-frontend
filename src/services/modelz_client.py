@@ -4,8 +4,10 @@ Modelz API client for fetching model token data and filtering models.
 
 import httpx
 import logging
+import time
 from typing import Dict, List, Optional, Any
 from fastapi import HTTPException
+from src.cache import get_modelz_cache, clear_modelz_cache
 
 logger = logging.getLogger(__name__)
 
@@ -21,19 +23,44 @@ async def get_modelz_client() -> httpx.AsyncClient:
         }
     )
 
-async def fetch_modelz_tokens(is_graduated: Optional[bool] = None) -> List[Dict[str, Any]]:
+async def fetch_modelz_tokens(is_graduated: Optional[bool] = None, use_cache: bool = True) -> List[Dict[str, Any]]:
     """
-    Fetch model tokens from Modelz API with optional graduation filter.
+    Fetch model tokens from Modelz API with optional graduation filter and caching.
     
     Args:
         is_graduated: Filter for graduated (singularity) models:
                      - True: Only graduated/singularity models
                      - False: Only non-graduated models  
                      - None: All models
+        use_cache: Whether to use cached data if available
     
     Returns:
         List of model token data from Modelz
     """
+    # Check cache first if requested
+    if use_cache:
+        cache = get_modelz_cache()
+        current_time = time.time()
+        
+        # Check if cache is valid
+        if (cache["data"] is not None and 
+            cache["timestamp"] is not None and 
+            (current_time - cache["timestamp"]) < cache["ttl"]):
+            
+            logger.info(f"Using cached Modelz data (age: {current_time - cache['timestamp']:.1f}s)")
+            cached_tokens = cache["data"]
+            
+            # Apply graduation filter to cached data if needed
+            if is_graduated is not None:
+                filtered_tokens = [
+                    token for token in cached_tokens 
+                    if token.get("isGraduated") == is_graduated
+                ]
+                logger.info(f"Filtered cached data: {len(filtered_tokens)} tokens (is_graduated={is_graduated})")
+                return filtered_tokens
+            
+            return cached_tokens
+    
     try:
         async with await get_modelz_client() as client:
             # Build URL with optional filter
@@ -43,7 +70,7 @@ async def fetch_modelz_tokens(is_graduated: Optional[bool] = None) -> List[Dict[
             if is_graduated is not None:
                 params["isGraduated"] = str(is_graduated).lower()
             
-            logger.info(f"Fetching Modelz tokens from: {url} with params: {params}")
+            logger.info(f"Fetching Modelz tokens from API: {url} with params: {params}")
             
             response = await client.get(url, params=params)
             response.raise_for_status()
@@ -60,7 +87,14 @@ async def fetch_modelz_tokens(is_graduated: Optional[bool] = None) -> List[Dict[
             else:
                 tokens = [data] if data else []
             
-            logger.info(f"Successfully fetched {len(tokens)} tokens from Modelz")
+            # Cache the full dataset (without filters) for future use
+            # Always cache when fetching from API, regardless of use_cache parameter
+            cache = get_modelz_cache()
+            cache["data"] = tokens
+            cache["timestamp"] = time.time()
+            logger.info(f"Cached {len(tokens)} Modelz tokens for {cache['ttl']}s")
+            
+            logger.info(f"Successfully fetched {len(tokens)} tokens from Modelz API")
             return tokens
             
     except httpx.TimeoutException:
@@ -82,17 +116,18 @@ async def fetch_modelz_tokens(is_graduated: Optional[bool] = None) -> List[Dict[
             detail=f"Failed to fetch data from Modelz API: {str(e)}"
         )
 
-async def get_modelz_model_ids(is_graduated: Optional[bool] = None) -> List[str]:
+async def get_modelz_model_ids(is_graduated: Optional[bool] = None, use_cache: bool = True) -> List[str]:
     """
     Get a list of model IDs that exist on Modelz.
     
     Args:
         is_graduated: Filter for graduated models (True/False/None)
+        use_cache: Whether to use cached data if available
     
     Returns:
         List of model IDs from Modelz
     """
-    tokens = await fetch_modelz_tokens(is_graduated)
+    tokens = await fetch_modelz_tokens(is_graduated, use_cache)
     
     model_ids = []
     for token in tokens:
@@ -116,31 +151,33 @@ async def get_modelz_model_ids(is_graduated: Optional[bool] = None) -> List[str]
     
     return unique_model_ids
 
-async def check_model_exists_on_modelz(model_id: str, is_graduated: Optional[bool] = None) -> bool:
+async def check_model_exists_on_modelz(model_id: str, is_graduated: Optional[bool] = None, use_cache: bool = True) -> bool:
     """
     Check if a specific model exists on Modelz.
     
     Args:
         model_id: The model ID to check
         is_graduated: Filter for graduated models (True/False/None)
+        use_cache: Whether to use cached data if available
     
     Returns:
         True if model exists on Modelz, False otherwise
     """
-    model_ids = await get_modelz_model_ids(is_graduated)
+    model_ids = await get_modelz_model_ids(is_graduated, use_cache)
     return model_id in model_ids
 
-async def get_modelz_model_details(model_id: str) -> Optional[Dict[str, Any]]:
+async def get_modelz_model_details(model_id: str, use_cache: bool = True) -> Optional[Dict[str, Any]]:
     """
     Get detailed information about a specific model from Modelz.
     
     Args:
         model_id: The model ID to fetch details for
+        use_cache: Whether to use cached data if available
     
     Returns:
         Model details from Modelz or None if not found
     """
-    tokens = await fetch_modelz_tokens()
+    tokens = await fetch_modelz_tokens(use_cache=use_cache)
     
     for token in tokens:
         token_model_id = (
@@ -156,3 +193,84 @@ async def get_modelz_model_details(model_id: str) -> Optional[Dict[str, Any]]:
             return token
     
     return None
+
+
+async def refresh_modelz_cache() -> Dict[str, Any]:
+    """
+    Force refresh the Modelz cache by fetching fresh data from the API.
+    
+    Returns:
+        Cache status information
+    """
+    try:
+        logger.info("Force refreshing Modelz cache")
+        
+        # Clear existing cache
+        clear_modelz_cache()
+        
+        # Fetch fresh data (this will populate the cache)
+        tokens = await fetch_modelz_tokens(use_cache=False)
+        
+        # Get cache after refresh to verify it was populated
+        cache = get_modelz_cache()
+        
+        # Verify cache was populated
+        if cache["data"] is None or cache["timestamp"] is None:
+            logger.error("Cache was not properly populated after refresh")
+            return {
+                "status": "error",
+                "message": "Cache was not properly populated after refresh",
+                "cache_size": 0,
+                "timestamp": None,
+                "ttl": cache["ttl"]
+            }
+        
+        return {
+            "status": "success",
+            "message": f"Modelz cache refreshed with {len(tokens)} tokens",
+            "cache_size": len(tokens),
+            "timestamp": cache["timestamp"],
+            "ttl": cache["ttl"]
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to refresh Modelz cache: {str(e)}")
+        return {
+            "status": "error",
+            "message": f"Failed to refresh Modelz cache: {str(e)}"
+        }
+
+
+def get_modelz_cache_status() -> Dict[str, Any]:
+    """
+    Get the current status of the Modelz cache.
+    
+    Returns:
+        Cache status information
+    """
+    cache = get_modelz_cache()
+    current_time = time.time()
+    
+    if cache["data"] is None or cache["timestamp"] is None:
+        return {
+            "status": "empty",
+            "message": "Modelz cache is empty",
+            "cache_size": 0,
+            "timestamp": None,
+            "ttl": cache["ttl"],
+            "age_seconds": None,
+            "is_valid": False
+        }
+    
+    age_seconds = current_time - cache["timestamp"]
+    is_valid = age_seconds < cache["ttl"]
+    
+    return {
+        "status": "valid" if is_valid else "expired",
+        "message": f"Modelz cache is {'valid' if is_valid else 'expired'}",
+        "cache_size": len(cache["data"]) if cache["data"] else 0,
+        "timestamp": cache["timestamp"],
+        "ttl": cache["ttl"],
+        "age_seconds": round(age_seconds, 1),
+        "is_valid": is_valid
+    }

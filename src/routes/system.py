@@ -11,7 +11,7 @@ from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, Query, HTTPException
 import httpx
 
-from src.cache import get_models_cache, get_providers_cache, clear_models_cache, clear_providers_cache
+from src.cache import get_models_cache, get_providers_cache, clear_models_cache, clear_providers_cache, get_modelz_cache, clear_modelz_cache
 from src.services.models import (
     fetch_models_from_openrouter,
     fetch_models_from_portkey,
@@ -22,6 +22,7 @@ from src.services.models import (
     fetch_models_from_together
 )
 from src.config import Config
+from src.services.modelz_client import refresh_modelz_cache, get_modelz_cache_status as get_modelz_cache_status_func
 
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
@@ -510,4 +511,116 @@ async def check_single_gateway(gateway: str):
     except Exception as e:
         logger.error(f"Failed to check gateway {gateway}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to check gateway health: {str(e)}")
+
+
+# ============================================================================
+# Modelz Cache Management Endpoints
+# ============================================================================
+
+@router.get("/cache/modelz/status", tags=["cache", "modelz"])
+async def get_modelz_cache_status():
+    """
+    Get the current status of the Modelz cache.
+    
+    Returns information about:
+    - Cache validity status
+    - Number of tokens cached
+    - Last refresh timestamp
+    - Cache age and TTL
+    
+    **Example Response:**
+    ```json
+    {
+      "status": "valid",
+      "message": "Modelz cache is valid",
+      "cache_size": 53,
+      "timestamp": 1705123456.789,
+      "ttl": 1800,
+      "age_seconds": 245.3,
+      "is_valid": true
+    }
+    ```
+    """
+    try:
+        cache_status = get_modelz_cache_status_func()
+        return {
+            "success": True,
+            "data": cache_status,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Failed to get Modelz cache status: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get Modelz cache status: {str(e)}")
+
+
+@router.post("/cache/modelz/refresh", tags=["cache", "modelz"])
+async def refresh_modelz_cache_endpoint():
+    """
+    Force refresh the Modelz cache by fetching fresh data from the API.
+    
+    This endpoint:
+    - Clears the existing Modelz cache
+    - Fetches fresh data from the Modelz API
+    - Updates the cache with new data
+    
+    **Example Response:**
+    ```json
+    {
+      "success": true,
+      "data": {
+        "status": "success",
+        "message": "Modelz cache refreshed with 53 tokens",
+        "cache_size": 53,
+        "timestamp": 1705123456.789,
+        "ttl": 1800
+      },
+      "timestamp": "2024-01-15T10:30:45.123Z"
+    }
+    ```
+    """
+    try:
+        logger.info("Refreshing Modelz cache via API endpoint")
+        refresh_result = await refresh_modelz_cache()
+        
+        return {
+            "success": True,
+            "data": refresh_result,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Failed to refresh Modelz cache: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to refresh Modelz cache: {str(e)}")
+
+
+@router.delete("/cache/modelz/clear", tags=["cache", "modelz"])
+async def clear_modelz_cache_endpoint():
+    """
+    Clear the Modelz cache.
+    
+    This endpoint:
+    - Removes all cached Modelz data
+    - Resets cache timestamps
+    - Forces next request to fetch fresh data from API
+    
+    **Example Response:**
+    ```json
+    {
+      "success": true,
+      "message": "Modelz cache cleared successfully",
+      "timestamp": "2024-01-15T10:30:45.123Z"
+    }
+    ```
+    """
+    try:
+        logger.info("Clearing Modelz cache via API endpoint")
+        clear_modelz_cache()
+        
+        return {
+            "success": True,
+            "message": "Modelz cache cleared successfully",
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Failed to clear Modelz cache: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to clear Modelz cache: {str(e)}")
 
