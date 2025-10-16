@@ -24,7 +24,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { Slider } from "@/components/ui/slider";
-import { BookText, Bot, ChevronDown, ChevronUp, FileText, ImageIcon, LayoutGrid, LayoutList, Music, Search, Sliders as SlidersIcon, X } from 'lucide-react';
+import { BookText, Bot, ChevronDown, ChevronUp, FileText, ImageIcon, LayoutGrid, LayoutList, Music, Search, Sliders as SlidersIcon, X, Zap } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 import { stringToColor } from '@/lib/utils';
@@ -46,9 +46,21 @@ interface Model {
   } | null;
   supported_parameters: string[] | null;
   provider_slug: string;
-  source_gateway?: string;
+  source_gateways?: string[]; // Updated to array
+  source_gateway?: string; // Keep for backwards compatibility
   created?: number;
 }
+
+// Gateway display configuration
+const GATEWAY_CONFIG: Record<string, { name: string; color: string; icon?: React.ReactNode }> = {
+  openrouter: { name: 'OpenRouter', color: 'bg-blue-500' },
+  portkey: { name: 'Portkey', color: 'bg-purple-500' },
+  featherless: { name: 'Featherless', color: 'bg-green-500' },
+  groq: { name: 'Groq', color: 'bg-orange-500', icon: <Zap className="w-3 h-3" /> },
+  together: { name: 'Together', color: 'bg-indigo-500' },
+  fireworks: { name: 'Fireworks', color: 'bg-red-500' },
+  chutes: { name: 'Chutes', color: 'bg-yellow-500' }
+};
 
 const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
   const isFree = parseFloat(model.pricing?.prompt || '0') === 0 && parseFloat(model.pricing?.completion || '0') === 0;
@@ -61,6 +73,9 @@ const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
                          (model.name.toLowerCase().includes('multilingual') ||
                           model.description?.toLowerCase().includes('multilingual') ||
                           model.description?.toLowerCase().includes('multi-lingual'));
+
+  // Get gateways - support both old and new format
+  const gateways = model.source_gateways || (model.source_gateway ? [model.source_gateway] : []);
 
   // Preserve literal slash in URL (e.g., "provider/model-name")
   const modelUrl = model.id.includes('/')
@@ -93,6 +108,36 @@ const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
         <p className="text-sm text-muted-foreground flex-grow line-clamp-2 mb-4 overflow-hidden break-words">
           {model.description || 'Explore Token Usage Across Models, Labs, And Public Applications.'}
         </p>
+
+        {/* Gateways - New section */}
+        {gateways.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-3">
+            {gateways.slice(0, 3).map((gateway) => {
+              const config = GATEWAY_CONFIG[gateway.toLowerCase()] || {
+                name: gateway,
+                color: 'bg-gray-500'
+              };
+              return (
+                <Badge
+                  key={gateway}
+                  className={`${config.color} text-white text-[10px] px-1.5 py-0 h-5 flex items-center gap-0.5`}
+                  variant="secondary"
+                >
+                  {config.icon}
+                  {config.name}
+                </Badge>
+              );
+            })}
+            {gateways.length > 3 && (
+              <Badge
+                className="bg-gray-500 text-white text-[10px] px-1.5 py-0 h-5"
+                variant="secondary"
+              >
+                +{gateways.length - 3}
+              </Badge>
+            )}
+          </div>
+        )}
 
         {/* Bottom metadata row */}
         <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground border-t pt-3">
@@ -283,7 +328,12 @@ export default function ModelsClient({ initialModels }: { initialModels: Model[]
         (avgPrice >= promptPricingRange[0] / 1000000 && avgPrice <= promptPricingRange[1] / 1000000);
       const parameterMatch = selectedParameters.length === 0 || selectedParameters.every(p => (model.supported_parameters || []).includes(p));
       const developerMatch = selectedDevelopers.length === 0 || selectedDevelopers.includes(model.provider_slug);
-      const gatewayMatch = selectedGateways.length === 0 || selectedGateways.includes(model.source_gateway || '');
+
+      // Updated gateway matching to support multiple gateways
+      const modelGateways = model.source_gateways || (model.source_gateway ? [model.source_gateway] : []);
+      const gatewayMatch = selectedGateways.length === 0 ||
+        selectedGateways.some(g => modelGateways.includes(g));
+
       const seriesMatch = selectedModelSeries.length === 0 || selectedModelSeries.includes(getModelSeries(model));
       const pricingMatch = pricingFilter === 'all' || (pricingFilter === 'free' && isFree) || (pricingFilter === 'paid' && !isFree);
 
@@ -418,9 +468,10 @@ export default function ModelsClient({ initialModels }: { initialModels: Model[]
   const allGatewaysWithCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     deduplicatedModels.forEach(m => {
-      if (m.source_gateway) {
-        counts[m.source_gateway] = (counts[m.source_gateway] || 0) + 1;
-      }
+      const gateways = m.source_gateways || (m.source_gateway ? [m.source_gateway] : []);
+      gateways.forEach(gateway => {
+        if (gateway) counts[gateway] = (counts[gateway] || 0) + 1;
+      });
     });
     return Object.entries(counts)
       .sort((a, b) => b[1] - a[1])
