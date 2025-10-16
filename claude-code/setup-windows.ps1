@@ -1,4 +1,4 @@
-#!/usr/bin/env pwsh
+﻿#!/usr/bin/env pwsh
 # Claude Code Router + GatewayZ Setup for Windows
 # Usage: powershell -ExecutionPolicy Bypass -File setup-windows.ps1
 
@@ -7,11 +7,12 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
 
 function Write-Header {
     Write-Host ""
     Write-Host "╔════════════════════════════════════════════╗" -ForegroundColor Cyan
-    Write-Host "║  Claude Code Router + GatewayZ Setup      ║" -ForegroundColor Cyan
+    Write-Host "║  Claude Code Router + GatewayZ Setup       ║" -ForegroundColor Cyan
     Write-Host "╚════════════════════════════════════════════╝" -ForegroundColor Cyan
     Write-Host ""
 }
@@ -100,18 +101,19 @@ try {
     Write-Host "Starting npm install (this may take 30-60 seconds, please be patient)..." -ForegroundColor Cyan
     Write-Host ""
 
-    # Run npm directly - let it show its own progress
-    & npm install -g @alpaca-network/claude-code-router
-    $installExitCode = $LASTEXITCODE
+    # Resolve npm.cmd explicitly and capture the real exit code
+    $npmCmd = (Get-Command npm.cmd -ErrorAction Stop).Source
+    Write-Host ("Running: {0} install -g @alpaca-network/claude-code-router" -f $npmCmd)
+    & $npmCmd install -g '@alpaca-network/claude-code-router'
+    $exitCode = $LASTEXITCODE
 
-    Write-Host ""
-    Write-Host "Install command completed with exit code: $installExitCode" -ForegroundColor $(if ($installExitCode -eq 0) { "Green" } else { "Red" })
-    Write-Host ""
-
-    # Check if there were errors
-    if ($installExitCode -ne 0) {
-        throw "npm install failed with exit code $installExitCode"
+    Write-Host ("Install command completed with exit code: {0}" -f $exitCode)
+    if ($exitCode -ne 0) {
+        throw "npm install failed with exit code $exitCode"
     }
+
+    Write-Host "✓ Installed Claude Code Router" -ForegroundColor Green
+    Write-Host ""
 
     # Verify installation
     Write-Host "Verifying installation..." -ForegroundColor Cyan
@@ -119,10 +121,8 @@ try {
     if ($ccrPath) {
         Write-Success "Claude Code Router installed at: $($ccrPath.Source)"
     } else {
-        Write-Host "⚠ Package installed but 'ccr' command not found. Trying to fix..." -ForegroundColor Yellow
+        Write-Host "Package installed but 'ccr' command not found. Attempting quick diagnostics..." -ForegroundColor Yellow
         Write-Host ""
-
-        # Check where npm actually installed it
         Write-Host "DEBUG: Checking npm global installation..." -ForegroundColor Cyan
         $npmRoot = npm root -g 2>&1
         Write-Host "  NPM global root: $npmRoot" -ForegroundColor Gray
@@ -132,59 +132,30 @@ try {
         Write-Host "  $npmList" -ForegroundColor Gray
         Write-Host ""
 
-        # Try reinstalling
-        Write-Host "Attempting fix: Uninstalling and reinstalling..." -ForegroundColor Yellow
-        $uninstallOutput = npm uninstall -g @alpaca-network/claude-code-router 2>&1
-        Write-Host "Uninstall output: $uninstallOutput" -ForegroundColor Gray
-
-        $reinstallOutput = npm install -g @alpaca-network/claude-code-router 2>&1
-        Write-Host "Reinstall output:" -ForegroundColor Gray
-        Write-Host $reinstallOutput -ForegroundColor Gray
-        Write-Host ""
-
-        # Refresh PATH
+        # Refresh PATH and re-check
         $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
-        Write-Host "Refreshed PATH environment variable" -ForegroundColor Cyan
-
         $ccrPath = Get-Command ccr -ErrorAction SilentlyContinue
         if ($ccrPath) {
-            Write-Success "Claude Code Router installed (fixed) at: $($ccrPath.Source)"
+            Write-Success "Claude Code Router available after PATH refresh at: $($ccrPath.Source)"
         } else {
             Write-Host ""
             Write-Host "═══════════════════════════════════════════" -ForegroundColor Red
             Write-Host "  INSTALLATION ISSUE DETECTED" -ForegroundColor Red
             Write-Host "═══════════════════════════════════════════" -ForegroundColor Red
             Write-Host ""
-            Write-Host "The package installed but 'ccr' command is not available." -ForegroundColor Yellow
-            Write-Host ""
-            Write-Host "DIAGNOSTIC INFO:" -ForegroundColor White
-            Write-Host "  NPM global prefix: $(npm config get prefix)" -ForegroundColor Cyan
-            Write-Host "  NPM global root: $(npm root -g)" -ForegroundColor Cyan
-
-            # Check if the bin directory exists
             $npmPrefix = npm config get prefix
-            $binPath = "$npmPrefix"
-            Write-Host "  Expected bin directory: $binPath" -ForegroundColor Cyan
-            Write-Host "  Bin directory exists: $(Test-Path $binPath)" -ForegroundColor Cyan
-
-            if (Test-Path $binPath) {
-                Write-Host "  Contents of bin directory:" -ForegroundColor Cyan
-                Get-ChildItem $binPath -Filter "ccr*" | ForEach-Object {
-                    Write-Host "    - $($_.Name)" -ForegroundColor Gray
-                }
-            }
-
-            Write-Host ""
+            $binPath   = "$npmPrefix"
             Write-Host "Possible solutions:" -ForegroundColor White
             Write-Host "  1. Close and reopen PowerShell (PATH may not be updated)" -ForegroundColor White
-            Write-Host "  2. Add npm's bin directory to PATH: $binPath" -ForegroundColor White
-            Write-Host "  3. Try: npm config set prefix $env:APPDATA\npm" -ForegroundColor White
+            Write-Host "  2. Ensure this directory is on PATH: $binPath" -ForegroundColor White
+            Write-Host "  3. Or: npm config set prefix $env:APPDATA\npm" -ForegroundColor White
             Write-Host "  4. Manual install: npm install -g @alpaca-network/claude-code-router" -ForegroundColor White
             Write-Host ""
             throw "ccr command not available after installation"
         }
     }
-} catch {
+}
+catch {
     Write-Host ""
     Write-Error "Failed to install Claude Code Router"
     Write-Host "Error: $_" -ForegroundColor Red
@@ -334,7 +305,7 @@ try {
 # Summary
 Write-Host ""
 Write-Host "╔════════════════════════════════════════════╗" -ForegroundColor Green
-Write-Host "║            Setup Complete! 🎉              ║" -ForegroundColor Green
+Write-Host "║            Setup Complete!                 ║" -ForegroundColor Green
 Write-Host "╚════════════════════════════════════════════╝" -ForegroundColor Green
 Write-Host ""
 Write-Host "Quick Start:" -ForegroundColor Cyan
