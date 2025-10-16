@@ -24,7 +24,7 @@ interface Model {
 async function getModels(): Promise<Model[]> {
   try {
     // Fetch models from all gateways to build a complete picture
-    const gateways = ['openrouter', 'portkey', 'featherless', 'groq', 'together', 'fireworks', 'chutes', 'deepinfra'];
+    const gateways = ['openrouter', 'portkey', 'featherless', 'groq', 'together', 'fireworks', 'chutes'];
 
     console.log(`📡 Fetching models from ${gateways.length} gateways...`);
 

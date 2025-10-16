@@ -25,7 +25,7 @@ function transformModel(model: any, gateway: string) {
 
 export async function getModelsForGateway(gateway: string, limit?: number) {
   // Validate gateway
-  const validGateways = ['openrouter', 'portkey', 'featherless', 'chutes', 'fireworks', 'together', 'groq', 'deepinfra', 'all'];
+  const validGateways = ['openrouter', 'portkey', 'featherless', 'chutes', 'fireworks', 'together', 'groq', 'all'];
   if (!validGateways.includes(gateway)) {
     throw new Error('Invalid gateway');
   }
@@ -73,7 +73,7 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
 
   if (gateway === 'all') {
     // Distribute all models across different gateways
-    const allGateways = ['openrouter', 'portkey', 'featherless', 'chutes', 'fireworks', 'together', 'groq', 'deepinfra'];
+    const allGateways = ['openrouter', 'portkey', 'featherless', 'chutes', 'fireworks', 'together', 'groq'];
     const modelsPerGateway = Math.ceil(models.length / allGateways.length);
 
     transformedModels = models.map((model, index) => {
@@ -83,7 +83,7 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
     });
   } else {
     // Get models for specific gateway
-    const allGateways = ['openrouter', 'portkey', 'featherless', 'chutes', 'fireworks', 'together', 'groq', 'deepinfra'];
+    const allGateways = ['openrouter', 'portkey', 'featherless', 'chutes', 'fireworks', 'together', 'groq'];
     const modelsPerGateway = Math.ceil(models.length / allGateways.length);
     let gatewayModels;
 
@@ -100,9 +100,7 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
     } else if (gateway === 'together') {
       gatewayModels = models.slice(modelsPerGateway * 5, modelsPerGateway * 6);
     } else if (gateway === 'groq') {
-      gatewayModels = models.slice(modelsPerGateway * 6, modelsPerGateway * 7);
-    } else if (gateway === 'deepinfra') {
-      gatewayModels = models.slice(modelsPerGateway * 7);
+      gatewayModels = models.slice(modelsPerGateway * 6);
     } else {
       gatewayModels = models; // Default to all models
     }
