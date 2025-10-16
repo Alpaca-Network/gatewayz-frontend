@@ -1463,7 +1463,6 @@ function ChatPageContent() {
                         variant="outline"
                         size="sm"
                         onClick={() => login()}
-                        className="bg-card hover:bg-muted/50 text-destructive border-destructive/20"
                     >
                         Log In
                     </Button>
