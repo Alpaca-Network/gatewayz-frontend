@@ -24,15 +24,20 @@ interface Model {
 async function getModels(): Promise<Model[]> {
   try {
     // Fetch models from all gateways to build a complete picture
-    const gateways = ['openrouter', 'portkey', 'featherless'];
+    const gateways = ['openrouter', 'portkey', 'featherless', 'groq', 'together', 'fireworks', 'chutes', 'deepinfra'];
+
+    console.log(`📡 Fetching models from ${gateways.length} gateways...`);
 
     // Fetch from all gateways in parallel
     const gatewayPromises = gateways.map(async (gateway) => {
       try {
+        console.log(`⏳ Fetching models from ${gateway}...`);
         const result = await getModelsForGateway(gateway);
+        const modelCount = result.data?.length || 0;
+        console.log(`✅ ${gateway}: ${modelCount} models`);
         return { gateway, models: result.data || [] };
       } catch (error) {
-        console.log(`Failed to fetch from ${gateway}:`, error);
+        console.error(`❌ Failed to fetch from ${gateway}:`, error);
         return { gateway, models: [] };
       }
     });

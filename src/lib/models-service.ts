@@ -25,7 +25,7 @@ function transformModel(model: any, gateway: string) {
 
 export async function getModelsForGateway(gateway: string, limit?: number) {
   // Validate gateway
-  const validGateways = ['openrouter', 'portkey', 'featherless', 'chutes', 'fireworks', 'together', 'groq', 'all'];
+  const validGateways = ['openrouter', 'portkey', 'featherless', 'chutes', 'fireworks', 'together', 'groq', 'deepinfra', 'all'];
   if (!validGateways.includes(gateway)) {
     throw new Error('Invalid gateway');
   }
@@ -73,19 +73,20 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
 
   if (gateway === 'all') {
     // Distribute all models across different gateways
-    const modelsPerGateway = Math.ceil(models.length / 7);
-    const gateways = ['openrouter', 'portkey', 'featherless', 'chutes', 'fireworks', 'together', 'groq'];
-    
+    const allGateways = ['openrouter', 'portkey', 'featherless', 'chutes', 'fireworks', 'together', 'groq', 'deepinfra'];
+    const modelsPerGateway = Math.ceil(models.length / allGateways.length);
+
     transformedModels = models.map((model, index) => {
       const gatewayIndex = Math.floor(index / modelsPerGateway);
-      const assignedGateway = gateways[Math.min(gatewayIndex, gateways.length - 1)];
+      const assignedGateway = allGateways[Math.min(gatewayIndex, allGateways.length - 1)];
       return transformModel(model, assignedGateway);
     });
   } else {
     // Get models for specific gateway
-    const modelsPerGateway = Math.ceil(models.length / 7);
+    const allGateways = ['openrouter', 'portkey', 'featherless', 'chutes', 'fireworks', 'together', 'groq', 'deepinfra'];
+    const modelsPerGateway = Math.ceil(models.length / allGateways.length);
     let gatewayModels;
-    
+
     if (gateway === 'openrouter') {
       gatewayModels = models.slice(0, modelsPerGateway);
     } else if (gateway === 'portkey') {
@@ -99,11 +100,13 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
     } else if (gateway === 'together') {
       gatewayModels = models.slice(modelsPerGateway * 5, modelsPerGateway * 6);
     } else if (gateway === 'groq') {
-      gatewayModels = models.slice(modelsPerGateway * 6);
+      gatewayModels = models.slice(modelsPerGateway * 6, modelsPerGateway * 7);
+    } else if (gateway === 'deepinfra') {
+      gatewayModels = models.slice(modelsPerGateway * 7);
     } else {
       gatewayModels = models; // Default to all models
     }
-    
+
     transformedModels = gatewayModels.map(m => transformModel(m, gateway));
   }
 

@@ -59,7 +59,8 @@ const GATEWAY_CONFIG: Record<string, { name: string; color: string; icon?: React
   groq: { name: 'Groq', color: 'bg-orange-500', icon: <Zap className="w-3 h-3" /> },
   together: { name: 'Together', color: 'bg-indigo-500' },
   fireworks: { name: 'Fireworks', color: 'bg-red-500' },
-  chutes: { name: 'Chutes', color: 'bg-yellow-500' }
+  chutes: { name: 'Chutes', color: 'bg-yellow-500' },
+  deepinfra: { name: 'DeepInfra', color: 'bg-cyan-500' }
 };
 
 const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
