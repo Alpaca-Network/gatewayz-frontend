@@ -70,7 +70,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${inter.className} antialiased bg-background min-h-screen flex flex-col justify-start`} suppressHydrationWarning>
+      <body className={`${inter.className} antialiased bg-background min-h-screen flex flex-col`} suppressHydrationWarning>
         <ThemeProvider
           defaultTheme="system"
           storageKey="ui-theme"
@@ -79,11 +79,13 @@ export default function RootLayout({
             <Suspense fallback={null}>
               <PostHogPageView />
             </Suspense>
-            <PrivyProviderWrapper>
+            <PrivyProviderWrapper className="flex flex-col flex-1">
               {/* <GTMLoader /> Temporarily disabled due to layout router issues */}
               <AppHeader />
               <OnboardingBanner />
-              {children}
+              <main className="flex-1">
+                {children}
+              </main>
               <Toaster />
               <AppFooter />
               <Analytics />

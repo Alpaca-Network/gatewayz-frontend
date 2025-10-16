@@ -17,7 +17,7 @@ export function AppFooter() {
   // Hide footer on mobile for chat page
   if (isChatPage) {
     return (
-      <footer className="hidden md:flex z-50 w-full h-[65px] border-t border-footer-border bg-header items-center">
+      <footer className="hidden md:flex sticky bottom-0 z-50 w-full h-[65px] border-t border-footer-border bg-header items-center">
         <div className="container flex h-14 justify-between items-center px-4 sm:px-6 lg:px-8 mx-auto">
           <Link href="/" className="flex items-center space-x-2">
             {/* <span className="font-bold sm:inline-block">GATEWAYZ</span> */}
@@ -52,7 +52,7 @@ export function AppFooter() {
   }
 
   return (
-    <footer className="z-50 w-full h-[65px] border-t border-footer-border bg-header flex items-center">
+    <footer className="sticky bottom-0 z-50 w-full h-[65px] border-t border-footer-border bg-header flex items-center">
       <div className="container flex h-14 justify-between items-center px-4 sm:px-6 lg:px-8 mx-auto">
         <Link href="/" className="flex items-center space-x-2">
           {/* <span className="font-bold sm:inline-block">GATEWAYZ</span> */}
