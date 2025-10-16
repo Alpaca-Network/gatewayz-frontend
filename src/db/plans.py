@@ -7,8 +7,8 @@ from src.supabase_config import get_supabase_client
 logger = logging.getLogger(__name__)
 
 # Default entitlements used when a plan cannot be resolved from the database.
-DEFAULT_DAILY_REQUEST_LIMIT = 100
-DEFAULT_MONTHLY_REQUEST_LIMIT = 1000
+DEFAULT_DAILY_REQUEST_LIMIT = 25000
+DEFAULT_MONTHLY_REQUEST_LIMIT = 750000
 DEFAULT_DAILY_TOKEN_LIMIT = 500_000
 DEFAULT_MONTHLY_TOKEN_LIMIT = 15_000_000
 DEFAULT_TRIAL_FEATURES = ['basic_models']
