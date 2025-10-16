@@ -13,8 +13,6 @@ import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/comp
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import {
   Plus,
   Search,
@@ -55,6 +53,8 @@ import 'katex/dist/katex.min.css';
 import { usePrivy } from '@privy-io/react-auth';
 import { streamChatResponse } from '@/lib/streaming';
 import { ReasoningDisplay } from '@/components/chat/reasoning-display';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 
 type Message = {
     role: 'user' | 'assistant';
@@ -142,6 +142,22 @@ const mockChatSessions: ChatSession[] = [
     }
 ];
 
+// Helper function to safely parse dates from backend
+const parseBackendDate = (dateString: string, fieldName: string, sessionId?: number): Date => {
+    if (!dateString) {
+        console.warn(`Empty ${fieldName} for session ${sessionId || 'unknown'}`);
+        return new Date(); // Fallback to current time
+    }
+    
+    const parsedDate = new Date(dateString);
+    if (isNaN(parsedDate.getTime())) {
+        console.warn(`Invalid ${fieldName} date for session ${sessionId || 'unknown'}:`, dateString);
+        return new Date(); // Fallback to current time
+    }
+    
+    return parsedDate;
+};
+
 // API helper functions for chat history integration
 const apiHelpers = {
     // Load chat sessions from API (without messages for faster initial load)
@@ -163,18 +179,31 @@ const apiHelpers = {
             const apiSessions = await chatAPI.getSessions(50, 0);
 
             // Map sessions WITHOUT loading messages (for faster initial load)
-            const sessions = apiSessions.map((apiSession) => ({
-                id: `api-${apiSession.id}`,
-                title: apiSession.title,
-                startTime: new Date(apiSession.created_at),
-                createdAt: new Date(apiSession.created_at),
-                updatedAt: new Date(apiSession.updated_at),
-                userId: userId,
-                apiSessionId: apiSession.id,
-                messages: [] // Empty initially, will load on demand
-            }));
+            const sessions = apiSessions.map((apiSession) => {
+                // Use helper function to safely parse dates
+                const createdAt = parseBackendDate(apiSession.created_at, 'created_at', apiSession.id);
+                const updatedAt = parseBackendDate(apiSession.updated_at, 'updated_at', apiSession.id);
+                
+                return {
+                    id: `api-${apiSession.id}`,
+                    title: apiSession.title,
+                    startTime: createdAt, // Use created_at as startTime for consistency
+                    createdAt: createdAt,
+                    updatedAt: updatedAt,
+                    userId: userId,
+                    apiSessionId: apiSession.id,
+                    messages: [] // Empty initially, will load on demand
+                };
+            });
 
             console.log(`Chat sessions - Loaded ${sessions.length} sessions (messages will load on demand)`);
+            console.log('Chat sessions - Sample session dates:', sessions.slice(0, 2).map(s => ({
+                id: s.id,
+                title: s.title,
+                startTime: s.startTime.toISOString(),
+                createdAt: s.createdAt.toISOString(),
+                updatedAt: s.updatedAt.toISOString()
+            })));
             return sessions;
         } catch (error) {
             console.error('Failed to load chat sessions from API:', error);
@@ -249,12 +278,16 @@ const apiHelpers = {
             console.log('Create session - Making API request to createSession');
             const apiSession = await chatAPI.createSession(title, model);
             
+            // Use helper function to safely parse dates
+            const createdAt = parseBackendDate(apiSession.created_at, 'created_at', apiSession.id);
+            const updatedAt = parseBackendDate(apiSession.updated_at, 'updated_at', apiSession.id);
+            
             return {
                 id: `api-${apiSession.id}`,
                 title: apiSession.title,
-                startTime: new Date(apiSession.created_at),
-                createdAt: new Date(apiSession.created_at),
-                updatedAt: new Date(apiSession.updated_at),
+                startTime: createdAt, // Use created_at as startTime for consistency
+                createdAt: createdAt,
+                updatedAt: updatedAt,
                 userId: 'user-1',
                 apiSessionId: apiSession.id,
                 messages: []
@@ -423,19 +456,19 @@ const SessionListItem = ({
 
     return (
         <>
-            <li key={session.id} className="group relative min-w-0 w-full">
-                <div
-                    className={`flex items-start justify-between gap-2 w-full px-2 py-1.5 rounded-lg transition-colors ${
-                        activeSessionId === session.id 
-                            ? 'bg-secondary' 
-                            : 'hover:bg-accent'
-                    }`}
-                    onContextMenu={(e) => {
-                        e.preventDefault();
-                        setMenuOpen(true);
-                    }}
+        <li key={session.id} className="group relative min-w-0 w-full">
+            <div
+                className={`flex items-start justify-between gap-2 w-full px-2 py-1.5 rounded-lg transition-colors ${
+                    activeSessionId === session.id 
+                        ? 'bg-secondary' 
+                        : 'hover:bg-accent'
+                }`}
+                onContextMenu={(e) => {
+                    e.preventDefault();
+                    setMenuOpen(true);
+                }}
                 >
-                    <button
+                   <button
                         className="flex-1 min-w-0 justify-start items-start text-left flex flex-col h-auto"
                         onClick={() => switchToSession(session.id)}
                     >
@@ -497,6 +530,7 @@ const SessionListItem = ({
                                 if (e.key === 'Enter') {
                                     handleRenameConfirm();
                                 }
+                                setMenuOpen(false);
                             }}
                             placeholder="Chat name"
                             className="col-span-3"
@@ -530,7 +564,7 @@ const SessionListItem = ({
                             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                         >
                             Delete
-                        </AlertDialogAction>
+                            </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
@@ -878,6 +912,40 @@ function ChatPageContent() {
     // Trigger for forcing session reload after API key becomes available
     const [authReady, setAuthReady] = useState(false);
 
+    // Test backend connectivity function
+    const testBackendConnectivity = async () => {
+        const apiKey = getApiKey();
+        const userData = getUserData();
+        
+        if (!apiKey || !userData?.privy_user_id) {
+            console.error('❌ Cannot test backend - missing API key or user data');
+            return false;
+        }
+
+        try {
+            console.log('🧪 Testing backend connectivity...');
+            const chatAPI = new ChatHistoryAPI(apiKey, undefined, userData.privy_user_id);
+            
+            // Test 1: Get sessions (this is the most important one)
+            const sessions = await chatAPI.getSessions(5, 0);
+            console.log('✅ Backend test - Get sessions:', sessions);
+            
+            // Test 2: Get stats (skip if it fails due to backend bug)
+            try {
+                const stats = await chatAPI.getStats();
+                console.log('✅ Backend test - Get stats:', stats);
+            } catch (statsError) {
+                console.warn('⚠️ Backend test - Get stats failed (backend bug):', statsError);
+                console.log('ℹ️ This is a known backend issue with the stats endpoint, but sessions should work fine');
+            }
+            
+            return true;
+        } catch (error) {
+            console.error('❌ Backend test failed:', error);
+            return false;
+        }
+    };
+
     // Handle model and message from URL parameters
     useEffect(() => {
         if (!searchParams) return;
@@ -1044,6 +1112,71 @@ function ChatPageContent() {
         };
 
         loadSessions();
+        
+        // Test backend connectivity after loading sessions
+        setTimeout(() => {
+            testBackendConnectivity();
+        }, 1000);
+        
+        // Make test function available globally for manual testing
+        (window as any).testChatBackend = testBackendConnectivity;
+        
+        // Add a test date parsing function
+        (window as any).testDateParsing = () => {
+            const testDates = [
+                '2024-01-01T12:00:00Z',
+                '2024-01-01T12:00:00.000Z',
+                '2024-01-01T12:00:00+00:00',
+                'invalid-date',
+                '',
+                null,
+                undefined
+            ];
+            
+            console.log('🧪 Testing date parsing...');
+            testDates.forEach((dateStr, index) => {
+                const result = parseBackendDate(dateStr as string, 'test_field', index);
+                console.log(`Test ${index}: "${dateStr}" → ${result.toISOString()}`);
+            });
+        };
+        
+        // Add a test message saving function
+        (window as any).testMessageSaving = async () => {
+            const apiKey = getApiKey();
+            const userData = getUserData();
+            const currentSession = sessions.find(s => s.id === activeSessionId);
+            
+            if (!apiKey || !userData?.privy_user_id || !currentSession?.apiSessionId) {
+                console.error('❌ Cannot test message saving - missing requirements:', {
+                    hasApiKey: !!apiKey,
+                    hasUserData: !!userData?.privy_user_id,
+                    hasSessionId: !!currentSession?.apiSessionId,
+                    activeSessionId,
+                    sessions: sessions.length
+                });
+                return false;
+            }
+            
+            try {
+                console.log('🧪 Testing message saving...');
+                const chatAPI = new ChatHistoryAPI(apiKey, undefined, userData.privy_user_id);
+                
+                // Try to save a test message
+                const result = await chatAPI.saveMessage(
+                    currentSession.apiSessionId,
+                    'user',
+                    'Test message from console',
+                    'openai/gpt-3.5-turbo',
+                    undefined
+                );
+                
+                console.log('✅ Test message saved successfully:', result);
+                return true;
+            } catch (error) {
+                console.error('❌ Test message saving failed:', error);
+                return false;
+            }
+        };
     }, [ready, authenticated, authReady]);
 
     // Handle rate limit countdown timer
@@ -1396,6 +1529,47 @@ function ChatPageContent() {
 
             // Get current session to find API session ID
             const currentSession = sessions.find(s => s.id === currentSessionId);
+
+            // Save the user message to the backend first
+            if (currentSession?.apiSessionId) {
+                try {
+                    console.log('🔄 Attempting to save user message to backend:', {
+                        sessionId: currentSession.apiSessionId,
+                        content: userMessage.substring(0, 100) + '...',
+                        model: selectedModel.value,
+                        hasImage: !!userImage,
+                        apiKey: apiKey ? `${apiKey.substring(0, 10)}...` : 'NO_API_KEY',
+                        privyUserId: userData.privy_user_id
+                    });
+                    
+                    const chatAPI = new ChatHistoryAPI(apiKey, undefined, userData.privy_user_id);
+                    const result = await chatAPI.saveMessage(
+                        currentSession.apiSessionId,
+                        'user',
+                        userMessage,
+                        selectedModel.value,
+                        undefined // Token count not calculated yet
+                    );
+                    console.log('✅ User message saved to backend successfully:', result);
+                } catch (error) {
+                    console.error('❌ Failed to save user message to backend:', error);
+                    console.error('Error details:', {
+                        message: error instanceof Error ? error.message : String(error),
+                        stack: error instanceof Error ? error.stack : undefined,
+                        sessionId: currentSession.apiSessionId,
+                        hasApiKey: !!apiKey,
+                        hasPrivyUserId: !!userData.privy_user_id
+                    });
+                    // Continue with the request even if saving fails
+                }
+            } else {
+                console.warn('⚠️ Cannot save user message - no API session ID:', {
+                    currentSession,
+                    sessionId: currentSession?.apiSessionId,
+                    currentSessionId
+                });
+            }
+
             const sessionIdParam = currentSession?.apiSessionId ? `&session_id=${currentSession.apiSessionId}` : '';
             const url = `${apiBaseUrl}/v1/responses?privy_user_id=${encodeURIComponent(privyUserId)}${sessionIdParam}`;
 
@@ -1510,15 +1684,50 @@ function ChatPageContent() {
                 console.log('Model:', modelValue);
                 console.log('Source Gateway:', selectedModel.sourceGateway);
                 console.log('Portkey Provider:', portkeyProvider);
+                console.log('Message content:', messageContent);
+                console.log('Current messages:', messages);
+
+                // Build conversation history for the API request
+                const conversationHistory = [];
+                
+                // Add all previous messages from the conversation
+                for (const msg of messages) {
+                    if (msg.role === 'user') {
+                        // Handle user messages with potential images
+                        if (msg.image) {
+                            conversationHistory.push({
+                                role: 'user',
+                                content: [
+                                    { type: 'text', text: msg.content },
+                                    { type: 'image_url', image_url: { url: msg.image } }
+                                ]
+                            });
+                        } else {
+                            conversationHistory.push({
+                                role: 'user',
+                                content: [{ type: 'text', text: msg.content }]
+                            });
+                        }
+                    } else if (msg.role === 'assistant') {
+                        // Handle assistant messages (text only)
+                        conversationHistory.push({
+                            role: 'assistant',
+                            content: [{ type: 'text', text: msg.content }]
+                        });
+                    }
+                }
+                
+                // Add the current user message
+                conversationHistory.push({
+                    role: 'user',
+                    content: mapToResponsesContent(messageContent)
+                });
+
+                console.log('Conversation history for API:', conversationHistory);
 
                 const requestBody: any = {
                     model: modelValue,
-                    input: [
-                        {
-                            role: 'user',
-                            content: mapToResponsesContent(messageContent)
-                        }
-                    ],
+                    input: conversationHistory,
                     stream: true
                 };
 
@@ -1586,6 +1795,46 @@ function ChatPageContent() {
                 setIsStreamingResponse(false);
 
                 const finalContent = accumulatedContent;
+                console.log({finalContent});
+
+                // Save the assistant's response to the backend
+                if (currentSession?.apiSessionId && finalContent) {
+                    try {
+                        console.log('🔄 Attempting to save assistant message to backend:', {
+                            sessionId: currentSession.apiSessionId,
+                            content: finalContent.substring(0, 100) + '...',
+                            model: modelValue,
+                            apiKey: apiKey ? `${apiKey.substring(0, 10)}...` : 'NO_API_KEY',
+                            privyUserId: userData.privy_user_id
+                        });
+                        
+                        const chatAPI = new ChatHistoryAPI(apiKey, undefined, userData.privy_user_id);
+                        const result = await chatAPI.saveMessage(
+                            currentSession.apiSessionId,
+                            'assistant',
+                            finalContent,
+                            modelValue,
+                            undefined // Token count not available from streaming
+                        );
+                        console.log('✅ Assistant message saved to backend successfully:', result);
+                    } catch (error) {
+                        console.error('❌ Failed to save assistant message to backend:', error);
+                        console.error('Error details:', {
+                            message: error instanceof Error ? error.message : String(error),
+                            stack: error instanceof Error ? error.stack : undefined,
+                            sessionId: currentSession.apiSessionId,
+                            hasApiKey: !!apiKey,
+                            hasPrivyUserId: !!userData.privy_user_id
+                        });
+                    }
+                } else {
+                    console.warn('⚠️ Cannot save assistant message:', {
+                        hasSessionId: !!currentSession?.apiSessionId,
+                        hasContent: !!finalContent,
+                        currentSession,
+                        finalContentLength: finalContent?.length || 0
+                    });
+                }
 
                 // Update session title in API if this is the first message
                 // Note: Messages are automatically saved by the backend when session_id is passed
