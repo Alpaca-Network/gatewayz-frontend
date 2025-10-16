@@ -198,47 +198,20 @@ def fetch_models_from_deepinfra():
             "Content-Type": "application/json"
         }
 
-        # Fetch all pages of models with pagination
-        all_raw_models = []
-        limit = 100  # DeepInfra page size
-        offset = 0
-        max_iterations = 50  # Safety limit
-        iteration = 0
+        # DeepInfra API returns all models in a single request
+        url = "https://api.deepinfra.com/v1/models"
+        logger.info(f"Fetching DeepInfra models from {url}")
 
-        while iteration < max_iterations:
-            url = f"https://api.deepinfra.com/v1/openai/models?limit={limit}&offset={offset}"
-            logger.info(f"Fetching DeepInfra models: offset={offset}, limit={limit}")
+        response = httpx.get(url, headers=headers, timeout=20.0)
+        response.raise_for_status()
 
-            response = httpx.get(url, headers=headers, timeout=20.0)
-            response.raise_for_status()
+        payload = response.json()
+        logger.info(f"DeepInfra API response structure: {json.dumps({k: type(v).__name__ for k, v in payload.items()}, indent=2)}")
 
-            payload = response.json()
-            raw_models = payload.get("data", [])
+        raw_models = payload.get("data", [])
+        logger.info(f"Fetched {len(raw_models)} models from DeepInfra")
 
-            # Debug: log response structure on first iteration
-            if iteration == 0:
-                logger.info(f"DeepInfra API response structure: {json.dumps({k: type(v).__name__ for k, v in payload.items()}, indent=2)}")
-
-            if not raw_models:
-                # No more models to fetch
-                logger.info(f"No more models to fetch at offset {offset}")
-                break
-
-            all_raw_models.extend(raw_models)
-            logger.info(f"Fetched {len(raw_models)} models (total so far: {len(all_raw_models)})")
-
-            # Check if there are more models to fetch
-            if len(raw_models) < limit:
-                # Last page (fewer models than limit)
-                logger.info(f"Reached last page: got {len(raw_models)} models (limit: {limit})")
-                break
-
-            offset += limit
-            iteration += 1
-
-        logger.info(f"Finished fetching DeepInfra models: {len(all_raw_models)} total models across {iteration + 1} pages")
-
-        normalized_models = [normalize_deepinfra_model(model) for model in all_raw_models if model]
+        normalized_models = [normalize_deepinfra_model(model) for model in raw_models if model]
 
         _deepinfra_models_cache["data"] = normalized_models
         _deepinfra_models_cache["timestamp"] = datetime.now(timezone.utc)
