@@ -283,7 +283,7 @@ async def get_models(
     ),
     gateway: Optional[str] = Query(
         "openrouter",
-        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'chutes', 'groq', 'fireworks', 'together', or 'all'",
+        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', 'groq', 'fireworks', 'together', or 'all'",
     ),
 ):
     """Get all metric data of available models with optional filtering, pagination, Hugging Face integration, and provider logos"""
@@ -299,6 +299,7 @@ async def get_models(
         openrouter_models: List[dict] = []
         portkey_models: List[dict] = []
         featherless_models: List[dict] = []
+        deepinfra_models: List[dict] = []
         chutes_models: List[dict] = []
         groq_models: List[dict] = []
         fireworks_models: List[dict] = []
@@ -320,6 +321,12 @@ async def get_models(
             featherless_models = get_cached_models("featherless") or []
             if gateway_value == "featherless" and not featherless_models:
                 logger.error("No Featherless models data available from cache")
+                raise HTTPException(status_code=503, detail="Models data unavailable")
+
+        if gateway_value in ("deepinfra", "all"):
+            deepinfra_models = get_cached_models("deepinfra") or []
+            if gateway_value == "deepinfra" and not deepinfra_models:
+                logger.error("No DeepInfra models data available from cache")
                 raise HTTPException(status_code=503, detail="Models data unavailable")
 
         if gateway_value in ("chutes", "all"):
@@ -352,6 +359,8 @@ async def get_models(
             models = portkey_models
         elif gateway_value == "featherless":
             models = featherless_models
+        elif gateway_value == "deepinfra":
+            models = deepinfra_models
         elif gateway_value == "chutes":
             models = chutes_models
         elif gateway_value == "groq":
@@ -361,7 +370,7 @@ async def get_models(
         elif gateway_value == "together":
             models = together_models
         else:
-            models = merge_models_by_slug(openrouter_models, portkey_models, featherless_models, chutes_models, groq_models, fireworks_models, together_models)
+            models = merge_models_by_slug(openrouter_models, portkey_models, featherless_models, deepinfra_models, chutes_models, groq_models, fireworks_models, together_models)
 
         if not models:
             logger.error("No models data available after applying gateway selection")
@@ -388,6 +397,12 @@ async def get_models(
             featherless_providers = derive_portkey_providers(models_for_providers)
             annotated_featherless = annotate_provider_sources(featherless_providers, "featherless")
             provider_groups.append(annotated_featherless)
+
+        if gateway_value in ("deepinfra", "all"):
+            models_for_providers = deepinfra_models if gateway_value == "all" else models
+            deepinfra_providers = derive_providers_from_models(models_for_providers, "deepinfra")
+            annotated_deepinfra = annotate_provider_sources(deepinfra_providers, "deepinfra")
+            provider_groups.append(annotated_deepinfra)
 
         if gateway_value in ("chutes", "all"):
             models_for_providers = chutes_models if gateway_value == "all" else models
@@ -450,11 +465,12 @@ async def get_models(
             "openrouter": "OpenRouter catalog",
             "portkey": "Portkey catalog",
             "featherless": "Featherless catalog",
+            "deepinfra": "DeepInfra catalog",
             "chutes": "Chutes.ai catalog",
             "groq": "Groq catalog",
             "fireworks": "Fireworks catalog",
             "together": "Together catalog",
-            "all": "Combined OpenRouter, Portkey, Featherless, Chutes, Groq, Fireworks, and Together catalog",
+            "all": "Combined OpenRouter, Portkey, Featherless, DeepInfra, Chutes, Groq, Fireworks, and Together catalog",
         }.get(gateway_value, "OpenRouter catalog")
 
         result = {
@@ -1166,7 +1182,7 @@ async def get_all_models(
     ),
     gateway: Optional[str] = Query(
         "openrouter",
-        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'chutes', 'groq', 'fireworks', 'together', or 'all'",
+        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', 'groq', 'fireworks', 'together', or 'all'",
     ),
 ):
     return await get_models(
