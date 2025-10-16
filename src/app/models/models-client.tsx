@@ -618,7 +618,7 @@ export default function ModelsClient({ initialModels }: { initialModels: Model[]
         </Sidebar>
 
         <SidebarInset className="flex-1 overflow-y-auto overflow-x-hidden h-full flex flex-col">
-          <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8 overflow-x-hidden flex-1">
+          <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8 overflow-x-hidden">
           <div className="flex flex-col gap-3 mb-6 w-full">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 w-full">
               <div className="flex items-center gap-3">
