@@ -484,7 +484,7 @@ class TestCouponUserEndpoints:
         # Get available coupons
         response = client.get(
             "/coupons/available",
-            headers={"Authorization": f"Bearer {user["api_key"]}"}
+            headers={"Authorization": f"Bearer {user['api_key']}"}
         )
 
         assert response.status_code == 200
@@ -527,7 +527,7 @@ class TestCouponUserEndpoints:
         # Redeem coupon
         response = client.post(
             "/coupons/redeem",
-            headers={"Authorization": f"Bearer {user["api_key"]}"},
+            headers={"Authorization": f"Bearer {user['api_key']}"},
             json={"code": code}
         )
 
@@ -566,7 +566,7 @@ class TestCouponUserEndpoints:
         # Redeem coupon
         response = client.post(
             "/coupons/redeem",
-            headers={"Authorization": f"Bearer {user["api_key"]}"},
+            headers={"Authorization": f"Bearer {user['api_key']}"},
             json={"code": code}
         )
 
@@ -602,7 +602,7 @@ class TestCouponUserEndpoints:
         # First redemption - should succeed
         first_response = client.post(
             "/coupons/redeem",
-            headers={"Authorization": f"Bearer {user["api_key"]}"},
+            headers={"Authorization": f"Bearer {user['api_key']}"},
             json={"code": code}
         )
 
@@ -612,7 +612,7 @@ class TestCouponUserEndpoints:
         # Second redemption - should fail
         second_response = client.post(
             "/coupons/redeem",
-            headers={"Authorization": f"Bearer {user["api_key"]}"},
+            headers={"Authorization": f"Bearer {user['api_key']}"},
             json={"code": code}
         )
 
@@ -628,7 +628,7 @@ class TestCouponUserEndpoints:
 
         response = client.post(
             "/coupons/redeem",
-            headers={"Authorization": f"Bearer {user["api_key"]}"},
+            headers={"Authorization": f"Bearer {user['api_key']}"},
             json={"code": "INVALID-NOTEXIST"}
         )
 
@@ -663,7 +663,7 @@ class TestCouponUserEndpoints:
         # Try to redeem
         response = client.post(
             "/coupons/redeem",
-            headers={"Authorization": f"Bearer {user["api_key"]}"},
+            headers={"Authorization": f"Bearer {user['api_key']}"},
             json={"code": code}
         )
 
@@ -705,7 +705,7 @@ class TestCouponUserEndpoints:
         # Try to redeem
         response = client.post(
             "/coupons/redeem",
-            headers={"Authorization": f"Bearer {user["api_key"]}"},
+            headers={"Authorization": f"Bearer {user['api_key']}"},
             json={"code": code}
         )
 
@@ -739,14 +739,14 @@ class TestCouponUserEndpoints:
         # Redeem it
         client.post(
             "/coupons/redeem",
-            headers={"Authorization": f"Bearer {user["api_key"]}"},
+            headers={"Authorization": f"Bearer {user['api_key']}"},
             json={"code": code}
         )
 
         # Get history
         response = client.get(
             "/coupons/history",
-            headers={"Authorization": f"Bearer {user["api_key"]}"}
+            headers={"Authorization": f"Bearer {user['api_key']}"}
         )
 
         assert response.status_code == 200
@@ -764,7 +764,7 @@ class TestCouponUserEndpoints:
 
         response = client.get(
             "/coupons/history?limit=5",
-            headers={"Authorization": f"Bearer {user["api_key"]}"}
+            headers={"Authorization": f"Bearer {user['api_key']}"}
         )
 
         assert response.status_code == 200
@@ -804,7 +804,7 @@ class TestCouponAnalytics:
         # Redeem it
         client.post(
             "/coupons/redeem",
-            headers={"Authorization": f"Bearer {user["api_key"]}"},
+            headers={"Authorization": f"Bearer {user['api_key']}"},
             json={"code": code}
         )
 
