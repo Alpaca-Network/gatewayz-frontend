@@ -2097,7 +2097,7 @@ function ChatPageContent() {
   }
 
   return (
-    <div className="flex h-screen max-h-[calc(100dvh-165px)] has-onboarding-banner:max-h-[calc(100dvh-245px)] bg-background overflow-hidden">
+    <div className="flex h-screen max-h-[calc(100dvh-180px)] has-onboarding-banner:max-h-[calc(100dvh-260px)] bg-background overflow-hidden">
       {/* Left Sidebar */}
         <div className="hidden lg:flex w-56 xl:w-72 border-r flex-shrink-0 overflow-hidden">
           <ChatSidebar
