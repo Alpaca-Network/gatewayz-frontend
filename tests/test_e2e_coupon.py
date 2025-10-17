@@ -92,12 +92,12 @@ def admin_api_key(supabase_client, test_prefix):
     admin_email = f"{admin_username}@test.example.com"
     admin_api_key_value = f"sk-admin-{test_prefix}"
 
-    # Create admin user
+    # Create admin user (api_key included to satisfy NOT NULL constraint in some schema versions)
     admin_user_data = {
         "username": admin_username,
         "email": admin_email,
         "credits": 1000,
-        "role": "admin",
+        "api_key": admin_api_key_value,
         "created_at": datetime.utcnow().isoformat(),
     }
 

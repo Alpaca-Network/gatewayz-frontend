@@ -659,11 +659,11 @@ class TestAPIKeyEndpoints:
         mock_user,
         auth_headers
     ):
-        """Regression: GET /api-keys must exist"""
+        """Regression: GET /user/api-keys must exist"""
         mock_get_user.return_value = mock_user
         mock_keys.return_value = []
 
-        response = client.get("/api-keys", headers=auth_headers)
+        response = client.get("/user/api-keys", headers=auth_headers)
         assert response.status_code in [200, 401, 500]
 
     @patch('src.db.users.get_user')
@@ -676,7 +676,7 @@ class TestAPIKeyEndpoints:
         mock_user,
         auth_headers
     ):
-        """Regression: POST /api-keys must exist"""
+        """Regression: POST /user/api-keys must exist"""
         mock_get_user.return_value = mock_user
         mock_create.return_value = {
             'api_key': 'new_key',
@@ -685,7 +685,7 @@ class TestAPIKeyEndpoints:
         }
 
         response = client.post(
-            "/api-keys",
+            "/user/api-keys",
             headers=auth_headers,
             json={"name": "Test Key", "environment": "test"}
         )
@@ -707,11 +707,11 @@ class TestPaymentEndpoints:
         mock_user,
         auth_headers
     ):
-        """Regression: POST /api/stripe/checkout-session must exist"""
+        """Regression: POST /payments/stripe/checkout-session must exist"""
         mock_get_user.return_value = mock_user
 
         response = client.post(
-            "/api/stripe/checkout-session",
+            "/payments/stripe/checkout-session",
             headers=auth_headers,
             json={"amount": 10.0, "currency": "usd"}
         )
@@ -728,11 +728,11 @@ class TestPaymentEndpoints:
         mock_user,
         auth_headers
     ):
-        """Regression: GET /api/stripe/payments must exist"""
+        """Regression: GET /payments/stripe/list must exist"""
         mock_get_user.return_value = mock_user
         mock_payments.return_value = []
 
-        response = client.get("/api/stripe/payments", headers=auth_headers)
+        response = client.get("/payments/stripe/list", headers=auth_headers)
         assert response.status_code in [200, 401, 500]
 
 
@@ -753,11 +753,11 @@ class TestChatHistoryEndpoints:
         mock_user,
         auth_headers
     ):
-        """Regression: GET /chat/sessions must exist"""
+        """Regression: GET /chat-history/sessions must exist"""
         mock_get_user.return_value = mock_user
         mock_sessions.return_value = []
 
-        response = client.get("/chat/sessions", headers=auth_headers)
+        response = client.get("/chat-history/sessions", headers=auth_headers)
         assert response.status_code in [200, 401, 500]
 
     @patch('src.db.users.get_user')
@@ -770,12 +770,12 @@ class TestChatHistoryEndpoints:
         mock_user,
         auth_headers
     ):
-        """Regression: POST /chat/sessions must exist"""
+        """Regression: POST /chat-history/sessions must exist"""
         mock_get_user.return_value = mock_user
         mock_create.return_value = {'id': 1, 'title': 'Test Session'}
 
         response = client.post(
-            "/chat/sessions",
+            "/chat-history/sessions",
             headers=auth_headers,
             json={"title": "Test Session"}
         )
@@ -791,11 +791,11 @@ class TestChatHistoryEndpoints:
         mock_user,
         auth_headers
     ):
-        """Regression: GET /chat/sessions/{session_id} must exist"""
+        """Regression: GET /chat-history/sessions/{session_id} must exist"""
         mock_get_user.return_value = mock_user
         mock_get_session.return_value = {'id': 1, 'title': 'Test', 'messages': []}
 
-        response = client.get("/chat/sessions/1", headers=auth_headers)
+        response = client.get("/chat-history/sessions/1", headers=auth_headers)
         assert response.status_code in [200, 401, 404, 500]
 
 
