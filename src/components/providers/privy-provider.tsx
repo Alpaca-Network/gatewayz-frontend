@@ -110,6 +110,13 @@ export function PrivyProviderWrapper({ children }: PrivyProviderWrapperProps) {
         referral_code: referralCode || undefined,
       });
 
+      console.log('Sending auth body to backend:', {
+        has_referral_code: !!referralCode,
+        referral_code: referralCode,
+        is_new_user: isNewUser,
+        privy_user_id: user.id
+      });
+
       const authResponse = await fetch(`${API_BASE_URL}/auth`, {
         method: 'POST',
         headers: {
@@ -119,12 +126,20 @@ export function PrivyProviderWrapper({ children }: PrivyProviderWrapperProps) {
       });
 
       if (!authResponse.ok) {
-        console.error('Backend auth failed:', await authResponse.text());
+        const errorText = await authResponse.text();
+        console.error('Backend auth failed:', {
+          status: authResponse.status,
+          error: errorText,
+          referral_code: referralCode
+        });
         return;
       }
 
       const authData = await authResponse.json();
-      console.log('Backend authentication successful:', authData);
+      console.log('Backend authentication successful:', {
+        ...authData,
+        referral_code_sent: !!referralCode
+      });
 
       // Store API key if provided
       if (authData.api_key) {
