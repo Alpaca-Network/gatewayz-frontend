@@ -48,8 +48,16 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
     throw new Error('Invalid gateway');
   }
 
+  // Map gateway names to backend query parameters
+  // Hugging Face uses 'hug' in the API, others use full names
+  const gatewayParamMap: Record<string, string> = {
+    'huggingface': 'hug',
+  };
+  const gatewayParam = gatewayParamMap[gateway] || gateway;
+
   const limitParam = limit ? `&limit=${limit}` : '';
-  const url = `${API_BASE_URL}/models?gateway=${gateway}${limitParam}`;
+  // Use /v1/catalog/models endpoint for newer gateway support (especially Hugging Face)
+  const url = `${API_BASE_URL}/v1/catalog/models?gateway=${gatewayParam}${limitParam}`;
 
   // Try live API first (primary source)
   try {
