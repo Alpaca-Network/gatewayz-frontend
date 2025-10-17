@@ -4,12 +4,14 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
-import { Send, Loader2 } from 'lucide-react';
+import { Send, Loader2, ChevronDown, ChevronRight } from 'lucide-react';
 import { getApiKey, getUserData } from '@/lib/api';
 
 interface Message {
   role: 'user' | 'assistant';
   content: string;
+  thinking?: string;
+  isStreaming?: boolean;
 }
 
 interface InlineChatProps {
@@ -22,7 +24,9 @@ export function InlineChat({ modelId, modelName }: InlineChatProps) {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [expandedThinking, setExpandedThinking] = useState<Set<number>>(new Set());
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -31,6 +35,18 @@ export function InlineChat({ modelId, modelName }: InlineChatProps) {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  const toggleThinking = (index: number) => {
+    setExpandedThinking(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(index)) {
+        newSet.delete(index);
+      } else {
+        newSet.add(index);
+      }
+      return newSet;
+    });
+  };
 
   const handleSendMessage = async () => {
     if (!input.trim() || loading) return;
@@ -50,7 +66,14 @@ export function InlineChat({ modelId, modelName }: InlineChatProps) {
     setLoading(true);
     setError(null);
 
+    // Add a streaming assistant message
+    const streamingMessageIndex = messages.length + 1;
+    setMessages(prev => [...prev, { role: 'assistant', content: '', thinking: '', isStreaming: true }]);
+    setExpandedThinking(prev => new Set(prev).add(streamingMessageIndex));
+
     try {
+      abortControllerRef.current = new AbortController();
+
       const response = await fetch('https://api.gatewayz.ai/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -59,25 +82,109 @@ export function InlineChat({ modelId, modelName }: InlineChatProps) {
         },
         body: JSON.stringify({
           model: modelId,
-          messages: [...messages, userMessage],
-          stream: false
-        })
+          messages: [...messages, userMessage].map(m => ({ role: m.role, content: m.content })),
+          stream: true
+        }),
+        signal: abortControllerRef.current.signal
       });
 
       if (!response.ok) {
         throw new Error(`API error: ${response.status}`);
       }
 
-      const data = await response.json();
-      const assistantMessage: Message = {
-        role: 'assistant',
-        content: data.choices?.[0]?.message?.content || 'No response received'
-      };
-      setMessages(prev => [...prev, assistantMessage]);
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let accumulatedContent = '';
+      let accumulatedThinking = '';
+      let inThinking = false;
+
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split('\n');
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6);
+              if (data === '[DONE]') continue;
+
+              try {
+                const parsed = JSON.parse(data);
+                const delta = parsed.choices?.[0]?.delta;
+
+                if (delta?.content) {
+                  const content = delta.content;
+
+                  // Check if we're entering or exiting thinking tags
+                  if (content.includes('<thinking>')) {
+                    inThinking = true;
+                    const parts = content.split('<thinking>');
+                    accumulatedContent += parts[0];
+                    accumulatedThinking += parts[1] || '';
+                  } else if (content.includes('</thinking>')) {
+                    inThinking = false;
+                    const parts = content.split('</thinking>');
+                    accumulatedThinking += parts[0];
+                    accumulatedContent += parts[1] || '';
+                  } else if (inThinking) {
+                    accumulatedThinking += content;
+                  } else {
+                    accumulatedContent += content;
+                  }
+
+                  // Update the streaming message
+                  setMessages(prev => {
+                    const newMessages = [...prev];
+                    newMessages[streamingMessageIndex] = {
+                      role: 'assistant',
+                      content: accumulatedContent,
+                      thinking: accumulatedThinking,
+                      isStreaming: true
+                    };
+                    return newMessages;
+                  });
+                }
+              } catch (e) {
+                // Skip malformed JSON
+              }
+            }
+          }
+        }
+      }
+
+      // Mark streaming as complete and collapse thinking
+      setMessages(prev => {
+        const newMessages = [...prev];
+        newMessages[streamingMessageIndex] = {
+          role: 'assistant',
+          content: accumulatedContent || 'No response received',
+          thinking: accumulatedThinking,
+          isStreaming: false
+        };
+        return newMessages;
+      });
+
+      // Collapse thinking after completion
+      setExpandedThinking(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(streamingMessageIndex);
+        return newSet;
+      });
+
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to send message');
+      if (err instanceof Error && err.name === 'AbortError') {
+        setError('Request cancelled');
+      } else {
+        setError(err instanceof Error ? err.message : 'Failed to send message');
+      }
+      // Remove the streaming message on error
+      setMessages(prev => prev.slice(0, -1));
     } finally {
       setLoading(false);
+      abortControllerRef.current = null;
     }
   };
 
@@ -98,18 +205,40 @@ export function InlineChat({ modelId, modelName }: InlineChatProps) {
         ) : (
           messages.map((msg, idx) => (
             <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <Card className={`max-w-[70%] p-4 ${msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-muted'}`}>
-                <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
-              </Card>
+              <div className={`max-w-[70%] ${msg.role === 'assistant' ? 'w-full' : ''}`}>
+                {msg.role === 'assistant' && msg.thinking && (
+                  <Card className="mb-2 p-3 bg-amber-50 dark:bg-amber-950 border-amber-200 dark:border-amber-800">
+                    <button
+                      onClick={() => toggleThinking(idx)}
+                      className="flex items-center gap-2 w-full text-left text-sm font-medium text-amber-900 dark:text-amber-100"
+                    >
+                      {expandedThinking.has(idx) ? (
+                        <ChevronDown className="h-4 w-4" />
+                      ) : (
+                        <ChevronRight className="h-4 w-4" />
+                      )}
+                      <span>{msg.isStreaming ? 'Thinking...' : 'View thinking process'}</span>
+                    </button>
+                    {expandedThinking.has(idx) && (
+                      <div className="mt-2 text-sm text-amber-800 dark:text-amber-200 whitespace-pre-wrap">
+                        {msg.thinking}
+                      </div>
+                    )}
+                  </Card>
+                )}
+                <Card className={`p-4 ${msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-muted'}`}>
+                  <p className="text-sm whitespace-pre-wrap">{msg.content || (msg.isStreaming ? '...' : '')}</p>
+                </Card>
+              </div>
             </div>
           ))
         )}
-        {loading && (
+        {loading && messages[messages.length - 1]?.isStreaming !== true && (
           <div className="flex justify-start">
             <Card className="bg-muted p-4">
               <div className="flex items-center gap-2">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                <p className="text-sm text-muted-foreground">Thinking...</p>
+                <p className="text-sm text-muted-foreground">Connecting...</p>
               </div>
             </Card>
           </div>
