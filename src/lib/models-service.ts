@@ -49,19 +49,11 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
   }
 
   const limitParam = limit ? `&limit=${limit}` : '';
-
-  // Try /v1/catalog/models endpoint first (newer endpoint with Hugging Face support)
-  let url = `${API_BASE_URL}/v1/catalog/models?gateway=${gateway}${limitParam}`;
-
-  if (gateway === 'huggingface') {
-    // Special handling for Hugging Face - backend may use 'hug' param
-    url = `${API_BASE_URL}/v1/catalog/models?gateway=hug${limitParam}`;
-  }
+  const url = `${API_BASE_URL}/models?gateway=${gateway}${limitParam}`;
 
   // Try live API first (primary source)
-  let response;
   try {
-    response = await fetch(url, {
+    const response = await fetch(url, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json'
@@ -76,37 +68,17 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
 
       // Validate response structure and data
       if (data.data && Array.isArray(data.data) && data.data.length > 0) {
+        console.log(`[Models] Fetched ${data.data.length} models for gateway: ${gateway}`);
         return data;
-      }
-    }
-  } catch (backendError: any) {
-    // If /v1/catalog/models fails, try the older /models endpoint
-    console.log(`[Models] /v1/catalog/models endpoint unavailable for ${gateway}, falling back to /models`);
-  }
-
-  // Fallback to older /models endpoint if /v1/catalog/models isn't available
-  url = `${API_BASE_URL}/models?gateway=${gateway}${limitParam}`;
-
-  try {
-    response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      next: { revalidate: 60 },
-      signal: AbortSignal.timeout(15000)
-    });
-
-    if (response.ok) {
-      const data = await response.json();
-
-      // Validate response structure and data
-      if (data.data && Array.isArray(data.data) && data.data.length > 0) {
-        return data;
+      } else if (gateway === 'huggingface') {
+        console.warn(`[Models] No models returned for Hugging Face gateway. Backend may not have Hugging Face models configured.`);
       }
     }
   } catch (backendError: any) {
     // Silently fail and use fallback
+    if (gateway === 'huggingface') {
+      console.warn(`[Models] Error fetching Hugging Face models:`, backendError.message);
+    }
   }
 
   // Fallback to static data (only used if API fails)
