@@ -478,8 +478,8 @@ console.log(completion.choices[0].message);`,
   return (
     <div className="bg-background text-foreground">
       {/* Claude Code Integration Banner */}
-      <div className="bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-md">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-2 sm:py-4">
+      <div className="bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-md overflow-hidden">
+        <div className="w-full px-3 sm:px-4 md:px-6 lg:px-8 py-2 sm:py-4">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-4">
             <div className="flex items-start gap-2 sm:gap-3 flex-1 min-w-0">
               <div className="bg-white/20 backdrop-blur-sm rounded-lg p-1.5 sm:p-2 flex-shrink-0">
@@ -496,7 +496,7 @@ console.log(completion.choices[0].message);`,
                 </p>
               </div>
             </div>
-            <Link href="/start/claude-code" className="w-full sm:w-auto">
+            <Link href="/start/claude-code" className="w-full sm:w-auto flex-shrink-0">
               <Button
                 variant="secondary"
                 size="sm"
