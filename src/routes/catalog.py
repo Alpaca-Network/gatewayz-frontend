@@ -182,12 +182,15 @@ async def get_providers(
     offset: Optional[int] = Query(0, description="Offset for pagination"),
     gateway: Optional[str] = Query(
         "openrouter",
-        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', 'groq', 'fireworks', 'together', 'google', 'cerebras', 'nebius', 'xai', 'novita', 'hug', or 'all'",
+        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', 'groq', 'fireworks', 'together', 'google', 'cerebras', 'nebius', 'xai', 'novita', 'huggingface' (or 'hug'), or 'all'",
     ),
 ):
     """Get all available provider list with detailed metric data including model count and logo URLs"""
     try:
         gateway_value = (gateway or "openrouter").lower()
+        # Support both 'huggingface' and 'hug' as aliases
+        if gateway_value == "huggingface":
+            gateway_value = "hug"
 
         openrouter_models = []
         portkey_models = []
@@ -287,7 +290,7 @@ async def get_models(
     ),
     gateway: Optional[str] = Query(
         "openrouter",
-        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', 'groq', 'fireworks', 'together', 'google', 'cerebras', 'nebius', 'xai', 'novita', 'hug', or 'all'",
+        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', 'groq', 'fireworks', 'together', 'google', 'cerebras', 'nebius', 'xai', 'novita', 'huggingface' (or 'hug'), or 'all'",
     ),
 ):
     """Get all metric data of available models with optional filtering, pagination, Hugging Face integration, and provider logos"""
@@ -296,6 +299,9 @@ async def get_models(
         provider = normalize_developer_segment(provider)
         logger.error(f"/models endpoint called with gateway parameter: {repr(gateway)}")
         gateway_value = (gateway or "openrouter").lower()
+        # Support both 'huggingface' and 'hug' as aliases
+        if gateway_value == "huggingface":
+            gateway_value = "hug"
         logger.info(
             f"Getting models with provider={provider}, limit={limit}, offset={offset}, gateway={gateway_value}"
         )
@@ -1293,7 +1299,7 @@ async def get_all_models(
     ),
     gateway: Optional[str] = Query(
         "openrouter",
-        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', 'groq', 'fireworks', 'together', 'google', 'cerebras', 'nebius', 'xai', 'novita', 'hug', or 'all'",
+        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', 'groq', 'fireworks', 'together', 'google', 'cerebras', 'nebius', 'xai', 'novita', 'huggingface' (or 'hug'), or 'all'",
     ),
 ):
     return await get_models(
