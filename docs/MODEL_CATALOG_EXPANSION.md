@@ -47,7 +47,7 @@ max_total = limit or 50000  # Will fetch until API returns no more models
 
 **Impact**: Allows fetching up to 50,000 HF models (API supports this many)
 
-#### 3. Added HF_API_KEY Authentication
+#### 3. Added HUG_API_KEY Authentication
 ```python
 # Add authentication headers if HF token is available
 headers = {}
@@ -63,7 +63,7 @@ response = httpx.get(url, params=params, headers=headers, timeout=30.0)
 #### 4. Added Rate Limiting Handling
 ```python
 # Add a small delay between requests to avoid rate limiting
-# Only add delay if HF_API_KEY is not provided (unauthenticated requests are more limited)
+# Only add delay if HUG_API_KEY is not provided (unauthenticated requests are more limited)
 if not Config.HUG_API_KEY and total_fetched < max_total:
     time.sleep(0.5)  # 500ms delay between requests
 ```
@@ -72,13 +72,13 @@ if not Config.HUG_API_KEY and total_fetched < max_total:
 
 ## Expected Results
 
-### With HF_API_KEY (Recommended for Production)
+### With HUG_API_KEY (Recommended for Production)
 - **Total models**: 13,382+ (previously 834)
 - **HF models**: 50,000+ (previously 10,000)
 - **Fetch time**: ~30-60 seconds (parallel efficient)
 - **Rate limit**: Very high (authenticated HF API limit)
 
-### Without HF_API_KEY (Development/Testing)
+### Without HUG_API_KEY (Development/Testing)
 - **Total models**: 13,382+ (but fetches slower)
 - **HF models**: 50,000+ (but with 500ms delays between requests)
 - **Fetch time**: ~5-10 minutes (due to rate limit delays)
@@ -91,27 +91,27 @@ if not Config.HUG_API_KEY and total_fetched < max_total:
 Add to `.env` file:
 ```env
 # Hugging Face Configuration
-HF_API_KEY=hf_your_token_here
+HUG_API_KEY=hf_your_token_here
 ```
 
 To get your HF token:
 1. Go to https://huggingface.co/settings/tokens
 2. Create a new token with read permissions
-3. Copy the token and add to .env as `HF_API_KEY`
+3. Copy the token and add to .env as `HUG_API_KEY`
 
 ## Migration Path
 
 ### Current Implementation (With this PR)
 1. Hugging Face batch size increased to 100
 2. Hugging Face limit increased to 50,000
-3. HF_API_KEY authentication optional but recommended
+3. HUG_API_KEY authentication optional but recommended
 4. Rate limiting handling added
 
 ### How to Activate
 
-Simply add the HF_API_KEY to your `.env`:
+Simply add the HUG_API_KEY to your `.env`:
 ```bash
-HF_API_KEY=hf_your_huggingface_token
+HUG_API_KEY=hf_your_huggingface_token
 ```
 
 The changes are backward compatible - the system works with or without the token.
@@ -179,19 +179,19 @@ Instead of full refetch, implement incremental updates to only fetch new/updated
 ## Troubleshooting
 
 ### Issue: "Rate limit exceeded"
-**Solution**: Add HF_API_KEY to .env file
+**Solution**: Add HUG_API_KEY to .env file
 
 ### Issue: "Still only seeing 834 models"
 **Solution**:
 1. Restart the server (to clear old cache)
-2. Verify HF_API_KEY is set (optional but recommended)
+2. Verify HUG_API_KEY is set (optional but recommended)
 3. Check logs for errors: `grep -i "hugging" app.log`
 
 ### Issue: "Fetch is taking too long"
 **Solution**:
-1. This is expected for first-time fetch without HF_API_KEY
+1. This is expected for first-time fetch without HUG_API_KEY
 2. Cache is stored for 1 hour, subsequent requests are instant
-3. Add HF_API_KEY to speed up significantly
+3. Add HUG_API_KEY to speed up significantly
 
 ## References
 
