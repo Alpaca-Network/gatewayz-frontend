@@ -48,18 +48,22 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
     throw new Error('Invalid gateway');
   }
 
-  // Fetch all models by paginating if limit is very high (backend caps at 500 per request)
+  // Fetch all models - request a very high limit that should cover most gateways
   const allModels: any[] = [];
-  const requestLimit = 500; // Backend max per request
+  const requestLimit = limit || 15000; // Request up to 15k models in one shot
+  const limitParam = `&limit=${requestLimit}`;
   let offset = 0;
   let hasMore = true;
+  let pageCount = 0;
 
-  while (hasMore) {
-    const limitParam = `&limit=${requestLimit}&offset=${offset}`;
+  while (hasMore && pageCount < 30) { // Max 30 pages to prevent infinite loops
+    pageCount++;
+    const offsetParam = offset > 0 ? `&offset=${offset}` : '';
+    const fullLimitParam = `${limitParam}${offsetParam}`;
 
     // Try v1/models endpoint first (newer endpoint), then fall back to /models
     let response;
-    let url = `${API_BASE_URL}/v1/models?gateway=${gateway}${limitParam}`;
+    let url = `${API_BASE_URL}/v1/models?gateway=${gateway}${fullLimitParam}`;
 
     // Try live API first (primary source)
     try {
@@ -93,7 +97,7 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
       } else {
         // If v1/models fails, try the older /models endpoint
         console.log(`[Models] Trying fallback /models endpoint for ${gateway}`);
-        url = `${API_BASE_URL}/models?gateway=${gateway}${limitParam}`;
+        url = `${API_BASE_URL}/models?gateway=${gateway}${fullLimitParam}`;
 
         try {
           response = await fetch(url, {
@@ -133,7 +137,7 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
     } catch (backendError: any) {
       // If v1/models fails, try the older /models endpoint
       console.log(`[Models] Trying fallback /models endpoint for ${gateway}`);
-      url = `${API_BASE_URL}/models?gateway=${gateway}${limitParam}`;
+      url = `${API_BASE_URL}/models?gateway=${gateway}${fullLimitParam}`;
 
       try {
         response = await fetch(url, {
