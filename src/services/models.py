@@ -270,8 +270,8 @@ def fetch_models_from_deepinfra():
             "Content-Type": "application/json"
         }
 
-        # DeepInfra API returns all models in a single request
-        url = "https://api.deepinfra.com/v1/models"
+        # DeepInfra API - use /models/list endpoint which has better model data
+        url = "https://api.deepinfra.com/models/list"
         logger.info(f"Fetching DeepInfra models from {url}")
 
         response = httpx.get(url, headers=headers, timeout=20.0)
@@ -280,9 +280,13 @@ def fetch_models_from_deepinfra():
         response.raise_for_status()
 
         payload = response.json()
-        logger.info(f"DeepInfra API response structure: {json.dumps({k: type(v).__name__ for k, v in payload.items()}, indent=2)}")
 
-        raw_models = payload.get("data", [])
+        # DeepInfra /models/list returns array directly, not wrapped in an object
+        if isinstance(payload, list):
+            raw_models = payload
+        else:
+            raw_models = payload.get("data", [])
+
         logger.info(f"Fetched {len(raw_models)} models from DeepInfra")
 
         normalized_models = [normalize_deepinfra_model(model) for model in raw_models if model]
@@ -1049,7 +1053,8 @@ def fetch_specific_model_from_deepinfra(provider_name: str, model_name: str):
 
 def normalize_deepinfra_model(deepinfra_model: dict) -> dict:
     """Normalize DeepInfra model to our schema"""
-    model_id = deepinfra_model.get("id", "")
+    # DeepInfra /models/list uses 'model_name' instead of 'id'
+    model_id = deepinfra_model.get("model_name") or deepinfra_model.get("id", "")
     if not model_id:
         return {"source_gateway": "deepinfra", "raw_deepinfra": deepinfra_model or {}}
 
