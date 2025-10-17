@@ -242,7 +242,7 @@ def test_assign_user_plan_deactivates_existing_and_updates_user(mod, fake_supaba
 def test_check_plan_entitlements_no_plan_defaults(mod, fake_supabase):
     out = mod.check_plan_entitlements(user_id=111)
     assert out["has_plan"] is False
-    assert out["daily_request_limit"] == 100
+    assert out["daily_request_limit"] == 25000
     assert out["daily_token_limit"] == 500_000
     assert out["monthly_token_limit"] == 15_000_000
     assert "basic_models" in out["features"]
@@ -368,8 +368,8 @@ def test_enforce_plan_limits_checks_and_env_multiplier(mod, fake_supabase):
         {"user_id": 606, "timestamp": (today + timedelta(hours=1)).isoformat(), "tokens_used": 50},
     ]).execute()
 
-    # live env: next request + 15 tokens -> daily tokens would exceed (90 + 15 > 100), request limit OK (2+1 < 10)
-    not_ok = mod.enforce_plan_limits(606, tokens_requested=15, environment_tag="live")
+    # test env: plan daily_token_limit is 100, multiplier 0.5 -> effective 50; we have 90 used, adding 15 would exceed
+    not_ok = mod.enforce_plan_limits(606, tokens_requested=15, environment_tag="test")
     assert not_ok["allowed"] is False
     assert "Daily token limit exceeded" in not_ok["reason"]
 

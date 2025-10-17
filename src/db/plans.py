@@ -113,7 +113,7 @@ def get_user_plan(user_id: int) -> Optional[Dict[str, Any]]:
             'user_id': user_id,
             'plan_id': plan['id'],
             'plan_name': plan['name'],
-            'plan_description': plan['description'],
+            'plan_description': plan.get('description', ''),
             'daily_request_limit': plan['daily_request_limit'],
             'monthly_request_limit': plan['monthly_request_limit'],
             'daily_token_limit': plan['daily_token_limit'],
