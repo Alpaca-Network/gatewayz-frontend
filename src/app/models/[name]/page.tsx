@@ -47,7 +47,7 @@ interface Model {
   provider_slug: string;
 }
 
-type TabType = 'Chat' | 'Use Model' | 'Providers' | 'Activity' | 'Apps';
+type TabType = 'Playground' | 'Use Model' | 'Providers' | 'Activity' | 'Apps';
 
 // Loading skeleton for providers
 const ProvidersLoading = () => (
@@ -409,7 +409,7 @@ console.log(response.choices[0].message.content);`
 
             <nav className="border-b overflow-x-auto -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 mb-8">
                 <div className="flex gap-4 lg:gap-6">
-                    {(['Chat', 'Use Model', 'Providers', 'Activity', 'Apps'] as TabType[]).map(item => (
+                    {(['Playground', 'Use Model', 'Providers', 'Activity', 'Apps'] as TabType[]).map(item => (
                         <Button
                             key={item}
                             variant="ghost"
@@ -428,10 +428,10 @@ console.log(response.choices[0].message.content);`
             </nav>
 
             <main>
-                {activeTab === 'Chat' && (
+                {activeTab === 'Playground' && (
                     <div className="h-[600px] flex flex-col">
                         <div className="mb-4">
-                            <h2 className="text-2xl font-bold mb-2">Chat with {model.name}</h2>
+                            <h2 className="text-2xl font-bold mb-2">Playground: {model.name}</h2>
                             <p className="text-muted-foreground">
                                 Try out {model.name} right here. Your messages are not saved.
                             </p>
