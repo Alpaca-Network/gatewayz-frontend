@@ -366,7 +366,7 @@ def fetch_models_from_hug():
     """
     return fetch_models_from_huggingface_api(
         task=None,  # Fetch all models available on HF Inference
-        limit=1000,  # Fetch up to 1000 models (HF Inference has limited model set)
+        limit=5000,  # Fetch up to 5000 models available on HF Inference API
         direction="-1",
         sort="likes"  # Sort by popularity/likes
     )
