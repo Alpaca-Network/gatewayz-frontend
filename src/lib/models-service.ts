@@ -65,6 +65,11 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
     let response;
     let url = `${API_BASE_URL}/v1/models?gateway=${gateway}${fullLimitParam}`;
 
+    // Debug logging for HuggingFace requests
+    if (gateway === 'huggingface') {
+      console.log(`[Models] Requesting HF models with URL: ${url}`);
+    }
+
     // Try live API first (primary source)
     try {
       const headers: Record<string, string> = {

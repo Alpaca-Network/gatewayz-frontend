@@ -51,6 +51,7 @@ async function getModels(): Promise<Model[]> {
         // Request up to 50000 models for huggingface to get all models (backend supports up to 50k per page)
         const limit = gateway === 'huggingface' ? 50000 : undefined;
         const result = await getModelsForGateway(gateway, limit);
+        console.log(`[Models Page] After getModelsForGateway for ${gateway}: ${result.data?.length || 0} models`);
         clearTimeout(timeoutId);
 
         return { gateway, models: result.data || [] };
@@ -61,6 +62,11 @@ async function getModels(): Promise<Model[]> {
     });
 
     const gatewayResults = await Promise.all(gatewayPromises);
+
+    // Log gateway results for debugging
+    for (const { gateway, models } of gatewayResults) {
+      console.log(`[Models Page] Gateway ${gateway}: ${models.length} models received`);
+    }
 
     // Build a map of models with all their available gateways
     const modelGatewayMap = new Map<string, { model: Model, gateways: Set<string> }>();
@@ -116,6 +122,7 @@ async function getModels(): Promise<Model[]> {
       source_gateways: model.source_gateways.sort()
     }));
 
+    console.log(`[Models Page] Total unique models after deduplication: ${uniqueModels.length}`);
     return uniqueModels;
   } catch (error) {
     console.log('Failed to fetch models:', error);
