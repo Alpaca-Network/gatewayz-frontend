@@ -15,10 +15,24 @@ from src.cache import (
     _fireworks_models_cache,
     _together_models_cache,
     _deepinfra_models_cache,
+    _google_models_cache,
+    _cerebras_models_cache,
+    _nebius_models_cache,
+    _xai_models_cache,
+    _novita_models_cache,
+    _hug_models_cache,
 )
 from fastapi import APIRouter
 from datetime import datetime, timezone
 from src.services.pricing_lookup import enrich_model_with_pricing
+from src.services.portkey_providers import (
+    fetch_models_from_google,
+    fetch_models_from_cerebras,
+    fetch_models_from_nebius,
+    fetch_models_from_xai,
+    fetch_models_from_novita,
+    fetch_models_from_hug,
+)
 
 import httpx
 
@@ -90,16 +104,70 @@ def get_cached_models(gateway: str = "openrouter"):
                     return cache["data"]
             return fetch_models_from_deepinfra()
 
+        if gateway == "google":
+            cache = _google_models_cache
+            if cache["data"] and cache["timestamp"]:
+                cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
+                if cache_age < cache["ttl"]:
+                    return cache["data"]
+            return fetch_models_from_google()
+
+        if gateway == "cerebras":
+            cache = _cerebras_models_cache
+            if cache["data"] and cache["timestamp"]:
+                cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
+                if cache_age < cache["ttl"]:
+                    return cache["data"]
+            return fetch_models_from_cerebras()
+
+        if gateway == "nebius":
+            cache = _nebius_models_cache
+            if cache["data"] and cache["timestamp"]:
+                cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
+                if cache_age < cache["ttl"]:
+                    return cache["data"]
+            return fetch_models_from_nebius()
+
+        if gateway == "xai":
+            cache = _xai_models_cache
+            if cache["data"] and cache["timestamp"]:
+                cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
+                if cache_age < cache["ttl"]:
+                    return cache["data"]
+            return fetch_models_from_xai()
+
+        if gateway == "novita":
+            cache = _novita_models_cache
+            if cache["data"] and cache["timestamp"]:
+                cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
+                if cache_age < cache["ttl"]:
+                    return cache["data"]
+            return fetch_models_from_novita()
+
+        if gateway == "hug":
+            cache = _hug_models_cache
+            if cache["data"] and cache["timestamp"]:
+                cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
+                if cache_age < cache["ttl"]:
+                    return cache["data"]
+            return fetch_models_from_hug()
+
         if gateway == "all":
             openrouter_models = get_cached_models("openrouter") or []
             portkey_models = get_cached_models("portkey") or []
             featherless_models = get_cached_models("featherless") or []
             deepinfra_models = get_cached_models("deepinfra") or []
+            google_models = get_cached_models("google") or []
+            cerebras_models = get_cached_models("cerebras") or []
+            nebius_models = get_cached_models("nebius") or []
+            xai_models = get_cached_models("xai") or []
+            novita_models = get_cached_models("novita") or []
+            hug_models = get_cached_models("hug") or []
             chutes_models = get_cached_models("chutes") or []
             groq_models = get_cached_models("groq") or []
             fireworks_models = get_cached_models("fireworks") or []
             together_models = get_cached_models("together") or []
-            return openrouter_models + portkey_models + featherless_models + deepinfra_models + chutes_models + groq_models + fireworks_models + together_models
+            return openrouter_models + portkey_models + featherless_models + deepinfra_models + google_models + cerebras_models + nebius_models + xai_models + novita_models + hug_models + chutes_models + groq_models + fireworks_models + together_models
 
         # Default to OpenRouter
         if _models_cache["data"] and _models_cache["timestamp"]:
