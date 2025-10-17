@@ -157,6 +157,91 @@ export default function ModelProfilePage() {
         return id ? decodeURIComponent(id) : '';
     }, [params.name]);
 
+    // Code examples moved to separate memo to avoid recalculation
+    const codeExamples = useMemo(() => {
+        if (!model) return {};
+        
+        return {
+            curl: `curl -X POST https://api.gatewayz.ai/v1/chat/completions \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer ${apiKey}" \\
+  -d '{
+    "model": "${model.id}",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Hello! What can you help me with?"
+      }
+    ]
+  }'`,
+            python: `import requests
+import json
+
+response = requests.post(
+    url="https://api.gatewayz.ai/v1/chat/completions",
+    headers={
+        "Authorization": "Bearer ${apiKey}",
+        "Content-Type": "application/json"
+    },
+    data=json.dumps({
+        "model": "${model.id}",
+        "messages": [
+            {
+                "role": "user",
+                "content": "Hello! What can you help me with?"
+            }
+        ]
+    })
+)
+
+print(response.json())`,
+            'openai-python': `from openai import OpenAI
+
+client = OpenAI(
+    base_url="https://api.gatewayz.ai/v1",
+    api_key="${apiKey}"
+)
+
+completion = client.chat.completions.create(
+    model="${model.id}",
+    messages=[
+        {"role": "user", "content": "Hello! What can you help me with?"}
+    ]
+)
+
+print(completion.choices[0].message.content)`,
+            typescript: `fetch("https://api.gatewayz.ai/v1/chat/completions", {
+  method: "POST",
+  headers: {
+    "Authorization": "Bearer ${apiKey}",
+    "Content-Type": "application/json"
+  },
+  body: JSON.stringify({
+    "model": "${model.id}",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Hello! What can you help me with?"
+      }
+    ]
+  })
+});`,
+            'openai-typescript': `import OpenAI from 'openai';
+
+const client = new OpenAI({
+  apiKey: "${apiKey}",
+  baseURL: "https://api.gatewayz.ai/v1"
+});
+
+const response = await client.chat.completions.create({
+  model: "${model.id}",
+  messages: [{ role: "user", content: "Hello! What can you help me with?" }]
+});
+
+console.log(response.choices[0].message.content);`
+        };
+    }, [apiKey, model]);
+
     useEffect(() => {
         if (!modelId) {
             setLoading(false);
@@ -264,86 +349,6 @@ export default function ModelProfilePage() {
         );
     }
 
-    // Code examples moved to separate memo to avoid recalculation
-    const codeExamples = useMemo(() => ({
-        curl: `curl -X POST https://api.gatewayz.ai/v1/chat/completions \\
-  -H "Content-Type: application/json" \\
-  -H "Authorization: Bearer ${apiKey}" \\
-  -d '{
-    "model": "${model.id}",
-    "messages": [
-      {
-        "role": "user",
-        "content": "Hello! What can you help me with?"
-      }
-    ]
-  }'`,
-        python: `import requests
-import json
-
-response = requests.post(
-    url="https://api.gatewayz.ai/v1/chat/completions",
-    headers={
-        "Authorization": "Bearer ${apiKey}",
-        "Content-Type": "application/json"
-    },
-    data=json.dumps({
-        "model": "${model.id}",
-        "messages": [
-            {
-                "role": "user",
-                "content": "Hello! What can you help me with?"
-            }
-        ]
-    })
-)
-
-print(response.json())`,
-        'openai-python': `from openai import OpenAI
-
-client = OpenAI(
-    base_url="https://api.gatewayz.ai/v1",
-    api_key="${apiKey}"
-)
-
-completion = client.chat.completions.create(
-    model="${model.id}",
-    messages=[
-        {"role": "user", "content": "Hello! What can you help me with?"}
-    ]
-)
-
-print(completion.choices[0].message.content)`,
-        typescript: `fetch("https://api.gatewayz.ai/v1/chat/completions", {
-  method: "POST",
-  headers: {
-    "Authorization": "Bearer ${apiKey}",
-    "Content-Type": "application/json"
-  },
-  body: JSON.stringify({
-    "model": "${model.id}",
-    "messages": [
-      {
-        "role": "user",
-        "content": "Hello! What can you help me with?"
-      }
-    ]
-  })
-});`,
-        'openai-typescript': `import OpenAI from 'openai';
-
-const client = new OpenAI({
-  apiKey: "${apiKey}",
-  baseURL: "https://api.gatewayz.ai/v1"
-});
-
-const response = await client.chat.completions.create({
-  model: "${model.id}",
-  messages: [{ role: "user", content: "Hello! What can you help me with?" }]
-});
-
-console.log(response.choices[0].message.content);`
-    }), [apiKey, model.id]);
 
     return (
       <TooltipProvider>
@@ -465,7 +470,7 @@ console.log(response.choices[0].message.content);`
                                     <Button
                                         variant="ghost"
                                         size="sm"
-                                        onClick={() => copyToClipboard(codeExamples[selectedLanguage], selectedLanguage)}
+                                        onClick={() => copyToClipboard(codeExamples[selectedLanguage] || '', selectedLanguage)}
                                         className="text-slate-300 hover:text-white"
                                     >
                                         {copiedStates[selectedLanguage] ? (
