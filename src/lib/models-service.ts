@@ -49,14 +49,7 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
   }
 
   const limitParam = limit ? `&limit=${limit}` : '';
-
-  // Use /v1/catalog/models for Hugging Face, /models for others
-  let url: string;
-  if (gateway === 'huggingface') {
-    url = `${API_BASE_URL}/v1/catalog/models?gateway=huggingface${limitParam}`;
-  } else {
-    url = `${API_BASE_URL}/models?gateway=${gateway}${limitParam}`;
-  }
+  const url = `${API_BASE_URL}/models?gateway=${gateway}${limitParam}`;
 
   // Try live API first (primary source)
   try {
@@ -77,15 +70,10 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
       if (data.data && Array.isArray(data.data) && data.data.length > 0) {
         console.log(`[Models] Fetched ${data.data.length} models for gateway: ${gateway}`);
         return data;
-      } else if (gateway === 'huggingface') {
-        console.warn(`[Models] No models returned for Hugging Face gateway. Backend may not have Hugging Face models configured.`);
       }
     }
   } catch (backendError: any) {
     // Silently fail and use fallback
-    if (gateway === 'huggingface') {
-      console.warn(`[Models] Error fetching Hugging Face models:`, backendError.message);
-    }
   }
 
   // Fallback to static data (only used if API fails)
