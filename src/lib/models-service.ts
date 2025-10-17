@@ -48,20 +48,20 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
     throw new Error('Invalid gateway');
   }
 
-  // Map gateway names to backend query parameters
-  // Hugging Face uses 'hug' in the API, others use full names
-  const gatewayParamMap: Record<string, string> = {
-    'huggingface': 'hug',
-  };
-  const gatewayParam = gatewayParamMap[gateway] || gateway;
-
   const limitParam = limit ? `&limit=${limit}` : '';
-  // Use /v1/catalog/models endpoint for newer gateway support (especially Hugging Face)
-  const url = `${API_BASE_URL}/v1/catalog/models?gateway=${gatewayParam}${limitParam}`;
+
+  // Try /v1/catalog/models endpoint first (newer endpoint with Hugging Face support)
+  let url = `${API_BASE_URL}/v1/catalog/models?gateway=${gateway}${limitParam}`;
+
+  if (gateway === 'huggingface') {
+    // Special handling for Hugging Face - backend may use 'hug' param
+    url = `${API_BASE_URL}/v1/catalog/models?gateway=hug${limitParam}`;
+  }
 
   // Try live API first (primary source)
+  let response;
   try {
-    const response = await fetch(url, {
+    response = await fetch(url, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json'
@@ -69,6 +69,32 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
       // Use Next.js revalidation instead of no-store for better performance
       next: { revalidate: 60 }, // Cache for 60 seconds
       signal: AbortSignal.timeout(15000) // 15 second timeout for larger requests
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+
+      // Validate response structure and data
+      if (data.data && Array.isArray(data.data) && data.data.length > 0) {
+        return data;
+      }
+    }
+  } catch (backendError: any) {
+    // If /v1/catalog/models fails, try the older /models endpoint
+    console.log(`[Models] /v1/catalog/models endpoint unavailable for ${gateway}, falling back to /models`);
+  }
+
+  // Fallback to older /models endpoint if /v1/catalog/models isn't available
+  url = `${API_BASE_URL}/models?gateway=${gateway}${limitParam}`;
+
+  try {
+    response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      next: { revalidate: 60 },
+      signal: AbortSignal.timeout(15000)
     });
 
     if (response.ok) {
