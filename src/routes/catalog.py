@@ -175,7 +175,7 @@ def merge_models_by_slug(*model_lists: List[dict]) -> List[dict]:
 
 
 # Provider and Models Information Endpoints
-@router.get("/provider", tags=["providers"])
+@router.get("/v1/provider", tags=["providers"])
 async def get_providers(
     moderated_only: bool = Query(False, description="Filter for moderated providers only"),
     limit: Optional[int] = Query(None, description="Limit number of results"),
@@ -811,7 +811,7 @@ async def get_developer_models(
 
 # ==================== NEW: Gateway & Provider Statistics Endpoints ====================
 
-@router.get("/provider/{provider_name}/stats", tags=["statistics"])
+@router.get("/v1/provider/{provider_name}/stats", tags=["statistics"])
 async def get_provider_statistics(
     provider_name: str,
     gateway: Optional[str] = Query(None, description="Filter by specific gateway"),
@@ -865,7 +865,7 @@ async def get_provider_statistics(
         raise HTTPException(status_code=500, detail=f"Failed to get provider statistics: {str(e)}")
 
 
-@router.get("/gateway/{gateway}/stats", tags=["statistics"])
+@router.get("/v1/gateway/{gateway}/stats", tags=["statistics"])
 async def get_gateway_statistics(
     gateway: str,
     time_range: str = Query("24h", description="Time range: '1h', '24h', '7d', '30d', 'all'")
@@ -984,7 +984,7 @@ async def get_trending_models_endpoint(
         raise HTTPException(status_code=500, detail=f"Failed to get trending models: {str(e)}")
 
 
-@router.get("/gateways/summary", tags=["statistics"])
+@router.get("/v1/gateways/summary", tags=["statistics"])
 async def get_all_gateways_summary_endpoint(
     time_range: str = Query("24h", description="Time range: '1h', '24h', '7d', '30d', 'all'")
 ):
@@ -1024,7 +1024,7 @@ async def get_all_gateways_summary_endpoint(
         raise HTTPException(status_code=500, detail=f"Failed to get gateways summary: {str(e)}")
 
 
-@router.get("/provider/{provider_name}/top-models", tags=["statistics"])
+@router.get("/v1/provider/{provider_name}/top-models", tags=["statistics"])
 async def get_provider_top_models_endpoint(
     provider_name: str,
     limit: int = Query(5, description="Number of models to return", ge=1, le=20),
@@ -1289,7 +1289,7 @@ async def batch_compare_models(
 # These are the actual FastAPI route handlers exposed to clients
 # ============================================================================
 
-@router.get("/models", tags=["models"])
+@router.get("/v1/models", tags=["models"])
 async def get_all_models(
     provider: Optional[str] = Query(None, description="Filter models by provider"),
     limit: Optional[int] = Query(None, description="Limit number of results"),
@@ -1311,7 +1311,7 @@ async def get_all_models(
     )
 
 
-@router.get("/models/trending", tags=["statistics"])
+@router.get("/v1/models/trending", tags=["statistics"])
 async def get_trending_models_api(
     gateway: Optional[str] = Query("all", description="Gateway filter or 'all'"),
     time_range: str = Query("24h", description="Time range: '1h', '24h', '7d', '30d'"),
@@ -1334,7 +1334,7 @@ async def batch_compare_models_api(
     return await batch_compare_models(model_ids=model_ids, criteria=criteria)
 
 
-@router.get("/models/{provider_name}/{model_name:path}/compare", tags=["comparison"])
+@router.get("/v1/models/{provider_name}/{model_name:path}/compare", tags=["comparison"])
 async def compare_model_gateways_api(
     provider_name: str,
     model_name: str,
@@ -1347,7 +1347,7 @@ async def compare_model_gateways_api(
     )
 
 
-@router.get("/models/{provider_name}/{model_name:path}", tags=["models"])
+@router.get("/v1/models/{provider_name}/{model_name:path}", tags=["models"])
 async def get_specific_model_api(
     provider_name: str,
     model_name: str,
@@ -1365,7 +1365,7 @@ async def get_specific_model_api(
     )
 
 
-@router.get("/models/{developer_name}", tags=["models"])
+@router.get("/v1/models/{developer_name}", tags=["models"])
 async def get_developer_models_api(
     developer_name: str,
     limit: Optional[int] = Query(None, description="Limit number of results"),
@@ -1382,7 +1382,7 @@ async def get_developer_models_api(
     )
 
 
-@router.get("/models/search", tags=["models"])
+@router.get("/v1/models/search", tags=["models"])
 async def search_models(
     q: Optional[str] = Query(None, description="Search query (searches in model name, provider, description)"),
     modality: Optional[str] = Query(None, description="Filter by modality: text, image, audio, video, multimodal"),
