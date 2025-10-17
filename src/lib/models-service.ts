@@ -48,62 +48,134 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
     throw new Error('Invalid gateway');
   }
 
-  const limitParam = limit ? `&limit=${limit}` : '';
+  // Fetch all models by paginating if limit is very high (backend caps at 500 per request)
+  const allModels: any[] = [];
+  const requestLimit = 500; // Backend max per request
+  let offset = 0;
+  let hasMore = true;
 
-  // Try v1/models endpoint first (newer endpoint), then fall back to /models
-  let response;
-  let url = `${API_BASE_URL}/v1/models?gateway=${gateway}${limitParam}`;
+  while (hasMore) {
+    const limitParam = `&limit=${requestLimit}&offset=${offset}`;
 
-  // Try live API first (primary source)
-  try {
-    response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      // Use Next.js revalidation instead of no-store for better performance
-      next: { revalidate: 60 }, // Cache for 60 seconds
-      signal: AbortSignal.timeout(15000) // 15 second timeout for larger requests
-    });
+    // Try v1/models endpoint first (newer endpoint), then fall back to /models
+    let response;
+    let url = `${API_BASE_URL}/v1/models?gateway=${gateway}${limitParam}`;
 
-    if (response.ok) {
-      const data = await response.json();
+    // Try live API first (primary source)
+    try {
+      response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        // Use Next.js revalidation instead of no-store for better performance
+        next: { revalidate: 60 }, // Cache for 60 seconds
+        signal: AbortSignal.timeout(15000) // 15 second timeout for larger requests
+      });
 
-      // Validate response structure and data
-      if (data.data && Array.isArray(data.data) && data.data.length > 0) {
-        console.log(`[Models] Fetched ${data.data.length} models for gateway: ${gateway}`);
-        return data;
+      if (response.ok) {
+        const data = await response.json();
+
+        // Validate response structure and data
+        if (data.data && Array.isArray(data.data) && data.data.length > 0) {
+          allModels.push(...data.data);
+          console.log(`[Models] Fetched ${data.data.length} models for gateway: ${gateway} (offset: ${offset})`);
+
+          // Stop if we got fewer models than requested or if we've reached the limit
+          if (data.data.length < requestLimit || (limit && allModels.length >= limit)) {
+            hasMore = false;
+          } else {
+            offset += requestLimit;
+          }
+        } else {
+          hasMore = false;
+        }
+      } else {
+        // If v1/models fails, try the older /models endpoint
+        console.log(`[Models] Trying fallback /models endpoint for ${gateway}`);
+        url = `${API_BASE_URL}/models?gateway=${gateway}${limitParam}`;
+
+        try {
+          response = await fetch(url, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            next: { revalidate: 60 },
+            signal: AbortSignal.timeout(15000)
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+
+            // Validate response structure and data
+            if (data.data && Array.isArray(data.data) && data.data.length > 0) {
+              allModels.push(...data.data);
+              console.log(`[Models] Fetched ${data.data.length} models for gateway: ${gateway} (from fallback, offset: ${offset})`);
+
+              // Stop if we got fewer models than requested or if we've reached the limit
+              if (data.data.length < requestLimit || (limit && allModels.length >= limit)) {
+                hasMore = false;
+              } else {
+                offset += requestLimit;
+              }
+            } else {
+              hasMore = false;
+            }
+          } else {
+            hasMore = false;
+          }
+        } catch (backendError: any) {
+          // Silently fail and use fallback
+          hasMore = false;
+        }
+      }
+    } catch (backendError: any) {
+      // If v1/models fails, try the older /models endpoint
+      console.log(`[Models] Trying fallback /models endpoint for ${gateway}`);
+      url = `${API_BASE_URL}/models?gateway=${gateway}${limitParam}`;
+
+      try {
+        response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          next: { revalidate: 60 },
+          signal: AbortSignal.timeout(15000)
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+
+          // Validate response structure and data
+          if (data.data && Array.isArray(data.data) && data.data.length > 0) {
+            allModels.push(...data.data);
+            console.log(`[Models] Fetched ${data.data.length} models for gateway: ${gateway} (from fallback, offset: ${offset})`);
+
+            // Stop if we got fewer models than requested or if we've reached the limit
+            if (data.data.length < requestLimit || (limit && allModels.length >= limit)) {
+              hasMore = false;
+            } else {
+              offset += requestLimit;
+            }
+          } else {
+            hasMore = false;
+          }
+        } else {
+          hasMore = false;
+        }
+      } catch (backendError: any) {
+        // Silently fail and use fallback
+        hasMore = false;
       }
     }
-  } catch (backendError: any) {
-    // If v1/models fails, try the older /models endpoint
-    console.log(`[Models] Trying fallback /models endpoint for ${gateway}`);
   }
 
-  // Fallback to /models endpoint
-  url = `${API_BASE_URL}/models?gateway=${gateway}${limitParam}`;
-
-  try {
-    response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      next: { revalidate: 60 },
-      signal: AbortSignal.timeout(15000)
-    });
-
-    if (response.ok) {
-      const data = await response.json();
-
-      // Validate response structure and data
-      if (data.data && Array.isArray(data.data) && data.data.length > 0) {
-        console.log(`[Models] Fetched ${data.data.length} models for gateway: ${gateway} (from fallback)`);
-        return data;
-      }
-    }
-  } catch (backendError: any) {
-    // Silently fail and use fallback
+  // If we got models from pagination, return them
+  if (allModels.length > 0) {
+    console.log(`[Models] Total fetched for gateway ${gateway}: ${allModels.length} models`);
+    return { data: allModels };
   }
 
   // Fallback to static data (only used if API fails)
