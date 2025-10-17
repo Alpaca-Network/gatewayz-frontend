@@ -624,7 +624,7 @@ const ChatSidebar = ({ sessions, activeSessionId, switchToSession, createNewChat
 
         </div>
 
-        <div className="flex-grow overflow-y-auto">
+        <div className="flex-grow overflow-y-auto pb-4">
             {Object.keys(groupedSessions).length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-32 text-center">
                     <p className="text-sm text-muted-foreground">No conversations yet</p>
