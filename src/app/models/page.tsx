@@ -48,7 +48,9 @@ async function getModels(): Promise<Model[]> {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-        const result = await getModelsForGateway(gateway);
+        // Request up to 10000 models for huggingface to get all models (backend may have pagination limits)
+        const limit = gateway === 'huggingface' ? 10000 : undefined;
+        const result = await getModelsForGateway(gateway, limit);
         clearTimeout(timeoutId);
 
         return { gateway, models: result.data || [] };
