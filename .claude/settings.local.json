@@ -16,7 +16,8 @@
       "Bash(npm run typecheck:*)",
       "Bash(npm run lint)",
       "Bash(npm i:*)",
-      "Bash(git pull:*)"
+      "Bash(git pull:*)",
+      "Bash(timeout 30 curl -s \"https://api.gatewayz.ai/v1/models?gateway=huggingface&limit=50000&offset=0\")"
     ],
     "deny": [],
     "ask": []

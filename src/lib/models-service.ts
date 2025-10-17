@@ -87,7 +87,7 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
         headers,
         // Use Next.js revalidation instead of no-store for better performance
         next: { revalidate: 60 }, // Cache for 60 seconds
-        signal: AbortSignal.timeout(15000) // 15 second timeout for larger requests
+        signal: AbortSignal.timeout(60000) // 60 second timeout for large model requests (50k+ models)
       });
 
       if (response.ok) {
@@ -132,7 +132,7 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
             method: 'GET',
             headers: fallbackHeaders,
             next: { revalidate: 60 },
-            signal: AbortSignal.timeout(15000)
+            signal: AbortSignal.timeout(60000) // 60 second timeout for large model requests
           });
 
           if (response.ok) {
@@ -185,7 +185,7 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
           method: 'GET',
           headers: fallbackHeaders2,
           next: { revalidate: 60 },
-          signal: AbortSignal.timeout(15000)
+          signal: AbortSignal.timeout(60000) // 60 second timeout for large model requests
         });
 
         if (response.ok) {
