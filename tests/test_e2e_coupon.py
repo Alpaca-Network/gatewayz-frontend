@@ -99,6 +99,7 @@ def admin_api_key(supabase_client, test_prefix):
         "email": admin_email,
         "credits": 1000,
         "api_key": admin_api_key_value,
+        "is_admin": True,
         "created_at": datetime.utcnow().isoformat(),
     }
 
