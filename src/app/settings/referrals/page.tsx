@@ -100,24 +100,43 @@ function ReferralsPageContent() {
       setLoading(true);
 
       // Wait a bit for authentication to complete
-      const userData = getUserData();
+      let userData = getUserData();
       if (!userData) {
         await new Promise(resolve => setTimeout(resolve, 1000));
+        userData = getUserData();
+      }
+
+      // Check if user is authenticated
+      if (!userData) {
+        console.warn('No user data available - user may not be authenticated');
+        setLoading(false);
+        return;
       }
 
       try {
+        console.log('Fetching referral code from:', `${API_BASE_URL}/referral/code`);
         // Fetch referral code
         const codeResponse = await makeAuthenticatedRequest(`${API_BASE_URL}/referral/code`);
+        console.log('Referral code response status:', codeResponse.status);
+
         if (codeResponse.ok) {
           const codeData = await codeResponse.json();
+          console.log('Referral code data:', { referral_code: codeData.referral_code });
           setReferralCode(codeData.referral_code || '');
           setReferralLink(`${window.location.origin}/signup?ref=${codeData.referral_code}`);
+        } else {
+          const errorText = await codeResponse.text();
+          console.error('Failed to fetch referral code:', codeResponse.status, errorText);
         }
 
+        console.log('Fetching referral stats from:', `${API_BASE_URL}/referral/stats`);
         // Fetch referral stats
         const statsResponse = await makeAuthenticatedRequest(`${API_BASE_URL}/referral/stats`);
+        console.log('Referral stats response status:', statsResponse.status);
+
         if (statsResponse.ok) {
           const statsData = await statsResponse.json();
+          console.log('Referral stats data:', statsData);
 
           // Set referrals from stats response
           if (Array.isArray(statsData.referrals)) {
@@ -130,12 +149,15 @@ function ReferralsPageContent() {
             completedReferrals: statsData.referrals?.filter((r: any) => r.status === 'completed').length || 0,
             totalEarned: statsData.total_earned || 0
           });
+        } else {
+          const errorText = await statsResponse.text();
+          console.error('Failed to fetch referral stats:', statsResponse.status, errorText);
         }
       } catch (error) {
         console.error('Error fetching referral data:', error);
         toast({
           title: "Error loading referral data",
-          description: "Please try again later",
+          description: error instanceof Error ? error.message : "Please try again later",
           variant: "destructive"
         });
       } finally {
@@ -144,7 +166,7 @@ function ReferralsPageContent() {
     };
 
     fetchReferralData();
-  }, []);
+  }, [toast]);
 
   const copyToClipboard = async (text: string, label: string) => {
     try {
