@@ -178,7 +178,7 @@ async def get_providers(
     offset: Optional[int] = Query(0, description="Offset for pagination"),
     gateway: Optional[str] = Query(
         "openrouter",
-        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'chutes', 'groq', 'fireworks', 'together', or 'all'",
+        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', 'groq', 'fireworks', 'together', 'google', 'cerebras', 'nebius', 'xai', 'novita', 'hug', or 'all'",
     ),
 ):
     """Get all available provider list with detailed metric data including model count and logo URLs"""
@@ -208,9 +208,9 @@ async def get_providers(
                 raise HTTPException(status_code=503, detail="Portkey models data unavailable")
 
         # Add support for other gateways
-        other_gateways = ["featherless", "deepinfra", "chutes", "groq", "fireworks", "together"]
+        other_gateways = ["featherless", "deepinfra", "chutes", "groq", "fireworks", "together", "google", "cerebras", "nebius", "xai", "novita", "hug"]
         all_models = {}  # Track models for each gateway
-        
+
         for gw in other_gateways:
             if gateway_value in (gw, "all"):
                 gw_models = get_cached_models(gw) or []
@@ -283,7 +283,7 @@ async def get_models(
     ),
     gateway: Optional[str] = Query(
         "openrouter",
-        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', 'groq', 'fireworks', 'together', or 'all'",
+        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', 'groq', 'fireworks', 'together', 'google', 'cerebras', 'nebius', 'xai', 'novita', 'hug', or 'all'",
     ),
 ):
     """Get all metric data of available models with optional filtering, pagination, Hugging Face integration, and provider logos"""
@@ -304,6 +304,12 @@ async def get_models(
         groq_models: List[dict] = []
         fireworks_models: List[dict] = []
         together_models: List[dict] = []
+        google_models: List[dict] = []
+        cerebras_models: List[dict] = []
+        nebius_models: List[dict] = []
+        xai_models: List[dict] = []
+        novita_models: List[dict] = []
+        hug_models: List[dict] = []
 
         if gateway_value in ("openrouter", "all"):
             openrouter_models = get_cached_models("openrouter") or []
@@ -353,6 +359,42 @@ async def get_models(
                 logger.error("No Together models data available from cache")
                 raise HTTPException(status_code=503, detail="Models data unavailable")
 
+        if gateway_value in ("google", "all"):
+            google_models = get_cached_models("google") or []
+            if gateway_value == "google" and not google_models:
+                logger.error("No Google models data available from cache")
+                raise HTTPException(status_code=503, detail="Models data unavailable")
+
+        if gateway_value in ("cerebras", "all"):
+            cerebras_models = get_cached_models("cerebras") or []
+            if gateway_value == "cerebras" and not cerebras_models:
+                logger.error("No Cerebras models data available from cache")
+                raise HTTPException(status_code=503, detail="Models data unavailable")
+
+        if gateway_value in ("nebius", "all"):
+            nebius_models = get_cached_models("nebius") or []
+            if gateway_value == "nebius" and not nebius_models:
+                logger.error("No Nebius models data available from cache")
+                raise HTTPException(status_code=503, detail="Models data unavailable")
+
+        if gateway_value in ("xai", "all"):
+            xai_models = get_cached_models("xai") or []
+            if gateway_value == "xai" and not xai_models:
+                logger.error("No Xai models data available from cache")
+                raise HTTPException(status_code=503, detail="Models data unavailable")
+
+        if gateway_value in ("novita", "all"):
+            novita_models = get_cached_models("novita") or []
+            if gateway_value == "novita" and not novita_models:
+                logger.error("No Novita models data available from cache")
+                raise HTTPException(status_code=503, detail="Models data unavailable")
+
+        if gateway_value in ("hug", "all"):
+            hug_models = get_cached_models("hug") or []
+            if gateway_value == "hug" and not hug_models:
+                logger.error("No Hugging Face models data available from cache")
+                raise HTTPException(status_code=503, detail="Models data unavailable")
+
         if gateway_value == "openrouter":
             models = openrouter_models
         elif gateway_value == "portkey":
@@ -369,8 +411,20 @@ async def get_models(
             models = fireworks_models
         elif gateway_value == "together":
             models = together_models
+        elif gateway_value == "google":
+            models = google_models
+        elif gateway_value == "cerebras":
+            models = cerebras_models
+        elif gateway_value == "nebius":
+            models = nebius_models
+        elif gateway_value == "xai":
+            models = xai_models
+        elif gateway_value == "novita":
+            models = novita_models
+        elif gateway_value == "hug":
+            models = hug_models
         else:
-            models = merge_models_by_slug(openrouter_models, portkey_models, featherless_models, deepinfra_models, chutes_models, groq_models, fireworks_models, together_models)
+            models = merge_models_by_slug(openrouter_models, portkey_models, featherless_models, deepinfra_models, chutes_models, groq_models, fireworks_models, together_models, google_models, cerebras_models, nebius_models, xai_models, novita_models, hug_models)
 
         if not models:
             logger.error("No models data available after applying gateway selection")
@@ -428,6 +482,42 @@ async def get_models(
             annotated_together = annotate_provider_sources(together_providers, "together")
             provider_groups.append(annotated_together)
 
+        if gateway_value in ("google", "all"):
+            models_for_providers = google_models if gateway_value == "all" else models
+            google_providers = derive_providers_from_models(models_for_providers, "google")
+            annotated_google = annotate_provider_sources(google_providers, "google")
+            provider_groups.append(annotated_google)
+
+        if gateway_value in ("cerebras", "all"):
+            models_for_providers = cerebras_models if gateway_value == "all" else models
+            cerebras_providers = derive_providers_from_models(models_for_providers, "cerebras")
+            annotated_cerebras = annotate_provider_sources(cerebras_providers, "cerebras")
+            provider_groups.append(annotated_cerebras)
+
+        if gateway_value in ("nebius", "all"):
+            models_for_providers = nebius_models if gateway_value == "all" else models
+            nebius_providers = derive_providers_from_models(models_for_providers, "nebius")
+            annotated_nebius = annotate_provider_sources(nebius_providers, "nebius")
+            provider_groups.append(annotated_nebius)
+
+        if gateway_value in ("xai", "all"):
+            models_for_providers = xai_models if gateway_value == "all" else models
+            xai_providers = derive_providers_from_models(models_for_providers, "xai")
+            annotated_xai = annotate_provider_sources(xai_providers, "xai")
+            provider_groups.append(annotated_xai)
+
+        if gateway_value in ("novita", "all"):
+            models_for_providers = novita_models if gateway_value == "all" else models
+            novita_providers = derive_providers_from_models(models_for_providers, "novita")
+            annotated_novita = annotate_provider_sources(novita_providers, "novita")
+            provider_groups.append(annotated_novita)
+
+        if gateway_value in ("hug", "all"):
+            models_for_providers = hug_models if gateway_value == "all" else models
+            hug_providers = derive_providers_from_models(models_for_providers, "hug")
+            annotated_hug = annotate_provider_sources(hug_providers, "hug")
+            provider_groups.append(annotated_hug)
+
         enhanced_providers = merge_provider_lists(*provider_groups)
         logger.info(f"Retrieved {len(enhanced_providers)} enhanced providers from cache")
 
@@ -470,7 +560,13 @@ async def get_models(
             "groq": "Groq catalog",
             "fireworks": "Fireworks catalog",
             "together": "Together catalog",
-            "all": "Combined OpenRouter, Portkey, Featherless, DeepInfra, Chutes, Groq, Fireworks, and Together catalog",
+            "google": "Google catalog",
+            "cerebras": "Cerebras catalog",
+            "nebius": "Nebius catalog",
+            "xai": "Xai catalog",
+            "novita": "Novita catalog",
+            "hug": "Hugging Face catalog",
+            "all": "Combined OpenRouter, Portkey, Featherless, DeepInfra, Chutes, Groq, Fireworks, Together, Google, Cerebras, Nebius, Xai, Novita, and Hugging Face catalogs",
         }.get(gateway_value, "OpenRouter catalog")
 
         result = {
@@ -1182,7 +1278,7 @@ async def get_all_models(
     ),
     gateway: Optional[str] = Query(
         "openrouter",
-        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', 'groq', 'fireworks', 'together', or 'all'",
+        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', 'groq', 'fireworks', 'together', 'google', 'cerebras', 'nebius', 'xai', 'novita', 'hug', or 'all'",
     ),
 ):
     return await get_models(
