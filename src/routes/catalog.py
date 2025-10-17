@@ -424,7 +424,10 @@ async def get_models(
         elif gateway_value == "hug":
             models = hug_models
         else:
-            models = merge_models_by_slug(openrouter_models, portkey_models, featherless_models, deepinfra_models, chutes_models, groq_models, fireworks_models, together_models, google_models, cerebras_models, nebius_models, xai_models, novita_models, hug_models)
+            # For "all" gateway, merge all models but avoid duplicates from Portkey-based providers
+            # Note: google, cerebras, nebius, xai, novita, hug are filtered FROM Portkey models,
+            # so we DON'T include them separately in the merge to avoid counting them twice
+            models = merge_models_by_slug(openrouter_models, portkey_models, featherless_models, deepinfra_models, chutes_models, groq_models, fireworks_models, together_models)
 
         if not models:
             logger.error("No models data available after applying gateway selection")
