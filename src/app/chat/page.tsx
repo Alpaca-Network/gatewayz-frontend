@@ -1163,6 +1163,7 @@ function ChatPageContent() {
             } finally {
                 setLoadingMessages(false);
             }
+        }
     };
 
     const createNewChat = async () => {
