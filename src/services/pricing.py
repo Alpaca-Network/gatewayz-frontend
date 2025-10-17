@@ -37,29 +37,9 @@ def get_model_pricing(model_id: str) -> Dict[str, float]:
             if model.get("id") == model_id or model.get("slug") == model_id:
                 pricing = model.get("pricing", {})
 
-                # Convert pricing strings to floats
+                # Convert pricing strings to floats, handling None and empty strings
                 prompt_price = float(pricing.get("prompt", "0") or "0")
                 completion_price = float(pricing.get("completion", "0") or "0")
-
-                # Check if pricing is 0 (null in catalog) and model is from Fireworks
-                if prompt_price == 0 and completion_price == 0:
-                    source_gateway = model.get("source_gateway", "")
-                    if source_gateway == "fireworks":
-                        # Use default Fireworks pricing
-                        # DeepSeek v3 is very efficient, so we'll use competitive pricing
-                        if "deepseek" in model_id.lower():
-                            prompt_price = 0.000001  # $0.001 per 1K tokens
-                            completion_price = 0.000002  # $0.002 per 1K tokens
-                        else:
-                            # Default Fireworks pricing for other models
-                            prompt_price = 0.000002  # $0.002 per 1K tokens
-                            completion_price = 0.000004  # $0.004 per 1K tokens
-                        logger.info(f"Using default Fireworks pricing for {model_id}")
-                    else:
-                        # Use general default pricing for other gateways with missing pricing
-                        prompt_price = 0.00002
-                        completion_price = 0.00002
-                        logger.info(f"Using general default pricing for {model_id} from {source_gateway}")
 
                 logger.info(f"Found pricing for {model_id}: prompt=${prompt_price}, completion=${completion_price}")
 

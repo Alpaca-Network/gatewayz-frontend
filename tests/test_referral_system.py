@@ -27,7 +27,7 @@ class TestReferralCodeGeneration:
         assert len(code) == 8
         assert code.isupper()
         assert code.isalnum()
-        print(f"✅ Generated valid referral code: {code}")
+        print(f"[PASS] Generated valid referral code: {code}")
 
     def test_generate_unique_codes(self):
         """Test that we can generate multiple unique codes"""
@@ -35,7 +35,7 @@ class TestReferralCodeGeneration:
         unique_codes = set(codes)
         # With 36^8 possibilities, 100 codes should all be unique
         assert len(unique_codes) == 100
-        print(f"✅ Generated 100 unique codes")
+        print("[PASS] Generated 100 unique codes")
 
     @patch('src.services.referral.get_supabase_client')
     def test_create_user_referral_code(self, mock_client):
@@ -58,7 +58,7 @@ class TestReferralCodeGeneration:
 
         assert len(code) == 8
         assert code.isupper()
-        print(f"✅ Created referral code for user: {code}")
+        print(f"[PASS] Created referral code for user: {code}")
 
 
 class TestReferralValidation:
@@ -86,11 +86,25 @@ class TestReferralValidation:
         # Mock usage count is 0
         usage_result = Mock()
         usage_result.count = 0
+        usage_result.data = []
 
-        mock_supabase.table.return_value.select.return_value.eq.return_value.execute.side_effect = [
-            referrer_result,  # Get referrer
-            user_result,      # Get user
-            usage_result      # Get usage count
+        # Set up the mock chain for the three queries
+        # Query 1: Get referrer
+        query1 = Mock()
+        query1.select.return_value.eq.return_value.execute.return_value = referrer_result
+
+        # Query 2: Get user
+        query2 = Mock()
+        query2.select.return_value.eq.return_value.execute.return_value = user_result
+
+        # Query 3: Check usage count - uses count='exact' parameter
+        query3 = Mock()
+        query3.select.return_value.eq.return_value.eq.return_value.execute.return_value = usage_result
+
+        mock_supabase.table.side_effect = [
+            query1,  # users table for referrer
+            query2,  # users table for user
+            query3   # referrals table for usage count
         ]
 
         is_valid, error_msg, referrer = validate_referral_code('ALICE123', user_id=2)
@@ -99,7 +113,7 @@ class TestReferralValidation:
         assert error_msg is None
         assert referrer is not None
         assert referrer['username'] == 'alice'
-        print("✅ Referral code validation passed")
+        print("[PASS] Referral code validation passed")
 
     @patch('src.services.referral.get_supabase_client')
     def test_validate_own_code_fails(self, mock_client):
@@ -127,7 +141,7 @@ class TestReferralValidation:
 
         assert is_valid is False
         assert "own referral code" in error_msg.lower()
-        print("✅ Self-referral correctly blocked")
+        print("[PASS] Self-referral correctly blocked")
 
     @patch('src.services.referral.get_supabase_client')
     def test_validate_already_made_purchase_fails(self, mock_client):
@@ -155,7 +169,7 @@ class TestReferralValidation:
 
         assert is_valid is False
         assert "first purchase" in error_msg.lower()
-        print("✅ Repeat purchase correctly blocked from using referral")
+        print("[PASS] Repeat purchase correctly blocked from using referral")
 
     @patch('src.services.referral.get_supabase_client')
     def test_validate_max_uses_reached_fails(self, mock_client):
@@ -177,11 +191,25 @@ class TestReferralValidation:
         # Mock usage count is MAX (10)
         usage_result = Mock()
         usage_result.count = MAX_REFERRAL_USES
+        usage_result.data = []
 
-        mock_supabase.table.return_value.select.return_value.eq.return_value.execute.side_effect = [
-            referrer_result,
-            user_result,
-            usage_result
+        # Set up the mock chain for the three queries
+        # Query 1: Get referrer
+        query1 = Mock()
+        query1.select.return_value.eq.return_value.execute.return_value = referrer_result
+
+        # Query 2: Get user
+        query2 = Mock()
+        query2.select.return_value.eq.return_value.execute.return_value = user_result
+
+        # Query 3: Check usage count
+        query3 = Mock()
+        query3.select.return_value.eq.return_value.eq.return_value.execute.return_value = usage_result
+
+        mock_supabase.table.side_effect = [
+            query1,  # users table for referrer
+            query2,  # users table for user
+            query3   # referrals table for usage count
         ]
 
         is_valid, error_msg, referrer = validate_referral_code('ALICE123', user_id=2)
@@ -189,7 +217,7 @@ class TestReferralValidation:
         assert is_valid is False
         assert "usage limit" in error_msg.lower()
         assert str(MAX_REFERRAL_USES) in error_msg
-        print(f"✅ Max usage limit ({MAX_REFERRAL_USES}) correctly enforced")
+        print(f"[PASS] Max usage limit ({MAX_REFERRAL_USES}) correctly enforced")
 
 
 class TestReferralBonus:
@@ -252,7 +280,7 @@ class TestReferralBonus:
 
         # Verify add_credits was called twice (once for each user)
         assert mock_add_credits.call_count == 2
-        print(f"✅ Referral bonus ${REFERRAL_BONUS} applied to both users")
+        print(f"[PASS] Referral bonus ${REFERRAL_BONUS} applied to both users")
 
     @patch('src.services.referral.get_supabase_client')
     def test_apply_referral_bonus_min_purchase_fails(self, mock_client):
@@ -268,7 +296,7 @@ class TestReferralBonus:
 
         assert success is False
         assert f"${MIN_PURCHASE_AMOUNT}" in error_msg
-        print(f"✅ Purchases under ${MIN_PURCHASE_AMOUNT} correctly rejected")
+        print(f"[PASS] Purchases under ${MIN_PURCHASE_AMOUNT} correctly rejected")
 
 
 class TestReferralStats:
@@ -318,7 +346,7 @@ class TestReferralStats:
         assert stats['max_uses'] == MAX_REFERRAL_USES
         assert stats['total_earned'] == 30.0
         assert len(stats['referrals']) == 3
-        print(f"✅ Referral stats: 3/{MAX_REFERRAL_USES} uses, $30 earned")
+        print(f"[PASS] Referral stats: 3/{MAX_REFERRAL_USES} uses, $30 earned")
 
 
 class TestPaymentWebhookIntegration:
@@ -380,7 +408,7 @@ class TestPaymentWebhookIntegration:
             purchase_amount=10.0
         )
         mock_mark_purchase.assert_called_once_with(1)
-        print("✅ Webhook correctly triggers referral bonus on first purchase")
+        print("[PASS] Webhook correctly triggers referral bonus on first purchase")
 
 
 def test_constants():
@@ -388,7 +416,7 @@ def test_constants():
     assert MAX_REFERRAL_USES == 10, f"Expected MAX_REFERRAL_USES to be 10, got {MAX_REFERRAL_USES}"
     assert MIN_PURCHASE_AMOUNT == 10.0, f"Expected MIN_PURCHASE_AMOUNT to be 10.0, got {MIN_PURCHASE_AMOUNT}"
     assert REFERRAL_BONUS == 10.0, f"Expected REFERRAL_BONUS to be 10.0, got {REFERRAL_BONUS}"
-    print("✅ All constants are correctly set:")
+    print("[PASS] All constants are correctly set:")
     print(f"   - Max uses per code: {MAX_REFERRAL_USES}")
     print(f"   - Min purchase: ${MIN_PURCHASE_AMOUNT}")
     print(f"   - Bonus amount: ${REFERRAL_BONUS}")
