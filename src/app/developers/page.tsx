@@ -196,7 +196,23 @@ export default function DevelopersPage() {
         console.log('Filtered models count:', filteredModels.length);
 
         // List of gateways/providers that should not be shown as developers
-        const excludedProviders = ['openrouter', 'portkey', 'featherless', 'together', 'fireworks'];
+        const excludedProviders = [
+          'openrouter',
+          'portkey',
+          'featherless',
+          'together',
+          'fireworks',
+          'chutes',
+          'groq',
+          'deepinfra',
+          // New Portkey SDK providers
+          'google',
+          'cerebras',
+          'nebius',
+          'xai',
+          'novita',
+          'huggingface'
+        ];
 
         // Group models by author, excluding gateways
         const orgMap = new Map<string, RankingModel[]>();
