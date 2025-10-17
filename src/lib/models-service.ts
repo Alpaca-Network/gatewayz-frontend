@@ -50,13 +50,13 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
 
   // Fetch all models - request a very high limit that should cover most gateways
   const allModels: any[] = [];
-  const requestLimit = limit || 15000; // Request up to 15k models in one shot
+  const requestLimit = limit || 50000; // Request up to 50k models per page (backend limit)
   const limitParam = `&limit=${requestLimit}`;
   let offset = 0;
   let hasMore = true;
   let pageCount = 0;
 
-  while (hasMore && pageCount < 30) { // Max 30 pages to prevent infinite loops
+  while (hasMore && pageCount < 10) { // Max 10 pages to prevent infinite loops (50k per page = 500k total)
     pageCount++;
     const offsetParam = offset > 0 ? `&offset=${offset}` : '';
     const fullLimitParam = `${limitParam}${offsetParam}`;
