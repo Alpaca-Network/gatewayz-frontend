@@ -49,11 +49,14 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
   }
 
   const limitParam = limit ? `&limit=${limit}` : '';
-  const url = `${API_BASE_URL}/models?gateway=${gateway}${limitParam}`;
+
+  // Try v1/models endpoint first (newer endpoint), then fall back to /models
+  let response;
+  let url = `${API_BASE_URL}/v1/models?gateway=${gateway}${limitParam}`;
 
   // Try live API first (primary source)
   try {
-    const response = await fetch(url, {
+    response = await fetch(url, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json'
@@ -69,6 +72,33 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
       // Validate response structure and data
       if (data.data && Array.isArray(data.data) && data.data.length > 0) {
         console.log(`[Models] Fetched ${data.data.length} models for gateway: ${gateway}`);
+        return data;
+      }
+    }
+  } catch (backendError: any) {
+    // If v1/models fails, try the older /models endpoint
+    console.log(`[Models] Trying fallback /models endpoint for ${gateway}`);
+  }
+
+  // Fallback to /models endpoint
+  url = `${API_BASE_URL}/models?gateway=${gateway}${limitParam}`;
+
+  try {
+    response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      next: { revalidate: 60 },
+      signal: AbortSignal.timeout(15000)
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+
+      // Validate response structure and data
+      if (data.data && Array.isArray(data.data) && data.data.length > 0) {
+        console.log(`[Models] Fetched ${data.data.length} models for gateway: ${gateway} (from fallback)`);
         return data;
       }
     }

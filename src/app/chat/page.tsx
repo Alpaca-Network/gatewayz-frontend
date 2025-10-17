@@ -1698,6 +1698,7 @@ function ChatPageContent() {
                 // Accumulate content locally to avoid state closure issues
                 let accumulatedContent = '';
                 let accumulatedReasoning = '';
+                let inThinking = false;
 
                 console.log('🌊 Starting to stream response...');
                 for await (const chunk of streamChatResponse(
@@ -1720,16 +1721,55 @@ function ChatPageContent() {
                         continue;
                     }
 
-                    const hasContent = !!chunk.content;
-                    const hasReasoning = !!chunk.reasoning;
+                    // Process content with thinking tag extraction
+                    if (chunk.content) {
+                        const content = chunk.content;
 
-                    if (!hasContent && !hasReasoning) {
-                        continue;
+                        // Debug: Log content to see what we're receiving
+                        if (content.includes('<thinking') || content.includes('</thinking') || content.includes('[THINKING')) {
+                            console.log('[THINKING DEBUG]', { content, inThinking, length: content.length });
+                        }
+
+                        // Process content character by character to handle thinking tags correctly
+                        let i = 0;
+                        while (i < content.length) {
+                            // Check for opening thinking tags: <thinking>, <|thinking>
+                            if (content.slice(i).match(/^<\|?thinking>/i)) {
+                                inThinking = true;
+                                const tagMatch = content.slice(i).match(/^<\|?thinking>/i);
+                                if (tagMatch) {
+                                    i += tagMatch[0].length;
+                                    console.log('[THINKING DEBUG] Opened thinking tag');
+                                }
+                                continue;
+                            }
+
+                            // Check for closing thinking tags: </thinking>, </|thinking>
+                            if (content.slice(i).match(/^<\|?\/thinking>/i)) {
+                                inThinking = false;
+                                const tagMatch = content.slice(i).match(/^<\|?\/thinking>/i);
+                                if (tagMatch) {
+                                    i += tagMatch[0].length;
+                                    console.log('[THINKING DEBUG] Closed thinking tag');
+                                }
+                                continue;
+                            }
+
+                            // Accumulate content character by character
+                            const char = content[i];
+                            if (inThinking) {
+                                accumulatedReasoning += char;
+                            } else {
+                                accumulatedContent += char;
+                            }
+                            i++;
+                        }
                     }
 
-                    // Accumulate content locally
-                    accumulatedContent += chunk.content || '';
-                    accumulatedReasoning += chunk.reasoning || '';
+                    // Also accumulate any reasoning sent explicitly from the API
+                    if (chunk.reasoning) {
+                        accumulatedReasoning += chunk.reasoning;
+                    }
 
                     // Update the assistant message with streamed content
                     setSessions(prev => prev.map(session => {
