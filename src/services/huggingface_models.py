@@ -24,9 +24,11 @@ FEATURES:
 import logging
 from datetime import datetime, timezone
 import httpx
+import time
 
 from src.cache import _hug_models_cache
 from src.services.pricing_lookup import enrich_model_with_pricing
+from src.config import Config
 
 logger = logging.getLogger(__name__)
 
@@ -66,12 +68,12 @@ def fetch_models_from_huggingface_api(
 
         models = []
         offset = 0
-        batch_size = 50  # HF API supports up to 100 per request, but 50 is safer
+        batch_size = 100  # HF API supports up to 100 per request
         total_fetched = 0
 
-        # If no limit specified, fetch all available models (~10,000 with hf-inference filter)
+        # If no limit specified, fetch all available models (~50,000+ with hf-inference filter)
         # Use a high number to ensure we get everything available
-        max_total = limit or 10000  # Will fetch until API returns no more models
+        max_total = limit or 50000  # Will fetch until API returns no more models
 
         # Fetch in batches
         while total_fetched < max_total:
@@ -94,7 +96,13 @@ def fetch_models_from_huggingface_api(
             url = "https://huggingface.co/api/models"
             logger.debug(f"Fetching batch from offset {offset} with params: {params}")
 
-            response = httpx.get(url, params=params, timeout=30.0)
+            # Add authentication headers if HF token is available
+            headers = {}
+            if Config.HUG_API_KEY:
+                headers["Authorization"] = f"Bearer {Config.HUG_API_KEY}"
+                logger.debug("Using Hugging Face API token for authentication")
+
+            response = httpx.get(url, params=params, headers=headers, timeout=30.0)
             response.raise_for_status()
 
             batch_models = response.json()
@@ -112,6 +120,11 @@ def fetch_models_from_huggingface_api(
             if len(batch_models) < batch_size:
                 logger.info(f"Batch returned fewer models than requested, stopping pagination")
                 break
+
+            # Add a small delay between requests to avoid rate limiting
+            # Only add delay if HF_API_KEY is not provided (unauthenticated requests are more limited)
+            if not Config.HUG_API_KEY and total_fetched < max_total:
+                time.sleep(0.5)  # 500ms delay between requests
 
         if not models:
             logger.warning("No Hugging Face models returned from API")
@@ -308,8 +321,13 @@ def search_huggingface_models(query: str, limit: int = 50) -> list:
             "direction": "-1",
         }
 
+        # Add authentication headers if HF token is available
+        headers = {}
+        if Config.HUG_API_KEY:
+            headers["Authorization"] = f"Bearer {Config.HUG_API_KEY}"
+
         url = "https://huggingface.co/api/models"
-        response = httpx.get(url, params=params, timeout=30.0)
+        response = httpx.get(url, params=params, headers=headers, timeout=30.0)
         response.raise_for_status()
 
         models = response.json()
@@ -337,8 +355,13 @@ def get_huggingface_model_info(model_id: str) -> dict:
     try:
         logger.info(f"Fetching details for Hugging Face model: {model_id}")
 
+        # Add authentication headers if HF token is available
+        headers = {}
+        if Config.HUG_API_KEY:
+            headers["Authorization"] = f"Bearer {Config.HUG_API_KEY}"
+
         url = f"https://huggingface.co/api/models/{model_id}"
-        response = httpx.get(url, timeout=10.0)
+        response = httpx.get(url, headers=headers, timeout=10.0)
         response.raise_for_status()
 
         model_data = response.json()
@@ -365,14 +388,14 @@ def fetch_models_from_hug():
     direct API calls to get all models available on Hugging Face Inference API.
 
     Fetches all available models on HF Inference (hf-inference filter).
-    Currently ~10,000 models available through the API.
+    Currently ~50,000+ models available through the API.
 
     Returns:
         List of normalized Hugging Face models or None on error
     """
     return fetch_models_from_huggingface_api(
         task=None,  # Fetch all models available on HF Inference
-        limit=None,  # Fetch all available (~10,000 models)
+        limit=None,  # Fetch all available (~50,000+ models)
         direction="-1",
         sort="likes"  # Sort by popularity/likes
     )
