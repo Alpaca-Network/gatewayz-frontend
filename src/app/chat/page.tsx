@@ -1036,12 +1036,10 @@ function ChatPageContent() {
     useEffect(() => {
         // Load sessions from API when authenticated and API key is available
         if (!ready) {
-            console.log('Session loading - Privy not ready yet');
             return;
         }
 
         if (!authenticated) {
-            console.log('Session loading - User not authenticated');
             return;
         }
 
@@ -1049,13 +1047,11 @@ function ChatPageContent() {
         const apiKey = getApiKey();
         const userData = getUserData();
         if (!apiKey || !userData?.privy_user_id) {
-            console.log('Session loading - Waiting for API key and user data...');
             // Retry with increasing intervals until we have the API key
             const checkInterval = setInterval(() => {
                 const key = getApiKey();
                 const data = getUserData();
                 if (key && data?.privy_user_id) {
-                    console.log('Session loading - API key and user data now available!');
                     clearInterval(checkInterval);
                     // Trigger auth ready state to force effect to re-run
                     setAuthReady(true);
@@ -1067,14 +1063,9 @@ function ChatPageContent() {
             return () => clearInterval(checkInterval);
         }
 
-        console.log('Session loading - Starting to load sessions...');
-
         const loadSessions = async () => {
             try {
                 const sessionsData = await apiHelpers.loadChatSessions('user-1');
-                console.log('Session loading - Loaded sessions:', sessionsData.length);
-                console.log('Session loading - Sessions data:', sessionsData);
-
                 setSessions(sessionsData);
 
                 // Check if there's already a new/empty chat, if not create one
@@ -1083,10 +1074,7 @@ function ChatPageContent() {
                     session.title === 'Untitled Chat'
                 );
 
-                console.log('Session loading - Has new chat:', hasNewChat);
-
                 if (!hasNewChat) {
-                    console.log('Session loading - Creating new chat');
                     createNewChat();
                 } else {
                     // Set the first new chat as active - use local data instead of state
@@ -1095,7 +1083,6 @@ function ChatPageContent() {
                         session.title === 'Untitled Chat'
                     );
                     if (firstNewChat) {
-                        console.log('Session loading - Setting active session:', firstNewChat.id);
                         // Clear any stale message from the input field for new empty chats
                         setMessage('');
                         setUserHasTyped(false); // Reset typing flag
@@ -1105,78 +1092,12 @@ function ChatPageContent() {
                     }
                 }
             } catch (error) {
-                console.error('Session loading - Failed to load chat sessions:', error);
-                // Fallback to creating a new chat
+                // Failed to load sessions, fallback to creating a new chat
                 createNewChat();
             }
         };
 
         loadSessions();
-        
-        // Test backend connectivity after loading sessions
-        setTimeout(() => {
-            testBackendConnectivity();
-        }, 1000);
-        
-        // Make test function available globally for manual testing
-        (window as any).testChatBackend = testBackendConnectivity;
-        
-        // Add a test date parsing function
-        (window as any).testDateParsing = () => {
-            const testDates = [
-                '2024-01-01T12:00:00Z',
-                '2024-01-01T12:00:00.000Z',
-                '2024-01-01T12:00:00+00:00',
-                'invalid-date',
-                '',
-                null,
-                undefined
-            ];
-            
-            console.log('🧪 Testing date parsing...');
-            testDates.forEach((dateStr, index) => {
-                const result = parseBackendDate(dateStr as string, 'test_field', index);
-                console.log(`Test ${index}: "${dateStr}" → ${result.toISOString()}`);
-            });
-        };
-        
-        // Add a test message saving function
-        (window as any).testMessageSaving = async () => {
-            const apiKey = getApiKey();
-            const userData = getUserData();
-            const currentSession = sessions.find(s => s.id === activeSessionId);
-            
-            if (!apiKey || !userData?.privy_user_id || !currentSession?.apiSessionId) {
-                console.error('❌ Cannot test message saving - missing requirements:', {
-                    hasApiKey: !!apiKey,
-                    hasUserData: !!userData?.privy_user_id,
-                    hasSessionId: !!currentSession?.apiSessionId,
-                    activeSessionId,
-                    sessions: sessions.length
-                });
-                return false;
-            }
-            
-            try {
-                console.log('🧪 Testing message saving...');
-                const chatAPI = new ChatHistoryAPI(apiKey, undefined, userData.privy_user_id);
-                
-                // Try to save a test message
-                const result = await chatAPI.saveMessage(
-                    currentSession.apiSessionId,
-                    'user',
-                    'Test message from console',
-                    'openai/gpt-3.5-turbo',
-                    undefined
-                );
-                
-                console.log('✅ Test message saved successfully:', result);
-                return true;
-            } catch (error) {
-                console.error('❌ Test message saving failed:', error);
-                return false;
-            }
-        };
     }, [ready, authenticated, authReady]);
 
     // Handle rate limit countdown timer
@@ -1211,33 +1132,24 @@ function ChatPageContent() {
 
     // Lazy load messages when switching to a session
     const switchToSession = async (sessionId: string) => {
-        console.log('switchToSession called for:', sessionId);
         const session = sessions.find(s => s.id === sessionId);
         if (!session) {
-            console.log('Session not found:', sessionId);
             return;
         }
-
-        console.log('Session found:', session);
-        console.log('Session has messages:', session.messages.length);
-        console.log('Already loaded:', loadedSessionIds.has(sessionId));
 
         // Set active session immediately for UI responsiveness
         setActiveSessionId(sessionId);
 
         // If messages already loaded or session is new (no messages), skip loading
         if (loadedSessionIds.has(sessionId) || session.messages.length > 0) {
-            console.log('Skipping message load - already loaded or has messages');
             return;
         }
 
         // Load messages for this session
         if (session.apiSessionId) {
-            console.log('Loading messages for session:', sessionId, 'API ID:', session.apiSessionId);
             setLoadingMessages(true);
             try {
                 const messages = await apiHelpers.loadSessionMessages(sessionId, session.apiSessionId);
-                console.log('Loaded messages:', messages.length);
 
                 // Update the session with loaded messages
                 setSessions(prev => prev.map(s =>
@@ -1247,19 +1159,15 @@ function ChatPageContent() {
                 // Mark session as loaded
                 setLoadedSessionIds(prev => new Set(prev).add(sessionId));
             } catch (error) {
-                console.error(`Failed to load messages for session ${sessionId}:`, error);
+                // Failed to load messages
             } finally {
                 setLoadingMessages(false);
             }
-        } else {
-            console.log('No API session ID for session:', sessionId);
-        }
     };
 
     const createNewChat = async () => {
         // Prevent duplicate session creation
         if (creatingSessionRef.current) {
-            console.log('Session creation already in progress');
             return;
         }
 
@@ -1280,8 +1188,7 @@ function ChatPageContent() {
             // Create new session using API helper
             const newSession = await apiHelpers.createChatSession('Untitled Chat', selectedModel?.value);
 
-            // FIX: Set active session immediately with the created session object
-            // Don't rely on setSessions completing before switchToSession is called
+            // Set active session immediately with the created session object
             setActiveSessionId(newSession.id);
 
             // Then update the sessions list
@@ -1290,7 +1197,6 @@ function ChatPageContent() {
             creatingSessionRef.current = false;
         } catch (error) {
             creatingSessionRef.current = false;
-            console.error('Failed to create new chat session:', error);
             toast({
                 title: "Error",
                 description: `Failed to create new chat session: ${error instanceof Error ? error.message : 'Unknown error'}`,
