@@ -605,7 +605,7 @@ const ChatSidebar = ({ sessions, activeSessionId, switchToSession, createNewChat
     const groupedSessions = groupChatsByDate(sessions);
 
     return (
-    <aside className="flex flex-col gap-4 p-4 h-full w-full overflow-hidden">
+    <aside className="flex flex-col gap-4 p-4 pb-0 h-full w-full overflow-hidden">
         <div className="flex items-center gap-2">
             <h2 className="text-2xl font-bold">Chat</h2>
         </div>
