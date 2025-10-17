@@ -15,12 +15,13 @@ api = importlib.import_module(MODULE_PATH)
 # Build a FastAPI app including the router under test
 @pytest.fixture(scope="session")
 def app():
+    from src.security.deps import get_api_key
+
     app = FastAPI()
     app.include_router(api.router)
 
     # Override API key dependency to avoid needing real headers
-    if hasattr(api, "get_api_key"):
-        app.dependency_overrides[api.get_api_key] = lambda: "test_api_key"
+    app.dependency_overrides[get_api_key] = lambda: "test_api_key"
 
     return app
 
