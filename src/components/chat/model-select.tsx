@@ -40,8 +40,8 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewa
 
 const CACHE_KEY = 'gatewayz_models_cache_v5_optimized';
 const FAVORITES_KEY = 'gatewayz_favorite_models';
-const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes - longer cache for better performance
-const INITIAL_MODELS_LIMIT = 100; // Load top 100 models initially for faster performance
+const CACHE_DURATION = 60 * 60 * 1000; // 60 minutes - extended cache for maximum performance
+const INITIAL_MODELS_LIMIT = 50; // Load top 50 models initially for instant loading
 const MAX_MODELS_PER_DEVELOPER = 10; // Limit models shown per developer for performance
 
 // Extract developer from model ID (e.g., "openai/gpt-4" -> "OpenAI")
@@ -143,7 +143,11 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
         const limit = loadAllModels ? undefined : INITIAL_MODELS_LIMIT;
         const limitParam = limit ? `&limit=${limit}` : '';
 
-        const openrouterRes = await fetch(`/api/models?gateway=openrouter${limitParam}`);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+
+        const openrouterRes = await fetch(`/api/models?gateway=openrouter${limitParam}`, { signal: controller.signal });
+        clearTimeout(timeoutId);
         const openrouterData = await openrouterRes.json();
 
         // Combine models from all gateways
