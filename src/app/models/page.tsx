@@ -24,7 +24,24 @@ interface Model {
 async function getModels(): Promise<Model[]> {
   try {
     // Fetch models from all gateways to build a complete picture
-    const gateways = ['openrouter', 'portkey', 'featherless', 'groq', 'together', 'fireworks', 'chutes', 'deepinfra'];
+    // Note: 'portkey' is deprecated; now using individual Portkey SDK providers
+    const gateways = [
+      'openrouter',
+      'portkey', // Kept for backward compatibility but recommend using individual providers
+      'featherless',
+      'groq',
+      'together',
+      'fireworks',
+      'chutes',
+      'deepinfra',
+      // New Portkey SDK providers (replaces single 'portkey' gateway)
+      'google',
+      'cerebras',
+      'nebius',
+      'xai',
+      'novita',
+      'huggingface'
+    ];
 
     console.log(`📡 Fetching models from ${gateways.length} gateways...`);
 

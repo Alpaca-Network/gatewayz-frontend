@@ -60,7 +60,14 @@ const GATEWAY_CONFIG: Record<string, { name: string; color: string; icon?: React
   together: { name: 'Together', color: 'bg-indigo-500' },
   fireworks: { name: 'Fireworks', color: 'bg-red-500' },
   chutes: { name: 'Chutes', color: 'bg-yellow-500' },
-  deepinfra: { name: 'DeepInfra', color: 'bg-cyan-500' }
+  deepinfra: { name: 'DeepInfra', color: 'bg-cyan-500' },
+  // New Portkey SDK providers
+  google: { name: 'Google', color: 'bg-blue-600' },
+  cerebras: { name: 'Cerebras', color: 'bg-amber-600' },
+  nebius: { name: 'Nebius', color: 'bg-slate-600' },
+  xai: { name: 'xAI', color: 'bg-black' },
+  novita: { name: 'Novita', color: 'bg-violet-600' },
+  huggingface: { name: 'Hugging Face', color: 'bg-yellow-600' }
 };
 
 const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {

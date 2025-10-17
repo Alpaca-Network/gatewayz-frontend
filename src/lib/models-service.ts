@@ -25,7 +25,25 @@ function transformModel(model: any, gateway: string) {
 
 export async function getModelsForGateway(gateway: string, limit?: number) {
   // Validate gateway
-  const validGateways = ['openrouter', 'portkey', 'featherless', 'chutes', 'fireworks', 'together', 'groq', 'deepinfra', 'all'];
+  // Note: 'portkey' is deprecated; use individual providers instead (google, cerebras, nebius, xai, novita, huggingface)
+  const validGateways = [
+    'openrouter',
+    'portkey', // Kept for backward compatibility
+    'featherless',
+    'chutes',
+    'fireworks',
+    'together',
+    'groq',
+    'deepinfra',
+    // New Portkey SDK providers
+    'google',
+    'cerebras',
+    'nebius',
+    'xai',
+    'novita',
+    'huggingface',
+    'all'
+  ];
   if (!validGateways.includes(gateway)) {
     throw new Error('Invalid gateway');
   }
@@ -73,7 +91,22 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
 
   if (gateway === 'all') {
     // Distribute all models across different gateways
-    const allGateways = ['openrouter', 'portkey', 'featherless', 'chutes', 'fireworks', 'together', 'groq', 'deepinfra'];
+    const allGateways = [
+      'openrouter',
+      'portkey',
+      'featherless',
+      'chutes',
+      'fireworks',
+      'together',
+      'groq',
+      'deepinfra',
+      'google',
+      'cerebras',
+      'nebius',
+      'xai',
+      'novita',
+      'huggingface'
+    ];
     const modelsPerGateway = Math.ceil(models.length / allGateways.length);
 
     transformedModels = models.map((model, index) => {
@@ -83,28 +116,32 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
     });
   } else {
     // Get models for specific gateway
-    const allGateways = ['openrouter', 'portkey', 'featherless', 'chutes', 'fireworks', 'together', 'groq', 'deepinfra'];
+    const allGateways = [
+      'openrouter',
+      'portkey',
+      'featherless',
+      'chutes',
+      'fireworks',
+      'together',
+      'groq',
+      'deepinfra',
+      'google',
+      'cerebras',
+      'nebius',
+      'xai',
+      'novita',
+      'huggingface'
+    ];
     const modelsPerGateway = Math.ceil(models.length / allGateways.length);
     let gatewayModels;
 
-    if (gateway === 'openrouter') {
-      gatewayModels = models.slice(0, modelsPerGateway);
-    } else if (gateway === 'portkey') {
-      gatewayModels = models.slice(modelsPerGateway, modelsPerGateway * 2);
-    } else if (gateway === 'featherless') {
-      gatewayModels = models.slice(modelsPerGateway * 2, modelsPerGateway * 3);
-    } else if (gateway === 'chutes') {
-      gatewayModels = models.slice(modelsPerGateway * 3, modelsPerGateway * 4);
-    } else if (gateway === 'fireworks') {
-      gatewayModels = models.slice(modelsPerGateway * 4, modelsPerGateway * 5);
-    } else if (gateway === 'together') {
-      gatewayModels = models.slice(modelsPerGateway * 5, modelsPerGateway * 6);
-    } else if (gateway === 'groq') {
-      gatewayModels = models.slice(modelsPerGateway * 6, modelsPerGateway * 7);
-    } else if (gateway === 'deepinfra') {
-      gatewayModels = models.slice(modelsPerGateway * 7);
+    const gatewayIndex = allGateways.indexOf(gateway);
+    if (gatewayIndex !== -1) {
+      const startIndex = gatewayIndex * modelsPerGateway;
+      const endIndex = gatewayIndex === allGateways.length - 1 ? models.length : (gatewayIndex + 1) * modelsPerGateway;
+      gatewayModels = models.slice(startIndex, endIndex);
     } else {
-      gatewayModels = models; // Default to all models
+      gatewayModels = models; // Default to all models for unknown gateways
     }
 
     transformedModels = gatewayModels.map(m => transformModel(m, gateway));

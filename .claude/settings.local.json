@@ -11,7 +11,11 @@
       "Bash(npm install)",
       "Bash(npm run dev:*)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(npm run typecheck:*)",
+      "Bash(npm run lint)",
+      "Bash(npm i:*)"
     ],
     "deny": [],
     "ask": []
