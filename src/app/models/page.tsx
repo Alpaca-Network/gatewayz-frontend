@@ -52,6 +52,17 @@ async function getModels(): Promise<Model[]> {
         const result = await getModelsForGateway(gateway);
         const modelCount = result.data?.length || 0;
         console.log(`✅ ${gateway}: ${modelCount} models`);
+
+        // Log details for new Portkey providers
+        if (['google', 'cerebras', 'nebius', 'xai', 'novita', 'huggingface'].includes(gateway)) {
+          console.log(`📦 Portkey provider ${gateway} response:`, {
+            hasData: !!result.data,
+            dataLength: result.data?.length || 0,
+            firstModel: result.data?.[0]?.id,
+            sampleModels: result.data?.slice(0, 2).map(m => m.name)
+          });
+        }
+
         return { gateway, models: result.data || [] };
       } catch (error) {
         console.error(`❌ Failed to fetch from ${gateway}:`, error);
@@ -121,6 +132,15 @@ async function getModels(): Promise<Model[]> {
     // Log some stats about gateway coverage
     const multiGatewayModels = uniqueModels.filter(m => m.source_gateways.length > 1);
     console.log(`Models available on multiple gateways: ${multiGatewayModels.length}`);
+
+    // Log gateway breakdown
+    const gatewayCount: Record<string, number> = {};
+    uniqueModels.forEach(m => {
+      m.source_gateways.forEach(g => {
+        gatewayCount[g] = (gatewayCount[g] || 0) + 1;
+      });
+    });
+    console.log(`📊 Gateway Coverage:`, gatewayCount);
 
     return uniqueModels;
   } catch (error) {
