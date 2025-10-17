@@ -73,13 +73,17 @@ def fetch_models_from_huggingface_api(
         # Fetch in batches
         while total_fetched < max_total:
             params = {
-                "task": task,
-                "sort": sort,
-                "direction": direction,
+                "inference_provider": "hf-inference",  # Only models available on HF Inference API
                 "limit": min(batch_size, max_total - total_fetched),
                 "offset": offset,
-                "filter": "text-generation",  # Focus on text generation models
             }
+
+            # Note: sort and direction don't work reliably with inference_provider filter
+            # so we fetch all available and handle sorting client-side if needed
+
+            # Only add task filter if explicitly specified and not "all"
+            if task and task != "all":
+                params["task"] = task
 
             if search:
                 params["search"] = search
@@ -355,14 +359,14 @@ def fetch_models_from_hug():
     Fetch models from Hugging Face using the direct API integration.
 
     This replaces the old Portkey pattern-based filtering approach with
-    direct API calls to get all available Hugging Face models.
+    direct API calls to get all models available on Hugging Face Inference API.
 
     Returns:
         List of normalized Hugging Face models or None on error
     """
     return fetch_models_from_huggingface_api(
-        task="text-generation",
-        limit=500,  # Reasonable limit for production
+        task=None,  # Fetch all models available on HF Inference
+        limit=1000,  # Fetch up to 1000 models (HF Inference has limited model set)
         direction="-1",
-        sort="downloads"
+        sort="likes"  # Sort by popularity/likes
     )
