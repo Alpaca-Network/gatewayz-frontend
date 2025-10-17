@@ -1,9 +1,14 @@
 """
-Portkey SDK Provider Fetch Functions
+Portkey Provider Filter Functions
 
-These functions use the Portkey Python SDK to fetch models from individual
-providers (Google, Cerebras, Nebius, Xai, Novita, Hug) instead of the unified
-Portkey gateway which has a 500-model limit.
+These functions filter models from the Portkey unified catalog by provider prefix.
+The Portkey unified catalog contains models from all providers with prefixes like:
+- @google/...
+- @cerebras/...
+- @nebius/...
+- @xai/...
+- @novita/...
+- @huggingface/... (hug)
 """
 
 import logging
@@ -22,25 +27,70 @@ from src.services.pricing_lookup import enrich_model_with_pricing
 logger = logging.getLogger(__name__)
 
 
-def fetch_models_from_google():
-    """Fetch models from Google via Portkey SDK"""
+def _filter_portkey_models_by_patterns(patterns: list, provider_name: str):
+    """
+    Filter Portkey unified models by name patterns and cache them.
+
+    Args:
+        patterns: List of strings to match in model ID (case-insensitive)
+        provider_name: The internal provider name (e.g., "google", "cerebras")
+
+    Returns:
+        List of filtered models or None
+    """
     try:
-        from src.services.portkey_sdk import get_portkey_service
+        from src.services.models import fetch_models_from_portkey
 
-        logger.info("Fetching Google models via Portkey SDK")
-        service = get_portkey_service()
+        logger.info(f"Fetching {provider_name} models from Portkey unified catalog (filtering by patterns: {patterns})")
 
-        models = service.list_models("google")
-        if not models:
-            logger.warning("No Google models returned from Portkey SDK")
+        # Get all Portkey models
+        all_portkey_models = fetch_models_from_portkey()
+
+        if not all_portkey_models:
+            logger.warning(f"No Portkey models returned for {provider_name}")
             return None
 
-        normalized_models = [normalize_portkey_provider_model(model, "google") for model in models if model]
+        # Filter by matching any of the patterns
+        filtered_models = []
+        seen_ids = set()  # Avoid duplicates
+
+        for model in all_portkey_models:
+            model_id = model.get("id", "").lower()
+
+            # Check if any pattern matches
+            for pattern in patterns:
+                if pattern.lower() in model_id:
+                    if model.get("id") not in seen_ids:
+                        model_copy = model.copy()
+                        model_copy["source_gateway"] = provider_name
+                        filtered_models.append(model_copy)
+                        seen_ids.add(model.get("id"))
+                    break
+
+        logger.info(f"Filtered {len(filtered_models)} {provider_name} models from Portkey catalog")
+        return filtered_models if filtered_models else None
+
+    except Exception as e:
+        logger.error(f"Failed to filter {provider_name} models from Portkey: {e}", exc_info=True)
+        return None
+
+
+def fetch_models_from_google():
+    """Fetch models from Google by filtering Portkey unified catalog"""
+    try:
+        # Google models include "gemini", "gemma" patterns
+        filtered_models = _filter_portkey_models_by_patterns(["gemini", "gemma"], "google")
+
+        if not filtered_models:
+            logger.warning("No Google models found in Portkey catalog")
+            return None
+
+        normalized_models = [normalize_portkey_provider_model(model, "google") for model in filtered_models if model]
 
         _google_models_cache["data"] = normalized_models
         _google_models_cache["timestamp"] = datetime.now(timezone.utc)
 
-        logger.info(f"Cached {len(normalized_models)} Google models from Portkey SDK")
+        logger.info(f"Cached {len(normalized_models)} Google models from Portkey catalog")
         return _google_models_cache["data"]
 
     except Exception as e:
@@ -49,24 +99,24 @@ def fetch_models_from_google():
 
 
 def fetch_models_from_cerebras():
-    """Fetch models from Cerebras via Portkey SDK"""
+    """Fetch models from Cerebras by filtering Portkey unified catalog"""
     try:
-        from src.services.portkey_sdk import get_portkey_service
+        # Cerebras models include specific model families
+        filtered_models = _filter_portkey_models_by_patterns(
+            ["cerebras", "qwen-3-coder", "llama3.1-8b", "llama-4", "gpt-oss-120b"],
+            "cerebras"
+        )
 
-        logger.info("Fetching Cerebras models via Portkey SDK")
-        service = get_portkey_service()
-
-        models = service.list_models("cerebras")
-        if not models:
-            logger.warning("No Cerebras models returned from Portkey SDK")
+        if not filtered_models:
+            logger.warning("No Cerebras models found in Portkey catalog")
             return None
 
-        normalized_models = [normalize_portkey_provider_model(model, "cerebras") for model in models if model]
+        normalized_models = [normalize_portkey_provider_model(model, "cerebras") for model in filtered_models if model]
 
         _cerebras_models_cache["data"] = normalized_models
         _cerebras_models_cache["timestamp"] = datetime.now(timezone.utc)
 
-        logger.info(f"Cached {len(normalized_models)} Cerebras models from Portkey SDK")
+        logger.info(f"Cached {len(normalized_models)} Cerebras models from Portkey catalog")
         return _cerebras_models_cache["data"]
 
     except Exception as e:
@@ -75,24 +125,24 @@ def fetch_models_from_cerebras():
 
 
 def fetch_models_from_nebius():
-    """Fetch models from Nebius via Portkey SDK"""
+    """Fetch models from Nebius by filtering Portkey unified catalog"""
     try:
-        from src.services.portkey_sdk import get_portkey_service
+        # Nebius models include various model families
+        filtered_models = _filter_portkey_models_by_patterns(
+            ["nebius", "nvidia/llama", "microsoft/phi", "microsoft/phi-3", "deepseek-coder-v2"],
+            "nebius"
+        )
 
-        logger.info("Fetching Nebius models via Portkey SDK")
-        service = get_portkey_service()
-
-        models = service.list_models("nebius")
-        if not models:
-            logger.warning("No Nebius models returned from Portkey SDK")
+        if not filtered_models:
+            logger.warning("No Nebius models found in Portkey catalog")
             return None
 
-        normalized_models = [normalize_portkey_provider_model(model, "nebius") for model in models if model]
+        normalized_models = [normalize_portkey_provider_model(model, "nebius") for model in filtered_models if model]
 
         _nebius_models_cache["data"] = normalized_models
         _nebius_models_cache["timestamp"] = datetime.now(timezone.utc)
 
-        logger.info(f"Cached {len(normalized_models)} Nebius models from Portkey SDK")
+        logger.info(f"Cached {len(normalized_models)} Nebius models from Portkey catalog")
         return _nebius_models_cache["data"]
 
     except Exception as e:
@@ -101,24 +151,21 @@ def fetch_models_from_nebius():
 
 
 def fetch_models_from_xai():
-    """Fetch models from Xai via Portkey SDK"""
+    """Fetch models from Xai by filtering Portkey unified catalog"""
     try:
-        from src.services.portkey_sdk import get_portkey_service
+        # Xai models use "x-ai/" prefix or "grok" pattern
+        filtered_models = _filter_portkey_models_by_patterns(["x-ai/", "grok"], "xai")
 
-        logger.info("Fetching Xai models via Portkey SDK")
-        service = get_portkey_service()
-
-        models = service.list_models("xai")
-        if not models:
-            logger.warning("No Xai models returned from Portkey SDK")
+        if not filtered_models:
+            logger.warning("No Xai models found in Portkey catalog")
             return None
 
-        normalized_models = [normalize_portkey_provider_model(model, "xai") for model in models if model]
+        normalized_models = [normalize_portkey_provider_model(model, "xai") for model in filtered_models if model]
 
         _xai_models_cache["data"] = normalized_models
         _xai_models_cache["timestamp"] = datetime.now(timezone.utc)
 
-        logger.info(f"Cached {len(normalized_models)} Xai models from Portkey SDK")
+        logger.info(f"Cached {len(normalized_models)} Xai models from Portkey catalog")
         return _xai_models_cache["data"]
 
     except Exception as e:
@@ -127,24 +174,24 @@ def fetch_models_from_xai():
 
 
 def fetch_models_from_novita():
-    """Fetch models from Novita via Portkey SDK"""
+    """Fetch models from Novita by filtering Portkey unified catalog"""
     try:
-        from src.services.portkey_sdk import get_portkey_service
+        # Novita models include specific model patterns
+        filtered_models = _filter_portkey_models_by_patterns(
+            ["novita", "meta-llama/llama-3.3-70b-instruct"],
+            "novita"
+        )
 
-        logger.info("Fetching Novita models via Portkey SDK")
-        service = get_portkey_service()
-
-        models = service.list_models("novita")
-        if not models:
-            logger.warning("No Novita models returned from Portkey SDK")
+        if not filtered_models:
+            logger.warning("No Novita models found in Portkey catalog")
             return None
 
-        normalized_models = [normalize_portkey_provider_model(model, "novita") for model in models if model]
+        normalized_models = [normalize_portkey_provider_model(model, "novita") for model in filtered_models if model]
 
         _novita_models_cache["data"] = normalized_models
         _novita_models_cache["timestamp"] = datetime.now(timezone.utc)
 
-        logger.info(f"Cached {len(normalized_models)} Novita models from Portkey SDK")
+        logger.info(f"Cached {len(normalized_models)} Novita models from Portkey catalog")
         return _novita_models_cache["data"]
 
     except Exception as e:
@@ -153,24 +200,21 @@ def fetch_models_from_novita():
 
 
 def fetch_models_from_hug():
-    """Fetch models from Hugging Face via Portkey SDK"""
+    """Fetch models from Hugging Face by filtering Portkey unified catalog"""
     try:
-        from src.services.portkey_sdk import get_portkey_service
+        # Hugging Face models include "llava-hf" and similar patterns
+        filtered_models = _filter_portkey_models_by_patterns(["llava-hf", "hugging", "hf/"], "hug")
 
-        logger.info("Fetching Hugging Face models via Portkey SDK")
-        service = get_portkey_service()
-
-        models = service.list_models("hug")
-        if not models:
-            logger.warning("No Hugging Face models returned from Portkey SDK")
+        if not filtered_models:
+            logger.warning("No Hugging Face models found in Portkey catalog")
             return None
 
-        normalized_models = [normalize_portkey_provider_model(model, "hug") for model in models if model]
+        normalized_models = [normalize_portkey_provider_model(model, "hug") for model in filtered_models if model]
 
         _hug_models_cache["data"] = normalized_models
         _hug_models_cache["timestamp"] = datetime.now(timezone.utc)
 
-        logger.info(f"Cached {len(normalized_models)} Hugging Face models from Portkey SDK")
+        logger.info(f"Cached {len(normalized_models)} Hugging Face models from Portkey catalog")
         return _hug_models_cache["data"]
 
     except Exception as e:
