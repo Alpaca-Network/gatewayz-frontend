@@ -224,10 +224,11 @@ To add automated testing to CI/CD:
 ## Known Limitations
 
 1. **Chutes & Groq** - No inference client yet, skipped in tests
-2. **New Providers** - Require Portkey API credentials and provider access
+2. **New Providers** - Use pattern-based filtering from Portkey unified catalog (integrations API requires workspace admin access)
 3. **Rate Limiting** - Tests may hit rate limits with high concurrency
 4. **Model Availability** - Some models may be region/access restricted
 5. **Streaming** - v2 tests non-streaming only (easier to validate)
+6. **Provider Integration Endpoints** - Portkey `/integrations/{slug}/models` requires admin workspace scoping
 
 ## Future Improvements
 
