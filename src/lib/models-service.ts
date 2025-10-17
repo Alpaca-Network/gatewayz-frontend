@@ -87,6 +87,7 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
 
   // Fallback to static data (only used if API fails)
   console.log(`[Models Service] Using static fallback data for gateway: ${gateway}`);
+  console.warn(`[Models Service] ⚠️ WARNING: Using fallback data for ${gateway}. Backend should be returning models for this gateway.`);
   let transformedModels;
 
   if (gateway === 'all') {
