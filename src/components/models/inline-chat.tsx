@@ -6,6 +6,9 @@ import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Send, Loader2, ChevronDown, ChevronRight } from 'lucide-react';
 import { getApiKey, getUserData } from '@/lib/api';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -118,17 +121,28 @@ export function InlineChat({ modelId, modelName }: InlineChatProps) {
                 if (delta?.content) {
                   const content = delta.content;
 
-                  // Check if we're entering or exiting thinking tags
-                  if (content.includes('<thinking>')) {
+                  // Check if we're entering or exiting thinking tags (case-insensitive)
+                  const lowerContent = content.toLowerCase();
+                  if (lowerContent.includes('<thinking>') || lowerContent.includes('<|thinking>')) {
                     inThinking = true;
-                    const parts = content.split('<thinking>');
-                    accumulatedContent += parts[0];
-                    accumulatedThinking += parts[1] || '';
-                  } else if (content.includes('</thinking>')) {
+                    // Handle both <thinking> and <|thinking>
+                    const match = content.match(/(<\|?thinking>)([\s\S]*)/i);
+                    if (match) {
+                      accumulatedContent += content.substring(0, match.index);
+                      accumulatedThinking += match[2];
+                    } else {
+                      accumulatedContent += content;
+                    }
+                  } else if (lowerContent.includes('</thinking>') || lowerContent.includes('</|thinking>')) {
                     inThinking = false;
-                    const parts = content.split('</thinking>');
-                    accumulatedThinking += parts[0];
-                    accumulatedContent += parts[1] || '';
+                    // Handle both </thinking> and </|thinking>
+                    const match = content.match(/([\s\S]*)(<\|?\/thinking>)/i);
+                    if (match) {
+                      accumulatedThinking += match[1];
+                      accumulatedContent += content.substring(match[0].length);
+                    } else {
+                      accumulatedThinking += content;
+                    }
                   } else if (inThinking) {
                     accumulatedThinking += content;
                   } else {
@@ -227,7 +241,38 @@ export function InlineChat({ modelId, modelName }: InlineChatProps) {
                   </Card>
                 )}
                 <Card className={`p-4 ${msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-muted'}`}>
-                  <p className="text-sm whitespace-pre-wrap">{msg.content || (msg.isStreaming ? '...' : '')}</p>
+                  {msg.role === 'user' ? (
+                    <p className="text-sm">{msg.content}</p>
+                  ) : (
+                    <div className="text-sm prose prose-sm dark:prose-invert max-w-none">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm, remarkMath]}
+                        components={{
+                          p: ({node, ...props}) => <p className="mb-2 last:mb-0" {...props} />,
+                          ul: ({node, ...props}) => <ul className="list-disc list-inside mb-2" {...props} />,
+                          ol: ({node, ...props}) => <ol className="list-decimal list-inside mb-2" {...props} />,
+                          li: ({node, ...props}) => <li className="mb-1" {...props} />,
+                          code: ({node, inline, ...props}) =>
+                            inline ? (
+                              <code className="bg-black/20 dark:bg-white/20 px-1.5 py-0.5 rounded text-xs font-mono" {...props} />
+                            ) : (
+                              <code className="block bg-black/20 dark:bg-white/20 p-3 rounded-lg text-xs font-mono overflow-x-auto mb-2" {...props} />
+                            ),
+                          pre: ({node, ...props}) => <pre className="block bg-black/20 dark:bg-white/20 p-3 rounded-lg overflow-x-auto mb-2" {...props} />,
+                          a: ({node, ...props}) => <a className="text-blue-600 dark:text-blue-400 underline hover:opacity-80" {...props} />,
+                          blockquote: ({node, ...props}) => <blockquote className="border-l-4 border-muted-foreground/50 pl-4 italic mb-2" {...props} />,
+                          h1: ({node, ...props}) => <h1 className="text-xl font-bold mb-2" {...props} />,
+                          h2: ({node, ...props}) => <h2 className="text-lg font-bold mb-2" {...props} />,
+                          h3: ({node, ...props}) => <h3 className="text-base font-bold mb-2" {...props} />,
+                          table: ({node, ...props}) => <table className="border-collapse border border-muted-foreground/30 mb-2" {...props} />,
+                          th: ({node, ...props}) => <th className="border border-muted-foreground/30 px-2 py-1 font-bold" {...props} />,
+                          td: ({node, ...props}) => <td className="border border-muted-foreground/30 px-2 py-1" {...props} />,
+                        }}
+                      >
+                        {msg.content || (msg.isStreaming ? '...' : '')}
+                      </ReactMarkdown>
+                    </div>
+                  )}
                 </Card>
               </div>
             </div>
