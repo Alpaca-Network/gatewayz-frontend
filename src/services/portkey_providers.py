@@ -234,13 +234,20 @@ def fetch_models_from_hug():
 
 
 def normalize_portkey_provider_model(model: dict, provider: str) -> dict:
-    """Normalize model from Portkey SDK provider to catalog schema"""
+    """
+    Normalize model from Portkey unified catalog to catalog schema.
+
+    IMPORTANT: Model IDs are formatted as @provider/model-id to work with Portkey's
+    request interface. When calling Portkey APIs, use the model ID directly - the
+    portkey_client will handle it correctly.
+    """
     try:
         model_id = model.get("id") or model.get("name", "")
         if not model_id:
             return {"source_gateway": provider, f"raw_{provider}": model}
 
-        slug = f"{provider}/{model_id}"
+        # Format: @provider/model-id (Portkey compatible format)
+        slug = f"@{provider}/{model_id}"
         display_name = model.get("display_name") or model_id.replace("-", " ").replace("_", " ").title()
         description = model.get("description") or f"{provider.title()} hosted model: {model_id}"
         context_length = model.get("context_length") or 0
