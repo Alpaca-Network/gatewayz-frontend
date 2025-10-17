@@ -482,6 +482,7 @@ export default function ModelsClient({ initialModels }: { initialModels: Model[]
       });
     });
     return Object.entries(counts)
+      .filter(([gateway]) => gateway !== 'portkey') // Hide deprecated portkey gateway, use individual Portkey SDK providers instead
       .sort((a, b) => b[1] - a[1])
       .map(([gateway, count]) => ({ value: gateway, count }));
   }, [deduplicatedModels]);
