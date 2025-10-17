@@ -14,6 +14,7 @@ import { models as staticModels } from '@/lib/models-data';
 import { getApiKey } from '@/lib/api';
 import dynamic from 'next/dynamic';
 import { Skeleton } from '@/components/ui/skeleton';
+import { InlineChat } from '@/components/models/inline-chat';
 
 // Lazy load heavy components
 const ProvidersDisplay = dynamic(() => import('@/components/models/provider-card').then(mod => ({ default: mod.ProvidersDisplay })), {
@@ -46,7 +47,7 @@ interface Model {
   provider_slug: string;
 }
 
-type TabType = 'Providers' | 'Activity' | 'Apps' | 'Use Model';
+type TabType = 'Chat' | 'Use Model' | 'Providers' | 'Activity' | 'Apps';
 
 // Loading skeleton for providers
 const ProvidersLoading = () => (
@@ -408,7 +409,7 @@ console.log(response.choices[0].message.content);`
 
             <nav className="border-b overflow-x-auto -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 mb-8">
                 <div className="flex gap-4 lg:gap-6">
-                    {(['Use Model', 'Providers', 'Activity', 'Apps'] as TabType[]).map(item => (
+                    {(['Chat', 'Use Model', 'Providers', 'Activity', 'Apps'] as TabType[]).map(item => (
                         <Button
                             key={item}
                             variant="ghost"
@@ -427,6 +428,20 @@ console.log(response.choices[0].message.content);`
             </nav>
 
             <main>
+                {activeTab === 'Chat' && (
+                    <div className="h-[600px] flex flex-col">
+                        <div className="mb-4">
+                            <h2 className="text-2xl font-bold mb-2">Chat with {model.name}</h2>
+                            <p className="text-muted-foreground">
+                                Try out {model.name} right here. Your messages are not saved.
+                            </p>
+                        </div>
+                        <Card className="flex-1 p-4 overflow-hidden flex flex-col">
+                            <InlineChat modelId={model.id} modelName={model.name} />
+                        </Card>
+                    </div>
+                )}
+
                 {activeTab === 'Use Model' && (
                     <div>
                         <div className="mb-6">
