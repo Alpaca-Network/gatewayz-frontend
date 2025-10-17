@@ -67,11 +67,19 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
 
     // Try live API first (primary source)
     try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json'
+      };
+
+      // Add HF_API_KEY header if available for Hugging Face gateway (for auth and rate limit bypass)
+      const hfApiKey = process.env.NEXT_PUBLIC_HF_API_KEY || process.env.HF_API_KEY;
+      if (gateway === 'huggingface' && hfApiKey) {
+        headers['Authorization'] = `Bearer ${hfApiKey}`;
+      }
+
       response = await fetch(url, {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers,
         // Use Next.js revalidation instead of no-store for better performance
         next: { revalidate: 60 }, // Cache for 60 seconds
         signal: AbortSignal.timeout(15000) // 15 second timeout for larger requests
@@ -100,11 +108,19 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
         url = `${API_BASE_URL}/models?gateway=${gateway}${fullLimitParam}`;
 
         try {
+          const fallbackHeaders: Record<string, string> = {
+            'Content-Type': 'application/json'
+          };
+
+          // Add HF_API_KEY header if available
+          const hfApiKey = process.env.NEXT_PUBLIC_HF_API_KEY || process.env.HF_API_KEY;
+          if (gateway === 'huggingface' && hfApiKey) {
+            fallbackHeaders['Authorization'] = `Bearer ${hfApiKey}`;
+          }
+
           response = await fetch(url, {
             method: 'GET',
-            headers: {
-              'Content-Type': 'application/json'
-            },
+            headers: fallbackHeaders,
             next: { revalidate: 60 },
             signal: AbortSignal.timeout(15000)
           });
@@ -140,11 +156,19 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
       url = `${API_BASE_URL}/models?gateway=${gateway}${fullLimitParam}`;
 
       try {
+        const fallbackHeaders2: Record<string, string> = {
+          'Content-Type': 'application/json'
+        };
+
+        // Add HF_API_KEY header if available
+        const hfApiKey = process.env.NEXT_PUBLIC_HF_API_KEY || process.env.HF_API_KEY;
+        if (gateway === 'huggingface' && hfApiKey) {
+          fallbackHeaders2['Authorization'] = `Bearer ${hfApiKey}`;
+        }
+
         response = await fetch(url, {
           method: 'GET',
-          headers: {
-            'Content-Type': 'application/json'
-          },
+          headers: fallbackHeaders2,
           next: { revalidate: 60 },
           signal: AbortSignal.timeout(15000)
         });
