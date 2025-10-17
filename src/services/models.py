@@ -31,8 +31,8 @@ from src.services.portkey_providers import (
     fetch_models_from_nebius,
     fetch_models_from_xai,
     fetch_models_from_novita,
-    fetch_models_from_hug,
 )
+from src.services.huggingface_models import fetch_models_from_hug
 
 import httpx
 
