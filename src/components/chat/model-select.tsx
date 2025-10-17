@@ -94,7 +94,7 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
       try {
         setFavorites(new Set(JSON.parse(stored)));
       } catch (e) {
-        console.log('Failed to load favorites:', e);
+        // Failed to load favorites, ignore
       }
     }
   }, []);
@@ -124,45 +124,30 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
           const { data, timestamp } = JSON.parse(cached);
           // Validate cached data has correct structure
           if (Date.now() - timestamp < CACHE_DURATION && data && data.length > 0 && data[0].value) {
-            console.log('Models loaded from cache (v4):', data.length);
             setModels(data);
             return;
           } else {
-            console.log('Cache expired or invalid, fetching fresh data');
             // Clear invalid cache
             localStorage.removeItem(CACHE_KEY);
           }
         } catch (e) {
-          console.log('Cache parse error:', e);
           // Clear corrupted cache
           localStorage.removeItem(CACHE_KEY);
         }
-      } else {
-        console.log('No cache found, fetching from API');
       }
 
       // Fetch from all gateways - optimized to load fewer models initially
       setLoading(true);
       try {
-        console.log('Fetching models from API proxy...');
-
         // Only fetch from OpenRouter initially for speed, load others on demand
         const limit = loadAllModels ? undefined : INITIAL_MODELS_LIMIT;
         const limitParam = limit ? `&limit=${limit}` : '';
 
         const openrouterRes = await fetch(`/api/models?gateway=openrouter${limitParam}`);
-        console.log('Fetch response:', { openrouter: openrouterRes.status });
-
         const openrouterData = await openrouterRes.json();
 
         // Combine models from all gateways
         const allModels = [...(openrouterData.data || [])];
-
-        console.log('Models fetched from API:', {
-          openrouter: openrouterData.data?.length || 0,
-          total: allModels.length,
-          loadedAll: loadAllModels
-        });
 
         // Deduplicate models by ID - keep the first occurrence
         const uniqueModelsMap = new Map();
@@ -172,8 +157,6 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
           }
         });
         const uniqueModels = Array.from(uniqueModelsMap.values());
-
-        console.log(`After deduplication: ${uniqueModels.length} unique models`);
 
         const modelOptions: ModelOption[] = uniqueModels.map((model: any) => {
           const sourceGateway = model.source_gateway || 'openrouter';
@@ -203,19 +186,17 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
             data: modelOptions,
             timestamp: Date.now()
           }));
-          console.log('Model options cached:', modelOptions.length);
         } catch (e) {
-          console.log('Failed to cache models (storage quota exceeded), clearing old cache');
+          // Storage quota exceeded, clear old cache
           try {
             localStorage.removeItem(CACHE_KEY);
             localStorage.removeItem('gatewayz_models_cache');
           } catch (clearError) {
-            console.log('Failed to clear cache:', clearError);
+            // Ignore
           }
         }
-        console.log('Model options set:', modelOptions.length);
       } catch (error) {
-        console.log('Failed to fetch models:', error);
+        // Failed to fetch models
       } finally {
         setLoading(false);
       }
