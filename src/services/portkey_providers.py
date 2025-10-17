@@ -1,18 +1,21 @@
 """
-Portkey Provider Filter Functions
+Portkey Provider Integration Functions
 
-These functions filter models from the Portkey unified catalog by provider prefix.
-The Portkey unified catalog contains models from all providers with prefixes like:
-- @google/...
-- @cerebras/...
-- @nebius/...
-- @xai/...
-- @novita/...
-- @huggingface/... (hug)
+These functions fetch models directly from Portkey provider integrations
+using the /integrations/{slug}/models endpoint.
+
+Supports:
+- google
+- cerebras
+- nebius
+- xai
+- novita
+- huggingface (hug)
 """
 
 import logging
 from datetime import datetime, timezone
+import httpx
 
 from src.cache import (
     _google_models_cache,
@@ -22,75 +25,92 @@ from src.cache import (
     _novita_models_cache,
     _hug_models_cache,
 )
+from src.config import Config
 from src.services.pricing_lookup import enrich_model_with_pricing
 
 logger = logging.getLogger(__name__)
 
+# Portkey integration slugs for each provider
+PORTKEY_INTEGRATION_SLUGS = {
+    'google': 'google',
+    'cerebras': 'cerebras',
+    'nebius': 'nebius',
+    'xai': 'xai',
+    'novita': 'novita',
+    'hug': 'huggingface',
+}
 
-def _filter_portkey_models_by_patterns(patterns: list, provider_name: str):
+
+def _fetch_models_from_portkey_integration(slug: str, provider_name: str):
     """
-    Filter Portkey unified models by name patterns and cache them.
+    Fetch models directly from a Portkey provider integration.
 
     Args:
-        patterns: List of strings to match in model ID (case-insensitive)
-        provider_name: The internal provider name (e.g., "google", "cerebras")
+        slug: Portkey integration slug (e.g., 'google', 'cerebras')
+        provider_name: Internal provider name (e.g., 'google', 'cerebras')
 
     Returns:
-        List of filtered models or None
+        List of models or None
     """
     try:
-        from src.services.models import fetch_models_from_portkey
-
-        logger.info(f"Fetching {provider_name} models from Portkey unified catalog (filtering by patterns: {patterns})")
-
-        # Get all Portkey models
-        all_portkey_models = fetch_models_from_portkey()
-
-        if not all_portkey_models:
-            logger.warning(f"No Portkey models returned for {provider_name}")
+        if not Config.PORTKEY_API_KEY:
+            logger.error(f"PORTKEY_API_KEY not configured for {provider_name}")
             return None
 
-        # Filter by matching any of the patterns
-        filtered_models = []
-        seen_ids = set()  # Avoid duplicates
+        headers = {
+            'x-portkey-api-key': Config.PORTKEY_API_KEY,
+            'Content-Type': 'application/json',
+        }
 
-        for model in all_portkey_models:
-            model_id = model.get("id", "").lower()
+        url = f"https://api.portkey.ai/v1/integrations/{slug}/models"
 
-            # Check if any pattern matches
-            for pattern in patterns:
-                if pattern.lower() in model_id:
-                    if model.get("id") not in seen_ids:
-                        model_copy = model.copy()
-                        model_copy["source_gateway"] = provider_name
-                        filtered_models.append(model_copy)
-                        seen_ids.add(model.get("id"))
-                    break
+        logger.info(f"Fetching {provider_name} models from Portkey integration: {url}")
 
-        logger.info(f"Filtered {len(filtered_models)} {provider_name} models from Portkey catalog")
-        return filtered_models if filtered_models else None
+        response = httpx.get(url, headers=headers, timeout=30)
+        response.raise_for_status()
 
+        data = response.json()
+        models = data.get('models', [])
+
+        if not models:
+            logger.warning(f"No models returned from Portkey integration {slug}")
+            return None
+
+        logger.info(f"Fetched {len(models)} models from {provider_name} integration")
+
+        # Normalize models to standard schema
+        normalized_models = []
+        for model in models:
+            try:
+                normalized = normalize_portkey_provider_model(model, provider_name)
+                normalized_models.append(normalized)
+            except Exception as e:
+                logger.warning(f"Failed to normalize {provider_name} model: {e}")
+                continue
+
+        return normalized_models if normalized_models else None
+
+    except httpx.HTTPError as e:
+        logger.error(f"HTTP error fetching {provider_name} models: {e}")
+        return None
     except Exception as e:
-        logger.error(f"Failed to filter {provider_name} models from Portkey: {e}", exc_info=True)
+        logger.error(f"Failed to fetch {provider_name} models from Portkey integration: {e}", exc_info=True)
         return None
 
 
 def fetch_models_from_google():
-    """Fetch models from Google by filtering Portkey unified catalog"""
+    """Fetch models from Google Portkey integration"""
     try:
-        # Google models include "gemini", "gemma" patterns
-        filtered_models = _filter_portkey_models_by_patterns(["gemini", "gemma"], "google")
+        models = _fetch_models_from_portkey_integration('google', 'google')
 
-        if not filtered_models:
-            logger.warning("No Google models found in Portkey catalog")
+        if not models:
+            logger.warning("No Google models found from Portkey integration")
             return None
 
-        normalized_models = [normalize_portkey_provider_model(model, "google") for model in filtered_models if model]
-
-        _google_models_cache["data"] = normalized_models
+        _google_models_cache["data"] = models
         _google_models_cache["timestamp"] = datetime.now(timezone.utc)
 
-        logger.info(f"Cached {len(normalized_models)} Google models from Portkey catalog")
+        logger.info(f"Cached {len(models)} Google models from Portkey integration")
         return _google_models_cache["data"]
 
     except Exception as e:
@@ -99,24 +119,18 @@ def fetch_models_from_google():
 
 
 def fetch_models_from_cerebras():
-    """Fetch models from Cerebras by filtering Portkey unified catalog"""
+    """Fetch models from Cerebras Portkey integration"""
     try:
-        # Cerebras models include specific model families
-        filtered_models = _filter_portkey_models_by_patterns(
-            ["cerebras", "qwen-3-coder", "llama3.1-8b", "llama-4", "gpt-oss-120b"],
-            "cerebras"
-        )
+        models = _fetch_models_from_portkey_integration('cerebras', 'cerebras')
 
-        if not filtered_models:
-            logger.warning("No Cerebras models found in Portkey catalog")
+        if not models:
+            logger.warning("No Cerebras models found from Portkey integration")
             return None
 
-        normalized_models = [normalize_portkey_provider_model(model, "cerebras") for model in filtered_models if model]
-
-        _cerebras_models_cache["data"] = normalized_models
+        _cerebras_models_cache["data"] = models
         _cerebras_models_cache["timestamp"] = datetime.now(timezone.utc)
 
-        logger.info(f"Cached {len(normalized_models)} Cerebras models from Portkey catalog")
+        logger.info(f"Cached {len(models)} Cerebras models from Portkey integration")
         return _cerebras_models_cache["data"]
 
     except Exception as e:
@@ -125,24 +139,18 @@ def fetch_models_from_cerebras():
 
 
 def fetch_models_from_nebius():
-    """Fetch models from Nebius by filtering Portkey unified catalog"""
+    """Fetch models from Nebius Portkey integration"""
     try:
-        # Nebius models include various model families
-        filtered_models = _filter_portkey_models_by_patterns(
-            ["nebius", "nvidia/llama", "microsoft/phi", "microsoft/phi-3", "deepseek-coder-v2"],
-            "nebius"
-        )
+        models = _fetch_models_from_portkey_integration('nebius', 'nebius')
 
-        if not filtered_models:
-            logger.warning("No Nebius models found in Portkey catalog")
+        if not models:
+            logger.warning("No Nebius models found from Portkey integration")
             return None
 
-        normalized_models = [normalize_portkey_provider_model(model, "nebius") for model in filtered_models if model]
-
-        _nebius_models_cache["data"] = normalized_models
+        _nebius_models_cache["data"] = models
         _nebius_models_cache["timestamp"] = datetime.now(timezone.utc)
 
-        logger.info(f"Cached {len(normalized_models)} Nebius models from Portkey catalog")
+        logger.info(f"Cached {len(models)} Nebius models from Portkey integration")
         return _nebius_models_cache["data"]
 
     except Exception as e:
@@ -151,21 +159,18 @@ def fetch_models_from_nebius():
 
 
 def fetch_models_from_xai():
-    """Fetch models from Xai by filtering Portkey unified catalog"""
+    """Fetch models from Xai Portkey integration"""
     try:
-        # Xai models use "x-ai/" prefix or "grok" pattern
-        filtered_models = _filter_portkey_models_by_patterns(["x-ai/", "grok"], "xai")
+        models = _fetch_models_from_portkey_integration('xai', 'xai')
 
-        if not filtered_models:
-            logger.warning("No Xai models found in Portkey catalog")
+        if not models:
+            logger.warning("No Xai models found from Portkey integration")
             return None
 
-        normalized_models = [normalize_portkey_provider_model(model, "xai") for model in filtered_models if model]
-
-        _xai_models_cache["data"] = normalized_models
+        _xai_models_cache["data"] = models
         _xai_models_cache["timestamp"] = datetime.now(timezone.utc)
 
-        logger.info(f"Cached {len(normalized_models)} Xai models from Portkey catalog")
+        logger.info(f"Cached {len(models)} Xai models from Portkey integration")
         return _xai_models_cache["data"]
 
     except Exception as e:
@@ -174,24 +179,18 @@ def fetch_models_from_xai():
 
 
 def fetch_models_from_novita():
-    """Fetch models from Novita by filtering Portkey unified catalog"""
+    """Fetch models from Novita Portkey integration"""
     try:
-        # Novita models include specific model patterns
-        filtered_models = _filter_portkey_models_by_patterns(
-            ["novita", "meta-llama/llama-3.3-70b-instruct"],
-            "novita"
-        )
+        models = _fetch_models_from_portkey_integration('novita', 'novita')
 
-        if not filtered_models:
-            logger.warning("No Novita models found in Portkey catalog")
+        if not models:
+            logger.warning("No Novita models found from Portkey integration")
             return None
 
-        normalized_models = [normalize_portkey_provider_model(model, "novita") for model in filtered_models if model]
-
-        _novita_models_cache["data"] = normalized_models
+        _novita_models_cache["data"] = models
         _novita_models_cache["timestamp"] = datetime.now(timezone.utc)
 
-        logger.info(f"Cached {len(normalized_models)} Novita models from Portkey catalog")
+        logger.info(f"Cached {len(models)} Novita models from Portkey integration")
         return _novita_models_cache["data"]
 
     except Exception as e:
@@ -200,21 +199,18 @@ def fetch_models_from_novita():
 
 
 def fetch_models_from_hug():
-    """Fetch models from Hugging Face by filtering Portkey unified catalog"""
+    """Fetch models from Hugging Face Portkey integration"""
     try:
-        # Hugging Face models include "llava-hf" and similar patterns
-        filtered_models = _filter_portkey_models_by_patterns(["llava-hf", "hugging", "hf/"], "hug")
+        models = _fetch_models_from_portkey_integration('huggingface', 'hug')
 
-        if not filtered_models:
-            logger.warning("No Hugging Face models found in Portkey catalog")
+        if not models:
+            logger.warning("No Hugging Face models found from Portkey integration")
             return None
 
-        normalized_models = [normalize_portkey_provider_model(model, "hug") for model in filtered_models if model]
-
-        _hug_models_cache["data"] = normalized_models
+        _hug_models_cache["data"] = models
         _hug_models_cache["timestamp"] = datetime.now(timezone.utc)
 
-        logger.info(f"Cached {len(normalized_models)} Hugging Face models from Portkey catalog")
+        logger.info(f"Cached {len(models)} Hugging Face models from Portkey integration")
         return _hug_models_cache["data"]
 
     except Exception as e:
