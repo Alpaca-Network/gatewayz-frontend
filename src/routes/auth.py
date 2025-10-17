@@ -24,6 +24,9 @@ async def privy_auth(request: PrivyAuthRequest):
     """Authenticate user via Privy and return API key"""
     try:
         logger.info(f"Privy auth request for user: {request.user.id}")
+        if request.referral_code:
+            logger.info(f"Referral code provided in auth request: {request.referral_code}")
+        logger.info(f"is_new_user flag: {request.is_new_user}")
 
         # Extract user info from Privy linked accounts
         # Priority: 1) Top-level email from request, 2) Email from linked accounts, 3) Fetch from Privy API
@@ -184,6 +187,30 @@ async def privy_auth(request: PrivyAuthRequest):
                 credits=0  # Users start with $0
             )
 
+            # Process referral code if provided
+            referral_code_valid = False
+            if request.referral_code:
+                try:
+                    client = get_supabase_client()
+                    # Check if referral code exists
+                    referrer_result = client.table('users').select('id').eq('referral_code', request.referral_code).execute()
+                    if referrer_result.data:
+                        referral_code_valid = True
+                        logger.info(f"Valid referral code provided during signup: {request.referral_code}")
+
+                        # Store referral code for the new user
+                        try:
+                            client.table('users').update({
+                                'referred_by_code': request.referral_code
+                            }).eq('id', user_data['user_id']).execute()
+                            logger.info(f"Stored referral code {request.referral_code} for new user {user_data['user_id']}")
+                        except Exception as e:
+                            logger.error(f"Failed to store referral code for new user: {e}")
+                    else:
+                        logger.warning(f"Invalid referral code provided during signup: {request.referral_code}")
+                except Exception as e:
+                    logger.error(f"Error processing referral code: {e}")
+
             # Send welcome email if we have an email
             if email:
                 try:
@@ -204,9 +231,19 @@ async def privy_auth(request: PrivyAuthRequest):
                     logger.warning(f"Failed to send welcome email: {e}")
 
             logger.info(f"New Privy user created: {user_data['user_id']}")
+            logger.info(f"Referral code processing result for new user {user_data['user_id']}: valid={referral_code_valid}")
 
             # Log registration activity
             try:
+                activity_metadata = {
+                    "action": "register",
+                    "auth_method": auth_method.value if hasattr(auth_method, 'value') else str(auth_method),
+                    "privy_user_id": request.user.id,
+                    "is_new_user": True,
+                    "initial_credits": user_data['credits'],
+                    "referral_code": request.referral_code,
+                    "referral_code_valid": referral_code_valid
+                }
                 log_activity(
                     user_id=user_data['user_id'],
                     model="auth",
@@ -216,13 +253,7 @@ async def privy_auth(request: PrivyAuthRequest):
                     speed=0.0,
                     finish_reason="register",
                     app="Auth",
-                    metadata={
-                        "action": "register",
-                        "auth_method": auth_method.value if hasattr(auth_method, 'value') else str(auth_method),
-                        "privy_user_id": request.user.id,
-                        "is_new_user": True,
-                        "initial_credits": user_data['credits']
-                    }
+                    metadata=activity_metadata
                 )
             except Exception as e:
                 logger.warning(f"Failed to log registration activity: {e}")

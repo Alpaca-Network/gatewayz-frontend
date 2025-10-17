@@ -44,6 +44,7 @@ class PrivyAuthRequest(BaseModel):
     refresh_token: Optional[str] = None
     session_update_action: Optional[str] = None
     is_new_user: Optional[bool] = None
+    referral_code: Optional[str] = None  # Referral code if user signed up with one
 
 class PrivyAuthResponse(BaseModel):
     success: bool
