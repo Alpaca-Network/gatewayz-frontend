@@ -33,6 +33,8 @@ def normalize_developer_segment(value: Optional[str]) -> Optional[str]:
     """Align developer/provider identifiers with Hugging Face style slugs."""
     if value is None:
         return None
+    # Convert to string if it's a Query object or other type
+    value = str(value) if not isinstance(value, str) else value
     normalized = value.strip()
     if not normalized:
         return None
@@ -45,6 +47,8 @@ def normalize_model_segment(value: Optional[str]) -> Optional[str]:
     """Normalize model identifiers without altering intentional casing."""
     if value is None:
         return None
+    # Convert to string if it's a Query object or other type
+    value = str(value) if not isinstance(value, str) else value
     normalized = value.strip()
     return normalized or None
 
@@ -540,12 +544,20 @@ async def get_models(
 
         total_models = len(models)
 
-        if offset:
-            models = models[offset:]
-            logger.info(f"Applied offset {offset}: {len(models)} models remaining")
-        if limit:
-            models = models[:limit]
-            logger.info(f"Applied limit {limit}: {len(models)} models remaining")
+        # Ensure offset and limit are integers
+        try:
+            offset_int = int(str(offset)) if offset else 0
+            limit_int = int(str(limit)) if limit else None
+        except (ValueError, TypeError):
+            offset_int = 0
+            limit_int = None
+
+        if offset_int:
+            models = models[offset_int:]
+            logger.info(f"Applied offset {offset_int}: {len(models)} models remaining")
+        if limit_int:
+            models = models[:limit_int]
+            logger.info(f"Applied limit {limit_int}: {len(models)} models remaining")
 
         enhanced_models = []
         for model in models:
@@ -576,8 +588,8 @@ async def get_models(
             "data": enhanced_models,
             "total": total_models,
             "returned": len(enhanced_models),
-            "offset": offset or 0,
-            "limit": limit,
+            "offset": offset_int,
+            "limit": limit_int,
             "include_huggingface": include_huggingface,
             "gateway": gateway_value,
             "note": note,
