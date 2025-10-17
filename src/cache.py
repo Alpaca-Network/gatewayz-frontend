@@ -70,6 +70,43 @@ _deepinfra_models_cache = {
     "ttl": 3600  # 1 hour TTL
 }
 
+# Portkey-based individual provider caches
+_google_models_cache = {
+    "data": None,
+    "timestamp": None,
+    "ttl": 3600  # 1 hour TTL
+}
+
+_cerebras_models_cache = {
+    "data": None,
+    "timestamp": None,
+    "ttl": 3600  # 1 hour TTL
+}
+
+_nebius_models_cache = {
+    "data": None,
+    "timestamp": None,
+    "ttl": 3600  # 1 hour TTL
+}
+
+_xai_models_cache = {
+    "data": None,
+    "timestamp": None,
+    "ttl": 3600  # 1 hour TTL
+}
+
+_novita_models_cache = {
+    "data": None,
+    "timestamp": None,
+    "ttl": 3600  # 1 hour TTL
+}
+
+_hug_models_cache = {
+    "data": None,
+    "timestamp": None,
+    "ttl": 3600  # 1 hour TTL
+}
+
 
 # Cache access functions
 def get_models_cache(gateway: str):
@@ -83,6 +120,12 @@ def get_models_cache(gateway: str):
         "groq": _groq_models_cache,
         "fireworks": _fireworks_models_cache,
         "together": _together_models_cache,
+        "google": _google_models_cache,
+        "cerebras": _cerebras_models_cache,
+        "nebius": _nebius_models_cache,
+        "xai": _xai_models_cache,
+        "novita": _novita_models_cache,
+        "hug": _hug_models_cache,
         "modelz": _modelz_cache
     }
     return cache_map.get(gateway.lower())
@@ -104,6 +147,12 @@ def clear_models_cache(gateway: str):
         "groq": _groq_models_cache,
         "fireworks": _fireworks_models_cache,
         "together": _together_models_cache,
+        "google": _google_models_cache,
+        "cerebras": _cerebras_models_cache,
+        "nebius": _nebius_models_cache,
+        "xai": _xai_models_cache,
+        "novita": _novita_models_cache,
+        "hug": _hug_models_cache,
         "modelz": _modelz_cache
     }
     cache = cache_map.get(gateway.lower())
