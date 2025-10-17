@@ -98,8 +98,13 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
           allModels.push(...data.data);
           console.log(`[Models] Fetched ${data.data.length} models for gateway: ${gateway} (offset: ${offset})`);
 
-          // Stop if we got fewer models than requested or if we've reached the limit
-          if (data.data.length < requestLimit || (limit && allModels.length >= limit)) {
+          // For HuggingFace, continue pagination even if we got 500 models (backend's old cap)
+          // For other gateways, stop if we got fewer than requested
+          const isFiveHundred = data.data.length === 500 && gateway === 'huggingface';
+          const hasReachedLimit = limit && allModels.length >= limit;
+          const gotFewerThanRequested = data.data.length < requestLimit && !isFiveHundred;
+
+          if (gotFewerThanRequested || hasReachedLimit) {
             hasMore = false;
           } else {
             offset += requestLimit;
@@ -138,8 +143,13 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
               allModels.push(...data.data);
               console.log(`[Models] Fetched ${data.data.length} models for gateway: ${gateway} (from fallback, offset: ${offset})`);
 
-              // Stop if we got fewer models than requested or if we've reached the limit
-              if (data.data.length < requestLimit || (limit && allModels.length >= limit)) {
+              // For HuggingFace, continue pagination even if we got 500 models (backend's old cap)
+              // For other gateways, stop if we got fewer than requested
+              const isFiveHundred1 = data.data.length === 500 && gateway === 'huggingface';
+              const hasReachedLimit1 = limit && allModels.length >= limit;
+              const gotFewerThanRequested1 = data.data.length < requestLimit && !isFiveHundred1;
+
+              if (gotFewerThanRequested1 || hasReachedLimit1) {
                 hasMore = false;
               } else {
                 offset += requestLimit;
@@ -186,8 +196,13 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
             allModels.push(...data.data);
             console.log(`[Models] Fetched ${data.data.length} models for gateway: ${gateway} (from fallback, offset: ${offset})`);
 
-            // Stop if we got fewer models than requested or if we've reached the limit
-            if (data.data.length < requestLimit || (limit && allModels.length >= limit)) {
+            // For HuggingFace, continue pagination even if we got 500 models (backend's old cap)
+            // For other gateways, stop if we got fewer than requested
+            const isFiveHundred2 = data.data.length === 500 && gateway === 'huggingface';
+            const hasReachedLimit2 = limit && allModels.length >= limit;
+            const gotFewerThanRequested2 = data.data.length < requestLimit && !isFiveHundred2;
+
+            if (gotFewerThanRequested2 || hasReachedLimit2) {
               hasMore = false;
             } else {
               offset += requestLimit;
