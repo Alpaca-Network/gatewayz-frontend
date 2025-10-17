@@ -86,7 +86,8 @@ export function InlineChat({ modelId, modelName }: InlineChatProps) {
         body: JSON.stringify({
           model: modelId,
           messages: [...messages, userMessage].map(m => ({ role: m.role, content: m.content })),
-          stream: true
+          stream: true,
+          temperature: 0.7
         }),
         signal: abortControllerRef.current.signal
       });
@@ -120,6 +121,11 @@ export function InlineChat({ modelId, modelName }: InlineChatProps) {
 
                 if (delta?.content) {
                   const content = delta.content;
+
+                  // Debug: Log content to see what we're receiving
+                  if (content.includes('<') || content.includes('>')) {
+                    console.log('[THINKING DEBUG]', { content, inThinking });
+                  }
 
                   // Check if we're entering or exiting thinking tags (case-insensitive)
                   const lowerContent = content.toLowerCase();
