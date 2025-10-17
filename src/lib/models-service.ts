@@ -49,7 +49,14 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
   }
 
   const limitParam = limit ? `&limit=${limit}` : '';
-  const url = `${API_BASE_URL}/models?gateway=${gateway}${limitParam}`;
+
+  // Use /v1/catalog/models for Hugging Face, /models for others
+  let url: string;
+  if (gateway === 'huggingface') {
+    url = `${API_BASE_URL}/v1/catalog/models?gateway=huggingface${limitParam}`;
+  } else {
+    url = `${API_BASE_URL}/models?gateway=${gateway}${limitParam}`;
+  }
 
   // Try live API first (primary source)
   try {
