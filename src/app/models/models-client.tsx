@@ -481,6 +481,19 @@ export default function ModelsClient({ initialModels }: { initialModels: Model[]
         if (gateway) counts[gateway] = (counts[gateway] || 0) + 1;
       });
     });
+
+    // Log gateway counts for debugging
+    const allGateways = ['openrouter', 'portkey', 'featherless', 'groq', 'together', 'fireworks', 'chutes', 'deepinfra', 'google', 'cerebras', 'nebius', 'xai', 'novita', 'huggingface'];
+    const gatewayStats = allGateways.map(g => ({
+      gateway: g,
+      modelCount: counts[g] || 0
+    }));
+    console.log('📊 All Gateway Model Counts:', gatewayStats);
+    const emptyGateways = gatewayStats.filter(s => s.modelCount === 0).map(s => s.gateway);
+    if (emptyGateways.length > 0) {
+      console.warn('⚠️ Gateways with 0 models (may need backend fixes):', emptyGateways);
+    }
+
     return Object.entries(counts)
       .filter(([gateway]) => gateway !== 'portkey') // Hide deprecated portkey gateway, use individual Portkey SDK providers instead
       .sort((a, b) => b[1] - a[1])
