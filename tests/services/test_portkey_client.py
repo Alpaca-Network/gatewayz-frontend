@@ -87,7 +87,8 @@ def test_make_portkey_request_openai_formats_model(monkeypatch, mod):
 
     assert response is fake_client.chat.completions.return_value
     call = fake_client.chat.completions.calls[0]
-    assert call["model"] == "@openai/gpt-3.5-turbo"
+    # When virtual_key is provided, it's used in the model format
+    assert call["model"] == "@vk-openai/gpt-3.5-turbo"
     assert call["temperature"] == 0.7
 
 

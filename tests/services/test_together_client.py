@@ -17,7 +17,7 @@ class TestTogetherClient:
         """Test getting Together client"""
         client = get_together_client()
         assert client is not None
-        assert client.base_url == "https://api.together.xyz/v1"
+        assert str(client.base_url) == "https://api.together.xyz/v1/"
 
     @patch('src.services.together_client.Config.TOGETHER_API_KEY', None)
     def test_get_together_client_no_key(self):
