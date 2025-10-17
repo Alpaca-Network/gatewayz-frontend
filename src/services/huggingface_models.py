@@ -68,7 +68,10 @@ def fetch_models_from_huggingface_api(
         offset = 0
         batch_size = 50  # HF API supports up to 100 per request, but 50 is safer
         total_fetched = 0
-        max_total = limit or 1000  # Default reasonable limit to avoid excessive API calls
+
+        # If no limit specified, fetch all available models (~10,000 with hf-inference filter)
+        # Use a high number to ensure we get everything available
+        max_total = limit or 10000  # Will fetch until API returns no more models
 
         # Fetch in batches
         while total_fetched < max_total:
@@ -361,12 +364,15 @@ def fetch_models_from_hug():
     This replaces the old Portkey pattern-based filtering approach with
     direct API calls to get all models available on Hugging Face Inference API.
 
+    Fetches all available models on HF Inference (hf-inference filter).
+    Currently ~10,000 models available through the API.
+
     Returns:
         List of normalized Hugging Face models or None on error
     """
     return fetch_models_from_huggingface_api(
         task=None,  # Fetch all models available on HF Inference
-        limit=5000,  # Fetch up to 5000 models available on HF Inference API
+        limit=None,  # Fetch all available (~10,000 models)
         direction="-1",
         sort="likes"  # Sort by popularity/likes
     )
