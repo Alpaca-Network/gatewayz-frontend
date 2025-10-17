@@ -21,6 +21,7 @@ import { stringToColor } from '@/lib/utils';
 import { API_BASE_URL } from '@/lib/config';
 import { models as staticModels } from '@/lib/models-data';
 import { getApiKey } from '@/lib/api';
+import { InlineChat } from '@/components/models/inline-chat';
 
 // Lazy load heavy components
 const TopAppsTable = lazy(() => import('@/components/dashboard/top-apps-table'));
@@ -138,7 +139,7 @@ const ChartCard = ({ modelName, title, dataKey, yAxisFormatter }: { modelName: s
     )
 }
 
-type TabType = 'Providers' | 'Activity' | 'Apps' | 'Use Model';
+type TabType = 'Playground' | 'Use Model' | 'Providers' | 'Activity' | 'Apps';
 
 // Transform static model to API format
 function transformStaticModel(staticModel: typeof staticModels[0]): Model {
@@ -517,7 +518,7 @@ export default function ModelProfilePage() {
 
             <nav className="border-b overflow-x-auto -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 mb-8">
                 <div className="flex gap-4 lg:gap-6">
-                    {(['Use Model', 'Providers', 'Activity', 'Apps'] as TabType[]).map(item => (
+                    {(['Playground', 'Use Model', 'Providers', 'Activity', 'Apps'] as TabType[]).map(item => (
                         <Button
                             key={item}
                             variant="ghost"
@@ -536,6 +537,20 @@ export default function ModelProfilePage() {
             </nav>
 
             <main>
+                {activeTab === 'Playground' && (
+                    <div className="h-[600px] flex flex-col">
+                        <div className="mb-4">
+                            <h2 className="text-2xl font-bold mb-2">Playground: {model.name}</h2>
+                            <p className="text-muted-foreground">
+                                Try out {model.name} right here. Your messages are not saved.
+                            </p>
+                        </div>
+                        <Card className="flex-1 p-4 overflow-hidden flex flex-col">
+                            <InlineChat modelId={model.id} modelName={model.name} />
+                        </Card>
+                    </div>
+                )}
+
                 {activeTab === 'Use Model' && (
                     <div>
                         <div className="mb-6">
