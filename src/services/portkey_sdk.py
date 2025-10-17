@@ -119,9 +119,12 @@ class PortkeySDKService:
             logger.error(f"Error creating Portkey client for provider {provider}: {e}")
             return None
 
-    async def list_models(self, provider: str) -> List[Dict[str, Any]]:
+    def list_models(self, provider: str) -> List[Dict[str, Any]]:
         """
         List available models for a provider via Portkey SDK.
+
+        Note: This is a synchronous wrapper around the SDK's models listing.
+        The Portkey SDK v2.0+ uses async internally but provides sync wrapper methods.
 
         Args:
             provider: Provider name
@@ -136,16 +139,29 @@ class PortkeySDKService:
                 return []
 
             # Use Portkey SDK to list models
-            # Note: This calls through Portkey's gateway to the provider's API
-            models = client.models.list()
+            # The SDK's list() method returns a SyncCursorPage which is iterable
+            try:
+                models_response = client.models.list()
 
-            if hasattr(models, 'data'):
-                model_list = models.data
-            else:
-                model_list = models if isinstance(models, list) else []
+                # Handle the SyncCursorPage response from Portkey SDK v2.0+
+                model_list = []
+                if hasattr(models_response, 'data'):
+                    model_list = models_response.data
+                elif hasattr(models_response, '__iter__'):
+                    # If it's iterable, collect all items
+                    try:
+                        model_list = list(models_response)
+                    except TypeError:
+                        model_list = []
+                else:
+                    model_list = models_response if isinstance(models_response, list) else []
 
-            logger.info(f"Retrieved {len(model_list)} models from {provider} via Portkey SDK")
-            return model_list
+                logger.info(f"Retrieved {len(model_list)} models from {provider} via Portkey SDK")
+                return model_list
+
+            except Exception as sdk_error:
+                logger.error(f"Portkey SDK error for {provider}: {sdk_error}")
+                return []
 
         except Exception as e:
             logger.error(f"Error listing models from {provider}: {e}", exc_info=True)

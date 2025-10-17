@@ -14,7 +14,7 @@ resend==0.8.0
 redis==5.0.1
 anyio>=3.7.1,<4.0.0
 stripe==13.0.1
-portkey-ai==0.2.2
+portkey-ai>=2.0.0
 
 # Testing dependencies
 pytest==7.4.3
