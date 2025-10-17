@@ -123,36 +123,43 @@ export function InlineChat({ modelId, modelName }: InlineChatProps) {
                   const content = delta.content;
 
                   // Debug: Log content to see what we're receiving
-                  if (content.includes('<') || content.includes('>')) {
-                    console.log('[THINKING DEBUG]', { content, inThinking });
+                  if (content.includes('<thinking') || content.includes('</thinking') || content.includes('[THINKING')) {
+                    console.log('[THINKING DEBUG]', { content, inThinking, length: content.length });
                   }
 
-                  // Check if we're entering or exiting thinking tags (case-insensitive)
-                  const lowerContent = content.toLowerCase();
-                  if (lowerContent.includes('<thinking>') || lowerContent.includes('<|thinking>')) {
-                    inThinking = true;
-                    // Handle both <thinking> and <|thinking>
-                    const match = content.match(/(<\|?thinking>)([\s\S]*)/i);
-                    if (match) {
-                      accumulatedContent += content.substring(0, match.index);
-                      accumulatedThinking += match[2];
-                    } else {
-                      accumulatedContent += content;
+                  // Process content character by character to handle thinking tags correctly
+                  let i = 0;
+                  while (i < content.length) {
+                    // Check for opening thinking tags: <thinking>, <|thinking>
+                    if (content.slice(i).match(/^<\|?thinking>/i)) {
+                      inThinking = true;
+                      const tagMatch = content.slice(i).match(/^<\|?thinking>/i);
+                      if (tagMatch) {
+                        i += tagMatch[0].length;
+                        console.log('[THINKING DEBUG] Opened thinking tag');
+                      }
+                      continue;
                     }
-                  } else if (lowerContent.includes('</thinking>') || lowerContent.includes('</|thinking>')) {
-                    inThinking = false;
-                    // Handle both </thinking> and </|thinking>
-                    const match = content.match(/([\s\S]*)(<\|?\/thinking>)/i);
-                    if (match) {
-                      accumulatedThinking += match[1];
-                      accumulatedContent += content.substring(match[0].length);
-                    } else {
-                      accumulatedThinking += content;
+
+                    // Check for closing thinking tags: </thinking>, </|thinking>
+                    if (content.slice(i).match(/^<\|?\/thinking>/i)) {
+                      inThinking = false;
+                      const tagMatch = content.slice(i).match(/^<\|?\/thinking>/i);
+                      if (tagMatch) {
+                        i += tagMatch[0].length;
+                        console.log('[THINKING DEBUG] Closed thinking tag');
+                      }
+                      continue;
                     }
-                  } else if (inThinking) {
-                    accumulatedThinking += content;
-                  } else {
-                    accumulatedContent += content;
+
+                    // Accumulate content character by character
+                    const char = content[i];
+                    if (inThinking) {
+                      accumulatedThinking += char;
+                    } else {
+                      accumulatedContent += char;
+                    }
+                    i++;
                   }
 
                   // Update the streaming message
