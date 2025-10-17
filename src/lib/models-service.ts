@@ -50,8 +50,6 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
 
   const limitParam = limit ? `&limit=${limit}` : '';
   const url = `${API_BASE_URL}/models?gateway=${gateway}${limitParam}`;
-  
-  console.log(`[Models Service] Fetching from live API: ${url}`);
 
   // Try live API first (primary source)
   try {
@@ -67,27 +65,17 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
 
     if (response.ok) {
       const data = await response.json();
-      
+
       // Validate response structure and data
       if (data.data && Array.isArray(data.data) && data.data.length > 0) {
-        console.log(`[Models Service] ✓ Live API success: ${data.data.length} models from ${gateway} gateway`);
         return data;
-      } else {
-        console.warn(`[Models Service] ⚠ API returned empty data array, falling back to static data`);
       }
-    } else {
-      console.warn(`[Models Service] ⚠ API returned status ${response.status}: ${response.statusText}, falling back to static data`);
     }
   } catch (backendError: any) {
-    const errorMsg = backendError?.name === 'TimeoutError'
-      ? 'API request timed out after 10s'
-      : backendError?.message || 'Unknown error';
-    console.warn(`[Models Service] ⚠ API error: ${errorMsg}, falling back to static data`);
+    // Silently fail and use fallback
   }
 
   // Fallback to static data (only used if API fails)
-  console.log(`[Models Service] Using static fallback data for gateway: ${gateway}`);
-  console.warn(`[Models Service] ⚠️ WARNING: Using fallback data for ${gateway}. Backend should be returning models for this gateway.`);
   let transformedModels;
 
   if (gateway === 'all') {
@@ -148,8 +136,6 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
     transformedModels = gatewayModels.map(m => transformModel(m, gateway));
   }
 
-  console.log(`[Models Service] Returning ${transformedModels.length} models from fallback data`);
-  
   return {
     data: transformedModels
   };

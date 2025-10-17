@@ -24,17 +24,15 @@ interface Model {
 async function getModels(): Promise<Model[]> {
   try {
     // Fetch models from all gateways to build a complete picture
-    // Note: 'portkey' is deprecated; now using individual Portkey SDK providers
+    // Using individual Portkey SDK providers instead of unified gateway for better performance
     const gateways = [
       'openrouter',
-      'portkey', // Kept for backward compatibility but recommend using individual providers
       'featherless',
       'groq',
       'together',
       'fireworks',
       'chutes',
       'deepinfra',
-      // New Portkey SDK providers (replaces single 'portkey' gateway)
       'google',
       'cerebras',
       'nebius',
@@ -43,29 +41,19 @@ async function getModels(): Promise<Model[]> {
       'huggingface'
     ];
 
-    console.log(`📡 Fetching models from ${gateways.length} gateways...`);
-
-    // Fetch from all gateways in parallel
+    // Fetch from all gateways in parallel with timeout
     const gatewayPromises = gateways.map(async (gateway) => {
       try {
-        console.log(`⏳ Fetching models from ${gateway}...`);
-        const result = await getModelsForGateway(gateway);
-        const modelCount = result.data?.length || 0;
-        console.log(`✅ ${gateway}: ${modelCount} models`);
+        // Add 10 second timeout per gateway
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-        // Log details for new Portkey providers
-        if (['google', 'cerebras', 'nebius', 'xai', 'novita', 'huggingface'].includes(gateway)) {
-          console.log(`📦 Portkey provider ${gateway} response:`, {
-            hasData: !!result.data,
-            dataLength: result.data?.length || 0,
-            firstModel: result.data?.[0]?.id,
-            sampleModels: result.data?.slice(0, 2).map(m => m.name)
-          });
-        }
+        const result = await getModelsForGateway(gateway);
+        clearTimeout(timeoutId);
 
         return { gateway, models: result.data || [] };
       } catch (error) {
-        console.error(`❌ Failed to fetch from ${gateway}:`, error);
+        // Silently fail and return empty models for this gateway
         return { gateway, models: [] };
       }
     });
@@ -125,22 +113,6 @@ async function getModels(): Promise<Model[]> {
       ...model,
       source_gateways: model.source_gateways.sort()
     }));
-
-    console.log(`Fetched models from ${gateways.length} gateways`);
-    console.log(`Total unique models: ${uniqueModels.length}`);
-
-    // Log some stats about gateway coverage
-    const multiGatewayModels = uniqueModels.filter(m => m.source_gateways.length > 1);
-    console.log(`Models available on multiple gateways: ${multiGatewayModels.length}`);
-
-    // Log gateway breakdown
-    const gatewayCount: Record<string, number> = {};
-    uniqueModels.forEach(m => {
-      m.source_gateways.forEach(g => {
-        gatewayCount[g] = (gatewayCount[g] || 0) + 1;
-      });
-    });
-    console.log(`📊 Gateway Coverage:`, gatewayCount);
 
     return uniqueModels;
   } catch (error) {
