@@ -1509,8 +1509,8 @@ function ChatPageContent() {
                 });
             }
 
-            const sessionIdParam = currentSession?.apiSessionId ? `&session_id=${currentSession.apiSessionId}` : '';
-            const url = `${apiBaseUrl}/v1/responses?privy_user_id=${encodeURIComponent(privyUserId)}${sessionIdParam}`;
+            const sessionIdParam = currentSession?.apiSessionId ? `?session_id=${currentSession.apiSessionId}` : '';
+            const url = `${apiBaseUrl}/v1/chat/completions${sessionIdParam}`;
 
             console.log('Sending chat request to:', url);
             console.log('API Key:', apiKey.substring(0, 10) + '...');
@@ -1679,7 +1679,7 @@ function ChatPageContent() {
 
                 const requestBody: any = {
                     model: modelValue,
-                    input: conversationHistory,
+                    messages: conversationHistory,
                     stream: true
                 };
 
@@ -1687,19 +1687,13 @@ function ChatPageContent() {
                     requestBody.portkey_provider = portkeyProvider;
                 }
 
-                if (currentSession?.apiSessionId) {
-                    requestBody.metadata = {
-                        ...(requestBody.metadata || {}),
-                        session_id: currentSession.apiSessionId
-                    };
-                }
+                // Session ID is already in the URL query parameter, no need to add it to the body
 
                 console.log('📨 Request body prepared:', {
                     model: requestBody.model,
                     hasPortkeyProvider: !!requestBody.portkey_provider,
-                    hasMetadata: !!requestBody.metadata,
                     stream: requestBody.stream,
-                    inputLength: requestBody.input?.length || 0,
+                    messagesLength: requestBody.messages?.length || 0,
                     url: url
                 });
 
