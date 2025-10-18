@@ -477,6 +477,17 @@ async def chat_completions(
             elif status in (401, 403):
                 # Tests expect 500 for upstream auth failures
                 raise HTTPException(status_code=500, detail="OpenRouter authentication error")
+            elif status == 404:
+                # Model not found on provider - provide helpful message
+                if provider == "huggingface":
+                    raise HTTPException(
+                        status_code=404,
+                        detail=f"Model '{model}' is not available on HuggingFace Inference API. "
+                               "This model may exist in the catalog but isn't supported for chat completions. "
+                               "Try a different model from the HuggingFace gateway."
+                    )
+                else:
+                    raise HTTPException(status_code=404, detail=f"Model {model} not found or unavailable on {provider}")
             elif 400 <= status < 500:
                 raise HTTPException(status_code=400, detail="Upstream rejected the request")
             else:

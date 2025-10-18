@@ -32,6 +32,14 @@ from src.config import Config
 
 logger = logging.getLogger(__name__)
 
+# Models that exist in catalog but aren't supported by HF Inference Router
+# These are typically routing, classification, or embedding models that don't support chat completions
+UNSUPPORTED_MODELS = {
+    "katanemo/Arch-Router-1.5B",  # Routing model, not chat
+    "katanemo/Arch-Router",  # Routing model variants
+    # Add more as discovered through user reports or testing
+}
+
 
 def fetch_models_from_huggingface_api(
     search: str = None,
@@ -176,6 +184,11 @@ def normalize_huggingface_model(hf_model: dict) -> dict:
         model_id = hf_model.get("id") or hf_model.get("modelId")
         if not model_id:
             logger.warning(f"Model missing ID: {hf_model}")
+            return None
+
+        # Skip models that are known to be unsupported by HF Inference Router
+        if model_id in UNSUPPORTED_MODELS:
+            logger.debug(f"Skipping unsupported model (not available for chat completions): {model_id}")
             return None
 
         # Extract metadata
