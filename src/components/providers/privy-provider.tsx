@@ -5,6 +5,7 @@ import { base } from 'viem/chains';
 import { ReactNode, useState, useEffect } from 'react';
 import { API_BASE_URL } from '@/lib/config';
 import { RateLimitHandler } from '@/components/auth/rate-limit-handler';
+import { processAuthResponse, type AuthResponse } from '@/lib/api';
 
 interface PrivyProviderWrapperProps {
   children: ReactNode;
@@ -117,6 +118,8 @@ export function PrivyProviderWrapper({ children }: PrivyProviderWrapperProps) {
         privy_user_id: user.id
       });
 
+      console.log('[Auth] Making request to:', `${API_BASE_URL}/auth`);
+
       const authResponse = await fetch(`${API_BASE_URL}/auth`, {
         method: 'POST',
         headers: {
@@ -125,55 +128,29 @@ export function PrivyProviderWrapper({ children }: PrivyProviderWrapperProps) {
         body: JSON.stringify(authBody),
       });
 
+      console.log('[Auth] Response status:', authResponse.status);
+
       if (!authResponse.ok) {
         const errorText = await authResponse.text();
         console.error('Backend auth failed:', {
           status: authResponse.status,
+          statusText: authResponse.statusText,
           error: errorText,
           referral_code: referralCode
         });
         return;
       }
 
-      const authData = await authResponse.json();
+      const authData = await authResponse.json() as AuthResponse;
       console.log('Backend authentication successful:', {
-        ...authData,
+        success: authData.success,
+        has_api_key: !!authData.api_key,
+        is_new_user: authData.is_new_user,
         referral_code_sent: !!referralCode
       });
 
-      // Store API key if provided
-      if (authData.api_key) {
-        localStorage.setItem('gatewayz_api_key', authData.api_key);
-      }
-
-      // Store user data
-      if (authData.user_id) {
-        // Extract real email from Privy user object
-        let userEmail = authData.email || null;
-
-        // If auth data doesn't have email or has a Privy DID, try to extract from linked accounts
-        if (!userEmail || userEmail.startsWith('did:privy:')) {
-          for (const account of user.linkedAccounts || []) {
-            if (account.type === 'email' && (account as { email?: string }).email) {
-              userEmail = (account as { email?: string }).email!;
-              break;
-            } else if (account.type === 'google_oauth' && (account as { email?: string }).email) {
-              userEmail = (account as { email?: string }).email!;
-              break;
-            }
-          }
-        }
-
-        localStorage.setItem('gatewayz_user_data', JSON.stringify({
-          user_id: authData.user_id,
-          display_name: authData.display_name || userEmail || 'User',
-          email: userEmail,
-          api_key: authData.api_key,
-          auth_method: authData.auth_method || 'privy',
-          privy_user_id: user.id,
-          credits: authData.credits || 0,
-        }));
-      }
+      // Use the centralized auth response processor
+      processAuthResponse(authData);
 
       // Clear referral code after successful authentication
       // Also set a flag to show bonus credits notification
@@ -188,6 +165,7 @@ export function PrivyProviderWrapper({ children }: PrivyProviderWrapperProps) {
 
       // Redirect new users to onboarding
       if (authData.is_new_user ?? isNewUser) {
+        console.log('[Auth] New user detected, redirecting to onboarding');
         window.location.href = '/onboarding';
       }
     } catch (error) {
