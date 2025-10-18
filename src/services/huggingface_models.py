@@ -67,9 +67,11 @@ def fetch_models_from_huggingface_api(
         logger.info("Fetching models from Hugging Face Models API Hub")
 
         models = []
+        seen_model_ids = set()  # Track unique model IDs to detect duplicates
         offset = 0
         batch_size = 100  # HF API supports up to 100 per request
         total_fetched = 0
+        consecutive_duplicates = 0  # Count consecutive batches with no new models
 
         # If no limit specified, fetch all available models (~50,000+ with hf-inference filter)
         # Use a high number to ensure we get everything available
@@ -111,14 +113,35 @@ def fetch_models_from_huggingface_api(
                 logger.info(f"No more models returned from Hugging Face API at offset {offset}")
                 break
 
-            logger.info(f"Fetched batch of {len(batch_models)} models from offset {offset}")
-            models.extend(batch_models)
+            # Track how many NEW models we got in this batch
+            new_models_in_batch = 0
+            for model in batch_models:
+                model_id = model.get("id")
+                if model_id and model_id not in seen_model_ids:
+                    seen_model_ids.add(model_id)
+                    models.append(model)
+                    new_models_in_batch += 1
+
+            logger.info(f"Fetched batch from offset {offset}: {len(batch_models)} total, {new_models_in_batch} new unique models")
+
+            # If no new models in this batch, we've hit the duplicate threshold
+            if new_models_in_batch == 0:
+                consecutive_duplicates += 1
+                logger.warning(f"Batch {consecutive_duplicates} returned only duplicates (offset {offset})")
+
+                # If we've had 3+ consecutive batches of only duplicates, stop
+                if consecutive_duplicates >= 3:
+                    logger.info(f"Stopping pagination: {consecutive_duplicates} consecutive batches with no new models")
+                    break
+            else:
+                consecutive_duplicates = 0  # Reset counter on new models
+
             total_fetched += len(batch_models)
             offset += batch_size
 
             # If we got fewer models than requested, we've reached the end
             if len(batch_models) < batch_size:
-                logger.info(f"Batch returned fewer models than requested, stopping pagination")
+                logger.info(f"Batch returned fewer models than requested ({len(batch_models)} < {batch_size}), stopping pagination")
                 break
 
             # Add a small delay between requests to avoid rate limiting
