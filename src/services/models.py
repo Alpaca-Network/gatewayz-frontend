@@ -1407,8 +1407,9 @@ def enhance_model_with_provider_info(openrouter_model: dict, providers_data: lis
             provider_slug = model_id.split('/')[0]
 
         # Get provider information
-        provider_site_url = None
-        if providers_data and provider_slug:
+        # Preserve existing provider_site_url if already set (e.g., from HuggingFace normalization)
+        provider_site_url = openrouter_model.get('provider_site_url')
+        if not provider_site_url and providers_data and provider_slug:
             for provider in providers_data:
                 if provider.get('slug') == provider_slug:
                     provider_site_url = provider.get('site_url')
@@ -1427,7 +1428,7 @@ def enhance_model_with_provider_info(openrouter_model: dict, providers_data: lis
         # Add provider information to model
         enhanced_model = {
             **openrouter_model,
-            "provider_slug": provider_slug,
+            "provider_slug": provider_slug if provider_slug else openrouter_model.get('provider_slug'),
             "provider_site_url": provider_site_url,
             "model_logo_url": model_logo_url
         }
