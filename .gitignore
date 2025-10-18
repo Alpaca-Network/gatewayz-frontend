@@ -42,3 +42,6 @@ __pycache__
 server.log
 nul
 .claude/settings.local.json
+docs/SESSION_SUMMARY.md
+docs/DEEPSEEK_R1_THINKING_TAGS_DEBUG.md
+docs/HUGGINGFACE_FRONTEND_DIAGNOSTIC.md

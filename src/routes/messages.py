@@ -35,6 +35,11 @@ from src.services.anthropic_transformer import (
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+DEFAULT_PROVIDER_TIMEOUT = 60
+PROVIDER_TIMEOUTS = {
+    "huggingface": 120,
+}
+
 
 def mask_key(k: str) -> str:
     return f"...{k[-4:]}" if k and len(k) >= 4 else "****"
@@ -210,6 +215,10 @@ async def anthropic_messages(
             logger.info(f"Transformed model ID from '{original_model}' to '{model}' for provider {provider}")
 
         # === 3) Call upstream ===
+        request_timeout = PROVIDER_TIMEOUTS.get(provider, DEFAULT_PROVIDER_TIMEOUT)
+        if request_timeout != DEFAULT_PROVIDER_TIMEOUT:
+            logger.debug("Using extended timeout %ss for provider %s", request_timeout, provider)
+
         start = time.monotonic()
         try:
             if provider == "portkey":
@@ -217,37 +226,37 @@ async def anthropic_messages(
                 portkey_virtual_key = getattr(req, "portkey_virtual_key", None)
                 resp_raw = await asyncio.wait_for(
                     _to_thread(make_portkey_request_openai, openai_messages, model, portkey_provider, portkey_virtual_key, **openai_params),
-                    timeout=60
+                    timeout=request_timeout
                 )
                 processed = await _to_thread(process_portkey_response, resp_raw)
             elif provider == "featherless":
                 resp_raw = await asyncio.wait_for(
                     _to_thread(make_featherless_request_openai, openai_messages, model, **openai_params),
-                    timeout=60
+                    timeout=request_timeout
                 )
                 processed = await _to_thread(process_featherless_response, resp_raw)
             elif provider == "fireworks":
                 resp_raw = await asyncio.wait_for(
                     _to_thread(make_fireworks_request_openai, openai_messages, model, **openai_params),
-                    timeout=60
+                    timeout=request_timeout
                 )
                 processed = await _to_thread(process_fireworks_response, resp_raw)
             elif provider == "together":
                 resp_raw = await asyncio.wait_for(
                     _to_thread(make_together_request_openai, openai_messages, model, **openai_params),
-                    timeout=60
+                    timeout=request_timeout
                 )
                 processed = await _to_thread(process_together_response, resp_raw)
             elif provider == "huggingface":
                 resp_raw = await asyncio.wait_for(
                     _to_thread(make_huggingface_request_openai, openai_messages, model, **openai_params),
-                    timeout=60
+                    timeout=request_timeout
                 )
                 processed = await _to_thread(process_huggingface_response, resp_raw)
             else:
                 resp_raw = await asyncio.wait_for(
                     _to_thread(make_openrouter_request_openai, openai_messages, model, **openai_params),
-                    timeout=60
+                    timeout=request_timeout
                 )
                 processed = await _to_thread(process_openrouter_response, resp_raw)
         except Exception as e:
