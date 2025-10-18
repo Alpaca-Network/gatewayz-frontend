@@ -101,7 +101,7 @@ _novita_models_cache = {
     "ttl": 3600  # 1 hour TTL
 }
 
-_hug_models_cache = {
+_huggingface_models_cache = {
     "data": None,
     "timestamp": None,
     "ttl": 3600  # 1 hour TTL
@@ -125,7 +125,8 @@ def get_models_cache(gateway: str):
         "nebius": _nebius_models_cache,
         "xai": _xai_models_cache,
         "novita": _novita_models_cache,
-        "hug": _hug_models_cache,
+        "huggingface": _huggingface_models_cache,
+        "hug": _huggingface_models_cache,  # Alias for backward compatibility
         "modelz": _modelz_cache
     }
     return cache_map.get(gateway.lower())
@@ -152,7 +153,8 @@ def clear_models_cache(gateway: str):
         "nebius": _nebius_models_cache,
         "xai": _xai_models_cache,
         "novita": _novita_models_cache,
-        "hug": _hug_models_cache,
+        "huggingface": _huggingface_models_cache,
+        "hug": _huggingface_models_cache,  # Alias for backward compatibility
         "modelz": _modelz_cache
     }
     cache = cache_map.get(gateway.lower())

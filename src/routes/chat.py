@@ -17,6 +17,7 @@ from src.services.portkey_client import make_portkey_request_openai, process_por
 from src.services.featherless_client import make_featherless_request_openai, process_featherless_response, make_featherless_request_openai_stream
 from src.services.fireworks_client import make_fireworks_request_openai, process_fireworks_response, make_fireworks_request_openai_stream
 from src.services.together_client import make_together_request_openai, process_together_response, make_together_request_openai_stream
+from src.services.huggingface_client import make_huggingface_request_openai, process_huggingface_response, make_huggingface_request_openai_stream
 from src.services.rate_limiting import get_rate_limit_manager
 from src.services.trial_validation import validate_trial_access, track_trial_usage
 from src.services.pricing import calculate_cost
@@ -31,13 +32,15 @@ async def _to_thread(func, *args, **kwargs):
     return await asyncio.to_thread(func, *args, **kwargs)
 
 async def stream_generator(stream, user, api_key, model, trial, environment_tag, session_id, messages, rate_limit_mgr=None, provider="openrouter"):
-    """Generate SSE stream from OpenAI stream response"""
+    """Generate SSE stream from OpenAI stream response with thinking tag support"""
     accumulated_content = ""
+    accumulated_thinking = ""
     prompt_tokens = 0
     completion_tokens = 0
     total_tokens = 0
     start_time = time.monotonic()
     release_required = rate_limit_mgr is not None and not trial.get("is_trial", False)
+    has_thinking = False
 
     try:
         for chunk in stream:
@@ -60,8 +63,17 @@ async def stream_generator(stream, user, api_key, model, trial, environment_tag,
                 if hasattr(choice.delta, 'role') and choice.delta.role:
                     choice_dict["delta"]["role"] = choice.delta.role
                 if hasattr(choice.delta, 'content') and choice.delta.content:
-                    choice_dict["delta"]["content"] = choice.delta.content
-                    accumulated_content += choice.delta.content
+                    content = choice.delta.content
+                    choice_dict["delta"]["content"] = content
+                    accumulated_content += content
+
+                    # Detect thinking tags for debug logging
+                    if '<thinking>' in content or '[THINKING' in content or 'thinking>' in content:
+                        has_thinking = True
+                        accumulated_thinking += content
+                        # Log when we first detect thinking
+                        if accumulated_thinking.count('<thinking>') == 1:
+                            logger.info(f"[THINKING DEBUG] Detected thinking tag in stream for model {model}")
 
                 chunk_dict["choices"].append(choice_dict)
 
@@ -71,7 +83,10 @@ async def stream_generator(stream, user, api_key, model, trial, environment_tag,
                 completion_tokens = chunk.usage.completion_tokens
                 total_tokens = chunk.usage.total_tokens
 
-            # Send SSE event
+            # Send SSE event with potential debug info
+            if has_thinking and not accumulated_thinking.endswith('DEBUG_LOGGED'):
+                logger.debug(f"[THINKING DEBUG] Streaming chunk with thinking content: {json.dumps(choice_dict)}")
+
             yield f"data: {json.dumps(chunk_dict)}\n\n"
 
         # If no usage was provided, estimate based on content
@@ -312,7 +327,7 @@ async def chat_completions(
                 from src.services.model_transformations import transform_model_id
 
                 # Try each provider with transformation
-                for test_provider in ["featherless", "fireworks", "together", "portkey"]:
+                for test_provider in ["featherless", "fireworks", "together", "hug", "portkey"]:
                     transformed = transform_model_id(original_model, test_provider)
                     provider_models = get_cached_models(test_provider) or []
                     if any(m.get("id") == transformed for m in provider_models):
@@ -349,6 +364,8 @@ async def chat_completions(
                     stream = await _to_thread(make_fireworks_request_openai_stream, messages, model, **optional)
                 elif provider == "together":
                     stream = await _to_thread(make_together_request_openai_stream, messages, model, **optional)
+                elif provider == "huggingface":
+                    stream = await _to_thread(make_huggingface_request_openai_stream, messages, model, **optional)
                 else:
                     stream = await _to_thread(make_openrouter_request_openai_stream, messages, model, **optional)
 
@@ -422,6 +439,12 @@ async def chat_completions(
                     timeout=30
                 )
                 processed = await _to_thread(process_together_response, resp_raw)
+            elif provider == "huggingface":
+                resp_raw = await asyncio.wait_for(
+                    _to_thread(make_huggingface_request_openai, messages, model, **optional),
+                    timeout=30
+                )
+                processed = await _to_thread(process_huggingface_response, resp_raw)
             else:
                 resp_raw = await asyncio.wait_for(
                     _to_thread(make_openrouter_request_openai, messages, model, **optional),
@@ -746,7 +769,7 @@ async def unified_responses(
                 from src.services.model_transformations import transform_model_id
 
                 # Try each provider with transformation
-                for test_provider in ["featherless", "fireworks", "together", "portkey"]:
+                for test_provider in ["featherless", "fireworks", "together", "hug", "portkey"]:
                     transformed = transform_model_id(original_model, test_provider)
                     provider_models = get_cached_models(test_provider) or []
                     if any(m.get("id") == transformed for m in provider_models):
@@ -774,6 +797,8 @@ async def unified_responses(
                     stream = await _to_thread(make_fireworks_request_openai_stream, messages, model, **optional)
                 elif provider == "together":
                     stream = await _to_thread(make_together_request_openai_stream, messages, model, **optional)
+                elif provider == "huggingface":
+                    stream = await _to_thread(make_huggingface_request_openai_stream, messages, model, **optional)
                 else:
                     stream = await _to_thread(make_openrouter_request_openai_stream, messages, model, **optional)
 
@@ -887,6 +912,12 @@ async def unified_responses(
                     timeout=30
                 )
                 processed = await _to_thread(process_together_response, resp_raw)
+            elif provider == "huggingface":
+                resp_raw = await asyncio.wait_for(
+                    _to_thread(make_huggingface_request_openai, messages, model, **optional),
+                    timeout=30
+                )
+                processed = await _to_thread(process_huggingface_response, resp_raw)
             else:
                 resp_raw = await asyncio.wait_for(
                     _to_thread(make_openrouter_request_openai, messages, model, **optional),
