@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Send, Loader2, ChevronDown, ChevronRight } from 'lucide-react';
 import { getApiKey, getUserData } from '@/lib/api';
+import { streamChatResponse } from '@/lib/streaming';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -75,120 +76,91 @@ export function InlineChat({ modelId, modelName }: InlineChatProps) {
     setExpandedThinking(prev => new Set(prev).add(streamingMessageIndex));
 
     try {
-      abortControllerRef.current = new AbortController();
-
       const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
+      const url = `${apiBaseUrl}/v1/chat/completions`;
 
       console.log('[InlineChat] Sending message to model:', modelId);
-      console.log('[InlineChat] Using API endpoint:', `${apiBaseUrl}/v1/chat/completions`);
+      console.log('[InlineChat] Using API endpoint:', url);
 
-      const response = await fetch(`${apiBaseUrl}/v1/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
-          model: modelId,
-          messages: [...messages, userMessage].map(m => ({ role: m.role, content: m.content })),
-          stream: true,
-          temperature: 0.7
-        }),
-        signal: abortControllerRef.current.signal
-      });
+      const requestBody = {
+        model: modelId,
+        messages: [...messages, userMessage].map(m => ({ role: m.role, content: m.content })),
+        stream: true,
+        temperature: 0.7
+      };
 
-      if (!response.ok) {
-        console.error('[InlineChat] API error:', response.status, response.statusText);
-        const errorText = await response.text();
-        console.error('[InlineChat] Error response:', errorText);
-        throw new Error(`API error: ${response.status} ${response.statusText}`);
-      }
-
-      console.log('[InlineChat] Stream started successfully');
-
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
       let accumulatedContent = '';
       let accumulatedThinking = '';
       let inThinking = false;
 
-      if (reader) {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
+      // Use the streaming utility with proper error handling and retries
+      for await (const chunk of streamChatResponse(url, apiKey, requestBody)) {
+        // Handle rate limit retries
+        if (chunk.status === 'rate_limit_retry') {
+          console.log('[InlineChat] Rate limit, retrying in', chunk.retryAfterMs, 'ms');
+          continue;
+        }
 
-          const chunk = decoder.decode(value, { stream: true });
-          const lines = chunk.split('\n');
+        // Process content with thinking tag extraction
+        if (chunk.content) {
+          const content = chunk.content;
 
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              const data = line.slice(6);
-              if (data === '[DONE]') continue;
-
-              try {
-                const parsed = JSON.parse(data);
-                const delta = parsed.choices?.[0]?.delta;
-
-                if (delta?.content) {
-                  const content = delta.content;
-
-                  // Debug: Log content to see what we're receiving
-                  if (content.includes('<thinking') || content.includes('</thinking') || content.includes('[THINKING')) {
-                    console.log('[THINKING DEBUG]', { content, inThinking, length: content.length });
-                  }
-
-                  // Process content character by character to handle thinking tags correctly
-                  let i = 0;
-                  while (i < content.length) {
-                    // Check for opening thinking tags: <thinking>, <|thinking>
-                    if (content.slice(i).match(/^<\|?thinking>/i)) {
-                      inThinking = true;
-                      const tagMatch = content.slice(i).match(/^<\|?thinking>/i);
-                      if (tagMatch) {
-                        i += tagMatch[0].length;
-                        console.log('[THINKING DEBUG] Opened thinking tag');
-                      }
-                      continue;
-                    }
-
-                    // Check for closing thinking tags: </thinking>, </|thinking>
-                    if (content.slice(i).match(/^<\|?\/thinking>/i)) {
-                      inThinking = false;
-                      const tagMatch = content.slice(i).match(/^<\|?\/thinking>/i);
-                      if (tagMatch) {
-                        i += tagMatch[0].length;
-                        console.log('[THINKING DEBUG] Closed thinking tag');
-                      }
-                      continue;
-                    }
-
-                    // Accumulate content character by character
-                    const char = content[i];
-                    if (inThinking) {
-                      accumulatedThinking += char;
-                    } else {
-                      accumulatedContent += char;
-                    }
-                    i++;
-                  }
-
-                  // Update the streaming message
-                  setMessages(prev => {
-                    const newMessages = [...prev];
-                    newMessages[streamingMessageIndex] = {
-                      role: 'assistant',
-                      content: accumulatedContent,
-                      thinking: accumulatedThinking,
-                      isStreaming: true
-                    };
-                    return newMessages;
-                  });
-                }
-              } catch (e) {
-                // Skip malformed JSON
-              }
-            }
+          // Debug: Log content to see what we're receiving
+          if (content.includes('<thinking') || content.includes('</thinking') || content.includes('[THINKING')) {
+            console.log('[THINKING DEBUG]', { content, inThinking, length: content.length });
           }
+
+          // Process content character by character to handle thinking tags correctly
+          let i = 0;
+          while (i < content.length) {
+            // Check for opening thinking tags: <thinking>, <|thinking>
+            if (content.slice(i).match(/^<\|?thinking>/i)) {
+              inThinking = true;
+              const tagMatch = content.slice(i).match(/^<\|?thinking>/i);
+              if (tagMatch) {
+                i += tagMatch[0].length;
+                console.log('[THINKING DEBUG] Opened thinking tag');
+              }
+              continue;
+            }
+
+            // Check for closing thinking tags: </thinking>, </|thinking>
+            if (content.slice(i).match(/^<\|?\/thinking>/i)) {
+              inThinking = false;
+              const tagMatch = content.slice(i).match(/^<\|?\/thinking>/i);
+              if (tagMatch) {
+                i += tagMatch[0].length;
+                console.log('[THINKING DEBUG] Closed thinking tag');
+              }
+              continue;
+            }
+
+            // Accumulate content character by character
+            const char = content[i];
+            if (inThinking) {
+              accumulatedThinking += char;
+            } else {
+              accumulatedContent += char;
+            }
+            i++;
+          }
+
+          // Update the streaming message
+          setMessages(prev => {
+            const newMessages = [...prev];
+            newMessages[streamingMessageIndex] = {
+              role: 'assistant',
+              content: accumulatedContent,
+              thinking: accumulatedThinking,
+              isStreaming: !chunk.done
+            };
+            return newMessages;
+          });
+        }
+
+        if (chunk.done) {
+          console.log('[InlineChat] Stream complete');
+          break;
         }
       }
 
@@ -213,13 +185,8 @@ export function InlineChat({ modelId, modelName }: InlineChatProps) {
 
     } catch (err) {
       console.error('[InlineChat] Error sending message:', err);
-      if (err instanceof Error && err.name === 'AbortError') {
-        setError('Request cancelled');
-      } else if (err instanceof TypeError && err.message.includes('Failed to fetch')) {
-        setError('Network error - check your connection and try again');
-      } else {
-        setError(err instanceof Error ? err.message : 'Failed to send message');
-      }
+      const errorMessage = err instanceof Error ? err.message : 'Failed to send message';
+      setError(errorMessage);
       // Remove the streaming message on error
       setMessages(prev => prev.slice(0, -1));
     } finally {
