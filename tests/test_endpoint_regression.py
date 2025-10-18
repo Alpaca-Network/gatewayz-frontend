@@ -757,13 +757,13 @@ class TestCatalogEndpoints:
     """Test model catalog endpoints"""
 
     def test_catalog_models_endpoint_exists(self, client):
-        """Regression: GET /models must exist"""
-        response = client.get("/models")
+        """Regression: GET /v1/models must exist"""
+        response = client.get("/v1/models")
         assert response.status_code in [200, 500]
 
     def test_catalog_providers_endpoint_exists(self, client):
-        """Regression: GET /provider must exist"""
-        response = client.get("/provider")
+        """Regression: GET /v1/provider must exist"""
+        response = client.get("/v1/provider")
         assert response.status_code in [200, 500]
 
 
