@@ -63,7 +63,7 @@ async function getModels(): Promise<Model[]> {
         // Featherless has 1.9M models - limit to 1k most popular for performance
         let limit: number | undefined = undefined;
         if (gateway === 'huggingface') {
-          limit = 200; // Limit to top 200 most popular HF models
+          limit = 1500; // Show 1500 most popular HF models
         } else if (gateway === 'featherless') {
           limit = 1000; // Limit featherless to 1k models for performance
         }
