@@ -92,16 +92,12 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
     setExpandedThinking(prev => new Set(prev).add(streamingMessageIndex));
 
     try {
-      // Use local API proxy in development to bypass CORS, direct API in production
-      const isDevelopment = process.env.NODE_ENV === 'development';
-      const url = isDevelopment
-        ? '/api/chat/completions'
-        : `${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai'}/v1/chat/completions`;
+      // Always use the API proxy to avoid CORS issues (it runs server-side)
+      const url = '/api/chat/completions';
 
       console.log('[InlineChat] Sending message to model:', modelId);
       console.log('[InlineChat] Gateway:', gateway || 'not specified');
       console.log('[InlineChat] Using API endpoint:', url);
-      console.log('[InlineChat] Environment:', process.env.NODE_ENV);
 
       const requestBody = {
         model: modelId,
