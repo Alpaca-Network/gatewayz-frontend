@@ -393,7 +393,11 @@ def normalize_portkey_model(portkey_model: dict, openrouter_models: list = None)
 
 
 def fetch_models_from_featherless():
-    """Fetch models from Featherless API and normalize to the catalog schema"""
+    """Fetch models from Featherless API and normalize to the catalog schema
+
+    Note: Featherless API ignores the 'limit' and 'offset' parameters and returns
+    ALL models (~6,452) in a single request. We only need one API call.
+    """
     try:
         if not Config.FEATHERLESS_API_KEY:
             logger.error("Featherless API key not configured")
@@ -403,38 +407,20 @@ def fetch_models_from_featherless():
             "Authorization": f"Bearer {Config.FEATHERLESS_API_KEY}"
         }
 
-        # Fetch all models with pagination
-        all_models = []
-        offset = 0
-        batch_size = 100
-        max_iterations = 200  # Prevent infinite loops (200 * 100 = 20,000 max models)
-        iteration = 0
+        # Featherless API returns all models in a single request (ignores pagination params)
+        url = "https://api.featherless.ai/v1/models"
 
-        logger.info("Fetching models from Featherless API with pagination")
+        logger.info("Fetching all models from Featherless API (single request)")
 
-        while iteration < max_iterations:
-            url = f"https://api.featherless.ai/v1/models?limit={batch_size}&offset={offset}"
+        response = httpx.get(url, headers=headers, timeout=30.0)
+        response.raise_for_status()
 
-            response = httpx.get(url, headers=headers, timeout=30.0)
-            response.raise_for_status()
+        payload = response.json()
+        all_models = payload.get("data", [])
 
-            payload = response.json()
-            raw_models = payload.get("data", [])
-
-            if not raw_models:
-                logger.info(f"No more models from Featherless at offset {offset}")
-                break
-
-            logger.info(f"Fetched batch from offset {offset}: {len(raw_models)} models")
-            all_models.extend(raw_models)
-
-            # If we got fewer models than requested, we've reached the end
-            if len(raw_models) < batch_size:
-                logger.info(f"Batch returned fewer models ({len(raw_models)} < {batch_size}), reached end")
-                break
-
-            offset += batch_size
-            iteration += 1
+        if not all_models:
+            logger.warning("No models returned from Featherless API")
+            return None
 
         logger.info(f"Fetched {len(all_models)} total models from Featherless")
 
