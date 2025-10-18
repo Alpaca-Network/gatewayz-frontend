@@ -128,7 +128,7 @@ export const models: Model[] = [
     supportedParameters: ['temperature', 'top_p'],
   },
   {
-    name: 'Katanemo: Arch-Router-1.5B',
+    name: 'Arch-Router-1.5B',
     isFree: true,
     tokens: '19.2B tokens',
     category: 'Router',
