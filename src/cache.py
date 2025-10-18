@@ -107,6 +107,10 @@ _huggingface_models_cache = {
     "ttl": 3600  # 1 hour TTL
 }
 
+# BACKWARD COMPATIBILITY: Alias for old cache name
+# Some deployed modules may still reference the old name
+_hug_models_cache = _huggingface_models_cache
+
 
 # Cache access functions
 def get_models_cache(gateway: str):
