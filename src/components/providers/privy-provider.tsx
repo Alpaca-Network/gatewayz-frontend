@@ -87,8 +87,20 @@ export function PrivyProviderWrapper({ children }: PrivyProviderWrapperProps) {
     const isNewUser = !existingGatewayzUser;
 
     try {
-      // Get the Privy access token
-      const token = localStorage.getItem('privy:token');
+      // Get the Privy access token - it's stored as a JSON string, so parse it
+      const tokenRaw = localStorage.getItem('privy:token');
+      let token: string | null = null;
+      if (tokenRaw) {
+        try {
+          // The token is stored as a JSON string, so parse it
+          token = JSON.parse(tokenRaw);
+        } catch {
+          // If parsing fails, use the raw value
+          token = tokenRaw;
+        }
+      }
+
+      console.log('[Auth] Token retrieved:', token ? `${token.substring(0, 20)}...` : 'null');
 
       // Check for referral code from localStorage (set by signup page)
       const referralCode = localStorage.getItem('gatewayz_referral_code');
