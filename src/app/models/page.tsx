@@ -2,6 +2,11 @@ import { Suspense } from 'react';
 import ModelsClient from './models-client';
 import { getModelsForGateway } from '@/lib/models-service';
 
+// Force dynamic rendering to ensure fresh data on every request
+// This prevents build-time timeouts and ensures users always get latest models
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 interface Model {
   id: string;
   name: string;
@@ -23,6 +28,13 @@ interface Model {
 
 async function getModels(): Promise<Model[]> {
   try {
+    // During build time, skip API calls if running in CI/build environment
+    // This prevents build failures when API is unavailable
+    if (process.env.NEXT_PHASE === 'phase-production-build' || process.env.CI) {
+      console.log('[Models Page] Build time detected, skipping API calls');
+      return [];
+    }
+
     // Fetch models from all gateways to build a complete picture
     // Using individual Portkey SDK providers instead of unified gateway for better performance
     const gateways = [
