@@ -314,12 +314,20 @@ async def chat_completions(
 
         # Auto-detect provider if not specified
         provider = (req.provider or "openrouter").lower()
+
+        # Normalize provider aliases
+        if provider == "hug":
+            provider = "huggingface"
+
         if not req.provider:
             # Try to detect provider from model ID using the transformation module
             from src.services.model_transformations import detect_provider_from_model_id
             detected_provider = detect_provider_from_model_id(original_model)
             if detected_provider:
                 provider = detected_provider
+                # Normalize provider aliases
+                if provider == "hug":
+                    provider = "huggingface"
                 logger.info(f"Auto-detected provider '{provider}' for model {original_model}")
             else:
                 # Fallback to checking cached models
@@ -327,7 +335,7 @@ async def chat_completions(
                 from src.services.model_transformations import transform_model_id
 
                 # Try each provider with transformation
-                for test_provider in ["featherless", "fireworks", "together", "hug", "portkey"]:
+                for test_provider in ["featherless", "fireworks", "together", "huggingface", "portkey"]:
                     transformed = transform_model_id(original_model, test_provider)
                     provider_models = get_cached_models(test_provider) or []
                     if any(m.get("id") == transformed for m in provider_models):
@@ -756,6 +764,11 @@ async def unified_responses(
 
         # Auto-detect provider if not specified
         provider = (req.provider or "openrouter").lower()
+
+        # Normalize provider aliases
+        if provider == "hug":
+            provider = "huggingface"
+
         if not req.provider:
             # Try to detect provider from model ID using the transformation module
             from src.services.model_transformations import detect_provider_from_model_id
@@ -769,7 +782,7 @@ async def unified_responses(
                 from src.services.model_transformations import transform_model_id
 
                 # Try each provider with transformation
-                for test_provider in ["featherless", "fireworks", "together", "hug", "portkey"]:
+                for test_provider in ["featherless", "fireworks", "together", "huggingface", "portkey"]:
                     transformed = transform_model_id(original_model, test_provider)
                     provider_models = get_cached_models(test_provider) or []
                     if any(m.get("id") == transformed for m in provider_models):

@@ -20,6 +20,9 @@ from src.security.deps import get_api_key
 from src.services.openrouter_client import make_openrouter_request_openai, process_openrouter_response
 from src.services.portkey_client import make_portkey_request_openai, process_portkey_response
 from src.services.featherless_client import make_featherless_request_openai, process_featherless_response
+from src.services.fireworks_client import make_fireworks_request_openai, process_fireworks_response
+from src.services.together_client import make_together_request_openai, process_together_response
+from src.services.huggingface_client import make_huggingface_request_openai, process_huggingface_response
 from src.services.rate_limiting import get_rate_limit_manager
 from src.services.trial_validation import validate_trial_access, track_trial_usage
 from src.services.pricing import calculate_cost
@@ -166,21 +169,45 @@ async def anthropic_messages(
             except Exception as e:
                 logger.warning(f"Failed to fetch chat history for session {session_id}: {e}")
 
-        model = req.model
+        original_model = req.model
 
         # Auto-detect provider
         provider = (req.provider or "openrouter").lower()
+
+        # Normalize provider aliases
+        if provider == "hug":
+            provider = "huggingface"
+
         if not req.provider:
-            from src.services.models import get_cached_models
-            featherless_models = get_cached_models("featherless") or []
-            if any(m.get("id") == model for m in featherless_models):
-                provider = "featherless"
-                logger.info(f"Auto-detected provider 'featherless' for model {model}")
+            # Try to detect provider from model ID using the transformation module
+            from src.services.model_transformations import detect_provider_from_model_id
+            detected_provider = detect_provider_from_model_id(original_model)
+            if detected_provider:
+                provider = detected_provider
+                # Normalize provider aliases
+                if provider == "hug":
+                    provider = "huggingface"
+                logger.info(f"Auto-detected provider '{provider}' for model {original_model}")
             else:
-                portkey_models = get_cached_models("portkey") or []
-                if any(m.get("id") == model for m in portkey_models):
-                    provider = "portkey"
-                    logger.info(f"Auto-detected provider 'portkey' for model {model}")
+                # Fallback to checking cached models
+                from src.services.models import get_cached_models
+                from src.services.model_transformations import transform_model_id
+
+                # Try each provider with transformation
+                for test_provider in ["featherless", "fireworks", "together", "huggingface", "portkey"]:
+                    transformed = transform_model_id(original_model, test_provider)
+                    provider_models = get_cached_models(test_provider) or []
+                    if any(m.get("id") == transformed for m in provider_models):
+                        provider = test_provider
+                        logger.info(f"Auto-detected provider '{provider}' for model {original_model} (transformed to {transformed})")
+                        break
+                # Otherwise default to openrouter (already set)
+
+        # Transform model ID to provider-specific format
+        from src.services.model_transformations import transform_model_id
+        model = transform_model_id(original_model, provider)
+        if model != original_model:
+            logger.info(f"Transformed model ID from '{original_model}' to '{model}' for provider {provider}")
 
         # === 3) Call upstream ===
         start = time.monotonic()
@@ -199,6 +226,24 @@ async def anthropic_messages(
                     timeout=60
                 )
                 processed = await _to_thread(process_featherless_response, resp_raw)
+            elif provider == "fireworks":
+                resp_raw = await asyncio.wait_for(
+                    _to_thread(make_fireworks_request_openai, openai_messages, model, **openai_params),
+                    timeout=60
+                )
+                processed = await _to_thread(process_fireworks_response, resp_raw)
+            elif provider == "together":
+                resp_raw = await asyncio.wait_for(
+                    _to_thread(make_together_request_openai, openai_messages, model, **openai_params),
+                    timeout=60
+                )
+                processed = await _to_thread(process_together_response, resp_raw)
+            elif provider == "huggingface":
+                resp_raw = await asyncio.wait_for(
+                    _to_thread(make_huggingface_request_openai, openai_messages, model, **openai_params),
+                    timeout=60
+                )
+                processed = await _to_thread(process_huggingface_response, resp_raw)
             else:
                 resp_raw = await asyncio.wait_for(
                     _to_thread(make_openrouter_request_openai, openai_messages, model, **openai_params),
@@ -295,7 +340,8 @@ async def anthropic_messages(
                     "prompt_tokens": prompt_tokens,
                     "completion_tokens": completion_tokens,
                     "endpoint": "/v1/messages",
-                    "session_id": session_id
+                    "session_id": session_id,
+                    "gateway": provider  # Track which gateway was used
                 }
             )
         except Exception as e:

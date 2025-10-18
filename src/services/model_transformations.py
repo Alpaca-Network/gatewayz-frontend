@@ -164,6 +164,75 @@ def get_model_id_mapping(provider: str) -> Dict[str, str]:
             # Portkey uses @ prefix
             "openai/gpt-4": "@openai/gpt-4",
             "anthropic/claude-3-opus": "@anthropic/claude-3-opus-20240229",
+        },
+        "huggingface": {
+            # HuggingFace uses org/model format directly
+            # Most models pass through as-is, but we map common variations
+            "meta-llama/llama-3.3-70b": "meta-llama/Llama-3.3-70B-Instruct",
+            "meta-llama/llama-3.3-70b-instruct": "meta-llama/Llama-3.3-70B-Instruct",
+            "meta-llama/llama-3.1-70b": "meta-llama/Meta-Llama-3.1-70B-Instruct",
+            "meta-llama/llama-3.1-70b-instruct": "meta-llama/Meta-Llama-3.1-70B-Instruct",
+            "meta-llama/llama-3.1-8b": "meta-llama/Meta-Llama-3.1-8B-Instruct",
+            "meta-llama/llama-3.1-8b-instruct": "meta-llama/Meta-Llama-3.1-8B-Instruct",
+
+            # DeepSeek models
+            "deepseek-ai/deepseek-v3": "deepseek-ai/DeepSeek-V3",
+            "deepseek-ai/deepseek-r1": "deepseek-ai/DeepSeek-R1",
+
+            # Qwen models
+            "qwen/qwen-2.5-72b": "Qwen/Qwen2.5-72B-Instruct",
+            "qwen/qwen-2.5-72b-instruct": "Qwen/Qwen2.5-72B-Instruct",
+            "qwen/qwen-2.5-7b": "Qwen/Qwen2.5-7B-Instruct",
+            "qwen/qwen-2.5-7b-instruct": "Qwen/Qwen2.5-7B-Instruct",
+
+            # Mistral models
+            "mistralai/mistral-7b": "mistralai/Mistral-7B-Instruct-v0.3",
+            "mistralai/mistral-7b-instruct": "mistralai/Mistral-7B-Instruct-v0.3",
+            "mistralai/mixtral-8x7b": "mistralai/Mixtral-8x7B-Instruct-v0.1",
+            "mistralai/mixtral-8x7b-instruct": "mistralai/Mixtral-8x7B-Instruct-v0.1",
+
+            # Microsoft models
+            "microsoft/phi-3": "microsoft/Phi-3-medium-4k-instruct",
+            "microsoft/phi-3-medium": "microsoft/Phi-3-medium-4k-instruct",
+
+            # Google models
+            "google/gemma-2-9b": "google/gemma-2-9b-it",
+            "google/gemma-2-9b-it": "google/gemma-2-9b-it",
+        },
+        "hug": {
+            # Alias for huggingface - use same mappings
+            # HuggingFace uses org/model format directly
+            # Most models pass through as-is, but we map common variations
+            "meta-llama/llama-3.3-70b": "meta-llama/Llama-3.3-70B-Instruct",
+            "meta-llama/llama-3.3-70b-instruct": "meta-llama/Llama-3.3-70B-Instruct",
+            "meta-llama/llama-3.1-70b": "meta-llama/Meta-Llama-3.1-70B-Instruct",
+            "meta-llama/llama-3.1-70b-instruct": "meta-llama/Meta-Llama-3.1-70B-Instruct",
+            "meta-llama/llama-3.1-8b": "meta-llama/Meta-Llama-3.1-8B-Instruct",
+            "meta-llama/llama-3.1-8b-instruct": "meta-llama/Meta-Llama-3.1-8B-Instruct",
+
+            # DeepSeek models
+            "deepseek-ai/deepseek-v3": "deepseek-ai/DeepSeek-V3",
+            "deepseek-ai/deepseek-r1": "deepseek-ai/DeepSeek-R1",
+
+            # Qwen models
+            "qwen/qwen-2.5-72b": "Qwen/Qwen2.5-72B-Instruct",
+            "qwen/qwen-2.5-72b-instruct": "Qwen/Qwen2.5-72B-Instruct",
+            "qwen/qwen-2.5-7b": "Qwen/Qwen2.5-7B-Instruct",
+            "qwen/qwen-2.5-7b-instruct": "Qwen/Qwen2.5-7B-Instruct",
+
+            # Mistral models
+            "mistralai/mistral-7b": "mistralai/Mistral-7B-Instruct-v0.3",
+            "mistralai/mistral-7b-instruct": "mistralai/Mistral-7B-Instruct-v0.3",
+            "mistralai/mixtral-8x7b": "mistralai/Mixtral-8x7B-Instruct-v0.1",
+            "mistralai/mixtral-8x7b-instruct": "mistralai/Mixtral-8x7B-Instruct-v0.1",
+
+            # Microsoft models
+            "microsoft/phi-3": "microsoft/Phi-3-medium-4k-instruct",
+            "microsoft/phi-3-medium": "microsoft/Phi-3-medium-4k-instruct",
+
+            # Google models
+            "google/gemma-2-9b": "google/gemma-2-9b-it",
+            "google/gemma-2-9b-it": "google/gemma-2-9b-it",
         }
     }
 
@@ -265,7 +334,7 @@ def detect_provider_from_model_id(model_id: str) -> Optional[str]:
         return "portkey"
 
     # Check all mappings to see if this model exists
-    for provider in ["fireworks", "openrouter", "featherless", "together", "portkey"]:
+    for provider in ["fireworks", "openrouter", "featherless", "together", "portkey", "huggingface", "hug"]:
         mapping = get_model_id_mapping(provider)
         if model_id in mapping:
             logger.info(f"Detected provider '{provider}' for model '{model_id}'")
