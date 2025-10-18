@@ -113,7 +113,7 @@ const ModelPageSkeleton = () => (
 // Optimized transform function - only transform when needed
 function transformStaticModel(staticModel: typeof staticModels[0]): Model {
     return {
-        id: `${staticModel.developer}/${staticModel.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+        id: `${staticModel.developer}/${staticModel.name}`,
         name: staticModel.name,
         description: staticModel.description,
         context_length: staticModel.context * 1000,
@@ -132,7 +132,7 @@ function transformStaticModel(staticModel: typeof staticModels[0]): Model {
 // Create a Map for O(1) lookup performance
 const staticModelsMap = new Map<string, typeof staticModels[0]>();
 staticModels.forEach(model => {
-    const id = `${model.developer}/${model.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+    const id = `${model.developer}/${model.name}`;
     staticModelsMap.set(id, model);
 });
 

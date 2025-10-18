@@ -144,7 +144,7 @@ type TabType = 'Playground' | 'Use Model' | 'Providers' | 'Activity' | 'Apps';
 // Transform static model to API format
 function transformStaticModel(staticModel: typeof staticModels[0]): Model {
     return {
-        id: `${staticModel.developer}/${staticModel.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+        id: `${staticModel.developer}/${staticModel.name}`,
         name: staticModel.name,
         description: staticModel.description,
         context_length: staticModel.context * 1000,
