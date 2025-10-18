@@ -72,10 +72,11 @@ def fetch_models_from_huggingface_api(
         batch_size = 100  # HF API supports up to 100 per request
         total_fetched = 0
         consecutive_duplicates = 0  # Count consecutive batches with no new models
+        new_models_in_batch = 0  # Track new unique models per batch
 
-        # If no limit specified, fetch all available models (~50,000+ with hf-inference filter)
-        # Use a high number to ensure we get everything available
-        max_total = limit or 50000  # Will fetch until API returns no more models
+        # If no limit specified, fetch up to 10k models (reasonable limit for HF Inference API)
+        # Most available models through hf-inference are in this range
+        max_total = limit or 10000  # Increased from 50000 to 10000 for better performance
 
         # Fetch in batches
         while total_fetched < max_total:
@@ -113,14 +114,35 @@ def fetch_models_from_huggingface_api(
                 logger.info(f"No more models returned from Hugging Face API at offset {offset}")
                 break
 
-            # Track all models (allow deduplication per batch but continue fetching all)
+            # Track all models with enhanced deduplication
+            new_models_in_batch = 0
+            duplicates_in_batch = 0
+
             for model in batch_models:
                 model_id = model.get("id")
-                if model_id and model_id not in seen_model_ids:
+                if not model_id:
+                    continue
+
+                if model_id not in seen_model_ids:
                     seen_model_ids.add(model_id)
                     models.append(model)
+                    new_models_in_batch += 1
+                else:
+                    duplicates_in_batch += 1
 
-            logger.info(f"Fetched batch from offset {offset}: {len(batch_models)} models, {len(seen_model_ids)} total unique so far")
+            logger.info(f"Fetched batch from offset {offset}: {len(batch_models)} returned, {new_models_in_batch} new, {duplicates_in_batch} duplicates, {len(models)} total unique")
+
+            # Stop if we got no new unique models (all duplicates)
+            if new_models_in_batch == 0:
+                consecutive_duplicates += 1
+                logger.warning(f"Batch had 0 new models (all {len(batch_models)} were duplicates). Consecutive duplicate batches: {consecutive_duplicates}")
+
+                # Stop after 3 consecutive batches with no new models
+                if consecutive_duplicates >= 3:
+                    logger.info(f"Stopping pagination after {consecutive_duplicates} consecutive batches with no new unique models")
+                    break
+            else:
+                consecutive_duplicates = 0  # Reset counter when we find new models
 
             total_fetched += len(batch_models)
             offset += batch_size
