@@ -47,7 +47,7 @@ def test_imports():
             _nebius_models_cache,
             _xai_models_cache,
             _novita_models_cache,
-            _hug_models_cache,
+            _huggingface_models_cache,
             get_models_cache,
             clear_models_cache
         )
