@@ -46,7 +46,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="Gatewayz Universal Inference API",
         description="Gateway for AI model access powered by Gatewayz",
-        version="2.0.1"
+        version="2.0.2"  # Bumped to force redeployment with HuggingFace client fix
     )
 
     # Add CORS middleware
@@ -119,7 +119,10 @@ def create_app() -> FastAPI:
             loaded_count += 1
 
         except ImportError as e:
-            logger.warning(f"  ⚠️  {display_name} ({module_name}) - Module not found: {e}")
+            logger.error(f"  ⚠️  {display_name} ({module_name}) - Module not found: {e}")
+            logger.error(f"       Full error details: {repr(e)}")
+            import traceback
+            logger.error(f"       Traceback:\n{traceback.format_exc()}")
             failed_count += 1
 
         except AttributeError as e:
