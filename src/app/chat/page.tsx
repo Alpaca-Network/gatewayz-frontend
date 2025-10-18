@@ -879,6 +879,7 @@ const generateChatTitle = (message: string): string => {
 function ChatPageContent() {
     const searchParams = useSearchParams();
     const { login, authenticated, ready } = usePrivy();
+    const [hasApiKey, setHasApiKey] = useState(false);
     const [message, setMessage] = useState('');
     const [userHasTyped, setUserHasTyped] = useState(false);
     const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -1012,9 +1013,16 @@ function ChatPageContent() {
         }
     }, [shouldAutoSend, activeSessionId, message, selectedModel, loading, isStreamingResponse]);
 
+    // Check for API key in localStorage as fallback authentication
+    useEffect(() => {
+        const apiKey = getApiKey();
+        const userData = getUserData();
+        setHasApiKey(!!(apiKey && userData?.privy_user_id));
+    }, [ready, authenticated]);
+
     // Check for referral bonus notification flag
     useEffect(() => {
-        if (!ready || !authenticated) return;
+        if (!ready || !(authenticated || hasApiKey)) return;
 
         // Check if we should show referral bonus notification
         const showReferralBonus = localStorage.getItem('gatewayz_show_referral_bonus');
@@ -1031,7 +1039,7 @@ function ChatPageContent() {
                 });
             }, 1000); // Delay to allow page to settle
         }
-    }, [ready, authenticated, toast]);
+    }, [ready, authenticated, hasApiKey, toast]);
 
     useEffect(() => {
         // Load sessions from API when authenticated and API key is available
@@ -1039,7 +1047,7 @@ function ChatPageContent() {
             return;
         }
 
-        if (!authenticated) {
+        if (!authenticated && !hasApiKey) {
             return;
         }
 
@@ -1098,7 +1106,7 @@ function ChatPageContent() {
         };
 
         loadSessions();
-    }, [ready, authenticated, authReady]);
+    }, [ready, authenticated, hasApiKey, authReady]);
 
     // Handle rate limit countdown timer
     useEffect(() => {
@@ -2020,7 +2028,8 @@ function ChatPageContent() {
     );
   }
 
-  if (!authenticated) {
+  // Check if user is authenticated via Privy OR has a valid API key in localStorage
+  if (!authenticated && !hasApiKey) {
     return (
       <div className="flex h-[calc(100dvh-130px)] bg-background items-center justify-center">
         <div className="flex flex-col items-center gap-6 max-w-md text-center p-6">
@@ -2324,13 +2333,13 @@ function ChatPageContent() {
                     size="icon"
                     className="h-8 w-8 rounded-lg"
                     onClick={() => fileInputRef.current?.click()}
-                    disabled={!ready || !authenticated}
+                    disabled={!ready || (!authenticated && !hasApiKey)}
                   >
                     <ImageIcon className="h-5 w-5" />
                   </Button>
                   <Input
                     ref={messageInputRef}
-                    placeholder={!ready ? "Authenticating..." : !authenticated ? "Please log in..." : "Start A Message"}
+                    placeholder={!ready ? "Authenticating..." : (!authenticated && !hasApiKey) ? "Please log in..." : "Start A Message"}
                     value={message}
                     onChange={(e) => {
                       setMessage(e.target.value);
@@ -2352,22 +2361,22 @@ function ChatPageContent() {
                       // Mark as typed on any input event (actual typing)
                       setUserHasTyped(true);
                     }}
-                    disabled={!ready || !authenticated}
+                    disabled={!ready || (!authenticated && !hasApiKey)}
                     autoComplete="off"
                     className="border-0 bg-transparent focus-visible:ring-0 text-base text-foreground flex-1"
                   />
-                  {(!ready || !authenticated || isStreamingResponse) && (
+                  {(!ready || (!authenticated && !hasApiKey) || isStreamingResponse) && (
                     <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
                   )}
                   <Button
                     size="icon"
                     variant="ghost"
                     onClick={handleSendMessage}
-                    disabled={loading || isStreamingResponse || !message.trim() || !ready || !authenticated}
+                    disabled={loading || isStreamingResponse || !message.trim() || !ready || (!authenticated && !hasApiKey)}
                     className="h-8 w-8 bg-primary hover:bg-primary/90 text-primary-foreground"
                     title={!ready
                       ? "Waiting for authentication..."
-                      : !authenticated
+                      : (!authenticated && !hasApiKey)
                         ? "Please log in"
                         : isStreamingResponse
                           ? "Please wait for the current response to finish"
