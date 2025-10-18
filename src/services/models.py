@@ -403,16 +403,47 @@ def fetch_models_from_featherless():
             "Authorization": f"Bearer {Config.FEATHERLESS_API_KEY}"
         }
 
-        response = httpx.get("https://api.featherless.ai/v1/models", headers=headers, timeout=30.0)
-        response.raise_for_status()
+        # Fetch all models with pagination
+        all_models = []
+        offset = 0
+        batch_size = 100
+        max_iterations = 200  # Prevent infinite loops (200 * 100 = 20,000 max models)
+        iteration = 0
 
-        payload = response.json()
-        raw_models = payload.get("data", [])
-        normalized_models = [normalize_featherless_model(model) for model in raw_models if model]
+        logger.info("Fetching models from Featherless API with pagination")
+
+        while iteration < max_iterations:
+            url = f"https://api.featherless.ai/v1/models?limit={batch_size}&offset={offset}"
+
+            response = httpx.get(url, headers=headers, timeout=30.0)
+            response.raise_for_status()
+
+            payload = response.json()
+            raw_models = payload.get("data", [])
+
+            if not raw_models:
+                logger.info(f"No more models from Featherless at offset {offset}")
+                break
+
+            logger.info(f"Fetched batch from offset {offset}: {len(raw_models)} models")
+            all_models.extend(raw_models)
+
+            # If we got fewer models than requested, we've reached the end
+            if len(raw_models) < batch_size:
+                logger.info(f"Batch returned fewer models ({len(raw_models)} < {batch_size}), reached end")
+                break
+
+            offset += batch_size
+            iteration += 1
+
+        logger.info(f"Fetched {len(all_models)} total models from Featherless")
+
+        normalized_models = [normalize_featherless_model(model) for model in all_models if model]
 
         _featherless_models_cache["data"] = normalized_models
         _featherless_models_cache["timestamp"] = datetime.now(timezone.utc)
 
+        logger.info(f"Normalized and cached {len(normalized_models)} Featherless models")
         return _featherless_models_cache["data"]
     except httpx.HTTPStatusError as e:
         logger.error(f"Featherless HTTP error: {e.response.status_code} - {e.response.text}")
