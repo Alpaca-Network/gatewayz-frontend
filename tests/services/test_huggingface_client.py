@@ -56,8 +56,9 @@ class TestHuggingFaceClient:
         stream = make_huggingface_request_openai_stream(messages, "meta-llama/Llama-2-7b-chat-hf")
 
         assert stream is not None
+        # The function automatically appends :hf-inference suffix if not present
         mock_client.chat.completions.create.assert_called_once_with(
-            model="meta-llama/Llama-2-7b-chat-hf",
+            model="meta-llama/Llama-2-7b-chat-hf:hf-inference",
             messages=messages,
             stream=True
         )

@@ -15,20 +15,29 @@ api = importlib.import_module(MODULE_PATH)
 # Build a FastAPI app including the router under test
 @pytest.fixture(scope="function")
 def app():
+    from src.security.deps import get_api_key
+
     app = FastAPI()
     app.include_router(api.router)
+
+    # Override the get_api_key dependency to bypass authentication
+    async def mock_get_api_key() -> str:
+        return "test_api_key"
+
+    app.dependency_overrides[get_api_key] = mock_get_api_key
     return app
 
 @pytest.fixture
 def auth_headers():
-    """Provide authorization headers for test requests"""
+    """Provide authorization headers for test requests (not actually used due to dependency override)"""
     return {"Authorization": "Bearer test_api_key"}
 
 @pytest.fixture(autouse=True)
 def mock_api_key_validation(monkeypatch):
     """Mock API key validation to bypass database check - applied to all tests automatically"""
-    from src.security import deps
-    monkeypatch.setattr("src.security.deps.validate_api_key_security", lambda api_key, **kwargs: api_key)
+    from src.security import security
+    # This fixture is kept for backwards compatibility but dependency override is the primary mechanism
+    monkeypatch.setattr(security, "validate_api_key_security", lambda api_key, **kwargs: api_key)
 
 @pytest.fixture
 def payload_basic():
