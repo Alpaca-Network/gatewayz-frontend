@@ -2,10 +2,9 @@ import { Suspense } from 'react';
 import ModelsClient from './models-client';
 import { getModelsForGateway } from '@/lib/models-service';
 
-// Force dynamic rendering to ensure fresh data on every request
-// This prevents build-time timeouts and ensures users always get latest models
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
+// Use static generation with revalidation for much better performance
+// Regenerate the page every 5 minutes (300 seconds) in the background
+export const revalidate = 300; // 5 minutes
 
 interface Model {
   id: string;
@@ -56,17 +55,17 @@ async function getModels(): Promise<Model[]> {
     // Fetch from all gateways in parallel with timeout
     const gatewayPromises = gateways.map(async (gateway) => {
       try {
-        // Add 70 second timeout per gateway (HF with 50k models takes ~25-30s)
+        // Add 15 second timeout per gateway (reasonable for limited fetches)
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 70000);
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
 
-        // Request sensible limits per gateway - prevent massive fetches during build
-        // Featherless has 1.9M models - limit to 10k for build performance
+        // Request sensible limits per gateway - prevent massive fetches
+        // Featherless has 1.9M models - limit to 1k most popular for performance
         let limit: number | undefined = undefined;
         if (gateway === 'huggingface') {
-          limit = 50000; // Get all Hugging Face models
+          limit = 200; // Limit to top 200 most popular HF models
         } else if (gateway === 'featherless') {
-          limit = 10000; // Limit featherless to 10k models for build performance
+          limit = 1000; // Limit featherless to 1k models for performance
         }
 
         const result = await getModelsForGateway(gateway, limit);
