@@ -46,7 +46,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="Gatewayz Universal Inference API",
         description="Gateway for AI model access powered by Gatewayz",
-        version="2.0.2"  # Bumped to force redeployment with HuggingFace client fix
+        version="2.0.3"  # Multi-sort strategy for 1204 HuggingFace models + auto :hf-inference suffix
     )
 
     # Add CORS middleware
