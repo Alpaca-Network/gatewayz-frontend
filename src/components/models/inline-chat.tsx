@@ -67,7 +67,10 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
     }
 
     if (!apiKey) {
-      setError('Please sign in to use chat. API key not found.');
+      console.log('[InlineChat] No API key found in localStorage');
+      console.log('[InlineChat] localStorage gatewayz_api_key:', localStorage.getItem('gatewayz_api_key'));
+      console.log('[InlineChat] localStorage gatewayz_user_data:', localStorage.getItem('gatewayz_user_data'));
+      setError('Authentication required. Please refresh the page or sign in again.');
       return;
     }
 
