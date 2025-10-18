@@ -248,7 +248,7 @@ export default function ModelProfilePage() {
                 };
 
                 console.log(`[ModelProfilePage] Fetching from all gateway APIs...`);
-                const [openrouterRes, portkeyRes, featherlessRes, chutesRes, fireworksRes, togetherRes, groqRes] = await Promise.allSettled([
+                const [openrouterRes, portkeyRes, featherlessRes, chutesRes, fireworksRes, togetherRes, groqRes, huggingfaceRes] = await Promise.allSettled([
                     fetchWithTimeout(`/api/models?gateway=openrouter`).catch(err => {
                         console.error('OpenRouter fetch error:', err);
                         return null;
@@ -276,6 +276,10 @@ export default function ModelProfilePage() {
                     fetchWithTimeout(`/api/models?gateway=groq`).catch(err => {
                         console.error('Groq fetch error:', err);
                         return null;
+                    }),
+                    fetchWithTimeout(`/api/models?gateway=huggingface`, 70000).catch(err => {
+                        console.error('HuggingFace fetch error:', err);
+                        return null;
                     })
                 ]);
                 console.log(`[ModelProfilePage] Gateway API responses:`, {
@@ -285,7 +289,8 @@ export default function ModelProfilePage() {
                     chutes: chutesRes?.status,
                     fireworks: fireworksRes?.status,
                     together: togetherRes?.status,
-                    groq: groqRes?.status
+                    groq: groqRes?.status,
+                    huggingface: huggingfaceRes?.status
                 });
 
                 const getData = async (result: PromiseSettledResult<Response | null>) => {
@@ -303,14 +308,15 @@ export default function ModelProfilePage() {
                     return [];
                 };
 
-                const [openrouterData, portkeyData, featherlessData, chutesData, fireworksData, togetherData, groqData] = await Promise.all([
+                const [openrouterData, portkeyData, featherlessData, chutesData, fireworksData, togetherData, groqData, huggingfaceData] = await Promise.all([
                     getData(openrouterRes),
                     getData(portkeyRes),
                     getData(featherlessRes),
                     getData(chutesRes),
                     getData(fireworksRes),
                     getData(togetherRes),
-                    getData(groqRes)
+                    getData(groqRes),
+                    getData(huggingfaceRes)
                 ]);
 
                 // Combine models from all gateways
@@ -321,7 +327,8 @@ export default function ModelProfilePage() {
                     ...chutesData,
                     ...fireworksData,
                     ...togetherData,
-                    ...groqData
+                    ...groqData,
+                    ...huggingfaceData
                 ];
 
                 // Deduplicate models by ID - keep the first occurrence
@@ -405,6 +412,7 @@ export default function ModelProfilePage() {
                     if (hasModel(fireworksData, 'fireworks')) providers.push('fireworks');
                     if (hasModel(togetherData, 'together')) providers.push('together');
                     if (hasModel(groqData, 'groq')) providers.push('groq');
+                    if (hasModel(huggingfaceData, 'huggingface')) providers.push('huggingface');
 
                     console.log(`Model ${modelId} available in gateways:`, providers);
                     setModelProviders(providers);
@@ -789,7 +797,8 @@ console.log(response.choices[0].message.content);`
                                         chutes: 'Chutes',
                                         fireworks: 'Fireworks',
                                         together: 'Together AI',
-                                        groq: 'Groq'
+                                        groq: 'Groq',
+                                        huggingface: 'Hugging Face'
                                     };
                                     const providerLogos: Record<string, string> = {
                                         openrouter: '/openrouter-logo.svg',
@@ -798,7 +807,8 @@ console.log(response.choices[0].message.content);`
                                         chutes: '/chutes-logo.svg',
                                         fireworks: '/fireworks-logo.svg',
                                         together: '/together-logo.svg',
-                                        groq: '/groq-logo.svg'
+                                        groq: '/groq-logo.svg',
+                                        huggingface: '/huggingface-logo.svg'
                                     };
 
                                     return (

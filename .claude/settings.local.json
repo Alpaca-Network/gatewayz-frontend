@@ -18,7 +18,8 @@
       "Bash(npm i:*)",
       "Bash(git pull:*)",
       "Bash(timeout 30 curl -s \"https://api.gatewayz.ai/v1/models?gateway=huggingface&limit=50000&offset=0\")",
-      "Bash(timeout 90 curl:*)"
+      "Bash(timeout 90 curl:*)",
+      "Bash(timeout 100 curl:*)"
     ],
     "deny": [],
     "ask": []
