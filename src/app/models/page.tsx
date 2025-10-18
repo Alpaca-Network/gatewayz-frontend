@@ -48,8 +48,15 @@ async function getModels(): Promise<Model[]> {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 70000);
 
-        // Request up to 50000 models for huggingface to get all models (backend supports up to 50k per page)
-        const limit = gateway === 'huggingface' ? 50000 : undefined;
+        // Request sensible limits per gateway - prevent massive fetches during build
+        // Featherless has 1.9M models - limit to 10k for build performance
+        let limit: number | undefined = undefined;
+        if (gateway === 'huggingface') {
+          limit = 50000; // Get all Hugging Face models
+        } else if (gateway === 'featherless') {
+          limit = 10000; // Limit featherless to 10k models for build performance
+        }
+
         const result = await getModelsForGateway(gateway, limit);
         console.log(`[Models Page] After getModelsForGateway for ${gateway}: ${result.data?.length || 0} models`);
         clearTimeout(timeoutId);

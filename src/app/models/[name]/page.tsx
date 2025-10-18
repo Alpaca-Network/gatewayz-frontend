@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import { useParams } from 'next/navigation';
 import { useMemo, useEffect, useState, lazy, Suspense } from 'react';
@@ -429,14 +429,14 @@ console.log(response.choices[0].message.content);`
 
             <main>
                 {activeTab === 'Playground' && (
-                    <div className="h-[600px] flex flex-col">
-                        <div className="mb-4">
+                    <div className="flex flex-col gap-4">
+                        <div>
                             <h2 className="text-2xl font-bold mb-2">Playground: {model.name}</h2>
                             <p className="text-muted-foreground">
                                 Try out {model.name} right here. Your messages are not saved.
                             </p>
                         </div>
-                        <Card className="flex-1 p-4 overflow-hidden flex flex-col">
+                        <Card className="h-[600px] p-4 overflow-hidden flex flex-col">
                             <InlineChat modelId={model.id} modelName={model.name} />
                         </Card>
                     </div>

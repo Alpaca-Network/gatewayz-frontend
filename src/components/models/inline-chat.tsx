@@ -223,16 +223,16 @@ export function InlineChat({ modelId, modelName }: InlineChatProps) {
   };
 
   return (
-    <div className="flex flex-col h-full gap-4">
-      <div className="flex-1 overflow-y-auto space-y-4 pb-4">
+    <div className="flex flex-col h-full gap-4 w-full">
+      <div className="flex-1 overflow-y-auto space-y-4 pb-4 pr-2">
         {messages.length === 0 ? (
           <div className="flex items-center justify-center h-full text-muted-foreground">
             <p>Start a conversation with {modelName}</p>
           </div>
         ) : (
           messages.map((msg, idx) => (
-            <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-[70%] ${msg.role === 'assistant' ? 'w-full' : ''}`}>
+            <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} w-full`}>
+              <div className={`max-w-[70%] ${msg.role === 'assistant' ? 'w-full max-w-full' : ''}`}>
                 {msg.role === 'assistant' && msg.thinking && (
                   <Card className="mb-2 p-3 bg-amber-50 dark:bg-amber-950 border-amber-200 dark:border-amber-800">
                     <button
