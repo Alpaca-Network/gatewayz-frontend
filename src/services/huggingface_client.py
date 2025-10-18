@@ -33,10 +33,15 @@ def make_huggingface_request_openai(messages, model, **kwargs):
 
     Args:
         messages: List of message objects
-        model: Model name to use (e.g., "meta-llama/Llama-2-7b-chat-hf", "katanemo/Arch-Router-1.5B:hf-inference")
+        model: Model name to use (e.g., "meta-llama/Llama-2-7b-chat-hf", "katanemo/Arch-Router-1.5B")
         **kwargs: Additional parameters like max_tokens, temperature, etc.
     """
     try:
+        # HuggingFace Router requires :hf-inference suffix if not already present
+        # This tells the router to use the HuggingFace Inference API backend
+        if not model.endswith(":hf-inference"):
+            model = f"{model}:hf-inference"
+
         logger.info(f"Making Hugging Face request with model: {model}")
         logger.debug(f"Request params: message_count={len(messages)}, kwargs={list(kwargs.keys())}")
 
@@ -69,6 +74,11 @@ def make_huggingface_request_openai_stream(messages, model, **kwargs):
         **kwargs: Additional parameters like max_tokens, temperature, etc.
     """
     try:
+        # HuggingFace Router requires :hf-inference suffix if not already present
+        # This tells the router to use the HuggingFace Inference API backend
+        if not model.endswith(":hf-inference"):
+            model = f"{model}:hf-inference"
+
         logger.info(f"Making Hugging Face streaming request with model: {model}")
         logger.debug(f"Request params: message_count={len(messages)}, kwargs={list(kwargs.keys())}")
 
