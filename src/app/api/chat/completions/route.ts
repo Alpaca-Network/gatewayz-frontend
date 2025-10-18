@@ -30,13 +30,39 @@ export async function POST(request: NextRequest) {
         'Authorization': apiKey,
       },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(60000), // 60 second timeout
     });
 
     console.log('[API Proxy] Response status:', response.status);
+    console.log('[API Proxy] Response ok:', response.ok);
 
     // If not streaming, return JSON
     if (!body.stream) {
-      const data = await response.json();
+      const contentType = response.headers.get('content-type');
+
+      // Try to parse JSON response
+      let data;
+      try {
+        data = await response.json();
+      } catch (parseError) {
+        console.error('[API Proxy] Failed to parse JSON response:', parseError);
+        // If JSON parsing fails, try to get text
+        const text = await response.text();
+        console.error('[API Proxy] Response text:', text);
+
+        return new Response(
+          JSON.stringify({
+            error: 'Invalid response from backend',
+            details: text || 'Could not parse backend response',
+            status: response.status
+          }),
+          {
+            status: 502,
+            headers: { 'Content-Type': 'application/json' },
+          }
+        );
+      }
+
       return new Response(JSON.stringify(data), {
         status: response.status,
         headers: { 'Content-Type': 'application/json' },
@@ -66,18 +92,33 @@ export async function POST(request: NextRequest) {
     // Extract more detailed error information
     const errorDetails = error instanceof Error ? {
       message: error.message,
+      name: error.name,
       cause: (error as any).cause,
       stack: error.stack
-    } : { message: 'Unknown error' };
+    } : { message: 'Unknown error', name: 'UnknownError' };
+
+    // Determine appropriate status code based on error type
+    let status = 500;
+    let details = 'Failed to proxy request to chat completions API';
+
+    if (errorDetails.name === 'TimeoutError' || errorDetails.message.includes('timeout')) {
+      status = 504;
+      details = 'Request to backend API timed out after 60 seconds';
+    } else if (errorDetails.message.includes('fetch') || errorDetails.message.includes('network')) {
+      status = 502;
+      details = 'Could not connect to backend API';
+    }
 
     return new Response(
       JSON.stringify({
         error: errorDetails.message,
-        details: 'Failed to proxy request to chat completions API',
+        errorName: errorDetails.name,
+        details: details,
         cause: errorDetails.cause,
-        suggestion: 'The backend API may be experiencing issues. Try again in a moment or use a different model.'
+        suggestion: 'The backend API may be experiencing issues. Try again in a moment or use a different model.',
+        apiUrl: process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai'
       }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
+      { status, headers: { 'Content-Type': 'application/json' } }
     );
   }
 }
