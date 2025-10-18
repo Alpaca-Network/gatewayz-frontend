@@ -419,14 +419,15 @@ def fetch_models_from_hug():
     direct API calls to get all models available on Hugging Face Inference API.
 
     Fetches all available models on HF Inference (hf-inference filter).
-    Currently ~50,000+ models available through the API.
+    Uses trending sort to get the most relevant and popular models first.
+    Targets up to 10,000 models (configurable via max_total limit).
 
     Returns:
         List of normalized Hugging Face models or None on error
     """
     return fetch_models_from_huggingface_api(
         task=None,  # Fetch all models available on HF Inference
-        limit=None,  # Fetch all available (~50,000+ models)
+        limit=None,  # Fetch up to 10k models (configurable in function)
         direction="-1",
-        sort="likes"  # Sort by popularity/likes
+        sort="trending"  # Sort by trending (matches HF UI default)
     )
