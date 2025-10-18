@@ -44,9 +44,9 @@ async function getModels(): Promise<Model[]> {
     // Fetch from all gateways in parallel with timeout
     const gatewayPromises = gateways.map(async (gateway) => {
       try {
-        // Add 10 second timeout per gateway
+        // Add 70 second timeout per gateway (HF with 50k models takes ~25-30s)
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000);
+        const timeoutId = setTimeout(() => controller.abort(), 70000);
 
         // Request up to 50000 models for huggingface to get all models (backend supports up to 50k per page)
         const limit = gateway === 'huggingface' ? 50000 : undefined;
