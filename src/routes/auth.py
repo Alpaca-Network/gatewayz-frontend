@@ -184,17 +184,20 @@ async def privy_auth(request: PrivyAuthRequest):
                 email=email or f"{request.user.id}@privy.user",
                 auth_method=auth_method,
                 privy_user_id=request.user.id,
-                credits=0  # Users start with $0
+                credits=10  # Users start with $10 trial credits for 3 days
             )
 
             # Process referral code if provided
             referral_code_valid = False
             if request.referral_code:
                 try:
+                    from src.services.referral import track_referral_signup, send_referral_signup_notification
                     client = get_supabase_client()
-                    # Check if referral code exists
-                    referrer_result = client.table('users').select('id').eq('referral_code', request.referral_code).execute()
-                    if referrer_result.data:
+
+                    # Track referral signup and store referred_by_code
+                    success, error_msg, referrer = track_referral_signup(request.referral_code, user_data['user_id'])
+
+                    if success and referrer:
                         referral_code_valid = True
                         logger.info(f"Valid referral code provided during signup: {request.referral_code}")
 
@@ -204,10 +207,19 @@ async def privy_auth(request: PrivyAuthRequest):
                                 'referred_by_code': request.referral_code
                             }).eq('id', user_data['user_id']).execute()
                             logger.info(f"Stored referral code {request.referral_code} for new user {user_data['user_id']}")
+
+                            # Send notification to referrer
+                            if referrer.get('email'):
+                                send_referral_signup_notification(
+                                    referrer_id=referrer['id'],
+                                    referrer_email=referrer['email'],
+                                    referrer_username=referrer.get('username', 'User'),
+                                    referee_username=username
+                                )
                         except Exception as e:
-                            logger.error(f"Failed to store referral code for new user: {e}")
+                            logger.error(f"Failed to store referral code or send notification for new user: {e}")
                     else:
-                        logger.warning(f"Invalid referral code provided during signup: {request.referral_code}")
+                        logger.warning(f"Invalid referral code provided during signup: {request.referral_code} - {error_msg}")
                 except Exception as e:
                     logger.error(f"Error processing referral code: {e}")
 
@@ -295,36 +307,49 @@ async def register_user(request: UserRegistrationRequest):
         if existing_username.data:
             raise HTTPException(status_code=400, detail="Username already taken")
 
-        # Validate referral code if provided
-        referral_code_valid = False
-        if request.referral_code:
-            from src.services.referral import validate_referral_code
-            # We can't validate yet since user doesn't exist, so just check if code exists
-            referrer_result = client.table('users').select('id').eq('referral_code', request.referral_code).execute()
-            if referrer_result.data:
-                referral_code_valid = True
-                logger.info(f"Valid referral code provided: {request.referral_code}")
-            else:
-                logger.warning(f"Invalid referral code provided: {request.referral_code}")
-
-        # Create user
+        # Create user first
         user_data = create_enhanced_user(
             username=request.username,
             email=request.email,
             auth_method=request.auth_method,
             privy_user_id=None,  # No Privy for direct registration
-            credits=0  # Users start with $0
+            credits=10  # Users start with $10 trial credits for 3 days
         )
 
-        # Store referral code if valid (bonus will be applied on first purchase)
-        if referral_code_valid and request.referral_code:
+        # Validate and track referral code if provided
+        referral_code_valid = False
+        if request.referral_code:
             try:
-                client.table('users').update({
-                    'referred_by_code': request.referral_code
-                }).eq('id', user_data['user_id']).execute()
-                logger.info(f"Stored referral code {request.referral_code} for user {user_data['user_id']}")
+                from src.services.referral import track_referral_signup, send_referral_signup_notification
+
+                # Track referral signup and store referred_by_code
+                success, error_msg, referrer = track_referral_signup(request.referral_code, user_data['user_id'])
+
+                if success and referrer:
+                    referral_code_valid = True
+                    logger.info(f"Valid referral code provided: {request.referral_code}")
+
+                    # Store referral code for the new user
+                    try:
+                        client.table('users').update({
+                            'referred_by_code': request.referral_code
+                        }).eq('id', user_data['user_id']).execute()
+                        logger.info(f"Stored referral code {request.referral_code} for user {user_data['user_id']}")
+
+                        # Send notification to referrer
+                        if referrer.get('email'):
+                            send_referral_signup_notification(
+                                referrer_id=referrer['id'],
+                                referrer_email=referrer['email'],
+                                referrer_username=referrer.get('username', 'User'),
+                                referee_username=request.username
+                            )
+                    except Exception as e:
+                        logger.error(f"Failed to store referral code or send notification: {e}")
+                else:
+                    logger.warning(f"Invalid referral code provided: {request.referral_code} - {error_msg}")
             except Exception as e:
-                logger.error(f"Failed to store referral code: {e}")
+                logger.error(f"Error processing referral code: {e}")
 
         # Send welcome email
         try:
