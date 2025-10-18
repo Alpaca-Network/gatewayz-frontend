@@ -69,21 +69,23 @@ def fetch_models_from_huggingface_api(
         models = []
         seen_model_ids = set()  # Track unique model IDs to detect duplicates
         offset = 0
-        batch_size = 100  # HF API supports up to 100 per request
+        batch_size = 1000  # HF API supports up to 1000 per request with full=true parameter
         total_fetched = 0
         consecutive_duplicates = 0  # Count consecutive batches with no new models
         new_models_in_batch = 0  # Track new unique models per batch
 
-        # If no limit specified, fetch up to 10k models (reasonable limit for HF Inference API)
-        # Most available models through hf-inference are in this range
-        max_total = limit or 10000  # Increased from 50000 to 10000 for better performance
+        # If no limit specified, fetch up to 1000 models (HF API limit with full=true)
+        # Note: The API has ~1,377 models but pagination doesn't work with inference_provider filter
+        # So we can only fetch the first 1000 in a single request
+        max_total = limit or 1000  # HF API maximum with full=true parameter
 
         # Fetch in batches
         while total_fetched < max_total:
             params = {
                 "inference_provider": "hf-inference",  # Only models available on HF Inference API
-                "limit": min(batch_size, max_total - total_fetched),
+                "limit": min(1000, max_total - total_fetched),  # HF API caps at 1000 models per request with full=true
                 "offset": offset,
+                "full": "true",  # Enable full response to get up to 1000 models (vs 100 without this)
             }
 
             # Note: sort and direction don't work reliably with inference_provider filter
@@ -146,6 +148,13 @@ def fetch_models_from_huggingface_api(
 
             total_fetched += len(batch_models)
             offset += batch_size
+
+            # If we got 1000 models (API max), we've hit the limit
+            # Note: Pagination doesn't work with inference_provider filter, so we stop here
+            if len(models) >= 1000:
+                logger.info(f"Reached HuggingFace API limit of 1000 models with full=true parameter")
+                logger.info(f"Note: ~1,377 models exist but API pagination doesn't work with inference_provider filter")
+                break
 
             # If we got fewer models than requested, we've reached the end
             if len(batch_models) < batch_size:
