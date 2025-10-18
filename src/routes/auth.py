@@ -4,7 +4,7 @@ import requests
 from datetime import datetime, timezone
 
 from src.enhanced_notification_service import enhanced_notification_service
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, BackgroundTasks
 
 from src.schemas import PrivyAuthResponse, PrivyAuthRequest, AuthMethod, UserRegistrationResponse, \
     UserRegistrationRequest, SubscriptionStatus
@@ -19,8 +19,85 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+# Background task functions for non-blocking operations
+def _send_welcome_email_background(user_id: str, username: str, email: str, credits: float):
+    """Send welcome email in background for existing users"""
+    try:
+        logger.info(f"Background task: Sending welcome email to user {user_id} with email {email}")
+        success = enhanced_notification_service.send_welcome_email_if_needed(
+            user_id=user_id,
+            username=username,
+            email=email,
+            credits=credits
+        )
+        logger.info(f"Background task: Welcome email result for user {user_id}: {success}")
+    except Exception as e:
+        logger.error(f"Background task: Failed to send welcome email to existing user: {e}")
+
+
+def _send_new_user_welcome_email_background(user_id: str, username: str, email: str, credits: float):
+    """Send welcome email in background for new users"""
+    try:
+        logger.info(f"Background task: Sending welcome email to new user {user_id}")
+        success = enhanced_notification_service.send_welcome_email(
+            user_id=user_id,
+            username=username,
+            email=email,
+            credits=credits
+        )
+        if success:
+            from src.db.users import mark_welcome_email_sent
+            mark_welcome_email_sent(user_id)
+            logger.info(f"Background task: Welcome email sent and marked for new user {user_id}")
+        else:
+            logger.warning(f"Background task: Welcome email failed for new user {user_id}")
+    except Exception as e:
+        logger.warning(f"Background task: Failed to send welcome email: {e}")
+
+
+def _log_auth_activity_background(user_id: str, auth_method: AuthMethod, privy_user_id: str, is_new_user: bool):
+    """Log authentication activity in background"""
+    try:
+        log_activity(
+            user_id=user_id,
+            model="auth",
+            provider="Privy",
+            tokens=0,
+            cost=0.0,
+            speed=0.0,
+            finish_reason="login",
+            app="Auth",
+            metadata={
+                "action": "login",
+                "auth_method": auth_method.value if hasattr(auth_method, 'value') else str(auth_method),
+                "privy_user_id": privy_user_id,
+                "is_new_user": is_new_user
+            }
+        )
+    except Exception as e:
+        logger.warning(f"Background task: Failed to log auth activity: {e}")
+
+
+def _log_registration_activity_background(user_id: str, metadata: dict):
+    """Log registration activity in background"""
+    try:
+        log_activity(
+            user_id=user_id,
+            model="auth",
+            provider="Privy",
+            tokens=0,
+            cost=0.0,
+            speed=0.0,
+            finish_reason="register",
+            app="Auth",
+            metadata=metadata
+        )
+    except Exception as e:
+        logger.warning(f"Background task: Failed to log registration activity: {e}")
+
+
 @router.post("/auth", response_model=PrivyAuthResponse, tags=["authentication"])
-async def privy_auth(request: PrivyAuthRequest):
+async def privy_auth(request: PrivyAuthRequest, background_tasks: BackgroundTasks):
     """Authenticate user via Privy and return API key"""
     try:
         logger.info(f"Privy auth request for user: {request.user.id}")
@@ -48,28 +125,12 @@ async def privy_auth(request: PrivyAuthRequest):
                     display_name = account.name
                     auth_method = AuthMethod.GITHUB
 
-        # If still no email found, try to fetch from Privy API using the token
+        # OPTIMIZATION: Skip expensive Privy API call (5s timeout) - we can use a fallback email if needed
+        # This call was taking too long and causing timeouts on Vercel free tier (10s limit)
         if not email and request.token:
-            try:
-                logger.info(f"No email in request or linked_accounts, fetching from Privy API for user {request.user.id}")
-                headers = {
-                    "Authorization": f"Bearer {request.token}",
-                    "privy-app-id": "cmg8fkib300g3l40dbs6autqe"  # Your Privy app ID from the JWT
-                }
-                response = requests.get(f"https://auth.privy.io/api/v1/users/{request.user.id}", headers=headers, timeout=5)
-                if response.status_code == 200:
-                    user_data = response.json()
-                    logger.info(f"Privy API response: {user_data}")
-                    # Extract email from linked accounts in the API response
-                    for acc in user_data.get('linked_accounts', []):
-                        if acc.get('type') == 'email' and acc.get('address'):
-                            email = acc['address']
-                            logger.info(f"Found email from Privy API: {email}")
-                            break
-                else:
-                    logger.warning(f"Privy API returned status {response.status_code}")
-            except Exception as e:
-                logger.error(f"Error fetching user data from Privy API: {e}")
+            logger.info(f"No email found for user {request.user.id}, will use fallback email")
+            # Use a fallback email format instead of calling external API
+            email = f"{request.user.id}@privy.user"
 
         logger.info(f"Email extraction result for user {request.user.id}: {email}")
 
@@ -99,67 +160,46 @@ async def privy_auth(request: PrivyAuthRequest):
             logger.info(f"Existing Privy user found: {existing_user['id']}")
             logger.info(f"User details - ID: {existing_user['id']}, Email: {existing_user.get('email')}, Welcome sent: {existing_user.get('welcome_email_sent', 'Not set')}")
 
-            # Get the primary API key from api_keys_new table (not users.api_key which might be stale)
+            # OPTIMIZATION: Get API key with a single query instead of two separate queries
             client = get_supabase_client()
 
-            # First try to get primary key
-            primary_key_result = client.table('api_keys_new').select('api_key').eq('user_id', existing_user['id']).eq('is_primary', True).eq('is_active', True).execute()
+            # Get all active keys, ordered by primary first, then by creation date
+            all_keys_result = client.table('api_keys_new').select('api_key, is_primary').eq('user_id', existing_user['id']).eq('is_active', True).order('is_primary', desc=True).order('created_at', desc=False).execute()
 
             api_key_to_return = existing_user['api_key']  # Default fallback
 
-            if primary_key_result.data and len(primary_key_result.data) > 0:
-                # Found primary key
-                api_key_to_return = primary_key_result.data[0]['api_key']
-                logger.info(f"Returning primary API key for user {existing_user['id']}: {api_key_to_return[:15]}...")
+            if all_keys_result.data and len(all_keys_result.data) > 0:
+                # Return the first key (will be primary if it exists, otherwise first active key)
+                api_key_to_return = all_keys_result.data[0]['api_key']
+                key_type = "primary" if all_keys_result.data[0].get('is_primary') else "active"
+                logger.info(f"Returning {key_type} API key for user {existing_user['id']}: {api_key_to_return[:15]}...")
             else:
-                # No primary key, get ANY active key from api_keys_new
-                any_key_result = client.table('api_keys_new').select('api_key').eq('user_id', existing_user['id']).eq('is_active', True).order('created_at', desc=False).limit(1).execute()
+                logger.warning(f"No API keys found in api_keys_new for user {existing_user['id']}, using legacy key from users table: {api_key_to_return[:15] if api_key_to_return else 'None'}...")
 
-                if any_key_result.data and len(any_key_result.data) > 0:
-                    api_key_to_return = any_key_result.data[0]['api_key']
-                    logger.info(f"No primary key found, returning first active API key for user {existing_user['id']}: {api_key_to_return[:15]}...")
-                else:
-                    logger.warning(f"No API keys found in api_keys_new for user {existing_user['id']}, using legacy key from users table: {api_key_to_return[:15] if api_key_to_return else 'None'}...")
-
-            # Send welcome email if they haven't received one yet
+            # OPTIMIZATION: Send welcome email in background to avoid blocking the response
             user_email = existing_user.get('email') or email
             logger.info(f"Welcome email check - User ID: {existing_user['id']}, Email: {user_email}, Welcome sent: {existing_user.get('welcome_email_sent', 'Not set')}")
 
             if user_email:
-                try:
-                    logger.info(f"Attempting to send welcome email to user {existing_user['id']} with email {user_email}")
-                    success = enhanced_notification_service.send_welcome_email_if_needed(
-                        user_id=existing_user['id'],
-                        username=existing_user.get('username') or display_name,
-                        email=user_email,
-                        credits=existing_user.get('credits', 0)
-                    )
-                    logger.info(f"Welcome email result for user {existing_user['id']}: {success}")
-                except Exception as e:
-                    logger.error(f"Failed to send welcome email to existing user: {e}")
+                # Send email in background
+                background_tasks.add_task(
+                    _send_welcome_email_background,
+                    user_id=existing_user['id'],
+                    username=existing_user.get('username') or display_name,
+                    email=user_email,
+                    credits=existing_user.get('credits', 0)
+                )
             else:
                 logger.warning(f"No email found for user {existing_user['id']}, skipping welcome email")
 
-            # Log authentication activity
-            try:
-                log_activity(
-                    user_id=existing_user['id'],
-                    model="auth",
-                    provider="Privy",
-                    tokens=0,
-                    cost=0.0,
-                    speed=0.0,
-                    finish_reason="login",
-                    app="Auth",
-                    metadata={
-                        "action": "login",
-                        "auth_method": auth_method.value if hasattr(auth_method, 'value') else str(auth_method),
-                        "privy_user_id": request.user.id,
-                        "is_new_user": False
-                    }
-                )
-            except Exception as e:
-                logger.warning(f"Failed to log auth activity: {e}")
+            # OPTIMIZATION: Log authentication activity in background to avoid blocking
+            background_tasks.add_task(
+                _log_auth_activity_background,
+                user_id=existing_user['id'],
+                auth_method=auth_method,
+                privy_user_id=request.user.id,
+                is_new_user=False
+            )
 
             return PrivyAuthResponse(
                 success=True,
@@ -208,9 +248,10 @@ async def privy_auth(request: PrivyAuthRequest):
                             }).eq('id', user_data['user_id']).execute()
                             logger.info(f"Stored referral code {request.referral_code} for new user {user_data['user_id']}")
 
-                            # Send notification to referrer
+                            # OPTIMIZATION: Send notification to referrer in background
                             if referrer.get('email'):
-                                send_referral_signup_notification(
+                                background_tasks.add_task(
+                                    send_referral_signup_notification,
                                     referrer_id=referrer['id'],
                                     referrer_email=referrer['email'],
                                     referrer_username=referrer.get('username', 'User'),
@@ -223,52 +264,34 @@ async def privy_auth(request: PrivyAuthRequest):
                 except Exception as e:
                     logger.error(f"Error processing referral code: {e}")
 
-            # Send welcome email if we have an email
+            # OPTIMIZATION: Send welcome email in background for new users
             if email:
-                try:
-                    success = enhanced_notification_service.send_welcome_email(
-                        user_id=user_data['user_id'],
-                        username=user_data['username'],
-                        email=email,
-                        credits=user_data['credits']
-                    )
-                    # Only mark welcome email as sent if it was actually sent successfully
-                    if success:
-                        from src.db.users import mark_welcome_email_sent
-                        mark_welcome_email_sent(user_data['user_id'])
-                        logger.info(f"Welcome email sent and marked as sent for new user {user_data['user_id']}")
-                    else:
-                        logger.warning(f"Welcome email failed to send for new user {user_data['user_id']}")
-                except Exception as e:
-                    logger.warning(f"Failed to send welcome email: {e}")
+                background_tasks.add_task(
+                    _send_new_user_welcome_email_background,
+                    user_id=user_data['user_id'],
+                    username=user_data['username'],
+                    email=email,
+                    credits=user_data['credits']
+                )
 
             logger.info(f"New Privy user created: {user_data['user_id']}")
             logger.info(f"Referral code processing result for new user {user_data['user_id']}: valid={referral_code_valid}")
 
-            # Log registration activity
-            try:
-                activity_metadata = {
-                    "action": "register",
-                    "auth_method": auth_method.value if hasattr(auth_method, 'value') else str(auth_method),
-                    "privy_user_id": request.user.id,
-                    "is_new_user": True,
-                    "initial_credits": user_data['credits'],
-                    "referral_code": request.referral_code,
-                    "referral_code_valid": referral_code_valid
-                }
-                log_activity(
-                    user_id=user_data['user_id'],
-                    model="auth",
-                    provider="Privy",
-                    tokens=0,
-                    cost=0.0,
-                    speed=0.0,
-                    finish_reason="register",
-                    app="Auth",
-                    metadata=activity_metadata
-                )
-            except Exception as e:
-                logger.warning(f"Failed to log registration activity: {e}")
+            # OPTIMIZATION: Log registration activity in background
+            activity_metadata = {
+                "action": "register",
+                "auth_method": auth_method.value if hasattr(auth_method, 'value') else str(auth_method),
+                "privy_user_id": request.user.id,
+                "is_new_user": True,
+                "initial_credits": user_data['credits'],
+                "referral_code": request.referral_code,
+                "referral_code_valid": referral_code_valid
+            }
+            background_tasks.add_task(
+                _log_registration_activity_background,
+                user_id=user_data['user_id'],
+                metadata=activity_metadata
+            )
 
             return PrivyAuthResponse(
                 success=True,
