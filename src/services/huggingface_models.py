@@ -64,32 +64,25 @@ def fetch_models_from_huggingface_api(
                 logger.info(f"Using cached Hugging Face models ({len(_huggingface_models_cache['data'])} models, age: {cache_age:.0f}s)")
                 return _huggingface_models_cache["data"]
 
-        logger.info("Fetching models from Hugging Face Models API Hub")
+        logger.info("Fetching models from Hugging Face Models API Hub using multi-sort strategy")
 
         models = []
-        seen_model_ids = set()  # Track unique model IDs to detect duplicates
-        offset = 0
-        batch_size = 1000  # HF API supports up to 1000 per request with full=true parameter
-        total_fetched = 0
-        consecutive_duplicates = 0  # Count consecutive batches with no new models
-        new_models_in_batch = 0  # Track new unique models per batch
+        seen_model_ids = set()  # Track unique model IDs to detect duplicates across all sort methods
 
-        # If no limit specified, fetch up to 1000 models (HF API limit with full=true)
-        # Note: The API has ~1,377 models but pagination doesn't work with inference_provider filter
-        # So we can only fetch the first 1000 in a single request
-        max_total = limit or 1000  # HF API maximum with full=true parameter
+        # Strategy: Use multiple sort methods to get different sets of models
+        # The API caps at 1000 per request, but different sorts return different models
+        # This allows us to fetch more than 1000 unique models by merging results
+        sort_methods = ['likes', 'downloads']  # These two sorts give us the best coverage
 
-        # Fetch in batches
-        while total_fetched < max_total:
+        for sort_method in sort_methods:
+            logger.info(f"Fetching models with sort={sort_method}")
+
             params = {
                 "inference_provider": "hf-inference",  # Only models available on HF Inference API
-                "limit": min(1000, max_total - total_fetched),  # HF API caps at 1000 models per request with full=true
-                "offset": offset,
+                "limit": 1000,  # HF API caps at 1000 models per request with full=true
                 "full": "true",  # Enable full response to get up to 1000 models (vs 100 without this)
+                "sort": sort_method,  # Use the current sort method
             }
-
-            # Note: sort and direction don't work reliably with inference_provider filter
-            # so we fetch all available and handle sorting client-side if needed
 
             # Only add task filter if explicitly specified and not "all"
             if task and task != "all":
@@ -99,7 +92,7 @@ def fetch_models_from_huggingface_api(
                 params["search"] = search
 
             url = "https://huggingface.co/api/models"
-            logger.debug(f"Fetching batch from offset {offset} with params: {params}")
+            logger.debug(f"Fetching with sort={sort_method}, params: {params}")
 
             # Add authentication headers if HF token is available
             headers = {}
@@ -113,10 +106,10 @@ def fetch_models_from_huggingface_api(
             batch_models = response.json()
 
             if not batch_models:
-                logger.info(f"No more models returned from Hugging Face API at offset {offset}")
-                break
+                logger.warning(f"No models returned for sort={sort_method}")
+                continue
 
-            # Track all models with enhanced deduplication
+            # Track unique models from this batch
             new_models_in_batch = 0
             duplicates_in_batch = 0
 
@@ -132,38 +125,10 @@ def fetch_models_from_huggingface_api(
                 else:
                     duplicates_in_batch += 1
 
-            logger.info(f"Fetched batch from offset {offset}: {len(batch_models)} returned, {new_models_in_batch} new, {duplicates_in_batch} duplicates, {len(models)} total unique")
+            logger.info(f"Sort={sort_method}: {len(batch_models)} returned, {new_models_in_batch} new, {duplicates_in_batch} duplicates, {len(models)} total unique")
 
-            # Stop if we got no new unique models (all duplicates)
-            if new_models_in_batch == 0:
-                consecutive_duplicates += 1
-                logger.warning(f"Batch had 0 new models (all {len(batch_models)} were duplicates). Consecutive duplicate batches: {consecutive_duplicates}")
-
-                # Stop after 3 consecutive batches with no new models
-                if consecutive_duplicates >= 3:
-                    logger.info(f"Stopping pagination after {consecutive_duplicates} consecutive batches with no new unique models")
-                    break
-            else:
-                consecutive_duplicates = 0  # Reset counter when we find new models
-
-            total_fetched += len(batch_models)
-            offset += batch_size
-
-            # If we got 1000 models (API max), we've hit the limit
-            # Note: Pagination doesn't work with inference_provider filter, so we stop here
-            if len(models) >= 1000:
-                logger.info(f"Reached HuggingFace API limit of 1000 models with full=true parameter")
-                logger.info(f"Note: ~1,377 models exist but API pagination doesn't work with inference_provider filter")
-                break
-
-            # If we got fewer models than requested, we've reached the end
-            if len(batch_models) < batch_size:
-                logger.info(f"Batch returned fewer models ({len(batch_models)} < {batch_size}), reached end of available models")
-                break
-
-            # Add a small delay between requests to avoid rate limiting
-            # Only add delay if HF_API_KEY is not provided (unauthenticated requests are more limited)
-            if not Config.HUG_API_KEY and total_fetched < max_total:
+            # Add a small delay between different sort requests to avoid rate limiting
+            if not Config.HUG_API_KEY and sort_method != sort_methods[-1]:
                 time.sleep(0.5)  # 500ms delay between requests
 
         if not models:
