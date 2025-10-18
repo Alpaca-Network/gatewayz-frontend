@@ -31,7 +31,7 @@ from src.cache import (
     _nebius_models_cache,
     _xai_models_cache,
     _novita_models_cache,
-    _hug_models_cache,
+    _huggingface_models_cache,
 )
 from src.services.pricing_lookup import enrich_model_with_pricing
 
@@ -222,11 +222,11 @@ def fetch_models_from_hug():
 
         normalized_models = [normalize_portkey_provider_model(model, "hug") for model in filtered_models if model]
 
-        _hug_models_cache["data"] = normalized_models
-        _hug_models_cache["timestamp"] = datetime.now(timezone.utc)
+        _huggingface_models_cache["data"] = normalized_models
+        _huggingface_models_cache["timestamp"] = datetime.now(timezone.utc)
 
         logger.info(f"Cached {len(normalized_models)} Hugging Face models from Portkey catalog")
-        return _hug_models_cache["data"]
+        return _huggingface_models_cache["data"]
 
     except Exception as e:
         logger.error(f"Failed to fetch models from Hugging Face: {e}", exc_info=True)

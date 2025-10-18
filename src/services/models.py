@@ -20,7 +20,7 @@ from src.cache import (
     _nebius_models_cache,
     _xai_models_cache,
     _novita_models_cache,
-    _hug_models_cache,
+    _huggingface_models_cache,
 )
 from fastapi import APIRouter
 from datetime import datetime, timezone
@@ -144,8 +144,8 @@ def get_cached_models(gateway: str = "openrouter"):
                     return cache["data"]
             return fetch_models_from_novita()
 
-        if gateway == "hug":
-            cache = _hug_models_cache
+        if gateway == "hug" or gateway == "huggingface":
+            cache = _huggingface_models_cache
             if cache["data"] and cache["timestamp"]:
                 cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
                 if cache_age < cache["ttl"]:
