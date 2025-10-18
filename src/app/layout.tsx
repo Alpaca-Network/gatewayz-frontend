@@ -8,6 +8,7 @@ import { PrivyProviderWrapper } from '@/components/providers/privy-provider';
 import { PostHogProvider, PostHogPageView } from '@/components/providers/posthog-provider';
 import { OnboardingBanner } from '@/components/onboarding/onboarding-banner';
 import { Analytics } from '@vercel/analytics/next';
+import { SpeedInsights } from '@vercel/speed-insights/next';
 import { Inter } from 'next/font/google';
 import { Suspense } from 'react';
 // import { GTMLoader } from '@/components/analytics/gtm-loader'; // Temporarily disabled due to layout router issues
@@ -89,6 +90,7 @@ export default function RootLayout({
               <Toaster />
               <AppFooter />
               <Analytics />
+              <SpeedInsights />
             </PrivyProviderWrapper>
           </PostHogProvider>
         </ThemeProvider>
