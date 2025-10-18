@@ -165,7 +165,7 @@ export default function ModelProfilePage() {
     const [model, setModel] = useState<Model | null>(null);
     const [allModels, setAllModels] = useState<Model[]>([]);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<TabType>('Use Model');
+    const [activeTab, setActiveTab] = useState<TabType>('Playground');
     const [copiedStates, setCopiedStates] = useState<{ [key: string]: boolean }>({});
     const [apiKey, setApiKey] = useState('gw_live_YOUR_API_KEY_HERE');
     const [selectedLanguage, setSelectedLanguage] = useState<'curl' | 'python' | 'openai-python' | 'typescript' | 'openai-typescript'>('curl');
@@ -550,11 +550,15 @@ export default function ModelProfilePage() {
                         <div className="mb-4">
                             <h2 className="text-2xl font-bold mb-2">Playground: {model.name}</h2>
                             <p className="text-muted-foreground">
-                                Try out {model.name} right here. Your messages are not saved.
+                                Test {model.name} directly in your browser. Messages are not saved to your chat history.
                             </p>
                         </div>
                         <Card className="flex-1 p-4 overflow-hidden flex flex-col">
-                            <InlineChat modelId={model.id} modelName={model.name} />
+                            <InlineChat
+                                modelId={model.id}
+                                modelName={model.name}
+                                gateway={modelProviders.length > 0 ? modelProviders[0] : undefined}
+                            />
                         </Card>
                     </div>
                 )}

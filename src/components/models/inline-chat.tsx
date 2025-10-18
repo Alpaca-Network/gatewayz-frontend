@@ -21,9 +21,10 @@ interface Message {
 interface InlineChatProps {
   modelId: string;
   modelName: string;
+  gateway?: string;
 }
 
-export function InlineChat({ modelId, modelName }: InlineChatProps) {
+export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -56,10 +57,22 @@ export function InlineChat({ modelId, modelName }: InlineChatProps) {
     if (!input.trim() || loading) return;
 
     // Get API key and user data
-    const apiKey = getApiKey();
+    let apiKey = getApiKey();
     const userData = getUserData();
 
-    if (!apiKey || !userData?.privy_user_id) {
+    // Development fallback: use env variable if API key not found (CORS issue on localhost)
+    if (!apiKey && process.env.NODE_ENV === 'development') {
+      apiKey = process.env.NEXT_PUBLIC_DEV_API_KEY || null;
+      console.log('[InlineChat] Using development API key fallback');
+    }
+
+    if (!apiKey) {
+      setError('Please sign in to use chat. API key not found.');
+      return;
+    }
+
+    // For development, we can proceed without userData.privy_user_id
+    if (!userData?.privy_user_id && process.env.NODE_ENV !== 'development') {
       setError('Please sign in to use chat');
       return;
     }
@@ -76,14 +89,20 @@ export function InlineChat({ modelId, modelName }: InlineChatProps) {
     setExpandedThinking(prev => new Set(prev).add(streamingMessageIndex));
 
     try {
-      const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
-      const url = `${apiBaseUrl}/v1/chat/completions`;
+      // Use local API proxy in development to bypass CORS, direct API in production
+      const isDevelopment = process.env.NODE_ENV === 'development';
+      const url = isDevelopment
+        ? '/api/chat/completions'
+        : `${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai'}/v1/chat/completions`;
 
       console.log('[InlineChat] Sending message to model:', modelId);
+      console.log('[InlineChat] Gateway:', gateway || 'not specified');
       console.log('[InlineChat] Using API endpoint:', url);
+      console.log('[InlineChat] Environment:', process.env.NODE_ENV);
 
       const requestBody = {
         model: modelId,
+        ...(gateway && { gateway }), // Add gateway if provided
         messages: [...messages, userMessage].map(m => ({ role: m.role, content: m.content })),
         stream: true,
         temperature: 0.7

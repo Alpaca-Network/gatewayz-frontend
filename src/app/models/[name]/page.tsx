@@ -5,7 +5,7 @@ import { useMemo, useEffect, useState, lazy, Suspense } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Copy, Check } from 'lucide-react';
 import { providerData } from '@/lib/provider-data';
@@ -140,7 +140,7 @@ export default function ModelProfilePage() {
     const params = useParams();
     const [model, setModel] = useState<Model | null>(null);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<TabType>('Use Model');
+    const [activeTab, setActiveTab] = useState<TabType>('Playground');
     const [copiedStates, setCopiedStates] = useState<{ [key: string]: boolean }>({});
     const [apiKey, setApiKey] = useState('YOUR_API_KEY');
     const [selectedLanguage, setSelectedLanguage] = useState<'curl' | 'python' | 'openai-python' | 'typescript' | 'openai-typescript'>('curl');
@@ -433,7 +433,7 @@ console.log(response.choices[0].message.content);`
                         <div>
                             <h2 className="text-2xl font-bold mb-2">Playground: {model.name}</h2>
                             <p className="text-muted-foreground">
-                                Try out {model.name} right here. Your messages are not saved.
+                                Test {model.name} directly in your browser. Messages are not saved to your chat history.
                             </p>
                         </div>
                         <Card className="h-[600px] p-4 overflow-hidden flex flex-col">
