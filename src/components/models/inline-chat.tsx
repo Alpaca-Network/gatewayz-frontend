@@ -77,7 +77,12 @@ export function InlineChat({ modelId, modelName }: InlineChatProps) {
     try {
       abortControllerRef.current = new AbortController();
 
-      const response = await fetch('https://api.gatewayz.ai/v1/chat/completions', {
+      const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
+
+      console.log('[InlineChat] Sending message to model:', modelId);
+      console.log('[InlineChat] Using API endpoint:', `${apiBaseUrl}/v1/chat/completions`);
+
+      const response = await fetch(`${apiBaseUrl}/v1/chat/completions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -93,8 +98,13 @@ export function InlineChat({ modelId, modelName }: InlineChatProps) {
       });
 
       if (!response.ok) {
-        throw new Error(`API error: ${response.status}`);
+        console.error('[InlineChat] API error:', response.status, response.statusText);
+        const errorText = await response.text();
+        console.error('[InlineChat] Error response:', errorText);
+        throw new Error(`API error: ${response.status} ${response.statusText}`);
       }
+
+      console.log('[InlineChat] Stream started successfully');
 
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
@@ -202,8 +212,11 @@ export function InlineChat({ modelId, modelName }: InlineChatProps) {
       });
 
     } catch (err) {
+      console.error('[InlineChat] Error sending message:', err);
       if (err instanceof Error && err.name === 'AbortError') {
         setError('Request cancelled');
+      } else if (err instanceof TypeError && err.message.includes('Failed to fetch')) {
+        setError('Network error - check your connection and try again');
       } else {
         setError(err instanceof Error ? err.message : 'Failed to send message');
       }
