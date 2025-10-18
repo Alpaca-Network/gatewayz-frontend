@@ -26,7 +26,7 @@ from datetime import datetime, timezone
 import httpx
 import time
 
-from src.cache import _hug_models_cache
+from src.cache import _huggingface_models_cache
 from src.services.pricing_lookup import enrich_model_with_pricing
 from src.config import Config
 
@@ -58,11 +58,11 @@ def fetch_models_from_huggingface_api(
     """
     try:
         # Check cache first
-        if use_cache and _hug_models_cache["data"] and _hug_models_cache["timestamp"]:
-            cache_age = (datetime.now(timezone.utc) - _hug_models_cache["timestamp"]).total_seconds()
-            if cache_age < _hug_models_cache["ttl"]:
-                logger.info(f"Using cached Hugging Face models ({len(_hug_models_cache['data'])} models, age: {cache_age:.0f}s)")
-                return _hug_models_cache["data"]
+        if use_cache and _huggingface_models_cache["data"] and _huggingface_models_cache["timestamp"]:
+            cache_age = (datetime.now(timezone.utc) - _huggingface_models_cache["timestamp"]).total_seconds()
+            if cache_age < _huggingface_models_cache["ttl"]:
+                logger.info(f"Using cached Hugging Face models ({len(_huggingface_models_cache['data'])} models, age: {cache_age:.0f}s)")
+                return _huggingface_models_cache["data"]
 
         logger.info("Fetching models from Hugging Face Models API Hub")
 
@@ -151,9 +151,9 @@ def fetch_models_from_huggingface_api(
 
         # Cache the results
         if use_cache:
-            _hug_models_cache["data"] = normalized_models
-            _hug_models_cache["timestamp"] = datetime.now(timezone.utc)
-            logger.info(f"Cached {len(normalized_models)} Hugging Face models with TTL {_hug_models_cache['ttl']}s")
+            _huggingface_models_cache["data"] = normalized_models
+            _huggingface_models_cache["timestamp"] = datetime.now(timezone.utc)
+            logger.info(f"Cached {len(normalized_models)} Hugging Face models with TTL {_huggingface_models_cache['ttl']}s")
 
         return normalized_models
 
