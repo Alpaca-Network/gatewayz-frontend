@@ -4,6 +4,7 @@ const API_KEY_STORAGE_KEY = 'gatewayz_api_key';
 const USER_DATA_STORAGE_KEY = 'gatewayz_user_data';
 
 export const AUTH_REFRESH_EVENT = 'gatewayz:refresh-auth';
+export const NEW_USER_WELCOME_EVENT = 'gatewayz:new-user-welcome';
 
 export interface AuthResponse {
   success: boolean;
@@ -142,6 +143,15 @@ export const processAuthResponse = (response: AuthResponse): void => {
       original_credits: response.credits,
       is_new_user: response.is_new_user
     });
+
+    // Trigger welcome dialog for new users
+    if (response.is_new_user && typeof window !== 'undefined') {
+      console.log('[Auth] New user detected, triggering welcome dialog');
+      const event = new CustomEvent(NEW_USER_WELCOME_EVENT, {
+        detail: { credits: creditsAsInteger }
+      });
+      window.dispatchEvent(event);
+    }
   } else {
     console.warn('Authentication response invalid:', {
       success: response.success,

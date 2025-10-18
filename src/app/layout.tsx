@@ -7,6 +7,7 @@ import { ThemeProvider } from '@/components/theme-provider';
 import { PrivyProviderWrapper } from '@/components/providers/privy-provider';
 import { PostHogProvider, PostHogPageView } from '@/components/providers/posthog-provider';
 import { OnboardingBanner } from '@/components/onboarding/onboarding-banner';
+import { WelcomeDialog } from '@/components/dialogs/welcome-dialog';
 import { Analytics } from '@vercel/analytics/next';
 import { SpeedInsights } from '@vercel/speed-insights/next';
 import { Inter } from 'next/font/google';
@@ -89,6 +90,7 @@ export default function RootLayout({
               </main>
               <Toaster />
               <AppFooter />
+              <WelcomeDialog />
               <Analytics />
               <SpeedInsights />
             </PrivyProviderWrapper>
