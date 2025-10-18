@@ -119,19 +119,37 @@ export function PrivyProviderWrapper({ children }: PrivyProviderWrapperProps) {
       });
 
       console.log('[Auth] Making request to:', `${API_BASE_URL}/auth`);
+      console.log('[Auth] Request body:', JSON.stringify(authBody, null, 2));
 
-      const authResponse = await fetch(`${API_BASE_URL}/auth`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(authBody),
-      });
+      let authResponse: Response;
+      try {
+        authResponse = await fetch(`${API_BASE_URL}/auth`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(authBody),
+          signal: AbortSignal.timeout(30000), // 30 second timeout
+        });
+      } catch (fetchError) {
+        console.error('[Auth] Fetch error:', {
+          error: fetchError,
+          message: fetchError instanceof Error ? fetchError.message : 'Unknown error',
+          name: fetchError instanceof Error ? fetchError.name : 'Unknown'
+        });
+        throw new Error(`Failed to connect to auth endpoint: ${fetchError instanceof Error ? fetchError.message : 'Unknown error'}`);
+      }
 
       console.log('[Auth] Response status:', authResponse.status);
+      console.log('[Auth] Response ok:', authResponse.ok);
 
       if (!authResponse.ok) {
-        const errorText = await authResponse.text();
+        let errorText: string;
+        try {
+          errorText = await authResponse.text();
+        } catch {
+          errorText = 'Could not read error response';
+        }
         console.error('Backend auth failed:', {
           status: authResponse.status,
           statusText: authResponse.statusText,
@@ -141,10 +159,20 @@ export function PrivyProviderWrapper({ children }: PrivyProviderWrapperProps) {
         return;
       }
 
-      const authData = await authResponse.json() as AuthResponse;
+      let authData: AuthResponse;
+      try {
+        authData = await authResponse.json() as AuthResponse;
+      } catch (parseError) {
+        console.error('[Auth] Failed to parse auth response:', parseError);
+        const responseText = await authResponse.text();
+        console.error('[Auth] Response text:', responseText);
+        throw new Error('Failed to parse auth response as JSON');
+      }
+
       console.log('Backend authentication successful:', {
         success: authData.success,
         has_api_key: !!authData.api_key,
+        api_key_length: authData.api_key ? authData.api_key.length : 0,
         is_new_user: authData.is_new_user,
         referral_code_sent: !!referralCode
       });
