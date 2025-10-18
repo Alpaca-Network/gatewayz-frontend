@@ -12,6 +12,10 @@ from typing import Dict, Optional
 
 logger = logging.getLogger(__name__)
 
+MODEL_PROVIDER_OVERRIDES = {
+    "katanemo/arch-router-1.5b": "huggingface",
+}
+
 
 def transform_model_id(model_id: str, provider: str) -> str:
     """
@@ -325,6 +329,14 @@ def detect_provider_from_model_id(model_id: str) -> Optional[str]:
     Returns:
         The detected provider name, or None if unable to detect
     """
+
+    # Apply explicit overrides first
+    normalized_id = (model_id or "").lower()
+    normalized_base = normalized_id.split(":", 1)[0]
+    override = MODEL_PROVIDER_OVERRIDES.get(normalized_base)
+    if override:
+        logger.info(f"Provider override for model '{model_id}': {override}")
+        return override
 
     # Check if it's already in a provider-specific format
     if model_id.startswith("accounts/fireworks/models/"):

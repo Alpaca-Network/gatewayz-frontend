@@ -75,6 +75,8 @@ def test_get_portkey_client_missing_api_key(monkeypatch, mod):
 def test_make_portkey_request_openai_formats_model(monkeypatch, mod):
     fake_client = FakeOpenAI()
     monkeypatch.setattr(mod, "get_portkey_client", lambda provider, virtual_key: fake_client)
+    # Mock Config.get_portkey_virtual_key to return None so virtual_key param is used
+    monkeypatch.setattr(mod.Config, "get_portkey_virtual_key", lambda provider: None)
 
     messages = [{"role": "user", "content": "Hi"}]
     response = mod.make_portkey_request_openai(

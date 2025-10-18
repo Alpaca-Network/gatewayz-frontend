@@ -32,7 +32,8 @@ from src.services.portkey_providers import (
     fetch_models_from_xai,
     fetch_models_from_novita,
 )
-from src.services.huggingface_models import fetch_models_from_hug
+from src.services.huggingface_models import fetch_models_from_hug, get_huggingface_model_info
+from src.services.model_transformations import detect_provider_from_model_id
 
 import httpx
 
@@ -1198,6 +1199,32 @@ def fetch_specific_model_from_fireworks(provider_name: str, model_name: str):
         return None
 
 
+def fetch_specific_model_from_huggingface(provider_name: str, model_name: str):
+    """Fetch specific model data from Hugging Face by using direct lookup or cached models"""
+    try:
+        model_id = f"{provider_name}/{model_name}"
+        model_id_lower = model_id.lower()
+
+        # Try lightweight direct lookup first
+        model_data = get_huggingface_model_info(model_id)
+        if model_data:
+            model_data.setdefault("source_gateway", "hug")
+            return model_data
+
+        # Fall back to cached catalog (may trigger a full fetch on first call)
+        huggingface_models = get_cached_models("huggingface") or get_cached_models("hug")
+        if huggingface_models:
+            for model in huggingface_models:
+                if model.get("id", "").lower() == model_id_lower:
+                    return model
+
+        logger.warning(f"Model {model_id} not found in Hugging Face catalog")
+        return None
+    except Exception as e:
+        logger.error(f"Failed to fetch specific model {provider_name}/{model_name} from Hugging Face: {e}")
+        return None
+
+
 def detect_model_gateway(provider_name: str, model_name: str) -> str:
     """Detect which gateway a model belongs to by searching all caches
     
@@ -1208,14 +1235,29 @@ def detect_model_gateway(provider_name: str, model_name: str) -> str:
         model_id = f"{provider_name}/{model_name}".lower()
         
         # Check each gateway's cache
-        gateways = ["openrouter", "portkey", "featherless", "chutes", "groq", "fireworks"]
+        gateways = [
+            "openrouter",
+            "portkey",
+            "featherless",
+            "deepinfra",
+            "chutes",
+            "groq",
+            "fireworks",
+            "together",
+            "google",
+            "cerebras",
+            "nebius",
+            "xai",
+            "novita",
+            "huggingface",
+        ]
         
         for gateway in gateways:
             models = get_cached_models(gateway)
             if models:
                 for model in models:
                     if model.get("id", "").lower() == model_id:
-                        return gateway
+                        return "huggingface" if gateway in ("hug", "huggingface") else gateway
         
         # Default to openrouter if not found
         return "openrouter"
@@ -1236,32 +1278,71 @@ def fetch_specific_model(provider_name: str, model_name: str, gateway: str = Non
         Model data dict or None if not found
     """
     try:
-        # If gateway not specified, detect it
-        if not gateway:
-            gateway = detect_model_gateway(provider_name, model_name)
-        
-        gateway = gateway.lower()
-        
-        # Fetch from appropriate gateway
-        if gateway == "openrouter":
-            return fetch_specific_model_from_openrouter(provider_name, model_name)
-        elif gateway == "portkey":
-            return fetch_specific_model_from_portkey(provider_name, model_name)
-        elif gateway == "featherless":
-            return fetch_specific_model_from_featherless(provider_name, model_name)
-        elif gateway == "deepinfra":
-            return fetch_specific_model_from_deepinfra(provider_name, model_name)
-        elif gateway == "chutes":
-            return fetch_specific_model_from_chutes(provider_name, model_name)
-        elif gateway == "groq":
-            return fetch_specific_model_from_groq(provider_name, model_name)
-        elif gateway == "fireworks":
-            return fetch_specific_model_from_fireworks(provider_name, model_name)
+        model_id = f"{provider_name}/{model_name}"
+        explicit_gateway = gateway is not None
+
+        detected_gateway = (gateway or detect_model_gateway(provider_name, model_name) or "openrouter")
+        detected_gateway = detected_gateway.lower()
+
+        override_gateway = detect_provider_from_model_id(model_id)
+        override_gateway = override_gateway.lower() if override_gateway else None
+
+        def normalize_gateway(value: str) -> str:
+            if not value:
+                return None
+            value = value.lower()
+            if value == "hug":
+                return "huggingface"
+            return value
+
+        candidate_gateways = []
+
+        if explicit_gateway:
+            normalized_override = normalize_gateway(override_gateway)
+            if normalized_override:
+                candidate_gateways.append(normalized_override)
+            normalized_requested = normalize_gateway(detected_gateway)
+            if normalized_requested and normalized_requested not in candidate_gateways:
+                candidate_gateways.append(normalized_requested)
         else:
-            logger.warning(f"Unknown gateway: {gateway}, defaulting to OpenRouter")
-            return fetch_specific_model_from_openrouter(provider_name, model_name)
+            primary = normalize_gateway(override_gateway) or normalize_gateway(detected_gateway)
+            if primary:
+                candidate_gateways.append(primary)
+
+            fallback_detected = normalize_gateway(detected_gateway)
+            if fallback_detected and fallback_detected not in candidate_gateways:
+                candidate_gateways.append(fallback_detected)
+
+            if "openrouter" not in candidate_gateways:
+                candidate_gateways.append("openrouter")
+
+        fetchers = {
+            "openrouter": fetch_specific_model_from_openrouter,
+            "portkey": fetch_specific_model_from_portkey,
+            "featherless": fetch_specific_model_from_featherless,
+            "deepinfra": fetch_specific_model_from_deepinfra,
+            "chutes": fetch_specific_model_from_chutes,
+            "groq": fetch_specific_model_from_groq,
+            "fireworks": fetch_specific_model_from_fireworks,
+            "together": fetch_specific_model_from_together,
+            "huggingface": fetch_specific_model_from_huggingface,
+        }
+
+        for candidate in candidate_gateways:
+            if not candidate:
+                continue
+
+            fetcher = fetchers.get(candidate, fetch_specific_model_from_openrouter)
+            model_data = fetcher(provider_name, model_name)
+            if model_data:
+                if candidate == "huggingface":
+                    model_data.setdefault("source_gateway", "hug")
+                return model_data
+
+        logger.warning(f"Model {model_id} not found after checking gateways: {candidate_gateways}")
+        return None
     except Exception as e:
-        logger.error(f"Failed to fetch specific model {provider_name}/{model_name} from gateway {gateway}: {e}")
+        logger.error(f"Failed to fetch specific model {provider_name}/{model_name} (gateways tried: {gateway}): {e}")
         return None
 
 

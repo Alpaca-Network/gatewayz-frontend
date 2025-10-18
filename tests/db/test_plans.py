@@ -240,6 +240,10 @@ def test_assign_user_plan_deactivates_existing_and_updates_user(mod, fake_supaba
 
 
 def test_check_plan_entitlements_no_plan_defaults(mod, fake_supabase):
+    # Ensure database is clean (no leftover plans from other tests)
+    fake_supabase.store["plans"].clear()
+    fake_supabase.store["user_plans"].clear()
+
     out = mod.check_plan_entitlements(user_id=111)
     assert out["has_plan"] is False
     assert out["daily_request_limit"] == 25000
@@ -342,6 +346,12 @@ def test_get_user_usage_within_plan_limits_aggregates(mod, fake_supabase):
 
 
 def test_enforce_plan_limits_checks_and_env_multiplier(mod, fake_supabase):
+    # Ensure database is clean (no leftover data from other tests)
+    fake_supabase.store["plans"].clear()
+    fake_supabase.store["user_plans"].clear()
+    fake_supabase.store["usage_records"].clear()
+    fake_supabase.store["users"].clear()
+
     # Use trial (no user plan) first: daily 100 req, 10k tokens
     out_ok = mod.enforce_plan_limits(user_id=404, tokens_requested=10, environment_tag="live")
     assert out_ok["allowed"] is True

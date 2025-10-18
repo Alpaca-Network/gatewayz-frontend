@@ -17,7 +17,7 @@ class TestFireworksClient:
         """Test getting Fireworks client"""
         client = get_fireworks_client()
         assert client is not None
-        assert str(client.base_url) == "https://api.fireworks.ai/inference/v1/"
+        assert str(client.base_url).rstrip('/') == "https://api.fireworks.ai/inference/v1"
 
     @patch('src.services.fireworks_client.Config.FIREWORKS_API_KEY', None)
     def test_get_fireworks_client_no_key(self):
