@@ -1,5 +1,10 @@
+import json
 import logging
-from openai import OpenAI
+from types import SimpleNamespace
+from typing import Any, Dict, Generator, List
+
+import httpx
+
 from src.config import Config
 
 # Initialize logging
@@ -8,126 +13,183 @@ logger = logging.getLogger(__name__)
 # Hugging Face Inference Router base URL
 HF_INFERENCE_BASE_URL = "https://router.huggingface.co/v1"
 
+ALLOWED_PARAMS = {
+    "max_tokens",
+    "temperature",
+    "top_p",
+    "frequency_penalty",
+    "presence_penalty",
+    "response_format",
+}
 
-def get_huggingface_client():
-    """Get Hugging Face Inference API client using OpenAI-compatible interface
 
-    Hugging Face Inference API provides OpenAI-compatible endpoints for various models.
-    Requires HF_TOKEN environment variable (stored in HUG_API_KEY config).
-    """
-    try:
-        if not Config.HUG_API_KEY:
-            raise ValueError("Hugging Face API key (HUG_API_KEY) not configured")
+class HFStreamChoice:
+    """Lightweight structure that mimics OpenAI stream choice objects."""
 
-        return OpenAI(
-            base_url=HF_INFERENCE_BASE_URL,
-            api_key=Config.HUG_API_KEY
+    def __init__(self, data: Dict[str, Any]):
+        self.index = data.get("index", 0)
+        self.delta = SimpleNamespace(**(data.get("delta") or {}))
+        self.message = (
+            SimpleNamespace(**data["message"]) if data.get("message") else None
         )
-    except Exception as e:
-        logger.error(f"Failed to initialize Hugging Face client: {e}")
-        raise
+        self.finish_reason = data.get("finish_reason")
+
+
+class HFStreamChunk:
+    """Stream chunk compatible with OpenAI client chunks."""
+
+    def __init__(self, payload: Dict[str, Any]):
+        self.id = payload.get("id")
+        self.object = payload.get("object")
+        self.created = payload.get("created")
+        self.model = payload.get("model")
+        self.choices = [HFStreamChoice(choice) for choice in payload.get("choices", [])]
+
+        usage = payload.get("usage")
+        if usage:
+            self.usage = SimpleNamespace(
+                prompt_tokens=usage.get("prompt_tokens", 0),
+                completion_tokens=usage.get("completion_tokens", 0),
+                total_tokens=usage.get("total_tokens", 0),
+            )
+        else:
+            self.usage = None
+
+
+def get_huggingface_client() -> httpx.Client:
+    """Create an HTTPX client for the Hugging Face Router API."""
+    if not Config.HUG_API_KEY:
+        raise ValueError("Hugging Face API key (HUG_API_KEY) not configured")
+
+    headers = {
+        "Authorization": f"Bearer {Config.HUG_API_KEY}",
+        "Content-Type": "application/json",
+    }
+
+    return httpx.Client(base_url=HF_INFERENCE_BASE_URL, headers=headers, timeout=60.0)
+
+
+def _prepare_model(model: str) -> str:
+    if model.endswith(":hf-inference"):
+        return model
+    return f"{model}:hf-inference"
+
+
+def _build_payload(messages: List[Dict[str, Any]], model: str, **kwargs) -> Dict[str, Any]:
+    payload = {
+        "messages": messages,
+        "model": _prepare_model(model),
+    }
+
+    for key, value in kwargs.items():
+        if key in ALLOWED_PARAMS and value is not None:
+            payload[key] = value
+
+    return payload
 
 
 def make_huggingface_request_openai(messages, model, **kwargs):
-    """Make request to Hugging Face Inference API using OpenAI client
-
-    Args:
-        messages: List of message objects
-        model: Model name to use (e.g., "meta-llama/Llama-2-7b-chat-hf", "katanemo/Arch-Router-1.5B")
-        **kwargs: Additional parameters like max_tokens, temperature, etc.
-    """
+    """Make request to Hugging Face Router using OpenAI-compatible schema."""
+    client = get_huggingface_client()
     try:
-        # HuggingFace Router requires :hf-inference suffix if not already present
-        # This tells the router to use the HuggingFace Inference API backend
-        if not model.endswith(":hf-inference"):
-            model = f"{model}:hf-inference"
-
-        logger.info(f"Making Hugging Face request with model: {model}")
-        logger.debug(f"Request params: message_count={len(messages)}, kwargs={list(kwargs.keys())}")
-
-        client = get_huggingface_client()
-        response = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            **kwargs
+        payload = _build_payload(messages, model, **kwargs)
+        logger.info(f"Making Hugging Face request with model: {payload['model']}")
+        logger.debug(
+            "HF request payload (non-streaming): message_count=%s, payload_keys=%s",
+            len(messages),
+            list(payload.keys()),
         )
 
-        logger.info(f"Hugging Face request successful for model: {model}")
-        return response
+        response = client.post("/chat/completions", json=payload)
+        response.raise_for_status()
+        logger.info("Hugging Face request successful for model: %s", payload["model"])
+        return response.json()
     except Exception as e:
-        try:
-            logger.error(f"Hugging Face request failed for model '{model}': {e}")
-            logger.error(f"Error type: {type(e).__name__}")
-            if hasattr(e, 'response'):
-                logger.error(f"Response status: {getattr(e.response, 'status_code', 'N/A')}")
-        except UnicodeEncodeError:
-            logger.error(f"Hugging Face request failed (encoding error in logging)")
+        logger.error("Hugging Face request failed for model '%s': %s", model, e)
         raise
+    finally:
+        client.close()
 
 
-def make_huggingface_request_openai_stream(messages, model, **kwargs):
-    """Make streaming request to Hugging Face Inference API using OpenAI client
+def make_huggingface_request_openai_stream(
+    messages, model, **kwargs
+) -> Generator[HFStreamChunk, None, None]:
+    """Stream responses from Hugging Face Router using SSE."""
+    client = get_huggingface_client()
+    payload = _build_payload(messages, model, **kwargs)
+    payload["stream"] = True
 
-    Args:
-        messages: List of message objects
-        model: Model name to use
-        **kwargs: Additional parameters like max_tokens, temperature, etc.
-    """
+    logger.info("Making Hugging Face streaming request with model: %s", payload["model"])
+    logger.debug(
+        "HF streaming request payload: message_count=%s, payload_keys=%s",
+        len(messages),
+        list(payload.keys()),
+    )
+
     try:
-        # HuggingFace Router requires :hf-inference suffix if not already present
-        # This tells the router to use the HuggingFace Inference API backend
-        if not model.endswith(":hf-inference"):
-            model = f"{model}:hf-inference"
+        with client.stream("POST", "/chat/completions", json=payload) as response:
+            response.raise_for_status()
+            logger.info(
+                "Hugging Face streaming request initiated for model: %s",
+                payload["model"],
+            )
 
-        logger.info(f"Making Hugging Face streaming request with model: {model}")
-        logger.debug(f"Request params: message_count={len(messages)}, kwargs={list(kwargs.keys())}")
-
-        client = get_huggingface_client()
-        stream = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            stream=True,
-            **kwargs
-        )
-
-        logger.info(f"Hugging Face streaming request initiated for model: {model}")
-        return stream
+            for raw_line in response.iter_lines():
+                if not raw_line:
+                    continue
+                if raw_line.startswith("data: "):
+                    data = raw_line[6:].strip()
+                    if data == "[DONE]":
+                        break
+                    try:
+                        chunk_payload = json.loads(data)
+                        yield HFStreamChunk(chunk_payload)
+                    except json.JSONDecodeError as err:
+                        logger.warning("Failed to decode Hugging Face stream chunk: %s", err)
+                        continue
     except Exception as e:
-        try:
-            logger.error(f"Hugging Face streaming request failed for model '{model}': {e}")
-            logger.error(f"Error type: {type(e).__name__}")
-            if hasattr(e, 'response'):
-                logger.error(f"Response status: {getattr(e.response, 'status_code', 'N/A')}")
-        except UnicodeEncodeError:
-            logger.error(f"Hugging Face streaming request failed (encoding error in logging)")
+        logger.error(
+            "Hugging Face streaming request failed for model '%s': %s", model, e
+        )
         raise
+    finally:
+        client.close()
 
 
 def process_huggingface_response(response):
-    """Process Hugging Face response to extract relevant data"""
+    """Process Hugging Face response (dict) to OpenAI-compatible structure."""
     try:
-        return {
-            "id": response.id,
-            "object": response.object,
-            "created": response.created,
-            "model": response.model,
-            "choices": [
+        if not isinstance(response, dict):
+            raise TypeError("Hugging Face response must be a dictionary")
+
+        choices = []
+        for choice in response.get("choices", []):
+            message = choice.get("message") or {}
+            choices.append(
                 {
-                    "index": choice.index,
+                    "index": choice.get("index", 0),
                     "message": {
-                        "role": choice.message.role,
-                        "content": choice.message.content
+                        "role": message.get("role", "assistant"),
+                        "content": message.get("content", ""),
                     },
-                    "finish_reason": choice.finish_reason
+                    "finish_reason": choice.get("finish_reason"),
                 }
-                for choice in response.choices
-            ],
+            )
+
+        usage = response.get("usage") or {}
+        processed = {
+            "id": response.get("id"),
+            "object": response.get("object", "chat.completion"),
+            "created": response.get("created"),
+            "model": response.get("model"),
+            "choices": choices,
             "usage": {
-                "prompt_tokens": response.usage.prompt_tokens,
-                "completion_tokens": response.usage.completion_tokens,
-                "total_tokens": response.usage.total_tokens
-            } if response.usage else {}
+                "prompt_tokens": usage.get("prompt_tokens", 0),
+                "completion_tokens": usage.get("completion_tokens", 0),
+                "total_tokens": usage.get("total_tokens", 0),
+            },
         }
+        return processed
     except Exception as e:
-        logger.error(f"Failed to process Hugging Face response: {e}")
+        logger.error("Failed to process Hugging Face response: %s", e)
         raise
