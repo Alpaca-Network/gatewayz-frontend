@@ -882,6 +882,7 @@ function ChatPageContent() {
     const [hasApiKey, setHasApiKey] = useState(false);
     const [message, setMessage] = useState('');
     const [userHasTyped, setUserHasTyped] = useState(false);
+    const userHasTypedRef = useRef(userHasTyped);
 
     // Immediate log to confirm latest code is deployed
     console.log('[Chat Page] Component mounted - Version with auto-login and pending message queue');
@@ -895,13 +896,18 @@ function ChatPageContent() {
     const [selectedModel, setSelectedModel] = useState<ModelOption | null>({
         value: 'openrouter/auto',
         label: 'Auto Router',
-        category: 'Free'
+        category: 'Free',
+        sourceGateway: 'openrouter'
     });
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
     const { toast } = useToast();
     const chatContainerRef = useRef<HTMLDivElement>(null);
     const messageInputRef = useRef<HTMLInputElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        userHasTypedRef.current = userHasTyped;
+    }, [userHasTyped]);
 
     // Track which sessions have loaded their messages
     const [loadedSessionIds, setLoadedSessionIds] = useState<Set<string>>(new Set());
@@ -982,10 +988,17 @@ function ChatPageContent() {
                     const foundModel = allModels.find((m: any) => m.id === modelParam);
                     if (foundModel) {
                         console.log('Found model from URL:', foundModel.name, foundModel.id);
+                        const sourceGateway = foundModel.source_gateway || foundModel.gateway || 'openrouter';
+                        const promptPrice = Number(foundModel.pricing?.prompt ?? 0);
+                        const completionPrice = Number(foundModel.pricing?.completion ?? 0);
+                        const isPaid = promptPrice > 0 || completionPrice > 0;
+                        const category = sourceGateway === 'portkey' ? 'Portkey' : (isPaid ? 'Paid' : 'Free');
                         setSelectedModel({
                             value: foundModel.id,
                             label: foundModel.name,
-                            category: foundModel.pricing?.prompt ? 'Paid' : 'Free'
+                            category,
+                            sourceGateway,
+                            developer: foundModel.provider_slug || foundModel.developer || undefined
                         });
                     } else {
                         console.warn('Model not found in API:', modelParam);
@@ -1003,6 +1016,7 @@ function ChatPageContent() {
             console.log('[URL Params] Setting message:', decodedMessage);
             setMessage(decodedMessage);
             setUserHasTyped(true); // Allow auto-send from URL
+            userHasTypedRef.current = true;
 
             // Auto-send if explicitly requested via autoSend parameter, or if message param exists
             if (autoSendParam === 'true' || messageParam) {
@@ -1029,8 +1043,14 @@ function ChatPageContent() {
             selectedModel: selectedModel?.label,
             loading,
             creatingSession: creatingSessionRef.current,
-            isStreamingResponse
+            isStreamingResponse,
+            hasPendingMessage: !!pendingMessage
         });
+
+        if (pendingMessage) {
+            console.log('[AutoSend] Pending message exists, waiting for auth/session to complete before auto-sending.');
+            return;
+        }
 
         if (
             shouldAutoSend &&
@@ -1045,7 +1065,7 @@ function ChatPageContent() {
             setShouldAutoSend(false); // Reset flag to prevent re-sending
             handleSendMessage();
         }
-    }, [shouldAutoSend, activeSessionId, message, selectedModel, loading, isStreamingResponse]);
+    }, [shouldAutoSend, activeSessionId, message, selectedModel, loading, isStreamingResponse, pendingMessage]);
 
     // Check for API key in localStorage as fallback authentication
     useEffect(() => {
@@ -1108,6 +1128,7 @@ function ChatPageContent() {
             setSelectedImage(pendingMessage.image);
         }
         setUserHasTyped(true);
+        userHasTypedRef.current = true;
 
         // Clear pending message
         setPendingMessage(null);
@@ -1170,8 +1191,11 @@ function ChatPageContent() {
                     );
                     if (firstNewChat) {
                         // Clear any stale message from the input field for new empty chats
-                        setMessage('');
-                        setUserHasTyped(false); // Reset typing flag
+                        if (!userHasTypedRef.current) {
+                            setMessage('');
+                            setUserHasTyped(false); // Reset typing flag
+                            userHasTypedRef.current = false;
+                        }
                         // Directly set active session ID instead of calling switchToSession
                         // since setSessions hasn't completed yet
                         setActiveSessionId(firstNewChat.id);
@@ -1255,7 +1279,7 @@ function ChatPageContent() {
     const createNewChat = async () => {
         // Prevent duplicate session creation
         if (creatingSessionRef.current) {
-            return;
+            return null;
         }
 
         // Check if there's already a new/empty chat session
@@ -1267,11 +1291,11 @@ function ChatPageContent() {
         if (existingNewChat) {
             // If there's already a new chat, just switch to it
             switchToSession(existingNewChat.id);
-            return;
+            return existingNewChat;
         }
 
+        creatingSessionRef.current = true;
         try {
-            creatingSessionRef.current = true;
             // Create new session using API helper
             const newSession = await apiHelpers.createChatSession('Untitled Chat', selectedModel?.value);
 
@@ -1281,14 +1305,16 @@ function ChatPageContent() {
             // Then update the sessions list
             setSessions(prev => [newSession, ...prev]);
 
-            creatingSessionRef.current = false;
+            return newSession;
         } catch (error) {
-            creatingSessionRef.current = false;
             toast({
                 title: "Error",
                 description: `Failed to create new chat session: ${error instanceof Error ? error.message : 'Unknown error'}`,
                 variant: 'destructive'
             });
+            return null;
+        } finally {
+            creatingSessionRef.current = false;
         }
     }
 
@@ -1296,6 +1322,7 @@ function ChatPageContent() {
         // Set the message input to the clicked prompt
         setMessage(promptText);
         setUserHasTyped(true);
+        userHasTypedRef.current = true;
         // Focus on the input
         setTimeout(() => {
             messageInputRef.current?.focus();
@@ -1456,13 +1483,6 @@ function ChatPageContent() {
                 image: selectedImage
             });
 
-            // Clear the input
-            setMessage('');
-            setSelectedImage(null);
-            if (fileInputRef.current) {
-                fileInputRef.current.value = '';
-            }
-
             // Show toast that we're logging them in
             toast({
                 title: "Logging you in...",
@@ -1485,12 +1505,24 @@ function ChatPageContent() {
         }
 
         // Check if session exists - if not, don't auto-create, just show error
+        const trimmedMessage = message.trim();
         let currentSessionId = activeSessionId;
         if (!currentSessionId) {
-            console.log('No active session - user needs to wait for session creation to complete');
+            console.log('[Session] No active session - queuing send until session ready');
+
+            setPendingMessage({
+                message: trimmedMessage,
+                model: selectedModel,
+                image: selectedImage
+            });
+
+            if (!creatingSessionRef.current) {
+                await createNewChat();
+            }
+
             toast({
-                title: "Please wait",
-                description: "Your chat session is being created...",
+                title: "Setting up chat...",
+                description: "We're preparing your chat session. Your message will send automatically.",
                 variant: 'default'
             });
             return;
@@ -2036,6 +2068,7 @@ function ChatPageContent() {
                             // Re-populate the message field with the original user message
                             setMessage(userMessage);
                             setUserHasTyped(true);
+                            userHasTypedRef.current = true;
                             // Trigger send
                             handleSendMessage();
                         }, 500);
@@ -2431,6 +2464,7 @@ function ChatPageContent() {
                       // Only mark as typed if there's actual content
                       if (e.target.value.trim()) {
                         setUserHasTyped(true);
+                        userHasTypedRef.current = true;
                       }
                     }}
                     onKeyDown={(e) => {
@@ -2445,6 +2479,7 @@ function ChatPageContent() {
                     onInput={() => {
                       // Mark as typed on any input event (actual typing)
                       setUserHasTyped(true);
+                      userHasTypedRef.current = true;
                     }}
                     disabled={!ready || (!authenticated && !hasApiKey)}
                     autoComplete="off"
