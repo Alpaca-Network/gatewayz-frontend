@@ -1,7 +1,7 @@
 import json
 import logging
 from types import SimpleNamespace
-from typing import Any, Dict, Generator, List
+from typing import Any, Dict, Generator, List, Union
 
 import httpx
 
@@ -56,7 +56,21 @@ class HFStreamChunk:
             self.usage = None
 
 
-def get_huggingface_client() -> httpx.Client:
+def _build_timeout_config(timeout: Union[float, httpx.Timeout, None]) -> httpx.Timeout:
+    if isinstance(timeout, httpx.Timeout):
+        return timeout
+
+    base = timeout or 180.0  # generous default for slow-start models
+    return httpx.Timeout(
+        timeout=base,
+        connect=min(30.0, base),
+        read=base,
+        write=base,
+        pool=None,
+    )
+
+
+def get_huggingface_client(timeout: Union[float, httpx.Timeout, None] = None) -> httpx.Client:
     """Create an HTTPX client for the Hugging Face Router API."""
     if not Config.HUG_API_KEY:
         raise ValueError("Hugging Face API key (HUG_API_KEY) not configured")
@@ -66,7 +80,9 @@ def get_huggingface_client() -> httpx.Client:
         "Content-Type": "application/json",
     }
 
-    return httpx.Client(base_url=HF_INFERENCE_BASE_URL, headers=headers, timeout=60.0)
+    timeout_config = _build_timeout_config(timeout)
+
+    return httpx.Client(base_url=HF_INFERENCE_BASE_URL, headers=headers, timeout=timeout_config)
 
 
 def _prepare_model(model: str) -> str:
@@ -90,7 +106,7 @@ def _build_payload(messages: List[Dict[str, Any]], model: str, **kwargs) -> Dict
 
 def make_huggingface_request_openai(messages, model, **kwargs):
     """Make request to Hugging Face Router using OpenAI-compatible schema."""
-    client = get_huggingface_client()
+    client = get_huggingface_client(timeout=180.0)
     try:
         payload = _build_payload(messages, model, **kwargs)
         logger.info(f"Making Hugging Face request with model: {payload['model']}")
@@ -115,7 +131,7 @@ def make_huggingface_request_openai_stream(
     messages, model, **kwargs
 ) -> Generator[HFStreamChunk, None, None]:
     """Stream responses from Hugging Face Router using SSE."""
-    client = get_huggingface_client()
+    client = get_huggingface_client(timeout=300.0)
     payload = _build_payload(messages, model, **kwargs)
     payload["stream"] = True
 
