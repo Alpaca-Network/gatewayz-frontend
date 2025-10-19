@@ -23,6 +23,7 @@ from src.services.featherless_client import make_featherless_request_openai, pro
 from src.services.fireworks_client import make_fireworks_request_openai, process_fireworks_response
 from src.services.together_client import make_together_request_openai, process_together_response
 from src.services.huggingface_client import make_huggingface_request_openai, process_huggingface_response
+from src.services.model_transformations import detect_provider_from_model_id, transform_model_id
 from src.services.rate_limiting import get_rate_limit_manager
 from src.services.trial_validation import validate_trial_access, track_trial_usage
 from src.services.pricing import calculate_cost
@@ -183,9 +184,25 @@ async def anthropic_messages(
         if provider == "hug":
             provider = "huggingface"
 
-        if not req.provider:
+        if req.provider:
+            req_provider_missing = False
+        else:
+            req_provider_missing = True
+
+        override_provider = detect_provider_from_model_id(original_model)
+        if override_provider:
+            override_provider = override_provider.lower()
+            if override_provider == "hug":
+                override_provider = "huggingface"
+            if override_provider != provider:
+                logger.info(
+                    f"Provider override applied for model {original_model}: '{provider}' -> '{override_provider}'"
+                )
+                provider = override_provider
+                req_provider_missing = False
+
+        if req_provider_missing:
             # Try to detect provider from model ID using the transformation module
-            from src.services.model_transformations import detect_provider_from_model_id
             detected_provider = detect_provider_from_model_id(original_model)
             if detected_provider:
                 provider = detected_provider
@@ -196,10 +213,9 @@ async def anthropic_messages(
             else:
                 # Fallback to checking cached models
                 from src.services.models import get_cached_models
-                from src.services.model_transformations import transform_model_id
 
                 # Try each provider with transformation
-                for test_provider in ["featherless", "fireworks", "together", "huggingface", "portkey"]:
+                for test_provider in ["huggingface", "featherless", "fireworks", "together", "portkey"]:
                     transformed = transform_model_id(original_model, test_provider)
                     provider_models = get_cached_models(test_provider) or []
                     if any(m.get("id") == transformed for m in provider_models):

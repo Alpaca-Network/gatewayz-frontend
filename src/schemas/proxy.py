@@ -18,7 +18,7 @@ class ProxyRequest(BaseModel):
     frequency_penalty: Optional[float] = 0.0
     presence_penalty: Optional[float] = 0.0
     stream: Optional[bool] = False
-    provider: Optional[str] = "openrouter"  # Provider selection: "openrouter" or "portkey"
+    provider: Optional[str] = None  # Provider selection: "openrouter" or "portkey"
     portkey_provider: Optional[str] = "openai"  # Sub-provider for Portkey
     portkey_virtual_key: Optional[str] = None  # Virtual key for Portkey
 
@@ -60,7 +60,7 @@ class ResponseRequest(BaseModel):
     presence_penalty: Optional[float] = 0.0
     stream: Optional[bool] = False
     response_format: Optional[ResponseFormat] = None
-    provider: Optional[str] = "openrouter"
+    provider: Optional[str] = None
     portkey_provider: Optional[str] = "openai"
     portkey_virtual_key: Optional[str] = None
 
@@ -111,7 +111,7 @@ class MessagesRequest(BaseModel):
     metadata: Optional[Dict[str, Any]] = None
 
     # Gateway-specific fields (not part of Anthropic API)
-    provider: Optional[str] = "openrouter"
+    provider: Optional[str] = None
     portkey_provider: Optional[str] = "openai"
     portkey_virtual_key: Optional[str] = None
 
