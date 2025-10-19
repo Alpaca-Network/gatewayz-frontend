@@ -82,7 +82,10 @@ def fetch_models_from_huggingface_api(
         # Strategy: Use multiple sort methods to get different sets of models
         # The API caps at 1000 per request, but different sorts return different models
         # This allows us to fetch more than 1000 unique models by merging results
-        sort_methods = ['likes', 'downloads', 'trending']  # Three sorts to maximize coverage and catch newer models
+        # Hugging Face Models API supports 'likes' and 'downloads' as stable sort options.
+        # 'trending' intermittently returns 400, so we stick to reliable sorts and rely
+        # on ESSENTIAL_MODELS to pull in anything critical that falls outside the top results.
+        sort_methods = ['likes', 'downloads']
 
         for sort_method in sort_methods:
             logger.info(f"Fetching models with sort={sort_method}")

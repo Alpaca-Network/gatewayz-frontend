@@ -146,11 +146,17 @@ def get_cached_models(gateway: str = "openrouter"):
             return fetch_models_from_novita()
 
         if gateway == "hug" or gateway == "huggingface":
+            from src.services.huggingface_models import ESSENTIAL_MODELS
+
             cache = _huggingface_models_cache
             if cache["data"] and cache["timestamp"]:
                 cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
                 if cache_age < cache["ttl"]:
-                    return cache["data"]
+                    cached_ids = {model.get("id", "").lower() for model in cache["data"]}
+                    essential_missing = any(model_id.lower() not in cached_ids for model_id in ESSENTIAL_MODELS)
+                    if not essential_missing:
+                        return cache["data"]
+                    logger.info("Hugging Face cache missing essential models; refetching catalog")
             return fetch_models_from_hug()
 
         if gateway == "all":
