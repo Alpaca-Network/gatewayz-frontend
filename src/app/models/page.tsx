@@ -34,109 +34,13 @@ async function getModels(): Promise<Model[]> {
       return [];
     }
 
-    // Fetch models from all supported gateways
-    // Backend deduplicates models, so fetching from all gateways ensures we get
-    // the complete picture of which models are available where
-    const gateways = [
-      'openrouter',
-      'featherless',
-      'groq',
-      'together',
-      'fireworks',
-      'chutes',
-      'deepinfra',
-      'google',
-      'cerebras',
-      'nebius',
-      'xai',
-      'novita',
-      'huggingface'
-    ];
+    // Fetch all models from backend without gateway parameter
+    // Backend returns all models with source_gateways already populated
+    const result = await getModelsForGateway('all');
+    const allModels = result.data || [];
 
-    // Fetch from gateways in parallel with timeout
-    const gatewayPromises = gateways.map(async (gateway) => {
-      try {
-        // Add 10 second timeout per gateway
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000);
-
-        // Get all available models from each gateway
-        // Backend handles model availability per gateway correctly
-        const result = await getModelsForGateway(gateway);
-        console.log(`[Models Page] After getModelsForGateway for ${gateway}: ${result.data?.length || 0} models`);
-        clearTimeout(timeoutId);
-
-        return { gateway, models: result.data || [] };
-      } catch (error) {
-        console.error(`[Models Page] Failed to fetch ${gateway}:`, error);
-        // Silently fail and return empty models for this gateway
-        return { gateway, models: [] };
-      }
-    });
-
-    const gatewayResults = await Promise.all(gatewayPromises);
-
-    // Log gateway results for debugging
-    for (const { gateway, models } of gatewayResults) {
-      console.log(`[Models Page] Gateway ${gateway}: ${models.length} models received`);
-    }
-
-    // Build a map of models with all their available gateways
-    const modelGatewayMap = new Map<string, { model: Model, gateways: Set<string> }>();
-
-    for (const { gateway, models } of gatewayResults) {
-      for (const model of models) {
-        if (!model.id || model.id.trim() === '') continue;
-
-        const existing = modelGatewayMap.get(model.id);
-        if (!existing) {
-          // First time seeing this model
-          modelGatewayMap.set(model.id, {
-            model: {
-              ...model,
-              source_gateways: [gateway] // Initialize with current gateway
-            },
-            gateways: new Set([gateway])
-          });
-        } else {
-          // Model already exists, add this gateway
-          existing.gateways.add(gateway);
-
-          // Update the model with better data if available
-          const currentCompleteness =
-            (model.description ? 1 : 0) +
-            (model.context_length > 0 ? 1 : 0) +
-            (model.pricing ? 1 : 0) +
-            (model.architecture ? 1 : 0);
-
-          const existingCompleteness =
-            (existing.model.description ? 1 : 0) +
-            (existing.model.context_length > 0 ? 1 : 0) +
-            (existing.model.pricing ? 1 : 0) +
-            (existing.model.architecture ? 1 : 0);
-
-          if (currentCompleteness > existingCompleteness) {
-            // Keep the better data but preserve all gateways
-            existing.model = {
-              ...model,
-              source_gateways: Array.from(existing.gateways)
-            };
-          } else {
-            // Just update the gateways list
-            existing.model.source_gateways = Array.from(existing.gateways);
-          }
-        }
-      }
-    }
-
-    // Convert to array and sort gateways for consistency
-    const uniqueModels = Array.from(modelGatewayMap.values()).map(({ model }) => ({
-      ...model,
-      source_gateways: model.source_gateways.sort()
-    }));
-
-    console.log(`[Models Page] Total unique models after deduplication: ${uniqueModels.length}`);
-    return uniqueModels;
+    console.log(`[Models Page] Total models fetched: ${allModels.length}`);
+    return allModels;
   } catch (error) {
     console.log('Failed to fetch models:', error);
     return [];
