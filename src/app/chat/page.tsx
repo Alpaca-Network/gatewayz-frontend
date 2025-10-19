@@ -913,6 +913,9 @@ function ChatPageContent() {
     // Trigger for forcing session reload after API key becomes available
     const [authReady, setAuthReady] = useState(false);
 
+    // Queue message to be sent after authentication completes
+    const [pendingMessage, setPendingMessage] = useState<{message: string, model: ModelOption | null, image: string | null} | null>(null);
+
     // Test backend connectivity function
     const testBackendConnectivity = async () => {
         const apiKey = getApiKey();
@@ -1063,6 +1066,50 @@ function ChatPageContent() {
             }, 1000); // Delay to allow page to settle
         }
     }, [ready, authenticated, hasApiKey, toast]);
+
+    // Send pending message after authentication completes
+    useEffect(() => {
+        if (!pendingMessage) return;
+        if (!ready) return;
+        if (!authenticated && !hasApiKey) return;
+
+        const apiKey = getApiKey();
+        const userData = getUserData();
+
+        // Wait for API key to be available
+        if (!apiKey || !userData?.privy_user_id) {
+            console.log('[Pending Message] Waiting for API key to be available...');
+            return;
+        }
+
+        // Wait for active session to be created
+        if (!activeSessionId) {
+            console.log('[Pending Message] Waiting for active session to be created...');
+            return;
+        }
+
+        // All conditions met - send the pending message
+        console.log('[Pending Message] Auth complete! Sending pending message:', pendingMessage.message);
+
+        // Restore the message to state
+        setMessage(pendingMessage.message);
+        if (pendingMessage.model) {
+            setSelectedModel(pendingMessage.model);
+        }
+        if (pendingMessage.image) {
+            setSelectedImage(pendingMessage.image);
+        }
+        setUserHasTyped(true);
+
+        // Clear pending message
+        setPendingMessage(null);
+
+        // Trigger send after a short delay to ensure state is updated
+        setTimeout(() => {
+            handleSendMessage();
+        }, 100);
+
+    }, [pendingMessage, ready, authenticated, hasApiKey, activeSessionId]);
 
     useEffect(() => {
         // Load sessions from API when authenticated and API key is available
@@ -1392,20 +1439,31 @@ function ChatPageContent() {
         const userData = getUserData();
 
         if (!apiKey || !userData || typeof userData.privy_user_id !== 'string') {
-            toast({
-                title: "Authentication required",
-                description: "Please wait for authentication to complete or log in.",
-                variant: 'destructive',
-                action: (
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => login()}
-                    >
-                        Log In
-                    </Button>
-                ),
+            console.log('[Auth] User not authenticated - queuing message and triggering login');
+
+            // Queue the message to be sent after authentication
+            setPendingMessage({
+                message: message.trim(),
+                model: selectedModel,
+                image: selectedImage
             });
+
+            // Clear the input
+            setMessage('');
+            setSelectedImage(null);
+            if (fileInputRef.current) {
+                fileInputRef.current.value = '';
+            }
+
+            // Show toast that we're logging them in
+            toast({
+                title: "Logging you in...",
+                description: "Your message will be sent after you log in.",
+                variant: 'default'
+            });
+
+            // Auto-trigger login
+            login();
             return;
         }
 
