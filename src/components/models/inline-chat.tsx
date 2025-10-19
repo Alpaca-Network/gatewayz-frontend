@@ -82,7 +82,9 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
       // Call the backend API directly to avoid Vercel's 60-second timeout
       // CORS headers are configured in vercel.json to allow beta.gatewayz.ai
       const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
-      const url = `${apiBaseUrl}/v1/chat/completions`;
+      const url = typeof window !== 'undefined'
+        ? '/api/chat/completions'
+        : `${apiBaseUrl}/v1/chat/completions`;
 
       console.log('[InlineChat] Sending message to model:', modelId);
       console.log('[InlineChat] Gateway:', gateway || 'not specified');

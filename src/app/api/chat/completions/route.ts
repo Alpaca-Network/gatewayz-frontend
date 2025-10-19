@@ -17,13 +17,18 @@ export async function POST(request: NextRequest) {
     }
 
     const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
-    const url = `${apiUrl}/v1/chat/completions`;
+    const targetUrl = new URL(`${apiUrl}/v1/chat/completions`);
 
-    console.log('[API Proxy] Forwarding request to:', url);
+    // Forward any query parameters (e.g., session_id)
+    request.nextUrl.searchParams.forEach((value, key) => {
+      targetUrl.searchParams.append(key, value);
+    });
+
+    console.log('[API Proxy] Forwarding request to:', targetUrl.toString());
     console.log('[API Proxy] Model:', body.model);
     console.log('[API Proxy] Stream:', body.stream);
 
-    const response = await fetch(url, {
+    const response = await fetch(targetUrl.toString(), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
