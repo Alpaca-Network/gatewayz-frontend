@@ -277,6 +277,8 @@ async def test_upstream_request_error_maps_503(app, mock_api_key_validation, mon
     monkeypatch.setattr(api, "enforce_plan_limits", lambda uid, tok, env: {"allowed": True})
     monkeypatch.setattr(api, "validate_trial_access", lambda k: {"is_valid": True, "is_trial": False})
     monkeypatch.setattr(api, "get_rate_limit_manager", lambda: _RateLimitMgr(True, True))
+    monkeypatch.setattr(api, "should_failover", lambda exc: False)
+    monkeypatch.setattr(api, "make_huggingface_request_openai", lambda *a, **k: (_ for _ in ()).throw(AssertionError("should not failover")))
 
     def boom(*a, **k):
         raise RequestError("network is down", request=Request("POST", "https://openrouter.example/v1/chat"))
@@ -293,6 +295,8 @@ async def test_upstream_timeout_maps_504(app, mock_api_key_validation, monkeypat
     monkeypatch.setattr(api, "enforce_plan_limits", lambda uid, tok, env: {"allowed": True})
     monkeypatch.setattr(api, "validate_trial_access", lambda k: {"is_valid": True, "is_trial": False})
     monkeypatch.setattr(api, "get_rate_limit_manager", lambda: _RateLimitMgr(True, True))
+    monkeypatch.setattr(api, "should_failover", lambda exc: False)
+    monkeypatch.setattr(api, "make_huggingface_request_openai", lambda *a, **k: (_ for _ in ()).throw(AssertionError("should not failover")))
 
     def boom(*a, **k):
         # Your code does not explicitly catch httpx.TimeoutException in the executor,
@@ -373,3 +377,93 @@ async def test_streaming_response(app, mock_api_key_validation, monkeypatch, pay
     content = r.text
     assert "data: " in content
     assert "[DONE]" in content
+
+
+@pytest.mark.anyio
+async def test_provider_failover_to_huggingface(app, happy_patches, payload_basic, auth_headers, monkeypatch):
+    payload = dict(payload_basic)
+    payload["provider"] = "featherless"
+    payload["model"] = "featherless/test-model"
+
+    # Avoid auto-detection overriding the requested provider
+    monkeypatch.setattr(api, "detect_provider_from_model_id", lambda model: None)
+
+    call_tracker = {"featherless": 0, "huggingface": 0}
+
+    def failing_featherless(*args, **kwargs):
+        call_tracker["featherless"] += 1
+        request = Request("POST", "https://featherless.test/v1/chat")
+        response = Response(status_code=502, request=request, content=b"")
+        raise HTTPStatusError("featherless backend error", request=request, response=response)
+
+    monkeypatch.setattr(api, "make_featherless_request_openai", failing_featherless)
+
+    def fallback_huggingface(messages, model, **kwargs):
+        call_tracker["huggingface"] += 1
+        return {"_raw": True}
+
+    monkeypatch.setattr(api, "make_huggingface_request_openai", fallback_huggingface)
+
+    def process_huggingface_response(resp):
+        return {
+            "choices": [{"message": {"content": "served by huggingface"}, "finish_reason": "stop"}],
+            "usage": {"total_tokens": 12, "prompt_tokens": 5, "completion_tokens": 7},
+        }
+
+    monkeypatch.setattr(api, "process_huggingface_response", process_huggingface_response)
+
+    def guard_openrouter(*args, **kwargs):
+        raise AssertionError("Failover should not reach openrouter in this scenario")
+
+    monkeypatch.setattr(api, "make_openrouter_request_openai", guard_openrouter)
+
+    async with AsyncClient(app=app, base_url="http://test") as ac:
+        response = await ac.post("/v1/chat/completions", json=payload, headers=auth_headers)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["choices"][0]["message"]["content"] == "served by huggingface"
+    assert call_tracker["featherless"] == 1
+    assert call_tracker["huggingface"] == 1
+
+
+@pytest.mark.anyio
+async def test_provider_failover_on_404_to_huggingface(app, happy_patches, payload_basic, auth_headers, monkeypatch):
+    payload = dict(payload_basic)
+    payload["provider"] = "featherless"
+    payload["model"] = "featherless/ghost-model"
+
+    monkeypatch.setattr(api, "detect_provider_from_model_id", lambda model: None)
+
+    call_tracker = {"featherless": 0, "huggingface": 0}
+
+    def missing_featherless(*args, **kwargs):
+        call_tracker["featherless"] += 1
+        request = Request("POST", "https://featherless.test/v1/chat")
+        response = Response(status_code=404, request=request, content=b"missing")
+        raise HTTPStatusError("not found", request=request, response=response)
+
+    monkeypatch.setattr(api, "make_featherless_request_openai", missing_featherless)
+
+    def fallback_huggingface(messages, model, **kwargs):
+        call_tracker["huggingface"] += 1
+        return {"_raw": True}
+
+    monkeypatch.setattr(api, "make_huggingface_request_openai", fallback_huggingface)
+
+    def process_huggingface_response(resp):
+        return {
+            "choices": [{"message": {"content": "fallback success"}, "finish_reason": "stop"}],
+            "usage": {"total_tokens": 8, "prompt_tokens": 4, "completion_tokens": 4},
+        }
+
+    monkeypatch.setattr(api, "process_huggingface_response", process_huggingface_response)
+
+    async with AsyncClient(app=app, base_url="http://test") as ac:
+        response = await ac.post("/v1/chat/completions", json=payload, headers=auth_headers)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["choices"][0]["message"]["content"] == "fallback success"
+    assert call_tracker["featherless"] == 1
+    assert call_tracker["huggingface"] == 1

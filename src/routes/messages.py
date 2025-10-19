@@ -6,6 +6,7 @@ Compatible with Claude API: https://docs.claude.com/en/api/messages
 import logging
 import asyncio
 import time
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Optional
 
@@ -24,6 +25,7 @@ from src.services.fireworks_client import make_fireworks_request_openai, process
 from src.services.together_client import make_together_request_openai, process_together_response
 from src.services.huggingface_client import make_huggingface_request_openai, process_huggingface_response
 from src.services.model_transformations import detect_provider_from_model_id, transform_model_id
+from src.services.provider_failover import build_provider_failover_chain, map_provider_error, should_failover
 from src.services.rate_limiting import get_rate_limit_manager
 from src.services.trial_validation import validate_trial_access, track_trial_usage
 from src.services.pricing import calculate_cost
@@ -224,68 +226,109 @@ async def anthropic_messages(
                         break
                 # Otherwise default to openrouter (already set)
 
-        # Transform model ID to provider-specific format
-        from src.services.model_transformations import transform_model_id
-        model = transform_model_id(original_model, provider)
-        if model != original_model:
-            logger.info(f"Transformed model ID from '{original_model}' to '{model}' for provider {provider}")
+        provider_chain = build_provider_failover_chain(provider)
+        model = original_model
 
-        # === 3) Call upstream ===
-        request_timeout = PROVIDER_TIMEOUTS.get(provider, DEFAULT_PROVIDER_TIMEOUT)
-        if request_timeout != DEFAULT_PROVIDER_TIMEOUT:
-            logger.debug("Using extended timeout %ss for provider %s", request_timeout, provider)
-
+        # === 3) Call upstream with failover ===
         start = time.monotonic()
-        try:
-            if provider == "portkey":
-                portkey_provider = req.portkey_provider or "anthropic"
-                portkey_virtual_key = getattr(req, "portkey_virtual_key", None)
-                resp_raw = await asyncio.wait_for(
-                    _to_thread(make_portkey_request_openai, openai_messages, model, portkey_provider, portkey_virtual_key, **openai_params),
-                    timeout=request_timeout
+        processed = None
+        last_http_exc = None
+
+        for idx, attempt_provider in enumerate(provider_chain):
+            attempt_model = transform_model_id(original_model, attempt_provider)
+            if attempt_model != original_model:
+                logger.info(
+                    f"Transformed model ID from '{original_model}' to '{attempt_model}' for provider {attempt_provider}"
                 )
-                processed = await _to_thread(process_portkey_response, resp_raw)
-            elif provider == "featherless":
-                resp_raw = await asyncio.wait_for(
-                    _to_thread(make_featherless_request_openai, openai_messages, model, **openai_params),
-                    timeout=request_timeout
+
+            request_model = attempt_model
+            request_timeout = PROVIDER_TIMEOUTS.get(attempt_provider, DEFAULT_PROVIDER_TIMEOUT)
+            if request_timeout != DEFAULT_PROVIDER_TIMEOUT:
+                logger.debug("Using extended timeout %ss for provider %s", request_timeout, attempt_provider)
+
+            http_exc = None
+            try:
+                if attempt_provider == "portkey":
+                    portkey_provider = req.portkey_provider or "anthropic"
+                    portkey_virtual_key = getattr(req, "portkey_virtual_key", None)
+                    resp_raw = await asyncio.wait_for(
+                        _to_thread(
+                            make_portkey_request_openai,
+                            openai_messages,
+                            request_model,
+                            portkey_provider,
+                            portkey_virtual_key,
+                            **openai_params,
+                        ),
+                        timeout=request_timeout,
+                    )
+                    processed = await _to_thread(process_portkey_response, resp_raw)
+                elif attempt_provider == "featherless":
+                    resp_raw = await asyncio.wait_for(
+                        _to_thread(make_featherless_request_openai, openai_messages, request_model, **openai_params),
+                        timeout=request_timeout,
+                    )
+                    processed = await _to_thread(process_featherless_response, resp_raw)
+                elif attempt_provider == "fireworks":
+                    resp_raw = await asyncio.wait_for(
+                        _to_thread(make_fireworks_request_openai, openai_messages, request_model, **openai_params),
+                        timeout=request_timeout,
+                    )
+                    processed = await _to_thread(process_fireworks_response, resp_raw)
+                elif attempt_provider == "together":
+                    resp_raw = await asyncio.wait_for(
+                        _to_thread(make_together_request_openai, openai_messages, request_model, **openai_params),
+                        timeout=request_timeout,
+                    )
+                    processed = await _to_thread(process_together_response, resp_raw)
+                elif attempt_provider == "huggingface":
+                    resp_raw = await asyncio.wait_for(
+                        _to_thread(make_huggingface_request_openai, openai_messages, request_model, **openai_params),
+                        timeout=request_timeout,
+                    )
+                    processed = await _to_thread(process_huggingface_response, resp_raw)
+                else:
+                    resp_raw = await asyncio.wait_for(
+                        _to_thread(make_openrouter_request_openai, openai_messages, request_model, **openai_params),
+                        timeout=request_timeout,
+                    )
+                    processed = await _to_thread(process_openrouter_response, resp_raw)
+
+                provider = attempt_provider
+                model = request_model
+                break
+            except Exception as exc:
+                if isinstance(exc, (httpx.TimeoutException, asyncio.TimeoutError)):
+                    logger.warning("Upstream timeout (%s): %s", attempt_provider, exc)
+                elif isinstance(exc, httpx.RequestError):
+                    logger.warning("Upstream network error (%s): %s", attempt_provider, exc)
+                elif isinstance(exc, httpx.HTTPStatusError):
+                    logger.debug(
+                        "Upstream HTTP error (%s): %s", attempt_provider, exc.response.status_code
+                    )
+                else:
+                    logger.error(f"Upstream error for model {request_model} on {attempt_provider}: {exc}")
+                http_exc = map_provider_error(attempt_provider, request_model, exc)
+
+            if http_exc is None:
+                continue
+
+            last_http_exc = http_exc
+            if idx < len(provider_chain) - 1 and should_failover(http_exc):
+                next_provider = provider_chain[idx + 1]
+                logger.warning(
+                    "Provider '%s' failed with status %s (%s). Falling back to '%s'.",
+                    attempt_provider,
+                    http_exc.status_code,
+                    http_exc.detail,
+                    next_provider,
                 )
-                processed = await _to_thread(process_featherless_response, resp_raw)
-            elif provider == "fireworks":
-                resp_raw = await asyncio.wait_for(
-                    _to_thread(make_fireworks_request_openai, openai_messages, model, **openai_params),
-                    timeout=request_timeout
-                )
-                processed = await _to_thread(process_fireworks_response, resp_raw)
-            elif provider == "together":
-                resp_raw = await asyncio.wait_for(
-                    _to_thread(make_together_request_openai, openai_messages, model, **openai_params),
-                    timeout=request_timeout
-                )
-                processed = await _to_thread(process_together_response, resp_raw)
-            elif provider == "huggingface":
-                resp_raw = await asyncio.wait_for(
-                    _to_thread(make_huggingface_request_openai, openai_messages, model, **openai_params),
-                    timeout=request_timeout
-                )
-                processed = await _to_thread(process_huggingface_response, resp_raw)
-            else:
-                resp_raw = await asyncio.wait_for(
-                    _to_thread(make_openrouter_request_openai, openai_messages, model, **openai_params),
-                    timeout=request_timeout
-                )
-                processed = await _to_thread(process_openrouter_response, resp_raw)
-        except Exception as e:
-            logger.error(f"Upstream error for model {model} on {provider}: {e}")
-            error_msg = str(e).lower()
-            if "timeout" in error_msg:
-                raise HTTPException(status_code=504, detail="Upstream timeout")
-            elif "not found" in error_msg or ("model" in error_msg and "unavailable" in error_msg):
-                raise HTTPException(status_code=404, detail=f"Model {model} not found or unavailable on {provider}")
-            elif "rate limit" in error_msg:
-                raise HTTPException(status_code=429, detail="Upstream rate limit exceeded")
-            else:
-                raise HTTPException(status_code=502, detail=f"Error communicating with upstream provider: {str(e)}")
+                continue
+
+            raise http_exc
+
+        if processed is None:
+            raise last_http_exc or HTTPException(status_code=502, detail="Upstream error")
 
         elapsed = max(0.001, time.monotonic() - start)
 
