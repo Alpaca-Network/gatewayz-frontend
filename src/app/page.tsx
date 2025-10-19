@@ -4,7 +4,7 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { ArrowRight, ChevronRight, GitMerge, ShieldCheck, TrendingUp, User, Zap, Code2, Terminal, MessageSquare, Check as CheckIcon } from 'lucide-react';
+import { ArrowRight, ChevronRight, GitMerge, ShieldCheck, TrendingUp, User, Zap, Code2, Terminal, MessageSquare, Check as CheckIcon, Send } from 'lucide-react';
 import Link from 'next/link';
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
