@@ -559,20 +559,24 @@ console.log(completion.choices[0].message);`,
                 <div className="pl-4 text-muted-foreground flex-shrink-0">
                   <MessageSquare className="w-5 h-5" />
                 </div>
-                <Input
-                  type="text"
-                  placeholder="Start A Message"
-                  value={message}
-                  onChange={(e) => setMessage(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && message.trim()) {
-                      e.preventDefault();
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (message.trim()) {
                       posthog.capture('start_message_sent', { message });
                       router.push('/chat?message=' + encodeURIComponent(message) + '&autoSend=true');
                     }
                   }}
-                  className="h-14 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 text-base bg-transparent"
-                />
+                  className="flex-1"
+                >
+                  <Input
+                    type="text"
+                    placeholder="Start A Message"
+                    value={message}
+                    onChange={(e) => setMessage(e.target.value)}
+                    className="h-14 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 text-base bg-transparent"
+                  />
+                </form>
                 <Button
                   onClick={() => {
                     if (message.trim()) {
