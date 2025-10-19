@@ -36,6 +36,12 @@ logger = logging.getLogger(__name__)
 # Currently empty - all models fetched from HF API with inference_provider=hf-inference should work
 UNSUPPORTED_MODELS = set()
 
+# Models that must always be present in the normalized catalog even if they
+# fall outside of the top-N API responses for likes/downloads/trending.
+ESSENTIAL_MODELS = {
+    "katanemo/Arch-Router-1.5B",
+}
+
 
 def fetch_models_from_huggingface_api(
     search: str = None,
@@ -146,6 +152,19 @@ def fetch_models_from_huggingface_api(
 
         # Filter out any None results from normalization
         normalized_models = [m for m in normalized_models if m]
+
+        # Ensure essential models are always available even if they fall outside
+        # the top results returned by the ranked API queries.
+        normalized_ids = {m.get("id", "").lower() for m in normalized_models}
+        for required_model in ESSENTIAL_MODELS:
+            if required_model.lower() not in normalized_ids:
+                logger.info(f"Essential Hugging Face model '{required_model}' missing from ranked fetch; retrieving directly")
+                direct_model = get_huggingface_model_info(required_model)
+                if direct_model:
+                    normalized_models.append(direct_model)
+                    normalized_ids.add(required_model.lower())
+                else:
+                    logger.warning(f"Failed to retrieve essential Hugging Face model '{required_model}'")
 
         logger.info(f"Normalized {len(normalized_models)} models")
 
