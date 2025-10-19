@@ -2326,50 +2326,57 @@ function ChatPageContent() {
                 }
 
                 return (
-                <div key={index} className={`flex items-start gap-3 ${msg.role === 'user' ? 'justify-end' : ''}`}>
-                  <div className={`flex flex-col gap-1 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-                    {msg.role === 'user' ? (
-                      <div className="rounded-lg p-3 bg-blue-600 dark:bg-blue-600 text-white">
-                        {msg.image && (
-                          <img
-                            src={msg.image}
-                            alt="Uploaded image"
-                            className="max-w-[200px] lg:max-w-xs rounded-lg mb-2"
-                          />
-                        )}
-                        <div className="text-sm whitespace-pre-wrap text-white">{msg.content}</div>
-                      </div>
-                    ) : (
-                      <div className="rounded-lg p-3 bg-muted/30 dark:bg-muted/20 border border-border">
-                        <div className="flex items-center justify-between mb-2">
-                          {selectedModel?.label && <p className="text-xs font-semibold">{selectedModel.label}</p>}
-                        </div>
-                        <div className="text-sm prose prose-sm max-w-none dark:prose-invert">
-                          <ReactMarkdown
-                            remarkPlugins={[remarkGfm, remarkMath]}
-                            rehypePlugins={[rehypeKatex]}
-                          >
-                            {fixLatexSyntax(msg.content)}
-                          </ReactMarkdown>
-                        </div>
-                        {/* Action Buttons - always visible in bottom right */}
-                        <div className="flex items-center justify-end gap-1 mt-3 pt-2 border-t border-border">
-                          <Button variant="ghost" size="sm" onClick={() => navigator.clipboard.writeText(msg.content)} className="h-8 w-8 p-0 hover:bg-muted" title="Copy response">
-                            <Copy className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="sm" onClick={() => navigator.share({ text: msg.content })} className="h-8 w-8 p-0 hover:bg-muted" title="Share response">
-                            <Share2 className="h-4 w-4" />
-                          </Button>
-                          {handleRegenerate && (
-                            <Button variant="ghost" size="sm" onClick={handleRegenerate} className="h-8 w-8 p-0 hover:bg-muted" title="Regenerate response">
-                              <RotateCcw className="h-4 w-4" />
-                            </Button>
+                  <div key={index} className={`flex items-start gap-3 ${msg.role === 'user' ? 'justify-end' : ''}`}>
+                    <div className={`flex flex-col gap-2 ${msg.role === 'user' ? 'items-end' : 'items-start'} w-full`}>
+                      {msg.role === 'assistant' && msg.reasoning && msg.reasoning.trim().length > 0 && (
+                        <ReasoningDisplay
+                          reasoning={msg.reasoning}
+                          isStreaming={msg.isStreaming}
+                          className="w-full max-w-2xl"
+                        />
+                      )}
+                      {msg.role === 'user' ? (
+                        <div className="rounded-lg p-3 bg-blue-600 dark:bg-blue-600 text-white max-w-2xl">
+                          {msg.image && (
+                            <img
+                              src={msg.image}
+                              alt="Uploaded image"
+                              className="max-w-[200px] lg:max-w-xs rounded-lg mb-2"
+                            />
                           )}
+                          <div className="text-sm whitespace-pre-wrap text-white">{msg.content}</div>
                         </div>
-                      </div>
-                    )}
+                      ) : (
+                        <div className="rounded-lg p-3 bg-muted/30 dark:bg-muted/20 border border-border max-w-2xl w-full">
+                          <div className="flex items-center justify-between mb-2">
+                            {selectedModel?.label && <p className="text-xs font-semibold text-muted-foreground">{selectedModel.label}</p>}
+                          </div>
+                          <div className="text-sm prose prose-sm max-w-none dark:prose-invert">
+                            <ReactMarkdown
+                              remarkPlugins={[remarkGfm, remarkMath]}
+                              rehypePlugins={[rehypeKatex]}
+                            >
+                              {fixLatexSyntax(msg.content)}
+                            </ReactMarkdown>
+                          </div>
+                          {/* Action Buttons - always visible in bottom right */}
+                          <div className="flex items-center justify-end gap-1 mt-3 pt-2 border-t border-border">
+                            <Button variant="ghost" size="sm" onClick={() => navigator.clipboard.writeText(msg.content)} className="h-8 w-8 p-0 hover:bg-muted" title="Copy response">
+                              <Copy className="h-4 w-4" />
+                            </Button>
+                            <Button variant="ghost" size="sm" onClick={() => navigator.share({ text: msg.content })} className="h-8 w-8 p-0 hover:bg-muted" title="Share response">
+                              <Share2 className="h-4 w-4" />
+                            </Button>
+                            {handleRegenerate && (
+                              <Button variant="ghost" size="sm" onClick={handleRegenerate} className="h-8 w-8 p-0 hover:bg-muted" title="Regenerate response">
+                                <RotateCcw className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
                 );
               })}
               {loading && <ChatSkeleton />}

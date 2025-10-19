@@ -4,12 +4,13 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
-import { Send, Loader2, ChevronDown, ChevronRight } from 'lucide-react';
+import { Send, Loader2 } from 'lucide-react';
 import { getApiKey, getUserData } from '@/lib/api';
 import { streamChatResponse } from '@/lib/streaming';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
+import { ReasoningDisplay } from '@/components/chat/reasoning-display';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -29,7 +30,6 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [expandedThinking, setExpandedThinking] = useState<Set<number>>(new Set());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -40,18 +40,6 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
-
-  const toggleThinking = (index: number) => {
-    setExpandedThinking(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(index)) {
-        newSet.delete(index);
-      } else {
-        newSet.add(index);
-      }
-      return newSet;
-    });
-  };
 
   const handleSendMessage = async () => {
     if (!input.trim() || loading) return;
@@ -89,7 +77,6 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
     // Add a streaming assistant message
     const streamingMessageIndex = messages.length + 1;
     setMessages(prev => [...prev, { role: 'assistant', content: '', thinking: '', isStreaming: true }]);
-    setExpandedThinking(prev => new Set(prev).add(streamingMessageIndex));
 
     try {
       // Call the backend API directly to avoid Vercel's 60-second timeout
@@ -196,13 +183,6 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
         return newMessages;
       });
 
-      // Collapse thinking after completion
-      setExpandedThinking(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(streamingMessageIndex);
-        return newSet;
-      });
-
     } catch (err) {
       console.error('[InlineChat] Error sending message:', err);
       const errorMessage = err instanceof Error ? err.message : 'Failed to send message';
@@ -234,24 +214,7 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
             <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} w-full`}>
               <div className={`max-w-[70%] ${msg.role === 'assistant' ? 'w-full max-w-full' : ''}`}>
                 {msg.role === 'assistant' && msg.thinking && (
-                  <Card className="mb-2 p-3 bg-amber-50 dark:bg-amber-950 border-amber-200 dark:border-amber-800">
-                    <button
-                      onClick={() => toggleThinking(idx)}
-                      className="flex items-center gap-2 w-full text-left text-sm font-medium text-amber-900 dark:text-amber-100"
-                    >
-                      {expandedThinking.has(idx) ? (
-                        <ChevronDown className="h-4 w-4" />
-                      ) : (
-                        <ChevronRight className="h-4 w-4" />
-                      )}
-                      <span>{msg.isStreaming ? 'Thinking...' : 'View thinking process'}</span>
-                    </button>
-                    {expandedThinking.has(idx) && (
-                      <div className="mt-2 text-sm text-amber-800 dark:text-amber-200 whitespace-pre-wrap">
-                        {msg.thinking}
-                      </div>
-                    )}
-                  </Card>
+                  <ReasoningDisplay reasoning={msg.thinking} isStreaming={msg.isStreaming} className="mb-2" />
                 )}
                 <Card className={`p-4 ${msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-muted'}`}>
                   {msg.role === 'user' ? (
