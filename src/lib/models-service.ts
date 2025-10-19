@@ -85,9 +85,9 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
       response = await fetch(url, {
         method: 'GET',
         headers,
-        // Use Next.js revalidation instead of no-store for better performance
-        next: { revalidate: 60 }, // Cache for 60 seconds
-        signal: AbortSignal.timeout(60000) // 60 second timeout for large model requests (50k+ models)
+        // Cache aggressively for better performance (5 minutes)
+        next: { revalidate: 300 }, // Cache for 5 minutes
+        signal: AbortSignal.timeout(15000) // 15 second timeout for faster failures
       });
 
       if (response.ok) {
@@ -131,8 +131,8 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
           response = await fetch(url, {
             method: 'GET',
             headers: fallbackHeaders,
-            next: { revalidate: 60 },
-            signal: AbortSignal.timeout(60000) // 60 second timeout for large model requests
+            next: { revalidate: 300 },
+            signal: AbortSignal.timeout(15000) // 15 second timeout for faster failures
           });
 
           if (response.ok) {
@@ -184,8 +184,8 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
         response = await fetch(url, {
           method: 'GET',
           headers: fallbackHeaders2,
-          next: { revalidate: 60 },
-          signal: AbortSignal.timeout(60000) // 60 second timeout for large model requests
+          next: { revalidate: 300 },
+          signal: AbortSignal.timeout(15000) // 15 second timeout for faster failures
         });
 
         if (response.ok) {

@@ -2,10 +2,9 @@ import { Suspense } from 'react';
 import ModelsClient from './models-client';
 import { getModelsForGateway } from '@/lib/models-service';
 
-// Force dynamic rendering to always fetch latest models
-// This ensures users always see the most up-to-date model catalog
-export const dynamic = 'force-dynamic';
-export const revalidate = 0; // No caching
+// Enable static generation with revalidation for better performance
+// Page will be statically generated and revalidated every 5 minutes
+export const revalidate = 300; // Revalidate every 5 minutes
 
 interface Model {
   id: string;
@@ -35,39 +34,28 @@ async function getModels(): Promise<Model[]> {
       return [];
     }
 
-    // Fetch models from all gateways to build a complete picture
-    // Using individual Portkey SDK providers instead of unified gateway for better performance
+    // Fetch models from key gateways only for initial load
+    // Reduced from 13 to 6 most popular gateways for faster initial load
+    // Users can filter/search to see more models client-side
     const gateways = [
-      'openrouter',
-      'featherless',
-      'groq',
-      'together',
-      'fireworks',
-      'chutes',
-      'deepinfra',
-      'google',
-      'cerebras',
-      'nebius',
-      'xai',
-      'novita',
-      'huggingface'
+      'openrouter',  // Most comprehensive
+      'groq',        // Fast inference
+      'together',    // Popular
+      'google',      // Gemini models
+      'cerebras',    // Fast models
+      'xai'          // Grok models
     ];
 
-    // Fetch from all gateways in parallel with timeout
+    // Fetch from gateways in parallel with timeout
     const gatewayPromises = gateways.map(async (gateway) => {
       try {
-        // Add 15 second timeout per gateway (reasonable for limited fetches)
+        // Add 10 second timeout per gateway
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000);
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-        // Request sensible limits per gateway - prevent massive fetches
-        // Featherless has 1.9M models - limit to 1k most popular for performance
-        let limit: number | undefined = undefined;
-        if (gateway === 'huggingface') {
-          limit = 1500; // Show 1500 most popular HF models
-        } else if (gateway === 'featherless') {
-          limit = 1000; // Limit featherless to 1k models for performance
-        }
+        // Limit to top 500 models per gateway for performance
+        // This still gives us 3000+ models total
+        const limit = 500;
 
         const result = await getModelsForGateway(gateway, limit);
         console.log(`[Models Page] After getModelsForGateway for ${gateway}: ${result.data?.length || 0} models`);
@@ -75,6 +63,7 @@ async function getModels(): Promise<Model[]> {
 
         return { gateway, models: result.data || [] };
       } catch (error) {
+        console.error(`[Models Page] Failed to fetch ${gateway}:`, error);
         // Silently fail and return empty models for this gateway
         return { gateway, models: [] };
       }
