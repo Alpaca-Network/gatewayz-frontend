@@ -1642,24 +1642,26 @@ function ChatPageContent() {
                                 ]
                             });
                         } else {
+                            // Plain text message - use string content for chat/completions endpoint
                             conversationHistory.push({
                                 role: 'user',
-                                content: [{ type: 'text', text: msg.content }]
+                                content: msg.content
                             });
                         }
                     } else if (msg.role === 'assistant') {
-                        // Handle assistant messages (text only)
+                        // Handle assistant messages (text only) - use plain string
                         conversationHistory.push({
                             role: 'assistant',
-                            content: [{ type: 'text', text: msg.content }]
+                            content: msg.content
                         });
                     }
                 }
-                
+
                 // Add the current user message
+                // messageContent is already in the correct format (string or OpenAI multimodal array)
                 conversationHistory.push({
                     role: 'user',
-                    content: mapToResponsesContent(messageContent)
+                    content: messageContent
                 });
 
                 console.log('📝 Conversation history for API:', {
