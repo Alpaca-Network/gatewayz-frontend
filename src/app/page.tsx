@@ -552,20 +552,41 @@ console.log(completion.choices[0].message);`,
             </Link>
           </div>
 
-          {/* Start a Message Button */}
-          <div className="flex justify-center items-center mt-4">
-            <Button
-              size="lg"
-              variant="outline"
-              className="h-14 px-8 text-lg font-semibold w-full sm:w-auto"
-              onClick={() => {
-                posthog.capture('start_message_clicked');
-                // Pre-fill with a demo message and auto-send
-                router.push('/chat?message=' + encodeURIComponent('What is the best AI model for coding?') + '&autoSend=true');
-              }}
-            >
-              Start a message
-            </Button>
+          {/* Start a Message Input Box */}
+          <div className="flex justify-center items-center mt-6 px-4">
+            <div className="w-full max-w-2xl">
+              <div className="relative flex items-center bg-background border-2 border-border rounded-lg hover:border-primary/50 focus-within:border-primary transition-colors shadow-sm">
+                <div className="pl-4 text-muted-foreground">
+                  <MessageSquare className="w-5 h-5" />
+                </div>
+                <Input
+                  type="text"
+                  placeholder="Start A Message"
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter' && message.trim()) {
+                      posthog.capture('start_message_sent', { message });
+                      router.push('/chat?message=' + encodeURIComponent(message) + '&autoSend=true');
+                    }
+                  }}
+                  className="h-14 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 text-base bg-transparent"
+                />
+                <Button
+                  size="icon"
+                  onClick={() => {
+                    if (message.trim()) {
+                      posthog.capture('start_message_sent', { message });
+                      router.push('/chat?message=' + encodeURIComponent(message) + '&autoSend=true');
+                    }
+                  }}
+                  disabled={!message.trim()}
+                  className="mr-2 h-10 w-10 rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Send className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
           </div>
 
           {/* Path Chooser Modal */}
