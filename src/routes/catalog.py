@@ -561,6 +561,10 @@ async def get_models(
         if offset_int:
             models = models[offset_int:]
             logger.info(f"Applied offset {offset_int}: {len(models)} models remaining")
+        if limit_int and gateway_value != "all":
+            logger.debug("Ignoring limit=%s for gateway '%s' to return full catalog", limit_int, gateway_value)
+            limit_int = None
+
         if limit_int:
             models = models[:limit_int]
             logger.info(f"Applied limit {limit_int}: {len(models)} models remaining")

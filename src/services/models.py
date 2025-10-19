@@ -3,6 +3,7 @@ import logging
 import json
 import os
 from pathlib import Path
+import csv
 
 from src.config import Config
 from src.cache import (
@@ -42,6 +43,98 @@ logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def load_featherless_catalog_export() -> list:
+    """
+    Load Featherless models from a static export CSV if available.
+    Returns a list of normalized model records or None.
+    """
+    try:
+        repo_root = Path(__file__).resolve().parents[2]
+        export_candidates = [
+            repo_root / "models_export_2025-10-16_202520.csv",
+            repo_root / "models_export_2025-10-16_202501.csv",
+        ]
+
+        for csv_path in export_candidates:
+            if not csv_path.exists():
+                continue
+
+            logger.info(f"Loading Featherless catalog export from {csv_path}")
+            with csv_path.open("r", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                rows = [row for row in reader if (row.get("gateway") or "").lower() == "featherless"]
+
+            if not rows:
+                logger.warning(f"No Featherless rows found in export {csv_path}")
+                continue
+
+            normalized = []
+            for row in rows:
+                model_id = row.get("id")
+                if not model_id:
+                    continue
+
+                try:
+                    context_length = int(float(row.get("context_length", 0) or 0))
+                except (TypeError, ValueError):
+                    context_length = 0
+
+                def parse_price(value: str) -> str:
+                    try:
+                        if value is None or value == "":
+                            return "0"
+                        return str(float(value))
+                    except (TypeError, ValueError):
+                        return "0"
+
+                prompt_price = parse_price(row.get("prompt_price"))
+                completion_price = parse_price(row.get("completion_price"))
+
+                normalized.append(
+                    {
+                        "id": model_id,
+                        "slug": model_id,
+                        "canonical_slug": model_id,
+                        "hugging_face_id": None,
+                        "name": row.get("name") or model_id,
+                        "created": None,
+                        "description": row.get("description") or f"Featherless catalog entry for {model_id}.",
+                        "context_length": context_length,
+                        "architecture": {
+                            "modality": row.get("modality") or "text->text",
+                            "input_modalities": ["text"],
+                            "output_modalities": ["text"],
+                            "tokenizer": None,
+                            "instruct_type": None,
+                        },
+                        "pricing": {
+                            "prompt": prompt_price,
+                            "completion": completion_price,
+                            "request": "0",
+                            "image": "0",
+                            "web_search": "0",
+                            "internal_reasoning": "0",
+                        },
+                        "top_provider": None,
+                        "per_request_limits": None,
+                        "supported_parameters": [],
+                        "default_parameters": {},
+                        "provider_slug": row.get("provider_slug") or (model_id.split("/")[0] if "/" in model_id else "featherless"),
+                        "provider_site_url": None,
+                        "model_logo_url": None,
+                        "source_gateway": "featherless",
+                        "raw_featherless": row,
+                    }
+                )
+
+            logger.info(f"Loaded {len(normalized)} Featherless models from export {csv_path}")
+            return normalized
+        return None
+    except Exception as exc:
+        logger.error(f"Failed to load Featherless catalog export: {exc}", exc_info=True)
+        return None
 
 
 def get_cached_models(gateway: str = "openrouter"):
@@ -419,7 +512,7 @@ def fetch_models_from_featherless():
 
         logger.info("Fetching all models from Featherless API (single request)")
 
-        response = httpx.get(url, headers=headers, timeout=30.0)
+        response = httpx.get(url, headers=headers, params={"limit": 10000}, timeout=30.0)
         response.raise_for_status()
 
         payload = response.json()
@@ -432,6 +525,16 @@ def fetch_models_from_featherless():
         logger.info(f"Fetched {len(all_models)} total models from Featherless")
 
         normalized_models = [normalize_featherless_model(model) for model in all_models if model]
+
+        if len(normalized_models) < 6000:
+            logger.warning(f"Featherless API returned {len(normalized_models)} models; loading extended catalog export for completeness")
+            export_models = load_featherless_catalog_export()
+            if export_models:
+                combined = {model["id"]: model for model in normalized_models if model.get("id")}
+                for export_model in export_models:
+                    combined[export_model["id"]] = export_model
+                normalized_models = list(combined.values())
+                logger.info(f"Combined Featherless catalog now includes {len(normalized_models)} models from API + export")
 
         _featherless_models_cache["data"] = normalized_models
         _featherless_models_cache["timestamp"] = datetime.now(timezone.utc)
@@ -459,16 +562,16 @@ def normalize_featherless_model(featherless_model: dict) -> dict:
     model_handle = model_id
     display_name = model_id.replace("-", " ").replace("_", " ").title()
 
-    description = f"Featherless catalog entry for {model_id}. Pricing data not available from Featherless API."
+    description = featherless_model.get("description") or f"Featherless catalog entry for {model_id}. Pricing data not available from Featherless API."
 
     # Use null for unknown pricing (Featherless API doesn't provide pricing)
     pricing = {
-        "prompt": None,
-        "completion": None,
-        "request": None,
-        "image": None,
-        "web_search": None,
-        "internal_reasoning": None
+        "prompt": featherless_model.get("prompt_price"),
+        "completion": featherless_model.get("completion_price"),
+        "request": featherless_model.get("request_price"),
+        "image": featherless_model.get("image_price"),
+        "web_search": featherless_model.get("web_search_price"),
+        "internal_reasoning": featherless_model.get("internal_reasoning_price")
     }
 
     architecture = {
