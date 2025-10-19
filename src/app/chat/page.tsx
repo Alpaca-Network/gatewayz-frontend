@@ -882,6 +882,9 @@ function ChatPageContent() {
     const [hasApiKey, setHasApiKey] = useState(false);
     const [message, setMessage] = useState('');
     const [userHasTyped, setUserHasTyped] = useState(false);
+
+    // Immediate log to confirm latest code is deployed
+    console.log('[Chat Page] Component mounted - Version with auto-login and pending message queue');
     const [sessions, setSessions] = useState<ChatSession[]>([]);
     const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
@@ -952,10 +955,15 @@ function ChatPageContent() {
 
     // Handle model and message from URL parameters
     useEffect(() => {
-        if (!searchParams) return;
+        console.log('[URL Params] useEffect triggered, searchParams:', searchParams);
+        if (!searchParams) {
+            console.log('[URL Params] searchParams is null/undefined, skipping');
+            return;
+        }
 
         const modelParam = searchParams.get('model');
         const messageParam = searchParams.get('message');
+        console.log('[URL Params] Parsed params:', { modelParam, messageParam });
 
         if (modelParam) {
             console.log('URL model parameter detected:', modelParam);
