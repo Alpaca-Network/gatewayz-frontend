@@ -102,9 +102,23 @@ export function PrivyProviderWrapper({ children }: PrivyProviderWrapperProps) {
 
       console.log('[Auth] Token retrieved:', token ? `${token.substring(0, 20)}...` : 'null');
 
-      // Check for referral code from localStorage (set by signup page)
-      const referralCode = localStorage.getItem('gatewayz_referral_code');
-      console.log('Referral code from localStorage:', referralCode);
+      // Check for referral code from multiple sources
+      // 1. Try localStorage first (set by signup page)
+      let referralCode = localStorage.getItem('gatewayz_referral_code');
+
+      // 2. If not in localStorage, check current URL params (fallback for direct signup)
+      if (!referralCode && typeof window !== 'undefined') {
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlRefCode = urlParams.get('ref');
+        if (urlRefCode) {
+          referralCode = urlRefCode;
+          // Persist it for future use
+          localStorage.setItem('gatewayz_referral_code', urlRefCode);
+          console.log('[Auth] Captured referral code from URL:', urlRefCode);
+        }
+      }
+
+      console.log('[Auth] Final referral code:', referralCode);
 
       // Authenticate with backend
       const authBody = stripUndefined({
