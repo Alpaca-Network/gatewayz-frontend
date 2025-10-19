@@ -564,8 +564,9 @@ console.log(completion.choices[0].message);`,
                   placeholder="Start A Message"
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
-                  onKeyPress={(e) => {
+                  onKeyDown={(e) => {
                     if (e.key === 'Enter' && message.trim()) {
+                      e.preventDefault();
                       posthog.capture('start_message_sent', { message });
                       router.push('/chat?message=' + encodeURIComponent(message) + '&autoSend=true');
                     }
