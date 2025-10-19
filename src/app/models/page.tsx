@@ -34,16 +34,23 @@ async function getModels(): Promise<Model[]> {
       return [];
     }
 
-    // Fetch models from key gateways only for initial load
-    // Reduced from 13 to 6 most popular gateways for faster initial load
-    // Users can filter/search to see more models client-side
+    // Fetch models from all supported gateways
+    // Backend deduplicates models, so fetching from all gateways ensures we get
+    // the complete picture of which models are available where
     const gateways = [
-      'openrouter',  // Most comprehensive
-      'groq',        // Fast inference
-      'together',    // Popular
-      'google',      // Gemini models
-      'cerebras',    // Fast models
-      'xai'          // Grok models
+      'openrouter',
+      'featherless',
+      'groq',
+      'together',
+      'fireworks',
+      'chutes',
+      'deepinfra',
+      'google',
+      'cerebras',
+      'nebius',
+      'xai',
+      'novita',
+      'huggingface'
     ];
 
     // Fetch from gateways in parallel with timeout
@@ -53,11 +60,9 @@ async function getModels(): Promise<Model[]> {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-        // Limit to top 500 models per gateway for performance
-        // This still gives us 3000+ models total
-        const limit = 500;
-
-        const result = await getModelsForGateway(gateway, limit);
+        // Get all available models from each gateway
+        // Backend handles model availability per gateway correctly
+        const result = await getModelsForGateway(gateway);
         console.log(`[Models Page] After getModelsForGateway for ${gateway}: ${result.data?.length || 0} models`);
         clearTimeout(timeoutId);
 
