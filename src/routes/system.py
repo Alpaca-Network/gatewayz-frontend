@@ -21,6 +21,7 @@ from src.services.models import (
     fetch_models_from_fireworks,
     fetch_models_from_together
 )
+from src.services.huggingface_models import fetch_models_from_hug
 from src.config import Config
 from src.services.modelz_client import refresh_modelz_cache, get_modelz_cache_status as get_modelz_cache_status_func
 
@@ -184,8 +185,8 @@ async def refresh_gateway_cache(
     """
     try:
         gateway = gateway.lower()
-        valid_gateways = ["openrouter", "portkey", "featherless", "deepinfra", "chutes", "groq", "fireworks", "together"]
-        
+        valid_gateways = ["openrouter", "portkey", "featherless", "deepinfra", "chutes", "groq", "fireworks", "together", "huggingface"]
+
         if gateway not in valid_gateways:
             raise HTTPException(
                 status_code=400,
@@ -225,7 +226,8 @@ async def refresh_gateway_cache(
             "chutes": fetch_models_from_chutes,
             "groq": fetch_models_from_groq,
             "fireworks": fetch_models_from_fireworks,
-            "together": fetch_models_from_together
+            "together": fetch_models_from_together,
+            "huggingface": fetch_models_from_hug
         }
         
         fetch_func = fetch_functions.get(gateway)
