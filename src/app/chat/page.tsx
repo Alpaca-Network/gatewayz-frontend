@@ -984,10 +984,14 @@ function ChatPageContent() {
         }
 
         // Set the message from URL parameter and flag for auto-send
+        const autoSendParam = searchParams.get('autoSend');
         if (messageParam) {
             setMessage(decodeURIComponent(messageParam));
             setUserHasTyped(true); // Allow auto-send from URL
-            setShouldAutoSend(true);
+            // Auto-send if explicitly requested via autoSend parameter, or if message param exists
+            if (autoSendParam === 'true' || messageParam) {
+                setShouldAutoSend(true);
+            }
         }
     }, [searchParams]);
 

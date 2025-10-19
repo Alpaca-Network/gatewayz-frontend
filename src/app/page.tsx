@@ -552,6 +552,22 @@ console.log(completion.choices[0].message);`,
             </Link>
           </div>
 
+          {/* Start a Message Button */}
+          <div className="flex justify-center items-center mt-4">
+            <Button
+              size="lg"
+              variant="outline"
+              className="h-14 px-8 text-lg font-semibold w-full sm:w-auto"
+              onClick={() => {
+                posthog.capture('start_message_clicked');
+                // Pre-fill with a demo message and auto-send
+                router.push('/chat?message=' + encodeURIComponent('What is the best AI model for coding?') + '&autoSend=true');
+              }}
+            >
+              Start a message
+            </Button>
+          </div>
+
           {/* Path Chooser Modal */}
           <PathChooserModal open={showPathChooser} onOpenChange={setShowPathChooser} />
 
