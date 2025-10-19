@@ -553,10 +553,10 @@ console.log(completion.choices[0].message);`,
           </div>
 
           {/* Start a Message Input Box */}
-          <div className="flex justify-center items-center mt-6 px-4">
-            <div className="w-full max-w-2xl">
+          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mt-6">
+            <div className="w-full sm:w-auto sm:min-w-[500px] sm:max-w-2xl">
               <div className="relative flex items-center bg-background border-2 border-border rounded-lg hover:border-primary/50 focus-within:border-primary transition-colors shadow-sm">
-                <div className="pl-4 text-muted-foreground">
+                <div className="pl-4 text-muted-foreground flex-shrink-0">
                   <MessageSquare className="w-5 h-5" />
                 </div>
                 <Input
@@ -573,7 +573,6 @@ console.log(completion.choices[0].message);`,
                   className="h-14 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 text-base bg-transparent"
                 />
                 <Button
-                  size="icon"
                   onClick={() => {
                     if (message.trim()) {
                       posthog.capture('start_message_sent', { message });
@@ -581,9 +580,9 @@ console.log(completion.choices[0].message);`,
                     }
                   }}
                   disabled={!message.trim()}
-                  className="mr-2 h-10 w-10 rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="mr-2 h-12 w-12 flex-shrink-0 rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <Send className="w-4 h-4" />
+                  <Send className="w-5 h-5" />
                 </Button>
               </div>
             </div>
