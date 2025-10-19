@@ -1,40 +1,37 @@
 
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Menu } from "lucide-react";
-import Link from 'next/link';
+import Link from "next/link";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Sheet, SheetContent, SheetTrigger, SheetOverlay, SheetPortal } from "@/components/ui/sheet";
-import { usePrivy } from '@privy-io/react-auth';
-import { UserNav } from './user-nav';
-import { SearchBar } from './search-bar';
-import { API_BASE_URL } from '@/lib/config';
-import { processAuthResponse, getApiKey, removeApiKey, AUTH_REFRESH_EVENT } from '@/lib/api';
+import { UserNav } from "./user-nav";
+import { SearchBar } from "./search-bar";
 import { Separator } from "@/components/ui/separator";
-import { GetCreditsButton } from './get-credits-button';
-import { Copy, ExternalLink } from 'lucide-react';
+import { GetCreditsButton } from "./get-credits-button";
+import { Copy } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useGatewayzAuth } from "@/context/gatewayz-auth-context";
+
+const getWalletAddress = (user: any) => {
+  try {
+    if (!user) return "";
+    const walletAccount = user?.linkedAccounts?.find((account: any) => account.type === "wallet");
+    return walletAccount?.address || "";
+  } catch (error) {
+    console.log("Error getting wallet address:", error);
+    return "";
+  }
+};
 
 export function AppHeader() {
-  const { user, login, logout, getAccessToken } = usePrivy();
+  const { privyUser: user, login, logout, status } = useGatewayzAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [walletAddress, setWalletAddress] = useState('');
-  const authInProgressRef = useRef(false);
   const { toast } = useToast();
-
-  const getWalletAddress = (user: any) => {
-    try {
-      if(!user) return '';
-      // Get the first wallet address from linked accounts
-      const walletAccount = user?.linkedAccounts?.find((account: any) => account.type === 'wallet');
-      return walletAccount?.address || '';
-    } catch (error) {
-      console.log('Error getting wallet address:', error);
-      return '';
-    }
-  }
+  const walletAddress = useMemo(() => getWalletAddress(user), [user]);
+  const isAuthenticating = status === "authenticating";
 
   const formatAddress = (address: string) => {
     if (!address) return '';
@@ -113,119 +110,6 @@ export function AppHeader() {
       latest_verified_at: toUnixSeconds(get('latestVerifiedAt')),
     });
   }, [toUnixSeconds]);
-
-  const authenticateUser = useCallback(async (forceRefresh = false) => {
-    if (!user) {
-      removeApiKey();
-      setWalletAddress('');
-      return;
-    }
-
-    if (authInProgressRef.current) {
-      return;
-    }
-
-    authInProgressRef.current = true;
-
-    try {
-      setWalletAddress(getWalletAddress(user));
-      let existingApiKey = getApiKey();
-
-      if (existingApiKey && !forceRefresh) {
-        try {
-          const testResponse = await fetch(`${API_BASE_URL}/user/profile`, {
-            headers: {
-              'Authorization': `Bearer ${existingApiKey}`
-            }
-          });
-
-          if (testResponse.ok) {
-            console.log('User already authenticated with valid API key');
-            return;
-          } else if (testResponse.status === 401) {
-            console.warn('Stored API key is invalid, re-authenticating...');
-            removeApiKey();
-            existingApiKey = null;
-          }
-        } catch (error) {
-          console.error('Error validating API key:', error);
-          // Continue to re-authenticate
-        }
-      }
-
-      if (existingApiKey && !forceRefresh) {
-        return;
-      }
-
-      const token = await getAccessToken();
-      console.log({ user });
-      console.log({ token });
-
-      const authBody = {
-        user: {
-          id: user.id,
-          created_at: toUnixSeconds(user.createdAt) ?? Math.floor(Date.now() / 1000),
-          linked_accounts: (user.linkedAccounts || []).map((account: any) =>
-            mapLinkedAccount(account as Record<string, unknown>)
-          ),
-          mfa_methods: user.mfaMethods || [],
-          has_accepted_terms: user.hasAcceptedTerms ?? false,
-          is_guest: user.isGuest ?? false,
-        },
-        token: token || '',
-        auto_create_api_key: true,
-        trial_credits: 10.0,
-      };
-
-      console.log('Sending auth request:', JSON.stringify(authBody, null, 2));
-
-      const response = await fetch(`${API_BASE_URL}/auth`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(authBody),
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        console.log('Authentication successful:', result);
-        processAuthResponse(result);
-      } else {
-        const errorText = await response.text();
-        console.log('Authentication failed:', response.status, response.statusText);
-        console.log('Error response:', errorText);
-        removeApiKey();
-      }
-    } catch (error) {
-      console.log('Error during authentication:', error);
-      removeApiKey();
-    } finally {
-      authInProgressRef.current = false;
-    }
-  }, [getAccessToken, mapLinkedAccount, toUnixSeconds, user]);
-
-  useEffect(() => {
-    authenticateUser();
-  }, [authenticateUser]);
-
-  useEffect(() => {
-    const handler = () => {
-      console.log('Received auth refresh event');
-      removeApiKey();
-      authenticateUser(true);
-    };
-
-    if (typeof window !== 'undefined') {
-      window.addEventListener(AUTH_REFRESH_EVENT, handler);
-    }
-
-    return () => {
-      if (typeof window !== 'undefined') {
-        window.removeEventListener(AUTH_REFRESH_EVENT, handler);
-      }
-    };
-  }, [authenticateUser]);
 
   return (
     <header className="sticky top-0 z-[60] w-full h-[65px] border-b bg-header flex items-center">
@@ -423,12 +307,13 @@ export function AppHeader() {
                       <Button
                         variant="outline"
                         className="w-full"
+                        disabled={isAuthenticating}
                         onClick={() => {
                           login();
                           setMobileMenuOpen(false);
                         }}
                       >
-                        Sign In
+                        {isAuthenticating ? "Connecting..." : "Sign In"}
                       </Button>
                     </>
                   )}
