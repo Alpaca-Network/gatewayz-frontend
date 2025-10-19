@@ -2,9 +2,9 @@ import { Suspense } from 'react';
 import ModelsClient from './models-client';
 import { getModelsForGateway } from '@/lib/models-service';
 
-// Enable static generation with revalidation for better performance
-// Page will be statically generated and revalidated every 5 minutes
-export const revalidate = 300; // Revalidate every 5 minutes
+// Force dynamic rendering to always fetch latest models
+// This ensures models are always fresh and not cached from build time (when there are 0 models)
+export const dynamic = 'force-dynamic';
 
 interface Model {
   id: string;
