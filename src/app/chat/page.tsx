@@ -985,11 +985,17 @@ function ChatPageContent() {
 
         // Set the message from URL parameter and flag for auto-send
         const autoSendParam = searchParams.get('autoSend');
+        console.log('[URL Params] Detected:', { messageParam, autoSendParam });
+
         if (messageParam) {
-            setMessage(decodeURIComponent(messageParam));
+            const decodedMessage = decodeURIComponent(messageParam);
+            console.log('[URL Params] Setting message:', decodedMessage);
+            setMessage(decodedMessage);
             setUserHasTyped(true); // Allow auto-send from URL
+
             // Auto-send if explicitly requested via autoSend parameter, or if message param exists
             if (autoSendParam === 'true' || messageParam) {
+                console.log('[URL Params] Setting shouldAutoSend = true');
                 setShouldAutoSend(true);
             }
         }
@@ -1003,6 +1009,18 @@ function ChatPageContent() {
 
     // Auto-send message from URL parameter when session is ready
     useEffect(() => {
+        console.log('[AutoSend] Effect triggered:', {
+            shouldAutoSend,
+            activeSessionId,
+            hasMessage: !!message.trim(),
+            message: message,
+            hasModel: !!selectedModel,
+            selectedModel: selectedModel?.label,
+            loading,
+            creatingSession: creatingSessionRef.current,
+            isStreamingResponse
+        });
+
         if (
             shouldAutoSend &&
             activeSessionId &&
@@ -1012,6 +1030,7 @@ function ChatPageContent() {
             !creatingSessionRef.current &&
             !isStreamingResponse
         ) {
+            console.log('[AutoSend] All conditions met! Sending message now...');
             setShouldAutoSend(false); // Reset flag to prevent re-sending
             handleSendMessage();
         }
