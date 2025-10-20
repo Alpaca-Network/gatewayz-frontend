@@ -522,15 +522,15 @@ console.log(completion.choices[0].message);`,
           style={{ zIndex: 0 }}
         />
 
-        <section className="grid md:grid-cols-1 gap-4 md:gap-8 items-center py-4 md:py-[140px] mb-8 md:mb-32 max-w-5xl mx-auto px-4 relative" style={{ zIndex: 1 }}>
-          <div className="space-y-3 md:space-y-8 px-4">
-            <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-7xl font-extrabold tracking-tighter text-center leading-tight" style={{  fontFamily: 'Inter, sans-serif',}}>
+        <section className="grid md:grid-cols-1 gap-2 md:gap-4 items-center py-4 md:py-8 mb-4 md:mb-8 max-w-5xl mx-auto px-4 relative" style={{ zIndex: 1 }}>
+          <div className="space-y-2 md:space-y-4 px-4">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-6xl font-extrabold tracking-tighter text-center leading-tight" style={{  fontFamily: 'Inter, sans-serif',}}>
               Ship with any AI model.<br />One API key.
             </h1>
-            <p className="text-sm sm:text-base md:text-lg text-center px-4 py-2 md:py-6">Make your first call in 30 seconds.</p>
+            <p className="text-sm sm:text-base md:text-lg text-center px-4">Make your first call in 30 seconds.</p>
           </div>
           {/* CTA Buttons */}
-          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mt-4">
+          <div className="flex flex-col sm:flex-row gap-3 justify-center items-center mt-2">
             <Button
               size="lg"
               className="h-14 px-8 text-lg font-semibold bg-black hover:bg-gray-900 text-white w-full sm:w-auto"
@@ -553,7 +553,7 @@ console.log(completion.choices[0].message);`,
           </div>
 
           {/* Start a Message Input Box */}
-          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mt-3 md:mt-6">
+          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mt-2">
             <div className="w-full sm:w-auto sm:min-w-[500px] sm:max-w-2xl">
               <div className="relative flex items-center bg-background border-2 border-border rounded-lg hover:border-primary/50 focus-within:border-primary transition-colors shadow-sm">
                 <div className="pl-4 text-muted-foreground flex-shrink-0">
