@@ -14,9 +14,13 @@ import { models as staticModels } from '@/lib/models-data';
 import { getApiKey } from '@/lib/api';
 import dynamic from 'next/dynamic';
 import { Skeleton } from '@/components/ui/skeleton';
-import { InlineChat } from '@/components/models/inline-chat';
 
 // Lazy load heavy components
+const InlineChat = dynamic(() => import('@/components/models/inline-chat').then(mod => ({ default: mod.InlineChat })), {
+    ssr: false,
+    loading: () => <Skeleton className="h-[600px] w-full" />
+});
+
 const ProvidersDisplay = dynamic(() => import('@/components/models/provider-card').then(mod => ({ default: mod.ProvidersDisplay })), {
     ssr: false,
     loading: () => <ProvidersLoading />
@@ -140,7 +144,7 @@ export default function ModelProfilePage() {
     const params = useParams();
     const [model, setModel] = useState<Model | null>(null);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<TabType>('Playground');
+    const [activeTab, setActiveTab] = useState<TabType>('Use Model');
     const [copiedStates, setCopiedStates] = useState<{ [key: string]: boolean }>({});
     const [apiKey, setApiKey] = useState('YOUR_API_KEY');
     const [selectedLanguage, setSelectedLanguage] = useState<'curl' | 'python' | 'openai-python' | 'typescript' | 'openai-typescript'>('curl');
@@ -282,7 +286,7 @@ console.log(response.choices[0].message.content);`
 
             // Fetch only from one gateway first (fastest)
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+            const timeoutId = setTimeout(() => controller.abort(), 2000); // 2 second timeout
 
             try {
                 const response = await fetch(`/api/models?gateway=openrouter`, {
