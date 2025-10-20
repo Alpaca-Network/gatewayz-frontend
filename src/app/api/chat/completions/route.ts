@@ -28,6 +28,10 @@ export async function POST(request: NextRequest) {
     console.log('[API Proxy] Model:', body.model);
     console.log('[API Proxy] Stream:', body.stream);
 
+    // Use a 120 second timeout for streaming requests (models can be slow to start)
+    // Use a 30 second timeout for non-streaming requests
+    const timeoutMs = body.stream ? 120000 : 30000;
+
     const response = await fetch(targetUrl.toString(), {
       method: 'POST',
       headers: {
@@ -35,7 +39,7 @@ export async function POST(request: NextRequest) {
         'Authorization': apiKey,
       },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(60000), // 60 second timeout
+      signal: AbortSignal.timeout(timeoutMs),
     });
 
     console.log('[API Proxy] Response status:', response.status);
@@ -76,11 +80,19 @@ export async function POST(request: NextRequest) {
 
     // For streaming responses, forward the stream
     if (!response.body) {
+      console.error('[API Proxy] No response body for streaming response');
       return new Response(
-        JSON.stringify({ error: 'No response body' }),
-        { status: 500, headers: { 'Content-Type': 'application/json' } }
+        JSON.stringify({
+          error: 'No response body',
+          details: 'Backend API returned empty response for streaming request',
+          status: response.status
+        }),
+        { status: 502, headers: { 'Content-Type': 'application/json' } }
       );
     }
+
+    // Log successful streaming setup
+    console.log('[API Proxy] Setting up streaming response forwarding');
 
     // Forward the streaming response
     return new Response(response.body, {
@@ -106,12 +118,12 @@ export async function POST(request: NextRequest) {
     let status = 500;
     let details = 'Failed to proxy request to chat completions API';
 
-    if (errorDetails.name === 'TimeoutError' || errorDetails.message.includes('timeout')) {
+    if (errorDetails.name === 'TimeoutError' || errorDetails.message.includes('timeout') || errorDetails.message.includes('timed out')) {
       status = 504;
-      details = 'Request to backend API timed out after 60 seconds';
-    } else if (errorDetails.message.includes('fetch') || errorDetails.message.includes('network')) {
+      details = `Request to backend API timed out after ${timeoutMs / 1000} seconds. The model may be overloaded or starting up. Please try again in a moment.`;
+    } else if (errorDetails.message.includes('fetch') || errorDetails.message.includes('network') || errorDetails.name === 'TypeError') {
       status = 502;
-      details = 'Could not connect to backend API';
+      details = 'Could not connect to backend API. The service may be temporarily unavailable.';
     }
 
     return new Response(

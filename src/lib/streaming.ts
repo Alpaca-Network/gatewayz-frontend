@@ -81,14 +81,22 @@ export async function* streamChatResponse(
   retryCount = 0,
   maxRetries = 5
 ): AsyncGenerator<StreamChunk> {
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify(requestBody),
-  });
+  // Client-side timeout for the fetch request (2 minutes for streaming)
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 120000);
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(requestBody),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
@@ -362,5 +370,18 @@ export async function* streamChatResponse(
     }
   } finally {
     reader.releaseLock();
+  }
+  } catch (error) {
+    clearTimeout(timeoutId);
+
+    // Handle abort/timeout errors
+    if (error instanceof Error) {
+      if (error.name === 'AbortError') {
+        throw new Error('Request timed out after 2 minutes. The model may be overloaded or unavailable. Please try again.');
+      }
+    }
+
+    // Re-throw other errors
+    throw error;
   }
 }
