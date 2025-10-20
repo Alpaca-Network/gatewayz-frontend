@@ -412,6 +412,7 @@ export async function* streamChatResponse(
             } else {
               console.warn('[Streaming] No chunk created from SSE data. This may indicate an unsupported response format or an error from the backend.');
               console.warn('[Streaming] Unrecognized data structure:', data);
+              console.warn('[Streaming] Data as JSON:', JSON.stringify(data, null, 2));
             }
           } catch (error) {
             console.error('[Streaming] Error parsing SSE data:', error, trimmedLine);
