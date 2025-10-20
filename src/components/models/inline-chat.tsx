@@ -95,7 +95,8 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
         ...(gateway && { gateway }), // Add gateway if provided
         messages: [...messages, userMessage].map(m => ({ role: m.role, content: m.content })),
         stream: true,
-        temperature: 0.7
+        temperature: 0.7,
+        max_tokens: 8000  // Increased for reasoning models like DeepSeek
       };
 
       let accumulatedContent = '';

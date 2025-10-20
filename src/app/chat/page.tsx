@@ -1803,7 +1803,8 @@ function ChatPageContent() {
                 const requestBody: any = {
                     model: modelValue,
                     messages: conversationHistory,
-                    stream: true
+                    stream: true,
+                    max_tokens: 8000  // Increased for reasoning models like DeepSeek
                 };
 
                 if (portkeyProvider) {
