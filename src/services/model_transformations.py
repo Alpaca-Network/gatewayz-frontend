@@ -51,6 +51,12 @@ def transform_model_id(model_id: str, provider: str) -> str:
 
     provider_lower = provider.lower()
 
+    # Special handling for OpenRouter: strip 'openrouter/' prefix if present
+    if provider_lower == "openrouter" and model_id.startswith("openrouter/"):
+        stripped = model_id[len("openrouter/"):]
+        logger.info(f"Stripped 'openrouter/' prefix: '{model_id}' -> '{stripped}' for OpenRouter")
+        model_id = stripped
+
     # Get the mapping for this provider
     mapping = get_model_id_mapping(provider_lower)
 
