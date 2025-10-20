@@ -134,6 +134,8 @@ export function AppHeader() {
             <Link href="/rankings" className="transition-colors hover:text-foreground/80 ">Ranking</Link>
             <Link href="https://docs.gatewayz.ai/" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-foreground/80 ">Docs</Link>
           </nav>
+
+          {/* Desktop: Theme toggle and auth */}
           <div className="hidden md:flex items-center gap-2">
             {user ? (
               <>
@@ -144,6 +146,19 @@ export function AppHeader() {
               <Button variant="outline" onClick={() => login()}>Sign In</Button>
             )}
             <ThemeToggle />
+          </div>
+
+          {/* Mobile: Credits, Profile, and Menu */}
+          <div className="md:hidden flex items-center gap-2">
+            {user && (
+              <>
+                <CreditsDisplay />
+                <UserNav user={user} />
+              </>
+            )}
+            {!user && (
+              <Button variant="outline" size="sm" onClick={() => login()}>Sign In</Button>
+            )}
           </div>
           <div className="md:hidden">
             <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>

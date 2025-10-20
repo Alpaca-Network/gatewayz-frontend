@@ -680,22 +680,6 @@ console.log(completion.choices[0].message);`,
                   <p className="text-sm text-muted-foreground">Access every major AI model through one API</p>
                 </div>
               </div>
-              <div className="mt-6 flex justify-center">
-                <div className="relative inline-block">
-                  {/* Animated gradient glow effect */}
-                  <div className="absolute -inset-2 bg-gradient-to-r from-yellow-400 via-orange-400 to-yellow-400 rounded-lg opacity-60 blur-md animate-pulse"></div>
-
-                  {/* Content box */}
-                  <div className="relative bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-900/30 dark:to-orange-900/30 border-2 border-yellow-400 dark:border-yellow-600 rounded-lg px-6 py-3 shadow-lg">
-                    <p className="text-base font-bold text-yellow-900 dark:text-yellow-200">
-                      <span className="text-2xl mr-2">💰</span>
-                      <span className="text-yellow-800 dark:text-yellow-300">Bonus:</span>{' '}
-                      <span className="text-orange-600 dark:text-orange-400">Add $10 → get +$10 free credits</span>{' '}
-                      <span className="text-yellow-800 dark:text-yellow-300">on your first top-up</span>
-                    </p>
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
 
