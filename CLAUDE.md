@@ -10,162 +10,193 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `npm run start` - Start production server
 - `npm run lint` - Run ESLint linting
 - `npm run typecheck` - Run TypeScript type checking
+- `npm run test` - Run Jest tests (configured with --passWithNoTests)
 
-### AI Development Commands
-- `npm run genkit:dev` - Start Genkit AI development server (run in separate terminal)
-- `npm run genkit:watch` - Start Genkit with file watching for AI flows
+### Package Management
+- **Package Manager**: pnpm (version 10.17.1) is the preferred package manager
+- Use `pnpm install` for dependencies (npm also works)
 
 ## Architecture Overview
 
 ### Tech Stack
-- **Next.js 15** with App Router for full-stack React framework
-- **TypeScript** for type safety
+- **Next.js 15** with App Router (server actions enabled)
+- **TypeScript** with ES2017 target and strict mode
 - **Tailwind CSS** with custom design system and dark/light theme support
 - **Radix UI** components for accessible UI primitives
 - **Privy** for Web3-native authentication (email, Google, GitHub)
 - **PostHog** for product analytics and user behavior tracking
-- **Google Genkit** for AI orchestration and chat flows
+- **Stripe** for payment processing and credit purchases
 - **Firebase** for backend services and database
 - **Recharts** and **Chart.js** for data visualization
+
+### Next.js Configuration Notes
+- **React Strict Mode**: Disabled (`reactStrictMode: false`) to fix layout router mounting issues with providers
+- **TypeScript/ESLint**: Build errors are ignored (`ignoreBuildErrors: true`, `ignoreDuringBuilds: true`)
+- **Webpack**: Custom config to handle Handlebars module resolution issues and Windows casing problems
+- **Image Optimization**: Configured for placehold.co and upload.wikimedia.org domains
+- **Source Maps**: Disabled in production (`productionBrowserSourceMaps: false`)
 
 ### Key Directory Structure
 ```
 src/
-├── ai/                     # AI integration layer
-│   ├── genkit.ts          # Genkit AI configuration (gemini-2.0-flash model)
-│   ├── flows/             # AI chat flows and logic
-│   └── dev.ts             # Development AI server
 ├── app/                   # Next.js App Router pages and API routes
-│   ├── api/               # Backend API endpoints
-│   ├── chat/              # Chat interface with AI models
-│   ├── models/            # Model browser and individual model pages
+│   ├── api/
+│   │   ├── chat/          # Chat completions proxy, sessions, messages, stats
+│   │   ├── stripe/        # Stripe checkout, portal, customer, webhook
+│   │   ├── models/        # Model data API
+│   │   ├── user/          # User activity logging and stats
+│   │   └── init-db/       # Database initialization
+│   ├── chat/              # Chat interface with model selection
+│   ├── models/            # Model browser with [name] and [...name] dynamic routes
 │   ├── rankings/          # Analytics dashboard
-│   └── settings/          # User settings and management
-├── components/            # Reusable React components
-│   ├── ui/               # Base UI components (Radix UI + custom)
+│   ├── settings/          # User settings (account, activity, credits, keys, etc.)
+│   ├── organizations/     # Organization management with [name] routes
+│   └── start/             # Onboarding flows (api, claude-code, chat)
+├── components/
+│   ├── ui/               # Base Radix UI components
 │   ├── auth/             # Authentication components
 │   ├── chat/             # Chat-specific components
 │   ├── dashboard/        # Analytics and charts
 │   ├── layout/           # Header, footer, navigation
-│   └── providers/        # Context providers (Privy, PostHog)
-├── hooks/                # Custom React hooks
-├── lib/                  # Utilities and configuration
-│   ├── models-data.ts    # 300+ AI model definitions
+│   ├── models/           # Model-related components
+│   └── providers/        # Context providers (Privy, PostHog, Theme)
+├── hooks/                # Custom React hooks (use-auth, use-mobile, use-toast, useModelData)
+├── lib/                  # Core utilities and configuration
+│   ├── api.ts            # API key management, authenticated requests, auth response processing
+│   ├── chat-history.ts   # ChatHistoryAPI class for session/message management
+│   ├── models-data.ts    # 300+ AI model definitions with pricing and capabilities
 │   ├── provider-data.ts  # AI provider information
 │   ├── privy.ts          # Privy auth configuration
-│   ├── firebase.ts       # Firebase config and auth functions
-│   └── data.ts           # Analytics and mock data
-└── styles/               # Global CSS and styling
+│   ├── firebase.ts       # Firebase config (project: oxvoidmain-gatewayz)
+│   ├── stripe.ts         # Stripe client initialization
+│   ├── streaming.ts      # SSE streaming utilities
+│   └── database.ts       # Database utilities
+└── styles/               # Global CSS (globals.css) and chat.css
 ```
 
-### Authentication System
-- **Primary**: Privy authentication with email/password, Google OAuth, GitHub OAuth
-- **Configuration**: Located in `src/lib/privy.ts`
-- **Required env**: `NEXT_PUBLIC_PRIVY_APP_ID`
-- **Components**: Authentication flows handled by `src/components/providers/privy-provider.tsx`
-- **Hooks**: Use `src/hooks/use-auth.ts` for authentication state
+## Authentication & API Integration
 
-### Analytics System
-- **PostHog**: Product analytics and user behavior tracking
-- **Configuration**: `src/components/providers/posthog-provider.tsx`
-- **Required env**: `NEXT_PUBLIC_POSTHOG_KEY`, `NEXT_PUBLIC_POSTHOG_HOST`
-- **Auto-tracking**: Pageviews are automatically tracked via `PostHogPageView` component
-- **Custom events**: Use `usePostHog()` hook from `posthog-js/react` to track custom events
-- **Example**: `const posthog = usePostHog(); posthog.capture('event_name', { property: 'value' });`
+### Authentication Flow
+1. **Privy Authentication**: Primary auth provider supporting email/password, Google OAuth, and GitHub OAuth
+2. **Backend API Authentication**: After Privy login, the app calls the Gatewayz backend API which returns an `AuthResponse` with:
+   - `api_key`: Backend API key for authenticated requests
+   - `user_id`: Numeric user ID in the backend system
+   - `privy_user_id`: Privy user identifier for linking
+   - `credits`: User's credit balance
+   - `is_new_user`: Flag for triggering welcome dialogs
+3. **Storage**: API key and user data stored in localStorage via `src/lib/api.ts` functions
+4. **Usage**: Use `getApiKey()` from `src/lib/api.ts` or `makeAuthenticatedRequest()` for authenticated API calls
 
-### AI Integration
-- **Framework**: Google Genkit for AI orchestration
-- **Model**: Default model is `googleai/gemini-2.0-flash`
-- **Configuration**: `src/ai/genkit.ts`
-- **Chat Flows**: Located in `src/ai/flows/`
-- **Required env**: `GOOGLE_AI_API_KEY`
-- **Development**: Run `npm run genkit:dev` for AI development server
+### Backend API Integration
+- **Base URL**: `https://api.gatewayz.ai` (configurable via `NEXT_PUBLIC_API_BASE_URL`)
+- **Chat Completions Proxy**: `/api/chat/completions` proxies requests to `https://api.gatewayz.ai/v1/chat/completions`
+  - Handles both streaming and non-streaming responses
+  - Streaming timeout: 120 seconds
+  - Non-streaming timeout: 30 seconds
+  - Includes detailed error handling for timeouts, network errors, and backend failures
+- **Session Management**: `/api/chat/sessions` endpoints for creating, retrieving, updating, and deleting chat sessions
+- **Chat History**: `ChatHistoryAPI` class in `src/lib/chat-history.ts` provides typed interface for all chat operations
 
-### Database & Backend
-- **Firebase**: Used for authentication and database services
-- **Configuration**: `src/lib/firebase.ts` (includes Firebase config with project ID: oxvoidmain-gatewayz)
-- **API Routes**: Database initialization and testing endpoints in `src/app/api/`
-- **Database utilities**: `src/lib/database.ts`
+### Payment Integration
+- **Stripe**: Used for credit purchases via Checkout Sessions
+- **Webhook**: `/api/stripe/webhook` handles `checkout.session.completed` events
+  - Verifies webhook signature
+  - Extracts credits and user info from session metadata
+  - Calls backend API to credit user account
+- **Environment Variables**: Requires `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`
 
-### UI System
-- **Base Components**: Radix UI primitives in `src/components/ui/`
-- **Styling**: Tailwind CSS with custom design system
-- **Theme**: Dark/light mode support via `src/components/theme-provider.tsx`
-- **Custom Colors**: Extended color palette including gradients and custom variables
-- **Responsive**: Mobile-first design with `src/hooks/use-mobile.tsx`
+## Model Management System
 
-### Model Management
-- **Data Source**: `src/lib/models-data.ts` contains 300+ AI model definitions
-- **Providers**: Provider information in `src/lib/provider-data.ts`
-- **Categories**: Models organized by capabilities, modality, and pricing
-- **Dynamic Pages**: Individual model pages at `/models/[name]`
+### Model Data Structure
+- **Location**: `src/lib/models-data.ts`
+- **Type Definition**: `Model` interface with fields:
+  - `name`, `developer`, `description`
+  - `isFree`, `tokens`, `category`, `series`
+  - `context` (context window), `inputCost`, `outputCost` (per 1M tokens)
+  - `modalities` (Text, Image, Audio, Video, File)
+  - `supportedParameters` (tools, temperature, top_p, etc.)
+- **Count**: 300+ AI models from 60+ providers
+- **Dynamic Routes**: Individual model pages at `/models/[name]` and `/models/[...name]` for nested paths
+
+### Provider Data
+- **Location**: `src/lib/provider-data.ts`
+- Contains provider logos, descriptions, and categorization
+
+## UI & Styling System
+
+### Component Architecture
+- **Base Components**: Radix UI primitives wrapped in `src/components/ui/`
+- **Theme System**: Dark/light mode via `src/components/theme-provider.tsx` using CSS variables
+- **Responsive Design**: Mobile-first with `use-mobile.tsx` hook
+- **Icons**: Lucide React icon library
+
+### Tailwind Configuration
+- Extended color palette with gradients and custom variables
+- Custom animations defined in Tailwind config
+- Typography plugin enabled (`@tailwindcss/typography`)
+- Optimized for package imports: `lucide-react`, `@radix-ui/react-icons`
+
+## Testing & Code Quality
+
+### Type Checking
+- Run `npm run typecheck` before commits
+- Note: Build errors are currently ignored in next.config.ts
+
+### Linting
+- Run `npm run lint` before commits
+- ESLint configured with Next.js config
+
+### Testing
+- Jest configured with `--passWithNoTests` flag
+- Testing libraries: `@testing-library/react`, `@testing-library/jest-dom`, `@testing-library/user-event`
+- Environment: jsdom
 
 ## Environment Variables
 
-### Required
+### Required for Core Functionality
 ```bash
 NEXT_PUBLIC_PRIVY_APP_ID=your-privy-app-id
-GOOGLE_AI_API_KEY=your-google-ai-api-key
-NEXT_PUBLIC_POSTHOG_KEY=your-posthog-key
-NEXT_PUBLIC_POSTHOG_HOST=https://us.i.posthog.com
+NEXT_PUBLIC_API_BASE_URL=https://api.gatewayz.ai
 ```
 
-### Privy Setup
-- Create app at dashboard.privy.io
-- Configure login methods: email, Google, GitHub OAuth
-- Set authorized domains for production
+### Optional Services
+```bash
+# PostHog Analytics
+NEXT_PUBLIC_POSTHOG_KEY=your-posthog-key
+NEXT_PUBLIC_POSTHOG_HOST=https://us.i.posthog.com
 
-### PostHog Setup
-- Create project at app.posthog.com
-- Get project API key from project settings
-- Analytics automatically tracks pageviews and user events
-- Use `usePostHog()` hook from `posthog-js/react` for custom event tracking
+# Stripe Payments
+STRIPE_SECRET_KEY=your-stripe-secret-key
+STRIPE_WEBHOOK_SECRET=your-stripe-webhook-secret
 
-## Development Workflow
+# Google AI (if using Genkit)
+GOOGLE_AI_API_KEY=your-google-ai-api-key
+```
 
-### Starting Development
-1. `npm install` - Install dependencies
-2. Set up environment variables in `.env.local`
-3. `npm run dev` - Start Next.js development server
-4. `npm run genkit:dev` - Start AI development server (separate terminal)
+## Important Architectural Patterns
 
-### Code Quality
-- Always run `npm run lint` before committing
-- Always run `npm run typecheck` to ensure type safety
-- Follow existing patterns in component structure and styling
+### API Request Flow
+1. Frontend makes requests to `/api/*` Next.js API routes (proxy layer)
+2. API routes forward to Gatewayz backend API at `https://api.gatewayz.ai`
+3. Include `Authorization: Bearer ${apiKey}` header from localStorage
+4. Handle streaming responses for chat completions
+5. Process errors with appropriate status codes (401, 502, 504, etc.)
 
-### Component Patterns
-- Use Radix UI components from `src/components/ui/` as base
-- Follow the established folder structure for new components
-- Use TypeScript interfaces for all props
-- Implement responsive design with Tailwind CSS classes
-- Use custom hooks for state management and side effects
+### Chat Session Management
+1. Create session: `chatHistoryAPI.createSession(title, model)`
+2. Save user message: `chatHistoryAPI.saveMessage(sessionId, 'user', content)`
+3. Stream AI response from `/api/chat/completions`
+4. Save assistant message: `chatHistoryAPI.saveMessage(sessionId, 'assistant', content, model, tokens)`
+5. Sessions linked to users via `user_id` and `privy_user_id`
 
-### AI Development
-- AI chat flows are defined in `src/ai/flows/`
-- Use Genkit development server for testing AI integrations
-- Model selection handled in `src/components/chat/model-select.tsx`
-- Chat interface styling in `src/app/chat/chat.css`
+### New User Onboarding
+1. Backend returns `is_new_user: true` in auth response
+2. Frontend dispatches `NEW_USER_WELCOME_EVENT` custom event
+3. Welcome dialog shows credit allocation
+4. User routed through `/start/*` onboarding flows
 
-## Important Notes
-
-### Authentication Flow
-- Privy handles the complete authentication flow
-- Firebase is configured but Privy is the primary auth provider
-- User state managed through `src/hooks/use-auth.ts`
-
-### Model Data
-- Model definitions include capabilities, pricing, context limits
-- Provider data includes logos, descriptions, and categories
-- Analytics data for rankings and charts in `src/lib/data.ts`
-
-### Styling System
-- Custom Tailwind configuration with design tokens
-- CSS variables for theme support
-- Radix UI for accessible component primitives
-- Custom animations and gradients defined in Tailwind config
-
-### Database Operations
-- Use Firebase Firestore for data persistence
-- Database utilities available in `src/lib/database.ts`
-- API routes for database operations in `src/app/api/`
+### Credit System
+- Credits stored in backend database
+- Tracked per user via `user_id`
+- Updated via Stripe webhook on successful payment
+- Displayed in UI from user data in localStorage (synced with backend)

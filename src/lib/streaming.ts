@@ -219,25 +219,35 @@ export async function* streamChatResponse(
 
   const decoder = new TextDecoder();
   let buffer = '';
+  let chunkCount = 0;
+
+  console.log('[Streaming] Starting to read stream...');
 
   try {
     while (true) {
       const { done, value } = await reader.read();
 
       if (done) {
+        console.log(`[Streaming] Stream completed. Total chunks processed: ${chunkCount}`);
         break;
       }
 
+      chunkCount++;
       buffer += decoder.decode(value, { stream: true });
       const lines = buffer.split('\n');
 
       // Keep the last incomplete line in the buffer
       buffer = lines.pop() || '';
 
+      console.log(`[Streaming] Processing ${lines.length} lines from chunk ${chunkCount}`);
+
       for (const line of lines) {
         const trimmedLine = line.trim();
 
         if (!trimmedLine || trimmedLine === 'data: [DONE]') {
+          if (trimmedLine === 'data: [DONE]') {
+            console.log('[Streaming] Received [DONE] signal');
+          }
           continue;
         }
 
@@ -245,6 +255,13 @@ export async function* streamChatResponse(
           try {
             const jsonStr = trimmedLine.slice(6);
             const data = JSON.parse(jsonStr);
+
+            console.log('[Streaming] Parsed SSE data:', {
+              hasOutput: !!data.output,
+              hasChoices: !!data.choices,
+              hasType: !!data.type,
+              dataKeys: Object.keys(data)
+            });
 
             let chunk: StreamChunk | null = null;
 
@@ -360,15 +377,26 @@ export async function* streamChatResponse(
             }
 
             if (chunk) {
+              console.log('[Streaming] Yielding chunk:', {
+                hasContent: !!chunk.content,
+                contentLength: chunk.content?.length || 0,
+                hasReasoning: !!chunk.reasoning,
+                isDone: !!chunk.done
+              });
               yield chunk;
+            } else {
+              console.log('[Streaming] No chunk created from SSE data');
             }
           } catch (error) {
-            console.error('Error parsing SSE data:', error, trimmedLine);
+            console.error('[Streaming] Error parsing SSE data:', error, trimmedLine);
           }
+        } else {
+          console.log('[Streaming] Line does not start with "data: ":', trimmedLine.substring(0, 50));
         }
       }
     }
   } finally {
+    console.log('[Streaming] Stream reader released');
     reader.releaseLock();
   }
   } catch (error) {
