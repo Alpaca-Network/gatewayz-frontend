@@ -8,6 +8,7 @@ import { PrivyProviderWrapper } from '@/components/providers/privy-provider';
 import { PostHogProvider, PostHogPageView } from '@/components/providers/posthog-provider';
 import { OnboardingBanner } from '@/components/onboarding/onboarding-banner';
 import { WelcomeDialog } from '@/components/dialogs/welcome-dialog';
+import { TrialCreditsNotice } from '@/components/dialogs/trial-credits-notice';
 import { Analytics } from '@vercel/analytics/next';
 import { SpeedInsights } from '@vercel/speed-insights/next';
 import { Inter } from 'next/font/google';
@@ -91,6 +92,7 @@ export default function RootLayout({
               <Toaster />
               <AppFooter />
               <WelcomeDialog />
+              <TrialCreditsNotice />
               <Analytics />
               <SpeedInsights />
             </PrivyProviderWrapper>
