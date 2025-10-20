@@ -104,6 +104,16 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
 
       // Use the streaming utility with proper error handling and retries
       for await (const chunk of streamChatResponse(url, apiKey, requestBody)) {
+        // Enhanced logging to see what data we're receiving
+        console.log('[InlineChat] Received chunk:', {
+          hasContent: !!chunk.content,
+          hasReasoning: !!chunk.reasoning,
+          isDone: !!chunk.done,
+          status: chunk.status,
+          contentPreview: chunk.content ? chunk.content.substring(0, 50) : null,
+          reasoningPreview: chunk.reasoning ? chunk.reasoning.substring(0, 50) : null
+        });
+
         // Handle rate limit retries
         if (chunk.status === 'rate_limit_retry') {
           console.log('[InlineChat] Rate limit, retrying in', chunk.retryAfterMs, 'ms');
@@ -190,6 +200,14 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
         }
       }
 
+      // Log final accumulated data
+      console.log('[InlineChat] Stream finished. Final data:', {
+        contentLength: accumulatedContent.length,
+        thinkingLength: accumulatedThinking.length,
+        hasThinking: accumulatedThinking.length > 0,
+        thinkingPreview: accumulatedThinking.substring(0, 200)
+      });
+
       // Mark streaming as complete and collapse thinking
       setMessages(prev => {
         const newMessages = [...prev];
@@ -229,7 +247,18 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
             <p>Start a conversation with {modelName}</p>
           </div>
         ) : (
-          messages.map((msg, idx) => (
+          messages.map((msg, idx) => {
+            // Log if message has thinking
+            if (msg.role === 'assistant' && msg.thinking) {
+              console.log('[InlineChat] Rendering message with thinking:', {
+                messageIndex: idx,
+                thinkingLength: msg.thinking.length,
+                isStreaming: msg.isStreaming,
+                thinkingPreview: msg.thinking.substring(0, 100)
+              });
+            }
+
+            return (
             <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} w-full`}>
               <div className={`max-w-[70%] ${msg.role === 'assistant' ? 'w-full max-w-full' : ''}`}>
                 {msg.role === 'assistant' && msg.thinking && (
@@ -271,7 +300,8 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
                 </Card>
               </div>
             </div>
-          ))
+            );
+          })
         )}
         {loading && messages[messages.length - 1]?.isStreaming !== true && (
           <div className="flex justify-start">
