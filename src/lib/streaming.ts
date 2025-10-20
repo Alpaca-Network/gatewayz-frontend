@@ -272,6 +272,7 @@ export async function* streamChatResponse(
               const outputRecord = output as Record<string, unknown>;
               const contentText = toPlainText(outputRecord.content ?? outputRecord.output_text);
               const reasoningText =
+                toPlainText(outputRecord.reasoning_content) ||
                 toPlainText(outputRecord.reasoning) ||
                 toPlainText(outputRecord.thinking) ||
                 toPlainText(outputRecord.analysis);
@@ -313,6 +314,7 @@ export async function* streamChatResponse(
                   toPlainText(deltaRecord.text) ||
                   toPlainText(deltaRecord.output_text);
                 const reasoningText =
+                  toPlainText(deltaRecord.reasoning_content) ||
                   toPlainText(deltaRecord.reasoning) ||
                   toPlainText(deltaRecord.thinking) ||
                   toPlainText(deltaRecord.analysis) ||
@@ -358,6 +360,7 @@ export async function* streamChatResponse(
                   const delta = data.delta;
                   const deltaText = toPlainText(delta);
                   const reasoningText =
+                    toPlainText((delta as Record<string, unknown>)?.reasoning_content) ||
                     toPlainText((delta as Record<string, unknown>)?.reasoning) ||
                     toPlainText((delta as Record<string, unknown>)?.thinking);
                   if (deltaText || reasoningText) {
@@ -371,6 +374,7 @@ export async function* streamChatResponse(
                   }
                   break;
                 }
+                case 'response.reasoning_content.delta':
                 case 'response.reasoning.delta':
                 case 'response.output_reasoning.delta':
                 case 'response.reflection.delta':
