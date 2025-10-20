@@ -260,7 +260,8 @@ export async function* streamChatResponse(
               hasOutput: !!data.output,
               hasChoices: !!data.choices,
               hasType: !!data.type,
-              dataKeys: Object.keys(data)
+              dataKeys: Object.keys(data),
+              fullData: data  // Log the full data structure to debug
             });
 
             let chunk: StreamChunk | null = null;
@@ -385,7 +386,8 @@ export async function* streamChatResponse(
               });
               yield chunk;
             } else {
-              console.log('[Streaming] No chunk created from SSE data');
+              console.warn('[Streaming] No chunk created from SSE data. This may indicate an unsupported response format or an error from the backend.');
+              console.warn('[Streaming] Unrecognized data structure:', data);
             }
           } catch (error) {
             console.error('[Streaming] Error parsing SSE data:', error, trimmedLine);

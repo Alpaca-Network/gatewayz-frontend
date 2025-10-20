@@ -894,7 +894,7 @@ function ChatPageContent() {
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const [editedTitle, setEditedTitle] = useState('');
     const [selectedModel, setSelectedModel] = useState<ModelOption | null>({
-        value: 'katanemo/arch-router-1.5b',
+        value: 'katanemo/Arch-Router-1.5B',
         label: 'Katanemo Arch Router 1.5B',
         category: 'Free',
         sourceGateway: 'huggingface'
