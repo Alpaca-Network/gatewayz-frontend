@@ -54,8 +54,13 @@ def transform_model_id(model_id: str, provider: str) -> str:
     # Special handling for OpenRouter: strip 'openrouter/' prefix if present
     if provider_lower == "openrouter" and model_id.startswith("openrouter/"):
         stripped = model_id[len("openrouter/"):]
-        logger.info(f"Stripped 'openrouter/' prefix: '{model_id}' -> '{stripped}' for OpenRouter")
-        model_id = stripped
+        if "/" in stripped:
+            logger.info(f"Stripped 'openrouter/' prefix: '{model_id}' -> '{stripped}' for OpenRouter")
+            model_id = stripped
+        else:
+            logger.debug(
+                "Preserving 'openrouter/' prefix for aggregator-style model ID: '%s'", model_id
+            )
 
     # Get the mapping for this provider
     mapping = get_model_id_mapping(provider_lower)
