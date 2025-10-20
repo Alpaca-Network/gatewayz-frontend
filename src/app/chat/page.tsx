@@ -894,10 +894,10 @@ function ChatPageContent() {
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const [editedTitle, setEditedTitle] = useState('');
     const [selectedModel, setSelectedModel] = useState<ModelOption | null>({
-        value: 'openrouter/auto',
-        label: 'Auto Router',
+        value: 'katanemo/arch-router-1.5b',
+        label: 'Katanemo Arch Router 1.5B',
         category: 'Free',
-        sourceGateway: 'openrouter'
+        sourceGateway: 'huggingface'
     });
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
     const { toast } = useToast();
