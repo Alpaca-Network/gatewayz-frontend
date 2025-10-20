@@ -166,16 +166,43 @@ export default function ModelsClient({ initialModels }: { initialModels: Model[]
   const router = useRouter();
   const searchParams = useSearchParams();
 
+  // Client-side model fetching state
+  const [models, setModels] = useState<Model[]>(initialModels);
+  const [isLoadingModels, setIsLoadingModels] = useState(initialModels.length < 50);
+
   // Infinite scroll state
   const [itemsPerPage] = useState(48); // Load 48 models at a time
   const [visibleCount, setVisibleCount] = useState(48); // Number of items currently visible
   const loadMoreRef = React.useRef<HTMLDivElement>(null);
 
+  // Fetch models client-side if we only got the fallback static models
+  useEffect(() => {
+    if (initialModels.length < 50) {
+      console.log('[Models] Only got', initialModels.length, 'models from server, fetching from client...');
+      setIsLoadingModels(true);
+
+      fetch('/api/models?gateway=all&limit=50000')
+        .then(res => res.json())
+        .then(data => {
+          if (data.data && data.data.length > 0) {
+            console.log(`[Models] Fetched ${data.data.length} models from client`);
+            setModels(data.data);
+          }
+        })
+        .catch(err => {
+          console.error('[Models] Client fetch failed:', err);
+        })
+        .finally(() => {
+          setIsLoadingModels(false);
+        });
+    }
+  }, [initialModels.length]);
+
   // Additional deduplication as a safety measure
   const deduplicatedModels = useMemo(() => {
-    console.log(`Initial models received: ${initialModels.length}`);
+    console.log(`Models for deduplication: ${models.length}`);
     const seen = new Set<string>();
-    const deduplicated = initialModels.filter(model => {
+    const deduplicated = models.filter(model => {
       if (seen.has(model.id)) {
         console.warn(`Duplicate model ID found: ${model.id}`);
         return false;
@@ -185,7 +212,7 @@ export default function ModelsClient({ initialModels }: { initialModels: Model[]
     });
     console.log(`After client-side deduplication: ${deduplicated.length} unique models`);
     return deduplicated;
-  }, [initialModels]);
+  }, [models]);
 
   const [layout, setLayout] = useState("list");
   const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || "");
