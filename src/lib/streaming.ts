@@ -277,6 +277,16 @@ export async function* streamChatResponse(
                 toPlainText(outputRecord.analysis);
               const finishReason = outputRecord.finish_reason;
 
+              // Log when reasoning fields are present
+              if (outputRecord.reasoning || outputRecord.thinking || outputRecord.analysis) {
+                console.log('[Streaming] Found reasoning field in output:', {
+                  hasReasoning: !!outputRecord.reasoning,
+                  hasThinking: !!outputRecord.thinking,
+                  hasAnalysis: !!outputRecord.analysis,
+                  reasoningLength: reasoningText.length
+                });
+              }
+
               if (contentText || reasoningText || finishReason) {
                 chunk = {};
                 if (contentText) {
@@ -284,6 +294,7 @@ export async function* streamChatResponse(
                 }
                 if (reasoningText) {
                   chunk.reasoning = reasoningText;
+                  console.log('[Streaming] Adding reasoning to chunk:', reasoningText.length, 'chars');
                 }
                 if (finishReason) {
                   chunk.done = true;
@@ -309,6 +320,18 @@ export async function* streamChatResponse(
                   toPlainText(deltaRecord.thoughts);
                 const finishReason = choice.finish_reason;
 
+                // Log when reasoning fields are present
+                if (deltaRecord.reasoning || deltaRecord.thinking || deltaRecord.analysis || deltaRecord.inner_thought || deltaRecord.thoughts) {
+                  console.log('[Streaming] Found reasoning field in delta:', {
+                    hasReasoning: !!deltaRecord.reasoning,
+                    hasThinking: !!deltaRecord.thinking,
+                    hasAnalysis: !!deltaRecord.analysis,
+                    hasInnerThought: !!deltaRecord.inner_thought,
+                    hasThoughts: !!deltaRecord.thoughts,
+                    reasoningLength: reasoningText.length
+                  });
+                }
+
                 if (contentText || reasoningText || finishReason) {
                   chunk = {};
                   if (contentText) {
@@ -316,6 +339,7 @@ export async function* streamChatResponse(
                   }
                   if (reasoningText) {
                     chunk.reasoning = reasoningText;
+                    console.log('[Streaming] Adding reasoning to chunk from delta:', reasoningText.length, 'chars');
                   }
                   if (finishReason) {
                     chunk.done = true;

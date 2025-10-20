@@ -19,7 +19,19 @@ export function ReasoningDisplay({ reasoning, className, isStreaming = false }: 
     }
   }, [isStreaming]);
 
-  if (!reasoning) return null;
+  // Always show for debugging - log when reasoning is present
+  useEffect(() => {
+    if (reasoning && reasoning.trim().length > 0) {
+      console.log('[ReasoningDisplay] Rendering reasoning:', {
+        length: reasoning.length,
+        isStreaming,
+        isExpanded,
+        preview: reasoning.substring(0, 100)
+      });
+    }
+  }, [reasoning, isStreaming, isExpanded]);
+
+  if (!reasoning || reasoning.trim().length === 0) return null;
 
   return (
     <div
@@ -50,8 +62,11 @@ export function ReasoningDisplay({ reasoning, className, isStreaming = false }: 
       </button>
 
       {isExpanded && (
-        <div className="border-t border-amber-200/50 dark:border-amber-500/30 px-4 py-3 text-sm text-amber-900 dark:text-amber-100 whitespace-pre-wrap">
+        <div className="border-t border-amber-200/50 dark:border-amber-500/30 px-4 py-3 text-sm text-amber-900 dark:text-amber-100 whitespace-pre-wrap relative">
           {reasoning.trim()}
+          {isStreaming && (
+            <span className="inline-block ml-1 w-2 h-4 bg-amber-600 dark:bg-amber-400 animate-pulse" />
+          )}
         </div>
       )}
     </div>

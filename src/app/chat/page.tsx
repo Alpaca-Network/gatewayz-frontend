@@ -1896,6 +1896,7 @@ function ChatPageContent() {
 
                     // Also accumulate any reasoning sent explicitly from the API
                     if (chunk.reasoning) {
+                        console.log('[REASONING] Received explicit reasoning chunk:', chunk.reasoning.length, 'chars');
                         accumulatedReasoning += String(chunk.reasoning);
                     }
 
@@ -1909,6 +1910,14 @@ function ChatPageContent() {
                                 lastMessage.content = accumulatedContent;
                                 lastMessage.reasoning = accumulatedReasoning;
                                 lastMessage.isStreaming = !chunk.done;
+
+                                if (accumulatedReasoning.length > 0) {
+                                    console.log('[REASONING] Updated message with reasoning:', {
+                                        reasoningLength: accumulatedReasoning.length,
+                                        contentLength: accumulatedContent.length,
+                                        isStreaming: !chunk.done
+                                    });
+                                }
                             }
 
                             return {
