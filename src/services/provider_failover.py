@@ -1,10 +1,29 @@
 from __future__ import annotations
 
 import asyncio
-from typing import List
+from typing import List, Optional
 
 import httpx
 from fastapi import HTTPException
+
+# OpenAI Python SDK raises its own exception hierarchy which we need to
+# translate into HTTP responses. Make these imports optional so the module
+# still loads if the dependency is absent (e.g. in minimal test environments).
+try:  # pragma: no cover - import guard
+    from openai import (
+        APIConnectionError,
+        APIStatusError,
+        APITimeoutError,
+        AuthenticationError,
+        BadRequestError,
+        NotFoundError,
+        OpenAIError,
+        PermissionDeniedError,
+        RateLimitError,
+    )
+except ImportError:  # pragma: no cover - handled gracefully below
+    APIConnectionError = APITimeoutError = APIStatusError = AuthenticationError = None
+    BadRequestError = NotFoundError = OpenAIError = PermissionDeniedError = RateLimitError = None
 
 FALLBACK_PROVIDER_PRIORITY: tuple[str, ...] = (
     "huggingface",
@@ -14,7 +33,7 @@ FALLBACK_PROVIDER_PRIORITY: tuple[str, ...] = (
     "openrouter",
 )
 FALLBACK_ELIGIBLE_PROVIDERS = set(FALLBACK_PROVIDER_PRIORITY)
-FAILOVER_STATUS_CODES = {404, 502, 503, 504}
+FAILOVER_STATUS_CODES = {401, 403, 404, 429, 502, 503, 504}
 
 
 def build_provider_failover_chain(initial_provider: str | None) -> List[str]:
@@ -54,6 +73,59 @@ def map_provider_error(
 
     if isinstance(exc, ValueError):
         return HTTPException(status_code=400, detail=str(exc))
+
+    # OpenAI SDK exceptions (used for OpenRouter and other compatible providers)
+    if APIConnectionError and isinstance(exc, APIConnectionError):
+        return HTTPException(status_code=503, detail="Upstream service unavailable")
+
+    if APITimeoutError and isinstance(exc, APITimeoutError):
+        return HTTPException(status_code=504, detail="Upstream timeout")
+
+    if APIStatusError and isinstance(exc, APIStatusError):
+        status = getattr(exc, "status_code", None)
+        try:
+            status = int(status)
+        except (TypeError, ValueError):
+            status = 500
+        detail = "Upstream error"
+        headers: Optional[dict[str, str]] = None
+
+        if RateLimitError and isinstance(exc, RateLimitError):
+            retry_after = None
+            if getattr(exc, "response", None):
+                retry_after = exc.response.headers.get("retry-after")
+            if retry_after is None and isinstance(getattr(exc, "body", None), dict):
+                retry_after = exc.body.get("retry_after")
+            if retry_after:
+                headers = {"Retry-After": str(retry_after)}
+            return HTTPException(status_code=429, detail="Upstream rate limit exceeded", headers=headers)
+
+        auth_error_classes = tuple(
+            err for err in (AuthenticationError, PermissionDeniedError) if err is not None
+        )
+        if auth_error_classes and isinstance(exc, auth_error_classes):
+            detail = f"{provider} authentication error"
+            if status not in (401, 403):
+                status = 401
+        elif NotFoundError and isinstance(exc, NotFoundError):
+            detail = f"Model {model} not found or unavailable on {provider}"
+            status = 404
+        elif BadRequestError and isinstance(exc, BadRequestError):
+            detail = "Upstream rejected the request"
+            status = 400
+        elif status == 403:
+            detail = f"{provider} authentication error"
+        elif 500 <= status < 600:
+            detail = "Upstream service error"
+
+        # Fall back to message body if we still have the generic detail
+        if detail == "Upstream error":
+            detail = getattr(exc, "message", None) or str(exc)
+
+        return HTTPException(status_code=status, detail=detail, headers=headers)
+
+    if OpenAIError and isinstance(exc, OpenAIError):
+        return HTTPException(status_code=502, detail=str(exc))
 
     if isinstance(exc, (httpx.TimeoutException, asyncio.TimeoutError)):
         return HTTPException(status_code=504, detail="Upstream timeout")
