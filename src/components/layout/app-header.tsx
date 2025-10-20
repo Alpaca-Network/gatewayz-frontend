@@ -11,6 +11,7 @@ import { UserNav } from "./user-nav";
 import { SearchBar } from "./search-bar";
 import { Separator } from "@/components/ui/separator";
 import { GetCreditsButton } from "./get-credits-button";
+import { CreditsDisplay } from "./credits-display";
 import { Copy } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useGatewayzAuth } from "@/context/gatewayz-auth-context";
@@ -136,6 +137,7 @@ export function AppHeader() {
           <div className="hidden md:flex items-center gap-2">
             {user ? (
               <>
+                <CreditsDisplay />
                 <UserNav user={user} />
               </>
             ) : (
@@ -197,7 +199,10 @@ export function AppHeader() {
                     <>
                       <Separator className="my-4" />
                       <div className="flex flex-col gap-2">
-                        <p className="text-xs font-semibold text-muted-foreground uppercase px-2">
+                        <div className="px-2">
+                          <CreditsDisplay />
+                        </div>
+                        <p className="text-xs font-semibold text-muted-foreground uppercase px-2 mt-4">
                           Wallet Address
                         </p>
                         <div className="flex items-center gap-2 px-2 py-2 bg-muted/50 rounded-lg">
