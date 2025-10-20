@@ -112,40 +112,43 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
 
         // Process content with thinking tag extraction
         if (chunk.content) {
-          const content = chunk.content;
+          const content = String(chunk.content);
 
           // Debug: Log content to see what we're receiving
-          if (content.includes('<thinking') || content.includes('</thinking') || content.includes('[THINKING')) {
+          if (content.includes('<thinking') || content.includes('</thinking') || content.includes('[THINKING') || content.includes('<think') || content.includes('</think')) {
             console.log('[THINKING DEBUG]', { content, inThinking, length: content.length });
           }
 
           // Process content character by character to handle thinking tags correctly
+          let normalizedContent = content
+            .replace(/\[THINKING\]/gi, '<thinking>')
+            .replace(/\[\/THINKING\]/gi, '</thinking>')
+            .replace(/<think>/gi, '<thinking>')
+            .replace(/<\/think>/gi, '</thinking>')
+            .replace(/<\|startofthinking\|>/gi, '<thinking>')
+            .replace(/<\|endofthinking\|>/gi, '</thinking>');
+
           let i = 0;
-          while (i < content.length) {
-            // Check for opening thinking tags: <thinking>, <|thinking>
-            if (content.slice(i).match(/^<\|?thinking>/i)) {
+          while (i < normalizedContent.length) {
+            const remaining = normalizedContent.slice(i);
+
+            const openMatch = remaining.match(/^<\|?(?:thinking|think)>/i);
+            if (openMatch) {
               inThinking = true;
-              const tagMatch = content.slice(i).match(/^<\|?thinking>/i);
-              if (tagMatch) {
-                i += tagMatch[0].length;
-                console.log('[THINKING DEBUG] Opened thinking tag');
-              }
+              i += openMatch[0].length;
+              console.log('[THINKING DEBUG] Opened thinking tag');
               continue;
             }
 
-            // Check for closing thinking tags: </thinking>, </|thinking>
-            if (content.slice(i).match(/^<\|?\/thinking>/i)) {
+            const closeMatch = remaining.match(/^<\|?\/(?:thinking|think)>/i);
+            if (closeMatch) {
               inThinking = false;
-              const tagMatch = content.slice(i).match(/^<\|?\/thinking>/i);
-              if (tagMatch) {
-                i += tagMatch[0].length;
-                console.log('[THINKING DEBUG] Closed thinking tag');
-              }
+              i += closeMatch[0].length;
+              console.log('[THINKING DEBUG] Closed thinking tag');
               continue;
             }
 
-            // Accumulate content character by character
-            const char = content[i];
+            const char = normalizedContent[i];
             if (inThinking) {
               accumulatedThinking += char;
             } else {
@@ -155,6 +158,20 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
           }
 
           // Update the streaming message
+          setMessages(prev => {
+            const newMessages = [...prev];
+            newMessages[streamingMessageIndex] = {
+              role: 'assistant',
+              content: accumulatedContent,
+              thinking: accumulatedThinking,
+              isStreaming: !chunk.done
+            };
+            return newMessages;
+          });
+        }
+
+        if (chunk.reasoning) {
+          accumulatedThinking += String(chunk.reasoning);
           setMessages(prev => {
             const newMessages = [...prev];
             newMessages[streamingMessageIndex] = {

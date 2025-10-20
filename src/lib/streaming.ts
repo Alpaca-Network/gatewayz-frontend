@@ -12,6 +12,65 @@ export interface StreamChunk {
   retryAfterMs?: number;
 }
 
+const toPlainText = (input: unknown): string => {
+  if (!input) {
+    return '';
+  }
+
+  if (typeof input === 'string') {
+    return input;
+  }
+
+  if (Array.isArray(input)) {
+    return input
+      .map(item => toPlainText(item))
+      .filter(Boolean)
+      .join('');
+  }
+
+  if (typeof input === 'object') {
+    const record = input as Record<string, unknown>;
+
+    if (typeof record.text === 'string') {
+      return record.text;
+    }
+
+    if (Array.isArray(record.text)) {
+      return toPlainText(record.text);
+    }
+
+    if (typeof record.value === 'string') {
+      return record.value;
+    }
+
+    if (typeof record.message === 'string' || Array.isArray(record.message)) {
+      return toPlainText(record.message);
+    }
+
+    if (typeof record.content === 'string' || Array.isArray(record.content)) {
+      return toPlainText(record.content);
+    }
+
+    if (typeof record.output_text === 'string' || Array.isArray(record.output_text)) {
+      return toPlainText(record.output_text);
+    }
+
+    if (Array.isArray(record.reasoning)) {
+      return toPlainText(record.reasoning);
+    }
+
+    if (Array.isArray(record.thoughts)) {
+      return toPlainText(record.thoughts);
+    }
+
+    if (Array.isArray(record.parts)) {
+      return toPlainText(record.parts);
+    }
+  }
+
+  return '';
+};
+
 // Helper function to wait/sleep
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -184,15 +243,25 @@ export async function* streamChatResponse(
             // Handle backend response format with "output" array
             const output = data.output?.[0];
             if (output && typeof output === 'object') {
-              chunk = {};
-              if (output.content) {
-                chunk.content = output.content;
-              }
-              if (output.reasoning) {
-                chunk.reasoning = output.reasoning;
-              }
-              if (output.finish_reason) {
-                chunk.done = true;
+              const outputRecord = output as Record<string, unknown>;
+              const contentText = toPlainText(outputRecord.content ?? outputRecord.output_text);
+              const reasoningText =
+                toPlainText(outputRecord.reasoning) ||
+                toPlainText(outputRecord.thinking) ||
+                toPlainText(outputRecord.analysis);
+              const finishReason = outputRecord.finish_reason;
+
+              if (contentText || reasoningText || finishReason) {
+                chunk = {};
+                if (contentText) {
+                  chunk.content = contentText;
+                }
+                if (reasoningText) {
+                  chunk.reasoning = reasoningText;
+                }
+                if (finishReason) {
+                  chunk.done = true;
+                }
               }
             }
             // Handle OpenAI-style "choices" format
@@ -201,15 +270,30 @@ export async function* streamChatResponse(
 
               if (choice?.delta) {
                 const delta = choice.delta;
-                chunk = {};
-                if (delta.content) {
-                  chunk.content = delta.content;
-                }
-                if (delta.reasoning) {
-                  chunk.reasoning = delta.reasoning;
-                }
-                if (choice.finish_reason) {
-                  chunk.done = true;
+                const deltaRecord = delta as Record<string, unknown>;
+                const contentText =
+                  toPlainText(deltaRecord.content) ||
+                  toPlainText(deltaRecord.text) ||
+                  toPlainText(deltaRecord.output_text);
+                const reasoningText =
+                  toPlainText(deltaRecord.reasoning) ||
+                  toPlainText(deltaRecord.thinking) ||
+                  toPlainText(deltaRecord.analysis) ||
+                  toPlainText(deltaRecord.inner_thought) ||
+                  toPlainText(deltaRecord.thoughts);
+                const finishReason = choice.finish_reason;
+
+                if (contentText || reasoningText || finishReason) {
+                  chunk = {};
+                  if (contentText) {
+                    chunk.content = contentText;
+                  }
+                  if (reasoningText) {
+                    chunk.reasoning = reasoningText;
+                  }
+                  if (finishReason) {
+                    chunk.done = true;
+                  }
                 }
               } else if (choice?.finish_reason) {
                 chunk = { done: true };
@@ -222,16 +306,10 @@ export async function* streamChatResponse(
               switch (eventType) {
                 case 'response.output_text.delta': {
                   const delta = data.delta;
-                  const deltaText =
-                    typeof delta === 'string'
-                      ? delta
-                      : typeof delta?.text === 'string'
-                        ? delta.text
-                        : '';
+                  const deltaText = toPlainText(delta);
                   const reasoningText =
-                    typeof delta === 'object' && typeof delta?.reasoning === 'string'
-                      ? delta.reasoning
-                      : undefined;
+                    toPlainText((delta as Record<string, unknown>)?.reasoning) ||
+                    toPlainText((delta as Record<string, unknown>)?.thinking);
                   if (deltaText || reasoningText) {
                     chunk = {};
                     if (deltaText) {
@@ -245,13 +323,11 @@ export async function* streamChatResponse(
                 }
                 case 'response.reasoning.delta':
                 case 'response.output_reasoning.delta':
-                case 'response.reflection.delta': {
-                  const reasoningText =
-                    typeof data.delta === 'string'
-                      ? data.delta
-                      : typeof data.delta?.text === 'string'
-                        ? data.delta.text
-                        : undefined;
+                case 'response.reflection.delta':
+                case 'response.thinking.delta':
+                case 'response.output_thinking.delta':
+                case 'response.inner_thought.delta': {
+                  const reasoningText = toPlainText(data.delta);
                   if (reasoningText) {
                     chunk = { reasoning: reasoningText };
                   }
