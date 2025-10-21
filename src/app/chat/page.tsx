@@ -55,7 +55,7 @@ import { streamChatResponse } from '@/lib/streaming';
 import { ReasoningDisplay } from '@/components/chat/reasoning-display';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { useStatsigClient } from '@statsig/react-bindings';
+import { logAnalyticsEvent } from '@/lib/analytics';
 
 type Message = {
     role: 'user' | 'assistant';
@@ -880,7 +880,6 @@ const generateChatTitle = (message: string): string => {
 function ChatPageContent() {
     const searchParams = useSearchParams();
     const { login, authenticated, ready } = usePrivy();
-    const { client: statsigClient } = useStatsigClient();
     const [hasApiKey, setHasApiKey] = useState(false);
     const [message, setMessage] = useState('');
     const [userHasTyped, setUserHasTyped] = useState(false);
@@ -1249,8 +1248,8 @@ function ChatPageContent() {
             return;
         }
 
-        // Log Statsig event for session switch
-        statsigClient.logEvent('chat_session_switched', {
+        // Log analytics event for session switch
+        logAnalyticsEvent('chat_session_switched', {
             session_id: sessionId,
             has_messages: session.messages.length > 0,
             message_count: session.messages.length
@@ -1308,8 +1307,8 @@ function ChatPageContent() {
             // Create new session using API helper
             const newSession = await apiHelpers.createChatSession('Untitled Chat', selectedModel?.value);
 
-            // Log Statsig event for new chat creation
-            statsigClient.logEvent('chat_session_created', {
+            // Log analytics event for new chat creation
+            logAnalyticsEvent('chat_session_created', {
                 session_id: newSession.id,
                 model: selectedModel?.value
             });
@@ -1471,7 +1470,7 @@ function ChatPageContent() {
 
     const handleModelSelect = (model: ModelOption | null) => {
         if (model) {
-            statsigClient.logEvent('model_selected', {
+            logAnalyticsEvent('model_selected', {
                 model_id: model.value,
                 model_name: model.label,
                 category: model.category,
@@ -1855,8 +1854,8 @@ function ChatPageContent() {
 
                 console.log('🌊 Starting to stream response...');
 
-                // Log Statsig event for message sent
-                statsigClient.logEvent('chat_message_sent', {
+                // Log analytics event for message sent
+                logAnalyticsEvent('chat_message_sent', {
                     model: modelValue,
                     gateway: selectedModel.sourceGateway,
                     has_image: !!selectedImage,
@@ -1995,8 +1994,8 @@ function ChatPageContent() {
                         );
                         console.log('✅ Assistant message saved to backend successfully:', result);
 
-                        // Log Statsig event for successful message completion
-                        statsigClient.logEvent('chat_message_completed', {
+                        // Log analytics event for successful message completion
+                        logAnalyticsEvent('chat_message_completed', {
                             model: modelValue,
                             gateway: selectedModel.sourceGateway,
                             response_length: finalContent.length,
@@ -2067,8 +2066,8 @@ function ChatPageContent() {
                 const errorMessage = streamError instanceof Error ? streamError.message : 'Failed to get response';
                 console.error('Error message for analysis:', errorMessage);
 
-                // Log Statsig event for streaming error
-                statsigClient.logEvent('chat_message_failed', {
+                // Log analytics event for streaming error
+                logAnalyticsEvent('chat_message_failed', {
                     model: selectedModel?.value || 'unknown',
                     gateway: selectedModel?.sourceGateway || 'unknown',
                     error_type: 'streaming_error',
@@ -2187,8 +2186,8 @@ function ChatPageContent() {
             setIsStreamingResponse(false);
             console.error('Send message error:', error);
 
-            // Log Statsig event for general error
-            statsigClient.logEvent('chat_message_failed', {
+            // Log analytics event for general error
+            logAnalyticsEvent('chat_message_failed', {
                 model: selectedModel?.value || 'unknown',
                 gateway: selectedModel?.sourceGateway || 'unknown',
                 error_type: 'general_error',
