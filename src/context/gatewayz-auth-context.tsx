@@ -174,6 +174,7 @@ export function GatewayzAuthProvider({ children, onAuthError }: GatewayzAuthProv
     (privyUser: User, token: string | null, existingUserData: UserData | null) => {
       const existingGatewayzUser = existingUserData ?? null;
       const isNewUser = !existingGatewayzUser;
+      const hasStoredApiKey = Boolean(existingGatewayzUser?.api_key);
 
       // Check for referral code from storage or URL
       let referralCode = localStorage.getItem("gatewayz_referral_code");
@@ -189,7 +190,7 @@ export function GatewayzAuthProvider({ children, onAuthError }: GatewayzAuthProv
 
       console.log("[Auth] Final referral code:", referralCode);
 
-      return {
+      const authRequestBody = {
         user: stripUndefined({
           id: privyUser.id,
           created_at: toUnixSeconds(privyUser.createdAt) ?? Math.floor(Date.now() / 1000),
@@ -199,13 +200,21 @@ export function GatewayzAuthProvider({ children, onAuthError }: GatewayzAuthProv
           is_guest: privyUser.isGuest ?? false,
         }),
         token: token ?? "",
-        auto_create_api_key: true,
-        trial_credits: 10,
+        auto_create_api_key: isNewUser || !hasStoredApiKey,
         is_new_user: isNewUser,
         has_referral_code: !!referralCode,
         referral_code: referralCode ?? null,
         privy_user_id: privyUser.id,
       };
+
+      if (isNewUser) {
+        return {
+          ...authRequestBody,
+          trial_credits: 10,
+        };
+      }
+
+      return authRequestBody;
     },
     []
   );
