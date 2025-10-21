@@ -6,7 +6,7 @@ Server-side PostHog integration to avoid ad-blocker issues
 import os
 import logging
 from typing import Optional, Dict, Any
-import posthog
+from posthog import Posthog
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ class PostHogService:
 
     def __init__(self):
         if not self._initialized:
-            self.enabled = False
+            self.client: Optional[Posthog] = None
             self._initialized = True
 
     def initialize(self):
@@ -36,23 +36,25 @@ class PostHogService:
                 logger.warning("POSTHOG_API_KEY not found in environment variables. PostHog analytics will be disabled.")
                 return
 
-            # Initialize PostHog
-            posthog.api_key = api_key
-            posthog.host = host
-            posthog.debug = os.getenv('POSTHOG_DEBUG', 'false').lower() == 'true'
+            # Initialize PostHog client
+            self.client = Posthog(
+                api_key,
+                host=host,
+                debug=os.getenv('POSTHOG_DEBUG', 'false').lower() == 'true',
+                sync_mode=False  # Use async mode for better performance
+            )
 
-            self.enabled = True
             logger.info(f"PostHog initialized successfully (host: {host})")
 
         except Exception as e:
             logger.error(f"Failed to initialize PostHog: {e}")
-            self.enabled = False
+            self.client = None
 
     def shutdown(self):
         """Shutdown PostHog gracefully"""
-        if self.enabled:
+        if self.client:
             try:
-                posthog.shutdown()
+                self.client.shutdown()
                 logger.info("PostHog shutdown successfully")
             except Exception as e:
                 logger.error(f"Error shutting down PostHog: {e}")
@@ -73,12 +75,12 @@ class PostHogService:
             properties: Optional event properties dict
             groups: Optional group associations dict
         """
-        if not self.enabled:
+        if not self.client:
             logger.debug(f"PostHog not initialized, skipping event: {event}")
             return
 
         try:
-            posthog.capture(
+            self.client.capture(
                 distinct_id=distinct_id,
                 event=event,
                 properties=properties or {},
@@ -101,12 +103,12 @@ class PostHogService:
             distinct_id: Unique identifier for the user
             properties: User properties to set
         """
-        if not self.enabled:
+        if not self.client:
             logger.debug(f"PostHog not initialized, skipping identify: {distinct_id}")
             return
 
         try:
-            posthog.identify(
+            self.client.identify(
                 distinct_id=distinct_id,
                 properties=properties or {}
             )
@@ -117,9 +119,9 @@ class PostHogService:
 
     def flush(self):
         """Flush pending events to PostHog (useful for testing)"""
-        if self.enabled:
+        if self.client:
             try:
-                posthog.flush()
+                self.client.flush()
                 logger.debug("PostHog events flushed")
             except Exception as e:
                 logger.error(f"Failed to flush PostHog events: {e}")
