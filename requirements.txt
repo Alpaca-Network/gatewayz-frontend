@@ -18,6 +18,7 @@ portkey-ai>=2.0.0
 
 # Analytics
 statsig-python-core==0.10.2
+posthog==6.7.8
 
 # Testing dependencies
 pytest==7.4.3

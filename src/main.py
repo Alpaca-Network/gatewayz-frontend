@@ -205,14 +205,22 @@ def create_app() -> FastAPI:
             except Exception as admin_e:
                 logger.warning(f"  ⚠️  Admin setup warning: {admin_e}")
 
-            # Initialize Statsig for server-side analytics
+            # Initialize analytics services (Statsig and PostHog)
             try:
-                logger.info("  📊 Initializing Statsig analytics...")
+                logger.info("  📊 Initializing analytics services...")
+
+                # Initialize Statsig
                 from src.services.statsig_service import statsig_service
                 await statsig_service.initialize()
                 logger.info("  ✅ Statsig analytics initialized")
-            except Exception as statsig_e:
-                logger.warning(f"  ⚠️  Statsig initialization warning: {statsig_e}")
+
+                # Initialize PostHog
+                from src.services.posthog_service import posthog_service
+                posthog_service.initialize()
+                logger.info("  ✅ PostHog analytics initialized")
+
+            except Exception as analytics_e:
+                logger.warning(f"  ⚠️  Analytics initialization warning: {analytics_e}")
 
         except Exception as e:
             logger.error(f"  ❌ Startup initialization failed: {e}")
@@ -227,12 +235,20 @@ def create_app() -> FastAPI:
     async def on_shutdown():
         logger.info("🛑 Shutting down application...")
 
-        # Shutdown Statsig gracefully
+        # Shutdown analytics services gracefully
         try:
             from src.services.statsig_service import statsig_service
             await statsig_service.shutdown()
+            logger.info("  ✅ Statsig shutdown complete")
         except Exception as e:
-            logger.warning(f"Statsig shutdown warning: {e}")
+            logger.warning(f"  ⚠️  Statsig shutdown warning: {e}")
+
+        try:
+            from src.services.posthog_service import posthog_service
+            posthog_service.shutdown()
+            logger.info("  ✅ PostHog shutdown complete")
+        except Exception as e:
+            logger.warning(f"  ⚠️  PostHog shutdown warning: {e}")
 
     return app
 

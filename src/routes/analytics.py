@@ -1,6 +1,6 @@
 """
 Analytics API Routes
-Server-side endpoint for logging analytics events to Statsig
+Server-side endpoint for logging analytics events to Statsig and PostHog
 """
 
 from fastapi import APIRouter, HTTPException, Depends
@@ -9,6 +9,7 @@ from typing import Optional, Dict, Any
 import logging
 
 from src.services.statsig_service import statsig_service
+from src.services.posthog_service import posthog_service
 from src.security.deps import get_current_user
 
 logger = logging.getLogger(__name__)
@@ -33,10 +34,10 @@ async def log_event(
     current_user: Optional[dict] = Depends(get_current_user)
 ):
     """
-    Log an analytics event to Statsig via backend
+    Log an analytics event to both Statsig and PostHog via backend
 
     This endpoint allows the frontend to send analytics events to the backend,
-    which then forwards them to Statsig. This avoids ad-blocker issues.
+    which then forwards them to both analytics platforms. This avoids ad-blocker issues.
 
     Args:
         event: The analytics event to log
@@ -62,6 +63,13 @@ async def log_event(
             metadata=event.metadata
         )
 
+        # Log event to PostHog
+        posthog_service.capture(
+            distinct_id=user_id,
+            event=event.event_name,
+            properties=event.metadata
+        )
+
         return {
             "success": True,
             "message": f"Event '{event.event_name}' logged successfully"
@@ -81,7 +89,7 @@ async def log_batch_events(
     current_user: Optional[dict] = Depends(get_current_user)
 ):
     """
-    Log multiple analytics events in batch
+    Log multiple analytics events in batch to both Statsig and PostHog
 
     Args:
         events: List of analytics events to log
@@ -96,15 +104,23 @@ async def log_batch_events(
         if current_user:
             user_id = str(current_user.get('user_id', 'anonymous'))
 
-        # Log each event
+        # Log each event to both platforms
         for event in events:
             event_user_id = event.user_id or user_id
 
+            # Log to Statsig
             statsig_service.log_event(
                 user_id=event_user_id,
                 event_name=event.event_name,
                 value=event.value,
                 metadata=event.metadata
+            )
+
+            # Log to PostHog
+            posthog_service.capture(
+                distinct_id=event_user_id,
+                event=event.event_name,
+                properties=event.metadata
             )
 
         return {
