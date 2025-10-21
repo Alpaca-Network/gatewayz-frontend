@@ -895,10 +895,10 @@ function ChatPageContent() {
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const [editedTitle, setEditedTitle] = useState('');
     const [selectedModel, setSelectedModel] = useState<ModelOption | null>({
-        value: 'katanemo/arch-router-1.5b',
-        label: 'Katanemo Arch Router 1.5B',
+        value: 'openrouter/auto',
+        label: 'OpenRouter Auto (Free Router)',
         category: 'Free',
-        sourceGateway: 'huggingface'
+        sourceGateway: 'openrouter'
     });
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
     const { toast } = useToast();
