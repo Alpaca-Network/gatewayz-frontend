@@ -2069,8 +2069,8 @@ function ChatPageContent() {
 
                 // Log Statsig event for streaming error
                 statsigClient.logEvent('chat_message_failed', {
-                    model: modelValue,
-                    gateway: selectedModel.sourceGateway,
+                    model: selectedModel?.value || 'unknown',
+                    gateway: selectedModel?.sourceGateway || 'unknown',
                     error_type: 'streaming_error',
                     error_message: errorMessage,
                     session_id: currentSessionId,

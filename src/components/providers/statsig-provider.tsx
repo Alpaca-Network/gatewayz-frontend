@@ -25,8 +25,10 @@ export function StatsigProviderWrapper({ children }: { children: React.ReactNode
     }
   }, [authenticated, user]);
 
+  const sdkKey = process.env.NEXT_PUBLIC_STATSIG_CLIENT_KEY;
+
   const { client } = useClientAsyncInit(
-    process.env.NEXT_PUBLIC_STATSIG_CLIENT_KEY || '',
+    sdkKey || '',
     { userID: userId },
     {
       plugins: [
@@ -35,6 +37,13 @@ export function StatsigProviderWrapper({ children }: { children: React.ReactNode
       ]
     },
   );
+
+  // Log warning if SDK key is missing
+  React.useEffect(() => {
+    if (!sdkKey) {
+      console.warn('[Statsig] SDK key not found in environment variables. Please set NEXT_PUBLIC_STATSIG_CLIENT_KEY');
+    }
+  }, [sdkKey]);
 
   return (
     <StatsigProvider client={client} loadingComponent={<div className="flex items-center justify-center min-h-screen">Loading...</div>}>
