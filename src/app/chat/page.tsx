@@ -1,7 +1,7 @@
 
 "use client"
 
-import React, { useState, useRef, useEffect, useMemo, Suspense } from 'react';
+import React, { useState, useRef, useEffect, useMemo, Suspense, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -42,7 +42,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format, isToday, isYesterday, formatDistanceToNow } from 'date-fns';
-import { getApiKey, getUserData } from '@/lib/api';
+import { getApiKey, getUserData, saveApiKey, saveUserData, type UserData } from '@/lib/api';
 import { ChatHistoryAPI, ChatSession as ApiChatSession, ChatMessage as ApiChatMessage, handleApiError } from '@/lib/chat-history';
 import { Copy, Share2, RotateCcw } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
@@ -56,6 +56,8 @@ import { ReasoningDisplay } from '@/components/chat/reasoning-display';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { logAnalyticsEvent } from '@/lib/analytics';
+
+const TEMP_API_KEY_PREFIX = 'gw_temp_';
 
 type Message = {
     role: 'user' | 'assistant';
@@ -895,10 +897,11 @@ function ChatPageContent() {
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const [editedTitle, setEditedTitle] = useState('');
     const [selectedModel, setSelectedModel] = useState<ModelOption | null>({
-        value: 'deepseek/deepseek-chat-v3.1:free',
-        label: 'DeepSeek V3.1 (Free)',
-        category: 'Free',
-        sourceGateway: 'deepseek'
+        value: 'auto-router',
+        label: 'Alpaca Router',
+        category: 'Router',
+        sourceGateway: 'alpaca',
+        developer: 'Alpaca'
     });
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
     const { toast } = useToast();
@@ -1483,6 +1486,71 @@ function ChatPageContent() {
         setSelectedModel(model);
     };
 
+    const upgradeTempKeyIfNeeded = useCallback(
+        async (currentKey: string, currentUserData: UserData | null): Promise<string> => {
+            if (
+                !currentKey ||
+                !currentUserData ||
+                !currentKey.startsWith(TEMP_API_KEY_PREFIX) ||
+                Math.floor(currentUserData.credits ?? 0) <= 10
+            ) {
+                return currentKey;
+            }
+
+            try {
+                const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
+                const response = await fetch(`${apiBaseUrl}/user/api-keys`, {
+                    method: 'GET',
+                    headers: {
+                        Authorization: `Bearer ${currentKey}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (!response.ok) {
+                    console.log('[Auth] Unable to upgrade API key during send:', response.status);
+                    return currentKey;
+                }
+
+                const data = await response.json();
+                const keys: Array<{ api_key?: string; is_primary?: boolean; environment_tag?: string }> =
+                    Array.isArray(data?.keys) ? data.keys : [];
+
+                const upgraded =
+                    keys.find(
+                        (key) =>
+                            key?.api_key &&
+                            !key.api_key.startsWith(TEMP_API_KEY_PREFIX) &&
+                            key.environment_tag === 'live' &&
+                            key.is_primary
+                    ) ||
+                    keys.find(
+                        (key) =>
+                            key?.api_key &&
+                            !key.api_key.startsWith(TEMP_API_KEY_PREFIX) &&
+                            key.environment_tag === 'live'
+                    ) ||
+                    keys.find((key) => key?.api_key && !key.api_key.startsWith(TEMP_API_KEY_PREFIX));
+
+                if (upgraded?.api_key && upgraded.api_key !== currentKey) {
+                    console.log('[Auth] Upgraded API key obtained during message send');
+                    saveApiKey(upgraded.api_key);
+                    saveUserData({
+                        ...currentUserData,
+                        api_key: upgraded.api_key
+                    });
+                    setHasApiKey(true);
+                    return upgraded.api_key;
+                }
+            } catch (error) {
+                console.log('[Auth] Failed upgrading API key during send:', error);
+            }
+
+            return currentKey;
+        },
+        [setHasApiKey]
+    );
+
     const handleSendMessage = async () => {
         // Prevent sending if user hasn't actually typed anything
         if (!userHasTyped) {
@@ -1499,8 +1567,16 @@ function ChatPageContent() {
         }
 
         // Check authentication first
-        const apiKey = getApiKey();
-        const userData = getUserData();
+        let apiKey = getApiKey();
+        let userData = getUserData();
+
+        if (apiKey && userData) {
+            const upgradedKey = await upgradeTempKeyIfNeeded(apiKey, userData);
+            if (upgradedKey !== apiKey) {
+                apiKey = upgradedKey;
+                userData = { ...userData, api_key: upgradedKey };
+            }
+        }
 
         if (!apiKey || !userData || typeof userData.privy_user_id !== 'string') {
             console.log('[Auth] User not authenticated - queuing message and triggering login');

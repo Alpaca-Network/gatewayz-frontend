@@ -332,7 +332,7 @@ export default function SettingsPage() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="auto-router">Auto Router</SelectItem>
+            <SelectItem value="auto-router">Alpaca Router</SelectItem>
             {models.slice(0, 20).map(model => (
               <SelectItem key={model.name} value={model.name}>
                 {model.name}

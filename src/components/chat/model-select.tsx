@@ -44,6 +44,24 @@ const CACHE_DURATION = 60 * 60 * 1000; // 60 minutes - extended cache for maximu
 const INITIAL_MODELS_LIMIT = 50; // Load top 50 models initially for instant loading
 const MAX_MODELS_PER_DEVELOPER = 10; // Limit models shown per developer for performance
 
+const ROUTER_OPTION: ModelOption = {
+  value: 'auto-router',
+  label: 'Alpaca Router',
+  category: 'Router',
+  sourceGateway: 'alpaca',
+  developer: 'Alpaca'
+};
+
+const ensureRouterOption = (options: ModelOption[]): ModelOption[] => {
+  const hasRouter = options.some((option) => option.value === ROUTER_OPTION.value);
+  if (hasRouter) {
+    return options.map((option) =>
+      option.value === ROUTER_OPTION.value ? { ...ROUTER_OPTION, ...option } : option
+    );
+  }
+  return [{ ...ROUTER_OPTION }, ...options];
+};
+
 // Extract developer from model ID (e.g., "openai/gpt-4" -> "OpenAI")
 const getDeveloper = (modelId: string): string => {
   const parts = modelId.split('/');
@@ -124,7 +142,8 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
           const { data, timestamp } = JSON.parse(cached);
           // Validate cached data has correct structure
           if (Date.now() - timestamp < CACHE_DURATION && data && data.length > 0 && data[0].value) {
-            setModels(data);
+            const hydrated = ensureRouterOption(data as ModelOption[]);
+            setModels(hydrated);
             return;
           } else {
             // Clear invalid cache
@@ -182,12 +201,13 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
             } : undefined,
           };
         });
-        setModels(modelOptions);
+        const normalizedOptions = ensureRouterOption(modelOptions);
+        setModels(normalizedOptions);
 
         // Try to cache the results, but don't fail if quota exceeded
         try {
           localStorage.setItem(CACHE_KEY, JSON.stringify({
-            data: modelOptions,
+            data: normalizedOptions,
             timestamp: Date.now()
           }));
         } catch (e) {
