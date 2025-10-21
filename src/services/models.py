@@ -250,7 +250,16 @@ def get_cached_models(gateway: str = "openrouter"):
                     if not essential_missing:
                         return cache["data"]
                     logger.info("Hugging Face cache missing essential models; refetching catalog")
-            return fetch_models_from_hug()
+
+            result = fetch_models_from_hug()
+
+            # WORKAROUND: Explicitly update cache in case of module import issues
+            if result and not cache["data"]:
+                logger.info("Manually updating HuggingFace cache after fetch")
+                _huggingface_models_cache["data"] = result
+                _huggingface_models_cache["timestamp"] = datetime.now(timezone.utc)
+
+            return result
 
         if gateway == "all":
             openrouter_models = get_cached_models("openrouter") or []

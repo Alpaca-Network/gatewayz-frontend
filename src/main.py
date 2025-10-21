@@ -222,6 +222,18 @@ def create_app() -> FastAPI:
             except Exception as analytics_e:
                 logger.warning(f"  ⚠️  Analytics initialization warning: {analytics_e}")
 
+            # Warm model caches on startup
+            try:
+                logger.info("  🔥 Warming model caches...")
+                from src.services.models import get_cached_models
+
+                # Warm critical provider caches
+                get_cached_models("hug")
+                logger.info("  ✅ HuggingFace models cache warmed")
+
+            except Exception as cache_e:
+                logger.warning(f"  ⚠️  Cache warming warning: {cache_e}")
+
         except Exception as e:
             logger.error(f"  ❌ Startup initialization failed: {e}")
 
