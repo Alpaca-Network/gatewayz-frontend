@@ -8,6 +8,8 @@ import {
   getUserData,
   processAuthResponse,
   removeApiKey,
+  saveApiKey,
+  saveUserData,
   type AuthResponse,
   type UserData,
 } from "@/lib/api";
@@ -36,6 +38,7 @@ interface GatewayzAuthContextValue {
 }
 
 const GatewayzAuthContext = createContext<GatewayzAuthContextValue | undefined>(undefined);
+const TEMP_API_KEY_PREFIX = "gw_temp_";
 
 interface GatewayzAuthProviderProps {
   children: ReactNode;
@@ -127,6 +130,7 @@ export function GatewayzAuthProvider({ children, onAuthError }: GatewayzAuthProv
 
   const syncInFlightRef = useRef(false);
   const lastSyncedPrivyIdRef = useRef<string | null>(null);
+  const upgradeAttemptedRef = useRef(false);
 
   const updateStateFromStorage = useCallback(() => {
     const key = getApiKey();
@@ -143,7 +147,105 @@ export function GatewayzAuthProvider({ children, onAuthError }: GatewayzAuthProv
     setApiKey(null);
     setUserData(null);
     lastSyncedPrivyIdRef.current = null;
+    upgradeAttemptedRef.current = false;
   }, []);
+
+  const upgradeApiKeyIfNeeded = useCallback(
+    async (authData: AuthResponse) => {
+      const currentKey = getApiKey();
+      if (!currentKey || !currentKey.startsWith(TEMP_API_KEY_PREFIX)) {
+        return;
+      }
+
+      try {
+        const credits = Math.floor(authData.credits ?? 0);
+        if (credits <= 10) {
+          return;
+        }
+
+        if (authData.is_new_user) {
+          return;
+        }
+
+        if (upgradeAttemptedRef.current) {
+          return;
+        }
+
+        upgradeAttemptedRef.current = true;
+
+        const response = await fetch(`${API_BASE_URL}/user/api-keys`, {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${currentKey}`,
+            "Content-Type": "application/json",
+          },
+        });
+
+        if (!response.ok) {
+          console.log("[Auth] Unable to fetch upgraded API keys:", response.status);
+          return;
+        }
+
+        const data = await response.json();
+        const keys: Array<{ api_key?: string; is_primary?: boolean; environment_tag?: string }> =
+          Array.isArray(data?.keys) ? data.keys : [];
+
+        const preferredKey =
+          keys.find(
+            (key) =>
+              typeof key.api_key === "string" &&
+              !key.api_key.startsWith(TEMP_API_KEY_PREFIX) &&
+              key.environment_tag === "live" &&
+              key.is_primary
+          ) ||
+          keys.find(
+            (key) =>
+              typeof key.api_key === "string" &&
+              !key.api_key.startsWith(TEMP_API_KEY_PREFIX) &&
+              key.environment_tag === "live"
+          ) ||
+          keys.find(
+            (key) => typeof key.api_key === "string" && !key.api_key.startsWith(TEMP_API_KEY_PREFIX)
+          );
+
+        if (!preferredKey || !preferredKey.api_key) {
+          console.log("[Auth] No upgraded API key found in response");
+          return;
+        }
+
+        if (preferredKey.api_key === currentKey) {
+          return;
+        }
+
+        console.log("[Auth] Upgrading stored API key to live key");
+        saveApiKey(preferredKey.api_key);
+
+        const storedUser = getUserData();
+        if (storedUser) {
+          saveUserData({
+            ...storedUser,
+            api_key: preferredKey.api_key,
+          });
+        } else {
+          saveUserData({
+            user_id: authData.user_id,
+            api_key: preferredKey.api_key,
+            auth_method: authData.auth_method,
+            privy_user_id: authData.privy_user_id,
+            display_name: authData.display_name,
+            email: authData.email,
+            credits: Math.floor(authData.credits ?? 0),
+          });
+        }
+
+        updateStateFromStorage();
+      } catch (error) {
+        console.log("[Auth] Failed to upgrade API key after payment", error);
+        upgradeAttemptedRef.current = false;
+      }
+    },
+    [updateStateFromStorage]
+  );
 
   const handleAuthSuccess = useCallback(
     (authData: AuthResponse, isNewUserExpected: boolean) => {
@@ -168,6 +270,14 @@ export function GatewayzAuthProvider({ children, onAuthError }: GatewayzAuthProv
       }
     },
     [updateStateFromStorage]
+  );
+
+  const handleAuthSuccessAsync = useCallback(
+    async (authData: AuthResponse, isNewUserExpected: boolean) => {
+      handleAuthSuccess(authData, isNewUserExpected);
+      await upgradeApiKeyIfNeeded(authData);
+    },
+    [handleAuthSuccess, upgradeApiKeyIfNeeded]
   );
 
   const buildAuthRequestBody = useCallback(
@@ -304,7 +414,10 @@ export function GatewayzAuthProvider({ children, onAuthError }: GatewayzAuthProv
         }
 
         console.log("[Auth] Backend authentication successful:", authData);
-        handleAuthSuccess(authData, (authBody as { is_new_user?: boolean }).is_new_user ?? false);
+        await handleAuthSuccessAsync(
+          authData,
+          (authBody as { is_new_user?: boolean }).is_new_user ?? false
+        );
       } catch (err) {
         console.error("[Auth] Error during backend sync:", err);
         clearStoredCredentials();
@@ -321,7 +434,7 @@ export function GatewayzAuthProvider({ children, onAuthError }: GatewayzAuthProv
       buildAuthRequestBody,
       clearStoredCredentials,
       getAccessToken,
-      handleAuthSuccess,
+      handleAuthSuccessAsync,
       onAuthError,
       privyReady,
       user,
