@@ -9,7 +9,7 @@ from typing import Optional, Dict, Any
 import logging
 
 from src.services.statsig_service import statsig_service
-from src.middleware.auth import get_current_user
+from src.security.deps import get_current_user
 
 logger = logging.getLogger(__name__)
 

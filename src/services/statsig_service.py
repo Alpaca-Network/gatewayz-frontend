@@ -6,7 +6,7 @@ Server-side Statsig integration to avoid ad-blocker issues
 import os
 import logging
 from typing import Optional, Dict, Any
-from statsig_python_core import Statsig, StatsigOptions, StatsigUser, StatsigEvent
+from statsig_python_core import Statsig, StatsigOptions, StatsigUser
 
 logger = logging.getLogger(__name__)
 
@@ -78,15 +78,12 @@ class StatsigService:
 
         try:
             user = StatsigUser(user_id=user_id)
-            event = StatsigEvent(user=user, event_name=event_name)
-
-            if value:
-                event.value = value
-
-            if metadata:
-                event.metadata = metadata
-
-            self.statsig.log_event(event)
+            self.statsig.log_event(
+                user=user,
+                event_name=event_name,
+                value=value,
+                metadata=metadata
+            )
             logger.debug(f"Logged event '{event_name}' for user '{user_id}'")
 
         except Exception as e:

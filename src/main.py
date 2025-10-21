@@ -99,6 +99,7 @@ def create_app() -> FastAPI:
         ("referral", "Referral System"),
         ("roles", "Role Management"),
         ("transaction_analytics", "Transaction Analytics"),
+        ("analytics", "Analytics Events"),  # Server-side Statsig integration
 
     ]
 
@@ -203,7 +204,8 @@ def create_app() -> FastAPI:
 
             except Exception as admin_e:
                 logger.warning(f"  ⚠️  Admin setup warning: {admin_e}")
-n            # Initialize Statsig for server-side analytics
+
+            # Initialize Statsig for server-side analytics
             try:
                 logger.info("  📊 Initializing Statsig analytics...")
                 from src.services.statsig_service import statsig_service
@@ -224,8 +226,8 @@ n            # Initialize Statsig for server-side analytics
     @app.on_event("shutdown")
     async def on_shutdown():
         logger.info("🛑 Shutting down application...")
-        logger.info("✅ Application shutdown complete")
-n        # Shutdown Statsig gracefully
+
+        # Shutdown Statsig gracefully
         try:
             from src.services.statsig_service import statsig_service
             await statsig_service.shutdown()
