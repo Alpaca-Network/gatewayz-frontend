@@ -896,7 +896,7 @@ function ChatPageContent() {
     const [editedTitle, setEditedTitle] = useState('');
     const [selectedModel, setSelectedModel] = useState<ModelOption | null>({
         value: 'openrouter/auto',
-        label: 'OpenRouter Auto (Free Router)',
+        label: 'Omni Router',
         category: 'Free',
         sourceGateway: 'openrouter'
     });
