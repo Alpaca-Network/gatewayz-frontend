@@ -201,7 +201,7 @@ async def get_my_referral_code(
         return {
             'referral_code': referral_code,
             'invite_link': invite_link,
-            'share_message': f'Join Gatewayz and get $10 in credits! Sign up here: {invite_link}'
+            'share_message': f'Get $10 in free AI credits on gatewayz: {invite_link}'
         }
 
     except HTTPException:
