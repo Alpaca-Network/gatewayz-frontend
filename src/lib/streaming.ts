@@ -122,7 +122,7 @@ export async function* streamChatResponse(
           errorMessage.toLowerCase().includes('insufficient credits') ||
           errorMessage.toLowerCase().includes('upstream rejected')) {
         throw new Error(
-          'Your trial has expired or you have insufficient credits. Please upgrade your plan or try a free model instead.'
+          'Your trial has expired. The backend API is currently blocking all requests, including free models. Please contact support or upgrade your plan.'
         );
       }
 
@@ -371,6 +371,25 @@ export async function* streamChatResponse(
               } else if (choice?.finish_reason) {
                 chunk = { done: true };
               }
+            }
+
+            // Check for error object in the response
+            if (data.error && typeof data.error === 'object') {
+              const errorObj = data.error as Record<string, unknown>;
+              const errorMessage =
+                (typeof errorObj.message === 'string' && errorObj.message) ||
+                (typeof errorObj.detail === 'string' && errorObj.detail) ||
+                'Stream error occurred';
+
+              // Check if it's a trial expiration error
+              if (errorMessage.toLowerCase().includes('trial has expired') ||
+                  errorMessage.toLowerCase().includes('streaming error')) {
+                throw new Error(
+                  'Your trial has expired. The backend API is blocking requests. Please contact support or upgrade your plan.'
+                );
+              }
+
+              throw new Error(errorMessage);
             }
 
             // Handle event-based streaming formats

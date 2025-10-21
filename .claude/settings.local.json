@@ -23,7 +23,8 @@
       "Bash(timeout 30 curl -s -X POST \"https://api.gatewayz.ai/v1/chat/completions\" -H \"Content-Type: application/json\" -d '{\"\"\"\"model\"\"\"\":\"\"\"\"katanemo/Arch-Router-1.5B\"\"\"\",\"\"\"\"messages\"\"\"\":[{\"\"\"\"role\"\"\"\":\"\"\"\"user\"\"\"\",\"\"\"\"content\"\"\"\":\"\"\"\"Hi\"\"\"\"}],\"\"\"\"max_tokens\"\"\"\":50}')",
       "Bash(timeout:*)",
       "Bash(node:*)",
-      "Bash(powershell -Command \"(Get-Content ''src\\lib\\models-data.ts'' | Select-String ''export const models'' -Context 0,5).Line\")"
+      "Bash(powershell -Command \"(Get-Content ''src\\lib\\models-data.ts'' | Select-String ''export const models'' -Context 0,5).Line\")",
+      "Bash(git log -3 --format='%h %s')"
     ],
     "deny": [],
     "ask": []
