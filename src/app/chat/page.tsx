@@ -55,6 +55,7 @@ import { streamChatResponse } from '@/lib/streaming';
 import { ReasoningDisplay } from '@/components/chat/reasoning-display';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { useStatsigClient } from '@statsig/react-bindings';
 
 type Message = {
     role: 'user' | 'assistant';
@@ -879,6 +880,7 @@ const generateChatTitle = (message: string): string => {
 function ChatPageContent() {
     const searchParams = useSearchParams();
     const { login, authenticated, ready } = usePrivy();
+    const { client: statsigClient } = useStatsigClient();
     const [hasApiKey, setHasApiKey] = useState(false);
     const [message, setMessage] = useState('');
     const [userHasTyped, setUserHasTyped] = useState(false);
@@ -1247,6 +1249,13 @@ function ChatPageContent() {
             return;
         }
 
+        // Log Statsig event for session switch
+        statsigClient.logEvent('chat_session_switched', {
+            session_id: sessionId,
+            has_messages: session.messages.length > 0,
+            message_count: session.messages.length
+        });
+
         // Set active session immediately for UI responsiveness
         setActiveSessionId(sessionId);
 
@@ -1298,6 +1307,12 @@ function ChatPageContent() {
         try {
             // Create new session using API helper
             const newSession = await apiHelpers.createChatSession('Untitled Chat', selectedModel?.value);
+
+            // Log Statsig event for new chat creation
+            statsigClient.logEvent('chat_session_created', {
+                session_id: newSession.id,
+                model: selectedModel?.value
+            });
 
             // Set active session immediately with the created session object
             setActiveSessionId(newSession.id);
@@ -1452,6 +1467,18 @@ function ChatPageContent() {
         setTimeout(() => {
             handleSendMessage();
         }, 100);
+    };
+
+    const handleModelSelect = (model: ModelOption | null) => {
+        if (model) {
+            statsigClient.logEvent('model_selected', {
+                model_id: model.value,
+                model_name: model.label,
+                category: model.category,
+                gateway: model.sourceGateway
+            });
+        }
+        setSelectedModel(model);
     };
 
     const handleSendMessage = async () => {
@@ -1827,6 +1854,16 @@ function ChatPageContent() {
                 let inThinking = false;
 
                 console.log('🌊 Starting to stream response...');
+
+                // Log Statsig event for message sent
+                statsigClient.logEvent('chat_message_sent', {
+                    model: modelValue,
+                    gateway: selectedModel.sourceGateway,
+                    has_image: !!selectedImage,
+                    message_length: messageContent.length,
+                    session_id: currentSessionId
+                });
+
                 for await (const chunk of streamChatResponse(
                     url,
                     apiKey,
@@ -2259,7 +2296,7 @@ function ChatPageContent() {
               )}
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
-              <ModelSelect selectedModel={selectedModel} onSelectModel={setSelectedModel} />
+              <ModelSelect selectedModel={selectedModel} onSelectModel={handleModelSelect} />
             </div>
           </div>
 
@@ -2314,7 +2351,7 @@ function ChatPageContent() {
               </div>
             </div>
             <div className="w-full">
-              <ModelSelect selectedModel={selectedModel} onSelectModel={setSelectedModel} />
+              <ModelSelect selectedModel={selectedModel} onSelectModel={handleModelSelect} />
             </div>
           </div>
         </header>
