@@ -21,30 +21,42 @@ def transform_model_id(model_id: str, provider: str) -> str:
     """
     Transform model ID from simplified format to provider-specific format.
 
+    NOTE: All model IDs are normalized to lowercase before being sent to providers
+    to ensure compatibility. Fireworks requires lowercase, while other providers
+    are case-insensitive, so lowercase works universally.
+
     Args:
         model_id: The input model ID (e.g., "deepseek-ai/deepseek-v3")
         provider: The target provider (e.g., "fireworks", "openrouter")
 
     Returns:
-        The transformed model ID suitable for the provider's API
+        The transformed model ID suitable for the provider's API (always lowercase)
 
     Examples:
-        Input: "deepseek-ai/deepseek-v3", provider="fireworks"
+        Input: "deepseek-ai/DeepSeek-V3", provider="fireworks"
         Output: "accounts/fireworks/models/deepseek-v3p1"
 
-        Input: "meta-llama/llama-3.3-70b", provider="fireworks"
+        Input: "meta-llama/Llama-3.3-70B", provider="fireworks"
         Output: "accounts/fireworks/models/llama-v3p3-70b-instruct"
 
-        Input: "openai/gpt-4", provider="openrouter"
-        Output: "openai/gpt-4" (already correct format)
+        Input: "OpenAI/GPT-4", provider="openrouter"
+        Output: "openai/gpt-4"
     """
 
-    # If already in full Fireworks path format, return as-is
+    # Normalize input to lowercase for case-insensitive matching
+    # Store original for logging
+    original_model_id = model_id
+    model_id = model_id.lower()
+
+    if original_model_id != model_id:
+        logger.debug(f"Normalized model ID to lowercase: '{original_model_id}' -> '{model_id}'")
+
+    # If already in full Fireworks path format, return as-is (already lowercase)
     if model_id.startswith("accounts/fireworks/models/"):
         logger.debug(f"Model ID already in Fireworks format: {model_id}")
         return model_id
 
-    # If already has Portkey @ prefix, return as-is
+    # If already has Portkey @ prefix, return as-is (already lowercase)
     if model_id.startswith("@"):
         logger.debug(f"Model ID already in Portkey format: {model_id}")
         return model_id
