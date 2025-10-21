@@ -106,10 +106,20 @@ export async function* streamChatResponse(
       status: response.status,
       statusText: response.statusText,
       errorData,
+      errorDataJSON: JSON.stringify(errorData, null, 2),
       url
     });
 
     // Handle specific error cases with helpful messages
+    // Handle 400 Bad Request
+    if (response.status === 400) {
+      const errorMessage = errorData.detail || errorData.error?.message || errorData.message || 'Bad request';
+      console.error('400 Bad Request details:', errorData);
+      throw new Error(
+        `Bad request: ${errorMessage}`
+      );
+    }
+
     if (response.status === 403) {
       throw new Error(
         errorData.detail || errorData.error?.message ||
