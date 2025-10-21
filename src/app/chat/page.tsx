@@ -895,10 +895,10 @@ function ChatPageContent() {
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const [editedTitle, setEditedTitle] = useState('');
     const [selectedModel, setSelectedModel] = useState<ModelOption | null>({
-        value: 'openrouter/auto',
-        label: 'Alpaca Router',
+        value: 'deepseek/deepseek-chat-v3.1:free',
+        label: 'DeepSeek V3.1 (Free)',
         category: 'Free',
-        sourceGateway: 'openrouter'
+        sourceGateway: 'deepseek'
     });
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
     const { toast } = useToast();
@@ -2092,18 +2092,18 @@ function ChatPageContent() {
                 });
 
                 if (shouldFallback && selectedModel) {
-                    // Define fallback models in order of preference (using top-ranked models):
-                    // 1. Auto router (default)
-                    // 2. Claude Sonnet 4 (Rank #2)
-                    // 3. Claude Sonnet 4.5 (Rank #6)
-                    // 4. DeepSeek V3.1 (Rank #5)
-                    // 5. Gemini 2.5 Flash (Rank #4)
+                    // Define fallback models in order of preference (using truly free models):
+                    // 1. DeepSeek V3.1 Free (default)
+                    // 2. Mistral Small Free
+                    // 3. Google Gemma 3n Free
+                    // 4. NVIDIA Nemotron Free
+                    // 5. Qwen3 Coder Free
                     const fallbackModels: ModelOption[] = [
-                        { value: 'openrouter/auto', label: 'Auto Router', category: 'Free' },
-                        { value: 'anthropic/claude-sonnet-4', label: 'Claude Sonnet 4', category: 'Paid' },
-                        { value: 'anthropic/claude-sonnet-4.5', label: 'Claude Sonnet 4.5', category: 'Paid' },
-                        { value: 'deepseek/deepseek-v3.1', label: 'DeepSeek V3.1', category: 'Free' },
-                        { value: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash', category: 'Free' }
+                        { value: 'deepseek/deepseek-chat-v3.1:free', label: 'DeepSeek V3.1 (Free)', category: 'Free' },
+                        { value: 'mistralai/mistral-small-3.2-24b-instruct:free', label: 'Mistral Small (Free)', category: 'Free' },
+                        { value: 'google/gemma-3n-e2b-it:free', label: 'Google Gemma 3n (Free)', category: 'Free' },
+                        { value: 'nvidia/nemotron-nano-9b-v2:free', label: 'NVIDIA Nemotron (Free)', category: 'Free' },
+                        { value: 'qwen/qwen3-coder:free', label: 'Qwen3 Coder (Free)', category: 'Free' }
                     ];
 
                     // Find the first fallback model that isn't the current model

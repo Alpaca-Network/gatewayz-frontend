@@ -115,6 +115,17 @@ export async function* streamChatResponse(
     if (response.status === 400) {
       const errorMessage = errorData.detail || errorData.error?.message || errorData.message || 'Bad request';
       console.error('400 Bad Request details:', errorData);
+
+      // Check for common error patterns that indicate trial/credit issues
+      if (errorMessage.toLowerCase().includes('trial has expired') ||
+          errorMessage.toLowerCase().includes('upgrade to') ||
+          errorMessage.toLowerCase().includes('insufficient credits') ||
+          errorMessage.toLowerCase().includes('upstream rejected')) {
+        throw new Error(
+          'Your trial has expired or you have insufficient credits. Please upgrade your plan or try a free model instead.'
+        );
+      }
+
       throw new Error(
         `Bad request: ${errorMessage}`
       );
