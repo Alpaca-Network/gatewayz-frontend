@@ -203,6 +203,14 @@ def create_app() -> FastAPI:
 
             except Exception as admin_e:
                 logger.warning(f"  ⚠️  Admin setup warning: {admin_e}")
+n            # Initialize Statsig for server-side analytics
+            try:
+                logger.info("  📊 Initializing Statsig analytics...")
+                from src.services.statsig_service import statsig_service
+                await statsig_service.initialize()
+                logger.info("  ✅ Statsig analytics initialized")
+            except Exception as statsig_e:
+                logger.warning(f"  ⚠️  Statsig initialization warning: {statsig_e}")
 
         except Exception as e:
             logger.error(f"  ❌ Startup initialization failed: {e}")
@@ -217,6 +225,12 @@ def create_app() -> FastAPI:
     async def on_shutdown():
         logger.info("🛑 Shutting down application...")
         logger.info("✅ Application shutdown complete")
+n        # Shutdown Statsig gracefully
+        try:
+            from src.services.statsig_service import statsig_service
+            await statsig_service.shutdown()
+        except Exception as e:
+            logger.warning(f"Statsig shutdown warning: {e}")
 
     return app
 

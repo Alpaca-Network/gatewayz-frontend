@@ -16,6 +16,9 @@ anyio>=3.7.1,<4.0.0
 stripe==13.0.1
 portkey-ai>=2.0.0
 
+# Analytics
+statsig-python-core==0.10.2
+
 # Testing dependencies
 pytest==7.4.3
 pytest-cov==4.1.0
