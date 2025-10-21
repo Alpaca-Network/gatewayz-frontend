@@ -1994,6 +1994,16 @@ function ChatPageContent() {
                             undefined // Token count not available from streaming
                         );
                         console.log('✅ Assistant message saved to backend successfully:', result);
+
+                        // Log Statsig event for successful message completion
+                        statsigClient.logEvent('chat_message_completed', {
+                            model: modelValue,
+                            gateway: selectedModel.sourceGateway,
+                            response_length: finalContent.length,
+                            has_reasoning: !!accumulatedReasoning,
+                            reasoning_length: accumulatedReasoning?.length || 0,
+                            session_id: currentSessionId
+                        });
                     } catch (error) {
                         console.error('❌ Failed to save assistant message to backend:', error);
                         console.error('Error details:', {
@@ -2056,6 +2066,16 @@ function ChatPageContent() {
 
                 const errorMessage = streamError instanceof Error ? streamError.message : 'Failed to get response';
                 console.error('Error message for analysis:', errorMessage);
+
+                // Log Statsig event for streaming error
+                statsigClient.logEvent('chat_message_failed', {
+                    model: modelValue,
+                    gateway: selectedModel.sourceGateway,
+                    error_type: 'streaming_error',
+                    error_message: errorMessage,
+                    session_id: currentSessionId,
+                    has_image: !!selectedImage
+                });
 
                 // Check if this is a 500 error or 404 error (model unavailable) and attempt fallback
                 const is500Error = errorMessage.includes('500') || errorMessage.includes('Internal server error') || errorMessage.includes('Server error');
@@ -2166,6 +2186,16 @@ function ChatPageContent() {
         } catch (error) {
             setIsStreamingResponse(false);
             console.error('Send message error:', error);
+
+            // Log Statsig event for general error
+            statsigClient.logEvent('chat_message_failed', {
+                model: selectedModel?.value || 'unknown',
+                gateway: selectedModel?.sourceGateway || 'unknown',
+                error_type: 'general_error',
+                error_message: error instanceof Error ? error.message : 'Unknown error',
+                session_id: currentSessionId || 'none',
+                has_image: !!selectedImage
+            });
 
             toast({
                 title: "Error",
