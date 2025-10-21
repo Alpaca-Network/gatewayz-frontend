@@ -5,6 +5,8 @@ import { NextRequest } from 'next/server';
  * This proxies requests to the Gatewayz API to bypass CORS issues in development
  */
 export async function POST(request: NextRequest) {
+  let timeoutMs = 30000; // Default timeout
+
   try {
     const body = await request.json();
     const apiKey = request.headers.get('authorization');
@@ -30,7 +32,7 @@ export async function POST(request: NextRequest) {
 
     // Use a 120 second timeout for streaming requests (models can be slow to start)
     // Use a 30 second timeout for non-streaming requests
-    const timeoutMs = body.stream ? 120000 : 30000;
+    timeoutMs = body.stream ? 120000 : 30000;
 
     const response = await fetch(targetUrl.toString(), {
       method: 'POST',

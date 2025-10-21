@@ -225,6 +225,9 @@ export function GatewayzAuthProvider({ children, onAuthError }: GatewayzAuthProv
           saveUserData({
             ...storedUser,
             api_key: preferredKey.api_key,
+            tier: authData.tier,
+            subscription_status: authData.subscription_status,
+            subscription_end_date: authData.subscription_end_date,
           });
         } else {
           saveUserData({
@@ -235,6 +238,9 @@ export function GatewayzAuthProvider({ children, onAuthError }: GatewayzAuthProv
             display_name: authData.display_name,
             email: authData.email,
             credits: Math.floor(authData.credits ?? 0),
+            tier: authData.tier,
+            subscription_status: authData.subscription_status,
+            subscription_end_date: authData.subscription_end_date,
           });
         }
 

@@ -48,7 +48,7 @@ const ROUTER_OPTION: ModelOption = {
   value: 'auto-router',
   label: 'Alpaca Router',
   category: 'Router',
-  sourceGateway: 'alpaca',
+  sourceGateway: 'openrouter',
   developer: 'Alpaca'
 };
 

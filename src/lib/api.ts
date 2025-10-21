@@ -6,6 +6,9 @@ const USER_DATA_STORAGE_KEY = 'gatewayz_user_data';
 export const AUTH_REFRESH_EVENT = 'gatewayz:refresh-auth';
 export const NEW_USER_WELCOME_EVENT = 'gatewayz:new-user-welcome';
 
+export type UserTier = 'basic' | 'pro' | 'max';
+export type SubscriptionStatus = 'active' | 'cancelled' | 'past_due' | 'inactive';
+
 export interface AuthResponse {
   success: boolean;
   message: string;
@@ -18,6 +21,9 @@ export interface AuthResponse {
   email: string;
   credits: number;
   timestamp: string | null;
+  tier?: UserTier;
+  subscription_status?: SubscriptionStatus;
+  subscription_end_date?: number; // Unix timestamp
 }
 
 export interface UserData {
@@ -28,6 +34,9 @@ export interface UserData {
   display_name: string;
   email: string;
   credits: number;
+  tier?: UserTier;
+  subscription_status?: SubscriptionStatus;
+  subscription_end_date?: number; // Unix timestamp
 }
 
 // API Key Management
@@ -115,14 +124,14 @@ export const processAuthResponse = (response: AuthResponse): void => {
     has_api_key: !!response.api_key,
     api_key_preview: response.api_key ? `${response.api_key.substring(0, 10)}...` : 'None'
   });
-  
+
   if (response.success && response.api_key) {
     saveApiKey(response.api_key);
     console.log('API key saved to localStorage');
-    
+
     // Convert credits to integer to match backend expectations
     const creditsAsInteger = Math.floor(response.credits);
-    
+
     const userData: UserData = {
       user_id: response.user_id,
       api_key: response.api_key,
@@ -131,17 +140,22 @@ export const processAuthResponse = (response: AuthResponse): void => {
       display_name: response.display_name,
       email: response.email,
       credits: creditsAsInteger,
+      tier: response.tier,
+      subscription_status: response.subscription_status,
+      subscription_end_date: response.subscription_end_date,
     };
-    
+
     saveUserData(userData);
     console.log('User data saved to localStorage');
-    
+
     console.log('User authenticated successfully:', {
       user_id: response.user_id,
       display_name: response.display_name,
       credits: creditsAsInteger,
       original_credits: response.credits,
-      is_new_user: response.is_new_user
+      is_new_user: response.is_new_user,
+      tier: response.tier,
+      subscription_status: response.subscription_status,
     });
 
     // Trigger welcome dialog for new users

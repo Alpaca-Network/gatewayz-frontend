@@ -900,7 +900,7 @@ function ChatPageContent() {
         value: 'auto-router',
         label: 'Alpaca Router',
         category: 'Router',
-        sourceGateway: 'alpaca',
+        sourceGateway: 'openrouter',
         developer: 'Alpaca'
     });
     const [selectedImage, setSelectedImage] = useState<string | null>(null);

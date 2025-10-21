@@ -23,8 +23,9 @@ import { Switch } from "@/components/ui/switch";
 import { Info, RefreshCw, ArrowUpRight, ChevronLeft, ChevronRight, CreditCard, MoreHorizontal, CheckCircle } from "lucide-react";
 import Link from "next/link";
 import { redirectToCheckout } from '@/lib/stripe';
-import { getUserData, makeAuthenticatedRequest } from '@/lib/api';
+import { getUserData, makeAuthenticatedRequest, requestAuthRefresh } from '@/lib/api';
 import { API_BASE_URL } from '@/lib/config';
+import { TierInfoCard } from '@/components/tier/tier-info-card';
 
 // Confetti/Emoji explosion component
 const EmojiExplosion = ({ onComplete }: { onComplete: () => void }) => {
@@ -209,7 +210,7 @@ function CreditsPageContent() {
       // Fetch fresh credits and transactions after successful payment
       const fetchFreshData = async () => {
         try {
-          let currentCredits;
+          let currentCredits: number | undefined;
           // Fetch credits
           const response = await makeAuthenticatedRequest(`${API_BASE_URL}/user/profile`);
           if (response.ok) {
@@ -245,6 +246,9 @@ function CreditsPageContent() {
               setTransactions(mappedTransactions);
             }
           }
+
+          // Trigger auth refresh to update tier and subscription info
+          requestAuthRefresh();
         } catch (error) {
           console.log('Could not fetch fresh data after payment');
         }
@@ -369,6 +373,11 @@ function CreditsPageContent() {
         {/* <Button variant="ghost" size="icon" className="text-muted-foreground">
           <RefreshCw className="h-5 w-5" />
         </Button> */}
+      </div>
+
+      {/* Subscription Tier Information */}
+      <div className="max-w-2xl mx-auto">
+        <TierInfoCard />
       </div>
 
       {/* Success message after Stripe payment */}

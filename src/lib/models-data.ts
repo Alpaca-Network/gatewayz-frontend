@@ -1,3 +1,4 @@
+import type { UserTier } from './api';
 
 export type Model = {
   name: string;
@@ -12,6 +13,7 @@ export type Model = {
   modalities: string[];
   series: string;
   supportedParameters: string[];
+  requiredTier?: UserTier;
 };
 
 export const models: Model[] = [
