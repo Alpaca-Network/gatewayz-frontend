@@ -910,36 +910,8 @@ function ChatPageContent() {
         userHasTypedRef.current = userHasTyped;
     }, [userHasTyped]);
 
-    // Smart default model selection based on user credits
-    useEffect(() => {
-        const userData = getUserData();
-
-        // Only set default model once when user data first loads
-        // Don't override if user has already manually selected a model
-        if (userData && userData.credits !== undefined) {
-            const hasCredits = userData.credits > 0;
-
-            // If user has credits, default to a better model
-            if (hasCredits) {
-                setSelectedModel({
-                    value: 'gpt-4o-mini',
-                    label: 'GPT-4o mini',
-                    category: 'Multimodal',
-                    sourceGateway: 'openrouter'
-                });
-                console.log('[Model Selection] User has credits, defaulting to GPT-4o mini');
-            } else {
-                // No credits - use free Alpaca Router
-                setSelectedModel({
-                    value: 'openrouter/auto',
-                    label: 'Alpaca Router',
-                    category: 'Free',
-                    sourceGateway: 'openrouter'
-                });
-                console.log('[Model Selection] No credits, defaulting to Alpaca Router (free)');
-            }
-        }
-    }, [ready, authenticated]); // Run when auth state changes
+    // Always use Alpaca Router as default - removed credit-based selection
+    // Users can manually select other models if they prefer
 
     // Track which sessions have loaded their messages
     const [loadedSessionIds, setLoadedSessionIds] = useState<Set<string>>(new Set());
