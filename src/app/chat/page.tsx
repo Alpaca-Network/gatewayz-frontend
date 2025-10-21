@@ -897,7 +897,7 @@ function ChatPageContent() {
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const [editedTitle, setEditedTitle] = useState('');
     const [selectedModel, setSelectedModel] = useState<ModelOption | null>({
-        value: 'auto-router',
+        value: 'openrouter/auto',
         label: 'Alpaca Router',
         category: 'Router',
         sourceGateway: 'openrouter',

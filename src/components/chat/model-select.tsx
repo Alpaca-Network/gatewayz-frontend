@@ -45,7 +45,7 @@ const INITIAL_MODELS_LIMIT = 50; // Load top 50 models initially for instant loa
 const MAX_MODELS_PER_DEVELOPER = 10; // Limit models shown per developer for performance
 
 const ROUTER_OPTION: ModelOption = {
-  value: 'auto-router',
+  value: 'openrouter/auto',
   label: 'Alpaca Router',
   category: 'Router',
   sourceGateway: 'openrouter',
