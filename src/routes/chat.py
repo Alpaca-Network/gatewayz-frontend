@@ -241,7 +241,20 @@ async def chat_completions(
 
         pre_plan = await _to_thread(enforce_plan_limits, user["id"], 0, environment_tag)
         if not pre_plan.get("allowed", False):
-            raise HTTPException(status_code=429, detail=f"Plan limit exceeded: {pre_plan.get('reason', 'unknown')}")
+            # For streaming requests, return SSE formatted error immediately
+            if req.stream:
+                async def error_stream():
+                    error_chunk = {
+                        "error": {
+                            "message": f"Plan limit exceeded: {pre_plan.get('reason', 'unknown')}",
+                            "type": "plan_limit_exceeded"
+                        }
+                    }
+                    yield f"data: {json.dumps(error_chunk)}\n\n"
+                    yield "data: [DONE]\n\n"
+                return StreamingResponse(error_stream(), media_type="text/event-stream")
+            else:
+                raise HTTPException(status_code=429, detail=f"Plan limit exceeded: {pre_plan.get('reason', 'unknown')}")
 
         trial = await _to_thread(validate_trial_access, api_key)
         if not trial.get("is_valid", False):
@@ -713,7 +726,20 @@ async def unified_responses(
 
         pre_plan = await _to_thread(enforce_plan_limits, user["id"], 0, environment_tag)
         if not pre_plan.get("allowed", False):
-            raise HTTPException(status_code=429, detail=f"Plan limit exceeded: {pre_plan.get('reason', 'unknown')}")
+            # For streaming requests, return SSE formatted error immediately
+            if req.stream:
+                async def error_stream():
+                    error_chunk = {
+                        "error": {
+                            "message": f"Plan limit exceeded: {pre_plan.get('reason', 'unknown')}",
+                            "type": "plan_limit_exceeded"
+                        }
+                    }
+                    yield f"data: {json.dumps(error_chunk)}\n\n"
+                    yield "data: [DONE]\n\n"
+                return StreamingResponse(error_stream(), media_type="text/event-stream")
+            else:
+                raise HTTPException(status_code=429, detail=f"Plan limit exceeded: {pre_plan.get('reason', 'unknown')}")
 
         trial = await _to_thread(validate_trial_access, api_key)
         if not trial.get("is_valid", False):
