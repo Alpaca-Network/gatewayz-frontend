@@ -89,8 +89,8 @@ def _filter_portkey_models_by_patterns(patterns: list, provider_name: str):
 def fetch_models_from_google():
     """Fetch models from Google by filtering Portkey unified catalog"""
     try:
-        # Google models include "gemini", "gemma" patterns
-        filtered_models = _filter_portkey_models_by_patterns(["gemini", "gemma"], "google")
+        # Google models use @google/ prefix in Portkey
+        filtered_models = _filter_portkey_models_by_patterns(["@google/"], "google")
 
         if not filtered_models:
             logger.warning("No Google models found in Portkey catalog")
@@ -112,9 +112,9 @@ def fetch_models_from_google():
 def fetch_models_from_cerebras():
     """Fetch models from Cerebras by filtering Portkey unified catalog"""
     try:
-        # Cerebras models include specific model families
+        # Cerebras models use @cerebras/ prefix in Portkey
         filtered_models = _filter_portkey_models_by_patterns(
-            ["cerebras", "qwen-3-coder", "llama3.1-8b", "llama-4", "gpt-oss-120b"],
+            ["@cerebras/"],
             "cerebras"
         )
 
@@ -138,9 +138,9 @@ def fetch_models_from_cerebras():
 def fetch_models_from_nebius():
     """Fetch models from Nebius by filtering Portkey unified catalog"""
     try:
-        # Nebius models include various model families
+        # Nebius models use @nebius/ prefix in Portkey
         filtered_models = _filter_portkey_models_by_patterns(
-            ["nebius", "nvidia/llama", "microsoft/phi", "microsoft/phi-3", "deepseek-coder-v2"],
+            ["@nebius/"],
             "nebius"
         )
 
@@ -164,8 +164,8 @@ def fetch_models_from_nebius():
 def fetch_models_from_xai():
     """Fetch models from Xai by filtering Portkey unified catalog"""
     try:
-        # Xai models use "x-ai/" prefix or "grok" pattern
-        filtered_models = _filter_portkey_models_by_patterns(["x-ai/", "grok"], "xai")
+        # Xai models use @xai/ prefix in Portkey
+        filtered_models = _filter_portkey_models_by_patterns(["@xai/"], "xai")
 
         if not filtered_models:
             logger.warning("No Xai models found in Portkey catalog")
@@ -187,9 +187,9 @@ def fetch_models_from_xai():
 def fetch_models_from_novita():
     """Fetch models from Novita by filtering Portkey unified catalog"""
     try:
-        # Novita models include specific model patterns
+        # Novita models use @novita/ prefix in Portkey
         filtered_models = _filter_portkey_models_by_patterns(
-            ["novita", "meta-llama/llama-3.3-70b-instruct"],
+            ["@novita/"],
             "novita"
         )
 
