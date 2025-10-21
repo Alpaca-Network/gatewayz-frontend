@@ -45,29 +45,26 @@ export function WelcomeDialog() {
           <DialogTitle className="text-center text-2xl">
             Welcome to Gatewayz!
           </DialogTitle>
-          <DialogDescription className="text-center space-y-4 pt-4">
-            <p className="text-lg font-semibold text-foreground">
-              ${credits} in credits has been added to your account
-            </p>
-            <p className="text-muted-foreground">
-              Enjoy your 3-day trial and explore all the features Gatewayz has to offer.
-            </p>
-            <div className="pt-2 space-y-2 text-sm text-left">
-              <div className="flex items-start gap-2">
-                <span className="text-primary">✓</span>
-                <span>Access to 300+ AI models</span>
-              </div>
-              <div className="flex items-start gap-2">
-                <span className="text-primary">✓</span>
-                <span>Intelligent model routing</span>
-              </div>
-              <div className="flex items-start gap-2">
-                <span className="text-primary">✓</span>
-                <span>Pay-as-you-go pricing</span>
-              </div>
-            </div>
+          <DialogDescription className="text-center">
+            ${credits} in credits has been added to your account. Enjoy your 3-day trial and explore all the features Gatewayz has to offer.
           </DialogDescription>
         </DialogHeader>
+        <div className="space-y-4 pt-4">
+          <div className="pt-2 space-y-2 text-sm text-left">
+            <div className="flex items-start gap-2">
+              <span className="text-primary">✓</span>
+              <span>Access to 300+ AI models</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="text-primary">✓</span>
+              <span>Intelligent model routing</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="text-primary">✓</span>
+              <span>Pay-as-you-go pricing</span>
+            </div>
+          </div>
+        </div>
         <div className="flex justify-center pt-4">
           <Button onClick={() => setOpen(false)} className="w-full">
             Get Started
