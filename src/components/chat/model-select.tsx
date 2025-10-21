@@ -266,6 +266,82 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
     return models.filter(m => favorites.has(m.value));
   }, [models, favorites]);
 
+  // Categorize models by capability/use case
+  const categorizeModel = (model: ModelOption): string[] => {
+    const categories: string[] = [];
+    const modelName = model.label.toLowerCase();
+    const modelId = model.value.toLowerCase();
+
+    // Reasoning models
+    if (
+      modelId.includes('deepseek-reasoner') ||
+      modelId.includes('deepseek-r1') ||
+      modelId.includes('qwq') ||
+      modelId.includes('o1') ||
+      modelId.includes('o3') ||
+      modelName.includes('reasoning') ||
+      modelName.includes('reasoner')
+    ) {
+      categories.push('Reasoning');
+    }
+
+    // Code generation models
+    if (
+      modelId.includes('code') ||
+      modelId.includes('codestral') ||
+      modelId.includes('codellama') ||
+      modelId.includes('starcoder') ||
+      modelId.includes('deepseek-coder') ||
+      modelId.includes('qwen-coder') ||
+      modelName.includes('code') ||
+      modelName.includes('coder')
+    ) {
+      categories.push('Code Generation');
+    }
+
+    // Multimodal models (from category or modalities in future)
+    if (model.category === 'Multimodal' || modelName.includes('vision') || modelName.includes('multimodal')) {
+      categories.push('Multimodal');
+    }
+
+    // Cost Efficient models (free OR paid under $1/M input tokens)
+    // Note: Price info not available in ModelOption currently, so we'll use category
+    const isFree = model.category === 'Free' || model.category?.toLowerCase().includes('free');
+    if (isFree) {
+      categories.push('Cost Efficient');
+      categories.push('Free');
+    } else if (model.category === 'Paid') {
+      // For now, add paid models to cost efficient if they're from known efficient providers
+      if (modelId.includes('gemini-flash') || modelId.includes('gpt-4o-mini') || modelId.includes('claude-haiku')) {
+        categories.push('Cost Efficient');
+      }
+    }
+
+    return categories;
+  };
+
+  // Group models by category
+  const modelsByCategory = React.useMemo(() => {
+    const categories: Record<string, ModelOption[]> = {
+      'Reasoning': [],
+      'Code Generation': [],
+      'Multimodal': [],
+      'Cost Efficient': [],
+      'Free': [],
+    };
+
+    models.forEach(model => {
+      const modelCategories = categorizeModel(model);
+      modelCategories.forEach(cat => {
+        if (categories[cat]) {
+          categories[cat].push(model);
+        }
+      });
+    });
+
+    return categories;
+  }, [models]);
+
   const toggleDeveloper = (developer: string) => {
     setExpandedDevelopers(prev => {
       const next = new Set(prev);
@@ -310,6 +386,39 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
 
     return filtered;
   }, [modelsByDeveloper, debouncedSearchQuery]);
+
+  // Filter category models based on search
+  const filteredModelsByCategory = React.useMemo(() => {
+    if (!debouncedSearchQuery.trim()) {
+      return modelsByCategory;
+    }
+
+    const query = debouncedSearchQuery.toLowerCase();
+    const filtered: Record<string, ModelOption[]> = {};
+    const categoriesToExpand = new Set<string>();
+
+    Object.entries(modelsByCategory).forEach(([category, catModels]) => {
+      const matchingModels = catModels.filter(model =>
+        model.label.toLowerCase().includes(query) ||
+        model.value.toLowerCase().includes(query) ||
+        category.toLowerCase().includes(query)
+      );
+
+      if (matchingModels.length > 0) {
+        filtered[category] = matchingModels;
+        categoriesToExpand.add(category);
+      }
+    });
+
+    // Auto-expand sections with matches
+    setExpandedDevelopers(prev => {
+      const next = new Set(prev);
+      categoriesToExpand.forEach(cat => next.add(cat));
+      return next;
+    });
+
+    return filtered;
+  }, [modelsByCategory, debouncedSearchQuery]);
 
   // Filter favorite models based on search
   const filteredFavoriteModels = React.useMemo(() => {
@@ -409,7 +518,67 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
               </div>
             )}
 
-            {/* Developer Groups */}
+            {/* Category Groups */}
+            {Object.entries(filteredModelsByCategory).map(([category, catModels]) => {
+              // Skip empty categories
+              if (catModels.length === 0) return null;
+
+              return (
+                <div key={category} className="border-b">
+                  <button
+                    onClick={() => toggleDeveloper(category)}
+                    className="w-full flex items-center gap-2 px-2 py-1.5 text-sm font-semibold hover:bg-muted"
+                  >
+                    {expandedDevelopers.has(category) ? (
+                      <ChevronDown className="h-4 w-4" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4" />
+                    )}
+                    <span>{category} ({catModels.length})</span>
+                  </button>
+                  {expandedDevelopers.has(category) && (
+                    <div className="pb-2">
+                      {catModels.map((model) => (
+                        <CommandItem
+                          key={`${category}-${model.value}`}
+                          value={model.label}
+                          onSelect={(currentValue) => {
+                            const selected = models.find(m => m.label.toLowerCase() === currentValue.toLowerCase());
+                            onSelectModel(selected || null);
+                            setOpen(false);
+                          }}
+                          className="cursor-pointer pl-8 pr-2 group"
+                        >
+                          <Star
+                            className={cn(
+                              "mr-2 h-4 w-4 flex-shrink-0 cursor-pointer transition-colors",
+                              favorites.has(model.value)
+                                ? "fill-yellow-400 text-yellow-400"
+                                : "text-muted-foreground/30 hover:text-yellow-400"
+                            )}
+                            onClick={(e) => toggleFavorite(model.value, e)}
+                          />
+                          <Check
+                            className={cn(
+                              "mr-2 h-4 w-4 flex-shrink-0",
+                              selectedModel?.value === model.value ? "opacity-100" : "opacity-0"
+                            )}
+                          />
+                          <span className="truncate flex-1">{model.label}</span>
+                        </CommandItem>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+            {/* All Models (by Developer) */}
+            <div className="border-b">
+              <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                All Models
+              </div>
+            </div>
             {Object.entries(filteredModelsByDeveloper).map(([developer, devModels]) => (
               <div key={developer} className="border-b last:border-0">
                 <button
