@@ -384,6 +384,10 @@ def detect_provider_from_model_id(model_id: str) -> Optional[str]:
     if "/" in model_id:
         org, model_name = model_id.split("/", 1)
 
+        # OpenRouter models (e.g., "openrouter/auto")
+        if org == "openrouter":
+            return "openrouter"
+
         # DeepSeek models are primarily on Fireworks in this system
         if org == "deepseek-ai" and "deepseek" in model_name.lower():
             return "fireworks"
