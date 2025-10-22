@@ -529,69 +529,69 @@ console.log(completion.choices[0].message);`,
             </h1>
             <p className="text-sm sm:text-base md:text-lg text-center px-4">Make your first call in 30 seconds.</p>
           </div>
-          {/* CTA Buttons */}
-          <div className="flex flex-col sm:flex-row gap-3 justify-center items-center mt-2">
-            <Button
-              size="lg"
-              className="h-14 px-8 text-lg font-semibold bg-black hover:bg-gray-900 text-white w-full sm:w-auto"
-              onClick={() => {
-                posthog.capture('get_started_clicked');
-                setShowPathChooser(true);
-              }}
-            >
-              Get Started
-            </Button>
-            <Link href="/models" className="w-full sm:w-auto">
-              <Button
-                size="lg"
-                variant="outline"
-                className="h-14 px-8 text-lg font-semibold w-full sm:w-auto"
-              >
-                Explore Models
-              </Button>
-            </Link>
-          </div>
+          {/*/!* CTA Buttons *!/*/}
+          {/*<div className="flex flex-col sm:flex-row gap-3 justify-center items-center mt-2">*/}
+          {/*  <Button*/}
+          {/*    size="lg"*/}
+          {/*    className="h-14 px-8 text-lg font-semibold bg-black hover:bg-gray-900 text-white w-full sm:w-auto"*/}
+          {/*    onClick={() => {*/}
+          {/*      posthog.capture('get_started_clicked');*/}
+          {/*      setShowPathChooser(true);*/}
+          {/*    }}*/}
+          {/*  >*/}
+          {/*    Get Started*/}
+          {/*  </Button>*/}
+          {/*  <Link href="/models" className="w-full sm:w-auto">*/}
+          {/*    <Button*/}
+          {/*      size="lg"*/}
+          {/*      variant="outline"*/}
+          {/*      className="h-14 px-8 text-lg font-semibold w-full sm:w-auto"*/}
+          {/*    >*/}
+          {/*      Explore Models*/}
+          {/*    </Button>*/}
+          {/*  </Link>*/}
+          {/*</div>*/}
 
           {/* Start a Message Input Box */}
-          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mt-2">
-            <div className="w-full sm:w-auto sm:min-w-[500px] sm:max-w-2xl">
-              <div className="relative flex items-center bg-background border-2 border-border rounded-lg hover:border-primary/50 focus-within:border-primary transition-colors shadow-sm">
-                <div className="pl-4 text-muted-foreground flex-shrink-0">
-                  <MessageSquare className="w-5 h-5" />
-                </div>
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    if (message.trim()) {
-                      posthog.capture('start_message_sent', { message });
-                      router.push('/chat?message=' + encodeURIComponent(message) + '&autoSend=true');
-                    }
-                  }}
-                  className="flex-1"
-                >
-                  <Input
-                    type="text"
-                    placeholder="Start A Message"
-                    value={message}
-                    onChange={(e) => setMessage(e.target.value)}
-                    className="h-14 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 text-base bg-transparent"
-                  />
-                </form>
-                <Button
-                  onClick={() => {
-                    if (message.trim()) {
-                      posthog.capture('start_message_sent', { message });
-                      router.push('/chat?message=' + encodeURIComponent(message) + '&autoSend=true');
-                    }
-                  }}
-                  disabled={!message.trim()}
-                  className="mr-2 h-12 w-12 flex-shrink-0 rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <Send className="w-5 h-5" />
-                </Button>
-              </div>
-            </div>
-          </div>
+          {/*<div className="flex flex-col sm:flex-row gap-4 justify-center items-center mt-2">*/}
+          {/*  <div className="w-full sm:w-auto sm:min-w-[500px] sm:max-w-2xl">*/}
+          {/*    <div className="relative flex items-center bg-background border-2 border-border rounded-lg hover:border-primary/50 focus-within:border-primary transition-colors shadow-sm">*/}
+          {/*      <div className="pl-4 text-muted-foreground flex-shrink-0">*/}
+          {/*        <MessageSquare className="w-5 h-5" />*/}
+          {/*      </div>*/}
+          {/*      <form*/}
+          {/*        onSubmit={(e) => {*/}
+          {/*          e.preventDefault();*/}
+          {/*          if (message.trim()) {*/}
+          {/*            posthog.capture('start_message_sent', { message });*/}
+          {/*            router.push('/chat?message=' + encodeURIComponent(message) + '&autoSend=true');*/}
+          {/*          }*/}
+          {/*        }}*/}
+          {/*        className="flex-1"*/}
+          {/*      >*/}
+          {/*        <Input*/}
+          {/*          type="text"*/}
+          {/*          placeholder="Start A Message"*/}
+          {/*          value={message}*/}
+          {/*          onChange={(e) => setMessage(e.target.value)}*/}
+          {/*          className="h-14 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 text-base bg-transparent"*/}
+          {/*        />*/}
+          {/*      </form>*/}
+          {/*      <Button*/}
+          {/*        onClick={() => {*/}
+          {/*          if (message.trim()) {*/}
+          {/*            posthog.capture('start_message_sent', { message });*/}
+          {/*            router.push('/chat?message=' + encodeURIComponent(message) + '&autoSend=true');*/}
+          {/*          }*/}
+          {/*        }}*/}
+          {/*        disabled={!message.trim()}*/}
+          {/*        className="mr-2 h-12 w-12 flex-shrink-0 rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"*/}
+          {/*      >*/}
+          {/*        <Send className="w-5 h-5" />*/}
+          {/*      </Button>*/}
+          {/*    </div>*/}
+          {/*  </div>*/}
+          {/*</div>*/}
 
           {/* Path Chooser Modal */}
           <PathChooserModal open={showPathChooser} onOpenChange={setShowPathChooser} />
@@ -709,34 +709,34 @@ console.log(completion.choices[0].message);`,
           </div>
 
           {/* Message Input for Chat Redirect */}
-          <div className="max-w-3xl mx-auto mt-8 px-4">
-            <div className="relative flex gap-2">
-              <Input
-                type="text"
-                placeholder="Try: Explain quantum computing in simple terms..."
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                onKeyPress={handleKeyPress}
-                className="h-14 px-6 text-base bg-background border-2 border-border hover:border-primary/50 focus:border-primary transition-colors"
-              />
-              <Button
-                size="lg"
-                onClick={handleSendMessage}
-                disabled={!message.trim() || activeModelIndex === null}
-                className="h-14 px-8 text-base font-semibold bg-primary hover:bg-primary/90"
-              >
-                Chat
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground text-center mt-2">
-              Select a model above and type a message to start chatting
-            </p>
-          </div>
+          {/*<div className="max-w-3xl mx-auto mt-8 px-4">*/}
+          {/*  <div className="relative flex gap-2">*/}
+          {/*    <Input*/}
+          {/*      type="text"*/}
+          {/*      placeholder="Try: Explain quantum computing in simple terms..."*/}
+          {/*      value={message}*/}
+          {/*      onChange={(e) => setMessage(e.target.value)}*/}
+          {/*      onKeyPress={handleKeyPress}*/}
+          {/*      className="h-14 px-6 text-base bg-background border-2 border-border hover:border-primary/50 focus:border-primary transition-colors"*/}
+          {/*    />*/}
+          {/*    <Button*/}
+          {/*      size="lg"*/}
+          {/*      onClick={handleSendMessage}*/}
+          {/*      disabled={!message.trim() || activeModelIndex === null}*/}
+          {/*      className="h-14 px-8 text-base font-semibold bg-primary hover:bg-primary/90"*/}
+          {/*    >*/}
+          {/*      Chat*/}
+          {/*    </Button>*/}
+          {/*  </div>*/}
+          {/*  <p className="text-xs text-muted-foreground text-center mt-2">*/}
+          {/*    Select a model above and type a message to start chatting*/}
+          {/*  </p>*/}
+          {/*</div>*/}
 
             {/* Connected to 1000+ AI Models - Moved here */}
             <section className="mt-12 px-4">
               <div className="mb-8">
-                <h2 className="text-xl sm:text-2xl font-bold text-center">Connect To 1000+ AI Models</h2>
+                <h2 className="text-xl sm:text-2xl font-bold text-center">Connect To 10000+ AI Models</h2>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-8 md:gap-12 items-center justify-items-center max-w-5xl mx-auto">
                 <Image src="/OpenAI_Logo-black.svg" alt="OpenAI" width={140} height={40} className="w-full max-w-[140px] dark:invert" loading="lazy" />
