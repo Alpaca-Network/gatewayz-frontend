@@ -49,7 +49,7 @@ jobs:
 
     - name: Run tests with pytest
       run: |
-        pytest tests/test_endpoints.py -v --tb=short --color=yes
+        pytest tests/integration/test_endpoints.py -v --tb=short --color=yes
 
     - name: Run all tests with coverage
       run: |
@@ -94,9 +94,9 @@ jobs:
 
     - name: Run critical tests only
       run: |
-        pytest tests/test_endpoints.py::TestChatEndpoints -v --tb=short
-        pytest tests/test_endpoints.py::TestAuthEndpoints -v --tb=short
-        pytest tests/test_endpoints.py::TestPaymentEndpoints -v --tb=short
+        pytest tests/integration/test_endpoints.py::TestChatEndpoints -v --tb=short
+        pytest tests/integration/test_endpoints.py::TestAuthEndpoints -v --tb=short
+        pytest tests/integration/test_endpoints.py::TestPaymentEndpoints -v --tb=short
 
     - name: Notify on failure
       if: failure()
@@ -134,12 +134,12 @@ jobs:
 
     - name: Run endpoint regression tests
       run: |
-        pytest tests/test_endpoint_regression.py -v --tb=short
+        pytest tests/integration/test_endpoint_regression.py -v --tb=short
 
     - name: Test critical chat endpoints
       run: |
-        pytest tests/test_endpoint_regression.py::TestChatCompletionsEndpoints -v --tb=short
-        pytest tests/test_endpoint_regression.py::TestUnifiedResponsesEndpoint -v --tb=short
+        pytest tests/integration/test_endpoint_regression.py::TestChatCompletionsEndpoints -v --tb=short
+        pytest tests/integration/test_endpoint_regression.py::TestUnifiedResponsesEndpoint -v --tb=short
 
     - name: Fail if any endpoint missing
       if: failure()
