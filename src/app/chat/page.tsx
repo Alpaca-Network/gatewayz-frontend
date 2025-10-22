@@ -37,6 +37,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { ModelSelect, type ModelOption } from '@/components/chat/model-select';
+import { FreeModelsBanner } from '@/components/chat/free-models-banner';
 import './chat.css';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
@@ -2329,9 +2330,11 @@ function ChatPageContent() {
   }
 
   return (
-    <div className="flex h-screen max-h-[calc(100dvh-200px)] has-onboarding-banner:max-h-[calc(100dvh-280px)] bg-background overflow-hidden">
-      {/* Left Sidebar */}
-        <div className="hidden lg:flex w-56 xl:w-72 border-r flex-shrink-0 overflow-hidden">
+    <>
+      <FreeModelsBanner />
+      <div className="flex h-screen max-h-[calc(100dvh-200px)] has-onboarding-banner:max-h-[calc(100dvh-280px)] bg-background overflow-hidden">
+        {/* Left Sidebar */}
+          <div className="hidden lg:flex w-56 xl:w-72 border-r flex-shrink-0 overflow-hidden">
           <ChatSidebar
             sessions={sessions}
             activeSessionId={activeSessionId}
@@ -2676,6 +2679,7 @@ function ChatPageContent() {
         </div>
       </main>
     </div>
+    </>
   );
 }
 

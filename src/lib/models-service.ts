@@ -48,7 +48,42 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
     throw new Error('Invalid gateway');
   }
 
-  // Fetch all models - request a very high limit that should cover most gateways
+  // Special handling for 'all' gateway - fetch from both 'all' and 'huggingface'
+  // because backend's 'all' endpoint doesn't include HuggingFace models
+  if (gateway === 'all') {
+    console.log('[Models] Fetching from both "all" and "huggingface" gateways');
+    try {
+      const [allGatewayModels, hfModels] = await Promise.all([
+        fetchModelsFromGateway('all', limit),
+        fetchModelsFromGateway('huggingface', limit)
+      ]);
+
+      // Combine and deduplicate models by ID
+      const combinedModels = [...allGatewayModels, ...hfModels];
+      const uniqueModels = Array.from(
+        new Map(combinedModels.map(m => [m.id, m])).values()
+      );
+
+      console.log(`[Models] Combined ${allGatewayModels.length} from "all" + ${hfModels.length} from "huggingface" = ${uniqueModels.length} unique models`);
+      return { data: uniqueModels };
+    } catch (error) {
+      console.error('[Models] Error fetching from multiple gateways:', error);
+      // Fall through to static fallback
+    }
+  }
+
+  // For specific gateways, use the existing fetch logic
+  const models = await fetchModelsFromGateway(gateway, limit);
+  if (models.length > 0) {
+    return { data: models };
+  }
+
+  // Fallback to static data (only used if API fails)
+  return { data: getStaticFallbackModels(gateway) };
+}
+
+// Helper function to fetch models from a specific gateway
+async function fetchModelsFromGateway(gateway: string, limit?: number): Promise<any[]> {
   const allModels: any[] = [];
   const requestLimit = limit || 50000; // Request up to 50k models per page (backend limit)
   const limitParam = `&limit=${requestLimit}`;
@@ -82,12 +117,15 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
         headers['Authorization'] = `Bearer ${hfApiKey}`;
       }
 
+      // Use longer timeout for 'all' and 'huggingface' gateways (they have many models)
+      const timeoutMs = (gateway === 'all' || gateway === 'huggingface') ? 90000 : 15000;
+
       response = await fetch(url, {
         method: 'GET',
         headers,
         // Cache aggressively for better performance (5 minutes)
         next: { revalidate: 300 }, // Cache for 5 minutes
-        signal: AbortSignal.timeout(30000) // 30 second timeout (increased from 15s to handle large model lists)
+        signal: AbortSignal.timeout(timeoutMs)
       });
 
       if (response.ok) {
@@ -132,7 +170,7 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
             method: 'GET',
             headers: fallbackHeaders,
             next: { revalidate: 300 },
-            signal: AbortSignal.timeout(30000) // 30 second timeout (increased from 15s to handle large model lists)
+            signal: AbortSignal.timeout(timeoutMs)
           });
 
           if (response.ok) {
@@ -186,7 +224,7 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
           method: 'GET',
           headers: fallbackHeaders2,
           next: { revalidate: 300 },
-          signal: AbortSignal.timeout(30000) // 30 second timeout (increased from 15s to handle large model lists)
+          signal: AbortSignal.timeout(timeoutMs)
         });
 
         if (response.ok) {
@@ -221,13 +259,13 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
     }
   }
 
-  // If we got models from pagination, return them
-  if (allModels.length > 0) {
-    console.log(`[Models] Total fetched for gateway ${gateway}: ${allModels.length} models`);
-    return { data: allModels };
-  }
+  // Return fetched models
+  console.log(`[Models] Total fetched for gateway ${gateway}: ${allModels.length} models`);
+  return allModels;
+}
 
-  // Fallback to static data (only used if API fails)
+// Helper function to get static fallback models
+function getStaticFallbackModels(gateway: string): any[] {
   console.warn(`[Models] No models fetched from API for ${gateway}, falling back to static data (${models.length} models)`);
   let transformedModels;
 
@@ -289,7 +327,5 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
     transformedModels = gatewayModels.map(m => transformModel(m, gateway));
   }
 
-  return {
-    data: transformedModels
-  };
+  return transformedModels;
 }
