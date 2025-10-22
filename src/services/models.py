@@ -22,6 +22,7 @@ from src.cache import (
     _xai_models_cache,
     _novita_models_cache,
     _huggingface_models_cache,
+    _aimo_models_cache,
 )
 from fastapi import APIRouter
 from datetime import datetime, timezone
@@ -274,6 +275,14 @@ def get_cached_models(gateway: str = "openrouter"):
 
             return result
 
+        if gateway == "aimo":
+            cache = _aimo_models_cache
+            if cache["data"] and cache["timestamp"]:
+                cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
+                if cache_age < cache["ttl"]:
+                    return cache["data"]
+            return fetch_models_from_aimo()
+
         if gateway == "all":
             openrouter_models = get_cached_models("openrouter") or []
             portkey_models = get_cached_models("portkey") or []
@@ -289,7 +298,8 @@ def get_cached_models(gateway: str = "openrouter"):
             groq_models = get_cached_models("groq") or []
             fireworks_models = get_cached_models("fireworks") or []
             together_models = get_cached_models("together") or []
-            return openrouter_models + portkey_models + featherless_models + deepinfra_models + google_models + cerebras_models + nebius_models + xai_models + novita_models + hug_models + chutes_models + groq_models + fireworks_models + together_models
+            aimo_models = get_cached_models("aimo") or []
+            return openrouter_models + portkey_models + featherless_models + deepinfra_models + google_models + cerebras_models + nebius_models + xai_models + novita_models + hug_models + chutes_models + groq_models + fireworks_models + together_models + aimo_models
 
         # Default to OpenRouter
         if _models_cache["data"] and _models_cache["timestamp"]:
@@ -1087,6 +1097,160 @@ def normalize_together_model(together_model: dict) -> dict:
     }
 
     return enrich_model_with_pricing(normalized, "together")
+
+
+def fetch_models_from_aimo():
+    """Fetch models from AIMO Network API
+
+    Note: AIMO is a decentralized AI marketplace with OpenAI-compatible API.
+    Models are fetched from the marketplace endpoint if available.
+    """
+    try:
+        if not Config.AIMO_API_KEY:
+            logger.error("AIMO API key not configured")
+            return None
+
+        headers = {
+            "Authorization": f"Bearer {Config.AIMO_API_KEY}",
+            "Content-Type": "application/json",
+        }
+
+        # Try to fetch models from AIMO marketplace
+        # Note: Using standard OpenAI-compatible /models endpoint
+        response = httpx.get(
+            "https://devnet.aimo.network/api/v1/models",
+            headers=headers,
+            timeout=20.0,
+        )
+        response.raise_for_status()
+
+        payload = response.json()
+        raw_models = payload.get("data", [])
+
+        if not raw_models:
+            logger.warning("No models returned from AIMO API")
+            return []
+
+        # Normalize models and filter out None values (models without providers)
+        normalized_models = [
+            normalized for model in raw_models
+            if model and (normalized := normalize_aimo_model(model)) is not None
+        ]
+
+        _aimo_models_cache["data"] = normalized_models
+        _aimo_models_cache["timestamp"] = datetime.now(timezone.utc)
+
+        logger.info(f"Fetched {len(normalized_models)} AIMO models")
+        return _aimo_models_cache["data"]
+    except httpx.HTTPStatusError as e:
+        logger.error(f"AIMO HTTP error: {e.response.status_code} - {e.response.text}")
+        return []
+    except Exception as e:
+        logger.error(f"Failed to fetch models from AIMO: {e}")
+        return []
+
+
+def normalize_aimo_model(aimo_model: dict) -> dict:
+    """Normalize AIMO catalog entries to resemble OpenRouter model shape
+
+    AIMO models use format: provider_pubkey:model_name
+    Model data structure:
+    - name: base model name (e.g., "DeepSeek-V3-1")
+    - display_name: human-readable name
+    - providers: list of provider objects with id, name, and pricing
+    """
+    model_name = aimo_model.get("name")
+    if not model_name:
+        logger.warning(f"AIMO model missing 'name' field: {aimo_model}")
+        return None
+
+    # Get provider information (use first provider if multiple)
+    providers = aimo_model.get("providers", [])
+    if not providers:
+        logger.warning(f"AIMO model '{model_name}' has no providers")
+        return None
+
+    # For now, use the first provider
+    provider = providers[0]
+    provider_id = provider.get("id")
+    provider_name = provider.get("name", "unknown")
+
+    # Construct model ID in AIMO format: provider_pubkey:model_name
+    model_id = f"{provider_id}:{model_name}"
+
+    slug = model_id
+    # Extract provider from model ID (format: provider_pubkey:model_name)
+    provider_slug = "aimo"
+    if ":" in model_id:
+        provider_slug = model_id.split(":")[0]
+
+    display_name = aimo_model.get("display_name") or model_name.replace("-", " ").title()
+    base_description = f"AIMO Network decentralized model {model_name} provided by {provider_name}."
+    description = base_description
+
+    context_length = aimo_model.get("context_length", 0)
+
+    # Extract pricing from provider object
+    pricing = {
+        "prompt": None,
+        "completion": None,
+        "request": None,
+        "image": None,
+        "web_search": None,
+        "internal_reasoning": None,
+    }
+
+    # AIMO provider pricing
+    provider_pricing = provider.get("pricing", {})
+    if provider_pricing:
+        prompt_price = provider_pricing.get("prompt")
+        completion_price = provider_pricing.get("completion")
+        # Convert to string if not None
+        pricing["prompt"] = str(prompt_price) if prompt_price is not None else None
+        pricing["completion"] = str(completion_price) if completion_price is not None else None
+
+    # Extract architecture from AIMO model
+    aimo_arch = aimo_model.get("architecture", {})
+    input_modalities = aimo_arch.get("input_modalities", ["text"])
+    output_modalities = aimo_arch.get("output_modalities", ["text"])
+
+    # Determine modality string
+    if input_modalities == ["text"] and output_modalities == ["text"]:
+        modality = "text->text"
+    else:
+        modality = "multimodal"
+
+    architecture = {
+        "modality": modality,
+        "input_modalities": input_modalities,
+        "output_modalities": output_modalities,
+        "tokenizer": None,
+        "instruct_type": None,
+    }
+
+    normalized = {
+        "id": slug,
+        "slug": slug,
+        "canonical_slug": slug,
+        "hugging_face_id": None,
+        "name": display_name,
+        "created": aimo_model.get("created"),
+        "description": description,
+        "context_length": context_length,
+        "architecture": architecture,
+        "pricing": pricing,
+        "top_provider": None,
+        "per_request_limits": None,
+        "supported_parameters": [],
+        "default_parameters": {},
+        "provider_slug": provider_slug,
+        "provider_site_url": "https://aimo.network",
+        "model_logo_url": None,
+        "source_gateway": "aimo",
+        "raw_aimo": aimo_model,
+    }
+
+    return enrich_model_with_pricing(normalized, "aimo")
 
 
 def fetch_specific_model_from_together(provider_name: str, model_name: str):

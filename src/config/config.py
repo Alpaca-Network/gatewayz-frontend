@@ -52,7 +52,10 @@ class Config:
 
     # Groq Configuration
     GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
-    
+
+    # AIMO Configuration
+    AIMO_API_KEY = os.environ.get("AIMO_API_KEY")
+
     # OpenRouter Analytics Cookie (for transaction analytics API)
     OPENROUTER_COOKIE = os.environ.get("OPENROUTER_COOKIE")
     
