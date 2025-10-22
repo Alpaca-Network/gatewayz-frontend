@@ -87,7 +87,7 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
         headers,
         // Cache aggressively for better performance (5 minutes)
         next: { revalidate: 300 }, // Cache for 5 minutes
-        signal: AbortSignal.timeout(15000) // 15 second timeout for faster failures
+        signal: AbortSignal.timeout(30000) // 30 second timeout (increased from 15s to handle large model lists)
       });
 
       if (response.ok) {
@@ -132,7 +132,7 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
             method: 'GET',
             headers: fallbackHeaders,
             next: { revalidate: 300 },
-            signal: AbortSignal.timeout(15000) // 15 second timeout for faster failures
+            signal: AbortSignal.timeout(30000) // 30 second timeout (increased from 15s to handle large model lists)
           });
 
           if (response.ok) {
@@ -161,16 +161,17 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
             hasMore = false;
           }
         } catch (backendError: any) {
-          // Silently fail and use fallback
+          console.error(`[Models] Nested fallback endpoint failed for ${gateway}:`, backendError.message || backendError);
           hasMore = false;
         }
       }
     } catch (backendError: any) {
       // If v1/models fails, try the older /models endpoint
+      console.error(`[Models] v1/models endpoint failed for ${gateway}:`, backendError.message || backendError);
       console.log(`[Models] Trying fallback /models endpoint for ${gateway}`);
       url = `${API_BASE_URL}/models?gateway=${gateway}${fullLimitParam}`;
 
-      try {
+      try{
         const fallbackHeaders2: Record<string, string> = {
           'Content-Type': 'application/json'
         };
@@ -185,7 +186,7 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
           method: 'GET',
           headers: fallbackHeaders2,
           next: { revalidate: 300 },
-          signal: AbortSignal.timeout(15000) // 15 second timeout for faster failures
+          signal: AbortSignal.timeout(30000) // 30 second timeout (increased from 15s to handle large model lists)
         });
 
         if (response.ok) {
@@ -214,7 +215,7 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
           hasMore = false;
         }
       } catch (backendError: any) {
-        // Silently fail and use fallback
+        console.error(`[Models] Fallback endpoint failed for ${gateway}:`, backendError.message || backendError);
         hasMore = false;
       }
     }
@@ -227,6 +228,7 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
   }
 
   // Fallback to static data (only used if API fails)
+  console.warn(`[Models] No models fetched from API for ${gateway}, falling back to static data (${models.length} models)`);
   let transformedModels;
 
   if (gateway === 'all') {
