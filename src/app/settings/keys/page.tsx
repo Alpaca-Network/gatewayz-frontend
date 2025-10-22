@@ -260,7 +260,8 @@ export default function ApiKeysPage() {
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!mounted) return;
