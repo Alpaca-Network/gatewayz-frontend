@@ -4,7 +4,7 @@ import string
 from typing import Optional, Dict, Any, Tuple
 from datetime import datetime, timezone
 
-from src.supabase_config import get_supabase_client
+from src.config.supabase_config import get_supabase_client
 from src.db.credit_transactions import add_credits
 
 logger = logging.getLogger(__name__)

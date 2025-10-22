@@ -70,7 +70,7 @@ class StripeService:
             if user_email.startswith('did:privy:'):
                 logger.warning(f"User {user_id} has Privy DID as email: {user_email}")
                 # Try to get email from Privy linked accounts via Supabase
-                from src.supabase_config import get_supabase_client
+                from src.config.supabase_config import get_supabase_client
                 client = get_supabase_client()
                 user_result = client.table('users').select('privy_user_id').eq('id', user_id).execute()
                 if user_result.data and user_result.data[0].get('privy_user_id'):
@@ -343,7 +343,7 @@ class StripeService:
             # Check for referral bonus (first purchase of $10+)
             try:
                 from src.services.referral import apply_referral_bonus, mark_first_purchase
-                from src.supabase_config import get_supabase_client
+                from src.config.supabase_config import get_supabase_client
 
                 client = get_supabase_client()
                 user_result = client.table('users').select('*').eq('id', user_id).execute()

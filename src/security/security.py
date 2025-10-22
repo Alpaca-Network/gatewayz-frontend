@@ -193,7 +193,7 @@ def validate_api_key_security(
     Raises:
         ValueError: With specific reason for rejection
     """
-    from src.supabase_config import get_supabase_client
+    from src.config.supabase_config import get_supabase_client
     from src.db.users import get_user
 
     client = get_supabase_client()

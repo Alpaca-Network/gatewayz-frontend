@@ -10,7 +10,7 @@ from datetime import datetime
 # Set test environment variables before any imports
 os.environ.setdefault('TESTING', 'true')
 
-from src.supabase_config import get_supabase_client
+from src.config.supabase_config import get_supabase_client
 
 
 @pytest.fixture

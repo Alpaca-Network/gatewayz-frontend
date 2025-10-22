@@ -8,7 +8,7 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime, timezone, timedelta
 from decimal import Decimal
 
-from src.supabase_config import get_supabase_client
+from src.config.supabase_config import get_supabase_client
 
 logger = logging.getLogger(__name__)
 

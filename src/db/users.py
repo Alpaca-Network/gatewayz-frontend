@@ -4,7 +4,7 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime, timedelta, timezone
 
 from src.db.api_keys import create_api_key
-from src.supabase_config import get_supabase_client
+from src.config.supabase_config import get_supabase_client
 import secrets
 
 logger = logging.getLogger(__name__)

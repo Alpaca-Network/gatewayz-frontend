@@ -18,7 +18,7 @@ from src.schemas.notification import (
     LowBalanceAlert, TrialExpiryAlert
 )
 from src.db.plans import get_user_plan
-from src.supabase_config import get_supabase_client
+from src.config.supabase_config import get_supabase_client
 from src.services.trial_validation import validate_trial_access
 
 logger = logging.getLogger(__name__)
