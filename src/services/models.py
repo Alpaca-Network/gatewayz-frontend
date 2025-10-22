@@ -245,13 +245,26 @@ def get_cached_models(gateway: str = "openrouter"):
             if cache["data"] and cache["timestamp"]:
                 cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
                 if cache_age < cache["ttl"]:
-                    cached_ids = {model.get("id", "").lower() for model in cache["data"]}
-                    essential_missing = any(model_id.lower() not in cached_ids for model_id in ESSENTIAL_MODELS)
-                    if not essential_missing:
-                        return cache["data"]
-                    logger.info("Hugging Face cache missing essential models; refetching catalog")
+                    # Validate cache has reasonable number of models (should be 500+, not just 9)
+                    cache_size = len(cache["data"])
+                    if cache_size < 100:
+                        logger.warning(f"⚠️  Hugging Face cache is suspiciously small ({cache_size} models). This might indicate a failed fetch or incomplete data. Refetching...")
+                    else:
+                        cached_ids = {model.get("id", "").lower() for model in cache["data"]}
+                        essential_missing = any(model_id.lower() not in cached_ids for model_id in ESSENTIAL_MODELS)
+                        if not essential_missing:
+                            logger.debug(f"Using cached Hugging Face models ({cache_size} models, age: {cache_age:.0f}s)")
+                            return cache["data"]
+                        logger.info("Hugging Face cache missing essential models; refetching catalog")
 
+            logger.info("Fetching fresh Hugging Face models catalog...")
             result = fetch_models_from_hug()
+
+            # Validate result
+            if result:
+                logger.info(f"✅ Successfully loaded {len(result)} Hugging Face models")
+            else:
+                logger.error("❌ Failed to fetch Hugging Face models - API may be unavailable or rate limited")
 
             # WORKAROUND: Explicitly update cache in case of module import issues
             if result and not cache["data"]:

@@ -87,7 +87,7 @@ def fetch_models_from_huggingface_api(
         # on ESSENTIAL_MODELS to pull in anything critical that falls outside the top results.
         sort_methods = ['likes', 'downloads']
 
-        for sort_method in sort_methods:
+        for sort_method_idx, sort_method in enumerate(sort_methods):
             logger.info(f"Fetching models with sort={sort_method}")
 
             params = {
@@ -113,8 +113,30 @@ def fetch_models_from_huggingface_api(
                 headers["Authorization"] = f"Bearer {Config.HUG_API_KEY}"
                 logger.debug("Using Hugging Face API token for authentication")
 
-            response = httpx.get(url, params=params, headers=headers, timeout=30.0)
-            response.raise_for_status()
+            # Retry logic for failed requests
+            max_retries = 3
+            retry_delay = 1.0  # Start with 1 second delay
+
+            for attempt in range(max_retries):
+                try:
+                    response = httpx.get(url, params=params, headers=headers, timeout=30.0)
+                    response.raise_for_status()
+                    break  # Success, exit retry loop
+                except httpx.HTTPStatusError as e:
+                    if e.response.status_code == 429:  # Rate limited
+                        if attempt < max_retries - 1:
+                            logger.warning(f"Rate limited (429) on sort={sort_method}, attempt {attempt + 1}/{max_retries}. Waiting {retry_delay}s before retry...")
+                            time.sleep(retry_delay)
+                            retry_delay *= 2  # Exponential backoff
+                            continue
+                    raise
+                except Exception as e:
+                    if attempt < max_retries - 1:
+                        logger.warning(f"Error fetching with sort={sort_method}, attempt {attempt + 1}/{max_retries}: {e}. Retrying...")
+                        time.sleep(retry_delay)
+                        retry_delay *= 2
+                        continue
+                    raise
 
             batch_models = response.json()
 
@@ -140,9 +162,12 @@ def fetch_models_from_huggingface_api(
 
             logger.info(f"Sort={sort_method}: {len(batch_models)} returned, {new_models_in_batch} new, {duplicates_in_batch} duplicates, {len(models)} total unique")
 
-            # Add a small delay between different sort requests to avoid rate limiting
-            if not Config.HUG_API_KEY and sort_method != sort_methods[-1]:
-                time.sleep(0.5)  # 500ms delay between requests
+            # Add a delay between different sort requests to avoid rate limiting
+            # Always add delay (required by HF API), but longer if no API key
+            if sort_method_idx < len(sort_methods) - 1:  # Not the last request
+                delay = 1.0 if Config.HUG_API_KEY else 2.0
+                logger.debug(f"Waiting {delay}s before next sort request...")
+                time.sleep(delay)
 
         if not models:
             logger.warning("No Hugging Face models returned from API")
@@ -180,10 +205,21 @@ def fetch_models_from_huggingface_api(
         return normalized_models
 
     except httpx.HTTPStatusError as e:
-        logger.error(f"Hugging Face API HTTP error: {e.response.status_code} - {e.response.text}")
+        error_body = e.response.text[:500] if e.response.text else "No response body"
+        logger.error(f"Hugging Face API HTTP error {e.response.status_code}: {error_body}")
+
+        if e.response.status_code == 401:
+            logger.error("❌ Authentication failed - check your HUG_API_KEY environment variable")
+        elif e.response.status_code == 403:
+            logger.error("❌ Access forbidden - your HF API key may not have the required permissions")
+        elif e.response.status_code == 429:
+            logger.error("❌ Rate limited by Hugging Face API - consider adding HUG_API_KEY or waiting")
+        elif e.response.status_code == 503:
+            logger.error("❌ Hugging Face API is temporarily unavailable")
+
         return None
     except Exception as e:
-        logger.error(f"Failed to fetch models from Hugging Face API: {e}", exc_info=True)
+        logger.error(f"Failed to fetch models from Hugging Face API: {type(e).__name__}: {e}", exc_info=True)
         return None
 
 
