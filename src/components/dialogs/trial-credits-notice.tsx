@@ -65,24 +65,24 @@ export function TrialCreditsNotice() {
             </div>
             <DialogTitle className="text-xl">Welcome to Gatewayz! 🎉</DialogTitle>
           </div>
-          <DialogDescription className="text-base pt-4 space-y-3">
-            <p>
-              You're starting with <strong className="text-amber-600 dark:text-amber-400">{credits} free trial credits</strong> to explore our platform.
-            </p>
-            <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
-              <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
-              <div className="text-sm">
-                <p className="font-semibold text-amber-900 dark:text-amber-100">Important:</p>
-                <p className="text-amber-800 dark:text-amber-200 mt-1">
-                  Trial credits expire <strong>3 days after signup</strong> unless you add $10 or more to your account.
-                </p>
-              </div>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Ready to unlock unlimited access? Add credits to keep using all our powerful AI models without interruption.
-            </p>
+          <DialogDescription className="text-sm text-muted-foreground">
+            You're starting with <strong className="text-amber-600 dark:text-amber-400">{credits} free trial credits</strong> to explore our platform.
           </DialogDescription>
         </DialogHeader>
+        <div className="space-y-3 pt-2">
+          <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
+            <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+            <div className="text-sm">
+              <p className="font-semibold text-amber-900 dark:text-amber-100">Important:</p>
+              <p className="text-amber-800 dark:text-amber-200 mt-1">
+                Trial credits expire <strong>3 days after signup</strong> unless you add $10 or more to your account.
+              </p>
+            </div>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Ready to unlock unlimited access? Add credits to keep using all our powerful AI models without interruption.
+          </p>
+        </div>
         <DialogFooter className="flex-col sm:flex-row gap-2">
           <Button
             type="button"

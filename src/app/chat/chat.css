@@ -50,8 +50,81 @@
     }
 }
 
+/* Mobile-specific styles */
 @media (max-width: 1024px) {
     .chat-sidebar {
         display: none;
+    }
+}
+
+/* Touch-friendly styles */
+.touch-manipulation {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* Mobile scrollbar styles */
+@media (max-width: 640px) {
+    .scrollbar-thin {
+        scrollbar-width: thin;
+        scrollbar-color: hsl(var(--muted)) transparent;
+    }
+    
+    .scrollbar-thin::-webkit-scrollbar {
+        width: 4px;
+    }
+    
+    .scrollbar-thin::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    
+    .scrollbar-thin::-webkit-scrollbar-thumb {
+        background-color: hsl(var(--muted));
+        border-radius: 2px;
+    }
+    
+    .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+        background-color: hsl(var(--muted-foreground));
+    }
+}
+
+/* Mobile message optimization */
+@media (max-width: 640px) {
+    .mobile-message {
+        max-width: 95%;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+    }
+    
+    .mobile-button {
+        min-height: 44px; /* iOS touch target size */
+        min-width: 44px;
+    }
+}
+
+/* Prevent zoom on input focus on iOS */
+@media screen and (max-width: 640px) {
+    input[type="text"],
+    input[type="search"],
+    textarea {
+        font-size: 16px;
+    }
+}
+
+/* Mobile-specific animations */
+@media (max-width: 640px) {
+    .mobile-slide-in {
+        animation: slideInFromLeft 0.3s ease-out;
+    }
+    
+    @keyframes slideInFromLeft {
+        from {
+            transform: translateX(-100%);
+            opacity: 0;
+        }
+        to {
+            transform: translateX(0);
+            opacity: 1;
+        }
     }
 }

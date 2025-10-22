@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Menu } from "lucide-react";
 import Link from "next/link";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { Sheet, SheetContent, SheetTrigger, SheetOverlay, SheetPortal } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTrigger, SheetOverlay, SheetPortal, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { UserNav } from "./user-nav";
 import { SearchBar } from "./search-bar";
 import { Separator } from "@/components/ui/separator";
@@ -169,6 +169,9 @@ export function AppHeader() {
                 </Button>
               </SheetTrigger>
               <SheetContent side="right" className="w-[100dvw] sm:w-[400px] overflow-y-auto top-[65px] h-[calc(100dvh-65px)]" overlayClassName="top-[65px]">
+                <SheetHeader className="sr-only">
+                  <SheetTitle>Mobile Navigation Menu</SheetTitle>
+                </SheetHeader>
                 <div className="flex flex-col py-6">
                   <nav className="flex flex-col gap-4 text-base">
                     <Link
