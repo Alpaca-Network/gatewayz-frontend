@@ -16,7 +16,7 @@ from functools import lru_cache
 import redis
 
 from src.db.rate_limits import update_rate_limit_config, get_rate_limit_config
-from src.redis_config import get_redis_client, is_redis_available
+from src.config.redis_config import get_redis_client, is_redis_available
 from src.services.rate_limiting_fallback import get_fallback_rate_limit_manager
 
 logger = logging.getLogger(__name__)

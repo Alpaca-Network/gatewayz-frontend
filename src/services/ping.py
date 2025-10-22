@@ -10,7 +10,7 @@ from typing import Dict, Any
 from datetime import datetime, timezone
 
 from src.db.ping import increment_ping_count, get_ping_count, get_ping_stats, reset_ping_count
-from src.redis_config import get_redis_config
+from src.config.redis_config import get_redis_config
 
 logger = logging.getLogger(__name__)
 
