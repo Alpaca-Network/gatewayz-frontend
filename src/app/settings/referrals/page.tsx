@@ -20,6 +20,24 @@ interface ReferralTransaction {
   completed_at?: string;
 }
 
+// Flexible referral data type to handle different API response formats
+interface FlexibleReferralData {
+  [key: string]: any;
+}
+
+// Function to normalize referral data from API response
+const normalizeReferralData = (rawData: FlexibleReferralData): ReferralTransaction => {
+  return {
+    id: rawData.id || rawData.ID || 0,
+    referee_id: rawData.referee_id || rawData.refereeId || rawData.user_id || rawData.userId || '',
+    referee_email: rawData.referee_email || rawData.refereeEmail || rawData.email || rawData.user_email || rawData.userEmail || '',
+    status: (rawData.status || rawData.Status || 'pending') as 'pending' | 'completed',
+    reward_amount: Number(rawData.reward_amount || rawData.rewardAmount || rawData.amount || rawData.reward || 0),
+    created_at: rawData.created_at || rawData.createdAt || rawData.date_created || rawData.dateCreated || '',
+    completed_at: rawData.completed_at || rawData.completedAt || rawData.date_completed || rawData.dateCompleted || undefined
+  };
+};
+
 // Stats card component
 const StatCard = ({
   title,
@@ -147,12 +165,22 @@ function ReferralsPageContent() {
         if (statsResponse.ok) {
           const statsData = await statsResponse.json();
           console.log('Referral stats data:', statsData);
+          console.log('Full API response structure:', JSON.stringify(statsData, null, 2));
 
           // Set referrals from stats response
           if (Array.isArray(statsData.referrals)) {
             console.log('Referrals array:', statsData.referrals);
             console.log('First referral:', statsData.referrals[0]);
-            setReferrals(statsData.referrals);
+            if (statsData.referrals.length > 0) {
+              console.log('First referral keys:', Object.keys(statsData.referrals[0]));
+              console.log('First referral values:', Object.values(statsData.referrals[0]));
+              console.log('Normalized first referral:', normalizeReferralData(statsData.referrals[0]));
+            }
+            // Normalize the referral data
+            const normalizedReferrals = statsData.referrals.map(normalizeReferralData);
+            setReferrals(normalizedReferrals);
+          } else {
+            console.log('Referrals is not an array:', typeof statsData.referrals, statsData.referrals);
           }
 
           // Set stats from response
