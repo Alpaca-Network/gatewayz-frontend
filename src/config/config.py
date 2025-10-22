@@ -6,7 +6,13 @@ load_dotenv()
 
 class Config:
     """Configuration class for the application"""
-    
+
+    # Environment Detection
+    APP_ENV = os.environ.get("APP_ENV", "development")  # development, staging, production
+    IS_PRODUCTION = APP_ENV == "production"
+    IS_STAGING = APP_ENV == "staging"
+    IS_DEVELOPMENT = APP_ENV == "development"
+
     # Supabase Configuration
     SUPABASE_URL = os.environ.get("SUPABASE_URL")
     SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
