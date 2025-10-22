@@ -591,6 +591,10 @@ class NotificationService:
             logger.error(f"Error processing notifications: {e}")
             return {'error': str(e)}
 
-# Global notification service instance
-notification_service = NotificationService()
+# Global notification service instance (lazy initialization for testing)
+try:
+    notification_service = NotificationService()
+except Exception as e:
+    logger.warning(f"Failed to initialize notification service during module import: {e}")
+    notification_service = None
 

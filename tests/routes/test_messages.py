@@ -22,7 +22,7 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from src.main import app
-from src.schemas import MessagesRequest, MessageParam
+from src.schemas import MessagesRequest, AnthropicMessage
 from src.services.anthropic_transformer import (
     transform_anthropic_to_openai,
     transform_openai_to_anthropic,

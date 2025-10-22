@@ -1,5 +1,6 @@
 """Test Arch-Router via HuggingFace Router API (not Inference API)"""
 import os
+import pytest
 from dotenv import load_dotenv
 load_dotenv(override=True)
 
@@ -13,7 +14,7 @@ hf_api_key = os.getenv("HUG_API_KEY")
 
 if not hf_api_key:
     print("[ERROR] HUG_API_KEY not set in .env")
-    exit(1)
+    pytest.skip("HUG_API_KEY not set in environment", allow_module_level=True)
 
 # Test with HuggingFace Router endpoint (OpenAI-compatible)
 print("\nTesting Arch-Router via HuggingFace Router...")
