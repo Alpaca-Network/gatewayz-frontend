@@ -122,7 +122,7 @@ export async function* streamChatResponse(
           errorMessage.toLowerCase().includes('insufficient credits') ||
           errorMessage.toLowerCase().includes('upstream rejected')) {
         throw new Error(
-          'Your trial has expired. The backend API is currently blocking all requests, including free models. Please contact support or upgrade your plan.'
+          'Trial credits have been used up. You can still use FREE models! Look for models with the "FREE" badge in the model selector, or add credits to use premium models.'
         );
       }
 
@@ -385,7 +385,7 @@ export async function* streamChatResponse(
               if (errorMessage.toLowerCase().includes('trial has expired') ||
                   errorMessage.toLowerCase().includes('streaming error')) {
                 throw new Error(
-                  'Your trial has expired. The backend API is blocking requests. Please contact support or upgrade your plan.'
+                  'Trial credits have been used up. You can still use FREE models! Look for models with the "FREE" badge in the model selector, or add credits to use premium models.'
                 );
               }
 
