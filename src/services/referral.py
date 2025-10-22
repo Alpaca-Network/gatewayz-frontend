@@ -485,36 +485,54 @@ def get_referral_stats(user_id: int) -> Optional[Dict[str, Any]]:
             referral_code = create_user_referral_code(user_id)
             user['referral_code'] = referral_code
 
-        # Get successful referrals
+        # Get users who signed up with this referral code (from users table)
+        referred_users_result = client.table('users').select('id', 'username', 'email', 'created_at').eq(
+            'referred_by_code', referral_code
+        ).execute()
+
+        referred_users = referred_users_result.data if referred_users_result.data else []
+
+        # Get successful referrals (from referrals table)
         referrals_result = client.table('referrals').select('*').eq(
             'referrer_id', user_id
         ).eq('status', 'completed').execute()
 
-        referrals = referrals_result.data if referrals_result.data else []
+        completed_referrals = referrals_result.data if referrals_result.data else []
 
-        total_uses = len(referrals)
+        # Calculate stats
+        total_uses = len(referred_users)  # Total people who used the code
+        completed_bonuses = len(completed_referrals)  # How many got bonuses
+        total_earned = sum(r.get('bonus_amount', 0) for r in completed_referrals)
         remaining_uses = max(0, MAX_REFERRAL_USES - total_uses)
-        total_earned = sum(r.get('bonus_amount', 0) for r in referrals)
 
         # Get details of referred users
         referral_details = []
-        for ref in referrals:
-            ref_user_result = client.table('users').select('username', 'email').eq(
-                'id', ref['referred_user_id']
-            ).execute()
-
-            ref_user = ref_user_result.data[0] if ref_user_result.data else {}
+        for ref_user in referred_users:
+            # Check if this user got a bonus (completed referral)
+            bonus_info = None
+            for completed_ref in completed_referrals:
+                if completed_ref['referred_user_id'] == ref_user['id']:
+                    bonus_info = {
+                        'bonus_earned': completed_ref.get('bonus_amount', 0),
+                        'bonus_date': completed_ref.get('completed_at', completed_ref.get('created_at'))
+                    }
+                    break
 
             referral_details.append({
-                'user_id': ref['referred_user_id'],
+                'user_id': ref_user['id'],
                 'username': ref_user.get('username', 'Unknown'),
-                'used_at': ref.get('completed_at', ref.get('created_at')),
-                'bonus_earned': ref.get('bonus_amount', 0)
+                'email': ref_user.get('email', 'Unknown'),
+                'signed_up_at': ref_user.get('created_at'),
+                'status': 'completed' if bonus_info else 'pending',
+                'bonus_earned': bonus_info.get('bonus_earned', 0) if bonus_info else 0,
+                'bonus_date': bonus_info.get('bonus_date') if bonus_info else None
             })
 
         return {
             'referral_code': referral_code,
             'total_uses': total_uses,
+            'completed_bonuses': completed_bonuses,
+            'pending_bonuses': total_uses - completed_bonuses,
             'remaining_uses': remaining_uses,
             'max_uses': MAX_REFERRAL_USES,
             'total_earned': float(total_earned),
