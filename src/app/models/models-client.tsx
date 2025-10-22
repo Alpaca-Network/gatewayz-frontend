@@ -67,7 +67,8 @@ const GATEWAY_CONFIG: Record<string, { name: string; color: string; icon?: React
   nebius: { name: 'Nebius', color: 'bg-slate-600' },
   xai: { name: 'xAI', color: 'bg-black' },
   novita: { name: 'Novita', color: 'bg-violet-600' },
-  huggingface: { name: 'Hugging Face', color: 'bg-yellow-600' }
+  huggingface: { name: 'Hugging Face', color: 'bg-yellow-600' },
+  hug: { name: 'Hugging Face', color: 'bg-yellow-600' } // Backend uses 'hug' abbreviation
 };
 
 const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
@@ -83,7 +84,7 @@ const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
                           model.description?.toLowerCase().includes('multi-lingual'));
 
   // Get gateways - support both old and new format
-  const gateways = model.source_gateways || (model.source_gateway ? [model.source_gateway] : []);
+  const gateways = (model.source_gateways && model.source_gateways.length > 0) ? model.source_gateways : (model.source_gateway ? [model.source_gateway] : []);
 
   // Preserve literal slash in URL (e.g., "provider/model-name")
   const modelUrl = model.id.includes('/')
@@ -365,9 +366,11 @@ export default function ModelsClient({ initialModels }: { initialModels: Model[]
       const developerMatch = selectedDevelopers.length === 0 || selectedDevelopers.includes(model.provider_slug);
 
       // Updated gateway matching to support multiple gateways
-      const modelGateways = model.source_gateways || (model.source_gateway ? [model.source_gateway] : []);
+      const modelGateways = (model.source_gateways && model.source_gateways.length > 0) ? model.source_gateways : (model.source_gateway ? [model.source_gateway] : []);
+      // Normalize 'hug' to 'huggingface' for filtering
+      const normalizedModelGateways = modelGateways.map(g => g === 'hug' ? 'huggingface' : g);
       const gatewayMatch = selectedGateways.length === 0 ||
-        selectedGateways.some(g => modelGateways.includes(g));
+        selectedGateways.some(g => normalizedModelGateways.includes(g));
 
       const seriesMatch = selectedModelSeries.length === 0 || selectedModelSeries.includes(getModelSeries(model));
       const pricingMatch = pricingFilter === 'all' || (pricingFilter === 'free' && isFree) || (pricingFilter === 'paid' && !isFree);
@@ -503,9 +506,13 @@ export default function ModelsClient({ initialModels }: { initialModels: Model[]
   const allGatewaysWithCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     deduplicatedModels.forEach(m => {
-      const gateways = m.source_gateways || (m.source_gateway ? [m.source_gateway] : []);
+      const gateways = (m.source_gateways && m.source_gateways.length > 0) ? m.source_gateways : (m.source_gateway ? [m.source_gateway] : []);
       gateways.forEach(gateway => {
-        if (gateway) counts[gateway] = (counts[gateway] || 0) + 1;
+        if (gateway) {
+          // Normalize 'hug' to 'huggingface' for consistent grouping
+          const normalizedGateway = gateway === 'hug' ? 'huggingface' : gateway;
+          counts[normalizedGateway] = (counts[normalizedGateway] || 0) + 1;
+        }
       });
     });
 
