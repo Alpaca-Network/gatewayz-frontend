@@ -73,7 +73,7 @@ const ReferralRow = ({ referral }: { referral: ReferralTransaction }) => {
           )}
         </div>
         <div className="font-medium text-green-600">
-          +${referral.reward_amount.toFixed(2)}
+          +${(referral.reward_amount || 0).toFixed(2)}
         </div>
         <div className="text-right text-muted-foreground">
           {formatDate(referral.completed_at || referral.created_at)}
@@ -145,9 +145,9 @@ function ReferralsPageContent() {
 
           // Set stats from response
           setStats({
-            totalReferrals: statsData.total_uses || 0,
-            completedReferrals: statsData.referrals?.filter((r: any) => r.status === 'completed').length || 0,
-            totalEarned: statsData.total_earned || 0
+            totalReferrals: Number(statsData.total_uses) || 0,
+            completedReferrals: Array.isArray(statsData.referrals) ? statsData.referrals.filter((r: any) => r.status === 'completed').length : 0,
+            totalEarned: Number(statsData.total_earned) || 0
           });
         } else {
           const errorText = await statsResponse.text();
@@ -202,7 +202,7 @@ function ReferralsPageContent() {
         />
         <StatCard
           title="Total Earned"
-          value={loading ? "..." : `$${stats.totalEarned.toFixed(2)}`}
+          value={loading ? "..." : `$${(stats.totalEarned || 0).toFixed(2)}`}
           icon={Gift}
           description="Credits earned from referrals"
         />
