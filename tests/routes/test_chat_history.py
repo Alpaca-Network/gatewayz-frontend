@@ -8,7 +8,7 @@ import sys
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from src.supabase_config import get_supabase_client
+from src.config.supabase_config import get_supabase_client
 
 def test_chat_history_data():
     """Check if chat history data exists in database"""
