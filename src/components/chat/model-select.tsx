@@ -2,7 +2,7 @@
 "use client"
 
 import * as React from "react"
-import { Check, ChevronDown, ChevronRight, ChevronsUpDown, Loader2, Star } from "lucide-react"
+import { Check, ChevronDown, ChevronRight, ChevronsUpDown, Loader2, Star, Sparkles } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -531,6 +531,12 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
                           )}
                         />
                         <span className="truncate flex-1">{model.label}</span>
+                        {model.category === 'Free' && (
+                          <span className="ml-2 text-xs font-semibold text-green-600 dark:text-green-400 flex items-center gap-1">
+                            <Sparkles className="h-3 w-3" />
+                            FREE
+                          </span>
+                        )}
                       </CommandItem>
                     ))}
                   </div>
@@ -585,6 +591,12 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
                             )}
                           />
                           <span className="truncate flex-1">{model.label}</span>
+                          {model.category === 'Free' && (
+                            <span className="ml-2 text-xs font-semibold text-green-600 dark:text-green-400 flex items-center gap-1">
+                              <Sparkles className="h-3 w-3" />
+                              FREE
+                            </span>
+                          )}
                         </CommandItem>
                       ))}
                     </div>
@@ -641,6 +653,12 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
                           )}
                         />
                         <span className="truncate flex-1">{model.label}</span>
+                        {model.category === 'Free' && (
+                          <span className="ml-2 text-xs font-semibold text-green-600 dark:text-green-400 flex items-center gap-1">
+                            <Sparkles className="h-3 w-3" />
+                            FREE
+                          </span>
+                        )}
                       </CommandItem>
                     ))}
                   </div>
