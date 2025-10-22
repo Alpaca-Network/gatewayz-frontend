@@ -54,26 +54,35 @@ def create_app() -> FastAPI:
     # Must specify exact origins for security
 
     # Environment-aware CORS origins
+    # Always include beta.gatewayz.ai for frontend access
+    base_origins = [
+        "https://beta.gatewayz.ai",
+        "https://staging.gatewayz.ai",
+    ]
+    
     if Config.IS_PRODUCTION:
         allowed_origins = [
             "https://gatewayz.ai",
             "https://www.gatewayz.ai",
-        ]
+        ] + base_origins
     elif Config.IS_STAGING:
         allowed_origins = [
-            "https://staging.gatewayz.ai",
-            "https://beta.gatewayz.ai",
             "http://localhost:3000",  # For testing against staging
             "http://localhost:3001",
-        ]
+        ] + base_origins
     else:  # development
         allowed_origins = [
             "http://localhost:3000",
             "http://localhost:3001",
             "http://127.0.0.1:3000",
             "http://127.0.0.1:3001",
-        ]
+        ] + base_origins
 
+    # Log CORS configuration for debugging
+    logger.info(f"🌐 CORS Configuration:")
+    logger.info(f"   Environment: {Config.APP_ENV}")
+    logger.info(f"   Allowed Origins: {allowed_origins}")
+    
     app.add_middleware(
         CORSMiddleware,
         allow_origins=allowed_origins,
