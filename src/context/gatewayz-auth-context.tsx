@@ -13,7 +13,6 @@ import {
   type AuthResponse,
   type UserData,
 } from "@/lib/api";
-import { API_BASE_URL } from "@/lib/config";
 import { usePrivy, type User, type LinkedAccountWithMetadata } from "@privy-io/react-auth";
 
 type AuthStatus = "idle" | "unauthenticated" | "authenticating" | "authenticated" | "error";
@@ -173,7 +172,7 @@ export function GatewayzAuthProvider({ children, onAuthError }: GatewayzAuthProv
 
         upgradeAttemptedRef.current = true;
 
-        const response = await fetch(`${API_BASE_URL}/user/api-keys`, {
+        const response = await fetch("/api/user/api-keys", {
           method: "GET",
           headers: {
             Authorization: `Bearer ${currentKey}`,
@@ -369,7 +368,7 @@ export function GatewayzAuthProvider({ children, onAuthError }: GatewayzAuthProv
         const authBody = buildAuthRequestBody(user, token, userData);
         console.log("Sending auth body to backend:", authBody);
 
-        const response = await fetch(`${API_BASE_URL}/auth`, {
+        const response = await fetch("/api/auth", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
