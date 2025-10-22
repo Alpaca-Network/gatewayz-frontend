@@ -1,198 +1,179 @@
 # Gatewayz Backend Test Suite
 
-Comprehensive test suite for the Gatewayz API Gateway backend to ensure all endpoints are functional and working correctly.
+Comprehensive test coverage for the Gatewayz API Gateway platform.
 
-## Test Structure
+---
 
-### ⭐ `test_endpoint_regression.py` (NEW - CRITICAL)
-**Regression tests to prevent breaking changes**. This is the most important test file - it ensures all critical endpoints continue working when new code is added:
-- **Health & Status**: `/health`, `/ping`, root endpoint
-- **Chat Completions**: `/v1/chat/completions` (legacy API)
-- **Unified Responses**: `/v1/responses` (new unified API)
-- **Streaming**: Both streaming endpoints
-- **Authentication**: User balance, profile, monitoring
-- **API Keys**: Create, list, delete keys
-- **Payments**: Stripe checkout, webhooks, payment history
-- **Chat History**: Session management
-- **Admin**: User management, credit operations
-- **Catalog**: Model and provider listings
-- **Ranking**: Model and app rankings
+## 📁 Test Organization
 
-### `test_endpoints.py`
-General endpoint tests covering:
-- **Health Endpoints**: `/health`, `/ping`, root endpoint
-- **Authentication**: `/auth`, `/user/balance`, user profile
-- **Chat Completions**: `/v1/chat/completions` (most critical)
-- **User Management**: credit transactions, profile, monitoring
-- **Payments**: Stripe checkout, webhooks, payment history
-- **Rankings**: Models and apps rankings
-- **API Keys**: Creation, listing, management
-- **Admin**: User management, credit operations
-- **Catalog**: Model and provider catalogs
-- **Chat History**: Session management
-
-### `test_app.py`
-Legacy tests for basic functionality (maintained for compatibility)
-
-## Quick Start
-
-```bash
-# Run regression tests (most important)
-pytest tests/test_endpoint_regression.py -v
-
-# Or use the test runner script
-python run_regression_tests.py
+```
+tests/
+├── conftest.py                  # Global pytest fixtures
+├── README.md                    # This file
+│
+├── db/                          # Database Layer (12 files)
+├── routes/                      # API Routes (14 files)
+├── services/                    # Service Layer (13 files)
+├── security/                    # Security (2 files)
+├── integration/                 # Integration Tests (21 files)
+└── smoke/                       # Smoke Tests (2 files)
 ```
 
-## Running Tests
+### Database Layer Tests (`tests/db/`)
+- `test_activity.py` - Activity logging
+- `test_api_keys.py` - API key CRUD
+- `test_chat_history.py` - Chat storage
+- `test_coupons.py` - Coupon system (60+ tests) ✨
+- `test_credit_transactions.py` - Credit ledger
+- `test_payments.py` - Payment records
+- `test_plans.py` - Subscription plans
+- `test_rate_limits.py` - Rate limits
+- `test_roles.py` - RBAC
+- `test_trials.py` - Trial management (40+ tests) ✨
+- `test_users.py` - User management
 
-### Regression Tests (RECOMMENDED)
-```bash
-# All regression tests
-pytest tests/test_endpoint_regression.py -v
+### API Route Tests (`tests/routes/`)
+- `test_activity.py` - Activity endpoints
+- `test_analytics.py` - Analytics
+- `test_api_keys.py` - **API key mgmt (40+ tests, 941 lines)** ✨
+- `test_audit.py` - Audit logs
+- `test_auth.py` - **Authentication (55+ tests, 1078 lines)** ✨
+- `test_chat.py` - Chat completions
+- `test_chat_history.py` - Chat history
+- `test_images.py` - Image generation
+- `test_messages.py` - Messages API
+- `test_payments.py` - **Stripe payments (30+ tests, 630 lines)** ✨
+- `test_responses.py` - Response handling
+- `test_roles.py` - Role management
+- `test_system.py` - System & cache
+- `test_transaction_analytics.py` - TX analytics
+- `test_users.py` - **User endpoints (40+ tests, 1026 lines)** ✨
 
-# Only critical endpoints (chat, auth, payments)
-python run_regression_tests.py --critical
+---
 
-# Only chat endpoints
-python run_regression_tests.py --chat
-
-# With coverage
-python run_regression_tests.py --coverage
-```
+## 🚀 Quick Start
 
 ### Run All Tests
 ```bash
-pytest tests/ -v
+pytest tests/
 ```
 
-### Run Specific Test File
+### Run by Category
 ```bash
-pytest tests/test_endpoints.py -v
-pytest tests/test_endpoint_regression.py -v
-```
-
-### Run Specific Test Class
-```bash
-pytest tests/test_endpoints.py::TestChatEndpoints -v
-```
-
-### Run Specific Test
-```bash
-pytest tests/test_endpoints.py::TestChatEndpoints::test_chat_completions_endpoint_exists -v
-```
-
-### Run Critical Tests Only
-```bash
-# Run only chat endpoint tests
-pytest tests/test_endpoints.py::TestChatEndpoints -v
-
-# Run auth tests
-pytest tests/test_endpoints.py::TestAuthEndpoints -v
-
-# Run payment tests
-pytest tests/test_endpoints.py::TestPaymentEndpoints -v
+pytest tests/db/           # Database tests
+pytest tests/routes/       # Route tests
+pytest tests/services/     # Service tests
+pytest tests/integration/  # Integration tests
 ```
 
 ### Run with Coverage
 ```bash
-pytest tests/ --cov=src --cov-report=html
+pytest tests/ --cov=src --cov-report=html --cov-report=term
 ```
 
-View coverage report at `htmlcov/index.html`
-
-### Run with Markers
+### Run Specific File
 ```bash
-# Run only critical tests
-pytest tests/ -m critical -v
-
-# Run only integration tests
-pytest tests/ -m integration -v
-
-# Skip slow tests
-pytest tests/ -m "not slow" -v
+pytest tests/routes/test_auth.py -v
 ```
 
-## Environment Setup
+---
 
-Tests require these environment variables (automatically set in CI/CD):
-```bash
-export SUPABASE_URL=https://test.supabase.co
-export SUPABASE_KEY=test-key
-export OPENROUTER_API_KEY=test-openrouter-key
-export ENCRYPTION_KEY=test-encryption-key-32-bytes-long!
-```
+## 📊 Test Coverage Status
 
-## Test Philosophy
+| Category | Files | Tests | Lines | Status |
+|----------|-------|-------|-------|--------|
+| Phase 1 (Critical) | 6 | ~155 | ~2,500 | ✅ Complete |
+| Phase 2 (High Priority) | 10 | ~280 | ~5,200 | ✅ Complete |
+| Phase 3A (Routes) | 4 | ~165 | ~3,675 | ✅ Complete |
+| Phase 3 (DB) | 2 | ~100 | ~900 | ✅ Complete |
+| **TOTAL** | **22** | **~700** | **~12,275** | **36% Complete** |
 
-1. **Endpoint Existence**: Every test ensures the endpoint exists (no 404)
-2. **Authentication**: Tests verify auth requirements are enforced
-3. **Mock External Services**: OpenRouter, Stripe, and database calls are mocked
-4. **Fast Execution**: Tests run quickly without real API calls
-5. **Comprehensive Coverage**: All critical user flows are tested
+**Target**: 90% coverage across all modules
 
-## Adding New Tests
+---
 
-When adding a new endpoint:
+## 🧪 Test Patterns
 
-1. Add a test in the appropriate test class
-2. Mock all external dependencies
-3. Test both success and failure cases
-4. Verify authentication requirements
-5. Run tests locally before committing
-
-Example:
+### Fixtures
 ```python
-@patch('src.db.users.get_user')
-def test_new_endpoint(self, mock_get_user, client, mock_user):
-    """Test GET /new-endpoint exists"""
-    mock_get_user.return_value = mock_user
-
-    response = client.get(
-        "/new-endpoint",
-        headers={"Authorization": f"Bearer {mock_user['api_key']}"}
-    )
-
-    assert response.status_code in [200, 401, 500]
+@pytest.fixture
+def mock_user():
+    return {'id': '1', 'username': 'test', 'credits': 100.0}
 ```
 
-## CI/CD Integration
-
-Tests run automatically on:
-- Every push to `main` or `develop`
-- Every pull request
-- Manual workflow dispatch
-
-See `.github/workflows/test.yml` for CI/CD configuration.
-
-## Troubleshooting
-
-### Import Errors
-```bash
-# Ensure you're in the project root
-cd /path/to/gatewayz-backend
-
-# Install test dependencies
-pip install pytest pytest-cov pytest-asyncio httpx
+### Supabase Mocking
+```python
+@pytest.fixture
+def mock_supabase_client():
+    client = Mock()
+    table_mock = Mock()
+    table_mock.select.return_value = table_mock
+    table_mock.eq.return_value = table_mock
+    table_mock.execute.return_value = Mock(data=[])
+    client.table.return_value = table_mock
+    return client, table_mock
 ```
 
-### Database Errors
-Tests use mocks, so database connection errors mean mocking isn't working correctly. Check that all database functions are properly patched with `@patch`.
+---
 
-### Async Errors
-Some tests may require `pytest-asyncio`. Install it:
-```bash
-pip install pytest-asyncio
+## 📝 Writing Tests
+
+### Location Guide
+- `tests/db/` - Database CRUD
+- `tests/routes/` - API endpoints
+- `tests/services/` - Business logic
+- `tests/integration/` - Multi-component
+- `tests/security/` - Security features
+
+### Test Structure
+```python
+class TestFeature:
+    """Test specific feature"""
+    
+    def test_success_case(self):
+        """Test successful operation"""
+        pass
+    
+    def test_error_case(self):
+        """Test error handling"""
+        pass
 ```
 
-## Test Maintenance
+---
 
-- Run tests before every commit
-- Update tests when endpoints change
-- Keep mocks in sync with actual implementations
-- Add tests for every new feature
-- Remove tests for deprecated endpoints
+## 🏆 Best Practices
 
-## Contact
+✅ Independent tests (no dependencies)
+✅ Clear, descriptive names
+✅ Test success, errors, and edge cases
+✅ Mock external services
+✅ Reuse fixtures
+✅ Fast execution
+✅ Clear docstrings
 
-For questions about tests, see the main project README or open an issue.
+---
+
+## 📚 Documentation
+
+- **Coverage Plan**: `docs/PHASE_3_COVERAGE_PLAN.md`
+- **Progress Update**: `docs/PHASE_3_PROGRESS_UPDATE.md`
+- **Reorganization**: `docs/TEST_FOLDER_REORGANIZATION.md`
+
+---
+
+## 🎯 Next Steps
+
+**Phase 3B** (High Priority):
+- [ ] `routes/admin.py` (~35 tests)
+- [ ] `routes/coupons.py` (~25 tests)
+- [ ] `routes/plans.py` (~20 tests)
+
+**Phase 3C** (Services):
+- [ ] `services/trial_service.py` (~30 tests)
+- [ ] `services/statsig_service.py` (~20 tests)
+- [ ] `services/posthog_service.py` (~20 tests)
+
+---
+
+**Last Updated**: January 2025  
+**Total Tests**: ~700 methods across 58 files
