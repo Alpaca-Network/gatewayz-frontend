@@ -32,12 +32,28 @@ __pycache__
 # md files
 *.md
 !docs/**/*.md
+!README.md
 
+# Temp and output files
+temp*.json
+response.json
+*.csv
+*.log
+gateway_test_results_*.json
+production_test_results_*.json
+model_format_validation_results.json
+models_export_*.csv
+
+# OS files
+.DS_Store
+*.swp
+*.swo
+*~
 
 # bat files
-
-
-
+*.bat
+*.sh
+!start.sh
 
 server.log
 nul
