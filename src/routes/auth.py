@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, BackgroundTasks
 
 from src.schemas import PrivyAuthResponse, PrivyAuthRequest, AuthMethod, UserRegistrationResponse, \
     UserRegistrationRequest, SubscriptionStatus
-from src.supabase_config import get_supabase_client
+from src.config.supabase_config import get_supabase_client
 from src.db.users import get_user_by_privy_id, create_enhanced_user
 from src.db.activity import log_activity
 

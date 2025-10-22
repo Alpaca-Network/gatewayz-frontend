@@ -7,7 +7,7 @@ Implements secure key storage, audit logging, and advanced security features.
 import logging
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timedelta
-from src.supabase_config import get_supabase_client
+from src.config.supabase_config import get_supabase_client
 from src.security.security import get_security_manager, get_audit_logger, generate_secure_api_key, hash_api_key, \
     validate_ip_allowlist, validate_domain_referrers
 

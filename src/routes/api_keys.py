@@ -15,7 +15,7 @@ from src.schemas import CreateApiKeyRequest, UpdateApiKeyRequest, UpdateApiKeyRe
     DeleteApiKeyRequest
 from src.security.deps import get_api_key
 
-from src.supabase_config import get_supabase_client
+from src.config.supabase_config import get_supabase_client
 
 # Initialize logging
 logging.basicConfig(level=logging.ERROR)

@@ -2,7 +2,7 @@ import logging
 import datetime
 from typing import Dict, Any
 from datetime import datetime, timezone
-from src.supabase_config import get_supabase_client
+from src.config.supabase_config import get_supabase_client
 
 logger = logging.getLogger(__name__)
 
