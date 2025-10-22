@@ -151,7 +151,8 @@ const TransactionRow = ({ transaction }: { transaction: Transaction }) => {
 
   return (
     <div className="px-4 py-3 hover:bg-muted/50">
-      <div className="grid grid-cols-5 gap-4 items-center text-sm">
+      {/* Desktop view - 5 columns */}
+      <div className="hidden md:grid md:grid-cols-5 gap-4 items-center text-sm">
         <div className="font-medium">
           {getTransactionType(transaction.transaction_type)}
           {transaction.description && (
@@ -174,6 +175,27 @@ const TransactionRow = ({ transaction }: { transaction: Transaction }) => {
           >
             <MoreHorizontal className="h-4 w-4" />
           </Button>
+        </div>
+      </div>
+
+      {/* Mobile view - stacked layout */}
+      <div className="md:hidden space-y-2 text-sm">
+        <div className="flex items-start justify-between gap-2">
+          <div className="font-medium flex-1 min-w-0">
+            {getTransactionType(transaction.transaction_type)}
+            {transaction.description && (
+              <div className="text-xs text-muted-foreground mt-0.5 truncate">{transaction.description}</div>
+            )}
+          </div>
+          <div className={`font-semibold flex-shrink-0 ${transaction.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+            {transaction.amount >= 0 ? '+' : ''}${Math.abs(transaction.amount).toFixed(2)}
+          </div>
+        </div>
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <span>{formatDate(transaction.created_at)}</span>
+          <span>
+            Balance: {transaction.balance !== undefined ? `$${transaction.balance.toFixed(2)}` : '-'}
+          </span>
         </div>
       </div>
     </div>
@@ -362,14 +384,14 @@ function CreditsPageContent() {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 sm:space-y-8 px-4 sm:px-0">
       {/* Emoji explosion animation */}
       {showEmojiExplosion && (
         <EmojiExplosion onComplete={() => setShowEmojiExplosion(false)} />
       )}
 
-      <div className="flex justify-center ">
-        <h1 className="text-3xl font-bold">Credits</h1>
+      <div className="flex justify-center">
+        <h1 className="text-2xl sm:text-3xl font-bold">Credits</h1>
         {/* <Button variant="ghost" size="icon" className="text-muted-foreground">
           <RefreshCw className="h-5 w-5" />
         </Button> */}
@@ -400,26 +422,24 @@ function CreditsPageContent() {
       )}
 
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-semibold mr-16">Available Balance</h2>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 mr-16">
-              <Card
-                className="w-96 h-14 text-xl md:text-2xl font-semibold bg-muted/50 border-border px-12"
-              >
-                <CardContent className="py-[13px] flex items-center justify-center">
-                  {loadingCredits ? (
-                    <span className="text-xl md:text-2xl font-bold text-muted-foreground">Loading...</span>
-                  ) : credits !== null ? (
-                    <span className="text-xl md:text-2xl font-bold">${credits.toFixed(2)}</span>
-                  ) : (
-                    <span className="text-xl md:text-2xl font-bold text-muted-foreground">$0.00</span>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <h2 className="text-xl sm:text-2xl font-semibold">Available Balance</h2>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
+            <Card
+              className="w-full sm:w-auto sm:min-w-[240px] h-14 text-xl md:text-2xl font-semibold bg-muted/50 border-border px-4 sm:px-8"
+            >
+              <CardContent className="py-[13px] flex items-center justify-center">
+                {loadingCredits ? (
+                  <span className="text-xl md:text-2xl font-bold text-muted-foreground">Loading...</span>
+                ) : credits !== null ? (
+                  <span className="text-xl md:text-2xl font-bold">${credits.toFixed(2)}</span>
+                ) : (
+                  <span className="text-xl md:text-2xl font-bold text-muted-foreground">$0.00</span>
+                )}
+              </CardContent>
+            </Card>
             <Button
-              className="bg-black text-white h-12 px-20"
+              className="bg-black text-white h-12 px-6 sm:px-12 w-full sm:w-auto"
               onClick={handleBuyCredits}
               disabled={isLoading || loadingCredits}
             >
@@ -546,12 +566,17 @@ function CreditsPageContent() {
       <div className="space-y-4">
         <div className="border border-border overflow-hidden border-x-0">
           <div className="bg-muted/50 px-4 py-3 border-b border-border">
-            <div className="grid grid-cols-5 gap-4 text-sm font-medium">
+            {/* Desktop header - 5 columns */}
+            <div className="hidden md:grid md:grid-cols-5 gap-4 text-sm font-medium">
               <div>Recent Transactions</div>
               <div>Amount</div>
               <div>Date</div>
               <div className="text-right">Balance After</div>
               <div></div>
+            </div>
+            {/* Mobile header - simple heading */}
+            <div className="md:hidden text-sm font-medium">
+              Recent Transactions
             </div>
           </div>
           <div className="divide-y divide-gray-200">

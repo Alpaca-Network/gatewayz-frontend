@@ -9,7 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Info, ChevronDown, Copy, Trash2, Eye, EyeOff } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { getApiKey, makeAuthenticatedRequest } from "@/lib/api";
 import { API_BASE_URL } from "@/lib/config";
 import { useToast } from "@/hooks/use-toast";
@@ -184,7 +184,7 @@ export default function ApiKeysPage() {
     setMounted(true);
   }, []);
 
-  const fetchApiKeys = async () => {
+  const fetchApiKeys = useCallback(async () => {
     // Check if user is authenticated first
     const apiKey = getApiKey();
     if (!apiKey) {
@@ -243,7 +243,7 @@ export default function ApiKeysPage() {
           variant: "default",
         });
       } else {
-        const errorData = await response.json();
+        const errorData = await response.json().catch(() => ({}));
         toast({
           title: "Error",
           description: errorData.detail || "Failed to fetch API keys",
@@ -260,7 +260,8 @@ export default function ApiKeysPage() {
     } finally {
       setLoading(false);
     }
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!mounted) return;
@@ -270,7 +271,7 @@ export default function ApiKeysPage() {
     let timeout: NodeJS.Timeout | null = null;
 
     // Check for API key periodically until authentication completes
-    const checkAndFetch = () => {
+    const checkAndFetch = async () => {
       if (hasStartedFetch) return;
 
       const apiKey = getApiKey();
@@ -278,7 +279,9 @@ export default function ApiKeysPage() {
         hasStartedFetch = true;
         if (interval) clearInterval(interval);
         if (timeout) clearTimeout(timeout);
-        fetchApiKeys();
+
+        // Fetch API keys
+        await fetchApiKeys();
       }
     };
 
@@ -299,7 +302,7 @@ export default function ApiKeysPage() {
       if (interval) clearInterval(interval);
       if (timeout) clearTimeout(timeout);
     };
-  }, [mounted]);
+  }, [mounted, fetchApiKeys]);
 
   const handleCreateKey = async () => {
     if (!keyName.trim()) {
