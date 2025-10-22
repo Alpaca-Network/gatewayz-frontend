@@ -3,8 +3,6 @@ import httpx
 import time
 import base64
 from typing import Dict, Any
-from google.cloud import aiplatform
-from google.cloud.aiplatform.gapic.schema import predict
 
 from src.config import Config
 
@@ -179,6 +177,15 @@ def make_google_vertex_image_request(
         Dict containing generated images in OpenAI-compatible format
     """
     try:
+        # Import Google Cloud AI Platform SDK
+        try:
+            from google.cloud import aiplatform
+        except ImportError:
+            raise ImportError(
+                "google-cloud-aiplatform package is required for Google Vertex AI integration. "
+                "Install it with: pip install google-cloud-aiplatform"
+            )
+
         # Use config values if not provided
         project_id = project_id or Config.GOOGLE_PROJECT_ID
         location = location or Config.GOOGLE_VERTEX_LOCATION
