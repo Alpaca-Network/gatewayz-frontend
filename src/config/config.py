@@ -57,9 +57,9 @@ class Config:
     AIMO_API_KEY = os.environ.get("AIMO_API_KEY")
 
     # Google Vertex AI Configuration
-    GOOGLE_PROJECT_ID = os.environ.get("GOOGLE_PROJECT_ID", "963491462685")
+    GOOGLE_PROJECT_ID = os.environ.get("GOOGLE_PROJECT_ID", "gatewayz-468519")
     GOOGLE_VERTEX_LOCATION = os.environ.get("GOOGLE_VERTEX_LOCATION", "us-central1")
-    GOOGLE_VERTEX_ENDPOINT_ID = os.environ.get("GOOGLE_VERTEX_ENDPOINT_ID", "1724873159724761088")
+    GOOGLE_VERTEX_ENDPOINT_ID = os.environ.get("GOOGLE_VERTEX_ENDPOINT_ID", "6072619212881264640")
     GOOGLE_APPLICATION_CREDENTIALS = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
 
     # OpenRouter Analytics Cookie (for transaction analytics API)

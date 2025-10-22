@@ -61,9 +61,9 @@ async def generate_images(req: ImageGenerationRequest, api_key: str = Depends(ge
         "size": "512x512",
         "n": 1,
         "provider": "google-vertex",
-        "google_project_id": "963491462685",
+        "google_project_id": "gatewayz-468519",
         "google_location": "us-central1",
-        "google_endpoint_id": "1724873159724761088"
+        "google_endpoint_id": "6072619212881264640"
     }
     ```
     """

@@ -49,9 +49,9 @@ def test_google_vertex_image_generation():
         "size": "512x512",  # Stable Diffusion 1.5 typically uses 512x512
         "n": 1,
         "provider": "google-vertex",
-        "google_project_id": "963491462685",  # Your Google Cloud project ID
+        "google_project_id": "gatewayz-468519",  # Your Google Cloud project ID
         "google_location": "us-central1",  # Your endpoint location
-        "google_endpoint_id": "1724873159724761088"  # Your endpoint ID
+        "google_endpoint_id": "6072619212881264640"  # Your endpoint ID
     }
 
     print("Sending request to Google Vertex AI endpoint...")
@@ -122,9 +122,9 @@ def test_with_custom_parameters():
         "size": "512x512",
         "n": 2,  # Generate 2 images
         "provider": "google-vertex",
-        "google_project_id": "963491462685",
+        "google_project_id": "gatewayz-468519",
         "google_location": "us-central1",
-        "google_endpoint_id": "1724873159724761088",
+        "google_endpoint_id": "6072619212881264640",
         # Additional Stability Diffusion parameters (if supported by your deployment)
         "num_inference_steps": 50,
         "guidance_scale": 7.5,
