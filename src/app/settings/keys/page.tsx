@@ -11,7 +11,6 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useState, useEffect, useCallback } from "react";
 import { getApiKey, makeAuthenticatedRequest } from "@/lib/api";
-import { API_BASE_URL } from "@/lib/config";
 import { useToast } from "@/hooks/use-toast";
 import { usePrivy } from "@privy-io/react-auth";
 
@@ -197,7 +196,7 @@ export default function ApiKeysPage() {
       setLoading(true);
       setAuthenticating(false);
       const response = await makeAuthenticatedRequest(
-        `${API_BASE_URL}/user/api-keys`,
+        `/api/user/api-keys`,
         { method: 'GET' }
       );
 
@@ -328,7 +327,7 @@ export default function ApiKeysPage() {
       };
 
       const response = await makeAuthenticatedRequest(
-        `${API_BASE_URL}/user/api-keys`,
+        `/api/user/api-keys`,
         {
           method: 'POST',
           body: JSON.stringify(requestBody),
@@ -385,7 +384,7 @@ export default function ApiKeysPage() {
   const handleDeleteKey = async (keyId: number) => {
     try {
       const response = await makeAuthenticatedRequest(
-        `${API_BASE_URL}/user/api-keys/${keyId}`,
+        `/api/user/api-keys/${keyId}`,
         {
           method: 'DELETE',
           body: JSON.stringify({ confirmation: "DELETE" }),
