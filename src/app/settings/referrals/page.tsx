@@ -46,8 +46,18 @@ const StatCard = ({
 
 // Referral row component
 const ReferralRow = ({ referral }: { referral: ReferralTransaction }) => {
+  // Add safety checks for referral data
+  if (!referral) {
+    return (
+      <div className="px-4 py-3 hover:bg-muted/50">
+        <div className="text-sm text-muted-foreground">Invalid referral data</div>
+      </div>
+    );
+  }
   const formatDate = (dateString: string) => {
+    if (!dateString) return 'N/A';
     const date = new Date(dateString);
+    if (isNaN(date.getTime())) return 'Invalid Date';
     return date.toLocaleDateString('en-US', {
       year: 'numeric',
       month: '2-digit',
@@ -58,9 +68,9 @@ const ReferralRow = ({ referral }: { referral: ReferralTransaction }) => {
   return (
     <div className="px-4 py-3 hover:bg-muted/50">
       <div className="grid grid-cols-4 gap-4 items-center text-sm">
-        <div className="font-medium truncate">{referral.referee_email}</div>
+        <div className="font-medium truncate">{referral.referee_email || 'N/A'}</div>
         <div className="flex items-center gap-2">
-          {referral.status === 'completed' ? (
+          {(referral.status || 'pending') === 'completed' ? (
             <>
               <CheckCircle className="h-4 w-4 text-green-600" />
               <span className="text-green-600">Completed</span>
@@ -140,6 +150,8 @@ function ReferralsPageContent() {
 
           // Set referrals from stats response
           if (Array.isArray(statsData.referrals)) {
+            console.log('Referrals array:', statsData.referrals);
+            console.log('First referral:', statsData.referrals[0]);
             setReferrals(statsData.referrals);
           }
 
