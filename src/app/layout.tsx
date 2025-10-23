@@ -80,7 +80,7 @@ export default function RootLayout({
             {/* <GTMLoader /> Temporarily disabled due to layout router issues */}
             <AppHeader />
             <OnboardingBanner />
-            <main className="flex-1">
+            <main className="flex-1 flex flex-col overflow-hidden">
               {children}
             </main>
             <Toaster />
