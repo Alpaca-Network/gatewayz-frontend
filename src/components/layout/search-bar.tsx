@@ -141,17 +141,17 @@ export function SearchBar() {
 
     return (
         <Popover open={open} onOpenChange={setOpen}>
-            <div className="relative w-full max-w-sm">
+            <div className="relative w-full">
                 <Input
                     type="search"
                     placeholder="Search Models..."
-                    className="pl-3 pr-4 h-[45px]"
+                    className="pl-3 pr-10 h-[45px] w-full"
                     onFocus={() => setOpen(true)}
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                 />
                 {/* <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /> */}
-                <img src="/material-symbols_search.svg" alt="Search" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" style={{ width: "24px", height: "24px" }} />
+                <img src="/material-symbols_search.svg" alt="Search" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" style={{ width: "24px", height: "24px" }} />
                 {/* <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground border rounded-sm px-1.5 py-0.5">/</div> */}
                 <PopoverTrigger asChild>
                     <div className="absolute inset-0 pointer-events-none" />
