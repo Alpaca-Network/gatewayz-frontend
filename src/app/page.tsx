@@ -477,7 +477,7 @@ console.log(completion.choices[0].message);`,
   }, []);
 
   return (
-    <div className="bg-background text-foreground overflow-x-hidden">
+    <div className="bg-background text-foreground w-full overflow-x-hidden">
       {/* Claude Code Integration Banner - Hidden on mobile to save space */}
       <div className="bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-md overflow-hidden hidden md:block">
         <div className="w-full px-3 sm:px-4 md:px-6 lg:px-8 py-2 sm:py-4">
@@ -511,25 +511,26 @@ console.log(completion.choices[0].message);`,
         </div>
       </div>
 
-      <main className="container mx-auto px-4 sm:px-6 lg:px-8 " style={{position: 'relative'}}>
-        {/* Hero Section */}
-        <Image
-          src="/logo_transparent.svg"
-          alt="Background logo"
-          width={768}
-          height={768}
-          priority
-          className="absolute top-8 left-1/2 transform -translate-x-1/2 w-[200px] h-[200px] sm:w-[300px] sm:h-[300px] md:w-[450px] md:h-[450px] lg:w-[640px] lg:h-[640px] xl:w-[768px] xl:h-[768px] pointer-events-none opacity-30 sm:opacity-50 md:opacity-100"
-          style={{ zIndex: 0 }}
-        />
+      <main className="w-full overflow-x-hidden">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8" style={{position: 'relative'}}>
+          {/* Hero Section */}
+          <Image
+            src="/logo_transparent.svg"
+            alt="Background logo"
+            width={768}
+            height={768}
+            priority
+            className="absolute top-8 left-1/2 transform -translate-x-1/2 w-[200px] h-[200px] sm:w-[300px] sm:h-[300px] md:w-[450px] md:h-[450px] lg:w-[640px] lg:h-[640px] xl:w-[768px] xl:h-[768px] pointer-events-none opacity-30 sm:opacity-50 md:opacity-100"
+            style={{ zIndex: 0 }}
+          />
 
-        <section className="grid md:grid-cols-1 gap-2 md:gap-4 items-center py-4 md:py-8 mb-2 md:mb-8 max-w-5xl mx-auto px-4 md:px-4 relative" style={{ zIndex: 1 }}>
-          <div className="space-y-2 md:space-y-4 px-0 md:px-4">
-            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tighter text-center leading-tight" style={{  fontFamily: 'Inter, sans-serif',}}>
-              Ship with any AI model.<br />One API key.
-            </h1>
-            <p className="text-base sm:text-lg md:text-xl text-center px-2 md:px-4">Make your first call in 30 seconds.</p>
-          </div>
+          <section className="grid md:grid-cols-1 gap-2 md:gap-4 items-center py-4 md:py-8 mb-2 md:mb-8 max-w-5xl mx-auto relative" style={{ zIndex: 1 }}>
+            <div className="space-y-2 md:space-y-4 w-full">
+              <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tighter text-center leading-tight px-2" style={{  fontFamily: 'Inter, sans-serif',}}>
+                Ship with any AI model.<br className="hidden sm:block" /><span className="sm:hidden"> </span>One API key.
+              </h1>
+              <p className="text-base sm:text-lg md:text-xl text-center px-4">Make your first call in 30 seconds.</p>
+            </div>
 
           {/* Mobile: Chat button above the fold */}
           <div className="flex md:hidden justify-center mt-4">
@@ -710,28 +711,30 @@ console.log(completion.choices[0].message);`,
             </div>
           </div>
 
-          <div className="overflow-hidden relative mt-4 sm:mt-6 -mx-4 sm:mx-0">
-            <div
-              ref={carouselRef}
-              className="flex pb-2 relative z-10 gap-2 px-4 sm:px-0"
-              style={{
-                transform: `translateX(${carouselOffset}px)`,
-                transition: 'transform 700ms cubic-bezier(0.4, 0, 0.2, 1)'
-              }}
-            >
-                {displayModels.map((model, i) => {
-                  const modelIndex = i % featuredModels.length;
-                  const isFirstSet = i < featuredModels.length;
-                  return (
-                    <FeaturedModelCard
-                      key={i}
-                      model={model}
-                      isNew={model.name.includes('GPT-5')}
-                      isActive={isFirstSet && modelIndex === activeModelIndex}
-                      onClick={() => handleModelClick(modelIndex)}
-                    />
-                  );
-                })}
+          <div className="w-full overflow-hidden relative mt-4 sm:mt-6">
+            <div className="w-full overflow-hidden relative -mx-4 sm:mx-0">
+              <div
+                ref={carouselRef}
+                className="flex pb-2 relative z-10 gap-2 px-4 sm:px-0"
+                style={{
+                  transform: `translateX(${carouselOffset}px)`,
+                  transition: 'transform 700ms cubic-bezier(0.4, 0, 0.2, 1)'
+                }}
+              >
+                  {displayModels.map((model, i) => {
+                    const modelIndex = i % featuredModels.length;
+                    const isFirstSet = i < featuredModels.length;
+                    return (
+                      <FeaturedModelCard
+                        key={i}
+                        model={model}
+                        isNew={model.name.includes('GPT-5')}
+                        isActive={isFirstSet && modelIndex === activeModelIndex}
+                        onClick={() => handleModelClick(modelIndex)}
+                      />
+                    );
+                  })}
+              </div>
             </div>
           </div>
 
@@ -761,51 +764,53 @@ console.log(completion.choices[0].message);`,
           {/*</div>*/}
 
             {/* Connected to 1000+ AI Models - Moved here */}
-            <section className="mt-8 sm:mt-12 px-2 sm:px-4">
+            <div className="mt-8 sm:mt-12 w-full">
               <div className="mb-4 sm:mb-6 md:mb-8">
                 <h2 className="text-lg sm:text-xl md:text-2xl font-bold text-center">Connect To 10000+ AI Models</h2>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 sm:gap-6 md:gap-8 lg:gap-12 items-center justify-items-center max-w-5xl mx-auto px-2">
-                <div className="flex items-center justify-center w-full">
-                  <Image src="/OpenAI_Logo-black.svg" alt="OpenAI" width={140} height={40} className="w-auto h-8 sm:h-10 md:h-12 max-w-[90px] sm:max-w-[110px] md:max-w-[140px] dark:invert object-contain" loading="lazy" />
+              <div className="w-full overflow-hidden px-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 sm:gap-6 md:gap-8 lg:gap-12 items-center justify-items-center max-w-5xl mx-auto">
+                  <div className="flex items-center justify-center w-full">
+                    <Image src="/OpenAI_Logo-black.svg" alt="OpenAI" width={140} height={40} className="w-auto h-8 sm:h-10 md:h-12 max-w-[90px] sm:max-w-[110px] md:max-w-[140px] dark:invert object-contain" loading="lazy" />
+                  </div>
+                  <div className="flex items-center justify-center w-full">
+                    <Image src="https://upload.wikimedia.org/wikipedia/commons/7/78/Anthropic_logo.svg" alt="Anthropic" width={140} height={40} className="w-auto h-8 sm:h-10 md:h-12 max-w-[90px] sm:max-w-[110px] md:max-w-[140px] dark:invert object-contain" loading="lazy" />
+                  </div>
+                  <div className="flex items-center justify-center w-full">
+                    <Image src="/Google_Logo-black.svg" alt="Google" width={140} height={40} className="w-auto h-8 sm:h-10 md:h-12 max-w-[90px] sm:max-w-[110px] md:max-w-[140px] dark:invert object-contain" loading="lazy" />
+                  </div>
+                  <div className="flex items-center justify-center w-full">
+                    <Image src="/DeepSeek_Logo-black.svg" alt="DeepSeek" width={140} height={40} className="w-auto h-8 sm:h-10 md:h-12 max-w-[90px] sm:max-w-[110px] md:max-w-[140px] dark:invert object-contain" loading="lazy" />
+                  </div>
+                  <div className="flex items-center justify-center w-full col-span-2 sm:col-span-1">
+                    <Image src="/Meta_Logo-black.svg" alt="Meta" width={140} height={40} className="w-auto h-8 sm:h-10 md:h-12 max-w-[90px] sm:max-w-[110px] md:max-w-[140px] dark:invert object-contain" loading="lazy" />
+                  </div>
                 </div>
-                <div className="flex items-center justify-center w-full">
-                  <Image src="https://upload.wikimedia.org/wikipedia/commons/7/78/Anthropic_logo.svg" alt="Anthropic" width={140} height={40} className="w-auto h-8 sm:h-10 md:h-12 max-w-[90px] sm:max-w-[110px] md:max-w-[140px] dark:invert object-contain" loading="lazy" />
-                </div>
-                <div className="flex items-center justify-center w-full">
-                  <Image src="/Google_Logo-black.svg" alt="Google" width={140} height={40} className="w-auto h-8 sm:h-10 md:h-12 max-w-[90px] sm:max-w-[110px] md:max-w-[140px] dark:invert object-contain" loading="lazy" />
-                </div>
-                <div className="flex items-center justify-center w-full">
-                  <Image src="/DeepSeek_Logo-black.svg" alt="DeepSeek" width={140} height={40} className="w-auto h-8 sm:h-10 md:h-12 max-w-[90px] sm:max-w-[110px] md:max-w-[140px] dark:invert object-contain" loading="lazy" />
-                </div>
-                <div className="flex items-center justify-center w-full col-span-2 sm:col-span-1">
-                  <Image src="/Meta_Logo-black.svg" alt="Meta" width={140} height={40} className="w-auto h-8 sm:h-10 md:h-12 max-w-[90px] sm:max-w-[110px] md:max-w-[140px] dark:invert object-contain" loading="lazy" />
-                </div>
-              </div>
-            </section>
-
-            <div className="rounded-lg border bg-card text-card-foreground shadow-sm z-10 mt-8 sm:mt-10 md:mt-12 mx-2">
-              <div className="px-4 sm:px-6 py-3 sm:py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-3">
-                <div className="font-bold tracking-tight text-base sm:text-lg">Top Models This Month</div>
-              <Link href="/rankings" className="w-full sm:w-auto">
-                <Button variant="link" className="text-sm w-full sm:w-auto justify-start sm:justify-center p-0">View Trending
-                  <span>
-                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M2.66671 8H13.3334M13.3334 8L9.33337 12M13.3334 8L9.33337 4" stroke="black" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  </span>
-                </Button>
-              </Link>
               </div>
             </div>
-        </section>
 
-        {/* How It Works Section */}
-        <section className="my-12 sm:my-16 md:my-24 px-2 sm:px-4">
-          <div className="mb-6 sm:mb-8">
-            <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-center">Getting Started Is As Easy As 123...</h2>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 md:gap-8 lg:gap-12">
+            <div className="rounded-lg border bg-card text-card-foreground shadow-sm z-10 mt-8 sm:mt-10 md:mt-12">
+              <div className="px-4 sm:px-6 py-3 sm:py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-3">
+                <div className="font-bold tracking-tight text-base sm:text-lg">Top Models This Month</div>
+                <Link href="/rankings" className="w-full sm:w-auto">
+                  <Button variant="link" className="text-sm w-full sm:w-auto justify-start sm:justify-center p-0">View Trending
+                    <span>
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M2.66671 8H13.3334M13.3334 8L9.33337 12M13.3334 8L9.33337 4" stroke="black" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    </span>
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          </section>
+
+          {/* How It Works Section */}
+          <div className="my-12 sm:my-16 md:my-24 w-full">
+            <div className="mb-6 sm:mb-8">
+              <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-center px-2">Getting Started Is As Easy As 123...</h2>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 md:gap-8 lg:gap-12">
             <div className="p-3 sm:p-4 bg-card border rounded-lg min-h-[140px] sm:h-40 grid grid-cols-7 shadow-sm">
               <div className="flex items-center justify-center col-span-2" >
                 <img src="/sign-up-blue.svg" alt="Signup icon" width="100" height="100" className="w-16 h-16 sm:w-20 sm:h-20 md:w-full md:h-full" loading="lazy" />
@@ -837,10 +842,9 @@ console.log(completion.choices[0].message);`,
               </div>
             </div>
           </div>
-        </section>
 
-        {/* Integrations Section */}
-        <section className="my-12 sm:my-16 md:my-24 pt-12 sm:pt-16 md:pt-24 px-2 sm:px-4">
+          {/* Integrations Section */}
+          <div className="my-12 sm:my-16 md:my-24 pt-12 sm:pt-16 md:pt-24 w-full">
           <div className="mb-6 sm:mb-8 flex flex-col items-center justify-center">
             <div className="w-full flex flex-col md:flex-row items-center gap-3 sm:gap-4">
               <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-center md:text-left flex-1">Integration Only Takes A Minute</h2>
@@ -997,14 +1001,14 @@ console.log(completion.choices[0].message);`,
                animation: led-shimmer 4s ease-in-out infinite;
              }
            `}</style>
-        </section>
-
-        {/* Features Section */}
-        <section className="my-12 sm:my-16 md:my-24 pt-8 sm:pt-12 px-2 sm:px-4">
-          <div className="mb-6 sm:mb-8 items-center justify-center">
-            <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-center flex-1">What Makes Gatewayz Stand Out?</h2>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 md:gap-8">
+
+          {/* Features Section */}
+          <div className="my-12 sm:my-16 md:my-24 pt-8 sm:pt-12 w-full">
+            <div className="mb-6 sm:mb-8 items-center justify-center">
+              <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-center flex-1 px-2">What Makes Gatewayz Stand Out?</h2>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 md:gap-8">
             <FeatureCard icon="mynaui_api-solid" title="One API For Any Model" description={
                 <>
                   Access all Major Models Through A Single, Unified Interface.
@@ -1032,11 +1036,11 @@ console.log(completion.choices[0].message);`,
                   Ensure Prompts Only Go To The Models And Providers You Trust.
                 </>
             } linkText="View docs" linkHref="#" />
+            </div>
           </div>
-        </section>
 
-        {/* Explore & Announcements */}
-        <section className="grid md:grid-cols-1 gap-6 sm:gap-8 md:gap-12 my-12 sm:my-16 md:my-24 pt-8 sm:pt-12 px-2 sm:px-4">
+          {/* Explore & Announcements */}
+          <div className="w-full my-12 sm:my-16 md:my-24 pt-8 sm:pt-12">
             <div className="space-y-4 sm:space-y-6 md:space-y-8">
                 <div className="p-4 sm:p-6 border rounded-lg bg-card">
                     <h2 className="text-xl sm:text-2xl md:text-3xl font-bold mb-2">Explore Models</h2>
@@ -1065,8 +1069,8 @@ console.log(completion.choices[0].message);`,
                     <AnnouncementCard title="Presets: How To Seamlessly Transfer Model Configurations Across Apps" description="Customize once and use everywhere. Server-side presets now simplify your model workflows." date="7/29/2025" />
                  </div>
             </div> */}
-        </section>
-
+          </div>
+        </div>
       </main>
 
       {/* Footer */}
