@@ -206,10 +206,8 @@ export default function DevelopersPage() {
           'groq',
           'deepinfra',
           // New Portkey SDK providers
-          'google',
           'cerebras',
           'nebius',
-          'xai',
           'novita',
           'huggingface'
         ];
@@ -268,13 +266,21 @@ export default function DevelopersPage() {
                     'google': 'Google',
                     'qwen': 'Qwen',
                     'x-ai': 'xAI',
+                    'xai': 'xAI',
                     'meta-llama': 'Meta',
                     'deepseek': 'DeepSeek',
                     'mistralai': 'Mistral AI',
                     'meta': 'Meta',
                     'cohere': 'Cohere',
                     'amazon': 'Amazon',
-                    'microsoft': 'Microsoft'
+                    'microsoft': 'Microsoft',
+                    'arcee-ai': 'Arcee AI',
+                    'bytedance': 'ByteDance',
+                    'cognitivecomputations': 'Cognitive Computations',
+                    'nousresearch': 'Nous Research',
+                    'thudm': 'THUDM',
+                    'tngtech': 'TNG Technology',
+                    'z-ai': 'Z.AI'
                 };
                 return formatted[author.toLowerCase()] || author.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
             };
