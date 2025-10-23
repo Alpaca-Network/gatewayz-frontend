@@ -87,11 +87,22 @@ const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
   // Get gateways - support both old and new format
   const gateways = (model.source_gateways && model.source_gateways.length > 0) ? model.source_gateways : (model.source_gateway ? [model.source_gateway] : []);
 
-  // Preserve literal slash in URL (e.g., "provider/model-name")
-  // But encode special characters like colons (for AIMO models: "providerId:model-name")
-  const modelUrl = model.id.includes('/') && !model.id.includes(':')
-    ? `/models/${model.id}`
-    : `/models/${encodeURIComponent(model.id)}`;
+  // Generate clean URLs:
+  // - For AIMO models (providerId:model-name), extract just the model name after the colon
+  // - For regular models with slashes (provider/model-name), keep the slash
+  // - Otherwise, use the full ID
+  let modelUrl: string;
+  if (model.id.includes(':')) {
+    // AIMO model - extract model name after the colon
+    const modelName = model.id.split(':')[1] || model.id;
+    modelUrl = `/models/${encodeURIComponent(modelName)}`;
+  } else if (model.id.includes('/')) {
+    // Regular provider/model format - preserve the slash
+    modelUrl = `/models/${model.id}`;
+  } else {
+    // Single-part ID - encode it
+    modelUrl = `/models/${encodeURIComponent(model.id)}`;
+  }
 
   return (
     <Link href={modelUrl} className="h-full block">

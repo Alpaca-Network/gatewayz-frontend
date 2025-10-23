@@ -198,7 +198,15 @@ export default function ModelProfilePage() {
 
         // Load static data immediately for instant page render (only if found)
         const staticModelsTransformed = staticModels.map(transformStaticModel);
-        const staticFoundModel = staticModelsTransformed.find((m: Model) => m.id === modelId);
+        let staticFoundModel = staticModelsTransformed.find((m: Model) => m.id === modelId);
+
+        // If not found by full ID, try matching by name (for AIMO models)
+        if (!staticFoundModel) {
+            staticFoundModel = staticModelsTransformed.find((m: Model) => {
+                const modelNamePart = m.id.includes(':') ? m.id.split(':')[1] : m.id;
+                return modelNamePart === modelId || m.id.split('/').pop() === modelId;
+            });
+        }
 
         if (staticFoundModel && mounted) {
             setModel(staticFoundModel);
@@ -221,7 +229,16 @@ export default function ModelProfilePage() {
                             models = data;
                             if (mounted) {
                                 setAllModels(models);
-                                const foundModel = models.find((m: Model) => m.id === modelId);
+                                let foundModel = models.find((m: Model) => m.id === modelId);
+
+                                // If not found by full ID, try matching by name (for AIMO models)
+                                if (!foundModel) {
+                                    foundModel = models.find((m: Model) => {
+                                        const modelNamePart = m.id.includes(':') ? m.id.split(':')[1] : m.id;
+                                        return modelNamePart === modelId || m.id.split('/').pop() === modelId;
+                                    });
+                                }
+
                                 if (foundModel) {
                                     setModel(foundModel);
                                     setLoading(false);
@@ -378,7 +395,18 @@ export default function ModelProfilePage() {
 
                 if (mounted) {
                     setAllModels(models);
-                    const foundModel = models.find((m: Model) => m.id === modelId);
+                    // Find model by ID or by name (for AIMO models where URL uses just the model name)
+                    let foundModel = models.find((m: Model) => m.id === modelId);
+
+                    // If not found by full ID, try matching by the part after the colon (for AIMO models)
+                    if (!foundModel) {
+                        foundModel = models.find((m: Model) => {
+                            // For AIMO models (providerId:model-name), extract the model name
+                            const modelNamePart = m.id.includes(':') ? m.id.split(':')[1] : m.id;
+                            return modelNamePart === modelId || m.id.split('/').pop() === modelId;
+                        });
+                    }
+
                     // Update if found, or set to null if not found (after API fetch completes)
                     if (foundModel) {
                         setModel(foundModel);
@@ -398,12 +426,23 @@ export default function ModelProfilePage() {
                         const found = data.some((m: Model) => {
                             // Check exact match (case-insensitive)
                             if (m.id.toLowerCase() === modelIdLower) return true;
+
+                            // For AIMO models, check if the model name part matches
+                            const modelNamePart = m.id.includes(':') ? m.id.split(':')[1].toLowerCase() : m.id.toLowerCase();
+                            if (modelNamePart === modelIdLower) return true;
+
                             // Check if IDs match after normalization (handle different separators)
                             const normalizedModelId = modelIdLower.replace(/[_\-\/]/g, '');
                             const normalizedDataId = m.id.toLowerCase().replace(/[_\-\/]/g, '');
                             if (normalizedModelId === normalizedDataId) return true;
+
                             // Check if the model name matches (as a fallback)
                             if (m.name && m.name.toLowerCase() === model?.name?.toLowerCase()) return true;
+
+                            // Check if the last part of the ID matches (for provider/model format)
+                            const lastPart = m.id.split('/').pop()?.toLowerCase();
+                            if (lastPart === modelIdLower) return true;
+
                             return false;
                         });
                         if (found) {
