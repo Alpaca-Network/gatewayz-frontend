@@ -66,6 +66,7 @@ type Message = {
     reasoning?: string;
     image?: string; // Base64 image data
     isStreaming?: boolean; // Track if message is currently streaming
+    model?: string; // Model ID that generated this message
 };
 
 type ChatSession = {
@@ -231,7 +232,8 @@ const apiHelpers = {
                 role: msg.role,
                 content: msg.content,
                 reasoning: undefined,
-                image: undefined
+                image: undefined,
+                model: msg.model
             })) || [];
         } catch (error) {
             console.error(`Failed to load messages for session ${sessionId}:`, error);
@@ -909,6 +911,28 @@ function ChatPageContent() {
     const chatContainerRef = useRef<HTMLDivElement>(null);
     const messageInputRef = useRef<HTMLInputElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // Helper function to get display name for a model ID
+    const getModelDisplayName = (modelId?: string): string => {
+        if (!modelId) return selectedModel?.label || 'Unknown Model';
+
+        // If it's the current model, return its label
+        if (modelId === selectedModel?.value) {
+            return selectedModel.label;
+        }
+
+        // Try to extract a readable name from the model ID
+        // Format is typically "provider/model-name" (e.g., "openai/gpt-4")
+        const parts = modelId.split('/');
+        if (parts.length > 1) {
+            // Return the model name part, capitalizing first letter
+            const modelName = parts[1];
+            return modelName.charAt(0).toUpperCase() + modelName.slice(1);
+        }
+
+        // Fallback to the full model ID
+        return modelId;
+    };
 
     useEffect(() => {
         userHasTypedRef.current = userHasTyped;
@@ -1794,7 +1818,8 @@ function ChatPageContent() {
                 role: 'assistant',
                 content: '',
                 reasoning: '',
-                isStreaming: true
+                isStreaming: true,
+                model: selectedModel.value
             };
 
             // Add streaming message to UI
@@ -2234,6 +2259,7 @@ function ChatPageContent() {
                             messages: [...updatedMessages, {
                                 role: 'assistant' as const,
                                 content: 'Sorry, there was an error processing your request. Please try again.',
+                                model: selectedModel.value
                             }],
                             updatedAt: new Date()
                         };
@@ -2483,7 +2509,7 @@ function ChatPageContent() {
               {messages.filter(msg => msg && msg.role).map((msg, index) => {
                 // Show thinking loader for streaming messages with no content
                 if (msg.role === 'assistant' && msg.isStreaming && !msg.content) {
-                  return <ThinkingLoader key={index} modelName={selectedModel?.label} />;
+                  return <ThinkingLoader key={index} modelName={getModelDisplayName(msg.model)} />;
                 }
 
                 return (
@@ -2510,7 +2536,7 @@ function ChatPageContent() {
                       ) : (
                         <div className="rounded-lg p-3 bg-muted/30 dark:bg-muted/20 border border-border max-w-2xl w-full">
                           <div className="flex items-center justify-between mb-2">
-                            {selectedModel?.label && <p className="text-xs font-semibold text-muted-foreground">{selectedModel.label}</p>}
+                            <p className="text-xs font-semibold text-muted-foreground">{getModelDisplayName(msg.model)}</p>
                           </div>
                           <div className="text-sm prose prose-sm max-w-none dark:prose-invert">
                             <ReactMarkdown
