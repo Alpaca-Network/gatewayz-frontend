@@ -477,7 +477,7 @@ console.log(completion.choices[0].message);`,
   }, []);
 
   return (
-    <div className="bg-background text-foreground">
+    <div className="bg-background text-foreground overflow-x-hidden">
       {/* Claude Code Integration Banner - Hidden on mobile to save space */}
       <div className="bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-md overflow-hidden hidden md:block">
         <div className="w-full px-3 sm:px-4 md:px-6 lg:px-8 py-2 sm:py-4">
@@ -550,13 +550,14 @@ console.log(completion.choices[0].message);`,
 
           {/* Three Path Cards - Mobile carousel (visible on small screens) */}
           <div className="mt-3 md:hidden">
-            <div className="relative overflow-hidden -mx-4">
+            <div className="relative overflow-hidden">
                 <div
                   ref={pathCarouselRef}
                   className="flex gap-3 px-4 overflow-x-auto snap-x snap-mandatory scrollbar-hide pb-2"
                   style={{
                     scrollbarWidth: 'none',
                     msOverflowStyle: 'none',
+                    WebkitOverflowScrolling: 'touch',
                   }}
                 >
                   {/* API Path Card */}
@@ -709,10 +710,10 @@ console.log(completion.choices[0].message);`,
             </div>
           </div>
 
-          <div className="overflow-hidden relative -mx-2 sm:-mx-4 mt-4 sm:mt-6">
+          <div className="overflow-hidden relative mt-4 sm:mt-6 -mx-4 sm:mx-0">
             <div
               ref={carouselRef}
-              className="flex pb-2 relative z-10 gap-2 px-2 sm:px-0"
+              className="flex pb-2 relative z-10 gap-2 px-4 sm:px-0"
               style={{
                 transform: `translateX(${carouselOffset}px)`,
                 transition: 'transform 700ms cubic-bezier(0.4, 0, 0.2, 1)'
@@ -764,12 +765,22 @@ console.log(completion.choices[0].message);`,
               <div className="mb-4 sm:mb-6 md:mb-8">
                 <h2 className="text-lg sm:text-xl md:text-2xl font-bold text-center">Connect To 10000+ AI Models</h2>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 sm:gap-6 md:gap-8 lg:gap-12 items-center justify-items-center max-w-5xl mx-auto">
-                <Image src="/OpenAI_Logo-black.svg" alt="OpenAI" width={140} height={40} className="w-full max-w-[100px] sm:max-w-[120px] md:max-w-[140px] dark:invert" loading="lazy" />
-                <Image src="https://upload.wikimedia.org/wikipedia/commons/7/78/Anthropic_logo.svg" alt="Anthropic" width={140} height={40} className="w-full max-w-[100px] sm:max-w-[120px] md:max-w-[140px] dark:invert" loading="lazy" />
-                <Image src="/Google_Logo-black.svg" alt="Google" width={140} height={40} className="w-full max-w-[100px] sm:max-w-[120px] md:max-w-[140px] dark:invert" loading="lazy" />
-                <Image src="/DeepSeek_Logo-black.svg" alt="DeepSeek" width={140} height={40} className="w-full max-w-[100px] sm:max-w-[120px] md:max-w-[140px] dark:invert" loading="lazy" />
-                <Image src="/Meta_Logo-black.svg" alt="Meta" width={140} height={40} className="w-full max-w-[100px] sm:max-w-[120px] md:max-w-[140px] dark:invert col-span-2 sm:col-span-1" loading="lazy" />
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 sm:gap-6 md:gap-8 lg:gap-12 items-center justify-items-center max-w-5xl mx-auto px-2">
+                <div className="flex items-center justify-center w-full">
+                  <Image src="/OpenAI_Logo-black.svg" alt="OpenAI" width={140} height={40} className="w-auto h-8 sm:h-10 md:h-12 max-w-[90px] sm:max-w-[110px] md:max-w-[140px] dark:invert object-contain" loading="lazy" />
+                </div>
+                <div className="flex items-center justify-center w-full">
+                  <Image src="https://upload.wikimedia.org/wikipedia/commons/7/78/Anthropic_logo.svg" alt="Anthropic" width={140} height={40} className="w-auto h-8 sm:h-10 md:h-12 max-w-[90px] sm:max-w-[110px] md:max-w-[140px] dark:invert object-contain" loading="lazy" />
+                </div>
+                <div className="flex items-center justify-center w-full">
+                  <Image src="/Google_Logo-black.svg" alt="Google" width={140} height={40} className="w-auto h-8 sm:h-10 md:h-12 max-w-[90px] sm:max-w-[110px] md:max-w-[140px] dark:invert object-contain" loading="lazy" />
+                </div>
+                <div className="flex items-center justify-center w-full">
+                  <Image src="/DeepSeek_Logo-black.svg" alt="DeepSeek" width={140} height={40} className="w-auto h-8 sm:h-10 md:h-12 max-w-[90px] sm:max-w-[110px] md:max-w-[140px] dark:invert object-contain" loading="lazy" />
+                </div>
+                <div className="flex items-center justify-center w-full col-span-2 sm:col-span-1">
+                  <Image src="/Meta_Logo-black.svg" alt="Meta" width={140} height={40} className="w-auto h-8 sm:h-10 md:h-12 max-w-[90px] sm:max-w-[110px] md:max-w-[140px] dark:invert object-contain" loading="lazy" />
+                </div>
               </div>
             </section>
 
