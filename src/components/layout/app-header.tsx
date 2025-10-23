@@ -118,11 +118,11 @@ export function AppHeader() {
         <div className="flex items-center gap-4 shrink-0">
           <Link href="/" className="flex items-center gap-2 shrink-0">
             {/* Light mode logo and text */}
-            <img src="/logo_black.svg" alt="Gatewayz" className="w-[45px] h-[45px] object-contain dark:hidden" />
+            <img src="/logo_black.svg" alt="Gatewayz" className="w-[32px] h-[32px] object-contain dark:hidden" />
             <span className="font-bold text-lg text-foreground dark:hidden hidden sm:inline-block">Gatewayz</span>
 
             {/* Dark mode logo and text */}
-            <img src="/logo_white.png" alt="Gatewayz" className="w-[45px] h-[45px] object-contain hidden dark:block" />
+            <img src="/logo_white.png" alt="Gatewayz" className="w-[32px] h-[32px] object-contain hidden dark:block" />
             <span className="font-bold text-lg text-foreground hidden dark:inline-block sm:dark:inline-block">Gatewayz</span>
           </Link>
         </div>
