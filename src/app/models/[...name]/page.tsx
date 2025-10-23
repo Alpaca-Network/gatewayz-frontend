@@ -248,7 +248,7 @@ export default function ModelProfilePage() {
                 };
 
                 console.log(`[ModelProfilePage] Fetching from all gateway APIs...`);
-                const [openrouterRes, portkeyRes, featherlessRes, chutesRes, fireworksRes, togetherRes, groqRes, huggingfaceRes] = await Promise.allSettled([
+                const [openrouterRes, portkeyRes, featherlessRes, chutesRes, fireworksRes, togetherRes, groqRes, huggingfaceRes, aimoRes] = await Promise.allSettled([
                     fetchWithTimeout(`/api/models?gateway=openrouter`).catch(err => {
                         console.error('OpenRouter fetch error:', err);
                         return null;
@@ -280,6 +280,10 @@ export default function ModelProfilePage() {
                     fetchWithTimeout(`/api/models?gateway=huggingface`, 70000).catch(err => {
                         console.error('HuggingFace fetch error:', err);
                         return null;
+                    }),
+                    fetchWithTimeout(`/api/models?gateway=aimo`, 70000).catch(err => {
+                        console.error('AIMO fetch error:', err);
+                        return null;
                     })
                 ]);
                 console.log(`[ModelProfilePage] Gateway API responses:`, {
@@ -290,7 +294,8 @@ export default function ModelProfilePage() {
                     fireworks: fireworksRes?.status,
                     together: togetherRes?.status,
                     groq: groqRes?.status,
-                    huggingface: huggingfaceRes?.status
+                    huggingface: huggingfaceRes?.status,
+                    aimo: aimoRes?.status
                 });
 
                 const getData = async (result: PromiseSettledResult<Response | null>) => {
@@ -308,7 +313,7 @@ export default function ModelProfilePage() {
                     return [];
                 };
 
-                const [openrouterData, portkeyData, featherlessData, chutesData, fireworksData, togetherData, groqData, huggingfaceData] = await Promise.all([
+                const [openrouterData, portkeyData, featherlessData, chutesData, fireworksData, togetherData, groqData, huggingfaceData, aimoData] = await Promise.all([
                     getData(openrouterRes),
                     getData(portkeyRes),
                     getData(featherlessRes),
@@ -316,7 +321,8 @@ export default function ModelProfilePage() {
                     getData(fireworksRes),
                     getData(togetherRes),
                     getData(groqRes),
-                    getData(huggingfaceRes)
+                    getData(huggingfaceRes),
+                    getData(aimoRes)
                 ]);
 
                 // Combine models from all gateways
@@ -328,7 +334,8 @@ export default function ModelProfilePage() {
                     ...fireworksData,
                     ...togetherData,
                     ...groqData,
-                    ...huggingfaceData
+                    ...huggingfaceData,
+                    ...aimoData
                 ];
 
                 // Deduplicate models by ID - keep the first occurrence
@@ -413,6 +420,7 @@ export default function ModelProfilePage() {
                     if (hasModel(togetherData, 'together')) providers.push('together');
                     if (hasModel(groqData, 'groq')) providers.push('groq');
                     if (hasModel(huggingfaceData, 'huggingface')) providers.push('huggingface');
+                    if (hasModel(aimoData, 'aimo')) providers.push('aimo');
 
                     console.log(`Model ${modelId} available in gateways:`, providers);
                     setModelProviders(providers);
@@ -802,7 +810,8 @@ console.log(response.choices[0].message.content);`
                                         fireworks: 'Fireworks',
                                         together: 'Together AI',
                                         groq: 'Groq',
-                                        huggingface: 'Hugging Face'
+                                        huggingface: 'Hugging Face',
+                                        aimo: 'AIMO Network'
                                     };
                                     const providerLogos: Record<string, string> = {
                                         openrouter: '/openrouter-logo.svg',
@@ -812,7 +821,8 @@ console.log(response.choices[0].message.content);`
                                         fireworks: '/fireworks-logo.svg',
                                         together: '/together-logo.svg',
                                         groq: '/groq-logo.svg',
-                                        huggingface: '/huggingface-logo.svg'
+                                        huggingface: '/huggingface-logo.svg',
+                                        aimo: '/aimo-logo.svg'
                                     };
 
                                     return (
