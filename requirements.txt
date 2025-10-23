@@ -17,6 +17,10 @@ stripe==13.0.1
 portkey-ai>=2.0.0
 google-cloud-aiplatform>=1.38.0
 
+# Provider SDKs
+cerebras-cloud-sdk>=1.0.0
+xai-sdk>=0.1.0
+
 # Analytics
 statsig-python-core==0.10.2
 posthog==6.7.8
