@@ -17,6 +17,18 @@ import Image from 'next/image';
 import { PathChooserModal } from '@/components/onboarding/path-chooser-modal';
 import posthog from 'posthog-js';
 
+// Helper function to safely capture posthog events
+const captureEvent = (eventName: string, properties?: Record<string, any>) => {
+  try {
+    if (typeof window !== 'undefined' && posthog && posthog.__loaded) {
+      posthog.capture(eventName, properties);
+    }
+  } catch (error) {
+    // Silently fail if PostHog isn't configured
+    console.debug('PostHog not configured:', error);
+  }
+};
+
 interface FeaturedModel {
   name: string;
   by: string;
@@ -177,14 +189,14 @@ const HowItWorksStep = ({ number, title, description, children }: { number: numb
 )
 
 const FeatureCard = ({ icon, title, description, linkText, linkHref }: { icon: string, title: string, description: React.ReactNode, linkText: string, linkHref: string }) => (
-  <Card className="p-4 sm:p-6 text-center">
-    <div className="flex justify-center mb-3 sm:mb-4">
-      <div className="w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 flex items-center justify-center rounded-xl sm:rounded-2xl bg-muted">
+  <Card className="p-6 text-center">
+    <div className="flex justify-center mb-4">
+      <div className="w-16 h-16 flex items-center justify-center rounded-2xl bg-muted">
         <img src={`/${icon}.svg`} alt={title} width="64" height="64" className="w-full h-full" loading="lazy" />
       </div>
     </div>
-    <h3 className="text-base sm:text-lg font-bold mb-2">{title}</h3>
-    <p className="text-sm sm:text-base text-bold mb-3 sm:mb-4">{description}</p>
+    <h3 className="text-lg font-bold mb-2">{title}</h3>
+    <p className=" text-1xl text-bold mb-4">{description}</p>
     {/* <Link href={linkHref}>
       <Button variant="link" className="text-primary">{linkText} <ArrowRight className="w-4 h-4 ml-1"/></Button>
     </Link> */}
@@ -212,7 +224,6 @@ export default function Home() {
   const [showApiKey, setShowApiKey] = useState(true);
   const { toast } = useToast();
   const [showPathChooser, setShowPathChooser] = useState(false);
-  const pathCarouselRef = useRef<HTMLDivElement>(null);
 
   // Load the actual API key when user is authenticated
   useEffect(() => {
@@ -473,43 +484,43 @@ console.log(completion.choices[0].message);`,
 
   // Track page view on mount
   useEffect(() => {
-    posthog.capture('view_homepage');
+    captureEvent('view_homepage');
   }, []);
 
   return (
-    <div className="bg-background text-foreground overflow-x-hidden">
-      {/* Claude Code Integration Banner - Hidden on mobile to save space */}
-      <div className="bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-md overflow-hidden hidden md:block">
-        <div className="w-full px-3 sm:px-4 md:px-6 lg:px-8 py-2 sm:py-4">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-4">
-            <div className="flex items-start gap-2 sm:gap-3 flex-1 min-w-0">
-              <div className="bg-white/20 backdrop-blur-sm rounded-lg p-1.5 sm:p-2 flex-shrink-0">
-                <svg className="w-4 h-4 sm:w-6 sm:h-6" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M13 2L3 14h8l-1 8 10-12h-8l1-8z" fill="currentColor"/>
-                </svg>
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold text-xs sm:text-base leading-tight">
-                  🚀 New: Integrate Claude Code with Gatewayz API
-                </p>
-                <p className="text-[11px] sm:text-sm text-white/90 leading-tight mt-0.5">
-                  Access multiple AI models, save costs, and build faster
-                </p>
-              </div>
-            </div>
-            <Link href="/start/claude-code" className="w-full sm:w-auto flex-shrink-0">
-              <Button
-                variant="secondary"
-                size="sm"
-                className="bg-background text-purple-600 dark:text-purple-400 hover:bg-muted whitespace-nowrap w-full sm:w-auto text-xs sm:text-sm py-1.5 sm:py-2"
-                onClick={() => posthog.capture('claude_code_banner_clicked')}
-              >
-                Get Started →
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </div>
+    <div className="bg-background text-foreground">
+      {/* Claude Code Integration Banner */}
+      {/*<div className="bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-md overflow-hidden">*/}
+      {/*  <div className="w-full px-3 sm:px-4 md:px-6 lg:px-8 py-2 sm:py-4">*/}
+      {/*    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-4">*/}
+      {/*      <div className="flex items-start gap-2 sm:gap-3 flex-1 min-w-0">*/}
+      {/*        <div className="bg-white/20 backdrop-blur-sm rounded-lg p-1.5 sm:p-2 flex-shrink-0">*/}
+      {/*          <svg className="w-4 h-4 sm:w-6 sm:h-6" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">*/}
+      {/*            <path d="M13 2L3 14h8l-1 8 10-12h-8l1-8z" fill="currentColor"/>*/}
+      {/*          </svg>*/}
+      {/*        </div>*/}
+      {/*        <div className="flex-1 min-w-0">*/}
+      {/*          <p className="font-semibold text-xs sm:text-base leading-tight">*/}
+      {/*            🚀 New: Integrate Claude Code with Gatewayz API*/}
+      {/*          </p>*/}
+      {/*          <p className="text-[11px] sm:text-sm text-white/90 leading-tight mt-0.5">*/}
+      {/*            Access multiple AI models, save costs, and build faster*/}
+      {/*          </p>*/}
+      {/*        </div>*/}
+      {/*      </div>*/}
+      {/*      <Link href="/start/claude-code" className="w-full sm:w-auto flex-shrink-0">*/}
+      {/*        <Button*/}
+      {/*          variant="secondary"*/}
+      {/*          size="sm"*/}
+      {/*          className="bg-background text-purple-600 dark:text-purple-400 hover:bg-muted whitespace-nowrap w-full sm:w-auto text-xs sm:text-sm py-1.5 sm:py-2"*/}
+      {/*          onClick={() => captureEvent('claude_code_banner_clicked')}*/}
+      {/*        >*/}
+      {/*          Get Started →*/}
+      {/*        </Button>*/}
+      {/*      </Link>*/}
+      {/*    </div>*/}
+      {/*  </div>*/}
+      {/*</div>*/}
 
       <main className="container mx-auto px-4 sm:px-6 lg:px-8 " style={{position: 'relative'}}>
         {/* Hero Section */}
@@ -519,381 +530,177 @@ console.log(completion.choices[0].message);`,
           width={768}
           height={768}
           priority
-          className="absolute top-8 left-1/2 transform -translate-x-1/2 w-[200px] h-[200px] sm:w-[300px] sm:h-[300px] md:w-[450px] md:h-[450px] lg:w-[640px] lg:h-[640px] xl:w-[768px] xl:h-[768px] pointer-events-none opacity-30 sm:opacity-50 md:opacity-100"
+          className="absolute top-8 left-1/2 transform -translate-x-1/2 w-[450px] h-[450px] lg:w-[640px] lg:h-[640px] xl:w-[768px] xl:h-[768px] pointer-events-none"
           style={{ zIndex: 0 }}
         />
 
-        <section className="grid md:grid-cols-1 gap-2 md:gap-4 items-center py-4 md:py-8 mb-2 md:mb-8 max-w-5xl mx-auto px-4 md:px-4 relative" style={{ zIndex: 1 }}>
-          <div className="space-y-2 md:space-y-4 px-0 md:px-4">
-            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tighter text-center leading-tight" style={{  fontFamily: 'Inter, sans-serif',}}>
+        <section className="grid md:grid-cols-1 gap-2 md:gap-4 items-center py-4 md:py-8 mb-4 md:mb-8 max-w-5xl mx-auto px-4 relative" style={{ zIndex: 1 }}>
+          <div className="space-y-2 md:space-y-4 px-4">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-6xl font-extrabold tracking-tighter text-center leading-tight" style={{  fontFamily: 'Inter, sans-serif',}}>
               Ship with any AI model.<br />One API key.
             </h1>
-            <p className="text-base sm:text-lg md:text-xl text-center px-2 md:px-4">Make your first call in 30 seconds.</p>
-          </div>
-
-          {/* Mobile: Chat button above the fold */}
-          <div className="flex md:hidden justify-center mt-4">
-            <Link href="/start/chat" className="w-full max-w-md px-2">
-              <Button
-                size="lg"
-                className="h-12 w-full text-base font-semibold bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-white shadow-lg"
-                onClick={() => posthog.capture('mobile_chat_clicked')}
-              >
-                <MessageSquare className="w-5 h-5 mr-2" />
-                Start Chat
-              </Button>
-            </Link>
+            <p className="text-sm sm:text-base md:text-lg text-center px-4">Make your first call in 30 seconds.</p>
           </div>
 
           {/* Path Chooser Modal */}
           <PathChooserModal open={showPathChooser} onOpenChange={setShowPathChooser} />
 
-          {/* Three Path Cards - Mobile carousel (visible on small screens) */}
-          <div className="mt-3 md:hidden">
-            <div className="relative overflow-hidden">
-                <div
-                  ref={pathCarouselRef}
-                  className="flex gap-3 px-4 overflow-x-auto snap-x snap-mandatory scrollbar-hide pb-2"
-                  style={{
-                    scrollbarWidth: 'none',
-                    msOverflowStyle: 'none',
-                    WebkitOverflowScrolling: 'touch',
-                  }}
-                >
-                  {/* API Path Card */}
-                  <Link href="/start/api" className="group flex-shrink-0 w-[260px] snap-center">
-                    <div className="bg-card border-2 border-border hover:border-blue-500 rounded-lg p-4 shadow-sm hover:shadow-md transition-all h-full flex flex-col">
-                      <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                        <Code2 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                      </div>
-                      <h3 className="text-lg font-bold mb-2">Use the API</h3>
-                      <p className="text-xs text-muted-foreground mb-3">
-                        Copy key → make your first API call in 30 seconds
-                      </p>
-                      <div className="mt-auto">
-                        <div className="text-xs font-medium text-blue-600 dark:text-blue-400 group-hover:underline">
-                          Get Started →
-                        </div>
-                      </div>
-                    </div>
-                  </Link>
-
-                  {/* Claude Code Path Card */}
-                  <Link href="/start/claude-code" className="group flex-shrink-0 w-[260px] snap-center">
-                    <div className="bg-card border-2 border-border hover:border-purple-500 rounded-lg p-4 shadow-sm hover:shadow-md transition-all h-full flex flex-col">
-                      <div className="w-10 h-10 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                        <Terminal className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-                      </div>
-                      <h3 className="text-lg font-bold mb-2">Install Claude Code</h3>
-                      <p className="text-xs text-muted-foreground mb-3">
-                        One command → AI-powered coding in minutes
-                      </p>
-                      <div className="mt-auto">
-                        <div className="text-xs font-medium text-purple-600 dark:text-purple-400 group-hover:underline">
-                          Get Started →
-                        </div>
-                      </div>
-                    </div>
-                  </Link>
-
-                  {/* Chat Path Card */}
-                  <Link href="/start/chat" className="group flex-shrink-0 w-[260px] snap-center">
-                    <div className="bg-card border-2 border-border hover:border-green-500 rounded-lg p-4 shadow-sm hover:shadow-md transition-all h-full flex flex-col">
-                      <div className="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                        <MessageSquare className="w-5 h-5 text-green-600 dark:text-green-400" />
-                      </div>
-                      <h3 className="text-lg font-bold mb-2">Open Chat</h3>
-                      <p className="text-xs text-muted-foreground mb-3">
-                        Start chatting → we pick the best model for you
-                      </p>
-                      <div className="mt-auto">
-                        <div className="text-xs font-medium text-green-600 dark:text-green-400 group-hover:underline">
-                          Get Started →
-                        </div>
-                      </div>
-                    </div>
-                  </Link>
+          {/* Three Path Cards - Above the Fold */}
+          <div className="grid md:grid-cols-3 gap-6 mt-16 max-w-5xl mx-auto">
+            {/* API Path Card */}
+            <Link href="/start/api" className="group">
+              <div className="bg-card border-2 border-border hover:border-blue-500 rounded-lg p-6 shadow-sm hover:shadow-md transition-all h-full flex flex-col">
+                <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                  <Code2 className="w-6 h-6 text-blue-600 dark:text-blue-400" />
                 </div>
-                {/* Scroll indicator dots */}
-                <div className="flex justify-center gap-1.5 mt-2">
-                  <div className="w-1.5 h-1.5 rounded-full bg-primary"></div>
-                  <div className="w-1.5 h-1.5 rounded-full bg-muted"></div>
-                  <div className="w-1.5 h-1.5 rounded-full bg-muted"></div>
+                <h3 className="text-xl font-bold mb-2">Use the API</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Copy key → make your first API call in 30 seconds
+                </p>
+                <div className="mt-auto">
+                  <div className="text-sm font-medium text-blue-600 dark:text-blue-400 group-hover:underline">
+                    Get Started →
+                  </div>
                 </div>
-            </div>
-          </div>
+              </div>
+            </Link>
 
-          {/* Three Path Cards - Desktop grid (visible on medium+ screens) */}
-          <div className="hidden md:grid md:grid-cols-3 gap-6 mt-16 max-w-5xl mx-auto">
-                {/* API Path Card */}
-                <Link href="/start/api" className="group">
-                  <div className="bg-card border-2 border-border hover:border-blue-500 rounded-lg p-6 shadow-sm hover:shadow-md transition-all h-full flex flex-col">
-                    <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                      <Code2 className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-                    </div>
-                    <h3 className="text-xl font-bold mb-2">Use the API</h3>
-                    <p className="text-sm text-muted-foreground mb-4">
-                      Copy key → make your first API call in 30 seconds
-                    </p>
-                    <div className="mt-auto">
-                      <div className="text-sm font-medium text-blue-600 dark:text-blue-400 group-hover:underline">
-                        Get Started →
-                      </div>
-                    </div>
+            {/* Claude Code Path Card */}
+            <Link href="/start/claude-code" className="group">
+              <div className="bg-card border-2 border-border hover:border-purple-500 rounded-lg p-6 shadow-sm hover:shadow-md transition-all h-full flex flex-col">
+                <div className="w-12 h-12 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                  <Terminal className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+                </div>
+                <h3 className="text-xl font-bold mb-2">Install Claude Code</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  One command → AI-powered coding in minutes
+                </p>
+                <div className="mt-auto">
+                  <div className="text-sm font-medium text-purple-600 dark:text-purple-400 group-hover:underline">
+                    Get Started →
                   </div>
-                </Link>
+                </div>
+              </div>
+            </Link>
 
-                {/* Claude Code Path Card */}
-                <Link href="/start/claude-code" className="group">
-                  <div className="bg-card border-2 border-border hover:border-purple-500 rounded-lg p-6 shadow-sm hover:shadow-md transition-all h-full flex flex-col">
-                    <div className="w-12 h-12 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                      <Terminal className="w-6 h-6 text-purple-600 dark:text-purple-400" />
-                    </div>
-                    <h3 className="text-xl font-bold mb-2">Install Claude Code</h3>
-                    <p className="text-sm text-muted-foreground mb-4">
-                      One command → AI-powered coding in minutes
-                    </p>
-                    <div className="mt-auto">
-                      <div className="text-sm font-medium text-purple-600 dark:text-purple-400 group-hover:underline">
-                        Get Started →
-                      </div>
-                    </div>
+            {/* Chat Path Card */}
+            <Link href="/start/chat" className="group">
+              <div className="bg-card border-2 border-border hover:border-green-500 rounded-lg p-6 shadow-sm hover:shadow-md transition-all h-full flex flex-col">
+                <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                  <MessageSquare className="w-6 h-6 text-green-600 dark:text-green-400" />
+                </div>
+                <h3 className="text-xl font-bold mb-2">Open Chat</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Start chatting → we pick the best model for you
+                </p>
+                <div className="mt-auto">
+                  <div className="text-sm font-medium text-green-600 dark:text-green-400 group-hover:underline">
+                    Get Started →
                   </div>
-                </Link>
-
-                {/* Chat Path Card */}
-                <Link href="/start/chat" className="group">
-                  <div className="bg-card border-2 border-border hover:border-green-500 rounded-lg p-6 shadow-sm hover:shadow-md transition-all h-full flex flex-col">
-                    <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                      <MessageSquare className="w-6 h-6 text-green-600 dark:text-green-400" />
-                    </div>
-                    <h3 className="text-xl font-bold mb-2">Open Chat</h3>
-                    <p className="text-sm text-muted-foreground mb-4">
-                      Start chatting → we pick the best model for you
-                    </p>
-                    <div className="mt-auto">
-                      <div className="text-sm font-medium text-green-600 dark:text-green-400 group-hover:underline">
-                        Get Started →
-                      </div>
-                    </div>
-                  </div>
-                </Link>
+                </div>
+              </div>
+            </Link>
           </div>
 
           {/* Why Gatewayz - Proof Strip */}
-          <div className="mt-8 md:mt-16 max-w-5xl mx-auto px-2">
-            <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/20 dark:to-purple-950/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 sm:p-6 md:p-8">
-              <h3 className="text-xl sm:text-2xl font-bold text-center mb-4 sm:mb-6 md:mb-8">Why Gatewayz?</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 md:gap-8">
+          <div className="mt-16 max-w-5xl mx-auto">
+            <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/20 dark:to-purple-950/20 border border-blue-200 dark:border-blue-800 rounded-lg p-8">
+              <h3 className="text-2xl font-bold text-center mb-8">Why Gatewayz?</h3>
+              <div className="grid md:grid-cols-3 gap-8">
                 <div className="text-center">
-                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mx-auto mb-2 sm:mb-3">
-                    <TrendingUp className="w-5 h-5 sm:w-6 sm:h-6 text-green-600 dark:text-green-400" />
+                  <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mx-auto mb-3">
+                    <TrendingUp className="w-6 h-6 text-green-600 dark:text-green-400" />
                   </div>
-                  <h4 className="font-bold mb-1 sm:mb-2">Cheaper</h4>
-                  <p className="text-xs sm:text-sm text-muted-foreground">Router picks lowest cost model automatically</p>
+                  <h4 className="font-bold mb-2">Cheaper</h4>
+                  <p className="text-sm text-muted-foreground">Router picks lowest cost model automatically</p>
                 </div>
                 <div className="text-center">
-                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center mx-auto mb-2 sm:mb-3">
-                    <Zap className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600 dark:text-blue-400" />
+                  <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center mx-auto mb-3">
+                    <Zap className="w-6 h-6 text-blue-600 dark:text-blue-400" />
                   </div>
-                  <h4 className="font-bold mb-1 sm:mb-2">Faster</h4>
-                  <p className="text-xs sm:text-sm text-muted-foreground">Multi-provider routing for best performance</p>
+                  <h4 className="font-bold mb-2">Faster</h4>
+                  <p className="text-sm text-muted-foreground">Multi-provider routing for best performance</p>
                 </div>
                 <div className="text-center">
-                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center mx-auto mb-2 sm:mb-3">
-                    <CheckIcon className="w-5 h-5 sm:w-6 sm:h-6 text-purple-600 dark:text-purple-400" />
+                  <div className="w-12 h-12 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center mx-auto mb-3">
+                    <CheckIcon className="w-6 h-6 text-purple-600 dark:text-purple-400" />
                   </div>
-                  <h4 className="font-bold mb-1 sm:mb-2">1000+ Models</h4>
-                  <p className="text-xs sm:text-sm text-muted-foreground">Access every major AI model through one API</p>
+                  <h4 className="font-bold mb-2">1000+ Models</h4>
+                  <p className="text-sm text-muted-foreground">Access every major AI model through one API</p>
                 </div>
               </div>
             </div>
           </div>
-
-          <div className="overflow-hidden relative mt-4 sm:mt-6 -mx-4 sm:mx-0">
-            <div
-              ref={carouselRef}
-              className="flex pb-2 relative z-10 gap-2 px-4 sm:px-0"
-              style={{
-                transform: `translateX(${carouselOffset}px)`,
-                transition: 'transform 700ms cubic-bezier(0.4, 0, 0.2, 1)'
-              }}
-            >
-                {displayModels.map((model, i) => {
-                  const modelIndex = i % featuredModels.length;
-                  const isFirstSet = i < featuredModels.length;
-                  return (
-                    <FeaturedModelCard
-                      key={i}
-                      model={model}
-                      isNew={model.name.includes('GPT-5')}
-                      isActive={isFirstSet && modelIndex === activeModelIndex}
-                      onClick={() => handleModelClick(modelIndex)}
-                    />
-                  );
-                })}
-            </div>
-          </div>
-
-          {/* Message Input for Chat Redirect */}
-          {/*<div className="max-w-3xl mx-auto mt-8 px-4">*/}
-          {/*  <div className="relative flex gap-2">*/}
-          {/*    <Input*/}
-          {/*      type="text"*/}
-          {/*      placeholder="Try: Explain quantum computing in simple terms..."*/}
-          {/*      value={message}*/}
-          {/*      onChange={(e) => setMessage(e.target.value)}*/}
-          {/*      onKeyPress={handleKeyPress}*/}
-          {/*      className="h-14 px-6 text-base bg-background border-2 border-border hover:border-primary/50 focus:border-primary transition-colors"*/}
-          {/*    />*/}
-          {/*    <Button*/}
-          {/*      size="lg"*/}
-          {/*      onClick={handleSendMessage}*/}
-          {/*      disabled={!message.trim() || activeModelIndex === null}*/}
-          {/*      className="h-14 px-8 text-base font-semibold bg-primary hover:bg-primary/90"*/}
-          {/*    >*/}
-          {/*      Chat*/}
-          {/*    </Button>*/}
-          {/*  </div>*/}
-          {/*  <p className="text-xs text-muted-foreground text-center mt-2">*/}
-          {/*    Select a model above and type a message to start chatting*/}
-          {/*  </p>*/}
-          {/*</div>*/}
 
             {/* Connected to 1000+ AI Models - Moved here */}
-            <section className="mt-8 sm:mt-12 px-2 sm:px-4">
-              <div className="mb-4 sm:mb-6 md:mb-8">
-                <h2 className="text-lg sm:text-xl md:text-2xl font-bold text-center">Connect To 10000+ AI Models</h2>
+            <section className="mt-12 px-4">
+              <div className="mb-8">
+                <h2 className="text-xl sm:text-2xl font-bold text-center">Connect To 10,000+ AI Models</h2>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 sm:gap-6 md:gap-8 lg:gap-12 items-center justify-items-center max-w-5xl mx-auto px-2">
-                <div className="flex items-center justify-center w-full">
-                  <Image src="/OpenAI_Logo-black.svg" alt="OpenAI" width={140} height={40} className="w-auto h-8 sm:h-10 md:h-12 max-w-[90px] sm:max-w-[110px] md:max-w-[140px] dark:invert object-contain" loading="lazy" />
-                </div>
-                <div className="flex items-center justify-center w-full">
-                  <Image src="https://upload.wikimedia.org/wikipedia/commons/7/78/Anthropic_logo.svg" alt="Anthropic" width={140} height={40} className="w-auto h-8 sm:h-10 md:h-12 max-w-[90px] sm:max-w-[110px] md:max-w-[140px] dark:invert object-contain" loading="lazy" />
-                </div>
-                <div className="flex items-center justify-center w-full">
-                  <Image src="/Google_Logo-black.svg" alt="Google" width={140} height={40} className="w-auto h-8 sm:h-10 md:h-12 max-w-[90px] sm:max-w-[110px] md:max-w-[140px] dark:invert object-contain" loading="lazy" />
-                </div>
-                <div className="flex items-center justify-center w-full">
-                  <Image src="/DeepSeek_Logo-black.svg" alt="DeepSeek" width={140} height={40} className="w-auto h-8 sm:h-10 md:h-12 max-w-[90px] sm:max-w-[110px] md:max-w-[140px] dark:invert object-contain" loading="lazy" />
-                </div>
-                <div className="flex items-center justify-center w-full col-span-2 sm:col-span-1">
-                  <Image src="/Meta_Logo-black.svg" alt="Meta" width={140} height={40} className="w-auto h-8 sm:h-10 md:h-12 max-w-[90px] sm:max-w-[110px] md:max-w-[140px] dark:invert object-contain" loading="lazy" />
-                </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-8 md:gap-12 items-center justify-items-center max-w-5xl mx-auto">
+                <Image src="/OpenAI_Logo-black.svg" alt="OpenAI" width={140} height={40} className="w-full max-w-[140px] dark:invert" loading="lazy" />
+                <Image src="https://upload.wikimedia.org/wikipedia/commons/7/78/Anthropic_logo.svg" alt="Anthropic" width={140} height={40} className="w-full max-w-[140px] dark:invert" loading="lazy" />
+                <Image src="/Google_Logo-black.svg" alt="Google" width={140} height={40} className="w-full max-w-[140px] dark:invert" loading="lazy" />
+                <Image src="/DeepSeek_Logo-black.svg" alt="DeepSeek" width={140} height={40} className="w-full max-w-[140px] dark:invert" loading="lazy" />
+                <Image src="/Meta_Logo-black.svg" alt="Meta" width={140} height={40} className="w-full max-w-[140px] dark:invert" loading="lazy" />
               </div>
             </section>
-
-            <div className="rounded-lg border bg-card text-card-foreground shadow-sm z-10 mt-8 sm:mt-10 md:mt-12 mx-2">
-              <div className="px-4 sm:px-6 py-3 sm:py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-3">
-                <div className="font-bold tracking-tight text-base sm:text-lg">Top Models This Month</div>
-              <Link href="/rankings" className="w-full sm:w-auto">
-                <Button variant="link" className="text-sm w-full sm:w-auto justify-start sm:justify-center p-0">View Trending
-                  <span>
-                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M2.66671 8H13.3334M13.3334 8L9.33337 12M13.3334 8L9.33337 4" stroke="black" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  </span>
-                </Button>
-              </Link>
-              </div>
-            </div>
         </section>
 
-        {/* How It Works Section */}
-        <section className="my-12 sm:my-16 md:my-24 px-2 sm:px-4">
-          <div className="mb-6 sm:mb-8">
-            <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-center">Getting Started Is As Easy As 123...</h2>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 md:gap-8 lg:gap-12">
-            <div className="p-3 sm:p-4 bg-card border rounded-lg min-h-[140px] sm:h-40 grid grid-cols-7 shadow-sm">
-              <div className="flex items-center justify-center col-span-2" >
-                <img src="/sign-up-blue.svg" alt="Signup icon" width="100" height="100" className="w-16 h-16 sm:w-20 sm:h-20 md:w-full md:h-full" loading="lazy" />
-              </div>
-              <div className="flex items-center justify-between col-span-5" >
-                <HowItWorksStep number={1} title="Signup" description="Create An Account To Get Started Using Your Email Or A 3rd Party.">
-                    <span></span>
-                </HowItWorksStep>
-              </div>
-            </div>
-            <div className="p-3 sm:p-4 bg-card border rounded-lg min-h-[140px] sm:h-40 grid grid-cols-7 shadow-sm">
-             <div className="flex items-center justify-center col-span-2" >
-                <img src="/coins-blue.svg" alt="Credits icon" width="100" height="100" className="w-16 h-16 sm:w-20 sm:h-20 md:w-full md:h-full" loading="lazy" />
-              </div>
-              <div className="flex items-center justify-between col-span-5" >
-                <HowItWorksStep number={2} title="Buy credits" description="Credits Can Be Purchased In Multiple Methods, And Used With Any Model Or Provider.">
-                    <span></span>
-                </HowItWorksStep>
-              </div>
-            </div>
-            <div className="p-3 sm:p-4 bg-card border rounded-lg min-h-[140px] sm:h-40 grid grid-cols-7 shadow-sm">
-              <div className="flex items-center justify-center col-span-2" >
-                <img src="/api-blue.svg" alt="API key icon" width="100" height="100" className="w-16 h-16 sm:w-20 sm:h-20 md:w-full md:h-full" loading="lazy" />
-              </div>
-              <div className="flex items-center justify-between col-span-5" >
-                <HowItWorksStep number={3} title="Get your API key" description="Create An API Key And Start Making Requests In An Instance.">
-                    <span></span>
-                </HowItWorksStep>
-              </div>
-            </div>
-          </div>
-        </section>
 
         {/* Integrations Section */}
-        <section className="my-12 sm:my-16 md:my-24 pt-12 sm:pt-16 md:pt-24 px-2 sm:px-4">
-          <div className="mb-6 sm:mb-8 flex flex-col items-center justify-center">
-            <div className="w-full flex flex-col md:flex-row items-center gap-3 sm:gap-4">
-              <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-center md:text-left flex-1">Integration Only Takes A Minute</h2>
-              <p className="text-sm sm:text-base md:text-xl text-center">3 Lines To Get Gatewayz Running, No Stack Overhaul Required.</p>
+        <section className="my-24 pt-24">
+          <div className="mb-8 flex flex-col items-center justify-center">
+            <div className="w-full flex flex-col md:flex-row items-center gap-4">
+              <h2 className="text-3xl font-bold text-left flex-1">Integration Only Takes A Minute</h2>
             </div>
           </div>
 
           {/* Interactive Code Block - Sexier Version */}
-          <div className="rounded-lg sm:rounded-xl overflow-hidden shadow-xl sm:shadow-2xl border border-gray-800 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+          <div className="rounded-xl overflow-hidden shadow-2xl border border-gray-800 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
             {/* Terminal-style Header */}
-            <div className="flex items-center justify-between px-3 sm:px-4 py-2 sm:py-3 bg-slate-950/50 border-b border-slate-700">
-              <div className="flex items-center gap-1 sm:gap-2 flex-1 min-w-0">
-                <div className="flex gap-1 sm:gap-1.5">
-                  <div className="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-red-500/80 hover:bg-red-500 transition-colors"></div>
-                  <div className="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-yellow-500/80 hover:bg-yellow-500 transition-colors"></div>
-                  <div className="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-green-500/80 hover:bg-green-500 transition-colors"></div>
+            <div className="flex items-center justify-between px-4 py-3 bg-slate-950/50 border-b border-slate-700">
+              <div className="flex items-center gap-2">
+                <div className="flex gap-1.5">
+                  <div className="w-3 h-3 rounded-full bg-red-500/80 hover:bg-red-500 transition-colors"></div>
+                  <div className="w-3 h-3 rounded-full bg-yellow-500/80 hover:bg-yellow-500 transition-colors"></div>
+                  <div className="w-3 h-3 rounded-full bg-green-500/80 hover:bg-green-500 transition-colors"></div>
                 </div>
-                <span className="text-[10px] sm:text-xs text-slate-400 ml-2 sm:ml-3 font-mono truncate">integration.{activeCodeTab === 'python' ? 'py' : activeCodeTab === 'javascript' ? 'js' : 'sh'}</span>
+                <span className="text-xs text-slate-400 ml-3 font-mono">integration.{activeCodeTab === 'python' ? 'py' : activeCodeTab === 'javascript' ? 'js' : 'sh'}</span>
               </div>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={handleCopyCode}
-                className="text-slate-300 hover:text-white hover:bg-slate-700/50 transition-all text-xs sm:text-sm h-7 sm:h-8 px-2 sm:px-3"
+                className="text-slate-300 hover:text-white hover:bg-slate-700/50 transition-all"
               >
                 {codeCopied ? (
                   <>
-                    <Check className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2 text-green-400" />
-                    <span className="text-green-400 hidden sm:inline">Copied!</span>
+                    <Check className="h-4 w-4 mr-2 text-green-400" />
+                    <span className="text-green-400">Copied!</span>
                   </>
                 ) : (
                   <>
-                    <Copy className="h-3 w-3 sm:h-4 sm:w-4 mr-0 sm:mr-2" />
-                    <span className="hidden sm:inline">Copy</span>
+                    <Copy className="h-4 w-4 mr-2" />
+                    Copy
                   </>
                 )}
               </Button>
             </div>
 
             {/* Language Tabs */}
-            <div className="flex gap-0.5 sm:gap-1 px-2 sm:px-4 pt-2 sm:pt-3 bg-slate-950/30 overflow-x-auto">
+            <div className="flex gap-1 px-4 pt-3 bg-slate-950/30">
               {(['python', 'javascript', 'curl'] as const).map((lang) => (
                 <button
                   key={lang}
                   onClick={() => setActiveCodeTab(lang)}
-                  className={`px-2 sm:px-3 md:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium rounded-t-lg transition-all whitespace-nowrap ${
+                  className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-all ${
                     activeCodeTab === lang
                       ? 'bg-slate-950/80 text-cyan-400 shadow-lg'
                       : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/30'
                   }`}
                 >
-                  <span className="hidden sm:inline">{lang === 'python' ? '🐍 Python' : lang === 'javascript' ? '⚡ JavaScript' : '🔧 cURL'}</span>
-                  <span className="sm:hidden">{lang === 'python' ? '🐍' : lang === 'javascript' ? '⚡' : '🔧'}</span>
+                  {lang === 'python' ? '🐍 Python' : lang === 'javascript' ? '⚡ JavaScript' : '🔧 cURL'}
                 </button>
               ))}
             </div>
@@ -901,12 +708,12 @@ console.log(completion.choices[0].message);`,
             {/* Code Display with animated transition */}
             <div className="relative bg-slate-950/80 backdrop-blur-sm">
               <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/5 via-purple-500/5 to-pink-500/5 opacity-50"></div>
-              <div className="relative p-3 sm:p-4 md:p-6 overflow-x-auto">
-                <pre className="text-xs sm:text-sm leading-relaxed font-mono">
+              <div className="relative p-6 overflow-x-auto">
+                <pre className="text-sm leading-relaxed font-mono">
                   <code className="text-slate-200">
                     {codeExamples[activeCodeTab].split('\n').map((line, i) => (
-                      <div key={i} className="hover:bg-slate-800/30 px-1 sm:px-2 -mx-1 sm:-mx-2 rounded transition-colors">
-                        <span className="inline-block w-6 sm:w-8 text-slate-600 select-none text-[10px] sm:text-sm">{i + 1}</span>
+                      <div key={i} className="hover:bg-slate-800/30 px-2 -mx-2 rounded transition-colors">
+                        <span className="inline-block w-8 text-slate-600 select-none">{i + 1}</span>
                         <span className="syntax-highlight">{line}</span>
                       </div>
                     ))}
@@ -925,28 +732,28 @@ console.log(completion.choices[0].message);`,
             }
           `}</style>
 
-           <div className="w-full flex flex-col lg:flex-row items-stretch lg:items-center gap-3 sm:gap-4 mt-6 sm:mt-8">
+           <div className="w-full flex flex-col lg:flex-row items-stretch lg:items-center gap-4 mt-8">
              {user && apiKey && (
-               <div className="flex-1 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
-                 <label className="text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">Your API Key</label>
+               <div className="flex-1 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                 <label className="text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">Your API Key</label>
                  <div className="relative flex-1">
                    <Input
-                     className="h-10 sm:h-12 pr-20 sm:pr-28 font-mono text-xs sm:text-sm bg-background text-foreground"
+                     className="h-12 pr-28 font-mono text-sm bg-background text-foreground"
                      value={apiKey}
                      type={showApiKey ? "text" : "password"}
                      readOnly
                    />
-                   <div className="absolute right-1 sm:right-2 top-1/2 -translate-y-1/2 flex gap-1 sm:gap-2">
+                   <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-2">
                      <button
                        onClick={() => setShowApiKey(!showApiKey)}
                        className="p-1 hover:bg-muted dark:hover:bg-muted/30 rounded"
                      >
                        {showApiKey ? (
-                         <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
                          </svg>
                        ) : (
-                         <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                          </svg>
@@ -956,14 +763,14 @@ console.log(completion.choices[0].message);`,
                        onClick={handleCopyApiKey}
                        className="p-1 hover:bg-muted dark:hover:bg-muted/30 rounded"
                      >
-                       <Copy className="w-4 h-4 sm:w-5 sm:h-5" />
+                       <Copy className="w-5 h-5" />
                      </button>
                    </div>
                  </div>
                </div>
              )}
 
-             <div className={`relative group ${user && apiKey ? 'w-full lg:w-auto' : 'w-full sm:w-auto mx-auto max-w-xs sm:max-w-none'}`}>
+             <div className={`relative group ${user && apiKey ? 'w-full lg:w-auto' : 'w-full sm:w-auto mx-auto'}`}>
                {/* Multi-layered LED-style glow with color shifting */}
                <div className="absolute -inset-[3px] rounded-lg opacity-90 blur-md animate-led-shimmer"></div>
                <div className="absolute -inset-[2px] rounded-lg opacity-80 blur-sm animate-led-shimmer" style={{ animationDelay: '0.5s' }}></div>
@@ -973,7 +780,7 @@ console.log(completion.choices[0].message);`,
 
                {/* Button with elevation effect */}
                <Button
-                 className="relative bg-black hover:bg-gray-900 text-white hover:text-white h-10 sm:h-12 px-8 sm:px-12 rounded-lg font-semibold transition-all duration-200 active:translate-y-[2px] active:shadow-none shadow-[0_2px_0_0_rgba(59,130,246,0.5),0_4px_12px_rgba(59,130,246,0.4)] w-full lg:w-auto text-sm sm:text-base"
+                 className="relative bg-black hover:bg-gray-900 text-white hover:text-white h-12 px-12 rounded-lg font-semibold transition-all duration-200 active:translate-y-[2px] active:shadow-none shadow-[0_2px_0_0_rgba(59,130,246,0.5),0_4px_12px_rgba(59,130,246,0.4)] w-full lg:w-auto"
                  onClick={handleGenerateApiKey}
                >
                  {user ? 'Claim Trial Credits' : 'Get API Key'}
@@ -999,73 +806,7 @@ console.log(completion.choices[0].message);`,
            `}</style>
         </section>
 
-        {/* Features Section */}
-        <section className="my-12 sm:my-16 md:my-24 pt-8 sm:pt-12 px-2 sm:px-4">
-          <div className="mb-6 sm:mb-8 items-center justify-center">
-            <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-center flex-1">What Makes Gatewayz Stand Out?</h2>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 md:gap-8">
-            <FeatureCard icon="mynaui_api-solid" title="One API For Any Model" description={
-                <>
-                  Access all Major Models Through A Single, Unified Interface.
-                  <br />
-                  OpenAI SDK Works Out Of The Box.
-                </>
-              }  linkText="Browse all" linkHref="/models" />
-            <FeatureCard icon="file-icons_api-blueprint" title="Higher Availability" description={
-                <>
-                Reliable AI Models Via Our Distributed Infrastructure.
-                <br />
-                Fall Back To Other Providers When One Goes Down.
-                </>
-            } linkText="Learn more" linkHref="#" />
-            <FeatureCard icon="streamline-ultimate_performance-increase-bold" title="Price and Performance" description={
-                <>
-                  Keep Costs In Check Without Sacrificing Speed.
-                  <br />
-                  OpenRouter Runs At The Edge, Adding Just ~25ms Between Your Users And Their Inference.
-                </>
-            } linkText="Learn more" linkHref="#" />
-            <FeatureCard icon="tdesign_data-filled" title="Custom Data Policies" description={
-                <>
-                  Protect Your Organization With Fine-Grained Data Policies.<br />
-                  Ensure Prompts Only Go To The Models And Providers You Trust.
-                </>
-            } linkText="View docs" linkHref="#" />
-          </div>
-        </section>
 
-        {/* Explore & Announcements */}
-        <section className="grid md:grid-cols-1 gap-6 sm:gap-8 md:gap-12 my-12 sm:my-16 md:my-24 pt-8 sm:pt-12 px-2 sm:px-4">
-            <div className="space-y-4 sm:space-y-6 md:space-y-8">
-                <div className="p-4 sm:p-6 border rounded-lg bg-card">
-                    <h2 className="text-xl sm:text-2xl md:text-3xl font-bold mb-2">Explore Models</h2>
-                    <p className="text-sm sm:text-base md:text-lg mb-3 sm:mb-4">Discover AI Models Across Our Collection, From All Major Labs And Providers.</p>
-                    <Link href="/models"><Button variant="outline" className="bg-background hover:bg-muted text-bold text-sm sm:text-base">View Models <ArrowRight className="w-4 h-4 ml-2" /></Button></Link>
-                </div>
-                 <div className="p-4 sm:p-6 border rounded-lg bg-card">
-                    <h2 className="text-xl sm:text-2xl md:text-3xl font-bold mb-2">Model & App Rankings</h2>
-                    <p className="text-sm sm:text-base md:text-lg mb-3 sm:mb-4">Explore Token Usage Across Models, Labs, And Public Applications.</p>
-                    <Link href="/rankings"><Button variant="outline" className="bg-background hover:bg-muted text-bold text-sm sm:text-base">View Rankings <ArrowRight className="w-4 h-4 ml-2" /></Button></Link>
-                </div>
-                <div className="p-4 sm:p-6 border rounded-lg bg-card">
-                    <h2 className="text-xl sm:text-2xl md:text-3xl font-bold mb-2">Chat With Any LLM</h2>
-                    <p className="text-sm sm:text-base md:text-lg mb-3 sm:mb-4">Select Between 1000+ Models To Help With Any Query You Have At Hand Or Integrate Into Your Systems.</p>
-                    <Link href="/chat"><Button variant="outline" className="bg-background hover:bg-muted text-bold text-sm sm:text-base">Chat With LLM <ArrowRight className="w-4 h-4 ml-2" /></Button></Link>
-                </div>
-            </div>
-            {/* <div>
-                 <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-xl font-semibold">Recent Announcements</h3>
-                    <Link href="#"><Button variant="link">View all <ArrowRight className="w-4 h-4 ml-1"/></Button></Link>
-                 </div>
-                 <div className="space-y-4">
-                    <AnnouncementCard title="GPT-5 is now live" description="GPT-5 is here on OpenRouter - long-context, built for complex reasoning and code workflows." date="8/7/2025" isNew />
-                    <AnnouncementCard title="Audio Inputs and PDF URLs for Apps" description="Add voice input and send PDFs by URL, on any model." date="8/4/2025" isNew />
-                    <AnnouncementCard title="Presets: How To Seamlessly Transfer Model Configurations Across Apps" description="Customize once and use everywhere. Server-side presets now simplify your model workflows." date="7/29/2025" />
-                 </div>
-            </div> */}
-        </section>
 
       </main>
 
