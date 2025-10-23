@@ -70,8 +70,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body className={`${inter.className} antialiased bg-background min-h-screen flex flex-col`} suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning className="overflow-x-hidden">
+      <body className={`${inter.className} antialiased bg-background min-h-screen flex flex-col overflow-x-hidden`} suppressHydrationWarning>
         <ThemeProvider
           defaultTheme="system"
           storageKey="ui-theme"
