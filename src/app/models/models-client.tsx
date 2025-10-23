@@ -68,7 +68,8 @@ const GATEWAY_CONFIG: Record<string, { name: string; color: string; icon?: React
   xai: { name: 'xAI', color: 'bg-black' },
   novita: { name: 'Novita', color: 'bg-violet-600' },
   huggingface: { name: 'Hugging Face', color: 'bg-yellow-600' },
-  hug: { name: 'Hugging Face', color: 'bg-yellow-600' } // Backend uses 'hug' abbreviation
+  hug: { name: 'Hugging Face', color: 'bg-yellow-600' }, // Backend uses 'hug' abbreviation
+  aimo: { name: 'AiMo', color: 'bg-pink-600' }
 };
 
 const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
@@ -517,7 +518,7 @@ export default function ModelsClient({ initialModels }: { initialModels: Model[]
     });
 
     // Log gateway counts for debugging
-    const allGateways = ['openrouter', 'portkey', 'featherless', 'groq', 'together', 'fireworks', 'chutes', 'deepinfra', 'google', 'cerebras', 'nebius', 'xai', 'novita', 'huggingface'];
+    const allGateways = ['openrouter', 'portkey', 'featherless', 'groq', 'together', 'fireworks', 'chutes', 'deepinfra', 'google', 'cerebras', 'nebius', 'xai', 'novita', 'huggingface', 'aimo'];
     const gatewayStats = allGateways.map(g => ({
       gateway: g,
       modelCount: counts[g] || 0
