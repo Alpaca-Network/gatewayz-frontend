@@ -63,26 +63,41 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
     throw new Error('Invalid gateway');
   }
 
-  // Special handling for 'all' gateway - fetch from 'all', 'huggingface', 'google', 'aimo', and 'near'
-  // because backend's 'all' endpoint doesn't include HuggingFace, Google, AiMo, and NEAR models
+  // Special handling for 'all' gateway - fetch from all individual gateways in parallel
+  // This ensures models are properly assigned to their respective gateways for filtering
   if (gateway === 'all') {
-    console.log('[Models] Fetching from "all", "huggingface", "google", "aimo", and "near" gateways in parallel');
+    console.log('[Models] Fetching from all gateways in parallel');
     try {
-      const [allGatewayModels, hfModels, googleModels, aimoModels, nearModels] = await Promise.all([
-        fetchModelsFromGateway('all', limit),
-        fetchModelsFromGateway('huggingface', limit),
-        fetchModelsFromGateway('google', limit),
-        fetchModelsFromGateway('aimo', limit),
-        fetchModelsFromGateway('near', limit)
-      ]);
+      // Fetch from all known gateways (excluding deprecated 'portkey' and 'all' itself)
+      const gatewaysToFetch = [
+        'openrouter',
+        'featherless',
+        'groq',
+        'together',
+        'fireworks',
+        'chutes',
+        'deepinfra',
+        'google',
+        'cerebras',
+        'nebius',
+        'xai',
+        'novita',
+        'huggingface',
+        'aimo',
+        'near'
+      ];
+
+      const results = await Promise.all(
+        gatewaysToFetch.map(gw => fetchModelsFromGateway(gw, limit))
+      );
 
       // Combine and deduplicate models by ID
-      const combinedModels = [...allGatewayModels, ...hfModels, ...googleModels, ...aimoModels, ...nearModels];
+      const combinedModels = results.flat();
       const uniqueModels = Array.from(
         new Map(combinedModels.map(m => [m.id, m])).values()
       );
 
-      console.log(`[Models] Combined ${allGatewayModels.length} from "all" + ${hfModels.length} from "huggingface" + ${googleModels.length} from "google" + ${aimoModels.length} from "aimo" + ${nearModels.length} from "near" = ${uniqueModels.length} unique models`);
+      console.log(`[Models] Combined ${combinedModels.length} total (${uniqueModels.length} unique) from ${gatewaysToFetch.length} gateways`);
 
       // Cache the result for 'all' gateway
       modelsCache = {
