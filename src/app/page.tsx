@@ -16,6 +16,7 @@ import { API_BASE_URL } from '@/lib/config';
 import Image from 'next/image';
 import { PathChooserModal } from '@/components/onboarding/path-chooser-modal';
 import posthog from 'posthog-js';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 interface FeaturedModel {
   name: string;
@@ -212,6 +213,8 @@ export default function Home() {
   const [showApiKey, setShowApiKey] = useState(true);
   const { toast } = useToast();
   const [showPathChooser, setShowPathChooser] = useState(false);
+  const isMobile = useIsMobile();
+  const pathCarouselRef = useRef<HTMLDivElement>(null);
 
   // Load the actual API key when user is authenticated
   useEffect(() => {
@@ -477,8 +480,8 @@ console.log(completion.choices[0].message);`,
 
   return (
     <div className="bg-background text-foreground">
-      {/* Claude Code Integration Banner */}
-      <div className="bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-md overflow-hidden">
+      {/* Claude Code Integration Banner - Hidden on mobile to save space */}
+      <div className="bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-md overflow-hidden hidden md:block">
         <div className="w-full px-3 sm:px-4 md:px-6 lg:px-8 py-2 sm:py-4">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-4">
             <div className="flex items-start gap-2 sm:gap-3 flex-1 min-w-0">
@@ -518,139 +521,167 @@ console.log(completion.choices[0].message);`,
           width={768}
           height={768}
           priority
-          className="absolute top-8 left-1/2 transform -translate-x-1/2 w-[450px] h-[450px] lg:w-[640px] lg:h-[640px] xl:w-[768px] xl:h-[768px] pointer-events-none"
+          className="absolute top-8 left-1/2 transform -translate-x-1/2 w-[300px] h-[300px] md:w-[450px] md:h-[450px] lg:w-[640px] lg:h-[640px] xl:w-[768px] xl:h-[768px] pointer-events-none opacity-50 md:opacity-100"
           style={{ zIndex: 0 }}
         />
 
-        <section className="grid md:grid-cols-1 gap-2 md:gap-4 items-center py-4 md:py-8 mb-4 md:mb-8 max-w-5xl mx-auto px-4 relative" style={{ zIndex: 1 }}>
-          <div className="space-y-2 md:space-y-4 px-4">
+        <section className="grid md:grid-cols-1 gap-2 md:gap-4 items-center py-3 md:py-8 mb-2 md:mb-8 max-w-5xl mx-auto px-2 md:px-4 relative" style={{ zIndex: 1 }}>
+          <div className="space-y-1 md:space-y-4 px-2 md:px-4">
             <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-6xl font-extrabold tracking-tighter text-center leading-tight" style={{  fontFamily: 'Inter, sans-serif',}}>
               Ship with any AI model.<br />One API key.
             </h1>
-            <p className="text-sm sm:text-base md:text-lg text-center px-4">Make your first call in 30 seconds.</p>
+            <p className="text-sm sm:text-base md:text-lg text-center px-2 md:px-4">Make your first call in 30 seconds.</p>
           </div>
-          {/*/!* CTA Buttons *!/*/}
-          {/*<div className="flex flex-col sm:flex-row gap-3 justify-center items-center mt-2">*/}
-          {/*  <Button*/}
-          {/*    size="lg"*/}
-          {/*    className="h-14 px-8 text-lg font-semibold bg-black hover:bg-gray-900 text-white w-full sm:w-auto"*/}
-          {/*    onClick={() => {*/}
-          {/*      posthog.capture('get_started_clicked');*/}
-          {/*      setShowPathChooser(true);*/}
-          {/*    }}*/}
-          {/*  >*/}
-          {/*    Get Started*/}
-          {/*  </Button>*/}
-          {/*  <Link href="/models" className="w-full sm:w-auto">*/}
-          {/*    <Button*/}
-          {/*      size="lg"*/}
-          {/*      variant="outline"*/}
-          {/*      className="h-14 px-8 text-lg font-semibold w-full sm:w-auto"*/}
-          {/*    >*/}
-          {/*      Explore Models*/}
-          {/*    </Button>*/}
-          {/*  </Link>*/}
-          {/*</div>*/}
 
-          {/* Start a Message Input Box */}
-          {/*<div className="flex flex-col sm:flex-row gap-4 justify-center items-center mt-2">*/}
-          {/*  <div className="w-full sm:w-auto sm:min-w-[500px] sm:max-w-2xl">*/}
-          {/*    <div className="relative flex items-center bg-background border-2 border-border rounded-lg hover:border-primary/50 focus-within:border-primary transition-colors shadow-sm">*/}
-          {/*      <div className="pl-4 text-muted-foreground flex-shrink-0">*/}
-          {/*        <MessageSquare className="w-5 h-5" />*/}
-          {/*      </div>*/}
-          {/*      <form*/}
-          {/*        onSubmit={(e) => {*/}
-          {/*          e.preventDefault();*/}
-          {/*          if (message.trim()) {*/}
-          {/*            posthog.capture('start_message_sent', { message });*/}
-          {/*            router.push('/chat?message=' + encodeURIComponent(message) + '&autoSend=true');*/}
-          {/*          }*/}
-          {/*        }}*/}
-          {/*        className="flex-1"*/}
-          {/*      >*/}
-          {/*        <Input*/}
-          {/*          type="text"*/}
-          {/*          placeholder="Start A Message"*/}
-          {/*          value={message}*/}
-          {/*          onChange={(e) => setMessage(e.target.value)}*/}
-          {/*          className="h-14 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 text-base bg-transparent"*/}
-          {/*        />*/}
-          {/*      </form>*/}
-          {/*      <Button*/}
-          {/*        onClick={() => {*/}
-          {/*          if (message.trim()) {*/}
-          {/*            posthog.capture('start_message_sent', { message });*/}
-          {/*            router.push('/chat?message=' + encodeURIComponent(message) + '&autoSend=true');*/}
-          {/*          }*/}
-          {/*        }}*/}
-          {/*        disabled={!message.trim()}*/}
-          {/*        className="mr-2 h-12 w-12 flex-shrink-0 rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"*/}
-          {/*      >*/}
-          {/*        <Send className="w-5 h-5" />*/}
-          {/*      </Button>*/}
-          {/*    </div>*/}
-          {/*  </div>*/}
-          {/*</div>*/}
+          {/* Mobile: Chat button above the fold */}
+          {isMobile && (
+            <div className="flex justify-center mt-4">
+              <Link href="/start/chat" className="w-full max-w-md px-2">
+                <Button
+                  size="lg"
+                  className="h-12 w-full text-base font-semibold bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-white shadow-lg"
+                  onClick={() => posthog.capture('mobile_chat_clicked')}
+                >
+                  <MessageSquare className="w-5 h-5 mr-2" />
+                  Start Chat
+                </Button>
+              </Link>
+            </div>
+          )}
 
           {/* Path Chooser Modal */}
           <PathChooserModal open={showPathChooser} onOpenChange={setShowPathChooser} />
 
-          {/* Three Path Cards - Above the Fold */}
-          <div className="grid md:grid-cols-3 gap-6 mt-16 max-w-5xl mx-auto">
-            {/* API Path Card */}
-            <Link href="/start/api" className="group">
-              <div className="bg-card border-2 border-border hover:border-blue-500 rounded-lg p-6 shadow-sm hover:shadow-md transition-all h-full flex flex-col">
-                <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                  <Code2 className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-                </div>
-                <h3 className="text-xl font-bold mb-2">Use the API</h3>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Copy key → make your first API call in 30 seconds
-                </p>
-                <div className="mt-auto">
-                  <div className="text-sm font-medium text-blue-600 dark:text-blue-400 group-hover:underline">
-                    Get Started →
-                  </div>
-                </div>
-              </div>
-            </Link>
+          {/* Three Path Cards - Desktop grid or Mobile carousel */}
+          <div className={isMobile ? "mt-3" : "grid md:grid-cols-3 gap-6 mt-16 max-w-5xl mx-auto"}>
+            {isMobile ? (
+              <div className="relative overflow-hidden -mx-4">
+                <div
+                  ref={pathCarouselRef}
+                  className="flex gap-3 px-4 overflow-x-auto snap-x snap-mandatory scrollbar-hide pb-2"
+                  style={{
+                    scrollbarWidth: 'none',
+                    msOverflowStyle: 'none',
+                  }}
+                >
+                  {/* API Path Card */}
+                  <Link href="/start/api" className="group flex-shrink-0 w-[260px] snap-center">
+                    <div className="bg-card border-2 border-border hover:border-blue-500 rounded-lg p-4 shadow-sm hover:shadow-md transition-all h-full flex flex-col">
+                      <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                        <Code2 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                      </div>
+                      <h3 className="text-lg font-bold mb-2">Use the API</h3>
+                      <p className="text-xs text-muted-foreground mb-3">
+                        Copy key → make your first API call in 30 seconds
+                      </p>
+                      <div className="mt-auto">
+                        <div className="text-xs font-medium text-blue-600 dark:text-blue-400 group-hover:underline">
+                          Get Started →
+                        </div>
+                      </div>
+                    </div>
+                  </Link>
 
-            {/* Claude Code Path Card */}
-            <Link href="/start/claude-code" className="group">
-              <div className="bg-card border-2 border-border hover:border-purple-500 rounded-lg p-6 shadow-sm hover:shadow-md transition-all h-full flex flex-col">
-                <div className="w-12 h-12 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                  <Terminal className="w-6 h-6 text-purple-600 dark:text-purple-400" />
-                </div>
-                <h3 className="text-xl font-bold mb-2">Install Claude Code</h3>
-                <p className="text-sm text-muted-foreground mb-4">
-                  One command → AI-powered coding in minutes
-                </p>
-                <div className="mt-auto">
-                  <div className="text-sm font-medium text-purple-600 dark:text-purple-400 group-hover:underline">
-                    Get Started →
-                  </div>
-                </div>
-              </div>
-            </Link>
+                  {/* Claude Code Path Card */}
+                  <Link href="/start/claude-code" className="group flex-shrink-0 w-[260px] snap-center">
+                    <div className="bg-card border-2 border-border hover:border-purple-500 rounded-lg p-4 shadow-sm hover:shadow-md transition-all h-full flex flex-col">
+                      <div className="w-10 h-10 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                        <Terminal className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                      </div>
+                      <h3 className="text-lg font-bold mb-2">Install Claude Code</h3>
+                      <p className="text-xs text-muted-foreground mb-3">
+                        One command → AI-powered coding in minutes
+                      </p>
+                      <div className="mt-auto">
+                        <div className="text-xs font-medium text-purple-600 dark:text-purple-400 group-hover:underline">
+                          Get Started →
+                        </div>
+                      </div>
+                    </div>
+                  </Link>
 
-            {/* Chat Path Card */}
-            <Link href="/start/chat" className="group">
-              <div className="bg-card border-2 border-border hover:border-green-500 rounded-lg p-6 shadow-sm hover:shadow-md transition-all h-full flex flex-col">
-                <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                  <MessageSquare className="w-6 h-6 text-green-600 dark:text-green-400" />
+                  {/* Chat Path Card */}
+                  <Link href="/start/chat" className="group flex-shrink-0 w-[260px] snap-center">
+                    <div className="bg-card border-2 border-border hover:border-green-500 rounded-lg p-4 shadow-sm hover:shadow-md transition-all h-full flex flex-col">
+                      <div className="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                        <MessageSquare className="w-5 h-5 text-green-600 dark:text-green-400" />
+                      </div>
+                      <h3 className="text-lg font-bold mb-2">Open Chat</h3>
+                      <p className="text-xs text-muted-foreground mb-3">
+                        Start chatting → we pick the best model for you
+                      </p>
+                      <div className="mt-auto">
+                        <div className="text-xs font-medium text-green-600 dark:text-green-400 group-hover:underline">
+                          Get Started →
+                        </div>
+                      </div>
+                    </div>
+                  </Link>
                 </div>
-                <h3 className="text-xl font-bold mb-2">Open Chat</h3>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Start chatting → we pick the best model for you
-                </p>
-                <div className="mt-auto">
-                  <div className="text-sm font-medium text-green-600 dark:text-green-400 group-hover:underline">
-                    Get Started →
-                  </div>
+                {/* Scroll indicator dots */}
+                <div className="flex justify-center gap-1.5 mt-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-primary"></div>
+                  <div className="w-1.5 h-1.5 rounded-full bg-muted"></div>
+                  <div className="w-1.5 h-1.5 rounded-full bg-muted"></div>
                 </div>
               </div>
-            </Link>
+            ) : (
+              <>
+                {/* API Path Card */}
+                <Link href="/start/api" className="group">
+                  <div className="bg-card border-2 border-border hover:border-blue-500 rounded-lg p-6 shadow-sm hover:shadow-md transition-all h-full flex flex-col">
+                    <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                      <Code2 className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    <h3 className="text-xl font-bold mb-2">Use the API</h3>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Copy key → make your first API call in 30 seconds
+                    </p>
+                    <div className="mt-auto">
+                      <div className="text-sm font-medium text-blue-600 dark:text-blue-400 group-hover:underline">
+                        Get Started →
+                      </div>
+                    </div>
+                  </div>
+                </Link>
+
+                {/* Claude Code Path Card */}
+                <Link href="/start/claude-code" className="group">
+                  <div className="bg-card border-2 border-border hover:border-purple-500 rounded-lg p-6 shadow-sm hover:shadow-md transition-all h-full flex flex-col">
+                    <div className="w-12 h-12 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                      <Terminal className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+                    </div>
+                    <h3 className="text-xl font-bold mb-2">Install Claude Code</h3>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      One command → AI-powered coding in minutes
+                    </p>
+                    <div className="mt-auto">
+                      <div className="text-sm font-medium text-purple-600 dark:text-purple-400 group-hover:underline">
+                        Get Started →
+                      </div>
+                    </div>
+                  </div>
+                </Link>
+
+                {/* Chat Path Card */}
+                <Link href="/start/chat" className="group">
+                  <div className="bg-card border-2 border-border hover:border-green-500 rounded-lg p-6 shadow-sm hover:shadow-md transition-all h-full flex flex-col">
+                    <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                      <MessageSquare className="w-6 h-6 text-green-600 dark:text-green-400" />
+                    </div>
+                    <h3 className="text-xl font-bold mb-2">Open Chat</h3>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Start chatting → we pick the best model for you
+                    </p>
+                    <div className="mt-auto">
+                      <div className="text-sm font-medium text-green-600 dark:text-green-400 group-hover:underline">
+                        Get Started →
+                      </div>
+                    </div>
+                  </div>
+                </Link>
+              </>
+            )}
           </div>
 
           {/* Why Gatewayz - Proof Strip */}
