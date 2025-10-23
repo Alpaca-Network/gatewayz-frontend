@@ -516,9 +516,12 @@ export default function ModelsClient({ initialModels }: { initialModels: Model[]
       });
     });
 
+    // Define all known gateways that should appear in the filter
+    // This ensures all gateways are visible even if they have 0 models currently
+    const allKnownGateways = ['featherless', 'openrouter', 'groq', 'together', 'fireworks', 'chutes', 'deepinfra', 'google', 'cerebras', 'nebius', 'xai', 'novita', 'huggingface'];
+
     // Log gateway counts for debugging
-    const allGateways = ['openrouter', 'portkey', 'featherless', 'groq', 'together', 'fireworks', 'chutes', 'deepinfra', 'google', 'cerebras', 'nebius', 'xai', 'novita', 'huggingface'];
-    const gatewayStats = allGateways.map(g => ({
+    const gatewayStats = allKnownGateways.map(g => ({
       gateway: g,
       modelCount: counts[g] || 0
     }));
@@ -528,10 +531,22 @@ export default function ModelsClient({ initialModels }: { initialModels: Model[]
       console.warn('⚠️ Gateways with 0 models (may need backend fixes):', emptyGateways);
     }
 
-    return Object.entries(counts)
-      .filter(([gateway]) => gateway !== 'portkey') // Hide deprecated portkey gateway, use individual Portkey SDK providers instead
-      .sort((a, b) => b[1] - a[1])
-      .map(([gateway, count]) => ({ value: gateway, count }));
+    // Include all known gateways, even if they have 0 models
+    // This ensures users can see all available gateways and understand the complete picture
+    const allGatewaysWithCounts = allKnownGateways.map(gateway => ({
+      value: gateway,
+      count: counts[gateway] || 0
+    }));
+
+    // Sort by count descending, but keep gateways with 0 models at the end
+    return allGatewaysWithCounts.sort((a, b) => {
+      // If both have models or both don't, sort by count
+      if ((a.count > 0 && b.count > 0) || (a.count === 0 && b.count === 0)) {
+        return b.count - a.count;
+      }
+      // Put gateways with models before those without
+      return a.count > 0 ? -1 : 1;
+    });
   }, [deduplicatedModels]);
 
   const allModelSeriesWithCounts = useMemo(() => {
