@@ -42,6 +42,7 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
     'xai',
     'novita',
     'huggingface',
+    'aimo',
     'all'
   ];
   if (!validGateways.includes(gateway)) {
@@ -284,7 +285,8 @@ function getStaticFallbackModels(gateway: string): any[] {
       'nebius',
       'xai',
       'novita',
-      'huggingface'
+      'huggingface',
+      'aimo'
     ];
     const modelsPerGateway = Math.ceil(models.length / allGateways.length);
 
@@ -309,7 +311,8 @@ function getStaticFallbackModels(gateway: string): any[] {
       'nebius',
       'xai',
       'novita',
-      'huggingface'
+      'huggingface',
+      'aimo'
     ];
     const modelsPerGateway = Math.ceil(models.length / allGateways.length);
     let gatewayModels;
