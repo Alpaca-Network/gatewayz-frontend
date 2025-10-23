@@ -53,20 +53,29 @@ const nextConfig: NextConfig = {
       fs: false,
       path: false,
       os: false,
+      child_process: false,
+      net: false,
+      tls: false,
+      dns: false,
     };
 
-    // Handle Handlebars module resolution
+    // Handle module resolution for client-side
     if (!isServer) {
-      // For client-side builds, we can ignore Handlebars entirely since it's used by Genkit
       config.resolve.alias = {
         ...config.resolve.alias,
         handlebars: false,
       };
-    } else {
-      // For server-side builds, provide a mock for require.extensions
-      config.resolve.alias = {
-        ...config.resolve.alias,
-      };
+
+      // Completely ignore node: protocol modules
+      config.plugins = config.plugins || [];
+      config.plugins.push(
+        new (require('webpack')).NormalModuleReplacementPlugin(
+          /^node:/,
+          (resource) => {
+            resource.request = resource.request.replace(/^node:/, '');
+          }
+        )
+      );
     }
 
     // Ignore warnings about require.extensions and module casing
