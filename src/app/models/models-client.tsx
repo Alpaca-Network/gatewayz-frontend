@@ -172,9 +172,9 @@ export default function ModelsClient({ initialModels }: { initialModels: Model[]
   const [models, setModels] = useState<Model[]>(initialModels);
   const [isLoadingModels, setIsLoadingModels] = useState(initialModels.length < 50);
 
-  // Infinite scroll state
-  const [itemsPerPage] = useState(48); // Load 48 models at a time
-  const [visibleCount, setVisibleCount] = useState(48); // Number of items currently visible
+  // Infinite scroll state - Reduced for faster initial load
+  const [itemsPerPage] = useState(24); // Load 24 models at a time
+  const [visibleCount, setVisibleCount] = useState(24); // Number of items currently visible
   const loadMoreRef = React.useRef<HTMLDivElement>(null);
 
   // Fetch models client-side if we only got the fallback static models
@@ -294,7 +294,8 @@ export default function ModelsClient({ initialModels }: { initialModels: Model[]
   };
 
   // Extract model series from model name (e.g., "GPT-4", "Claude", "Gemini")
-  const getModelSeries = (model: Model): string => {
+  // Memoized to avoid recreating on every render
+  const getModelSeries = useCallback((model: Model): string => {
     const name = model.name.toLowerCase();
     if (name.includes('gpt-4')) return 'GPT-4';
     if (name.includes('gpt-3')) return 'GPT-3';
@@ -307,7 +308,7 @@ export default function ModelsClient({ initialModels }: { initialModels: Model[]
     if (name.includes('glm')) return 'GLM';
     if (name.includes('phi')) return 'Phi';
     return 'Other';
-  };
+  }, []);
 
   const resetFilters = () => {
     setSearchTerm("");
@@ -345,7 +346,9 @@ export default function ModelsClient({ initialModels }: { initialModels: Model[]
     });
   }, [deduplicatedModels, debouncedSearchTerm]);
 
+  // Memoize the filtering logic separately for better performance
   const filteredModels = useMemo(() => {
+    const startTime = performance.now();
     // First filter, then sort
     const filtered = searchFilteredModels.filter((model) => {
       const inputFormatMatch = selectedInputFormats.length === 0 || selectedInputFormats.every(m =>
@@ -410,6 +413,8 @@ export default function ModelsClient({ initialModels }: { initialModels: Model[]
         }
     });
 
+    const endTime = performance.now();
+    console.log(`[Models] Filtering took ${(endTime - startTime).toFixed(2)}ms (${sorted.length} results)`);
     return sorted;
   }, [searchFilteredModels, selectedInputFormats, selectedOutputFormats, contextLengthRange, promptPricingRange, selectedParameters, selectedDevelopers, selectedGateways, selectedModelSeries, pricingFilter, sortBy, getModelSeries]);
 
@@ -422,7 +427,7 @@ export default function ModelsClient({ initialModels }: { initialModels: Model[]
 
   // Reset visible count when filters change
   useEffect(() => {
-    setVisibleCount(48);
+    setVisibleCount(24);
   }, [searchTerm, selectedInputFormats, selectedOutputFormats, contextLengthRange, promptPricingRange, selectedParameters, selectedDevelopers, selectedGateways, selectedModelSeries, pricingFilter, sortBy, releaseDateFilter]);
 
   // Intersection Observer for infinite scroll
