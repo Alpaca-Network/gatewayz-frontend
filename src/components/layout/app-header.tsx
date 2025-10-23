@@ -120,17 +120,18 @@ export function AppHeader() {
             <img src="/logo_black.svg" alt="Gatewayz" className="w-[45px] h-[45px] object-contain dark:hidden" />
             <img src="/logo_white.png" alt="Gatewayz" className="w-[45px] h-[45px] object-contain hidden dark:block" />
           </Link>
-          <div className="hidden lg:block shrink-0">
-            <GetCreditsButton />
-          </div>
         </div>
 
-        <div className="hidden md:block flex-1 max-w-md">
+        <div className="hidden xl:block flex-1 min-w-[200px] max-w-md">
           <SearchBar />
         </div>
 
         <div className="flex items-center gap-4 ml-auto">
-          <nav className="hidden md:flex items-center gap-6 text-sm whitespace-nowrap">
+          <div className="hidden lg:block shrink-0">
+            <GetCreditsButton />
+          </div>
+
+          <nav className="hidden lg:flex items-center gap-6 text-sm whitespace-nowrap">
             <Link href="/models" className="transition-colors hover:text-foreground/80 ">Models</Link>
             <Link href="/chat" className="transition-colors hover:text-foreground/80 ">Chat</Link>
             <Link href="/developers" className="transition-colors hover:text-foreground/80 ">Researchers</Link>
