@@ -113,12 +113,17 @@ export function AppHeader() {
   }, [toUnixSeconds]);
 
   return (
-    <header className="sticky top-0 z-[60] w-full h-[65px] border-b bg-header flex items-center">
-      <div className="container flex h-14 max-w-screen-2xl items-center px-4 sm:px-6 lg:px-8 mx-auto gap-4">
+    <header className="sticky top-0 z-[60] w-full h-[65px] border-b bg-header">
+      <div className="w-full max-w-7xl mx-auto flex h-full items-center px-4 sm:px-6 lg:px-8 gap-4">
         <div className="flex items-center gap-4 shrink-0">
-          <Link href="/" className="flex items-center space-x-2 w-[45px] h-[45px] shrink-0">
+          <Link href="/" className="flex items-center gap-2 shrink-0">
+            {/* Light mode logo and text */}
             <img src="/logo_black.svg" alt="Gatewayz" className="w-[45px] h-[45px] object-contain dark:hidden" />
+            <span className="font-bold text-lg text-foreground dark:hidden hidden sm:inline-block">Gatewayz</span>
+
+            {/* Dark mode logo and text */}
             <img src="/logo_white.png" alt="Gatewayz" className="w-[45px] h-[45px] object-contain hidden dark:block" />
+            <span className="font-bold text-lg text-foreground hidden dark:inline-block sm:dark:inline-block">Gatewayz</span>
           </Link>
         </div>
 
@@ -127,9 +132,9 @@ export function AppHeader() {
         </div>
 
         <div className="flex items-center gap-4 ml-auto">
-          <div className="hidden lg:block shrink-0">
-            <GetCreditsButton />
-          </div>
+          {/*<div className="hidden lg:block shrink-0">*/}
+          {/*  <GetCreditsButton />*/}
+          {/*</div>*/}
 
           <nav className="hidden lg:flex items-center gap-6 text-sm whitespace-nowrap">
             <Link href="/models" className="transition-colors hover:text-foreground/80 ">Models</Link>

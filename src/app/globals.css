@@ -189,4 +189,28 @@ body {
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
+
+  /* Marquee animation for logo carousel */
+  @keyframes marquee {
+    0% {
+      transform: translateX(0);
+    }
+    100% {
+      transform: translateX(-50%);
+    }
+  }
+
+  .marquee-container {
+    @apply relative overflow-hidden;
+  }
+
+  .marquee-track {
+    @apply flex gap-8;
+    animation: marquee 40s linear infinite;
+    width: max-content;
+  }
+
+  .marquee-track:hover {
+    animation-play-state: paused;
+  }
 }

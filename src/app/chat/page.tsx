@@ -2442,7 +2442,7 @@ function ChatPageContent() {
             </div>
           </div>
 
-          {/* Mobile Layout - Title above, Model below */}
+          {/* Mobile Layout - TitleSection above, Model below */}
           <div className="flex lg:hidden flex-col gap-3">
             <div className="flex items-center gap-2 w-full">
               <div className="flex-shrink-0">
