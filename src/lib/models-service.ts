@@ -2,6 +2,10 @@ import { models } from '@/lib/models-data';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
 
+// In-memory cache for models to reduce API calls
+let modelsCache: { data: any[], timestamp: number } | null = null;
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
+
 // Transform static models data to backend format
 function transformModel(model: any, gateway: string) {
   return {
@@ -24,6 +28,15 @@ function transformModel(model: any, gateway: string) {
 }
 
 export async function getModelsForGateway(gateway: string, limit?: number) {
+  // Check cache first
+  if (modelsCache && gateway === 'all') {
+    const now = Date.now();
+    if (now - modelsCache.timestamp < CACHE_DURATION) {
+      console.log(`[Models] Returning cached models (${modelsCache.data.length} models)`);
+      return { data: modelsCache.data };
+    }
+  }
+
   // Validate gateway
   // Note: 'portkey' is deprecated; use individual providers instead (google, cerebras, nebius, xai, novita, huggingface)
   const validGateways = [
@@ -68,6 +81,13 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
       );
 
       console.log(`[Models] Combined ${allGatewayModels.length} from "all" + ${hfModels.length} from "huggingface" + ${googleModels.length} from "google" + ${aimoModels.length} from "aimo" = ${uniqueModels.length} unique models`);
+
+      // Cache the result for 'all' gateway
+      modelsCache = {
+        data: uniqueModels,
+        timestamp: Date.now()
+      };
+
       return { data: uniqueModels };
     } catch (error) {
       console.error('[Models] Error fetching from multiple gateways:', error);
