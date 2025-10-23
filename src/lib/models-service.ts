@@ -56,31 +56,33 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
     'novita',
     'huggingface',
     'aimo',
+    'near',
     'all'
   ];
   if (!validGateways.includes(gateway)) {
     throw new Error('Invalid gateway');
   }
 
-  // Special handling for 'all' gateway - fetch from 'all', 'huggingface', 'google', and 'aimo'
-  // because backend's 'all' endpoint doesn't include HuggingFace, Google, and AiMo models
+  // Special handling for 'all' gateway - fetch from 'all', 'huggingface', 'google', 'aimo', and 'near'
+  // because backend's 'all' endpoint doesn't include HuggingFace, Google, AiMo, and NEAR models
   if (gateway === 'all') {
-    console.log('[Models] Fetching from "all", "huggingface", "google", and "aimo" gateways in parallel');
+    console.log('[Models] Fetching from "all", "huggingface", "google", "aimo", and "near" gateways in parallel');
     try {
-      const [allGatewayModels, hfModels, googleModels, aimoModels] = await Promise.all([
+      const [allGatewayModels, hfModels, googleModels, aimoModels, nearModels] = await Promise.all([
         fetchModelsFromGateway('all', limit),
         fetchModelsFromGateway('huggingface', limit),
         fetchModelsFromGateway('google', limit),
-        fetchModelsFromGateway('aimo', limit)
+        fetchModelsFromGateway('aimo', limit),
+        fetchModelsFromGateway('near', limit)
       ]);
 
       // Combine and deduplicate models by ID
-      const combinedModels = [...allGatewayModels, ...hfModels, ...googleModels, ...aimoModels];
+      const combinedModels = [...allGatewayModels, ...hfModels, ...googleModels, ...aimoModels, ...nearModels];
       const uniqueModels = Array.from(
         new Map(combinedModels.map(m => [m.id, m])).values()
       );
 
-      console.log(`[Models] Combined ${allGatewayModels.length} from "all" + ${hfModels.length} from "huggingface" + ${googleModels.length} from "google" + ${aimoModels.length} from "aimo" = ${uniqueModels.length} unique models`);
+      console.log(`[Models] Combined ${allGatewayModels.length} from "all" + ${hfModels.length} from "huggingface" + ${googleModels.length} from "google" + ${aimoModels.length} from "aimo" + ${nearModels.length} from "near" = ${uniqueModels.length} unique models`);
 
       // Cache the result for 'all' gateway
       modelsCache = {
@@ -123,10 +125,13 @@ async function fetchModelsFromGateway(gateway: string, limit?: number): Promise<
     let response;
     let url = `${API_BASE_URL}/v1/models?gateway=${gateway}${fullLimitParam}`;
 
-    // Debug logging for HuggingFace, Google, and AiMo requests
-    if (gateway === 'huggingface' || gateway === 'google' || gateway === 'aimo') {
+    // Debug logging for HuggingFace, Google, AiMo, and NEAR requests
+    if (gateway === 'huggingface' || gateway === 'google' || gateway === 'aimo' || gateway === 'near') {
       console.log(`[Models] Requesting ${gateway} models with URL: ${url}`);
     }
+
+    // Use longer timeout for 'all', 'huggingface', 'google', 'aimo', and 'near' gateways (they have many models)
+    const timeoutMs = (gateway === 'all' || gateway === 'huggingface' || gateway === 'google' || gateway === 'aimo' || gateway === 'near') ? 90000 : 15000;
 
     // Try live API first (primary source)
     try {
@@ -139,9 +144,6 @@ async function fetchModelsFromGateway(gateway: string, limit?: number): Promise<
       if (gateway === 'huggingface' && hfApiKey) {
         headers['Authorization'] = `Bearer ${hfApiKey}`;
       }
-
-      // Use longer timeout for 'all', 'huggingface', 'google', and 'aimo' gateways (they have many models)
-      const timeoutMs = (gateway === 'all' || gateway === 'huggingface' || gateway === 'google' || gateway === 'aimo') ? 90000 : 15000;
 
       response = await fetch(url, {
         method: 'GET',
@@ -309,7 +311,8 @@ function getStaticFallbackModels(gateway: string): any[] {
       'xai',
       'novita',
       'huggingface',
-      'aimo'
+      'aimo',
+      'near'
     ];
     const modelsPerGateway = Math.ceil(models.length / allGateways.length);
 
@@ -335,7 +338,8 @@ function getStaticFallbackModels(gateway: string): any[] {
       'xai',
       'novita',
       'huggingface',
-      'aimo'
+      'aimo',
+      'near'
     ];
     const modelsPerGateway = Math.ceil(models.length / allGateways.length);
     let gatewayModels;

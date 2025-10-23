@@ -69,7 +69,8 @@ const GATEWAY_CONFIG: Record<string, { name: string; color: string; icon?: React
   novita: { name: 'Novita', color: 'bg-violet-600' },
   huggingface: { name: 'Hugging Face', color: 'bg-yellow-600' },
   hug: { name: 'Hugging Face', color: 'bg-yellow-600' }, // Backend uses 'hug' abbreviation
-  aimo: { name: 'AiMo', color: 'bg-pink-600' }
+  aimo: { name: 'AiMo', color: 'bg-pink-600' },
+  near: { name: 'NEAR', color: 'bg-teal-600' }
 };
 
 const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
@@ -537,7 +538,7 @@ export default function ModelsClient({ initialModels }: { initialModels: Model[]
     // Define all known gateways that should appear in the filter
     // This ensures all gateways are visible even if they have 0 models currently
     // Excludes 'portkey' as it's deprecated (use individual Portkey SDK providers instead)
-    const allKnownGateways = ['featherless', 'openrouter', 'groq', 'together', 'fireworks', 'chutes', 'deepinfra', 'google', 'cerebras', 'nebius', 'xai', 'novita', 'huggingface', 'aimo'];
+    const allKnownGateways = ['featherless', 'openrouter', 'groq', 'together', 'fireworks', 'chutes', 'deepinfra', 'google', 'cerebras', 'nebius', 'xai', 'novita', 'huggingface', 'aimo', 'near'];
 
     // Log gateway counts for debugging
     const gatewayStats = allKnownGateways.map(g => ({
