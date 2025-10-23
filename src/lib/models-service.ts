@@ -63,51 +63,26 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
     throw new Error('Invalid gateway');
   }
 
-  // Special handling for 'all' gateway - fetch from all individual gateways in parallel
-  // This ensures models are properly assigned to their respective gateways for filtering
+  // Special handling for 'all' gateway - use the backend's gateway=all endpoint directly
+  // This is more efficient than fetching from each gateway individually
   if (gateway === 'all') {
-    console.log('[Models] Fetching from all gateways in parallel');
+    console.log('[Models] Fetching from gateway=all endpoint');
     try {
-      // Fetch from all known gateways (excluding deprecated 'portkey' and 'all' itself)
-      const gatewaysToFetch = [
-        'openrouter',
-        'featherless',
-        'groq',
-        'together',
-        'fireworks',
-        'chutes',
-        'deepinfra',
-        'google',
-        'cerebras',
-        'nebius',
-        'xai',
-        'novita',
-        'huggingface',
-        'aimo',
-        'near'
-      ];
+      // Fetch directly from the backend's gateway=all endpoint
+      const models = await fetchModelsFromGateway('all', limit);
 
-      const results = await Promise.all(
-        gatewaysToFetch.map(gw => fetchModelsFromGateway(gw, limit))
-      );
-
-      // Combine and deduplicate models by ID
-      const combinedModels = results.flat();
-      const uniqueModels = Array.from(
-        new Map(combinedModels.map(m => [m.id, m])).values()
-      );
-
-      console.log(`[Models] Combined ${combinedModels.length} total (${uniqueModels.length} unique) from ${gatewaysToFetch.length} gateways`);
+      console.log(`[Models] Fetched ${models.length} models from gateway=all endpoint`);
 
       // Cache the result for 'all' gateway
-      modelsCache = {
-        data: uniqueModels,
-        timestamp: Date.now()
-      };
-
-      return { data: uniqueModels };
+      if (models.length > 0) {
+        modelsCache = {
+          data: models,
+          timestamp: Date.now()
+        };
+        return { data: models };
+      }
     } catch (error) {
-      console.error('[Models] Error fetching from multiple gateways:', error);
+      console.error('[Models] Error fetching from gateway=all:', error);
       // Fall through to static fallback
     }
   }
