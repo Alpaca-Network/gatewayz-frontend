@@ -56,6 +56,9 @@ class Config:
     # AIMO Configuration
     AIMO_API_KEY = os.environ.get("AIMO_API_KEY")
 
+    # Near AI Configuration
+    NEAR_API_KEY = os.environ.get("NEAR_API_KEY")
+
     # Google Vertex AI Configuration
     GOOGLE_PROJECT_ID = os.environ.get("GOOGLE_PROJECT_ID", "gatewayz-468519")
     GOOGLE_VERTEX_LOCATION = os.environ.get("GOOGLE_VERTEX_LOCATION", "us-central1")

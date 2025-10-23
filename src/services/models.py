@@ -23,6 +23,7 @@ from src.cache import (
     _novita_models_cache,
     _huggingface_models_cache,
     _aimo_models_cache,
+    _near_models_cache,
 )
 from fastapi import APIRouter
 from datetime import datetime, timezone
@@ -283,6 +284,14 @@ def get_cached_models(gateway: str = "openrouter"):
                     return cache["data"]
             return fetch_models_from_aimo()
 
+        if gateway == "near":
+            cache = _near_models_cache
+            if cache["data"] and cache["timestamp"]:
+                cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
+                if cache_age < cache["ttl"]:
+                    return cache["data"]
+            return fetch_models_from_near()
+
         if gateway == "all":
             openrouter_models = get_cached_models("openrouter") or []
             portkey_models = get_cached_models("portkey") or []
@@ -299,7 +308,8 @@ def get_cached_models(gateway: str = "openrouter"):
             fireworks_models = get_cached_models("fireworks") or []
             together_models = get_cached_models("together") or []
             aimo_models = get_cached_models("aimo") or []
-            return openrouter_models + portkey_models + featherless_models + deepinfra_models + google_models + cerebras_models + nebius_models + xai_models + novita_models + hug_models + chutes_models + groq_models + fireworks_models + together_models + aimo_models
+            near_models = get_cached_models("near") or []
+            return openrouter_models + portkey_models + featherless_models + deepinfra_models + google_models + cerebras_models + nebius_models + xai_models + novita_models + hug_models + chutes_models + groq_models + fireworks_models + together_models + aimo_models + near_models
 
         # Default to OpenRouter
         if _models_cache["data"] and _models_cache["timestamp"]:
@@ -1251,6 +1261,140 @@ def normalize_aimo_model(aimo_model: dict) -> dict:
     }
 
     return enrich_model_with_pricing(normalized, "aimo")
+
+
+def fetch_models_from_near():
+    """Fetch models from Near AI API
+
+    Note: Near AI is a decentralized AI infrastructure providing private, verifiable, and user-owned AI services.
+    Models are fetched from the OpenAI-compatible /models endpoint.
+    """
+    try:
+        if not Config.NEAR_API_KEY:
+            logger.error("Near AI API key not configured")
+            return None
+
+        headers = {
+            "Authorization": f"Bearer {Config.NEAR_API_KEY}",
+            "Content-Type": "application/json",
+        }
+
+        # Try to fetch models from Near AI
+        # Note: Using standard OpenAI-compatible /models endpoint
+        response = httpx.get(
+            "https://api.near.ai/v1/models",
+            headers=headers,
+            timeout=20.0,
+        )
+        response.raise_for_status()
+
+        payload = response.json()
+        raw_models = payload.get("data", [])
+
+        if not raw_models:
+            logger.warning("No models returned from Near AI API")
+            return []
+
+        # Normalize models
+        normalized_models = [
+            normalize_near_model(model) for model in raw_models if model
+        ]
+
+        _near_models_cache["data"] = normalized_models
+        _near_models_cache["timestamp"] = datetime.now(timezone.utc)
+
+        logger.info(f"Fetched {len(normalized_models)} Near AI models")
+        return _near_models_cache["data"]
+    except httpx.HTTPStatusError as e:
+        logger.error(f"Near AI HTTP error: {e.response.status_code} - {e.response.text}")
+        return []
+    except Exception as e:
+        logger.error(f"Failed to fetch models from Near AI: {e}")
+        return []
+
+
+def normalize_near_model(near_model: dict) -> dict:
+    """Normalize Near AI catalog entries to resemble OpenRouter model shape
+
+    Near AI features:
+    - Private, verifiable AI infrastructure
+    - Decentralized execution
+    - User-owned AI services
+    - Cryptographic verification and on-chain auditing
+    """
+    model_id = near_model.get("id")
+    if not model_id:
+        logger.warning(f"Near AI model missing 'id' field: {near_model}")
+        return None
+
+    slug = f"near/{model_id}"
+    provider_slug = "near"
+
+    display_name = near_model.get("display_name") or model_id.replace("-", " ").replace("_", " ").title()
+    owned_by = near_model.get("owned_by", "Near Protocol")
+
+    # Highlight security features in description
+    base_description = near_model.get("description") or f"Near AI hosted model {model_id}."
+    security_features = " Security: Private AI inference with decentralized execution, cryptographic verification, and on-chain auditing."
+    description = f"{base_description}{security_features}"
+
+    metadata = near_model.get("metadata") or {}
+    context_length = metadata.get("context_length") or near_model.get("context_length") or 0
+
+    pricing = {
+        "prompt": None,
+        "completion": None,
+        "request": None,
+        "image": None,
+        "web_search": None,
+        "internal_reasoning": None,
+    }
+
+    # Extract pricing if available from Near AI
+    pricing_info = near_model.get("pricing", {})
+    if pricing_info:
+        pricing["prompt"] = str(pricing_info.get("prompt")) if pricing_info.get("prompt") is not None else None
+        pricing["completion"] = str(pricing_info.get("completion")) if pricing_info.get("completion") is not None else None
+
+    architecture = {
+        "modality": metadata.get("modality", "text->text"),
+        "input_modalities": metadata.get("input_modalities") or ["text"],
+        "output_modalities": metadata.get("output_modalities") or ["text"],
+        "tokenizer": metadata.get("tokenizer"),
+        "instruct_type": metadata.get("instruct_type"),
+    }
+
+    normalized = {
+        "id": slug,
+        "slug": slug,
+        "canonical_slug": slug,
+        "hugging_face_id": metadata.get("huggingface_repo"),
+        "name": display_name,
+        "created": near_model.get("created"),
+        "description": description,
+        "context_length": context_length,
+        "architecture": architecture,
+        "pricing": pricing,
+        "top_provider": None,
+        "per_request_limits": None,
+        "supported_parameters": metadata.get("supported_parameters", []),
+        "default_parameters": metadata.get("default_parameters", {}),
+        "provider_slug": provider_slug,
+        "provider_site_url": "https://near.ai",
+        "model_logo_url": None,
+        "source_gateway": "near",
+        "raw_near": near_model,
+        # Highlight security features as metadata
+        "security_features": {
+            "private_inference": True,
+            "decentralized": True,
+            "verifiable": True,
+            "on_chain_auditing": True,
+            "user_owned": True,
+        },
+    }
+
+    return enrich_model_with_pricing(normalized, "near")
 
 
 def fetch_specific_model_from_together(provider_name: str, model_name: str):
