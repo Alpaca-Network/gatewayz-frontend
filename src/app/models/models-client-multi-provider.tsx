@@ -66,7 +66,8 @@ const GATEWAY_CONFIG: Record<string, { name: string; color: string; icon?: React
   nebius: { name: 'Nebius', color: 'bg-slate-600' },
   xai: { name: 'xAI', color: 'bg-black' },
   novita: { name: 'Novita', color: 'bg-violet-600' },
-  huggingface: { name: 'Hugging Face', color: 'bg-yellow-600' }
+  huggingface: { name: 'Hugging Face', color: 'bg-yellow-600' },
+  near: { name: 'NEAR', color: 'bg-teal-600' }
 };
 
 const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
