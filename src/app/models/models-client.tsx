@@ -88,7 +88,8 @@ const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
   const gateways = (model.source_gateways && model.source_gateways.length > 0) ? model.source_gateways : (model.source_gateway ? [model.source_gateway] : []);
 
   // Preserve literal slash in URL (e.g., "provider/model-name")
-  const modelUrl = model.id.includes('/')
+  // But encode special characters like colons (for AIMO models: "providerId:model-name")
+  const modelUrl = model.id.includes('/') && !model.id.includes(':')
     ? `/models/${model.id}`
     : `/models/${encodeURIComponent(model.id)}`;
 
