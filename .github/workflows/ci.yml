@@ -5,6 +5,7 @@ on:
     branches: [main, staging, develop]
   pull_request:
     branches: [main, staging, develop]
+  workflow_dispatch:
 
 env:
   PYTHON_VERSION: "3.12"
