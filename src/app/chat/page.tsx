@@ -1509,6 +1509,11 @@ function ChatPageContent() {
             });
         }
         setSelectedModel(model);
+
+        // Clear selected image if switching to a text-only model
+        if (model && !model.modalities?.includes('Image') && selectedImage) {
+            handleRemoveImage();
+        }
     };
 
     const upgradeTempKeyIfNeeded = useCallback(
@@ -2528,7 +2533,7 @@ function ChatPageContent() {
                             <img
                               src={msg.image}
                               alt="Uploaded image"
-                              className="max-w-[200px] lg:max-w-xs rounded-lg mb-2"
+                              className="max-w-[280px] lg:max-w-md max-h-48 lg:max-h-64 rounded-lg mb-2 object-contain border border-white/20"
                             />
                           )}
                           <div className="text-sm whitespace-pre-wrap text-white">{msg.content}</div>
@@ -2609,17 +2614,21 @@ function ChatPageContent() {
               <div className="relative">
                 {/* Image preview */}
                 {selectedImage && (
-                  <div className="mb-2 relative inline-block">
-                    <img
-                      src={selectedImage}
-                      alt="Selected image"
-                      className="max-w-[200px] lg:max-w-xs max-h-24 lg:max-h-32 rounded-lg border"
-                    />
+                  <div className="mb-3 relative inline-block">
+                    <div className="relative group">
+                      <img
+                        src={selectedImage}
+                        alt="Selected image"
+                        className="max-w-[280px] lg:max-w-md max-h-32 lg:max-h-48 rounded-lg border-2 border-border shadow-md object-contain"
+                      />
+                      <div className="absolute inset-0 bg-black/5 dark:bg-white/5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </div>
                     <Button
                       variant="destructive"
                       size="icon"
-                      className="absolute -top-2 -right-2 h-6 w-6 rounded-full"
+                      className="absolute -top-2 -right-2 h-7 w-7 rounded-full shadow-lg"
                       onClick={handleRemoveImage}
+                      title="Remove image"
                     >
                       <X className="h-4 w-4" />
                     </Button>
@@ -2640,18 +2649,22 @@ function ChatPageContent() {
                     onChange={handleImageSelect}
                     className="hidden"
                   />
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 rounded-lg"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={!ready || (!authenticated && !hasApiKey)}
-                  >
-                    <ImageIcon className="h-5 w-5" />
-                  </Button>
+                  {/* Only show image button for models that support image input */}
+                  {selectedModel?.modalities?.includes('Image') && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 rounded-lg"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={!ready || (!authenticated && !hasApiKey)}
+                      title="Upload an image"
+                    >
+                      <ImageIcon className="h-5 w-5" />
+                    </Button>
+                  )}
                   <Input
                     ref={messageInputRef}
-                    placeholder={!ready ? "Authenticating..." : (!authenticated && !hasApiKey) ? "Please log in..." : "Start A Message"}
+                    placeholder={!ready ? "Authenticating..." : (!authenticated && !hasApiKey) ? "Please log in..." : selectedModel?.modalities?.includes('Image') ? "Type a message or add an image..." : "Start A Message"}
                     value={message}
                     onChange={(e) => {
                       setMessage(e.target.value);
