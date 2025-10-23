@@ -104,6 +104,7 @@ def create_app() -> FastAPI:
         ("ping", "Ping Service"),
         ("chat", "Chat Completions"),  # Moved before catalog
         ("messages", "Anthropic Messages API"),  # Claude-compatible endpoint
+        ("images", "Image Generation"),  # Image generation endpoints
         ("catalog", "Model Catalog"),
         ("system", "System & Health"),  # Cache management and health monitoring
         ("root", "Root/Home"),

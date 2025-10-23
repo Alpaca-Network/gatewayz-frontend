@@ -14,6 +14,7 @@ Tests cover:
 """
 
 import pytest
+import json
 from unittest.mock import Mock, patch, MagicMock
 from datetime import datetime, timezone, timedelta
 from fastapi.testclient import TestClient
@@ -655,10 +656,10 @@ class TestAccountDeletion:
             'confirmation': 'DELETE_ACCOUNT'
         }
 
-        response = client.delete(
+        response = client.request("DELETE",
             '/user/account',
             json=delete_data,
-            headers={'Authorization': f'Bearer {mock_api_key}'}
+            headers={'Authorization': f'Bearer {mock_api_key}', 'Content-Type': 'application/json'}
         )
 
         assert response.status_code == 200
@@ -682,10 +683,10 @@ class TestAccountDeletion:
             'confirmation': 'DELETE'
         }
 
-        response = client.delete(
+        response = client.request("DELETE",
             '/user/account',
             json=delete_data,
-            headers={'Authorization': f'Bearer {mock_api_key}'}
+            headers={'Authorization': f'Bearer {mock_api_key}', 'Content-Type': 'application/json'}
         )
 
         assert response.status_code == 400
@@ -709,10 +710,10 @@ class TestAccountDeletion:
             'confirmation': 'DELETE_ACCOUNT'
         }
 
-        response = client.delete(
+        response = client.request("DELETE",
             '/user/account',
             json=delete_data,
-            headers={'Authorization': f'Bearer {mock_api_key}'}
+            headers={'Authorization': f'Bearer {mock_api_key}', 'Content-Type': 'application/json'}
         )
 
         assert response.status_code == 500
@@ -731,11 +732,9 @@ class TestAccountDeletion:
             'confirmation': 'DELETE_ACCOUNT'
         }
 
-        response = client.delete(
-            '/user/account',
+        response = client.request("DELETE", "/user/account",
             json=delete_data,
-            headers={'Authorization': 'Bearer invalid-key'}
-        )
+            headers={'Authorization': 'Bearer invalid-key', 'Content-Type': 'application/json'})
 
         assert response.status_code == 401
 

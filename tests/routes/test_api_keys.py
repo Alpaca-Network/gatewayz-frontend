@@ -14,6 +14,7 @@ Tests cover:
 """
 
 import pytest
+import json
 from unittest.mock import Mock, patch, MagicMock
 from datetime import datetime, timezone, timedelta
 from fastapi.testclient import TestClient
@@ -478,7 +479,7 @@ class TestApiKeyUpdate:
     @patch('src.routes.api_keys.get_user')
     @patch('src.routes.api_keys.validate_api_key_permissions')
     @patch('src.routes.api_keys.get_api_key_by_id')
-    @patch('src.routes.api_keys.bulk_rotate_user_keys')
+    @patch('src.db_security.bulk_rotate_user_keys')
     def test_bulk_rotate_api_keys_success(
         self,
         mock_bulk_rotate,
@@ -646,10 +647,10 @@ class TestApiKeyDeletion:
             'confirmation': 'DELETE_KEY'
         }
 
-        response = client.delete(
+        response = client.request("DELETE",
             '/user/api-keys/1',
             json=delete_data,
-            headers={'Authorization': f'Bearer {mock_api_key}'}
+            headers={'Authorization': f'Bearer {mock_api_key}', 'Content-Type': 'application/json'}
         )
 
         assert response.status_code == 200
@@ -676,10 +677,10 @@ class TestApiKeyDeletion:
             'confirmation': 'DELETE'
         }
 
-        response = client.delete(
+        response = client.request("DELETE",
             '/user/api-keys/1',
             json=delete_data,
-            headers={'Authorization': f'Bearer {mock_api_key}'}
+            headers={'Authorization': f'Bearer {mock_api_key}', 'Content-Type': 'application/json'}
         )
 
         assert response.status_code == 400
@@ -706,7 +707,7 @@ class TestApiKeyDeletion:
             'confirmation': 'DELETE_KEY'
         }
 
-        response = client.delete(
+        response = client.request("DELETE",
             '/user/api-keys/999',
             json=delete_data,
             headers={'Authorization': f'Bearer {mock_api_key}'}
@@ -739,10 +740,10 @@ class TestApiKeyDeletion:
             'confirmation': 'DELETE_KEY'
         }
 
-        response = client.delete(
+        response = client.request("DELETE",
             '/user/api-keys/1',
             json=delete_data,
-            headers={'Authorization': f'Bearer {mock_api_key}'}
+            headers={'Authorization': f'Bearer {mock_api_key}', 'Content-Type': 'application/json'}
         )
 
         assert response.status_code == 500
@@ -932,7 +933,7 @@ class TestApiKeyIntegration:
         # 2. Delete key
         mock_delete_key.return_value = True
 
-        delete_response = client.delete(
+        delete_response = client.request("DELETE",
             '/user/api-keys/1',
             json={'confirmation': 'DELETE_KEY'},
             headers={'Authorization': f'Bearer {mock_api_key}'}
