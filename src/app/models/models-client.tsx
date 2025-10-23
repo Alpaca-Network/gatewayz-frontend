@@ -517,7 +517,27 @@ export default function ModelsClient({ initialModels }: { initialModels: Model[]
         counts[m.provider_slug] = (counts[m.provider_slug] || 0) + 1;
       }
     });
-    return Object.entries(counts)
+
+    // Filter out nonsensical alphanumeric AIMO provider IDs (e.g., "vTdFo728T1zRvBUGMYGfvvVBgewzvZDbpdXekVBMi7N")
+    // These are long base58-encoded strings that aren't human-readable researcher names
+    // We keep entries that:
+    // 1. Are not purely alphanumeric (contain hyphens, underscores, etc.)
+    // 2. OR are short (less than 30 chars - most real provider slugs are short)
+    // 3. OR contain common patterns like slashes, dots, or spaces
+    const filteredEntries = Object.entries(counts).filter(([dev]) => {
+      // If it contains non-alphanumeric characters (hyphens, slashes, etc.), keep it
+      if (/[^a-zA-Z0-9]/.test(dev)) {
+        return true;
+      }
+      // If it's short, it's probably a real slug
+      if (dev.length < 30) {
+        return true;
+      }
+      // Otherwise, it's likely a nonsensical base58 AIMO ID
+      return false;
+    });
+
+    return filteredEntries
       .sort((a, b) => b[1] - a[1])
       .map(([dev, count]) => ({ value: dev, count }));
   }, [deduplicatedModels]);
