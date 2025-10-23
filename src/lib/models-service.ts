@@ -145,6 +145,12 @@ async function fetchModelsFromGateway(gateway: string, limit?: number): Promise<
         headers['Authorization'] = `Bearer ${hfApiKey}`;
       }
 
+      // Add NEAR_API_KEY header if available for NEAR gateway (for auth and rate limit bypass)
+      const nearApiKey = process.env.NEXT_PUBLIC_NEAR_API_KEY || process.env.NEAR_API_KEY;
+      if (gateway === 'near' && nearApiKey) {
+        headers['Authorization'] = `Bearer ${nearApiKey}`;
+      }
+
       response = await fetch(url, {
         method: 'GET',
         headers,
@@ -189,6 +195,12 @@ async function fetchModelsFromGateway(gateway: string, limit?: number): Promise<
           const hfApiKey = process.env.NEXT_PUBLIC_HF_API_KEY || process.env.HF_API_KEY;
           if (gateway === 'huggingface' && hfApiKey) {
             fallbackHeaders['Authorization'] = `Bearer ${hfApiKey}`;
+          }
+
+          // Add NEAR_API_KEY header if available
+          const nearApiKey = process.env.NEXT_PUBLIC_NEAR_API_KEY || process.env.NEAR_API_KEY;
+          if (gateway === 'near' && nearApiKey) {
+            fallbackHeaders['Authorization'] = `Bearer ${nearApiKey}`;
           }
 
           response = await fetch(url, {
@@ -243,6 +255,12 @@ async function fetchModelsFromGateway(gateway: string, limit?: number): Promise<
         const hfApiKey = process.env.NEXT_PUBLIC_HF_API_KEY || process.env.HF_API_KEY;
         if (gateway === 'huggingface' && hfApiKey) {
           fallbackHeaders2['Authorization'] = `Bearer ${hfApiKey}`;
+        }
+
+        // Add NEAR_API_KEY header if available
+        const nearApiKey = process.env.NEXT_PUBLIC_NEAR_API_KEY || process.env.NEAR_API_KEY;
+        if (gateway === 'near' && nearApiKey) {
+          fallbackHeaders2['Authorization'] = `Bearer ${nearApiKey}`;
         }
 
         response = await fetch(url, {
