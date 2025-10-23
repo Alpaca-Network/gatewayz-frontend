@@ -2,6 +2,7 @@ import logging
 import httpx
 import time
 import base64
+import os
 from typing import Dict, Any
 
 from src.config import Config
@@ -180,10 +181,11 @@ def make_google_vertex_image_request(
         # Import Google Cloud AI Platform SDK
         try:
             from google.cloud import aiplatform
+            from google.auth import impersonated_credentials, default
         except ImportError:
             raise ImportError(
-                "google-cloud-aiplatform package is required for Google Vertex AI integration. "
-                "Install it with: pip install google-cloud-aiplatform"
+                "google-cloud-aiplatform and google-auth packages are required. "
+                "Install with: pip install google-cloud-aiplatform google-auth"
             )
 
         # Use config values if not provided
@@ -198,8 +200,46 @@ def make_google_vertex_image_request(
 
         logger.info(f"Making image generation request to Google Vertex AI endpoint {endpoint_id}")
 
+        # Service account to impersonate (if key creation is disabled)
+        target_sa = os.getenv(
+            "GOOGLE_VERTEX_SERVICE_ACCOUNT",
+            "vertex-client@gatewayz-468519.iam.gserviceaccount.com"
+        )
+
+        # Try to get credentials with impersonation support
+        credentials = None
+        try:
+            # First, try to get default credentials
+            source_credentials, source_project = default(
+                scopes=["https://www.googleapis.com/auth/cloud-platform"]
+            )
+
+            # If GOOGLE_VERTEX_SERVICE_ACCOUNT is set, use impersonation
+            if os.getenv("GOOGLE_VERTEX_SERVICE_ACCOUNT"):
+                logger.info(f"Using service account impersonation: {target_sa}")
+                credentials = impersonated_credentials.Credentials(
+                    source_credentials=source_credentials,
+                    target_principal=target_sa,
+                    target_scopes=["https://www.googleapis.com/auth/cloud-platform"],
+                    lifetime=3600  # 1 hour
+                )
+                logger.info("✓ Successfully created impersonated credentials")
+            else:
+                # Use default credentials (works if GOOGLE_APPLICATION_CREDENTIALS is set)
+                credentials = source_credentials
+                logger.info("Using default credentials from environment")
+
+        except Exception as auth_error:
+            logger.warning(f"Authentication setup: {auth_error}")
+            # Let Vertex AI SDK handle default authentication
+            credentials = None
+
         # Initialize Vertex AI
-        aiplatform.init(project=project_id, location=location)
+        if credentials:
+            aiplatform.init(project=project_id, location=location, credentials=credentials)
+        else:
+            # Fall back to default authentication
+            aiplatform.init(project=project_id, location=location)
 
         # Get the endpoint
         endpoint = aiplatform.Endpoint(endpoint_id)
