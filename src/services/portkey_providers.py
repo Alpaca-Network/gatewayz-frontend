@@ -15,9 +15,9 @@ APPROACH:
 RESULTS:
   Successfully returns models from providers by filtering the unified catalog:
   - Google: Matches "@google/", "google/", "gemini", "gemma" patterns
-  - Xai: Matches "@xai/", "xai/", "grok" patterns
+  - Cerebras: 9 models matching "@cerebras/", "cerebras/" patterns (as of Sep 2025)
   - Nebius: Matches "@nebius/", "nebius/" patterns
-  - Cerebras: Matches "@cerebras/", "cerebras/" patterns
+  - Xai: Matches "@xai/", "xai/", "grok" patterns
   - Novita: Matches "@novita/", "novita/" patterns
   - Hugging Face: Matches "llava-hf", "hugging", "hf/" patterns
 """
@@ -120,7 +120,20 @@ def fetch_models_from_google():
 
 
 def fetch_models_from_cerebras():
-    """Fetch models from Cerebras by filtering Portkey unified catalog"""
+    """
+    Fetch models from Cerebras by filtering Portkey unified catalog.
+
+    Expected models (9 total as of Sep 2025):
+    - qwen-3-coder-480b
+    - qwen-3-32b
+    - qwen-3-235b-a22b-thinking-2507
+    - qwen-3-235b-a22b-instruct-2507
+    - llama3.1-8b
+    - llama-4-scout-17b-16e-instruct
+    - llama-4-maverick-17b-128e-instruct
+    - llama-3.3-70b
+    - gpt-oss-120b
+    """
     try:
         # Cerebras models use @cerebras/ prefix in Portkey (also try without @ for compatibility)
         filtered_models = _filter_portkey_models_by_patterns(
@@ -257,7 +270,11 @@ def normalize_portkey_provider_model(model: dict, provider: str) -> dict:
             return {"source_gateway": provider, f"raw_{provider}": model}
 
         # Format: @provider/model-id (Portkey compatible format)
-        slug = f"@{provider}/{model_id}"
+        # Check if model_id already has the @provider/ prefix to avoid duplication
+        if model_id.startswith(f"@{provider}/"):
+            slug = model_id
+        else:
+            slug = f"@{provider}/{model_id}"
         display_name = model.get("display_name") or model_id.replace("-", " ").replace("_", " ").title()
         description = model.get("description") or f"{provider.title()} hosted model: {model_id}"
         context_length = model.get("context_length") or 0
