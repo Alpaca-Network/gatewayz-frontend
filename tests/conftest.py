@@ -35,7 +35,13 @@ def test_prefix():
 @pytest.fixture(scope="session")
 def supabase_client():
     """Get Supabase client for tests"""
-    return get_supabase_client()
+    try:
+        client = get_supabase_client()
+        # Test the connection
+        client.table("users").select("id").limit(1).execute()
+        return client
+    except Exception as e:
+        pytest.skip(f"Database not available: {e}")
 
 
 @pytest.fixture(scope="function")
@@ -135,8 +141,8 @@ def isolated_test_data(supabase_client, test_prefix):
 @pytest.fixture(autouse=True)
 def skip_if_no_database(request):
     """Skip tests that require database if credentials are not available"""
-    # Check if this is a database test
-    if 'db' in str(request.fspath):
+    # Check if this is a database or integration test
+    if 'db' in str(request.fspath) or 'integration' in str(request.fspath):
         try:
             client = get_supabase_client()
             # Quick connection test

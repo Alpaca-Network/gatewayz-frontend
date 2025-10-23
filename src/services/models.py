@@ -1374,8 +1374,21 @@ def normalize_deepinfra_model(deepinfra_model: dict) -> dict:
     provider_slug = model_id.split("/")[0] if "/" in model_id else "deepinfra"
     display_name = model_id.replace("-", " ").replace("_", " ").title()
 
-    description = f"DeepInfra hosted model: {model_id}. Pricing data may vary by region and usage."
+    # Get model type to determine modality
+    model_type = deepinfra_model.get("type") or deepinfra_model.get("reported_type") or "text"
 
+    # Build description with deprecation notice if applicable
+    base_description = deepinfra_model.get("description") or f"DeepInfra hosted model: {model_id}."
+    if deepinfra_model.get("deprecated"):
+        replaced_by = deepinfra_model.get("replaced_by")
+        if replaced_by:
+            base_description = f"{base_description} Note: This model is deprecated and has been replaced by {replaced_by}."
+        else:
+            base_description = f"{base_description} Note: This model is deprecated."
+    description = f"{base_description} Pricing data may vary by region and usage."
+
+    # Extract pricing information
+    pricing_info = deepinfra_model.get("pricing", {})
     pricing = {
         "prompt": None,
         "completion": None,
@@ -1385,10 +1398,38 @@ def normalize_deepinfra_model(deepinfra_model: dict) -> dict:
         "internal_reasoning": None
     }
 
+    # If pricing is time-based (for image generation), convert to image pricing
+    if pricing_info.get("type") == "time" and model_type in ("text-to-image", "image"):
+        cents_per_sec = pricing_info.get("cents_per_sec", 0)
+        # Convert cents per second to dollars per image (assume ~5 seconds per image)
+        pricing["image"] = str(cents_per_sec * 5 / 100) if cents_per_sec else None
+
+    # Determine modality based on model type
+    modality = "text->text"
+    input_modalities = ["text"]
+    output_modalities = ["text"]
+
+    if model_type in ("text-to-image", "image"):
+        modality = "text->image"
+        input_modalities = ["text"]
+        output_modalities = ["image"]
+    elif model_type in ("text-to-speech", "tts"):
+        modality = "text->audio"
+        input_modalities = ["text"]
+        output_modalities = ["audio"]
+    elif model_type in ("speech-to-text", "stt"):
+        modality = "audio->text"
+        input_modalities = ["audio"]
+        output_modalities = ["text"]
+    elif model_type == "multimodal":
+        modality = "multimodal"
+        input_modalities = ["text", "image"]
+        output_modalities = ["text"]
+
     architecture = {
-        "modality": "text->text",
-        "input_modalities": ["text"],
-        "output_modalities": ["text"],
+        "modality": modality,
+        "input_modalities": input_modalities,
+        "output_modalities": output_modalities,
         "tokenizer": None,
         "instruct_type": None
     }
