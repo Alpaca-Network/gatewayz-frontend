@@ -8,16 +8,17 @@ import string
 from datetime import datetime
 
 # Set test environment variables before any imports
+# NOTE: These are MOCK/FAKE placeholder credentials for testing only
 os.environ.setdefault('TESTING', 'true')
 os.environ.setdefault('APP_ENV', 'testing')
-os.environ.setdefault('SUPABASE_URL', 'https://test.supabase.co')
-os.environ.setdefault('SUPABASE_KEY', 'test-key-12345678901234567890123456789012')
-os.environ.setdefault('OPENROUTER_API_KEY', 'sk-or-v1-test123')
-os.environ.setdefault('PORTKEY_API_KEY', 'test-portkey-key')
-os.environ.setdefault('ADMIN_API_KEY', 'test-admin-key-12345')
-os.environ.setdefault('ENCRYPTION_KEY', 'test-encryption-key-32-chars!!')
-os.environ.setdefault('STRIPE_SECRET_KEY', 'sk_test_mock123')
-os.environ.setdefault('STRIPE_WEBHOOK_SECRET', 'whsec_test_mock123')
+os.environ.setdefault('SUPABASE_URL', 'https://xxxxxxxxxxxxx.supabase.co')
+os.environ.setdefault('SUPABASE_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh4eHh4eHh4eHh4eHgiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTYwMDAwMDAwMCwiZXhwIjoxOTAwMDAwMDAwfQ.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
+os.environ.setdefault('OPENROUTER_API_KEY', 'sk-or-v1-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
+os.environ.setdefault('PORTKEY_API_KEY', 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
+os.environ.setdefault('ADMIN_API_KEY', 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
+os.environ.setdefault('ENCRYPTION_KEY', 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
+os.environ.setdefault('STRIPE_SECRET_KEY', 'sk_test_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
+os.environ.setdefault('STRIPE_WEBHOOK_SECRET', 'whsec_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
 os.environ.setdefault('FRONTEND_URL', 'http://localhost:3000')
 
 from src.config.supabase_config import get_supabase_client
