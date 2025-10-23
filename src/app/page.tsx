@@ -450,7 +450,7 @@ console.log(completion.choices[0].message);`,
 
           <ProblemSolution/>
 
-          <Benefits/>
+          {/*<Benefits/>*/}
 
           <FAQ/>
 
