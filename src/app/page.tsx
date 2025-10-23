@@ -16,7 +16,6 @@ import { API_BASE_URL } from '@/lib/config';
 import Image from 'next/image';
 import { PathChooserModal } from '@/components/onboarding/path-chooser-modal';
 import posthog from 'posthog-js';
-import { useIsMobile } from '@/hooks/use-mobile';
 
 interface FeaturedModel {
   name: string;
@@ -213,7 +212,6 @@ export default function Home() {
   const [showApiKey, setShowApiKey] = useState(true);
   const { toast } = useToast();
   const [showPathChooser, setShowPathChooser] = useState(false);
-  const isMobile = useIsMobile();
   const pathCarouselRef = useRef<HTMLDivElement>(null);
 
   // Load the actual API key when user is authenticated
@@ -534,28 +532,25 @@ console.log(completion.choices[0].message);`,
           </div>
 
           {/* Mobile: Chat button above the fold */}
-          {isMobile && (
-            <div className="flex justify-center mt-4">
-              <Link href="/start/chat" className="w-full max-w-md px-2">
-                <Button
-                  size="lg"
-                  className="h-12 w-full text-base font-semibold bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-white shadow-lg"
-                  onClick={() => posthog.capture('mobile_chat_clicked')}
-                >
-                  <MessageSquare className="w-5 h-5 mr-2" />
-                  Start Chat
-                </Button>
-              </Link>
-            </div>
-          )}
+          <div className="flex md:hidden justify-center mt-4">
+            <Link href="/start/chat" className="w-full max-w-md px-2">
+              <Button
+                size="lg"
+                className="h-12 w-full text-base font-semibold bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-white shadow-lg"
+                onClick={() => posthog.capture('mobile_chat_clicked')}
+              >
+                <MessageSquare className="w-5 h-5 mr-2" />
+                Start Chat
+              </Button>
+            </Link>
+          </div>
 
           {/* Path Chooser Modal */}
           <PathChooserModal open={showPathChooser} onOpenChange={setShowPathChooser} />
 
-          {/* Three Path Cards - Desktop grid or Mobile carousel */}
-          <div className={isMobile ? "mt-3" : "grid md:grid-cols-3 gap-6 mt-16 max-w-5xl mx-auto"}>
-            {isMobile ? (
-              <div className="relative overflow-hidden -mx-4">
+          {/* Three Path Cards - Mobile carousel (visible on small screens) */}
+          <div className="mt-3 md:hidden">
+            <div className="relative overflow-hidden -mx-4">
                 <div
                   ref={pathCarouselRef}
                   className="flex gap-3 px-4 overflow-x-auto snap-x snap-mandatory scrollbar-hide pb-2"
@@ -624,9 +619,11 @@ console.log(completion.choices[0].message);`,
                   <div className="w-1.5 h-1.5 rounded-full bg-muted"></div>
                   <div className="w-1.5 h-1.5 rounded-full bg-muted"></div>
                 </div>
-              </div>
-            ) : (
-              <>
+            </div>
+          </div>
+
+          {/* Three Path Cards - Desktop grid (visible on medium+ screens) */}
+          <div className="hidden md:grid md:grid-cols-3 gap-6 mt-16 max-w-5xl mx-auto">
                 {/* API Path Card */}
                 <Link href="/start/api" className="group">
                   <div className="bg-card border-2 border-border hover:border-blue-500 rounded-lg p-6 shadow-sm hover:shadow-md transition-all h-full flex flex-col">
@@ -680,8 +677,6 @@ console.log(completion.choices[0].message);`,
                     </div>
                   </div>
                 </Link>
-              </>
-            )}
           </div>
 
           {/* Why Gatewayz - Proof Strip */}
