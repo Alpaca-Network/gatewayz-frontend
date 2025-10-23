@@ -329,8 +329,8 @@ console.log(completion.choices[0].message);`,
   }, []);
 
   return (
-    <div className="bg-background text-foreground">
-      {/* Claude Code Integration Banner */}
+    <div className="bg-background text-foreground w-full overflow-x-hidden">
+      {/* Claude Code Integration Banner - Commented out in master */}
       {/*<div className="bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-md overflow-hidden">*/}
       {/*  <div className="w-full px-3 sm:px-4 md:px-6 lg:px-8 py-2 sm:py-4">*/}
       {/*    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-4">*/}
@@ -363,21 +363,22 @@ console.log(completion.choices[0].message);`,
       {/*  </div>*/}
       {/*</div>*/}
 
-      <main className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8" style={{position: 'relative'}}>
-        {/* Hero Section */}
-        <Image
-          src="/logo_transparent.svg"
-          alt="Background logo"
-          width={768}
-          height={768}
-          priority
-          className="absolute top-8 left-1/2 transform -translate-x-1/2 w-[450px] h-[450px] lg:w-[640px] lg:h-[640px] xl:w-[768px] xl:h-[768px] pointer-events-none"
-          style={{ zIndex: 0 }}
-        />
+      <main className="w-full overflow-x-hidden">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8" style={{position: 'relative'}}>
+          {/* Hero Section */}
+          <Image
+            src="/logo_transparent.svg"
+            alt="Background logo"
+            width={768}
+            height={768}
+            priority
+            className="absolute top-8 left-1/2 transform -translate-x-1/2 w-[200px] h-[200px] sm:w-[450px] sm:h-[450px] lg:w-[640px] lg:h-[640px] xl:w-[768px] xl:h-[768px] pointer-events-none opacity-30 sm:opacity-100"
+            style={{ zIndex: 0 }}
+          />
 
-        <section className="pt-24 md:pt-32 lg:pt-40 pb-8 md:pb-12 max-w-5xl mx-auto px-4 relative" style={{ zIndex: 1 }}>
-          <TitleSection/>
-        </section>
+          <section className="pt-12 sm:pt-24 md:pt-32 lg:pt-40 pb-8 md:pb-12 max-w-5xl mx-auto px-2 sm:px-4 relative" style={{ zIndex: 1 }}>
+            <TitleSection/>
+          </section>
 
           <PathChooserModal open={showPathChooser} onOpenChange={setShowPathChooser} />
 
@@ -453,7 +454,7 @@ console.log(completion.choices[0].message);`,
           {/*<Benefits/>*/}
 
           <FAQ/>
-
+        </div>
       </main>
 
     </div>
