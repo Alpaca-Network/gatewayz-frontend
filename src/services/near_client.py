@@ -11,14 +11,14 @@ def get_near_client():
     """Get Near AI client using OpenAI-compatible interface
 
     Near AI is a decentralized AI infrastructure providing private, verifiable, and user-owned AI services
-    Base URL: https://api.near.ai/v1
+    Base URL: https://cloud-api.near.ai/v1
     """
     try:
         if not Config.NEAR_API_KEY:
             raise ValueError("Near AI API key not configured")
 
         return OpenAI(
-            base_url="https://api.near.ai/v1",
+            base_url="https://cloud-api.near.ai/v1",
             api_key=Config.NEAR_API_KEY
         )
     except Exception as e:

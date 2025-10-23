@@ -1268,6 +1268,7 @@ def fetch_models_from_near():
 
     Note: Near AI is a decentralized AI infrastructure providing private, verifiable, and user-owned AI services.
     Models are fetched from the OpenAI-compatible /models endpoint.
+    If the API doesn't return models, fallback to known Near AI models.
     """
     try:
         if not Config.NEAR_API_KEY:
@@ -1279,35 +1280,51 @@ def fetch_models_from_near():
             "Content-Type": "application/json",
         }
 
-        # Try to fetch models from Near AI
-        # Note: Using standard OpenAI-compatible /models endpoint
-        response = httpx.get(
-            "https://api.near.ai/v1/models",
-            headers=headers,
-            timeout=20.0,
-        )
-        response.raise_for_status()
+        try:
+            # Try to fetch models from Near AI
+            # Note: Using standard OpenAI-compatible /models endpoint
+            response = httpx.get(
+                "https://cloud-api.near.ai/v1/models",
+                headers=headers,
+                timeout=20.0,
+            )
+            response.raise_for_status()
 
-        payload = response.json()
-        raw_models = payload.get("data", [])
+            payload = response.json()
+            raw_models = payload.get("data", [])
 
-        if not raw_models:
-            logger.warning("No models returned from Near AI API")
-            return []
+            if raw_models:
+                # Normalize models
+                normalized_models = [
+                    normalize_near_model(model) for model in raw_models if model
+                ]
 
-        # Normalize models
+                _near_models_cache["data"] = normalized_models
+                _near_models_cache["timestamp"] = datetime.now(timezone.utc)
+
+                logger.info(f"Fetched {len(normalized_models)} Near AI models from API")
+                return _near_models_cache["data"]
+        except (httpx.HTTPStatusError, httpx.RequestError) as e:
+            logger.warning(f"Near AI API request failed: {e}. Using fallback model list.")
+
+        # Fallback to known Near AI models if API doesn't return results
+        logger.info("Using fallback Near AI model list")
+        fallback_models = [
+            {"id": "deepseek-chat-v3-0324", "owned_by": "DeepSeek"},
+            {"id": "gpt-oss-120b", "owned_by": "GPT"},
+            {"id": "llama-3-70b", "owned_by": "Meta"},
+            {"id": "qwen-2-72b", "owned_by": "Alibaba"},
+        ]
+
         normalized_models = [
-            normalize_near_model(model) for model in raw_models if model
+            normalize_near_model(model) for model in fallback_models if model
         ]
 
         _near_models_cache["data"] = normalized_models
         _near_models_cache["timestamp"] = datetime.now(timezone.utc)
 
-        logger.info(f"Fetched {len(normalized_models)} Near AI models")
+        logger.info(f"Using {len(normalized_models)} fallback Near AI models")
         return _near_models_cache["data"]
-    except httpx.HTTPStatusError as e:
-        logger.error(f"Near AI HTTP error: {e.response.status_code} - {e.response.text}")
-        return []
     except Exception as e:
         logger.error(f"Failed to fetch models from Near AI: {e}")
         return []

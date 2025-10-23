@@ -268,6 +268,7 @@ def fetch_models_from_xai():
 
     Uses the xai-sdk Python library to interact with xAI's Grok API.
     Falls back to OpenAI SDK with custom base URL if official SDK is not available.
+    If API fails or returns no models, uses a fallback list of known xAI models.
     """
     try:
         from src.config import Config
@@ -312,24 +313,37 @@ def fetch_models_from_xai():
                 else:
                     models_list.append({'id': str(model)})
 
-            logger.info(f"Fetched {len(models_list)} models from xAI SDK")
+            if models_list:
+                logger.info(f"Fetched {len(models_list)} models from xAI SDK")
+            else:
+                logger.warning("xAI SDK returned empty model list, using fallback")
+                raise ValueError("Empty model list from SDK")
 
-        except ImportError:
+        except (ImportError, ValueError):
             # Fallback to OpenAI SDK with xAI base URL
-            logger.info("xAI SDK not available, using OpenAI SDK with xAI base URL")
-            from openai import OpenAI
+            try:
+                logger.info("xAI SDK not available or returned no models, using OpenAI SDK with xAI base URL")
+                from openai import OpenAI
 
-            client = OpenAI(
-                base_url="https://api.x.ai/v1",
-                api_key=Config.XAI_API_KEY,
-            )
+                client = OpenAI(
+                    base_url="https://api.x.ai/v1",
+                    api_key=Config.XAI_API_KEY,
+                )
 
-            models_response = client.models.list()
-            models_list = [model.model_dump() if hasattr(model, 'model_dump') else model.dict() for model in models_response.data]
+                models_response = client.models.list()
+                models_list = [model.model_dump() if hasattr(model, 'model_dump') else model.dict() for model in models_response.data]
 
-            if not models_list:
-                logger.warning("No models returned from xAI API")
-                return None
+                if not models_list:
+                    logger.warning("No models returned from xAI API, using fallback models")
+                    raise ValueError("Empty model list from API")
+
+            except Exception as openai_error:
+                # Fallback to known xAI models
+                logger.warning(f"xAI API failed: {openai_error}. Using fallback xAI model list.")
+                models_list = [
+                    {"id": "grok-beta", "owned_by": "xAI"},
+                    {"id": "grok-vision-beta", "owned_by": "xAI"},
+                ]
 
         normalized_models = [normalize_portkey_provider_model(model, "xai") for model in models_list if model]
 
@@ -341,7 +355,16 @@ def fetch_models_from_xai():
 
     except Exception as e:
         logger.error(f"Failed to fetch models from xAI: {e}", exc_info=True)
-        return None
+        # Return fallback models even on complete failure
+        fallback_models = [
+            {"id": "grok-beta", "owned_by": "xAI"},
+            {"id": "grok-vision-beta", "owned_by": "xAI"},
+        ]
+        normalized_models = [normalize_portkey_provider_model(model, "xai") for model in fallback_models]
+        _xai_models_cache["data"] = normalized_models
+        _xai_models_cache["timestamp"] = datetime.now(timezone.utc)
+        logger.info(f"Using {len(normalized_models)} fallback xAI models due to error")
+        return _xai_models_cache["data"]
 
 
 def fetch_models_from_novita():
