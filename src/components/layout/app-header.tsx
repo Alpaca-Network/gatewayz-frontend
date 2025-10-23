@@ -114,26 +114,33 @@ export function AppHeader() {
 
   return (
     <header className="sticky top-0 z-[60] w-full h-[65px] border-b bg-header flex items-center">
-      <div className="container flex h-14 max-w-screen-2xl items-center px-4 sm:px-6 lg:px-8 mx-auto">
-        <div className="flex items-center mr-auto">
+      <div className="container flex h-14 max-w-screen-2xl items-center px-4 sm:px-6 lg:px-8 mx-auto gap-4">
+        <div className="flex items-center gap-4 shrink-0">
           <Link href="/" className="flex items-center space-x-2 w-[45px] h-[45px] shrink-0">
             <img src="/logo_black.svg" alt="Gatewayz" className="w-[45px] h-[45px] object-contain dark:hidden" />
             <img src="/logo_white.png" alt="Gatewayz" className="w-[45px] h-[45px] object-contain hidden dark:block" />
           </Link>
-           <div className="relative hidden sm:block w-full max-w-sm pl-6">
-             <SearchBar />
-           </div>
-        </div>
-        
-        <div className="flex items-center gap-4">
-          <nav className="hidden md:flex items-center gap-6 text-sm">
+          <div className="hidden lg:block shrink-0">
             <GetCreditsButton />
+          </div>
+        </div>
+
+        <div className="hidden md:block flex-1 max-w-md">
+          <SearchBar />
+        </div>
+
+        <div className="flex items-center gap-4 ml-auto">
+          <nav className="hidden md:flex items-center gap-6 text-sm whitespace-nowrap">
             <Link href="/models" className="transition-colors hover:text-foreground/80 ">Models</Link>
             <Link href="/chat" className="transition-colors hover:text-foreground/80 ">Chat</Link>
             <Link href="/developers" className="transition-colors hover:text-foreground/80 ">Researchers</Link>
             <Link href="/rankings" className="transition-colors hover:text-foreground/80 ">Ranking</Link>
             <Link href="https://docs.gatewayz.ai/" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-foreground/80 ">Docs</Link>
           </nav>
+
+          <div className="lg:hidden shrink-0">
+            <GetCreditsButton />
+          </div>
 
           {/* Desktop: Theme toggle and auth */}
           <div className="hidden md:flex items-center gap-2">
@@ -170,6 +177,9 @@ export function AppHeader() {
               </SheetTrigger>
               <SheetContent side="right" className="w-[100dvw] sm:w-[400px] overflow-y-auto top-[65px] h-[calc(100dvh-65px)]" overlayClassName="top-[65px]">
                 <div className="flex flex-col py-6">
+                  <div className="px-2 mb-4">
+                    <SearchBar />
+                  </div>
                   <nav className="flex flex-col gap-4 text-base">
                     <Link
                       href="/models"
