@@ -25,6 +25,7 @@ export type ModelOption = {
     category: string;
     sourceGateway?: string;
     developer?: string;
+    modalities?: string[];
     huggingfaceMetrics?: {
         downloads?: number;
         likes?: number;
@@ -49,7 +50,8 @@ const ROUTER_OPTION: ModelOption = {
   label: 'Alpaca Router',
   category: 'Router',
   sourceGateway: 'openrouter',
-  developer: 'Alpaca'
+  developer: 'Alpaca',
+  modalities: ['Text', 'Image', 'File', 'Audio', 'Video'] // Router supports all modalities
 };
 
 const ensureRouterOption = (options: ModelOption[]): ModelOption[] => {
@@ -189,12 +191,18 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
           const category = sourceGateway === 'portkey' ? 'Portkey' : (isPaid ? 'Paid' : 'Free');
           const developer = getDeveloper(model.id);
 
+          // Extract modalities from architecture.input_modalities
+          const modalities = model.architecture?.input_modalities?.map((m: string) =>
+            m.charAt(0).toUpperCase() + m.slice(1)
+          ) || ['Text'];
+
           return {
             value: model.id,
             label: model.name,
             category,
             sourceGateway,
             developer,
+            modalities,
             huggingfaceMetrics: model.huggingface_metrics ? {
               downloads: model.huggingface_metrics.downloads || 0,
               likes: model.huggingface_metrics.likes || 0,
