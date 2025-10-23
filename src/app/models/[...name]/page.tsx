@@ -511,8 +511,41 @@ export default function ModelProfilePage() {
 
     if (!model) {
         return (
-            <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 text-center">
-                <h1 className="text-2xl font-bold">Model not found.</h1>
+            <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                <Card className="max-w-2xl mx-auto">
+                    <CardContent className="p-8 text-center">
+                        <h1 className="text-2xl font-bold mb-4">Model Not Found</h1>
+                        <p className="text-muted-foreground mb-6">
+                            The model <code className="px-2 py-1 bg-muted rounded text-sm">{modelId}</code> is not available through Gatewayz.
+                        </p>
+                        <div className="space-y-4 text-left">
+                            <div>
+                                <h2 className="font-semibold mb-2">Possible reasons:</h2>
+                                <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1">
+                                    <li>The model may not be supported by any of our gateway providers</li>
+                                    <li>The model ID may be incorrect or misspelled</li>
+                                    <li>The model may have been deprecated or removed by the provider</li>
+                                </ul>
+                            </div>
+                            <div>
+                                <h2 className="font-semibold mb-2">What you can do:</h2>
+                                <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1">
+                                    <li>Browse our <Link href="/models" className="text-primary hover:underline">available models</Link></li>
+                                    <li>Check the <Link href="/" className="text-primary hover:underline">homepage</Link> for featured models</li>
+                                    <li>Try searching for similar models with different naming formats</li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div className="mt-6 flex gap-4 justify-center">
+                            <Link href="/models">
+                                <Button>Browse Models</Button>
+                            </Link>
+                            <Link href="/">
+                                <Button variant="outline">Go Home</Button>
+                            </Link>
+                        </div>
+                    </CardContent>
+                </Card>
             </div>
         );
     }
