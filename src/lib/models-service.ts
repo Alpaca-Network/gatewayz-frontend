@@ -48,23 +48,24 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
     throw new Error('Invalid gateway');
   }
 
-  // Special handling for 'all' gateway - fetch from both 'all' and 'huggingface'
-  // because backend's 'all' endpoint doesn't include HuggingFace models
+  // Special handling for 'all' gateway - fetch from 'all', 'huggingface', and 'google'
+  // because backend's 'all' endpoint doesn't include HuggingFace and Google models
   if (gateway === 'all') {
-    console.log('[Models] Fetching from both "all" and "huggingface" gateways');
+    console.log('[Models] Fetching from "all", "huggingface", and "google" gateways in parallel');
     try {
-      const [allGatewayModels, hfModels] = await Promise.all([
+      const [allGatewayModels, hfModels, googleModels] = await Promise.all([
         fetchModelsFromGateway('all', limit),
-        fetchModelsFromGateway('huggingface', limit)
+        fetchModelsFromGateway('huggingface', limit),
+        fetchModelsFromGateway('google', limit)
       ]);
 
       // Combine and deduplicate models by ID
-      const combinedModels = [...allGatewayModels, ...hfModels];
+      const combinedModels = [...allGatewayModels, ...hfModels, ...googleModels];
       const uniqueModels = Array.from(
         new Map(combinedModels.map(m => [m.id, m])).values()
       );
 
-      console.log(`[Models] Combined ${allGatewayModels.length} from "all" + ${hfModels.length} from "huggingface" = ${uniqueModels.length} unique models`);
+      console.log(`[Models] Combined ${allGatewayModels.length} from "all" + ${hfModels.length} from "huggingface" + ${googleModels.length} from "google" = ${uniqueModels.length} unique models`);
       return { data: uniqueModels };
     } catch (error) {
       console.error('[Models] Error fetching from multiple gateways:', error);
@@ -100,9 +101,9 @@ async function fetchModelsFromGateway(gateway: string, limit?: number): Promise<
     let response;
     let url = `${API_BASE_URL}/v1/models?gateway=${gateway}${fullLimitParam}`;
 
-    // Debug logging for HuggingFace requests
-    if (gateway === 'huggingface') {
-      console.log(`[Models] Requesting HF models with URL: ${url}`);
+    // Debug logging for HuggingFace and Google requests
+    if (gateway === 'huggingface' || gateway === 'google') {
+      console.log(`[Models] Requesting ${gateway} models with URL: ${url}`);
     }
 
     // Try live API first (primary source)
@@ -117,8 +118,8 @@ async function fetchModelsFromGateway(gateway: string, limit?: number): Promise<
         headers['Authorization'] = `Bearer ${hfApiKey}`;
       }
 
-      // Use longer timeout for 'all' and 'huggingface' gateways (they have many models)
-      const timeoutMs = (gateway === 'all' || gateway === 'huggingface') ? 90000 : 15000;
+      // Use longer timeout for 'all', 'huggingface', and 'google' gateways (they have many models)
+      const timeoutMs = (gateway === 'all' || gateway === 'huggingface' || gateway === 'google') ? 90000 : 15000;
 
       response = await fetch(url, {
         method: 'GET',
