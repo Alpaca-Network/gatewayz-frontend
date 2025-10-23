@@ -588,7 +588,7 @@ export default function ModelsClient({ initialModels }: { initialModels: Model[]
           variant="sidebar"
           collapsible="offcanvas"
         >
-          <SidebarContent className="p-4 pb-20">
+          <SidebarContent className="p-4 pb-48">
             <SidebarGroup>
               <SidebarGroupLabel>Input Formats</SidebarGroupLabel>
               <div className="flex flex-col gap-2">
