@@ -1924,18 +1924,40 @@ def enhance_model_with_huggingface_data(openrouter_model: dict) -> dict:
 
 
 def get_model_count_by_provider(provider_slug: str, models_data: list = None) -> int:
-    """Get count of models for a specific provider"""
+    """Get count of models for a specific provider
+
+    This function counts models by checking both:
+    1. The provider prefix in the model ID (e.g., "groq/llama" -> "groq")
+    2. The provider_slug field in the model data
+    3. The source_gateway field as a fallback (for gateway-specific providers)
+    """
     try:
         if not models_data or not provider_slug:
             return 0
 
         count = 0
+        provider_slug_lower = provider_slug.lower().lstrip('@')
+
         for model in models_data:
+            # Strategy 1: Check the provider_slug field directly
+            model_provider_slug = model.get('provider_slug', '').lower().lstrip('@')
+            if model_provider_slug == provider_slug_lower:
+                count += 1
+                continue
+
+            # Strategy 2: Extract provider from model ID (format: provider/model-name)
             model_id = model.get('id', '')
             if '/' in model_id:
-                model_provider = model_id.split('/')[0]
-                if model_provider == provider_slug:
+                model_provider = model_id.split('/')[0].lower().lstrip('@')
+                if model_provider == provider_slug_lower:
                     count += 1
+                    continue
+
+            # Strategy 3: Check source_gateway field (for gateway-specific providers)
+            source_gateway = model.get('source_gateway', '').lower()
+            if source_gateway == provider_slug_lower:
+                count += 1
+                continue
 
         return count
     except Exception as e:
