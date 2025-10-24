@@ -221,10 +221,10 @@ def test_get_user_chat_sessions_pagination_and_sort(sb):
 def test_update_and_delete_chat_session(sb):
     import src.db.chat_history as ch
     sess = ch.create_chat_session(user_id=3, title="Old", model="m1")
-    ok = ch.update_chat_session(sess["id"], 3, title="New Title", model="m2")
+    ok = ch.update_chat_session(sess["id"], 3, title="New TitleSection", model="m2")
     assert ok is True
     stored = [r for r in sb.tables["chat_sessions"] if r["id"] == sess["id"]][0]
-    assert stored["title"] == "New Title"
+    assert stored["title"] == "New TitleSection"
     assert stored["model"] == "m2"
 
     # soft delete

@@ -84,7 +84,7 @@ def test_openrouter_with_transform():
             api_key=OPENROUTER_API_KEY,
             default_headers={
                 'HTTP-Referer': os.getenv('OPENROUTER_SITE_URL', 'https://gatewayz.ai'),
-                'X-Title': os.getenv('OPENROUTER_SITE_NAME', 'Gatewayz')
+                'X-TitleSection': os.getenv('OPENROUTER_SITE_NAME', 'Gatewayz')
             }
         )
 

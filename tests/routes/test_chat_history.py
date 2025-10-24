@@ -24,7 +24,7 @@ def test_chat_history_data():
         if sessions_result.data:
             print(f"   ✅ Found {len(sessions_result.data)} sessions")
             for session in sessions_result.data[:5]:
-                print(f"      - ID: {session.get('id')}, User: {session.get('user_id')}, Title: {session.get('title')}, Active: {session.get('is_active')}")
+                print(f"      - ID: {session.get('id')}, User: {session.get('user_id')}, TitleSection: {session.get('title')}, Active: {session.get('is_active')}")
         else:
             print("   ⚠️  No sessions found in database")
 

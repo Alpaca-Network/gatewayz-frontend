@@ -23,7 +23,7 @@ def test_model():
             api_key=OPENROUTER_API_KEY,
             default_headers={
                 "HTTP-Referer": OPENROUTER_SITE_URL,
-                "X-Title": OPENROUTER_SITE_NAME
+                "X-TitleSection": OPENROUTER_SITE_NAME
             }
         )
 
@@ -56,7 +56,7 @@ def test_model():
             api_key=OPENROUTER_API_KEY,
             default_headers={
                 "HTTP-Referer": OPENROUTER_SITE_URL,
-                "X-Title": OPENROUTER_SITE_NAME
+                "X-TitleSection": OPENROUTER_SITE_NAME
             }
         )
 

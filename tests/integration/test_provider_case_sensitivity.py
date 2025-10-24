@@ -19,7 +19,7 @@ PROVIDERS = [
         'api_key': os.getenv('OPENROUTER_API_KEY'),
         'headers': {
             'HTTP-Referer': os.getenv('OPENROUTER_SITE_URL', 'https://gatewayz.ai'),
-            'X-Title': os.getenv('OPENROUTER_SITE_NAME', 'Gatewayz')
+            'X-TitleSection': os.getenv('OPENROUTER_SITE_NAME', 'Gatewayz')
         },
         'test_models': [
             ('meta-llama/llama-3.1-8b-instruct', 'meta-llama/Llama-3.1-8B-Instruct'),

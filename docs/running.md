@@ -1,4 +1,4 @@
-Title: How to Run the Gatewayz Backend Locally
+TitleSection: How to Run the Gatewayz Backend Locally
 
 Overview
 This guide explains how to run the FastAPI backend locally after the recent initialization refactor (create_app factory with startup events). It also covers basic verification, environment variables, and running tests.
