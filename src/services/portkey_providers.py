@@ -341,6 +341,21 @@ def fetch_models_from_xai():
                 # Fallback to known xAI models
                 logger.warning(f"xAI API failed: {openai_error}. Using fallback xAI model list.")
                 models_list = [
+                    # Grok 4 Models (2025)
+                    {"id": "grok-4", "owned_by": "xAI"},
+                    {"id": "grok-4-latest", "owned_by": "xAI"},
+                    {"id": "grok-4-fast-reasoning", "owned_by": "xAI"},
+                    {"id": "grok-4-fast-non-reasoning", "owned_by": "xAI"},
+                    # Grok 3 Models
+                    {"id": "grok-3", "owned_by": "xAI"},
+                    {"id": "grok-3-latest", "owned_by": "xAI"},
+                    {"id": "grok-3-mini", "owned_by": "xAI"},
+                    # Grok 2 Models
+                    {"id": "grok-2", "owned_by": "xAI"},
+                    {"id": "grok-2-latest", "owned_by": "xAI"},
+                    {"id": "grok-2-mini", "owned_by": "xAI"},
+                    {"id": "grok-2-image-1212", "owned_by": "xAI"},
+                    # Legacy Beta Models
                     {"id": "grok-beta", "owned_by": "xAI"},
                     {"id": "grok-vision-beta", "owned_by": "xAI"},
                 ]
@@ -357,6 +372,21 @@ def fetch_models_from_xai():
         logger.error(f"Failed to fetch models from xAI: {e}", exc_info=True)
         # Return fallback models even on complete failure
         fallback_models = [
+            # Grok 4 Models (2025)
+            {"id": "grok-4", "owned_by": "xAI"},
+            {"id": "grok-4-latest", "owned_by": "xAI"},
+            {"id": "grok-4-fast-reasoning", "owned_by": "xAI"},
+            {"id": "grok-4-fast-non-reasoning", "owned_by": "xAI"},
+            # Grok 3 Models
+            {"id": "grok-3", "owned_by": "xAI"},
+            {"id": "grok-3-latest", "owned_by": "xAI"},
+            {"id": "grok-3-mini", "owned_by": "xAI"},
+            # Grok 2 Models
+            {"id": "grok-2", "owned_by": "xAI"},
+            {"id": "grok-2-latest", "owned_by": "xAI"},
+            {"id": "grok-2-mini", "owned_by": "xAI"},
+            {"id": "grok-2-image-1212", "owned_by": "xAI"},
+            # Legacy Beta Models
             {"id": "grok-beta", "owned_by": "xAI"},
             {"id": "grok-vision-beta", "owned_by": "xAI"},
         ]

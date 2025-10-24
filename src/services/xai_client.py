@@ -41,7 +41,7 @@ def make_xai_request_openai(messages, model, **kwargs):
 
     Args:
         messages: List of message objects
-        model: Model name (e.g., "grok-beta", "grok-vision-beta")
+        model: Model name (e.g., "grok-4", "grok-3", "grok-2", "grok-beta")
         **kwargs: Additional parameters like max_tokens, temperature, etc.
     """
     try:
@@ -62,7 +62,7 @@ def make_xai_request_openai_stream(messages, model, **kwargs):
 
     Args:
         messages: List of message objects
-        model: Model name (e.g., "grok-beta", "grok-vision-beta")
+        model: Model name (e.g., "grok-4", "grok-3", "grok-2", "grok-beta")
         **kwargs: Additional parameters like max_tokens, temperature, etc.
     """
     try:
