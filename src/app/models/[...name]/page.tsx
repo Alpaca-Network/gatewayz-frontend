@@ -187,7 +187,9 @@ export default function ModelProfilePage() {
     const modelId = useMemo(() => {
         // Handle catch-all route - params.name will be an array like ['x-ai', 'grok-4-fast']
         const nameParam = params.name as string | string[];
-        const id = Array.isArray(nameParam) ? nameParam.join('/') : nameParam;
+        let id = Array.isArray(nameParam) ? nameParam.join('/') : nameParam;
+        // Decode URL-encoded characters (e.g., %40 -> @)
+        id = decodeURIComponent(id);
         return id || '';
     }, [params.name]);
 
