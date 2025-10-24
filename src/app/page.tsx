@@ -329,7 +329,7 @@ console.log(completion.choices[0].message);`,
   }, []);
 
   return (
-    <div className="bg-background text-foreground w-full overflow-x-hidden">
+    <div className="bg-background text-foreground w-full overflow-x-hidden overflow-y-auto h-full">
       {/* Claude Code Integration Banner - Commented out in master */}
       {/*<div className="bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-md overflow-hidden">*/}
       {/*  <div className="w-full px-3 sm:px-4 md:px-6 lg:px-8 py-2 sm:py-4">*/}
@@ -376,14 +376,13 @@ console.log(completion.choices[0].message);`,
             style={{ zIndex: 0 }}
           />
 
-          <section className="pt-12 sm:pt-24 md:pt-32 lg:pt-40 pb-8 md:pb-12 max-w-5xl mx-auto px-2 sm:px-4 relative" style={{ zIndex: 1 }}>
+          <section className="pt-12 sm:pt-24 md:pt-32 lg:pt-40 pb-8 md:pb-12 max-w-5xl mx-auto px-2 sm:px-4 relative min-h-[calc(100vh-200px)]" style={{ zIndex: 1 }}>
             <TitleSection/>
-          </section>
 
-          <PathChooserModal open={showPathChooser} onOpenChange={setShowPathChooser} />
+            <PathChooserModal open={showPathChooser} onOpenChange={setShowPathChooser} />
 
-          {/* Three Path Cards - Above the Fold */}
-          <div className="grid md:grid-cols-3 gap-6 mt-8 mb-12 max-w-5xl mx-auto">
+            {/* Three Path Cards - Above the Fold */}
+            <div className="grid md:grid-cols-3 gap-6 mt-8 mb-12">
             {/* API Path Card */}
             <Link href="/start/api" className="group">
               <div className="bg-card border-2 border-border hover:border-blue-500 rounded-lg p-6 shadow-sm hover:shadow-md transition-all h-full flex flex-col">
@@ -438,6 +437,7 @@ console.log(completion.choices[0].message);`,
               </div>
             </Link>
           </div>
+          </section>
 
           <div className="my-12 w-full animate-fade-in opacity-0 delay-400">
             <LogoMarquee />
