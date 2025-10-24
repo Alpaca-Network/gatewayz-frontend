@@ -329,7 +329,7 @@ console.log(completion.choices[0].message);`,
   }, []);
 
   return (
-    <div className="bg-background text-foreground w-full overflow-x-hidden">
+    <div className="bg-background text-foreground w-full overflow-x-hidden overflow-y-auto h-full">
       {/* Claude Code Integration Banner - Commented out in master */}
       {/*<div className="bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-md overflow-hidden">*/}
       {/*  <div className="w-full px-3 sm:px-4 md:px-6 lg:px-8 py-2 sm:py-4">*/}
