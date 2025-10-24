@@ -184,7 +184,7 @@ export function AppHeader() {
               <SheetContent side="right" className="w-[100dvw] sm:w-[400px] overflow-y-auto top-[65px] h-[calc(100dvh-65px)]" overlayClassName="top-[65px]">
                 <div className="flex flex-col py-6">
                   <div className="px-2 mb-4">
-                    <SearchBar />
+                    <SearchBar autoOpenOnFocus={false} />
                   </div>
                   <nav className="flex flex-col gap-4 text-base">
                     <Link

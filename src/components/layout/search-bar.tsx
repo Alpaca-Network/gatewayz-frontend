@@ -15,7 +15,11 @@ interface Model {
     provider_slug?: string;
 }
 
-export function SearchBar() {
+interface SearchBarProps {
+    autoOpenOnFocus?: boolean;
+}
+
+export function SearchBar({ autoOpenOnFocus = true }: SearchBarProps) {
     const [open, setOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [allModels, setAllModels] = useState<Model[]>([]);
@@ -146,7 +150,8 @@ export function SearchBar() {
                     type="search"
                     placeholder="Search Models..."
                     className="pl-3 pr-10 h-[45px] w-full"
-                    onFocus={() => setOpen(true)}
+                    onFocus={() => autoOpenOnFocus && setOpen(true)}
+                    onClick={() => setOpen(true)}
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                 />
