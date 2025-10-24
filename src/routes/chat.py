@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from typing import Optional
 import httpx
+from braintrust import current_span, start_span, traced
 
 from src.db.api_keys import increment_api_key_usage
 from src.db.plans import enforce_plan_limits
@@ -224,6 +225,7 @@ async def stream_generator(stream, user, api_key, model, trial, environment_tag,
         yield "data: [DONE]\n\n"
 
 @router.post("/v1/chat/completions", tags=["chat"])
+@traced(name="chat_completions", type="llm")
 async def chat_completions(
     req: ProxyRequest,
     api_key: str = Depends(get_api_key),
@@ -232,6 +234,9 @@ async def chat_completions(
     # === 0) Setup / sanity ===
     # Never print keys; log masked
     logger.info("chat_completions start (api_key=%s, model=%s)", mask_key(api_key), req.model)
+
+    # Start Braintrust span for this request
+    span = start_span(name=f"chat_{req.model}", type="llm")
 
     try:
         # === 1) User + plan/trial prechecks (DB calls on thread) ===
@@ -706,6 +711,32 @@ async def chat_completions(
             # If you can cheaply re-fetch balance, do it here; otherwise omit
             processed["gateway_usage"]["cost_usd"] = round(cost, 6)
 
+        # === 7) Log to Braintrust ===
+        try:
+            messages_for_log = [m.model_dump() if hasattr(m, 'model_dump') else m for m in req.messages]
+            span.log(
+                input=messages_for_log,
+                output=processed.get("choices", [{}])[0].get("message", {}).get("content", ""),
+                metrics={
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "total_tokens": total_tokens,
+                    "latency_ms": int(elapsed * 1000),
+                    "cost_usd": cost if not trial.get("is_trial", False) else 0.0,
+                },
+                metadata={
+                    "model": model,
+                    "provider": provider,
+                    "user_id": user["id"],
+                    "session_id": session_id,
+                    "is_trial": trial.get("is_trial", False),
+                    "environment": user.get("environment_tag", "live"),
+                }
+            )
+            span.end()
+        except Exception as e:
+            logger.warning(f"Failed to log to Braintrust: {e}")
+
         return processed
 
     except HTTPException:
@@ -717,6 +748,7 @@ async def chat_completions(
 
 
 @router.post("/v1/responses", tags=["chat"])
+@traced(name="unified_responses", type="llm")
 async def unified_responses(
     req: ResponseRequest,
     api_key: str = Depends(get_api_key),
@@ -733,6 +765,9 @@ async def unified_responses(
     - Future-ready for multimodal input/output
     """
     logger.info("unified_responses start (api_key=%s, model=%s)", mask_key(api_key), req.model)
+
+    # Start Braintrust span for this request
+    span = start_span(name=f"responses_{req.model}", type="llm")
 
     rate_limit_mgr = None
     should_release_concurrency = False
@@ -1286,6 +1321,40 @@ async def unified_responses(
         }
         if not trial.get("is_trial", False):
             response["gateway_usage"]["cost_usd"] = round(cost, 6)
+
+        # === 7) Log to Braintrust ===
+        try:
+            # Convert input messages to loggable format
+            input_messages = []
+            for inp_msg in req.input:
+                if isinstance(inp_msg.content, str):
+                    input_messages.append({"role": inp_msg.role, "content": inp_msg.content})
+                else:
+                    input_messages.append({"role": inp_msg.role, "content": str(inp_msg.content)})
+
+            span.log(
+                input=input_messages,
+                output=response["output"][0].get("content", "") if response["output"] else "",
+                metrics={
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "total_tokens": total_tokens,
+                    "latency_ms": int(elapsed * 1000),
+                    "cost_usd": cost if not trial.get("is_trial", False) else 0.0,
+                },
+                metadata={
+                    "model": model,
+                    "provider": provider,
+                    "user_id": user["id"],
+                    "session_id": session_id,
+                    "is_trial": trial.get("is_trial", False),
+                    "environment": user.get("environment_tag", "live"),
+                    "endpoint": "/v1/responses",
+                }
+            )
+            span.end()
+        except Exception as e:
+            logger.warning(f"Failed to log to Braintrust: {e}")
 
         return response
 

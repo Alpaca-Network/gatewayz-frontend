@@ -230,7 +230,7 @@ def create_app() -> FastAPI:
             except Exception as admin_e:
                 logger.warning(f"  ⚠️  Admin setup warning: {admin_e}")
 
-            # Initialize analytics services (Statsig and PostHog)
+            # Initialize analytics services (Statsig, PostHog, and Braintrust)
             try:
                 logger.info("  📊 Initializing analytics services...")
 
@@ -243,6 +243,14 @@ def create_app() -> FastAPI:
                 from src.services.posthog_service import posthog_service
                 posthog_service.initialize()
                 logger.info("  ✅ PostHog analytics initialized")
+
+                # Initialize Braintrust
+                try:
+                    from braintrust import init_logger
+                    braintrust_logger = init_logger(project="Gatewayz Backend")
+                    logger.info("  ✅ Braintrust tracing initialized")
+                except Exception as bt_e:
+                    logger.warning(f"  ⚠️  Braintrust initialization warning: {bt_e}")
 
             except Exception as analytics_e:
                 logger.warning(f"  ⚠️  Analytics initialization warning: {analytics_e}")
