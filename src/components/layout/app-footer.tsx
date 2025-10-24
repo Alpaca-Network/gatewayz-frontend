@@ -10,14 +10,47 @@ export function AppFooter() {
   const pathname = usePathname();
   const [isChatPage, setIsChatPage] = useState(false);
   const [isModelsPage, setIsModelsPage] = useState(false);
+  const [showFooter, setShowFooter] = useState(false);
+  const [hasScrolledPastFold, setHasScrolledPastFold] = useState(false);
 
   useEffect(() => {
     setIsChatPage(pathname?.startsWith('/chat') ?? false);
     setIsModelsPage(pathname?.startsWith('/models') ?? false);
   }, [pathname]);
 
+  // Track if user has scrolled past the initial viewport on homepage
+  useEffect(() => {
+    const isHomepage = pathname === '/';
+
+    if (!isHomepage) {
+      // Show footer immediately on non-homepage routes
+      setShowFooter(true);
+      return;
+    }
+
+    // On homepage, only show footer after scrolling past the fold
+    const handleScroll = () => {
+      const scrollThreshold = window.innerHeight * 0.8; // Show footer when scrolled 80% of viewport height
+      const hasScrolled = window.scrollY > scrollThreshold;
+      setHasScrolledPastFold(hasScrolled);
+      setShowFooter(hasScrolled);
+    };
+
+    // Check initial scroll position
+    handleScroll();
+
+    // Listen for scroll events
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [pathname]);
+
   // Hide footer on models page (has sidebar layout)
   if (isModelsPage) {
+    return null;
+  }
+
+  // Don't render footer until conditions are met
+  if (!showFooter) {
     return null;
   }
 
@@ -59,7 +92,7 @@ export function AppFooter() {
   }
 
   return (
-    <footer className="w-full border-t border-gray-200 py-12 bg-white">
+    <footer className={`w-full border-t border-gray-200 py-12 bg-white transition-opacity duration-500 ${hasScrolledPastFold ? 'opacity-100' : 'opacity-0'}`}>
       <div className="w-full px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
         <div className="flex flex-wrap justify-between gap-8 mb-8">
           <div>
