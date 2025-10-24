@@ -70,17 +70,17 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning className="overflow-x-hidden">
-      <body className={`${inter.className} antialiased bg-background min-h-screen flex flex-col overflow-x-hidden`} suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning className="overflow-x-hidden h-full">
+      <body className={`${inter.className} antialiased bg-background h-full flex flex-col overflow-hidden`} suppressHydrationWarning>
         <ThemeProvider
           defaultTheme="system"
           storageKey="ui-theme"
         >
-          <PrivyProviderWrapper className="flex flex-col flex-1">
+          <PrivyProviderWrapper className="flex flex-col h-full">
             {/* <GTMLoader /> Temporarily disabled due to layout router issues */}
             <AppHeader />
             <OnboardingBanner />
-            <main className="flex-1 flex flex-col overflow-hidden">
+            <main className="flex-1 flex flex-col overflow-hidden min-h-0">
               {children}
             </main>
             <Toaster />

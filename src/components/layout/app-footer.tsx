@@ -9,10 +9,17 @@ import { useState, useEffect } from 'react';
 export function AppFooter() {
   const pathname = usePathname();
   const [isChatPage, setIsChatPage] = useState(false);
+  const [isModelsPage, setIsModelsPage] = useState(false);
 
   useEffect(() => {
     setIsChatPage(pathname?.startsWith('/chat') ?? false);
+    setIsModelsPage(pathname?.startsWith('/models') ?? false);
   }, [pathname]);
+
+  // Hide footer on models page (has sidebar layout)
+  if (isModelsPage) {
+    return null;
+  }
 
   // Hide footer on mobile for chat page
   if (isChatPage) {

@@ -603,12 +603,12 @@ export default function ModelsClient({ initialModels }: { initialModels: Model[]
 
   return (
     <SidebarProvider>
-      <div className="relative flex w-full h-full justify-center overflow-x-hidden">
+      <div className="relative flex w-full h-full justify-center overflow-hidden">
         <Sidebar
           variant="sidebar"
           collapsible="offcanvas"
         >
-          <SidebarContent className="p-4 pb-32 overflow-y-auto">
+          <SidebarContent className="p-4 overflow-y-auto">
             <SidebarGroup>
               <SidebarGroupLabel>Input Formats</SidebarGroupLabel>
               <div className="flex flex-col gap-2">
@@ -727,8 +727,8 @@ export default function ModelsClient({ initialModels }: { initialModels: Model[]
           </SidebarContent>
         </Sidebar>
 
-        <SidebarInset className="flex-1 overflow-y-auto overflow-x-hidden h-full flex flex-col pb-24">
-          <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8 overflow-x-hidden">
+        <SidebarInset className="flex-1 overflow-y-auto overflow-x-hidden h-full flex flex-col">
+          <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8 pb-24 overflow-x-hidden">
           <div className="flex flex-col gap-3 mb-6 w-full">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 w-full">
               <div className="flex items-center gap-3">
