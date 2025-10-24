@@ -19,7 +19,7 @@ mypy==1.8.0  # Type checker
 
 # Security
 bandit==1.7.6  # Security linter
-safety==2.3.5  # Dependency vulnerability scanner
+safety==3.2.0  # Dependency vulnerability scanner (updated to fix packaging conflict)
 
 # Pre-commit hooks
 pre-commit==3.6.0
