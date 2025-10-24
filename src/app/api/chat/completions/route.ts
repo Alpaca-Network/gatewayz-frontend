@@ -1,4 +1,115 @@
 import { NextRequest } from 'next/server';
+import { traced, wrapTraced } from 'braintrust';
+import { isBraintrustEnabled } from '@/lib/braintrust';
+
+/**
+ * Process LLM completion with Braintrust tracing
+ */
+const processCompletion = wrapTraced(
+  async function processCompletion(
+    body: any,
+    apiKey: string,
+    targetUrl: string,
+    timeoutMs: number
+  ) {
+    return traced(async (span) => {
+      const startTime = Date.now();
+
+      console.log('[API Proxy] Forwarding request to:', targetUrl);
+      console.log('[API Proxy] Model:', body.model);
+      console.log('[API Proxy] Stream:', body.stream);
+
+      const response = await fetch(targetUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': apiKey,
+        },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+
+      console.log('[API Proxy] Response status:', response.status);
+      console.log('[API Proxy] Response ok:', response.ok);
+
+      // If not streaming, parse and log the response
+      if (!body.stream) {
+        const contentType = response.headers.get('content-type');
+
+        // Try to parse JSON response
+        let data;
+        try {
+          data = await response.json();
+        } catch (parseError) {
+          console.error('[API Proxy] Failed to parse JSON response:', parseError);
+          const text = await response.text();
+          console.error('[API Proxy] Response text:', text);
+
+          throw new Error(`Invalid response from backend: ${text || 'Could not parse backend response'}`);
+        }
+
+        // Extract metrics from response
+        const promptTokens = data.usage?.prompt_tokens || 0;
+        const completionTokens = data.usage?.completion_tokens || 0;
+        const totalTokens = data.usage?.total_tokens || promptTokens + completionTokens;
+        const latency = Date.now() - startTime;
+
+        // Log to Braintrust
+        if (isBraintrustEnabled()) {
+          span.log({
+            input: body.messages || [{ role: 'user', content: body.prompt || '' }],
+            output: data.choices?.[0]?.message?.content || data.choices?.[0]?.text || '',
+            metrics: {
+              prompt_tokens: promptTokens,
+              completion_tokens: completionTokens,
+              tokens: totalTokens,
+              latency_ms: latency,
+            },
+            metadata: {
+              model: body.model,
+              temperature: body.temperature,
+              max_tokens: body.max_tokens,
+              top_p: body.top_p,
+              frequency_penalty: body.frequency_penalty,
+              presence_penalty: body.presence_penalty,
+              stream: body.stream,
+              response_status: response.status,
+            },
+          });
+        }
+
+        return { data, status: response.status };
+      }
+
+      // For streaming responses, we'll log basic info and return the stream
+      if (!response.body) {
+        throw new Error('No response body for streaming response');
+      }
+
+      // Log streaming request to Braintrust (without output since it's streaming)
+      if (isBraintrustEnabled()) {
+        span.log({
+          input: body.messages || [{ role: 'user', content: body.prompt || '' }],
+          metadata: {
+            model: body.model,
+            temperature: body.temperature,
+            max_tokens: body.max_tokens,
+            top_p: body.top_p,
+            stream: true,
+            response_status: response.status,
+          },
+        });
+      }
+
+      console.log('[API Proxy] Setting up streaming response forwarding');
+      return { stream: response.body, status: response.status };
+    });
+  },
+  {
+    type: 'llm',
+    name: 'Gatewayz Chat Completion',
+  }
+);
 
 /**
  * API Proxy for Chat Completions
@@ -26,85 +137,38 @@ export async function POST(request: NextRequest) {
       targetUrl.searchParams.append(key, value);
     });
 
-    console.log('[API Proxy] Forwarding request to:', targetUrl.toString());
-    console.log('[API Proxy] Model:', body.model);
-    console.log('[API Proxy] Stream:', body.stream);
-
     // Use a 120 second timeout for streaming requests (models can be slow to start)
     // Use a 30 second timeout for non-streaming requests
     timeoutMs = body.stream ? 120000 : 30000;
 
-    const response = await fetch(targetUrl.toString(), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': apiKey,
-      },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(timeoutMs),
-    });
+    // Process completion with Braintrust tracing
+    const result = await processCompletion(body, apiKey, targetUrl.toString(), timeoutMs);
 
-    console.log('[API Proxy] Response status:', response.status);
-    console.log('[API Proxy] Response ok:', response.ok);
-
-    // If not streaming, return JSON
-    if (!body.stream) {
-      const contentType = response.headers.get('content-type');
-
-      // Try to parse JSON response
-      let data;
-      try {
-        data = await response.json();
-      } catch (parseError) {
-        console.error('[API Proxy] Failed to parse JSON response:', parseError);
-        // If JSON parsing fails, try to get text
-        const text = await response.text();
-        console.error('[API Proxy] Response text:', text);
-
-        return new Response(
-          JSON.stringify({
-            error: 'Invalid response from backend',
-            details: text || 'Could not parse backend response',
-            status: response.status
-          }),
-          {
-            status: 502,
-            headers: { 'Content-Type': 'application/json' },
-          }
-        );
-      }
-
-      return new Response(JSON.stringify(data), {
-        status: response.status,
+    // Handle non-streaming response
+    if ('data' in result) {
+      return new Response(JSON.stringify(result.data), {
+        status: result.status,
         headers: { 'Content-Type': 'application/json' },
       });
     }
 
-    // For streaming responses, forward the stream
-    if (!response.body) {
-      console.error('[API Proxy] No response body for streaming response');
-      return new Response(
-        JSON.stringify({
-          error: 'No response body',
-          details: 'Backend API returned empty response for streaming request',
-          status: response.status
-        }),
-        { status: 502, headers: { 'Content-Type': 'application/json' } }
-      );
+    // Handle streaming response
+    if ('stream' in result) {
+      return new Response(result.stream, {
+        status: result.status,
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+        },
+      });
     }
 
-    // Log successful streaming setup
-    console.log('[API Proxy] Setting up streaming response forwarding');
-
-    // Forward the streaming response
-    return new Response(response.body, {
-      status: response.status,
-      headers: {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-      },
-    });
+    // Fallback error
+    return new Response(
+      JSON.stringify({ error: 'Unexpected response format' }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    );
   } catch (error) {
     console.error('[API Proxy] Error:', error);
 
