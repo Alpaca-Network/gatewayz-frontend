@@ -48,7 +48,7 @@ def supabase_client():
     """Get Supabase client for tests"""
     try:
         client = get_supabase_client()
-        # Test the connection
+        # Quick connection test with reduced timeout
         client.table("users").select("id").limit(1).execute()
         return client
     except Exception as e:
@@ -154,12 +154,19 @@ def skip_if_no_database(request):
     """Skip tests that require database if credentials are not available"""
     # Check if this is a database or integration test
     if 'db' in str(request.fspath) or 'integration' in str(request.fspath):
-        try:
-            client = get_supabase_client()
-            # Quick connection test
-            client.table("users").select("id").limit(1).execute()
-        except Exception as e:
-            pytest.skip(f"Database not available: {e}")
+        # Cache the database check result
+        if not hasattr(skip_if_no_database, '_db_available'):
+            try:
+                client = get_supabase_client()
+                # Quick connection test
+                client.table("users").select("id").limit(1).execute()
+                skip_if_no_database._db_available = True
+            except Exception as e:
+                skip_if_no_database._db_available = False
+                skip_if_no_database._db_error = str(e)
+        
+        if not skip_if_no_database._db_available:
+            pytest.skip(f"Database not available: {skip_if_no_database._db_error}")
 
 
 @pytest.fixture
