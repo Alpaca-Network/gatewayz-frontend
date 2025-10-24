@@ -2,7 +2,6 @@
 "use client"
 
 import { useMemo, useState, useEffect } from 'react';
-import { models, type Model } from "@/lib/models-data";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -116,6 +115,7 @@ export default function DevelopersPage() {
     const [activeTab, setActiveTab] = useState<'top' | 'trending'>('top');
     const [timeFrame, setTimeFrame] = useState<'month' | 'week' | 'today'>('month');
     const [rankingModels, setRankingModels] = useState<RankingModel[]>([]);
+    const [apiModels, setApiModels] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [organizationLogos, setOrganizationLogos] = useState<Map<string, string>>(new Map());
     const [currentPage, setCurrentPage] = useState(1);
@@ -134,35 +134,48 @@ export default function DevelopersPage() {
     };
 
     useEffect(() => {
-        const fetchRankingModels = async () => {
+        const fetchData = async () => {
             try {
                 setLoading(true);
                 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
-                const url = `${apiBaseUrl}/ranking/models`;
-                console.log('Fetching ranking models from:', url);
+                
+                // Fetch ranking models
+                const rankingUrl = `${apiBaseUrl}/ranking/models`;
+                console.log('Fetching ranking models from:', rankingUrl);
+                const rankingResponse = await fetch(rankingUrl);
+                console.log('Ranking response status:', rankingResponse.status);
 
-                const response = await fetch(url);
-                console.log('Response status:', response.status);
-
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                if (rankingResponse.ok) {
+                    const rankingData = await rankingResponse.json();
+                    console.log('Received ranking data:', rankingData.success, 'models count:', rankingData.data?.length);
+                    if (rankingData.success && rankingData.data) {
+                        setRankingModels(rankingData.data);
+                        console.log('Set ranking models:', rankingData.data.length);
+                    }
                 }
 
-                const data = await response.json();
-                console.log('Received data:', data.success, 'models count:', data.data?.length);
+                // Fetch all models to get complete developer list
+                const modelsUrl = `${apiBaseUrl}/v1/models?limit=5000`;
+                console.log('Fetching models from:', modelsUrl);
+                const modelsResponse = await fetch(modelsUrl);
+                console.log('Models response status:', modelsResponse.status);
 
-                if (data.success && data.data) {
-                    setRankingModels(data.data);
-                    console.log('Set ranking models:', data.data.length);
+                if (modelsResponse.ok) {
+                    const modelsData = await modelsResponse.json();
+                    console.log('Received models data:', modelsData.data?.length);
+                    if (modelsData.data) {
+                        setApiModels(modelsData.data);
+                        console.log('Set API models:', modelsData.data.length);
+                    }
                 }
             } catch (error) {
-                console.log('Failed to fetch ranking models:', error);
+                console.log('Failed to fetch data:', error);
             } finally {
                 setLoading(false);
             }
         };
 
-        fetchRankingModels();
+        fetchData();
     }, []);
 
     // Build organization logos from API response
@@ -198,6 +211,7 @@ export default function DevelopersPage() {
         console.log('Filtered models count:', filteredModels.length);
 
         // List of gateways/providers that should not be shown as developers
+        // Only include actual gateway/router services, not model developers
         const excludedProviders = [
           'openrouter',
           'portkey',
@@ -206,12 +220,7 @@ export default function DevelopersPage() {
           'fireworks',
           'chutes',
           'groq',
-          'deepinfra',
-          // New Portkey SDK providers
-          'cerebras',
-          'nebius',
-          'novita',
-          'huggingface'
+          'deepinfra'
         ];
 
         // Group models by author, excluding gateways
@@ -230,12 +239,12 @@ export default function DevelopersPage() {
             orgMap.get(model.author)!.push(model);
         });
 
-        // Get all unique developers from models data (excluding gateways)
+        // Get all unique developers from API models data (excluding gateways)
         const allDevelopers = new Set<string>();
-        models.forEach(model => {
-            const developer = model.developer.toLowerCase();
-            if (!excludedProviders.includes(developer)) {
-                allDevelopers.add(model.developer);
+        apiModels.forEach(model => {
+            const developer = (model.provider_slug || '').toLowerCase();
+            if (developer && !excludedProviders.includes(developer)) {
+                allDevelopers.add(model.provider_slug);
             }
         });
 
@@ -280,8 +289,8 @@ export default function DevelopersPage() {
                 model.rank < top.rank ? model : top
             , rankingModelsForAuthor[0]) : null;
             
-            // Get model count from imported models data
-            const developerModels = models.filter((m: Model) => m.developer.toLowerCase() === author.toLowerCase());
+            // Get model count from API models data
+            const developerModels = apiModels.filter((m: any) => (m.provider_slug || '').toLowerCase() === author.toLowerCase());
             const actualModelCount = developerModels.length > 0 ? developerModels.length : rankingModelsForAuthor.length;
 
             // Format author name for display
@@ -364,7 +373,7 @@ export default function DevelopersPage() {
             const bTokens = parseFloat(b.totalTokens.replace(/[^0-9.]/g, ''));
             return bTokens - aTokens;
         });
-    }, [rankingModels, timeFrame, activeTab, organizationLogos]);
+    }, [rankingModels, apiModels, timeFrame, activeTab, organizationLogos]);
 
     const filteredOrgs = useMemo(() => {
         return organizations.filter(org =>
