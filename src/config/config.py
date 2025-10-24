@@ -52,7 +52,19 @@ class Config:
 
     # Groq Configuration
     GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
-    
+
+    # AIMO Configuration
+    AIMO_API_KEY = os.environ.get("AIMO_API_KEY")
+
+    # Near AI Configuration
+    NEAR_API_KEY = os.environ.get("NEAR_API_KEY")
+
+    # Google Vertex AI Configuration
+    GOOGLE_PROJECT_ID = os.environ.get("GOOGLE_PROJECT_ID", "gatewayz-468519")
+    GOOGLE_VERTEX_LOCATION = os.environ.get("GOOGLE_VERTEX_LOCATION", "us-central1")
+    GOOGLE_VERTEX_ENDPOINT_ID = os.environ.get("GOOGLE_VERTEX_ENDPOINT_ID", "6072619212881264640")
+    GOOGLE_APPLICATION_CREDENTIALS = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+
     # OpenRouter Analytics Cookie (for transaction analytics API)
     OPENROUTER_COOKIE = os.environ.get("OPENROUTER_COOKIE")
     

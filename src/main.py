@@ -54,26 +54,35 @@ def create_app() -> FastAPI:
     # Must specify exact origins for security
 
     # Environment-aware CORS origins
+    # Always include beta.gatewayz.ai for frontend access
+    base_origins = [
+        "https://beta.gatewayz.ai",
+        "https://staging.gatewayz.ai",
+    ]
+    
     if Config.IS_PRODUCTION:
         allowed_origins = [
             "https://gatewayz.ai",
             "https://www.gatewayz.ai",
-        ]
+        ] + base_origins
     elif Config.IS_STAGING:
         allowed_origins = [
-            "https://staging.gatewayz.ai",
-            "https://beta.gatewayz.ai",
             "http://localhost:3000",  # For testing against staging
             "http://localhost:3001",
-        ]
+        ] + base_origins
     else:  # development
         allowed_origins = [
             "http://localhost:3000",
             "http://localhost:3001",
             "http://127.0.0.1:3000",
             "http://127.0.0.1:3001",
-        ]
+        ] + base_origins
 
+    # Log CORS configuration for debugging
+    logger.info(f"🌐 CORS Configuration:")
+    logger.info(f"   Environment: {Config.APP_ENV}")
+    logger.info(f"   Allowed Origins: {allowed_origins}")
+    
     app.add_middleware(
         CORSMiddleware,
         allow_origins=allowed_origins,
@@ -95,6 +104,7 @@ def create_app() -> FastAPI:
         ("ping", "Ping Service"),
         ("chat", "Chat Completions"),  # Moved before catalog
         ("messages", "Anthropic Messages API"),  # Claude-compatible endpoint
+        ("images", "Image Generation"),  # Image generation endpoints
         ("catalog", "Model Catalog"),
         ("system", "System & Health"),  # Cache management and health monitoring
         ("root", "Root/Home"),
@@ -183,7 +193,7 @@ def create_app() -> FastAPI:
             # Initialize database
             try:
                 logger.info("  🗄️  Initializing database...")
-                from src.supabase_config import init_db
+                from src.config.supabase_config import init_db
                 init_db()
                 logger.info("  ✅ Database initialized")
 
@@ -193,7 +203,7 @@ def create_app() -> FastAPI:
             # Set default admin user
             try:
                 from src.db.roles import update_user_role, get_user_role, UserRole
-                from src.supabase_config import get_supabase_client
+                from src.config.supabase_config import get_supabase_client
 
                 ADMIN_EMAIL = Config.ADMIN_EMAIL
 
@@ -220,7 +230,7 @@ def create_app() -> FastAPI:
             except Exception as admin_e:
                 logger.warning(f"  ⚠️  Admin setup warning: {admin_e}")
 
-            # Initialize analytics services (Statsig and PostHog)
+            # Initialize analytics services (Statsig, PostHog, and Braintrust)
             try:
                 logger.info("  📊 Initializing analytics services...")
 
@@ -233,6 +243,14 @@ def create_app() -> FastAPI:
                 from src.services.posthog_service import posthog_service
                 posthog_service.initialize()
                 logger.info("  ✅ PostHog analytics initialized")
+
+                # Initialize Braintrust
+                try:
+                    from braintrust import init_logger
+                    braintrust_logger = init_logger(project="Gatewayz Backend")
+                    logger.info("  ✅ Braintrust tracing initialized")
+                except Exception as bt_e:
+                    logger.warning(f"  ⚠️  Braintrust initialization warning: {bt_e}")
 
             except Exception as analytics_e:
                 logger.warning(f"  ⚠️  Analytics initialization warning: {analytics_e}")

@@ -107,6 +107,18 @@ _huggingface_models_cache = {
     "ttl": 3600  # 1 hour TTL
 }
 
+_aimo_models_cache = {
+    "data": None,
+    "timestamp": None,
+    "ttl": 3600  # 1 hour TTL for AIMO catalog
+}
+
+_near_models_cache = {
+    "data": None,
+    "timestamp": None,
+    "ttl": 3600  # 1 hour TTL for Near AI catalog
+}
+
 # BACKWARD COMPATIBILITY: Alias for old cache name
 # Some deployed modules may still reference the old name
 _hug_models_cache = _huggingface_models_cache
@@ -131,6 +143,8 @@ def get_models_cache(gateway: str):
         "novita": _novita_models_cache,
         "huggingface": _huggingface_models_cache,
         "hug": _huggingface_models_cache,  # Alias for backward compatibility
+        "aimo": _aimo_models_cache,
+        "near": _near_models_cache,
         "modelz": _modelz_cache
     }
     return cache_map.get(gateway.lower())
@@ -159,6 +173,8 @@ def clear_models_cache(gateway: str):
         "novita": _novita_models_cache,
         "huggingface": _huggingface_models_cache,
         "hug": _huggingface_models_cache,  # Alias for backward compatibility
+        "aimo": _aimo_models_cache,
+        "near": _near_models_cache,
         "modelz": _modelz_cache
     }
     cache = cache_map.get(gateway.lower())

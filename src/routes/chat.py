@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from typing import Optional
 import httpx
+from braintrust import current_span, start_span, traced
 
 from src.db.api_keys import increment_api_key_usage
 from src.db.plans import enforce_plan_limits
@@ -18,6 +19,8 @@ from src.services.featherless_client import make_featherless_request_openai, pro
 from src.services.fireworks_client import make_fireworks_request_openai, process_fireworks_response, make_fireworks_request_openai_stream
 from src.services.together_client import make_together_request_openai, process_together_response, make_together_request_openai_stream
 from src.services.huggingface_client import make_huggingface_request_openai, process_huggingface_response, make_huggingface_request_openai_stream
+from src.services.aimo_client import make_aimo_request_openai, process_aimo_response, make_aimo_request_openai_stream
+from src.services.xai_client import make_xai_request_openai, process_xai_response, make_xai_request_openai_stream
 from src.services.model_transformations import detect_provider_from_model_id, transform_model_id
 from src.services.provider_failover import build_provider_failover_chain, map_provider_error, should_failover
 from src.services.rate_limiting import get_rate_limit_manager
@@ -222,6 +225,7 @@ async def stream_generator(stream, user, api_key, model, trial, environment_tag,
         yield "data: [DONE]\n\n"
 
 @router.post("/v1/chat/completions", tags=["chat"])
+@traced(name="chat_completions", type="llm")
 async def chat_completions(
     req: ProxyRequest,
     api_key: str = Depends(get_api_key),
@@ -230,6 +234,9 @@ async def chat_completions(
     # === 0) Setup / sanity ===
     # Never print keys; log masked
     logger.info("chat_completions start (api_key=%s, model=%s)", mask_key(api_key), req.model)
+
+    # Start Braintrust span for this request
+    span = start_span(name=f"chat_{req.model}", type="llm")
 
     try:
         # === 1) User + plan/trial prechecks (DB calls on thread) ===
@@ -417,6 +424,14 @@ async def chat_completions(
                         stream = await _to_thread(
                             make_huggingface_request_openai_stream, messages, request_model, **optional
                         )
+                    elif attempt_provider == "aimo":
+                        stream = await _to_thread(
+                            make_aimo_request_openai_stream, messages, request_model, **optional
+                        )
+                    elif attempt_provider == "xai":
+                        stream = await _to_thread(
+                            make_xai_request_openai_stream, messages, request_model, **optional
+                        )
                     else:
                         stream = await _to_thread(
                             make_openrouter_request_openai_stream, messages, request_model, **optional
@@ -526,6 +541,18 @@ async def chat_completions(
                         timeout=request_timeout,
                     )
                     processed = await _to_thread(process_huggingface_response, resp_raw)
+                elif attempt_provider == "aimo":
+                    resp_raw = await asyncio.wait_for(
+                        _to_thread(make_aimo_request_openai, messages, request_model, **optional),
+                        timeout=request_timeout,
+                    )
+                    processed = await _to_thread(process_aimo_response, resp_raw)
+                elif attempt_provider == "xai":
+                    resp_raw = await asyncio.wait_for(
+                        _to_thread(make_xai_request_openai, messages, request_model, **optional),
+                        timeout=request_timeout,
+                    )
+                    processed = await _to_thread(process_xai_response, resp_raw)
                 else:
                     resp_raw = await asyncio.wait_for(
                         _to_thread(make_openrouter_request_openai, messages, request_model, **optional),
@@ -684,6 +711,32 @@ async def chat_completions(
             # If you can cheaply re-fetch balance, do it here; otherwise omit
             processed["gateway_usage"]["cost_usd"] = round(cost, 6)
 
+        # === 7) Log to Braintrust ===
+        try:
+            messages_for_log = [m.model_dump() if hasattr(m, 'model_dump') else m for m in req.messages]
+            span.log(
+                input=messages_for_log,
+                output=processed.get("choices", [{}])[0].get("message", {}).get("content", ""),
+                metrics={
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "total_tokens": total_tokens,
+                    "latency_ms": int(elapsed * 1000),
+                    "cost_usd": cost if not trial.get("is_trial", False) else 0.0,
+                },
+                metadata={
+                    "model": model,
+                    "provider": provider,
+                    "user_id": user["id"],
+                    "session_id": session_id,
+                    "is_trial": trial.get("is_trial", False),
+                    "environment": user.get("environment_tag", "live"),
+                }
+            )
+            span.end()
+        except Exception as e:
+            logger.warning(f"Failed to log to Braintrust: {e}")
+
         return processed
 
     except HTTPException:
@@ -695,6 +748,7 @@ async def chat_completions(
 
 
 @router.post("/v1/responses", tags=["chat"])
+@traced(name="unified_responses", type="llm")
 async def unified_responses(
     req: ResponseRequest,
     api_key: str = Depends(get_api_key),
@@ -711,6 +765,9 @@ async def unified_responses(
     - Future-ready for multimodal input/output
     """
     logger.info("unified_responses start (api_key=%s, model=%s)", mask_key(api_key), req.model)
+
+    # Start Braintrust span for this request
+    span = start_span(name=f"responses_{req.model}", type="llm")
 
     rate_limit_mgr = None
     should_release_concurrency = False
@@ -930,6 +987,14 @@ async def unified_responses(
                         stream = await _to_thread(
                             make_huggingface_request_openai_stream, messages, request_model, **optional
                         )
+                    elif attempt_provider == "aimo":
+                        stream = await _to_thread(
+                            make_aimo_request_openai_stream, messages, request_model, **optional
+                        )
+                    elif attempt_provider == "xai":
+                        stream = await _to_thread(
+                            make_xai_request_openai_stream, messages, request_model, **optional
+                        )
                     else:
                         stream = await _to_thread(
                             make_openrouter_request_openai_stream, messages, request_model, **optional
@@ -1064,6 +1129,18 @@ async def unified_responses(
                         timeout=request_timeout,
                     )
                     processed = await _to_thread(process_huggingface_response, resp_raw)
+                elif attempt_provider == "aimo":
+                    resp_raw = await asyncio.wait_for(
+                        _to_thread(make_aimo_request_openai, messages, request_model, **optional),
+                        timeout=request_timeout,
+                    )
+                    processed = await _to_thread(process_aimo_response, resp_raw)
+                elif attempt_provider == "xai":
+                    resp_raw = await asyncio.wait_for(
+                        _to_thread(make_xai_request_openai, messages, request_model, **optional),
+                        timeout=request_timeout,
+                    )
+                    processed = await _to_thread(process_xai_response, resp_raw)
                 else:
                     resp_raw = await asyncio.wait_for(
                         _to_thread(make_openrouter_request_openai, messages, request_model, **optional),
@@ -1244,6 +1321,40 @@ async def unified_responses(
         }
         if not trial.get("is_trial", False):
             response["gateway_usage"]["cost_usd"] = round(cost, 6)
+
+        # === 7) Log to Braintrust ===
+        try:
+            # Convert input messages to loggable format
+            input_messages = []
+            for inp_msg in req.input:
+                if isinstance(inp_msg.content, str):
+                    input_messages.append({"role": inp_msg.role, "content": inp_msg.content})
+                else:
+                    input_messages.append({"role": inp_msg.role, "content": str(inp_msg.content)})
+
+            span.log(
+                input=input_messages,
+                output=response["output"][0].get("content", "") if response["output"] else "",
+                metrics={
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "total_tokens": total_tokens,
+                    "latency_ms": int(elapsed * 1000),
+                    "cost_usd": cost if not trial.get("is_trial", False) else 0.0,
+                },
+                metadata={
+                    "model": model,
+                    "provider": provider,
+                    "user_id": user["id"],
+                    "session_id": session_id,
+                    "is_trial": trial.get("is_trial", False),
+                    "environment": user.get("environment_tag", "live"),
+                    "endpoint": "/v1/responses",
+                }
+            )
+            span.end()
+        except Exception as e:
+            logger.warning(f"Failed to log to Braintrust: {e}")
 
         return response
 

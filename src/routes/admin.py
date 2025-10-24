@@ -581,3 +581,115 @@ async def get_trial_analytics_admin(admin_user: dict = Depends(require_admin)):
     except Exception as e:
         logger.error(f"Error getting trial analytics: {e}")
         raise HTTPException(status_code=500, detail="Failed to get trial analytics")
+
+
+@router.get("/admin/users", tags=["admin"])
+async def get_all_users_info(admin_user: dict = Depends(require_admin)):
+    """Get all users information from users table (Admin only)"""
+    try:
+        from src.config.supabase_config import get_supabase_client
+        
+        client = get_supabase_client()
+        
+        # Get all users with their information
+        result = client.table('users').select(
+            'id, username, email, credits, is_active, role, registration_date, '
+            'auth_method, subscription_status, trial_expires_at, created_at, updated_at'
+        ).execute()
+        
+        if not result.data:
+            return {
+                "status": "success",
+                "total_users": 0,
+                "users": [],
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+        
+        users = result.data
+        
+        # Get additional statistics
+        total_users = len(users)
+        active_users = len([u for u in users if u.get('is_active', True)])
+        admin_users = len([u for u in users if u.get('role') == 'admin'])
+        developer_users = len([u for u in users if u.get('role') == 'developer'])
+        regular_users = len([u for u in users if u.get('role') == 'user' or u.get('role') is None])
+        
+        # Calculate total credits across all users
+        total_credits = sum(float(u.get('credits', 0)) for u in users)
+        
+        # Get subscription status breakdown
+        subscription_stats = {}
+        for user in users:
+            status = user.get('subscription_status', 'unknown')
+            subscription_stats[status] = subscription_stats.get(status, 0) + 1
+        
+        return {
+            "status": "success",
+            "total_users": total_users,
+            "statistics": {
+                "active_users": active_users,
+                "inactive_users": total_users - active_users,
+                "admin_users": admin_users,
+                "developer_users": developer_users,
+                "regular_users": regular_users,
+                "total_credits": round(total_credits, 2),
+                "average_credits": round(total_credits / total_users, 2) if total_users > 0 else 0,
+                "subscription_breakdown": subscription_stats
+            },
+            "users": users,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting all users info: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get users information")
+
+
+@router.get("/admin/users/{user_id}", tags=["admin"])
+async def get_user_info_by_id(user_id: int, admin_user: dict = Depends(require_admin)):
+    """Get detailed information for a specific user (Admin only)"""
+    try:
+        from src.config.supabase_config import get_supabase_client
+        
+        client = get_supabase_client()
+        
+        # Get user information
+        user_result = client.table('users').select('*').eq('id', user_id).execute()
+        
+        if not user_result.data:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        user = user_result.data[0]
+        
+        # Get user's API keys
+        api_keys_result = client.table('api_keys_new').select('*').eq('user_id', user_id).execute()
+        api_keys = api_keys_result.data if api_keys_result.data else []
+        
+        # Get user's usage records (if available)
+        try:
+            usage_result = client.table('usage_records').select('*').eq('user_id', user_id).order('created_at', desc=True).limit(10).execute()
+            recent_usage = usage_result.data if usage_result.data else []
+        except:
+            recent_usage = []
+        
+        # Get user's activity log (if available)
+        try:
+            activity_result = client.table('activity_log').select('*').eq('user_id', user_id).order('created_at', desc=True).limit(10).execute()
+            recent_activity = activity_result.data if activity_result.data else []
+        except:
+            recent_activity = []
+        
+        return {
+            "status": "success",
+            "user": user,
+            "api_keys": api_keys,
+            "recent_usage": recent_usage,
+            "recent_activity": recent_activity,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting user info for ID {user_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get user information")

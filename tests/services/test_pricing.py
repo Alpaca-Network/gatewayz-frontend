@@ -92,6 +92,52 @@ def test_get_model_pricing_exception_returns_default(monkeypatch, mod):
     assert math.isclose(out["completion"], 0.00002)
 
 
+def test_get_model_pricing_normalizes_hf_suffix(monkeypatch, mod):
+    """Test that HuggingFace :hf-inference suffix is stripped for pricing lookup"""
+    # Create a model with ID without suffix
+    hf_models = [
+        {
+            "id": "meta-llama/Llama-2-7b-chat-hf",
+            "slug": "meta-llama/Llama-2-7b-chat-hf",
+            "pricing": {"prompt": "0", "completion": "0"},  # Free model
+        }
+    ]
+    monkeypatch.setattr(mod, "get_cached_models", lambda _: hf_models)
+
+    # Request with :hf-inference suffix should still find the model
+    out = mod.get_model_pricing("meta-llama/Llama-2-7b-chat-hf:hf-inference")
+    assert out["found"] is True
+    assert math.isclose(out["prompt"], 0.0)
+    assert math.isclose(out["completion"], 0.0)
+
+
+def test_get_model_pricing_handles_multiple_provider_suffixes(monkeypatch, mod):
+    """Test that various provider suffixes are normalized"""
+    models = [
+        {
+            "id": "test/model-1",
+            "slug": "test/model-1",
+            "pricing": {"prompt": "0.00001", "completion": "0.00002"},
+        }
+    ]
+    monkeypatch.setattr(mod, "get_cached_models", lambda _: models)
+
+    # Test with :hf-inference suffix
+    out_hf = mod.get_model_pricing("test/model-1:hf-inference")
+    assert out_hf["found"] is True
+    assert math.isclose(out_hf["prompt"], 0.00001)
+
+    # Test with :openai suffix
+    out_openai = mod.get_model_pricing("test/model-1:openai")
+    assert out_openai["found"] is True
+    assert math.isclose(out_openai["prompt"], 0.00001)
+
+    # Test with :anthropic suffix
+    out_anthropic = mod.get_model_pricing("test/model-1:anthropic")
+    assert out_anthropic["found"] is True
+    assert math.isclose(out_anthropic["prompt"], 0.00001)
+
+
 # -------------------- calculate_cost --------------------
 
 def test_calculate_cost_happy(monkeypatch, mod):

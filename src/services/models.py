@@ -22,6 +22,8 @@ from src.cache import (
     _xai_models_cache,
     _novita_models_cache,
     _huggingface_models_cache,
+    _aimo_models_cache,
+    _near_models_cache,
 )
 from fastapi import APIRouter
 from datetime import datetime, timezone
@@ -37,6 +39,40 @@ from src.services.huggingface_models import fetch_models_from_hug, get_huggingfa
 from src.services.model_transformations import detect_provider_from_model_id
 
 import httpx
+
+
+def sanitize_pricing(pricing: dict) -> dict:
+    """
+    Sanitize pricing data by converting negative values to 0.
+    
+    OpenRouter uses -1 to indicate dynamic pricing (e.g., for auto-routing models).
+    We convert these to 0 to avoid issues in cost calculations.
+    
+    Args:
+        pricing: Pricing dictionary from API
+        
+    Returns:
+        Sanitized pricing dictionary
+    """
+    if not pricing or not isinstance(pricing, dict):
+        return pricing
+    
+    sanitized = pricing.copy()
+    for key in ['prompt', 'completion', 'request', 'image', 'web_search', 'internal_reasoning']:
+        if key in sanitized:
+            try:
+                value = sanitized[key]
+                if value is not None:
+                    # Convert to float and check if negative
+                    float_value = float(value)
+                    if float_value < 0:
+                        sanitized[key] = "0"
+                        logger.debug(f"Converted negative pricing {key}={value} to 0")
+            except (ValueError, TypeError):
+                # Keep the original value if conversion fails
+                pass
+    
+    return sanitized
 
 # Initialize logging
 logging.basicConfig(level=logging.ERROR)
@@ -274,6 +310,22 @@ def get_cached_models(gateway: str = "openrouter"):
 
             return result
 
+        if gateway == "aimo":
+            cache = _aimo_models_cache
+            if cache["data"] and cache["timestamp"]:
+                cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
+                if cache_age < cache["ttl"]:
+                    return cache["data"]
+            return fetch_models_from_aimo()
+
+        if gateway == "near":
+            cache = _near_models_cache
+            if cache["data"] and cache["timestamp"]:
+                cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
+                if cache_age < cache["ttl"]:
+                    return cache["data"]
+            return fetch_models_from_near()
+
         if gateway == "all":
             openrouter_models = get_cached_models("openrouter") or []
             portkey_models = get_cached_models("portkey") or []
@@ -289,7 +341,9 @@ def get_cached_models(gateway: str = "openrouter"):
             groq_models = get_cached_models("groq") or []
             fireworks_models = get_cached_models("fireworks") or []
             together_models = get_cached_models("together") or []
-            return openrouter_models + portkey_models + featherless_models + deepinfra_models + google_models + cerebras_models + nebius_models + xai_models + novita_models + hug_models + chutes_models + groq_models + fireworks_models + together_models
+            aimo_models = get_cached_models("aimo") or []
+            near_models = get_cached_models("near") or []
+            return openrouter_models + portkey_models + featherless_models + deepinfra_models + google_models + cerebras_models + nebius_models + xai_models + novita_models + hug_models + chutes_models + groq_models + fireworks_models + together_models + aimo_models + near_models
 
         # Default to OpenRouter
         if _models_cache["data"] and _models_cache["timestamp"]:
@@ -323,6 +377,9 @@ def fetch_models_from_openrouter():
         models = models_data.get("data", [])
         for model in models:
             model.setdefault("source_gateway", "openrouter")
+            # Sanitize pricing to convert negative values (e.g., -1 for autorouter) to 0
+            if "pricing" in model:
+                model["pricing"] = sanitize_pricing(model["pricing"])
         _models_cache["data"] = models
         _models_cache["timestamp"] = datetime.now(timezone.utc)
 
@@ -453,20 +510,20 @@ def normalize_portkey_model(portkey_model: dict, openrouter_models: list = None)
 
             # Strategy 1: Exact match
             if or_slug.lower() == slug.lower():
-                pricing = or_model.get("pricing")
+                pricing = sanitize_pricing(or_model.get("pricing"))
                 description_suffix = "Pricing from OpenRouter (exact match)."
                 break
 
             # Strategy 2: Match without prefixes/suffixes
             if or_slug_clean.lower() == clean_slug.lower():
-                pricing = or_model.get("pricing")
+                pricing = sanitize_pricing(or_model.get("pricing"))
                 description_suffix = "Pricing from OpenRouter (approximate match)."
                 break
 
             # Strategy 3: Match canonical slug
             or_canonical = or_model.get("canonical_slug", "")
             if or_canonical and or_canonical.lower() == clean_slug.lower():
-                pricing = or_model.get("pricing")
+                pricing = sanitize_pricing(or_model.get("pricing"))
                 description_suffix = "Pricing from OpenRouter (canonical match)."
                 break
 
@@ -1089,6 +1146,311 @@ def normalize_together_model(together_model: dict) -> dict:
     return enrich_model_with_pricing(normalized, "together")
 
 
+def fetch_models_from_aimo():
+    """Fetch models from AIMO Network API
+
+    Note: AIMO is a decentralized AI marketplace with OpenAI-compatible API.
+    Models are fetched from the marketplace endpoint if available.
+    """
+    try:
+        if not Config.AIMO_API_KEY:
+            logger.error("AIMO API key not configured")
+            return None
+
+        headers = {
+            "Authorization": f"Bearer {Config.AIMO_API_KEY}",
+            "Content-Type": "application/json",
+        }
+
+        # Try to fetch models from AIMO marketplace
+        # Note: Using standard OpenAI-compatible /models endpoint
+        response = httpx.get(
+            "https://devnet.aimo.network/api/v1/models",
+            headers=headers,
+            timeout=20.0,
+        )
+        response.raise_for_status()
+
+        payload = response.json()
+        raw_models = payload.get("data", [])
+
+        if not raw_models:
+            logger.warning("No models returned from AIMO API")
+            return []
+
+        # Normalize models and filter out None values (models without providers)
+        normalized_models = [
+            normalized for model in raw_models
+            if model and (normalized := normalize_aimo_model(model)) is not None
+        ]
+
+        _aimo_models_cache["data"] = normalized_models
+        _aimo_models_cache["timestamp"] = datetime.now(timezone.utc)
+
+        logger.info(f"Fetched {len(normalized_models)} AIMO models")
+        return _aimo_models_cache["data"]
+    except httpx.HTTPStatusError as e:
+        logger.error(f"AIMO HTTP error: {e.response.status_code} - {e.response.text}")
+        return []
+    except Exception as e:
+        logger.error(f"Failed to fetch models from AIMO: {e}")
+        return []
+
+
+def normalize_aimo_model(aimo_model: dict) -> dict:
+    """Normalize AIMO catalog entries to resemble OpenRouter model shape
+
+    AIMO models use format: provider_pubkey:model_name
+    Model data structure:
+    - name: base model name (e.g., "DeepSeek-V3-1")
+    - display_name: human-readable name
+    - providers: list of provider objects with id, name, and pricing
+    """
+    model_name = aimo_model.get("name")
+    if not model_name:
+        logger.warning(f"AIMO model missing 'name' field: {aimo_model}")
+        return None
+
+    # Get provider information (use first provider if multiple)
+    providers = aimo_model.get("providers", [])
+    if not providers:
+        logger.warning(f"AIMO model '{model_name}' has no providers")
+        return None
+
+    # For now, use the first provider
+    provider = providers[0]
+    provider_id = provider.get("id")
+    provider_name = provider.get("name", "unknown")
+
+    # Construct model ID in AIMO format: provider_pubkey:model_name
+    model_id = f"{provider_id}:{model_name}"
+
+    slug = model_id
+    # Extract provider from model ID (format: provider_pubkey:model_name)
+    provider_slug = "aimo"
+    if ":" in model_id:
+        provider_slug = model_id.split(":")[0]
+
+    display_name = aimo_model.get("display_name") or model_name.replace("-", " ").title()
+    base_description = f"AIMO Network decentralized model {model_name} provided by {provider_name}."
+    description = base_description
+
+    context_length = aimo_model.get("context_length", 0)
+
+    # Extract pricing from provider object
+    pricing = {
+        "prompt": None,
+        "completion": None,
+        "request": None,
+        "image": None,
+        "web_search": None,
+        "internal_reasoning": None,
+    }
+
+    # AIMO provider pricing
+    provider_pricing = provider.get("pricing", {})
+    if provider_pricing:
+        prompt_price = provider_pricing.get("prompt")
+        completion_price = provider_pricing.get("completion")
+        # Convert to string if not None
+        pricing["prompt"] = str(prompt_price) if prompt_price is not None else None
+        pricing["completion"] = str(completion_price) if completion_price is not None else None
+
+    # Extract architecture from AIMO model
+    aimo_arch = aimo_model.get("architecture", {})
+    input_modalities = aimo_arch.get("input_modalities", ["text"])
+    output_modalities = aimo_arch.get("output_modalities", ["text"])
+
+    # Determine modality string
+    if input_modalities == ["text"] and output_modalities == ["text"]:
+        modality = "text->text"
+    else:
+        modality = "multimodal"
+
+    architecture = {
+        "modality": modality,
+        "input_modalities": input_modalities,
+        "output_modalities": output_modalities,
+        "tokenizer": None,
+        "instruct_type": None,
+    }
+
+    normalized = {
+        "id": slug,
+        "slug": slug,
+        "canonical_slug": slug,
+        "hugging_face_id": None,
+        "name": display_name,
+        "created": aimo_model.get("created"),
+        "description": description,
+        "context_length": context_length,
+        "architecture": architecture,
+        "pricing": pricing,
+        "top_provider": None,
+        "per_request_limits": None,
+        "supported_parameters": [],
+        "default_parameters": {},
+        "provider_slug": provider_slug,
+        "provider_site_url": "https://aimo.network",
+        "model_logo_url": None,
+        "source_gateway": "aimo",
+        "raw_aimo": aimo_model,
+    }
+
+    return enrich_model_with_pricing(normalized, "aimo")
+
+
+def fetch_models_from_near():
+    """Fetch models from Near AI API
+
+    Note: Near AI is a decentralized AI infrastructure providing private, verifiable, and user-owned AI services.
+    Models are fetched from the OpenAI-compatible /models endpoint.
+    If the API doesn't return models, fallback to known Near AI models.
+    """
+    try:
+        if not Config.NEAR_API_KEY:
+            logger.error("Near AI API key not configured")
+            return None
+
+        headers = {
+            "Authorization": f"Bearer {Config.NEAR_API_KEY}",
+            "Content-Type": "application/json",
+        }
+
+        try:
+            # Try to fetch models from Near AI
+            # Note: Using standard OpenAI-compatible /models endpoint
+            response = httpx.get(
+                "https://cloud-api.near.ai/v1/models",
+                headers=headers,
+                timeout=20.0,
+            )
+            response.raise_for_status()
+
+            payload = response.json()
+            raw_models = payload.get("data", [])
+
+            if raw_models:
+                # Normalize models
+                normalized_models = [
+                    normalize_near_model(model) for model in raw_models if model
+                ]
+
+                _near_models_cache["data"] = normalized_models
+                _near_models_cache["timestamp"] = datetime.now(timezone.utc)
+
+                logger.info(f"Fetched {len(normalized_models)} Near AI models from API")
+                return _near_models_cache["data"]
+        except (httpx.HTTPStatusError, httpx.RequestError) as e:
+            logger.warning(f"Near AI API request failed: {e}. Using fallback model list.")
+
+        # Fallback to known Near AI models if API doesn't return results
+        logger.info("Using fallback Near AI model list")
+        fallback_models = [
+            {"id": "deepseek-chat-v3-0324", "owned_by": "DeepSeek"},
+            {"id": "gpt-oss-120b", "owned_by": "GPT"},
+            {"id": "llama-3-70b", "owned_by": "Meta"},
+            {"id": "qwen-2-72b", "owned_by": "Alibaba"},
+        ]
+
+        normalized_models = [
+            normalize_near_model(model) for model in fallback_models if model
+        ]
+
+        _near_models_cache["data"] = normalized_models
+        _near_models_cache["timestamp"] = datetime.now(timezone.utc)
+
+        logger.info(f"Using {len(normalized_models)} fallback Near AI models")
+        return _near_models_cache["data"]
+    except Exception as e:
+        logger.error(f"Failed to fetch models from Near AI: {e}")
+        return []
+
+
+def normalize_near_model(near_model: dict) -> dict:
+    """Normalize Near AI catalog entries to resemble OpenRouter model shape
+
+    Near AI features:
+    - Private, verifiable AI infrastructure
+    - Decentralized execution
+    - User-owned AI services
+    - Cryptographic verification and on-chain auditing
+    """
+    model_id = near_model.get("id")
+    if not model_id:
+        logger.warning(f"Near AI model missing 'id' field: {near_model}")
+        return None
+
+    slug = f"near/{model_id}"
+    provider_slug = "near"
+
+    display_name = near_model.get("display_name") or model_id.replace("-", " ").replace("_", " ").title()
+    owned_by = near_model.get("owned_by", "Near Protocol")
+
+    # Highlight security features in description
+    base_description = near_model.get("description") or f"Near AI hosted model {model_id}."
+    security_features = " Security: Private AI inference with decentralized execution, cryptographic verification, and on-chain auditing."
+    description = f"{base_description}{security_features}"
+
+    metadata = near_model.get("metadata") or {}
+    context_length = metadata.get("context_length") or near_model.get("context_length") or 0
+
+    pricing = {
+        "prompt": None,
+        "completion": None,
+        "request": None,
+        "image": None,
+        "web_search": None,
+        "internal_reasoning": None,
+    }
+
+    # Extract pricing if available from Near AI
+    pricing_info = near_model.get("pricing", {})
+    if pricing_info:
+        pricing["prompt"] = str(pricing_info.get("prompt")) if pricing_info.get("prompt") is not None else None
+        pricing["completion"] = str(pricing_info.get("completion")) if pricing_info.get("completion") is not None else None
+
+    architecture = {
+        "modality": metadata.get("modality", "text->text"),
+        "input_modalities": metadata.get("input_modalities") or ["text"],
+        "output_modalities": metadata.get("output_modalities") or ["text"],
+        "tokenizer": metadata.get("tokenizer"),
+        "instruct_type": metadata.get("instruct_type"),
+    }
+
+    normalized = {
+        "id": slug,
+        "slug": slug,
+        "canonical_slug": slug,
+        "hugging_face_id": metadata.get("huggingface_repo"),
+        "name": display_name,
+        "created": near_model.get("created"),
+        "description": description,
+        "context_length": context_length,
+        "architecture": architecture,
+        "pricing": pricing,
+        "top_provider": None,
+        "per_request_limits": None,
+        "supported_parameters": metadata.get("supported_parameters", []),
+        "default_parameters": metadata.get("default_parameters", {}),
+        "provider_slug": provider_slug,
+        "provider_site_url": "https://near.ai",
+        "model_logo_url": None,
+        "source_gateway": "near",
+        "raw_near": near_model,
+        # Highlight security features as metadata
+        "security_features": {
+            "private_inference": True,
+            "decentralized": True,
+            "verifiable": True,
+            "on_chain_auditing": True,
+            "user_owned": True,
+        },
+    }
+
+    return enrich_model_with_pricing(normalized, "near")
+
+
 def fetch_specific_model_from_together(provider_name: str, model_name: str):
     """Fetch specific model data from Together by searching cached models"""
     try:
@@ -1210,8 +1572,21 @@ def normalize_deepinfra_model(deepinfra_model: dict) -> dict:
     provider_slug = model_id.split("/")[0] if "/" in model_id else "deepinfra"
     display_name = model_id.replace("-", " ").replace("_", " ").title()
 
-    description = f"DeepInfra hosted model: {model_id}. Pricing data may vary by region and usage."
+    # Get model type to determine modality
+    model_type = deepinfra_model.get("type") or deepinfra_model.get("reported_type") or "text"
 
+    # Build description with deprecation notice if applicable
+    base_description = deepinfra_model.get("description") or f"DeepInfra hosted model: {model_id}."
+    if deepinfra_model.get("deprecated"):
+        replaced_by = deepinfra_model.get("replaced_by")
+        if replaced_by:
+            base_description = f"{base_description} Note: This model is deprecated and has been replaced by {replaced_by}."
+        else:
+            base_description = f"{base_description} Note: This model is deprecated."
+    description = f"{base_description} Pricing data may vary by region and usage."
+
+    # Extract pricing information
+    pricing_info = deepinfra_model.get("pricing", {})
     pricing = {
         "prompt": None,
         "completion": None,
@@ -1221,10 +1596,38 @@ def normalize_deepinfra_model(deepinfra_model: dict) -> dict:
         "internal_reasoning": None
     }
 
+    # If pricing is time-based (for image generation), convert to image pricing
+    if pricing_info.get("type") == "time" and model_type in ("text-to-image", "image"):
+        cents_per_sec = pricing_info.get("cents_per_sec", 0)
+        # Convert cents per second to dollars per image (assume ~5 seconds per image)
+        pricing["image"] = str(cents_per_sec * 5 / 100) if cents_per_sec else None
+
+    # Determine modality based on model type
+    modality = "text->text"
+    input_modalities = ["text"]
+    output_modalities = ["text"]
+
+    if model_type in ("text-to-image", "image"):
+        modality = "text->image"
+        input_modalities = ["text"]
+        output_modalities = ["image"]
+    elif model_type in ("text-to-speech", "tts"):
+        modality = "text->audio"
+        input_modalities = ["text"]
+        output_modalities = ["audio"]
+    elif model_type in ("speech-to-text", "stt"):
+        modality = "audio->text"
+        input_modalities = ["audio"]
+        output_modalities = ["text"]
+    elif model_type == "multimodal":
+        modality = "multimodal"
+        input_modalities = ["text", "image"]
+        output_modalities = ["text"]
+
     architecture = {
-        "modality": "text->text",
-        "input_modalities": ["text"],
-        "output_modalities": ["text"],
+        "modality": modality,
+        "input_modalities": input_modalities,
+        "output_modalities": output_modalities,
         "tokenizer": None,
         "instruct_type": None
     }
@@ -1575,18 +1978,40 @@ def enhance_model_with_huggingface_data(openrouter_model: dict) -> dict:
 
 
 def get_model_count_by_provider(provider_slug: str, models_data: list = None) -> int:
-    """Get count of models for a specific provider"""
+    """Get count of models for a specific provider
+
+    This function counts models by checking both:
+    1. The provider prefix in the model ID (e.g., "groq/llama" -> "groq")
+    2. The provider_slug field in the model data
+    3. The source_gateway field as a fallback (for gateway-specific providers)
+    """
     try:
         if not models_data or not provider_slug:
             return 0
 
         count = 0
+        provider_slug_lower = provider_slug.lower().lstrip('@')
+
         for model in models_data:
+            # Strategy 1: Check the provider_slug field directly
+            model_provider_slug = model.get('provider_slug', '').lower().lstrip('@')
+            if model_provider_slug == provider_slug_lower:
+                count += 1
+                continue
+
+            # Strategy 2: Extract provider from model ID (format: provider/model-name)
             model_id = model.get('id', '')
             if '/' in model_id:
-                model_provider = model_id.split('/')[0]
-                if model_provider == provider_slug:
+                model_provider = model_id.split('/')[0].lower().lstrip('@')
+                if model_provider == provider_slug_lower:
                     count += 1
+                    continue
+
+            # Strategy 3: Check source_gateway field (for gateway-specific providers)
+            source_gateway = model.get('source_gateway', '').lower()
+            if source_gateway == provider_slug_lower:
+                count += 1
+                continue
 
         return count
     except Exception as e:

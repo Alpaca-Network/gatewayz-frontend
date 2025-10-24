@@ -14,7 +14,7 @@ from src.schemas.notification import NotificationPreferences, UpdateNotification
     NotificationType, SendNotificationRequest, NotificationChannel, NotificationStats
 from src.services.notification import notification_service
 
-from src.supabase_config import get_supabase_client
+from src.config.supabase_config import get_supabase_client
 
 logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)

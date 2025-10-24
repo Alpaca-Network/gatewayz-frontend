@@ -13,7 +13,7 @@ from src.schemas.payments import (
     CreateCheckoutSessionRequest,
     CreatePaymentIntentRequest,
     StripeCurrency,
-    PaymentMethodType,
+    StripePaymentMethodType,
     CreateRefundRequest
 )
 
@@ -298,7 +298,7 @@ class TestPaymentIntents:
         request = CreatePaymentIntentRequest(
             amount=1000,
             currency=StripeCurrency.USD,
-            payment_method_types=[PaymentMethodType.CARD],
+            payment_method_types=[StripePaymentMethodType.CARD],
             automatic_payment_methods=False
         )
 

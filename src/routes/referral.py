@@ -36,6 +36,8 @@ class ReferralStatsResponse(BaseModel):
     referral_code: str
     invite_link: str
     total_uses: int
+    completed_bonuses: int
+    pending_bonuses: int
     remaining_uses: int
     max_uses: int
     total_earned: float
