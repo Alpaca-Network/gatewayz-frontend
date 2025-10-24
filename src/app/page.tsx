@@ -376,7 +376,7 @@ console.log(completion.choices[0].message);`,
             style={{ zIndex: 0 }}
           />
 
-          <section className="pt-12 sm:pt-24 md:pt-32 lg:pt-40 pb-8 md:pb-12 max-w-5xl mx-auto px-2 sm:px-4 relative min-h-[calc(100vh-200px)]" style={{ zIndex: 1 }}>
+          <section className="pt-12 sm:pt-24 md:pt-32 lg:pt-40 pb-8 md:pb-12 max-w-5xl mx-auto px-2 sm:px-4 relative min-h-[100vh]" style={{ zIndex: 1 }}>
             <TitleSection/>
 
             <PathChooserModal open={showPathChooser} onOpenChange={setShowPathChooser} />
