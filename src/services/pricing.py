@@ -53,8 +53,12 @@ def get_model_pricing(model_id: str) -> Dict[str, float]:
                 pricing = model.get("pricing", {})
 
                 # Convert pricing strings to floats, handling None and empty strings
+                # Also ensure negative values (e.g., -1 for dynamic pricing) are treated as 0
                 prompt_price = float(pricing.get("prompt", "0") or "0")
+                prompt_price = max(0.0, prompt_price)  # Convert negative to 0
+                
                 completion_price = float(pricing.get("completion", "0") or "0")
+                completion_price = max(0.0, completion_price)  # Convert negative to 0
 
                 logger.info(f"Found pricing for {model_id} (normalized: {normalized_model_id}): prompt=${prompt_price}, completion=${completion_price}")
 

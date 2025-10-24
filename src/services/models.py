@@ -40,6 +40,40 @@ from src.services.model_transformations import detect_provider_from_model_id
 
 import httpx
 
+
+def sanitize_pricing(pricing: dict) -> dict:
+    """
+    Sanitize pricing data by converting negative values to 0.
+    
+    OpenRouter uses -1 to indicate dynamic pricing (e.g., for auto-routing models).
+    We convert these to 0 to avoid issues in cost calculations.
+    
+    Args:
+        pricing: Pricing dictionary from API
+        
+    Returns:
+        Sanitized pricing dictionary
+    """
+    if not pricing or not isinstance(pricing, dict):
+        return pricing
+    
+    sanitized = pricing.copy()
+    for key in ['prompt', 'completion', 'request', 'image', 'web_search', 'internal_reasoning']:
+        if key in sanitized:
+            try:
+                value = sanitized[key]
+                if value is not None:
+                    # Convert to float and check if negative
+                    float_value = float(value)
+                    if float_value < 0:
+                        sanitized[key] = "0"
+                        logger.debug(f"Converted negative pricing {key}={value} to 0")
+            except (ValueError, TypeError):
+                # Keep the original value if conversion fails
+                pass
+    
+    return sanitized
+
 # Initialize logging
 logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
@@ -343,6 +377,9 @@ def fetch_models_from_openrouter():
         models = models_data.get("data", [])
         for model in models:
             model.setdefault("source_gateway", "openrouter")
+            # Sanitize pricing to convert negative values (e.g., -1 for autorouter) to 0
+            if "pricing" in model:
+                model["pricing"] = sanitize_pricing(model["pricing"])
         _models_cache["data"] = models
         _models_cache["timestamp"] = datetime.now(timezone.utc)
 
@@ -473,20 +510,20 @@ def normalize_portkey_model(portkey_model: dict, openrouter_models: list = None)
 
             # Strategy 1: Exact match
             if or_slug.lower() == slug.lower():
-                pricing = or_model.get("pricing")
+                pricing = sanitize_pricing(or_model.get("pricing"))
                 description_suffix = "Pricing from OpenRouter (exact match)."
                 break
 
             # Strategy 2: Match without prefixes/suffixes
             if or_slug_clean.lower() == clean_slug.lower():
-                pricing = or_model.get("pricing")
+                pricing = sanitize_pricing(or_model.get("pricing"))
                 description_suffix = "Pricing from OpenRouter (approximate match)."
                 break
 
             # Strategy 3: Match canonical slug
             or_canonical = or_model.get("canonical_slug", "")
             if or_canonical and or_canonical.lower() == clean_slug.lower():
-                pricing = or_model.get("pricing")
+                pricing = sanitize_pricing(or_model.get("pricing"))
                 description_suffix = "Pricing from OpenRouter (canonical match)."
                 break
 
