@@ -108,7 +108,7 @@ export function OnboardingBanner() {
   }
 
   return (
-    <div className="bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-md sticky top-[65px] z-40">
+    <div className="bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-md sticky top-[65px] z-30">
       <div className="px-4 py-3 max-w-full overflow-x-hidden">
         <div className="flex items-center justify-between gap-2 sm:gap-4">
           <div className="flex items-center gap-2 sm:gap-4 flex-1 min-w-0">
