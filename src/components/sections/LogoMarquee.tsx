@@ -45,10 +45,10 @@ export default function LogoMarquee({ compact = false, className = "" }: LogoMar
         </div>
         
         {/* Left fade */}
-        <div className="absolute left-0 top-0 bottom-0 w-1/3 bg-gradient-to-r from-white via-white/90 via-white/60 to-transparent pointer-events-none z-10" />
-        
+        <div className="absolute left-0 top-0 bottom-0 w-1/3 bg-gradient-to-r from-white via-white/90 via-white/60 to-transparent dark:from-slate-950 dark:via-slate-950/90 dark:via-slate-950/60 dark:to-transparent pointer-events-none z-10" />
+
         {/* Right fade */}
-        <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-gradient-to-l from-white via-white/90 via-white/60 to-transparent pointer-events-none z-10" />
+        <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-gradient-to-l from-white via-white/90 via-white/60 to-transparent dark:from-slate-950 dark:via-slate-950/90 dark:via-slate-950/60 dark:to-transparent pointer-events-none z-10" />
       </div>
     </div>
   );
