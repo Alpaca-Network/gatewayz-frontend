@@ -123,7 +123,7 @@ export function AppHeader() {
 
             {/* Dark mode logo and text */}
             <img src="/logo_white.png" alt="Gatewayz" className="w-[28px] h-[28px] sm:w-[32px] sm:h-[32px] object-contain hidden dark:block" />
-            <span className="font-bold text-base sm:text-lg text-foreground hidden dark:inline-block sm:dark:inline-block">Gatewayz</span>
+            <span className="font-bold text-base sm:text-lg text-foreground hidden sm:dark:inline-block">Gatewayz</span>
           </Link>
         </div>
 
