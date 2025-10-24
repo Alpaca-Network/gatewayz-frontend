@@ -118,6 +118,8 @@ export default function DevelopersPage() {
     const [rankingModels, setRankingModels] = useState<RankingModel[]>([]);
     const [loading, setLoading] = useState(true);
     const [organizationLogos, setOrganizationLogos] = useState<Map<string, string>>(new Map());
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 30;
 
     const timeFrameLabels: Record<typeof timeFrame, string> = {
         month: 'Past Month',
@@ -228,10 +230,29 @@ export default function DevelopersPage() {
             orgMap.get(model.author)!.push(model);
         });
 
+        // Get all unique developers from models data (excluding gateways)
+        const allDevelopers = new Set<string>();
+        models.forEach(model => {
+            const developer = model.developer.toLowerCase();
+            if (!excludedProviders.includes(developer)) {
+                allDevelopers.add(model.developer);
+            }
+        });
+
+        // Add developers that aren't in ranking data with empty model arrays
+        allDevelopers.forEach(developer => {
+            if (!orgMap.has(developer)) {
+                orgMap.set(developer, []);
+            }
+        });
+
         // Convert to Organization objects
-        return Array.from(orgMap.entries()).map(([author, models]) => {
+        return Array.from(orgMap.entries()).map(([author, rankingModelsForAuthor]) => {
+            // If no ranking models, get count from models data
+            const hasRankingData = rankingModelsForAuthor.length > 0;
+            
             // Parse tokens and sum them up
-            const totalTokensNum = models.reduce((sum, model) => {
+            const totalTokensNum = rankingModelsForAuthor.reduce((sum, model) => {
                 const tokensStr = model.tokens.replace(/[^0-9.]/g, '');
                 const multiplier = model.tokens.includes('T') ? 1000000000000 :
                                   model.tokens.includes('B') ? 1000000000 :
@@ -244,19 +265,24 @@ export default function DevelopersPage() {
                 if (num >= 1000000000000) return (num / 1000000000000).toFixed(1) + 'T';
                 if (num >= 1000000000) return (num / 1000000000).toFixed(1) + 'B';
                 if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+                if (num === 0) return 'N/A';
                 return num.toString();
             };
 
             // Calculate average trend percentage
-            const avgTrend = models.reduce((sum, model) => {
+            const avgTrend = hasRankingData ? rankingModelsForAuthor.reduce((sum, model) => {
                 const trendNum = parseFloat(model.trend_percentage.replace('%', ''));
                 return sum + (isNaN(trendNum) ? 0 : trendNum);
-            }, 0) / models.length;
+            }, 0) / rankingModelsForAuthor.length : 0;
 
             // Get top model (highest rank, which means lowest rank number)
-            const topModel = models.reduce((top, model) =>
+            const topModel = hasRankingData ? rankingModelsForAuthor.reduce((top, model) =>
                 model.rank < top.rank ? model : top
-            , models[0]);
+            , rankingModelsForAuthor[0]) : null;
+            
+            // Get model count from imported models data
+            const developerModels = models.filter((m: Model) => m.developer.toLowerCase() === author.toLowerCase());
+            const actualModelCount = developerModels.length > 0 ? developerModels.length : rankingModelsForAuthor.length;
 
             // Format author name for display
             const formatAuthorName = (author: string): string => {
@@ -280,7 +306,10 @@ export default function DevelopersPage() {
                     'nousresearch': 'Nous Research',
                     'thudm': 'THUDM',
                     'tngtech': 'TNG Technology',
-                    'z-ai': 'Z.AI'
+                    'z-ai': 'Z.AI',
+                    'katanemo': 'Katanemo',
+                    'moonshotai': 'Moonshot AI',
+                    'switchpoint': 'Switchpoint'
                 };
                 return formatted[author.toLowerCase()] || author.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
             };
@@ -289,11 +318,11 @@ export default function DevelopersPage() {
                 id: author,
                 name: formatAuthorName(author),
                 author: author,
-                modelCount: models.length,
+                modelCount: actualModelCount,
                 totalTokens: formatTokens(totalTokensNum),
-                topModel: topModel.model_name,
+                topModel: topModel ? topModel.model_name : (developerModels[0]?.name || 'N/A'),
                 performanceChange: avgTrend,
-                models: models,
+                models: rankingModelsForAuthor,
                 logoUrl: organizationLogos.get(author),
             };
         }).sort((a, b) => {
@@ -342,6 +371,19 @@ export default function DevelopersPage() {
             org.name.toLowerCase().includes(searchTerm.toLowerCase())
         );
     }, [organizations, searchTerm, activeTab]);
+
+    // Calculate pagination
+    const totalPages = Math.ceil(filteredOrgs.length / itemsPerPage);
+    const paginatedOrgs = useMemo(() => {
+        const startIndex = (currentPage - 1) * itemsPerPage;
+        const endIndex = startIndex + itemsPerPage;
+        return filteredOrgs.slice(startIndex, endIndex);
+    }, [filteredOrgs, currentPage, itemsPerPage]);
+
+    // Reset to page 1 when filters change
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchTerm, activeTab, timeFrame]);
 
 
     return (
@@ -422,11 +464,59 @@ export default function DevelopersPage() {
                             ))}
                         </div>
                     ) : filteredOrgs.length > 0 ? (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {filteredOrgs.map(org => (
-                                <OrganizationCard key={org.id} org={org} />
-                            ))}
-                        </div>
+                        <>
+                            <div className="mb-6 text-sm text-muted-foreground">
+                                Showing {((currentPage - 1) * itemsPerPage) + 1}-{Math.min(currentPage * itemsPerPage, filteredOrgs.length)} of {filteredOrgs.length} developers
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {paginatedOrgs.map(org => (
+                                    <OrganizationCard key={org.id} org={org} />
+                                ))}
+                            </div>
+                            {totalPages > 1 && (
+                                <div className="flex items-center justify-center gap-2 mt-12">
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                        disabled={currentPage === 1}
+                                    >
+                                        Previous
+                                    </Button>
+                                    <div className="flex items-center gap-1">
+                                        {Array.from({ length: totalPages }, (_, i) => i + 1)
+                                            .filter(page => {
+                                                // Show first page, last page, current page, and pages around current
+                                                return page === 1 || 
+                                                       page === totalPages || 
+                                                       (page >= currentPage - 1 && page <= currentPage + 1);
+                                            })
+                                            .map((page, idx, arr) => (
+                                                <>
+                                                    {idx > 0 && arr[idx - 1] !== page - 1 && (
+                                                        <span key={`ellipsis-${page}`} className="px-2">...</span>
+                                                    )}
+                                                    <Button
+                                                        key={page}
+                                                        variant={currentPage === page ? 'default' : 'outline'}
+                                                        onClick={() => setCurrentPage(page)}
+                                                        className={currentPage === page ? 'bg-muted text-foreground' : ''}
+                                                    >
+                                                        {page}
+                                                    </Button>
+                                                </>
+                                            ))
+                                        }
+                                    </div>
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                        disabled={currentPage === totalPages}
+                                    >
+                                        Next
+                                    </Button>
+                                </div>
+                            )}
+                        </>
                     ) : (
                         <p className="text-center text-muted-foreground mt-12">
                             {searchTerm ? 'No developers found matching your search.' : 'No developers found for this time period.'}
