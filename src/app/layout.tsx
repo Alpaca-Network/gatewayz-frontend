@@ -71,16 +71,16 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning className="overflow-x-hidden h-full">
-      <body className={`${inter.className} antialiased bg-background h-full flex flex-col overflow-hidden`} suppressHydrationWarning>
+      <body className={`${inter.className} antialiased bg-background min-h-screen flex flex-col`} suppressHydrationWarning>
         <ThemeProvider
           defaultTheme="system"
           storageKey="ui-theme"
         >
-          <PrivyProviderWrapper className="flex flex-col h-full">
+          <PrivyProviderWrapper className="flex flex-col min-h-screen">
             {/* <GTMLoader /> Temporarily disabled due to layout router issues */}
             <AppHeader />
             <OnboardingBanner />
-            <main className="flex-1 flex flex-col overflow-hidden min-h-0">
+            <main className="flex-1 flex flex-col">
               {children}
             </main>
             <Toaster />
