@@ -228,10 +228,29 @@ export default function DevelopersPage() {
             orgMap.get(model.author)!.push(model);
         });
 
+        // Get all unique developers from models data (excluding gateways)
+        const allDevelopers = new Set<string>();
+        models.forEach(model => {
+            const developer = model.developer.toLowerCase();
+            if (!excludedProviders.includes(developer)) {
+                allDevelopers.add(model.developer);
+            }
+        });
+
+        // Add developers that aren't in ranking data with empty model arrays
+        allDevelopers.forEach(developer => {
+            if (!orgMap.has(developer)) {
+                orgMap.set(developer, []);
+            }
+        });
+
         // Convert to Organization objects
-        return Array.from(orgMap.entries()).map(([author, models]) => {
+        return Array.from(orgMap.entries()).map(([author, rankingModelsForAuthor]) => {
+            // If no ranking models, get count from models data
+            const hasRankingData = rankingModelsForAuthor.length > 0;
+            
             // Parse tokens and sum them up
-            const totalTokensNum = models.reduce((sum, model) => {
+            const totalTokensNum = rankingModelsForAuthor.reduce((sum, model) => {
                 const tokensStr = model.tokens.replace(/[^0-9.]/g, '');
                 const multiplier = model.tokens.includes('T') ? 1000000000000 :
                                   model.tokens.includes('B') ? 1000000000 :
@@ -244,19 +263,24 @@ export default function DevelopersPage() {
                 if (num >= 1000000000000) return (num / 1000000000000).toFixed(1) + 'T';
                 if (num >= 1000000000) return (num / 1000000000).toFixed(1) + 'B';
                 if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+                if (num === 0) return 'N/A';
                 return num.toString();
             };
 
             // Calculate average trend percentage
-            const avgTrend = models.reduce((sum, model) => {
+            const avgTrend = hasRankingData ? rankingModelsForAuthor.reduce((sum, model) => {
                 const trendNum = parseFloat(model.trend_percentage.replace('%', ''));
                 return sum + (isNaN(trendNum) ? 0 : trendNum);
-            }, 0) / models.length;
+            }, 0) / rankingModelsForAuthor.length : 0;
 
             // Get top model (highest rank, which means lowest rank number)
-            const topModel = models.reduce((top, model) =>
+            const topModel = hasRankingData ? rankingModelsForAuthor.reduce((top, model) =>
                 model.rank < top.rank ? model : top
-            , models[0]);
+            , rankingModelsForAuthor[0]) : null;
+            
+            // Get model count from imported models data
+            const developerModels = models.filter((m: Model) => m.developer.toLowerCase() === author.toLowerCase());
+            const actualModelCount = developerModels.length > 0 ? developerModels.length : rankingModelsForAuthor.length;
 
             // Format author name for display
             const formatAuthorName = (author: string): string => {
@@ -280,7 +304,10 @@ export default function DevelopersPage() {
                     'nousresearch': 'Nous Research',
                     'thudm': 'THUDM',
                     'tngtech': 'TNG Technology',
-                    'z-ai': 'Z.AI'
+                    'z-ai': 'Z.AI',
+                    'katanemo': 'Katanemo',
+                    'moonshotai': 'Moonshot AI',
+                    'switchpoint': 'Switchpoint'
                 };
                 return formatted[author.toLowerCase()] || author.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
             };
@@ -289,11 +316,11 @@ export default function DevelopersPage() {
                 id: author,
                 name: formatAuthorName(author),
                 author: author,
-                modelCount: models.length,
+                modelCount: actualModelCount,
                 totalTokens: formatTokens(totalTokensNum),
-                topModel: topModel.model_name,
+                topModel: topModel ? topModel.model_name : (developerModels[0]?.name || 'N/A'),
                 performanceChange: avgTrend,
-                models: models,
+                models: rankingModelsForAuthor,
                 logoUrl: organizationLogos.get(author),
             };
         }).sort((a, b) => {
