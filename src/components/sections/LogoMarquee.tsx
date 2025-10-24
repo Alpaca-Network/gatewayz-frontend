@@ -37,7 +37,7 @@ export default function LogoMarquee({ compact = false, className = "" }: LogoMar
                   alt={idx < logos.length ? logo.name : ""}
                   loading="lazy"
                   decoding="async"
-                  className="h-12 sm:h-16 md:h-20 w-auto object-contain grayscale contrast-75 opacity-70"
+                  className="h-12 sm:h-16 md:h-20 w-auto object-contain grayscale contrast-75 opacity-70 dark:invert dark:opacity-90 dark:contrast-125"
                 />
               </div>
             ))}
