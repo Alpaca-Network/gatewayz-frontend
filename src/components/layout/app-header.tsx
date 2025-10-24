@@ -114,16 +114,16 @@ export function AppHeader() {
 
   return (
     <header className="sticky top-0 z-[60] w-full h-[65px] border-b bg-header">
-      <div className="w-full max-w-7xl mx-auto flex h-full items-center px-4 sm:px-6 lg:px-8 gap-4">
-        <div className="flex items-center gap-4 shrink-0">
-          <Link href="/" className="flex items-center gap-2 shrink-0">
+      <div className="w-full max-w-7xl mx-auto flex h-full items-center px-3 sm:px-6 lg:px-8 gap-2 sm:gap-4">
+        <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+          <Link href="/" className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {/* Light mode logo and text */}
-            <img src="/logo_black.svg" alt="Gatewayz" className="w-[32px] h-[32px] object-contain dark:hidden" />
-            <span className="font-bold text-lg text-foreground dark:hidden hidden sm:inline-block">Gatewayz</span>
+            <img src="/logo_black.svg" alt="Gatewayz" className="w-[28px] h-[28px] sm:w-[32px] sm:h-[32px] object-contain dark:hidden" />
+            <span className="font-bold text-base sm:text-lg text-foreground dark:hidden hidden sm:inline-block">Gatewayz</span>
 
             {/* Dark mode logo and text */}
-            <img src="/logo_white.png" alt="Gatewayz" className="w-[32px] h-[32px] object-contain hidden dark:block" />
-            <span className="font-bold text-lg text-foreground hidden dark:inline-block sm:dark:inline-block">Gatewayz</span>
+            <img src="/logo_white.png" alt="Gatewayz" className="w-[28px] h-[28px] sm:w-[32px] sm:h-[32px] object-contain hidden dark:block" />
+            <span className="font-bold text-base sm:text-lg text-foreground hidden dark:inline-block sm:dark:inline-block">Gatewayz</span>
           </Link>
         </div>
 
@@ -131,7 +131,7 @@ export function AppHeader() {
           <SearchBar />
         </div>
 
-        <div className="flex items-center gap-4 ml-auto">
+        <div className="flex items-center gap-2 sm:gap-4 ml-auto">
           {/*<div className="hidden lg:block shrink-0">*/}
           {/*  <GetCreditsButton />*/}
           {/*</div>*/}
@@ -162,7 +162,7 @@ export function AppHeader() {
           </div>
 
           {/* Mobile: Credits, Profile, and Menu */}
-          <div className="md:hidden flex items-center gap-2">
+          <div className="md:hidden flex items-center gap-1.5 sm:gap-2">
             {user && (
               <>
                 <CreditsDisplay />
@@ -173,11 +173,11 @@ export function AppHeader() {
               <Button variant="outline" size="sm" onClick={() => login()}>Sign In</Button>
             )}
           </div>
-          <div className="md:hidden">
+          <div className="md:hidden shrink-0">
             <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
               <SheetTrigger asChild>
-                <Button variant="ghost" size="icon">
-                  <Menu className="h-6 w-6" />
+                <Button variant="ghost" size="icon" className="h-9 w-9 sm:h-10 sm:w-10">
+                  <Menu className="h-5 w-5 sm:h-6 sm:w-6" />
                   <span className="sr-only">Open menu</span>
                 </Button>
               </SheetTrigger>
