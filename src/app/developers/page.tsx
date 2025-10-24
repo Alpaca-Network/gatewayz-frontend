@@ -345,7 +345,7 @@ export default function DevelopersPage() {
 
 
     return (
-        <div className="min-h-[calc(100vh-130px)] bg-background">
+        <div className="min-h-[calc(100vh-130px)] bg-background pb-32">
             <div className="mx-auto max-w-screen-2xl px-4 sm:px-6 lg:px-8 py-8">
                 <header className="text-center mb-8">
                     <h1 className="text-4xl font-bold tracking-tight">Developers</h1>
