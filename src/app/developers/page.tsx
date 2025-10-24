@@ -118,6 +118,8 @@ export default function DevelopersPage() {
     const [rankingModels, setRankingModels] = useState<RankingModel[]>([]);
     const [loading, setLoading] = useState(true);
     const [organizationLogos, setOrganizationLogos] = useState<Map<string, string>>(new Map());
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 30;
 
     const timeFrameLabels: Record<typeof timeFrame, string> = {
         month: 'Past Month',
@@ -370,6 +372,19 @@ export default function DevelopersPage() {
         );
     }, [organizations, searchTerm, activeTab]);
 
+    // Calculate pagination
+    const totalPages = Math.ceil(filteredOrgs.length / itemsPerPage);
+    const paginatedOrgs = useMemo(() => {
+        const startIndex = (currentPage - 1) * itemsPerPage;
+        const endIndex = startIndex + itemsPerPage;
+        return filteredOrgs.slice(startIndex, endIndex);
+    }, [filteredOrgs, currentPage, itemsPerPage]);
+
+    // Reset to page 1 when filters change
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchTerm, activeTab, timeFrame]);
+
 
     return (
         <div className="min-h-[calc(100vh-130px)] bg-background pb-32">
@@ -449,11 +464,59 @@ export default function DevelopersPage() {
                             ))}
                         </div>
                     ) : filteredOrgs.length > 0 ? (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {filteredOrgs.map(org => (
-                                <OrganizationCard key={org.id} org={org} />
-                            ))}
-                        </div>
+                        <>
+                            <div className="mb-6 text-sm text-muted-foreground">
+                                Showing {((currentPage - 1) * itemsPerPage) + 1}-{Math.min(currentPage * itemsPerPage, filteredOrgs.length)} of {filteredOrgs.length} developers
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {paginatedOrgs.map(org => (
+                                    <OrganizationCard key={org.id} org={org} />
+                                ))}
+                            </div>
+                            {totalPages > 1 && (
+                                <div className="flex items-center justify-center gap-2 mt-12">
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                        disabled={currentPage === 1}
+                                    >
+                                        Previous
+                                    </Button>
+                                    <div className="flex items-center gap-1">
+                                        {Array.from({ length: totalPages }, (_, i) => i + 1)
+                                            .filter(page => {
+                                                // Show first page, last page, current page, and pages around current
+                                                return page === 1 || 
+                                                       page === totalPages || 
+                                                       (page >= currentPage - 1 && page <= currentPage + 1);
+                                            })
+                                            .map((page, idx, arr) => (
+                                                <>
+                                                    {idx > 0 && arr[idx - 1] !== page - 1 && (
+                                                        <span key={`ellipsis-${page}`} className="px-2">...</span>
+                                                    )}
+                                                    <Button
+                                                        key={page}
+                                                        variant={currentPage === page ? 'default' : 'outline'}
+                                                        onClick={() => setCurrentPage(page)}
+                                                        className={currentPage === page ? 'bg-muted text-foreground' : ''}
+                                                    >
+                                                        {page}
+                                                    </Button>
+                                                </>
+                                            ))
+                                        }
+                                    </div>
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                        disabled={currentPage === totalPages}
+                                    >
+                                        Next
+                                    </Button>
+                                </div>
+                            )}
+                        </>
                     ) : (
                         <p className="text-center text-muted-foreground mt-12">
                             {searchTerm ? 'No developers found matching your search.' : 'No developers found for this time period.'}
