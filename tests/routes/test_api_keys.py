@@ -28,8 +28,20 @@ from src.main import app
 
 @pytest.fixture
 def client():
-    """FastAPI test client"""
-    return TestClient(app)
+    """FastAPI test client with dependency overrides"""
+    from src.security.deps import get_api_key
+
+    # Override the get_api_key dependency to bypass authentication
+    async def override_get_api_key():
+        return "gw_live_test1234567890"
+
+    app.dependency_overrides[get_api_key] = override_get_api_key
+
+    client = TestClient(app)
+    yield client
+
+    # Cleanup: Remove overrides after test
+    app.dependency_overrides.clear()
 
 
 @pytest.fixture
@@ -63,6 +75,7 @@ def mock_api_key_data():
         'is_primary': False,
         'expiration_date': None,
         'max_requests': None,
+        'requests_used': 0,
         'ip_allowlist': [],
         'domain_referrers': [],
         'last_used_at': '2024-01-01T12:00:00Z',
@@ -86,6 +99,7 @@ def mock_api_keys_list():
             'domain_referrers': [],
             'expiration_date': None,
             'max_requests': None,
+            'requests_used': 0,
             'last_used_at': '2024-01-05T12:00:00Z'
         },
         {
@@ -99,6 +113,7 @@ def mock_api_keys_list():
             'domain_referrers': ['example.com'],
             'expiration_date': '2024-12-31T23:59:59Z',
             'max_requests': 1000,
+            'requests_used': 500,
             'last_used_at': '2024-01-03T10:00:00Z'
         }
     ]

@@ -110,25 +110,28 @@ jobs:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY_TEST || 'test-key' }}
           PORTKEY_API_KEY: ${{ secrets.PORTKEY_API_KEY_TEST || 'test-key' }}
         run: |
-          # Run tests with coverage
-          # Note: Some tests have pre-existing failures due to auth mocking issues
-          # Using continue-on-error to prevent blocking PRs for pre-existing issues
+          # Run tests with coverage - TESTS NOW ENFORCED (Phase 3 started)
+          # Target: 25% coverage (current baseline: 23.4%)
+          # Will increase 10% monthly: 35% (Month 2), 50% (Month 3), 70% (Month 4), 90% (Month 5)
           pytest tests/ -v --tb=short \
             --cov=src \
             --cov-report=term \
             --cov-report=xml \
-            --cov-report=html || echo "Some tests failed (may be pre-existing)"
-        continue-on-error: true  # Allow tests to fail due to pre-existing issues
+            --cov-report=html \
+            --cov-fail-under=25
 
-      - name: Check coverage threshold
+          echo "✅ Tests passed with coverage above 25%"
+
+      - name: Check coverage progress
+        if: always()
         run: |
-          # Check if coverage meets minimum threshold (80%)
-          # Note: Coverage check is informational only for now
-          pytest tests/ --cov=src --cov-report=term --cov-fail-under=80 --co -q || {
-            echo "⚠️  Coverage is below 80% threshold"
-            echo "📊 Run 'pytest tests/ --cov=src --cov-report=html' locally to see detailed coverage report"
-            echo "This is informational only and will not fail the build"
-          }
+          echo "📊 Coverage Progress Tracker"
+          echo "Current minimum: 25%"
+          echo "Next milestone: 35% (Target: Month 2)"
+          echo "Phase 3A Goal: 40% (Add auth, users, api_keys, db_security tests)"
+          echo "Phase 3 Final Goal: 90% (Complete test coverage)"
+          echo ""
+          echo "Run locally: pytest tests/ --cov=src --cov-report=html"
         continue-on-error: true
 
       - name: Upload coverage reports

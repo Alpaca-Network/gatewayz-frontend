@@ -61,3 +61,12 @@ nul
 docs/SESSION_SUMMARY.md
 docs/DEEPSEEK_R1_THINKING_TAGS_DEBUG.md
 docs/HUGGINGFACE_FRONTEND_DIAGNOSTIC.md
+
+# Test artifacts
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.json

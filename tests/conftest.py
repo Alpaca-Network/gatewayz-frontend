@@ -22,6 +22,50 @@ os.environ.setdefault('STRIPE_WEBHOOK_SECRET', 'whsec_xxxxxxxxxxxxxxxxxxxxxxxxxx
 os.environ.setdefault('FRONTEND_URL', 'http://localhost:3000')
 
 from src.config.supabase_config import get_supabase_client
+from tests.factories import (
+    UserFactory,
+    ApiKeyFactory,
+    ChatCompletionFactory,
+    ModelFactory,
+    PaymentFactory,
+    ReferralFactory,
+)
+
+
+@pytest.fixture
+def user_factory():
+    """Provide UserFactory for tests"""
+    return UserFactory
+
+
+@pytest.fixture
+def api_key_factory():
+    """Provide ApiKeyFactory for tests"""
+    return ApiKeyFactory
+
+
+@pytest.fixture
+def chat_factory():
+    """Provide ChatCompletionFactory for tests"""
+    return ChatCompletionFactory
+
+
+@pytest.fixture
+def model_factory():
+    """Provide ModelFactory for tests"""
+    return ModelFactory
+
+
+@pytest.fixture
+def payment_factory():
+    """Provide PaymentFactory for tests"""
+    return PaymentFactory
+
+
+@pytest.fixture
+def referral_factory():
+    """Provide ReferralFactory for tests"""
+    return ReferralFactory
 
 
 @pytest.fixture
@@ -152,6 +196,10 @@ def isolated_test_data(supabase_client, test_prefix):
 @pytest.fixture(autouse=True)
 def skip_if_no_database(request):
     """Skip tests that require database if credentials are not available"""
+    # Skip if test uses in-memory stub (sb fixture)
+    if 'sb' in request.fixturenames:
+        return  # Don't skip tests that use the in-memory stub
+
     # Check if this is a database or integration test
     if 'db' in str(request.fspath) or 'integration' in str(request.fspath):
         # Cache the database check result
@@ -164,7 +212,7 @@ def skip_if_no_database(request):
             except Exception as e:
                 skip_if_no_database._db_available = False
                 skip_if_no_database._db_error = str(e)
-        
+
         if not skip_if_no_database._db_available:
             pytest.skip(f"Database not available: {skip_if_no_database._db_error}")
 
