@@ -215,7 +215,7 @@ async def get_providers(
                 raise HTTPException(status_code=503, detail="Portkey models data unavailable")
 
         # Add support for other gateways
-        other_gateways = ["featherless", "deepinfra", "chutes", "groq", "fireworks", "together", "google", "cerebras", "nebius", "xai", "novita", "hug", "aimo"]
+        other_gateways = ["featherless", "deepinfra", "chutes", "groq", "fireworks", "together"]
         all_models = {}  # Track models for each gateway
 
         for gw in other_gateways:
@@ -321,6 +321,7 @@ async def get_models(
         novita_models: List[dict] = []
         hug_models: List[dict] = []
         aimo_models: List[dict] = []
+        near_models: List[dict] = []
 
         if gateway_value in ("openrouter", "all"):
             openrouter_models = get_cached_models("openrouter") or []
@@ -412,6 +413,12 @@ async def get_models(
                 logger.error("No AIMO models data available from cache")
                 raise HTTPException(status_code=503, detail="Models data unavailable")
 
+        if gateway_value in ("near", "all"):
+            near_models = get_cached_models("near") or []
+            if gateway_value == "near" and not near_models:
+                logger.error("No Near models data available from cache")
+                raise HTTPException(status_code=503, detail="Models data unavailable")
+
         if gateway_value == "openrouter":
             models = openrouter_models
         elif gateway_value == "portkey":
@@ -442,11 +449,13 @@ async def get_models(
             models = hug_models
         elif gateway_value == "aimo":
             models = aimo_models
+        elif gateway_value == "near":
+            models = near_models
         else:
             # For "all" gateway, merge all models but avoid duplicates from Portkey-based providers
             # Note: google, cerebras, nebius, xai, novita, hug are filtered FROM Portkey models,
             # so we DON'T include them separately in the merge to avoid counting them twice
-            models = merge_models_by_slug(openrouter_models, portkey_models, featherless_models, deepinfra_models, chutes_models, groq_models, fireworks_models, together_models, aimo_models)
+            models = merge_models_by_slug(openrouter_models, portkey_models, featherless_models, deepinfra_models, chutes_models, groq_models, fireworks_models, together_models, aimo_models, near_models)
 
         if not models:
             logger.error("No models data available after applying gateway selection")
