@@ -28,6 +28,9 @@ spec = importlib.util.spec_from_file_location(
 check_module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(check_module)
 
+# Mark all tests in this module as health tests
+pytestmark = pytest.mark.health
+
 
 class TestGatewayHealthChecker:
     """Test suite for gateway health checker"""
