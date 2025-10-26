@@ -118,7 +118,7 @@ def fake_supabase():
 def mod(fake_supabase, monkeypatch):
     # stub out get_supabase_client
     supabase_mod = types.SimpleNamespace(get_supabase_client=lambda: fake_supabase)
-    monkeypatch.setitem(sys.modules, "src.supabase_config", supabase_mod)
+    monkeypatch.setitem(sys.modules, "src.config.supabase_config", supabase_mod)
 
     # stub plan entitlements
     plans_mod = types.SimpleNamespace(check_plan_entitlements=lambda user_id: {"monthly_request_limit": 5000})

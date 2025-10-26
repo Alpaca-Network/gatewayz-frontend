@@ -142,7 +142,7 @@ def fake_supabase():
 def mod(fake_supabase, monkeypatch):
     # stub out get_supabase_client
     supabase_mod = types.SimpleNamespace(get_supabase_client=lambda: fake_supabase)
-    monkeypatch.setitem(sys.modules, "src.supabase_config", supabase_mod)
+    monkeypatch.setitem(sys.modules, "src.config.supabase_config", supabase_mod)
 
     # import the module fresh
     m = importlib.import_module(MODULE_PATH)

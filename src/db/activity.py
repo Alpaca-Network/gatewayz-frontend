@@ -294,7 +294,7 @@ def get_provider_from_model(model: str) -> str:
         return 'Google'
     elif 'llama' in model_lower or 'meta' in model_lower:
         return 'Meta'
-    elif 'mistral' in model_lower:
+    elif 'mistral' in model_lower or 'mixtral' in model_lower:
         return 'Mistral AI'
     elif 'qwen' in model_lower:
         return 'Alibaba'
