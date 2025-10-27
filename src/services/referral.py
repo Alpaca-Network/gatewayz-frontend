@@ -522,10 +522,12 @@ def get_referral_stats(user_id: int) -> Optional[Dict[str, Any]]:
                 'user_id': ref_user['id'],
                 'username': ref_user.get('username', 'Unknown'),
                 'email': ref_user.get('email', 'Unknown'),
+                'date': ref_user.get('created_at'),  # Use 'date' for frontend compatibility
                 'signed_up_at': ref_user.get('created_at'),
                 'status': 'completed' if bonus_info else 'pending',
                 'bonus_earned': bonus_info.get('bonus_earned', 0) if bonus_info else 0,
-                'bonus_date': bonus_info.get('bonus_date') if bonus_info else None
+                'bonus_date': bonus_info.get('bonus_date') if bonus_info else None,
+                'reward': bonus_info.get('bonus_earned', 0) if bonus_info else 0  # Use 'reward' for frontend compatibility
             })
 
         return {

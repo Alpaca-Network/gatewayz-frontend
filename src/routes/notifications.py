@@ -208,10 +208,25 @@ async def get_notification_stats(admin_user: dict = Depends(require_admin)):
     try:
         client = get_supabase_client()
 
-        # Get notification counts
-        logger.info("Fetching notification counts...")
-        result = client.table('notifications').select('status').execute()
-        notifications = result.data if result.data else []
+        # Check if notifications table exists
+        try:
+            # Get notification counts
+            logger.info("Fetching notification counts...")
+            result = client.table('notifications').select('status').execute()
+            notifications = result.data if result.data else []
+        except Exception as table_error:
+            if "Could not find the table" in str(table_error):
+                logger.warning("Notifications table does not exist yet. Returning empty stats.")
+                return NotificationStats(
+                    total_notifications=0,
+                    sent_notifications=0,
+                    failed_notifications=0,
+                    pending_notifications=0,
+                    delivery_rate=0.0,
+                    recent_notifications=[]
+                )
+            else:
+                raise table_error
 
         total_notifications = len(notifications)
         sent_notifications = len([n for n in notifications if n['status'] == 'sent'])
