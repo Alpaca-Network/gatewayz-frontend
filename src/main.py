@@ -2,6 +2,7 @@ import os
 import logging
 
 from fastapi import Depends, FastAPI, HTTPException, Request
+from src.services.startup import lifespan
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -46,7 +47,8 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="Gatewayz Universal Inference API",
         description="Gateway for AI model access powered by Gatewayz",
-        version="2.0.3"  # Multi-sort strategy for 1204 HuggingFace models + auto :hf-inference suffix
+        version="2.0.3",  # Multi-sort strategy for 1204 HuggingFace models + auto :hf-inference suffix
+        lifespan=lifespan
     )
 
     # Add CORS middleware
@@ -101,6 +103,7 @@ def create_app() -> FastAPI:
     # IMPORTANT: chat & messages must be before catalog to avoid /v1/* being caught by /model/{provider}/{model}
     routes_to_load = [
         ("health", "Health Check"),
+        ("availability", "Model Availability"),
         ("ping", "Ping Service"),
         ("chat", "Chat Completions"),  # Moved before catalog
         ("messages", "Anthropic Messages API"),  # Claude-compatible endpoint
