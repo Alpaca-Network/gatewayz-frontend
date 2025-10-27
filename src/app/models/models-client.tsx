@@ -177,13 +177,19 @@ const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
   );
 });
 
-export default function ModelsClient({ initialModels }: { initialModels: Model[] }) {
+export default function ModelsClient({
+  initialModels,
+  isLoadingMore = false
+}: {
+  initialModels: Model[];
+  isLoadingMore?: boolean;
+}) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
   // Client-side model fetching state
   const [models, setModels] = useState<Model[]>(initialModels);
-  const [isLoadingModels, setIsLoadingModels] = useState(initialModels.length < 50);
+  const [isLoadingModels, setIsLoadingModels] = useState(initialModels.length < 50 && !isLoadingMore);
 
   // Infinite scroll state - Reduced for faster initial load
   const [itemsPerPage] = useState(24); // Load 24 models at a time
@@ -734,10 +740,16 @@ export default function ModelsClient({ initialModels }: { initialModels: Model[]
               <div className="flex items-center gap-3">
                   <SidebarTrigger className="lg:hidden" />
                   <h1 className="text-2xl font-bold">Models</h1>
+                  {isLoadingMore && (
+                    <Badge variant="secondary" className="text-xs animate-pulse">
+                      Loading more...
+                    </Badge>
+                  )}
               </div>
               <div className="flex items-center gap-4">
                 <span className="text-sm text-muted-foreground whitespace-nowrap">
                   {`${filteredModels.length} / ${deduplicatedModels.length} models`}
+                  {isLoadingMore && <span className="ml-1">(updating...)</span>}
                 </span>
                 {hasActiveFilters && (
                   <Button variant="ghost" size="sm" onClick={resetFilters}>Clear All Filters</Button>
