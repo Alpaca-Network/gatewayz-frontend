@@ -200,6 +200,10 @@ def skip_if_no_database(request):
     if 'sb' in request.fixturenames:
         return  # Don't skip tests that use the in-memory stub
 
+    # Don't skip health check and ping tests - they don't require a database
+    if 'TestHealthEndpoints' in str(request.cls) or 'test_ping' in str(request.function):
+        return
+
     # Check if this is a database or integration test
     if 'db' in str(request.fspath) or 'integration' in str(request.fspath):
         # Cache the database check result
