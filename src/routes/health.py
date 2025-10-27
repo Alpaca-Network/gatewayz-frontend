@@ -264,13 +264,17 @@ async def get_health_dashboard(api_key: str = Depends(get_api_key)):
     - Uptime metrics for status page integration
     """
     try:
+        logger.info("Starting health dashboard request")
+        
+        # Import required models at the top
+        from src.models.health_models import SystemHealthResponse, HealthStatus, UptimeMetricsResponse
+        from datetime import datetime, timezone
+        
         # Get system health
-        system_health = health_monitor.get_system_health()
-        if not system_health:
+        system_health_metrics = health_monitor.get_system_health()
+        logger.info(f"System health retrieved: {system_health_metrics is not None}")
+        if not system_health_metrics:
             # Create default system health if no data available
-            from src.models.health_models import SystemHealthResponse, HealthStatus
-            from datetime import datetime, timezone
-            
             system_health = SystemHealthResponse(
                 overall_status=HealthStatus.UNKNOWN,
                 total_providers=0,
@@ -284,9 +288,25 @@ async def get_health_dashboard(api_key: str = Depends(get_api_key)):
                 system_uptime=0.0,
                 last_updated=datetime.now(timezone.utc)
             )
+        else:
+            # Convert SystemHealthMetrics to SystemHealthResponse
+            system_health = SystemHealthResponse(
+                overall_status=system_health_metrics.overall_status,
+                total_providers=system_health_metrics.total_providers,
+                healthy_providers=system_health_metrics.healthy_providers,
+                degraded_providers=system_health_metrics.degraded_providers,
+                unhealthy_providers=system_health_metrics.unhealthy_providers,
+                total_models=system_health_metrics.total_models,
+                healthy_models=system_health_metrics.healthy_models,
+                degraded_models=system_health_metrics.degraded_models,
+                unhealthy_models=system_health_metrics.unhealthy_models,
+                system_uptime=system_health_metrics.system_uptime,
+                last_updated=system_health_metrics.last_updated or datetime.now(timezone.utc)
+            )
         
         # Get providers health
         providers_health = health_monitor.get_all_providers_health()
+        logger.info(f"Providers health retrieved: {len(providers_health)} providers")
         providers_status = []
         
         for provider in providers_health:
@@ -322,6 +342,7 @@ async def get_health_dashboard(api_key: str = Depends(get_api_key)):
         
         # Get models health
         models_health = health_monitor.get_all_models_health()
+        logger.info(f"Models health retrieved: {len(models_health)} models")
         models_status = []
         
         for model in models_health:
@@ -361,14 +382,27 @@ async def get_health_dashboard(api_key: str = Depends(get_api_key)):
             ))
         
         # Get uptime metrics
+        logger.info("Getting uptime metrics")
         try:
             uptime_metrics = await get_uptime_metrics(api_key)
+            logger.info("Uptime metrics retrieved successfully")
+        except HTTPException as e:
+            logger.warning(f"Uptime metrics not available (HTTP {e.status_code}), using defaults")
+            # Create default uptime metrics if not available
+            uptime_metrics = UptimeMetricsResponse(
+                status="unknown",
+                uptime_percentage=0.0,
+                response_time_avg=None,
+                last_incident=None,
+                total_requests=0,
+                successful_requests=0,
+                failed_requests=0,
+                error_rate=0.0,
+                last_updated=datetime.now(timezone.utc)
+            )
         except Exception as e:
             logger.warning(f"Failed to get uptime metrics, using defaults: {e}")
             # Create default uptime metrics if not available
-            from src.models.health_models import UptimeMetricsResponse
-            from datetime import datetime, timezone
-            
             uptime_metrics = UptimeMetricsResponse(
                 status="unknown",
                 uptime_percentage=0.0,
@@ -381,7 +415,13 @@ async def get_health_dashboard(api_key: str = Depends(get_api_key)):
                 last_updated=datetime.now(timezone.utc)
             )
         
-        return HealthDashboardResponse(
+        logger.info("Creating HealthDashboardResponse")
+        logger.info(f"System health: {system_health}")
+        logger.info(f"Providers count: {len(providers_status)}")
+        logger.info(f"Models count: {len(models_status)}")
+        logger.info(f"Uptime metrics: {uptime_metrics}")
+        
+        response = HealthDashboardResponse(
             system_status=system_health,
             providers=providers_status,
             models=models_status,
@@ -389,9 +429,14 @@ async def get_health_dashboard(api_key: str = Depends(get_api_key)):
             last_updated=system_health.last_updated or datetime.now(timezone.utc),
             monitoring_active=health_monitor.monitoring_active
         )
+        
+        logger.info("HealthDashboardResponse created successfully")
+        return response
     except Exception as e:
         logger.error(f"Failed to get health dashboard: {e}")
-        raise HTTPException(status_code=500, detail="Failed to retrieve health dashboard")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve health dashboard: {str(e)}")
 
 @router.get("/health/status", response_model=Dict[str, Any], tags=["health", "status"])
 async def get_health_status(api_key: str = Depends(get_api_key)):
