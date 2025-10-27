@@ -48,6 +48,7 @@ body {
     --footer-border: 197 197 197; /* rgba(197, 197, 197, 1) */
 
     --search-bar: 0, 0%, 77%, 1; /* #4D4D4D */
+    --sidebar-top: 65px;
   }
  
   .dark {
