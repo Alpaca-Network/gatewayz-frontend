@@ -110,7 +110,7 @@ async function DeferredModelsLoader({
   );
 
   console.log(`[Models Page] Total combined models: ${uniqueModels.length}`);
-  return <ModelsClient initialModels={uniqueModels} />;
+  return <ModelsClient initialModels={uniqueModels} isLoadingMore={false} />;
 }
 
 export default async function ModelsPage() {
