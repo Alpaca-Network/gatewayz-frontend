@@ -140,6 +140,8 @@ def fetch_models_from_cerebras():
             logger.warning("Cerebras API key not configured")
             return None
 
+        models_list = None
+
         # Try using the official Cerebras SDK first
         try:
             from cerebras.cloud.sdk import Cerebras
@@ -156,33 +158,55 @@ def fetch_models_from_cerebras():
                 raw_models = models_response if isinstance(models_response, list) else [models_response]
 
             # Extract data array if response is wrapped
-            if raw_models and isinstance(raw_models[0], dict) and 'data' in raw_models[0]:
-                raw_models = raw_models[0].get('data', [])
+            # Check if ANY element has a 'data' key (not just the first one)
+            if raw_models:
+                # If first element is a dict with 'data' key, unwrap it
+                if isinstance(raw_models[0], dict) and 'data' in raw_models[0]:
+                    raw_models = raw_models[0].get('data', [])
+                # If raw_models is a list with one dict containing 'data', unwrap it
+                elif len(raw_models) == 1 and isinstance(raw_models[0], dict) and 'data' in raw_models[0]:
+                    raw_models = raw_models[0].get('data', [])
 
             # Convert SDK model objects to dicts if needed
             models_list = []
             for model in raw_models:
-                if hasattr(model, 'model_dump'):
-                    # Pydantic model
-                    models_list.append(model.model_dump())
-                elif hasattr(model, 'dict'):
-                    # Legacy Pydantic model
-                    models_list.append(model.dict())
-                elif hasattr(model, '__dict__'):
-                    # Regular object
-                    models_list.append(vars(model))
-                elif isinstance(model, dict):
-                    # Already a dict
-                    models_list.append(model)
-                else:
-                    # Try to convert to dict
-                    models_list.append({'id': str(model)})
+                try:
+                    if hasattr(model, 'model_dump'):
+                        # Pydantic v2 model
+                        models_list.append(model.model_dump())
+                    elif hasattr(model, 'dict'):
+                        # Legacy Pydantic v1 model
+                        models_list.append(model.dict())
+                    elif hasattr(model, '__dict__'):
+                        # Regular object
+                        models_list.append(vars(model))
+                    elif isinstance(model, dict):
+                        # Already a dict
+                        models_list.append(model)
+                    else:
+                        # Try to convert to dict
+                        models_list.append({'id': str(model)})
+                except Exception as conversion_error:
+                    logger.warning(f"Failed to convert Cerebras model object: {conversion_error}")
+                    continue
 
-            logger.info(f"Fetched {len(models_list)} models from Cerebras SDK")
+            if models_list:
+                logger.info(f"Fetched {len(models_list)} models from Cerebras SDK")
+            else:
+                logger.warning("Cerebras SDK returned no models, falling back to HTTP API")
+                raise ValueError("SDK returned empty model list")
 
-        except ImportError:
+        except (ImportError, ModuleNotFoundError):
             # Fallback to direct HTTP API call if SDK not installed
             logger.info("Cerebras SDK not available, using direct HTTP API")
+            models_list = None
+        except Exception as sdk_error:
+            # Fallback to HTTP if SDK fails for any reason
+            logger.warning(f"Cerebras SDK error: {sdk_error}. Falling back to direct HTTP API")
+            models_list = None
+
+        # Fallback to direct HTTP API if SDK didn't work
+        if models_list is None:
             import httpx
 
             headers = {
@@ -190,21 +214,58 @@ def fetch_models_from_cerebras():
                 "Content-Type": "application/json",
             }
 
-            response = httpx.get(
-                "https://api.cerebras.ai/v1/models",
-                headers=headers,
-                timeout=20.0,
-            )
-            response.raise_for_status()
+            try:
+                response = httpx.get(
+                    "https://api.cerebras.ai/v1/models",
+                    headers=headers,
+                    timeout=20.0,
+                )
+                response.raise_for_status()
 
-            payload = response.json()
-            models_list = payload.get("data", [])
+                payload = response.json()
 
-            if not models_list:
-                logger.warning("No models returned from Cerebras API")
+                # Handle different response formats
+                if isinstance(payload, dict) and 'data' in payload:
+                    models_list = payload.get("data", [])
+                elif isinstance(payload, list):
+                    models_list = payload
+                else:
+                    logger.warning(f"Unexpected Cerebras API response format: {type(payload)}")
+                    models_list = []
+
+                if not models_list:
+                    logger.warning("No models returned from Cerebras API")
+                    return None
+
+                logger.info(f"Fetched {len(models_list)} models from Cerebras HTTP API")
+
+            except httpx.HTTPStatusError as http_error:
+                logger.error(f"Cerebras API HTTP error {http_error.response.status_code}: {http_error.response.text[:200]}")
+                return None
+            except Exception as http_error:
+                logger.error(f"Cerebras HTTP API error: {http_error}")
                 return None
 
-        normalized_models = [normalize_portkey_provider_model(model, "cerebras") for model in models_list if model]
+        # Normalize the models
+        if not models_list:
+            logger.warning("No models available from Cerebras")
+            return None
+
+        normalized_models = []
+        for model in models_list:
+            if not model:
+                continue
+            try:
+                normalized = normalize_portkey_provider_model(model, "cerebras")
+                if normalized:
+                    normalized_models.append(normalized)
+            except Exception as normalization_error:
+                logger.warning(f"Failed to normalize Cerebras model: {normalization_error}")
+                continue
+
+        if not normalized_models:
+            logger.warning("No models were successfully normalized from Cerebras")
+            return None
 
         _cerebras_models_cache["data"] = normalized_models
         _cerebras_models_cache["timestamp"] = datetime.now(timezone.utc)

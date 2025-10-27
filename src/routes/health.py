@@ -32,6 +32,15 @@ from src.security.deps import get_api_key
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+@router.get("/health", tags=["health"])
+async def health_check():
+    """
+    Simple health check endpoint
+
+    Returns basic health status for monitoring and load balancing
+    """
+    return {"status": "healthy"}
+
 @router.get("/health/system", response_model=SystemHealthResponse, tags=["health"])
 async def get_system_health(api_key: str = Depends(get_api_key)):
     """
