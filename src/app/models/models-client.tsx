@@ -196,6 +196,14 @@ export default function ModelsClient({
   const [visibleCount, setVisibleCount] = useState(24); // Number of items currently visible
   const loadMoreRef = React.useRef<HTMLDivElement>(null);
 
+  // Update models when initialModels changes (e.g., when deferred models finish loading)
+  useEffect(() => {
+    if (initialModels.length > 0 && initialModels.length !== models.length) {
+      console.log(`[Models] Updating models from ${models.length} to ${initialModels.length}`);
+      setModels(initialModels);
+    }
+  }, [initialModels, models.length]);
+
   // Fetch models client-side if we only got the fallback static models
   useEffect(() => {
     if (initialModels.length < 50) {
