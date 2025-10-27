@@ -728,25 +728,26 @@ export default function ModelsClient({ initialModels }: { initialModels: Model[]
         </Sidebar>
 
         <SidebarInset className="flex-1 overflow-y-auto overflow-x-hidden h-full flex flex-col">
-          <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8 pb-24 overflow-x-hidden">
-          <div className="flex flex-col gap-3 mb-6 w-full">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 w-full">
-              <div className="flex items-center gap-3">
-                  <SidebarTrigger className="lg:hidden" />
-                  <h1 className="text-2xl font-bold">Models</h1>
-              </div>
-              <div className="flex items-center gap-4">
-                <span className="text-sm text-muted-foreground whitespace-nowrap">
-                  {`${filteredModels.length} / ${deduplicatedModels.length} models`}
-                </span>
-                {hasActiveFilters && (
-                  <Button variant="ghost" size="sm" onClick={resetFilters}>Clear All Filters</Button>
-                )}
-              </div>
-            </div>
+          <div className="sticky top-0 z-40 bg-background border-b">
+            <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
+              <div className="flex flex-col gap-3">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 w-full">
+                  <div className="flex items-center gap-3">
+                      <SidebarTrigger className="lg:hidden" />
+                      <h1 className="text-2xl font-bold">Models</h1>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <span className="text-sm text-muted-foreground whitespace-nowrap">
+                      {`${filteredModels.length} / ${deduplicatedModels.length} models`}
+                    </span>
+                    {hasActiveFilters && (
+                      <Button variant="ghost" size="sm" onClick={resetFilters}>Clear All Filters</Button>
+                    )}
+                  </div>
+                </div>
 
-            {/* Active Filters */}
-            <div className="flex flex-wrap gap-2">
+                {/* Active Filters */}
+                <div className="flex flex-wrap gap-2">
               {selectedInputFormats.map(format => (
                 <Badge key={`input-${format}`} variant="secondary" className="gap-1">
                   Input: {format}
@@ -830,9 +831,11 @@ export default function ModelsClient({ initialModels }: { initialModels: Model[]
                   </button>
                 </Badge>
               ))}
+              </div>
             </div>
           </div>
 
+          <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8 pb-24 overflow-x-hidden">
           <div className="flex flex-col sm:flex-row gap-4 mb-6">
               <div className="relative w-full">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -902,6 +905,7 @@ export default function ModelsClient({ initialModels }: { initialModels: Model[]
               </div>
             </div>
           )}
+          </div>
           </div>
         </SidebarInset>
       </div>
