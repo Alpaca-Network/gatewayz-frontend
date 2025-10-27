@@ -727,8 +727,8 @@ export default function ModelsClient({ initialModels }: { initialModels: Model[]
           </SidebarContent>
         </Sidebar>
 
-        <SidebarInset className="flex-1 overflow-y-auto overflow-x-hidden h-full flex flex-col">
-          <div className="sticky top-0 z-40 bg-background border-b">
+        <SidebarInset className="flex-1 flex flex-col overflow-x-hidden">
+          <div className="sticky z-40 bg-background border-b" style={{ top: 'var(--sidebar-top, 65px)' }}>
             <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
               <div className="flex flex-col gap-3">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 w-full">
@@ -835,7 +835,8 @@ export default function ModelsClient({ initialModels }: { initialModels: Model[]
             </div>
           </div>
 
-          <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8 pb-24 overflow-x-hidden">
+          <div className="flex-1 overflow-y-auto overflow-x-hidden">
+            <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8 pb-24 overflow-x-hidden">
           <div className="flex flex-col sm:flex-row gap-4 mb-6">
               <div className="relative w-full">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -906,6 +907,7 @@ export default function ModelsClient({ initialModels }: { initialModels: Model[]
             </div>
           )}
           </div>
+            </div>
           </div>
         </SidebarInset>
       </div>
