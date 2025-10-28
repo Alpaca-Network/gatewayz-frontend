@@ -4,6 +4,25 @@
 
 import { removeApiKey, requestAuthRefresh } from '@/lib/api';
 
+// OPTIMIZATION: Dev-only logging helpers to remove console logs from production
+const devLog = (...args: any[]) => {
+    if (process.env.NODE_ENV === 'development') {
+        console.log(...args);
+    }
+};
+
+const devError = (...args: any[]) => {
+    if (process.env.NODE_ENV === 'development') {
+        console.error(...args);
+    }
+};
+
+const devWarn = (...args: any[]) => {
+    if (process.env.NODE_ENV === 'development') {
+        console.warn(...args);
+    }
+};
+
 export interface StreamChunk {
   content?: string;
   reasoning?: string;
@@ -242,14 +261,14 @@ export async function* streamChatResponse(
   let buffer = '';
   let chunkCount = 0;
 
-  console.log('[Streaming] Starting to read stream...');
+  devLog('[Streaming] Starting to read stream...');
 
   try {
     while (true) {
       const { done, value } = await reader.read();
 
       if (done) {
-        console.log(`[Streaming] Stream completed. Total chunks processed: ${chunkCount}`);
+        devLog(`[Streaming] Stream completed. Total chunks processed: ${chunkCount}`);
         break;
       }
 
@@ -260,14 +279,14 @@ export async function* streamChatResponse(
       // Keep the last incomplete line in the buffer
       buffer = lines.pop() || '';
 
-      console.log(`[Streaming] Processing ${lines.length} lines from chunk ${chunkCount}`);
+      devLog(`[Streaming] Processing ${lines.length} lines from chunk ${chunkCount}`);
 
       for (const line of lines) {
         const trimmedLine = line.trim();
 
         if (!trimmedLine || trimmedLine === 'data: [DONE]') {
           if (trimmedLine === 'data: [DONE]') {
-            console.log('[Streaming] Received [DONE] signal');
+            devLog('[Streaming] Received [DONE] signal');
           }
           continue;
         }
@@ -277,7 +296,7 @@ export async function* streamChatResponse(
             const jsonStr = trimmedLine.slice(6);
             const data = JSON.parse(jsonStr);
 
-            console.log('[Streaming] Parsed SSE data:', {
+            devLog('[Streaming] Parsed SSE data:', {
               hasOutput: !!data.output,
               hasChoices: !!data.choices,
               hasType: !!data.type,
@@ -301,7 +320,7 @@ export async function* streamChatResponse(
 
               // Log when reasoning fields are present
               if (outputRecord.reasoning || outputRecord.thinking || outputRecord.analysis) {
-                console.log('[Streaming] Found reasoning field in output:', {
+                devLog('[Streaming] Found reasoning field in output:', {
                   hasReasoning: !!outputRecord.reasoning,
                   hasThinking: !!outputRecord.thinking,
                   hasAnalysis: !!outputRecord.analysis,
@@ -316,7 +335,7 @@ export async function* streamChatResponse(
                 }
                 if (reasoningText) {
                   chunk.reasoning = reasoningText;
-                  console.log('[Streaming] Adding reasoning to chunk:', reasoningText.length, 'chars');
+                  devLog('[Streaming] Adding reasoning to chunk:', reasoningText.length, 'chars');
                 }
                 if (finishReason) {
                   chunk.done = true;
@@ -446,7 +465,7 @@ export async function* streamChatResponse(
             }
 
             if (chunk) {
-              console.log('[Streaming] Yielding chunk:', {
+              devLog('[Streaming] Yielding chunk:', {
                 hasContent: !!chunk.content,
                 contentLength: chunk.content?.length || 0,
                 hasReasoning: !!chunk.reasoning,
@@ -454,20 +473,20 @@ export async function* streamChatResponse(
               });
               yield chunk;
             } else {
-              console.warn('[Streaming] No chunk created from SSE data. This may indicate an unsupported response format or an error from the backend.');
-              console.warn('[Streaming] Unrecognized data structure:', data);
-              console.warn('[Streaming] Data as JSON:', JSON.stringify(data, null, 2));
+              devWarn('[Streaming] No chunk created from SSE data. This may indicate an unsupported response format or an error from the backend.');
+              devWarn('[Streaming] Unrecognized data structure:', data);
+              devWarn('[Streaming] Data as JSON:', JSON.stringify(data, null, 2));
             }
           } catch (error) {
-            console.error('[Streaming] Error parsing SSE data:', error, trimmedLine);
+            devError('[Streaming] Error parsing SSE data:', error, trimmedLine);
           }
         } else {
-          console.log('[Streaming] Line does not start with "data: ":', trimmedLine.substring(0, 50));
+          devLog('[Streaming] Line does not start with "data: ":', trimmedLine.substring(0, 50));
         }
       }
     }
   } finally {
-    console.log('[Streaming] Stream reader released');
+    devLog('[Streaming] Stream reader released');
     reader.releaseLock();
   }
   } catch (error) {

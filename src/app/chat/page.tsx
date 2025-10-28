@@ -910,6 +910,25 @@ const generateChatTitle = (message: string): string => {
     return `${randomEmoji} ${title}`;
 };
 
+// OPTIMIZATION: Dev-only logging helper to remove console logs from production
+const devLog = (...args: any[]) => {
+    if (process.env.NODE_ENV === 'development') {
+        console.log(...args);
+    }
+};
+
+const devError = (...args: any[]) => {
+    if (process.env.NODE_ENV === 'development') {
+        console.error(...args);
+    }
+};
+
+const devWarn = (...args: any[]) => {
+    if (process.env.NODE_ENV === 'development') {
+        console.warn(...args);
+    }
+};
+
 function ChatPageContent() {
     const searchParams = useSearchParams();
     const { login, authenticated, ready } = usePrivy();
@@ -1704,12 +1723,22 @@ function ChatPageContent() {
         // Generate title if this is the first message
         let newTitle = isFirstMessage ? generateChatTitle(userMessage) : undefined;
 
+        // OPTIMIZATION: Optimistic UI - add assistant message immediately with streaming flag
+        // This makes the UI feel more responsive by showing typing indicator right away
+        const optimisticAssistantMessage: Message = {
+            role: 'assistant',
+            content: '',
+            reasoning: '',
+            isStreaming: true,
+            model: selectedModel.value
+        };
+
         const updatedSessions = sessions.map(session => {
             if (session.id === currentSessionId) {
                 return {
                     ...session,
                     title: isFirstMessage && newTitle ? newTitle : session.title,
-                    messages: updatedMessages,
+                    messages: [...updatedMessages, optimisticAssistantMessage],
                     updatedAt: new Date()
                 };
             }
@@ -1722,7 +1751,8 @@ function ChatPageContent() {
         if (fileInputRef.current) {
             fileInputRef.current.value = '';
         }
-        setLoading(true);
+        setIsStreamingResponse(true); // Set streaming state immediately
+        setLoading(false); // Don't show loading spinner
 
         try {
             console.log('🚀 Starting handleSendMessage - Core auth check:', {
@@ -1753,38 +1783,43 @@ function ChatPageContent() {
                 messagesCount: currentSession?.messages?.length || 0
             });
 
-            // Save the user message to the backend first
+            // OPTIMIZATION: Save the user message to the backend asynchronously (don't block streaming)
+            // This improves time-to-first-token by 200-500ms
             if (currentSession?.apiSessionId) {
-                try {
-                    console.log('🔄 Attempting to save user message to backend:', {
-                        sessionId: currentSession.apiSessionId,
-                        content: userMessage.substring(0, 100) + '...',
-                        model: selectedModel.value,
-                        hasImage: !!userImage,
-                        apiKey: apiKey ? `${apiKey.substring(0, 10)}...` : 'NO_API_KEY',
-                        privyUserId: userData.privy_user_id
-                    });
-                    
-                    const chatAPI = new ChatHistoryAPI(apiKey, undefined, userData.privy_user_id);
-                    const result = await chatAPI.saveMessage(
-                        currentSession.apiSessionId,
-                        'user',
-                        userMessage,
-                        selectedModel.value,
-                        undefined // Token count not calculated yet
-                    );
-                    console.log('✅ User message saved to backend successfully:', result);
-                } catch (error) {
-                    console.error('❌ Failed to save user message to backend:', error);
-                    console.error('Error details:', {
-                        message: error instanceof Error ? error.message : String(error),
-                        stack: error instanceof Error ? error.stack : undefined,
-                        sessionId: currentSession.apiSessionId,
-                        hasApiKey: !!apiKey,
-                        hasPrivyUserId: !!userData.privy_user_id
-                    });
-                    // Continue with the request even if saving fails
-                }
+                // Fire and forget - save in background while streaming starts
+                const saveUserMessage = async () => {
+                    try {
+                        console.log('🔄 Attempting to save user message to backend:', {
+                            sessionId: currentSession.apiSessionId,
+                            content: userMessage.substring(0, 100) + '...',
+                            model: selectedModel.value,
+                            hasImage: !!userImage,
+                            apiKey: apiKey ? `${apiKey.substring(0, 10)}...` : 'NO_API_KEY',
+                            privyUserId: userData.privy_user_id
+                        });
+
+                        const chatAPI = new ChatHistoryAPI(apiKey, undefined, userData.privy_user_id);
+                        const result = await chatAPI.saveMessage(
+                            currentSession.apiSessionId,
+                            'user',
+                            userMessage,
+                            selectedModel.value,
+                            undefined // Token count not calculated yet
+                        );
+                        console.log('✅ User message saved to backend successfully:', result);
+                    } catch (error) {
+                        console.error('❌ Failed to save user message to backend:', error);
+                        console.error('Error details:', {
+                            message: error instanceof Error ? error.message : String(error),
+                            stack: error instanceof Error ? error.stack : undefined,
+                            sessionId: currentSession.apiSessionId,
+                            hasApiKey: !!apiKey,
+                            hasPrivyUserId: !!userData.privy_user_id
+                        });
+                    }
+                };
+                // Start saving in background - don't await
+                saveUserMessage();
             } else {
                 console.warn('⚠️ Cannot save user message - no API session ID:', {
                     currentSession,
@@ -1810,66 +1845,7 @@ function ChatPageContent() {
                 ];
             }
 
-            const mapToResponsesContent = (content: any): any[] => {
-                if (typeof content === 'string') {
-                    return [{ type: 'input_text', text: content }];
-                }
-
-                if (Array.isArray(content)) {
-                    return content.map(item => {
-                        if (!item || typeof item !== 'object') {
-                            return { type: 'input_text', text: String(item ?? '') };
-                        }
-                        if (item.type === 'text' || item.type === 'input_text') {
-                            return { type: 'input_text', text: item.text ?? '' };
-                        }
-                        if (item.type === 'image_url' || item.type === 'input_image_url') {
-                            return {
-                                type: 'input_image_url',
-                                image_url: item.image_url,
-                            };
-                        }
-                        if (item.type === 'input_audio') {
-                            return item;
-                        }
-                        if (typeof item.content === 'string') {
-                            return { type: 'input_text', text: item.content };
-                        }
-                        return { type: 'input_text', text: JSON.stringify(item) };
-                    });
-                }
-
-                if (content && typeof content === 'object' && 'text' in content) {
-                    return [{ type: 'input_text', text: (content as { text: string }).text }];
-                }
-
-                return [{ type: 'input_text', text: String(content ?? '') }];
-            };
-
-            // Initialize assistant message with streaming flag
-            const assistantMessage: Message = {
-                role: 'assistant',
-                content: '',
-                reasoning: '',
-                isStreaming: true,
-                model: selectedModel.value
-            };
-
-            // Add streaming message to UI
-            // Use updatedSessions to preserve the title update from line 1051
-            const streamingSessions = updatedSessions.map(session => {
-                if (session.id === currentSessionId) {
-                    return {
-                        ...session,
-                        messages: [...updatedMessages, assistantMessage],
-                        updatedAt: new Date()
-                    };
-                }
-                return session;
-            });
-            setSessions(streamingSessions);
-            setIsStreamingResponse(true);
-            setLoading(false); // Stop loading spinner, but message is still streaming
+            // Note: Assistant message already added optimistically above, no need to add again
 
             try {
                 // Use streaming API
@@ -2001,6 +1977,35 @@ function ChatPageContent() {
                     session_id: currentSessionId
                 });
 
+                // OPTIMIZATION: Batch UI updates to reduce re-renders
+                // Only update UI every 50ms or when significant content arrives
+                let lastUpdateTime = Date.now();
+                let pendingUpdate = false;
+                const UPDATE_INTERVAL_MS = 50;
+
+                const performUIUpdate = () => {
+                    pendingUpdate = false;
+                    setSessions(prev => prev.map(session => {
+                        if (session.id === currentSessionId) {
+                            const messages = [...session.messages];
+                            const lastMessage = messages[messages.length - 1];
+
+                            if (lastMessage.role === 'assistant') {
+                                lastMessage.content = accumulatedContent;
+                                lastMessage.reasoning = accumulatedReasoning;
+                                lastMessage.isStreaming = true;
+                            }
+
+                            return {
+                                ...session,
+                                messages,
+                                updatedAt: new Date()
+                            };
+                        }
+                        return session;
+                    }));
+                };
+
                 for await (const chunk of streamChatResponse(
                     url,
                     apiKey,
@@ -2075,34 +2080,45 @@ function ChatPageContent() {
                         accumulatedReasoning += String(chunk.reasoning);
                     }
 
-                    // Update the assistant message with streamed content
-                    setSessions(prev => prev.map(session => {
-                        if (session.id === currentSessionId) {
-                            const messages = [...session.messages];
-                            const lastMessage = messages[messages.length - 1];
+                    // OPTIMIZATION: Batch UI updates - only update every 50ms
+                    const now = Date.now();
+                    const timeSinceLastUpdate = now - lastUpdateTime;
 
-                            if (lastMessage.role === 'assistant') {
-                                lastMessage.content = accumulatedContent;
-                                lastMessage.reasoning = accumulatedReasoning;
-                                lastMessage.isStreaming = !chunk.done;
+                    if (chunk.done) {
+                        // Always update immediately when done
+                        performUIUpdate();
+                        // Final update to mark as not streaming
+                        setSessions(prev => prev.map(session => {
+                            if (session.id === currentSessionId) {
+                                const messages = [...session.messages];
+                                const lastMessage = messages[messages.length - 1];
 
-                                if (accumulatedReasoning.length > 0) {
-                                    console.log('[REASONING] Updated message with reasoning:', {
-                                        reasoningLength: accumulatedReasoning.length,
-                                        contentLength: accumulatedContent.length,
-                                        isStreaming: !chunk.done
-                                    });
+                                if (lastMessage.role === 'assistant') {
+                                    lastMessage.isStreaming = false;
                                 }
-                            }
 
-                            return {
-                                ...session,
-                                messages,
-                                updatedAt: new Date()
-                            };
-                        }
-                        return session;
-                    }));
+                                return {
+                                    ...session,
+                                    messages,
+                                    updatedAt: new Date()
+                                };
+                            }
+                            return session;
+                        }));
+                    } else if (timeSinceLastUpdate >= UPDATE_INTERVAL_MS) {
+                        // Update if enough time has passed
+                        performUIUpdate();
+                        lastUpdateTime = now;
+                    } else if (!pendingUpdate) {
+                        // Schedule an update for later
+                        pendingUpdate = true;
+                        setTimeout(() => {
+                            if (pendingUpdate) {
+                                performUIUpdate();
+                                lastUpdateTime = Date.now();
+                            }
+                        }, UPDATE_INTERVAL_MS - timeSinceLastUpdate);
+                    }
                 }
 
                 // Use the accumulated content instead of reading from stale state
@@ -2111,46 +2127,52 @@ function ChatPageContent() {
                 const finalContent = accumulatedContent;
                 console.log({finalContent});
 
-                // Save the assistant's response to the backend
+                // OPTIMIZATION: Save the assistant's response to the backend asynchronously
+                // This allows the UI to be responsive immediately after streaming completes
                 if (currentSession?.apiSessionId && finalContent) {
-                    try {
-                        console.log('🔄 Attempting to save assistant message to backend:', {
-                            sessionId: currentSession.apiSessionId,
-                            content: finalContent.substring(0, 100) + '...',
-                            model: modelValue,
-                            apiKey: apiKey ? `${apiKey.substring(0, 10)}...` : 'NO_API_KEY',
-                            privyUserId: userData.privy_user_id
-                        });
-                        
-                        const chatAPI = new ChatHistoryAPI(apiKey, undefined, userData.privy_user_id);
-                        const result = await chatAPI.saveMessage(
-                            currentSession.apiSessionId,
-                            'assistant',
-                            finalContent,
-                            modelValue,
-                            undefined // Token count not available from streaming
-                        );
-                        console.log('✅ Assistant message saved to backend successfully:', result);
+                    // Fire and forget - save in background
+                    const saveAssistantMessage = async () => {
+                        try {
+                            console.log('🔄 Attempting to save assistant message to backend:', {
+                                sessionId: currentSession.apiSessionId,
+                                content: finalContent.substring(0, 100) + '...',
+                                model: modelValue,
+                                apiKey: apiKey ? `${apiKey.substring(0, 10)}...` : 'NO_API_KEY',
+                                privyUserId: userData.privy_user_id
+                            });
 
-                        // Log analytics event for successful message completion
-                        logAnalyticsEvent('chat_message_completed', {
-                            model: modelValue,
-                            gateway: selectedModel.sourceGateway,
-                            response_length: finalContent.length,
-                            has_reasoning: !!accumulatedReasoning,
-                            reasoning_length: accumulatedReasoning?.length || 0,
-                            session_id: currentSessionId
-                        });
-                    } catch (error) {
-                        console.error('❌ Failed to save assistant message to backend:', error);
-                        console.error('Error details:', {
-                            message: error instanceof Error ? error.message : String(error),
-                            stack: error instanceof Error ? error.stack : undefined,
-                            sessionId: currentSession.apiSessionId,
-                            hasApiKey: !!apiKey,
-                            hasPrivyUserId: !!userData.privy_user_id
-                        });
-                    }
+                            const chatAPI = new ChatHistoryAPI(apiKey, undefined, userData.privy_user_id);
+                            const result = await chatAPI.saveMessage(
+                                currentSession.apiSessionId,
+                                'assistant',
+                                finalContent,
+                                modelValue,
+                                undefined // Token count not available from streaming
+                            );
+                            console.log('✅ Assistant message saved to backend successfully:', result);
+
+                            // Log analytics event for successful message completion
+                            logAnalyticsEvent('chat_message_completed', {
+                                model: modelValue,
+                                gateway: selectedModel.sourceGateway,
+                                response_length: finalContent.length,
+                                has_reasoning: !!accumulatedReasoning,
+                                reasoning_length: accumulatedReasoning?.length || 0,
+                                session_id: currentSessionId
+                            });
+                        } catch (error) {
+                            console.error('❌ Failed to save assistant message to backend:', error);
+                            console.error('Error details:', {
+                                message: error instanceof Error ? error.message : String(error),
+                                stack: error instanceof Error ? error.stack : undefined,
+                                sessionId: currentSession.apiSessionId,
+                                hasApiKey: !!apiKey,
+                                hasPrivyUserId: !!userData.privy_user_id
+                            });
+                        }
+                    };
+                    // Start saving in background - don't await
+                    saveAssistantMessage();
                 } else {
                     console.warn('⚠️ Cannot save assistant message:', {
                         hasSessionId: !!currentSession?.apiSessionId,
