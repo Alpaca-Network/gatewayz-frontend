@@ -136,13 +136,13 @@ GATEWAY_CONFIG = {
         'header_type': 'bearer'
     },
     'google': {
-        'name': 'Google (Portkey)',
+        'name': 'Google Generative AI',
         'url': 'https://generativelanguage.googleapis.com/v1beta/models',
-        'api_key_env': 'PORTKEY_API_KEY',
-        'api_key': Config.PORTKEY_API_KEY,
+        'api_key_env': 'GOOGLE_API_KEY',
+        'api_key': Config.GOOGLE_API_KEY,
         'cache': _google_models_cache,
         'min_expected_models': 5,
-        'header_type': 'portkey'
+        'header_type': 'google'
     },
     'cerebras': {
         'name': 'Cerebras',

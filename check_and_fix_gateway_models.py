@@ -119,13 +119,13 @@ GATEWAY_CONFIG = {
         'header_type': 'bearer'
     },
     'google': {
-        'name': 'Google (Portkey)',
+        'name': 'Google Generative AI',
         'url': 'https://generativelanguage.googleapis.com/v1beta/models',
-        'api_key_env': 'PORTKEY_API_KEY',
-        'api_key': Config.PORTKEY_API_KEY,
+        'api_key_env': 'GOOGLE_API_KEY',
+        'api_key': Config.GOOGLE_API_KEY,
         'cache': _google_models_cache,
         'min_expected_models': 5,
-        'header_type': 'portkey'
+        'header_type': 'google'
     },
     'cerebras': {
         'name': 'Cerebras',
@@ -198,13 +198,16 @@ def build_headers(gateway_config: dict) -> dict:
     api_key = gateway_config.get('api_key')
     if not api_key:
         return {}
-    
+
     header_type = gateway_config.get('header_type', 'bearer')
-    
+
     if header_type == 'bearer':
         return {"Authorization": f"Bearer {api_key}"}
     elif header_type == 'portkey':
         return {"x-portkey-api-key": api_key}
+    elif header_type == 'google':
+        # Google uses API key as query parameter, not header
+        return {}
     else:
         return {}
 
@@ -212,37 +215,49 @@ def build_headers(gateway_config: dict) -> dict:
 def test_gateway_endpoint(gateway_name: str, config: dict) -> Tuple[bool, str, int]:
     """
     Test a gateway endpoint directly via HTTP
-    
+
     Returns:
         (success: bool, message: str, model_count: int)
     """
     try:
         url = config['url']
-        headers = build_headers(config)
-        
+
+        # Skip if URL is None (cache-only gateways)
+        if url is None:
+            return False, "No direct endpoint (cache-only gateway)", 0
+
         if not config['api_key']:
             return False, f"API key not configured ({config['api_key_env']})", 0
-        
+
+        headers = build_headers(config)
+
+        # Google uses API key as query parameter
+        if config.get('header_type') == 'google':
+            url = f"{url}?key={config['api_key']}"
+
         # Make HTTP request with timeout
         response = httpx.get(url, headers=headers, timeout=30.0)
-        
+
         if response.status_code != 200:
             return False, f"HTTP {response.status_code}: {response.text[:100]}", 0
-        
+
         # Parse response
         data = response.json()
-        
+
         # Extract model count (different APIs have different structures)
         if isinstance(data, list):
             model_count = len(data)
         elif isinstance(data, dict) and 'data' in data:
             model_count = len(data.get('data', []))
+        elif isinstance(data, dict) and 'models' in data:
+            # Google API uses 'models' key
+            model_count = len(data.get('models', []))
         else:
             model_count = 0
-        
+
         if model_count == 0:
             return False, "API returned 0 models", 0
-        
+
         return True, f"OK - {model_count} models available", model_count
         
     except httpx.TimeoutException:
@@ -416,7 +431,7 @@ def run_comprehensive_check(
             'message': endpoint_msg,
             'model_count': endpoint_count
         }
-        
+
         if endpoint_success:
             print(f"   ✅ {endpoint_msg}")
         else:

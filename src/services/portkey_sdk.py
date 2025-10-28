@@ -29,8 +29,7 @@ PROVIDERS = {
     'google': {
         'name': 'Google',
         'provider_slug': 'google',
-        'models_endpoint': 'https://generativelanguage.googleapis.com/v1beta/models',
-        'description': 'Google AI models via Portkey'
+        'description': 'Google Generative AI models (direct API access)'
     },
     'cerebras': {
         'name': 'Cerebras',

@@ -104,21 +104,79 @@ def _filter_portkey_models_by_patterns(patterns: list, provider_name: str):
 
 
 def fetch_models_from_google():
-    """Fetch models from Google by filtering Portkey unified catalog"""
-    try:
-        # Google models use @google/ prefix in Portkey (also try without @ for compatibility)
-        filtered_models = _filter_portkey_models_by_patterns(["@google/", "google/", "gemini", "gemma"], "google")
+    """
+    Fetch models from Google using their Generative AI API.
 
-        if not filtered_models:
-            logger.warning("No Google models found in Portkey catalog")
+    Uses the Google Generative AI API to list available models (Gemini, etc.)
+    """
+    try:
+        from src.config import Config
+        import httpx
+
+        if not Config.GOOGLE_API_KEY:
+            logger.warning("Google API key not configured")
             return None
 
-        normalized_models = [normalize_portkey_provider_model(model, "google") for model in filtered_models if model]
+        # Google Generative AI API endpoint
+        url = f"https://generativelanguage.googleapis.com/v1beta/models?key={Config.GOOGLE_API_KEY}"
+
+        headers = {
+            "Content-Type": "application/json",
+        }
+
+        try:
+            response = httpx.get(url, headers=headers, timeout=20.0)
+            response.raise_for_status()
+
+            payload = response.json()
+
+            # Handle response format
+            if isinstance(payload, dict) and 'models' in payload:
+                models_list = payload.get("models", [])
+            elif isinstance(payload, list):
+                models_list = payload
+            else:
+                logger.warning(f"Unexpected Google API response format: {type(payload)}")
+                models_list = []
+
+            if not models_list:
+                logger.warning("No models returned from Google API")
+                return None
+
+            logger.info(f"Fetched {len(models_list)} models from Google Generative AI API")
+
+        except httpx.HTTPStatusError as http_error:
+            logger.error(f"Google API HTTP error {http_error.response.status_code}: {http_error.response.text[:200]}")
+            return None
+        except Exception as http_error:
+            logger.error(f"Google HTTP API error: {http_error}")
+            return None
+
+        # Normalize the models
+        if not models_list:
+            logger.warning("No models available from Google")
+            return None
+
+        normalized_models = []
+        for model in models_list:
+            if not model:
+                continue
+            try:
+                normalized = normalize_portkey_provider_model(model, "google")
+                if normalized:
+                    normalized_models.append(normalized)
+            except Exception as normalization_error:
+                logger.warning(f"Failed to normalize Google model: {normalization_error}")
+                continue
+
+        if not normalized_models:
+            logger.warning("No models were successfully normalized from Google")
+            return None
 
         _google_models_cache["data"] = normalized_models
         _google_models_cache["timestamp"] = datetime.now(timezone.utc)
 
-        logger.info(f"Cached {len(normalized_models)} Google models from Portkey catalog")
+        logger.info(f"Cached {len(normalized_models)} Google models")
         return _google_models_cache["data"]
 
     except Exception as e:
