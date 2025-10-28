@@ -237,6 +237,220 @@ Get complete health dashboard data for frontend.
 }
 ```
 
+### Gateway Health Monitoring
+
+#### `GET /health/gateways`
+
+Get health metrics for all gateways.
+
+**Response:**
+```json
+[
+  {
+    "gateway": "openrouter",
+    "status": "online",
+    "total_models": 500,
+    "healthy_models": 480,
+    "degraded_models": 15,
+    "unhealthy_models": 5,
+    "avg_response_time_ms": 2500.5,
+    "overall_uptime": 96.0,
+    "last_checked": "2024-01-15T10:30:00Z",
+    "endpoint_url": "https://openrouter.ai/api/v1",
+    "api_key_configured": true,
+    "rate_limit_remaining": 1000,
+    "rate_limit_reset": "2024-01-15T11:00:00Z"
+  },
+  {
+    "gateway": "portkey",
+    "status": "degraded",
+    "total_models": 300,
+    "healthy_models": 280,
+    "degraded_models": 15,
+    "unhealthy_models": 5,
+    "avg_response_time_ms": 3500.2,
+    "overall_uptime": 93.3,
+    "last_checked": "2024-01-15T10:30:00Z",
+    "endpoint_url": "https://api.portkey.ai/v1",
+    "api_key_configured": true,
+    "rate_limit_remaining": 500,
+    "rate_limit_reset": "2024-01-15T10:45:00Z"
+  }
+]
+```
+
+#### `GET /health/gateway/{gateway}`
+
+Get health metrics for a specific gateway.
+
+**Path Parameters:**
+- `gateway`: Gateway name (e.g., openrouter, portkey, featherless, deepinfra, huggingface, groq, fireworks, together, xai, novita, chutes, aimo, near)
+
+**Response:**
+```json
+{
+  "gateway": "openrouter",
+  "status": "online",
+  "total_models": 500,
+  "healthy_models": 480,
+  "degraded_models": 15,
+  "unhealthy_models": 5,
+  "avg_response_time_ms": 2500.5,
+  "overall_uptime": 96.0,
+  "last_checked": "2024-01-15T10:30:00Z",
+  "endpoint_url": "https://openrouter.ai/api/v1",
+  "api_key_configured": true,
+  "rate_limit_remaining": 1000,
+  "rate_limit_reset": "2024-01-15T11:00:00Z",
+  "providers": [
+    {
+      "provider": "openai",
+      "models_count": 45,
+      "healthy_count": 42,
+      "avg_response_time_ms": 2100.5,
+      "uptime": 93.3
+    },
+    {
+      "provider": "anthropic",
+      "models_count": 25,
+      "healthy_count": 24,
+      "avg_response_time_ms": 2800.2,
+      "uptime": 96.0
+    }
+  ],
+  "recent_errors": [
+    {
+      "timestamp": "2024-01-15T10:25:00Z",
+      "error": "Rate limit exceeded",
+      "model_id": "gpt-4",
+      "status_code": 429
+    }
+  ],
+  "performance_trends": {
+    "response_time_1h": 2500.5,
+    "response_time_24h": 2400.2,
+    "uptime_1h": 96.0,
+    "uptime_24h": 95.8
+  }
+}
+```
+
+#### `GET /health/gateway/{gateway}/models`
+
+Get health metrics for all models in a specific gateway.
+
+**Path Parameters:**
+- `gateway`: Gateway name
+
+**Query Parameters:**
+- `provider` (optional): Filter by specific provider
+- `status` (optional): Filter by health status
+- `limit` (optional): Limit number of results (default: 100)
+- `offset` (optional): Offset for pagination (default: 0)
+
+**Response:**
+```json
+{
+  "gateway": "openrouter",
+  "total_models": 500,
+  "models": [
+    {
+      "model_id": "gpt-4",
+      "provider": "openai",
+      "status": "healthy",
+      "response_time_ms": 2100.5,
+      "success_rate": 98.5,
+      "last_checked": "2024-01-15T10:30:00Z",
+      "uptime_percentage": 98.5,
+      "error_count": 15,
+      "total_requests": 1000
+    }
+  ],
+  "pagination": {
+    "limit": 100,
+    "offset": 0,
+    "total": 500,
+    "has_more": true
+  }
+}
+```
+
+#### `GET /health/gateway/{gateway}/status`
+
+Get simple status check for a specific gateway.
+
+**Path Parameters:**
+- `gateway`: Gateway name
+
+**Response:**
+```json
+{
+  "gateway": "openrouter",
+  "status": "online",
+  "uptime": 96.0,
+  "response_time_avg": 2500.5,
+  "models_healthy": 480,
+  "models_total": 500,
+  "last_checked": "2024-01-15T10:30:00Z",
+  "api_key_configured": true,
+  "rate_limit_ok": true
+}
+```
+
+#### `POST /health/gateway/{gateway}/test`
+
+Test connectivity to a specific gateway.
+
+**Path Parameters:**
+- `gateway`: Gateway name
+
+**Response:**
+```json
+{
+  "gateway": "openrouter",
+  "test_result": "success",
+  "response_time_ms": 1200.5,
+  "status_code": 200,
+  "timestamp": "2024-01-15T10:30:00Z",
+  "error_message": null,
+  "api_key_valid": true,
+  "rate_limit_ok": true
+}
+```
+
+#### `GET /health/gateways/summary`
+
+Get summary of all gateway health metrics.
+
+**Response:**
+```json
+{
+  "total_gateways": 13,
+  "online_gateways": 11,
+  "degraded_gateways": 2,
+  "offline_gateways": 0,
+  "overall_uptime": 95.2,
+  "avg_response_time": 2800.5,
+  "gateways": [
+    {
+      "gateway": "openrouter",
+      "status": "online",
+      "uptime": 96.0,
+      "models_count": 500,
+      "healthy_models": 480
+    },
+    {
+      "gateway": "portkey",
+      "status": "degraded",
+      "uptime": 93.3,
+      "models_count": 300,
+      "healthy_models": 280
+    }
+  ],
+  "last_updated": "2024-01-15T10:30:00Z"
+}
+```
+
 ## Availability Endpoints
 
 ### Model Availability
@@ -530,6 +744,87 @@ data.providers.forEach(provider => {
 });
 ```
 
+### Gateway Health Monitoring
+
+Use gateway-specific endpoints for detailed gateway monitoring:
+
+```javascript
+// Fetch all gateway health
+const response = await fetch('/health/gateways', {
+  headers: {
+    'Authorization': 'Bearer YOUR_API_KEY'
+  }
+});
+const gateways = await response.json();
+
+// Render gateway status
+gateways.forEach(gateway => {
+  const element = document.createElement('div');
+  element.className = `gateway ${gateway.status}`;
+  element.innerHTML = `
+    <h3>${gateway.gateway}</h3>
+    <span class="status">${gateway.status}</span>
+    <span class="uptime">${gateway.overall_uptime}%</span>
+    <span class="models">${gateway.healthy_models}/${gateway.total_models} models</span>
+  `;
+  document.getElementById('gateways').appendChild(element);
+});
+```
+
+### Gateway-Specific Model Monitoring
+
+Monitor models within a specific gateway:
+
+```javascript
+// Fetch models for a specific gateway
+const response = await fetch('/health/gateway/openrouter/models?limit=50', {
+  headers: {
+    'Authorization': 'Bearer YOUR_API_KEY'
+  }
+});
+const data = await response.json();
+
+// Render models
+data.models.forEach(model => {
+  const element = document.createElement('div');
+  element.className = `model ${model.status}`;
+  element.innerHTML = `
+    <h4>${model.model_id}</h4>
+    <span class="provider">${model.provider}</span>
+    <span class="status">${model.status}</span>
+    <span class="response-time">${model.response_time_ms}ms</span>
+    <span class="uptime">${model.uptime_percentage}%</span>
+  `;
+  document.getElementById('models').appendChild(element);
+});
+```
+
+### Gateway Connectivity Testing
+
+Test gateway connectivity in real-time:
+
+```javascript
+// Test gateway connectivity
+async function testGateway(gatewayName) {
+  const response = await fetch(`/health/gateway/${gatewayName}/test`, {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer YOUR_API_KEY'
+    }
+  });
+  const result = await response.json();
+  
+  if (result.test_result === 'success') {
+    console.log(`${gatewayName} is healthy: ${result.response_time_ms}ms`);
+  } else {
+    console.error(`${gatewayName} test failed: ${result.error_message}`);
+  }
+}
+
+// Test multiple gateways
+['openrouter', 'portkey', 'featherless'].forEach(testGateway);
+```
+
 ### Model Selection with Fallbacks
 
 Use the availability endpoints for intelligent model selection:
@@ -552,6 +847,8 @@ const modelToUse = data.best_available;
 ### Health Check Endpoints
 
 - `/health/status` - Simple health check
+- `/health/gateways/summary` - Gateway health summary
+- `/health/gateway/{gateway}/status` - Specific gateway status
 - `/availability/status` - Simple availability check
 
 ### Metrics to Monitor
@@ -561,6 +858,9 @@ const modelToUse = data.best_available;
 - Response time averages
 - Error rates by provider
 - Circuit breaker states
+- Gateway-specific metrics
+- API key validity
+- Rate limit status
 
 ### Recommended Alerting
 
@@ -569,6 +869,10 @@ const modelToUse = data.best_available;
 - Response time > 10 seconds
 - Error rate > 5%
 - Circuit breaker open for > 5 minutes
+- Gateway uptime < 90%
+- API key invalid or expired
+- Rate limit exceeded
+- Gateway connectivity failures
 
 ## Best Practices
 
@@ -579,3 +883,8 @@ const modelToUse = data.best_available;
 5. **Monitor Trends**: Track availability trends over time
 6. **Set Alerts**: Configure alerts for critical thresholds
 7. **Test Fallbacks**: Regularly test fallback model functionality
+8. **Monitor Gateways**: Track gateway health and connectivity separately
+9. **API Key Management**: Monitor API key validity and rate limits
+10. **Gateway Failover**: Implement automatic gateway switching on failures
+11. **Performance Tracking**: Monitor response times per gateway
+12. **Error Analysis**: Track and analyze gateway-specific errors

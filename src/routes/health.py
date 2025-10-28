@@ -211,6 +211,37 @@ async def perform_health_check(
         logger.error(f"Failed to initiate health check: {e}")
         raise HTTPException(status_code=500, detail="Failed to initiate health check")
 
+@router.post("/health/check/now", response_model=Dict[str, Any], tags=["health", "admin"])
+async def perform_immediate_health_check(api_key: str = Depends(get_api_key)):
+    """
+    Perform immediate health check and return results
+    
+    This endpoint performs health checks immediately and returns the results.
+    Useful for testing and debugging.
+    """
+    try:
+        logger.info("Performing immediate health check...")
+        
+        # Perform health check synchronously
+        await health_monitor._perform_health_checks()
+        
+        # Get updated data
+        system_health = health_monitor.get_system_health()
+        models_count = len(health_monitor.health_data)
+        providers_count = len(health_monitor.get_all_providers_health())
+        
+        return {
+            "message": "Health check completed",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "models_checked": models_count,
+            "providers_checked": providers_count,
+            "system_status": system_health.overall_status.value if system_health else "unknown",
+            "monitoring_active": health_monitor.monitoring_active
+        }
+    except Exception as e:
+        logger.error(f"Failed to perform immediate health check: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to perform health check: {str(e)}")
+
 @router.get("/health/uptime", response_model=UptimeMetricsResponse, tags=["health", "uptime"])
 async def get_uptime_metrics(api_key: str = Depends(get_api_key)):
     """

@@ -169,13 +169,13 @@ class ModelHealthMonitor:
             from src.services.models import get_cached_models
             
             # Get models from different gateways
-            gateways = ["openrouter", "portkey", "featherless", "deepinfra", "huggingface"]
+            gateways = ["openrouter", "portkey", "featherless", "deepinfra", "huggingface", "groq", "fireworks", "together", "xai", "novita", "chutes", "aimo", "near"]
             
             for gateway in gateways:
                 try:
                     gateway_models = get_cached_models(gateway)
                     if gateway_models:
-                        for model in gateway_models[:10]:  # Limit to top 10 models per gateway
+                        for model in gateway_models[:5]:  # Limit to top 5 models per gateway for health checking
                             models.append({
                                 "id": model.get("id"),
                                 "provider": model.get("provider_slug", "unknown"),
@@ -231,31 +231,109 @@ class ModelHealthMonitor:
         return health_metrics
     
     async def _perform_model_request(self, model_id: str, gateway: str) -> Dict[str, Any]:
-        """Perform a test request to a model"""
+        """Perform a real test request to a model"""
         try:
-            # This would integrate with your existing request system
-            # For now, we'll simulate a basic check
+            import httpx
+            import json
             
-            # Simulate different response times and success rates based on gateway
-            gateway_performance = {
-                "openrouter": {"success_rate": 0.98, "avg_time": 2000},
-                "portkey": {"success_rate": 0.95, "avg_time": 2500},
-                "featherless": {"success_rate": 0.92, "avg_time": 3000},
-                "deepinfra": {"success_rate": 0.90, "avg_time": 4000},
-                "huggingface": {"success_rate": 0.85, "avg_time": 5000}
+            # Create a simple test request based on the gateway
+            test_payload = {
+                "model": model_id,
+                "messages": [
+                    {"role": "user", "content": "Hello"}
+                ],
+                "max_tokens": 10,
+                "temperature": 0.1
             }
             
-            perf = gateway_performance.get(gateway, {"success_rate": 0.80, "avg_time": 3000})
+            # Get the appropriate endpoint URL based on gateway
+            endpoint_urls = {
+                "openrouter": "https://openrouter.ai/api/v1/chat/completions",
+                "portkey": "https://api.portkey.ai/v1/chat/completions", 
+                "featherless": "https://api.featherless.ai/v1/chat/completions",
+                "deepinfra": "https://api.deepinfra.com/v1/openai/chat/completions",
+                "huggingface": "https://api-inference.huggingface.co/models/" + model_id,
+                "groq": "https://api.groq.com/openai/v1/chat/completions",
+                "fireworks": "https://api.fireworks.ai/inference/v1/chat/completions",
+                "together": "https://api.together.xyz/v1/chat/completions",
+                "xai": "https://api.x.ai/v1/chat/completions",
+                "novita": "https://api.novita.ai/v3/openai/chat/completions"
+            }
             
-            # Simulate success/failure based on success rate
-            import random
-            if random.random() < perf["success_rate"]:
-                return {"success": True, "response_time": perf["avg_time"]}
-            else:
-                return {"success": False, "error": "Simulated failure for testing"}
+            url = endpoint_urls.get(gateway)
+            if not url:
+                return {
+                    "success": False,
+                    "error": f"Unknown gateway: {gateway}",
+                    "status_code": 400
+                }
+            
+            # Set up headers based on gateway
+            headers = {
+                "Content-Type": "application/json",
+                "User-Agent": "HealthMonitor/1.0"
+            }
+            
+            # For HuggingFace, use a different payload format
+            if gateway == "huggingface":
+                test_payload = {
+                    "inputs": "Hello",
+                    "parameters": {
+                        "max_new_tokens": 10,
+                        "temperature": 0.1
+                    }
+                }
+            
+            # Perform the actual HTTP request
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                start_time = time.time()
+                
+                try:
+                    response = await client.post(
+                        url,
+                        headers=headers,
+                        json=test_payload
+                    )
+                    
+                    response_time = (time.time() - start_time) * 1000
+                    
+                    if response.status_code == 200:
+                        return {
+                            "success": True,
+                            "response_time": response_time,
+                            "status_code": response.status_code,
+                            "response_data": response.json() if response.content else None
+                        }
+                    else:
+                        return {
+                            "success": False,
+                            "error": f"HTTP {response.status_code}: {response.text[:200]}",
+                            "status_code": response.status_code,
+                            "response_time": response_time
+                        }
+                        
+                except httpx.TimeoutException:
+                    return {
+                        "success": False,
+                        "error": "Request timeout",
+                        "status_code": 408,
+                        "response_time": (time.time() - start_time) * 1000
+                    }
+                except httpx.RequestError as e:
+                    return {
+                        "success": False,
+                        "error": f"Request error: {str(e)}",
+                        "status_code": 500,
+                        "response_time": (time.time() - start_time) * 1000
+                    }
                 
         except Exception as e:
-            return {"success": False, "error": str(e)}
+            logger.error(f"Health check request failed for {model_id} via {gateway}: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "status_code": 500
+            }
     
     def _update_health_data(self, health_metrics: ModelHealthMetrics):
         """Update health data for a model"""
