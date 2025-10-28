@@ -756,8 +756,10 @@ export default function ModelsClient({
               </div>
               <div className="flex items-center gap-4">
                 <span className="text-sm text-muted-foreground whitespace-nowrap">
-                  {`${filteredModels.length} / ${deduplicatedModels.length} models`}
-                  {isLoadingMore && <span className="ml-1">(updating...)</span>}
+                  {isLoadingModels || isLoadingMore
+                    ? `${filteredModels.length} of ~10,000 models (loading...)`
+                    : `${filteredModels.length} / ${deduplicatedModels.length} models`
+                  }
                 </span>
                 {hasActiveFilters && (
                   <Button variant="ghost" size="sm" onClick={resetFilters}>Clear All Filters</Button>
