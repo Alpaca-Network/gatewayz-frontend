@@ -18,7 +18,7 @@ import os
 import time
 import httpx
 from datetime import datetime, timezone
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 
 # Add the project root to the path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -344,7 +344,11 @@ def attempt_auto_fix(gateway_name: str, config: dict) -> Tuple[bool, str]:
         return False, f"Auto-fix error: {str(e)[:100]}"
 
 
-def run_comprehensive_check(auto_fix: bool = True, verbose: bool = False) -> Dict:
+def run_comprehensive_check(
+    auto_fix: bool = True,
+    verbose: bool = False,
+    gateway: Optional[str] = None
+) -> Dict:
     """
     Run comprehensive check on all gateways
     
@@ -360,9 +364,19 @@ def run_comprehensive_check(auto_fix: bool = True, verbose: bool = False) -> Dic
     print("=" * 80)
     print()
     
+    if gateway:
+        gateway_key = gateway.lower()
+        if gateway_key not in GATEWAY_CONFIG:
+            raise ValueError(
+                f"Unknown gateway: {gateway}. Available: {', '.join(GATEWAY_CONFIG.keys())}"
+            )
+        gateways_to_check = {gateway_key: GATEWAY_CONFIG[gateway_key]}
+    else:
+        gateways_to_check = GATEWAY_CONFIG
+
     results = {
         'timestamp': datetime.now(timezone.utc).isoformat(),
-        'total_gateways': len(GATEWAY_CONFIG),
+        'total_gateways': len(gateways_to_check),
         'healthy': 0,
         'unhealthy': 0,
         'fixed': 0,
@@ -370,7 +384,7 @@ def run_comprehensive_check(auto_fix: bool = True, verbose: bool = False) -> Dic
         'gateways': {}
     }
     
-    for gateway_name, config in GATEWAY_CONFIG.items():
+    for gateway_name, config in gateways_to_check.items():
         gateway_display_name = config['name']
         print(f"\n{'─' * 80}")
         print(f"Testing: {gateway_display_name} ({gateway_name})")
@@ -479,22 +493,20 @@ def main():
     
     args = parser.parse_args()
     
-    # Filter to specific gateway if requested
-    global GATEWAY_CONFIG
+    gateway_filter: Optional[str] = None
     if args.gateway:
         gateway_name = args.gateway.lower()
         if gateway_name not in GATEWAY_CONFIG:
             print(f"❌ Unknown gateway: {gateway_name}")
             print(f"Available gateways: {', '.join(GATEWAY_CONFIG.keys())}")
             sys.exit(1)
-        
-        # Test only the specified gateway
-        GATEWAY_CONFIG = {gateway_name: GATEWAY_CONFIG[gateway_name]}
+        gateway_filter = gateway_name
     
     # Run comprehensive check
     results = run_comprehensive_check(
         auto_fix=not args.no_fix,
-        verbose=args.verbose
+        verbose=args.verbose,
+        gateway=gateway_filter
     )
     
     # Exit with error code if there are unhealthy gateways

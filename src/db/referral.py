@@ -127,6 +127,11 @@ class Purchase(db.Model):
 
     user = db.relationship('User', backref='purchases')
 
+    def __init__(self, **kwargs):
+        super(Purchase, self).__init__(**kwargs)
+        if self.referral_bonus_applied is None:
+            self.referral_bonus_applied = False
+
     def to_dict(self):
         return {
             'id': self.id,

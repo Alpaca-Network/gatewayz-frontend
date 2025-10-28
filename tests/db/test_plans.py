@@ -194,8 +194,8 @@ def test_get_user_plan_combines_user_and_plan(mod, fake_supabase):
     now = datetime.now(timezone.utc)
     fake_supabase.table("user_plans").insert({
         "id": 1001, "user_id": 9, "plan_id": 42,
-        "start_date": (now - timedelta(days=1)).isoformat(),
-        "end_date": (now + timedelta(days=29)).isoformat(),
+        "started_at": (now - timedelta(days=1)).isoformat(),
+        "expires_at": (now + timedelta(days=29)).isoformat(),
         "is_active": True
     }).execute()
 
@@ -209,8 +209,8 @@ def test_assign_user_plan_deactivates_existing_and_updates_user(mod, fake_supaba
     # existing plan
     fake_supabase.table("user_plans").insert({
         "id": 1, "user_id": 5, "plan_id": 1,
-        "start_date": datetime.now(timezone.utc).isoformat(),
-        "end_date": (datetime.now(timezone.utc) + timedelta(days=10)).isoformat(),
+        "started_at": datetime.now(timezone.utc).isoformat(),
+        "expires_at": (datetime.now(timezone.utc) + timedelta(days=10)).isoformat(),
         "is_active": True
     }).execute()
     # target plan exists
@@ -263,8 +263,8 @@ def test_check_plan_entitlements_expired_plan_marks_inactive_and_user_expired(mo
     yesterday = datetime.now(timezone.utc) - timedelta(days=1)
     fake_supabase.table("user_plans").insert({
         "id": 501, "user_id": 77, "plan_id": 55,
-        "start_date": (yesterday - timedelta(days=29)).isoformat(),
-        "end_date": yesterday.isoformat(),
+        "started_at": (yesterday - timedelta(days=29)).isoformat(),
+        "expires_at": yesterday.isoformat(),
         "is_active": True,
     }).execute()
     fake_supabase.table("users").insert({"id": 77, "subscription_status": "active"}).execute()
@@ -290,8 +290,8 @@ def test_check_plan_entitlements_active_plan_allows_feature(mod, fake_supabase):
     now = datetime.now(timezone.utc)
     fake_supabase.table("user_plans").insert({
         "id": 700, "user_id": 123, "plan_id": 7,
-        "start_date": (now - timedelta(days=1)).isoformat(),
-        "end_date": (now + timedelta(days=10)).isoformat(),
+        "started_at": (now - timedelta(days=1)).isoformat(),
+        "expires_at": (now + timedelta(days=10)).isoformat(),
         "is_active": True
     }).execute()
 
@@ -314,8 +314,8 @@ def test_get_user_usage_within_plan_limits_aggregates(mod, fake_supabase):
     now = datetime.now(timezone.utc)
     fake_supabase.table("user_plans").insert({
         "id": 900, "user_id": 9, "plan_id": 9,
-        "start_date": (now - timedelta(days=1)).isoformat(),
-        "end_date": (now + timedelta(days=5)).isoformat(),
+        "started_at": (now - timedelta(days=1)).isoformat(),
+        "expires_at": (now + timedelta(days=5)).isoformat(),
         "is_active": True
     }).execute()
 
@@ -366,8 +366,8 @@ def test_enforce_plan_limits_checks_and_env_multiplier(mod, fake_supabase):
     now = datetime.now(timezone.utc)
     fake_supabase.table("user_plans").insert({
         "id": 660, "user_id": 606, "plan_id": 66,
-        "start_date": (now - timedelta(days=1)).isoformat(),
-        "end_date": (now + timedelta(days=10)).isoformat(),
+        "started_at": (now - timedelta(days=1)).isoformat(),
+        "expires_at": (now + timedelta(days=10)).isoformat(),
         "is_active": True
     }).execute()
 
@@ -408,7 +408,7 @@ def test_get_subscription_plans_active_only(mod, fake_supabase):
 def test_get_all_plans_error_returns_empty(monkeypatch):
     # Force get_supabase_client to raise
     bad_supabase_mod = types.SimpleNamespace(get_supabase_client=lambda: (_ for _ in ()).throw(RuntimeError("boom")))
-    monkeypatch.setitem(sys.modules, "src.supabase_config", bad_supabase_mod)
+    monkeypatch.setitem(sys.modules, "src.config.supabase_config", bad_supabase_mod)
 
     m = importlib.import_module(MODULE_PATH)
     importlib.reload(m)

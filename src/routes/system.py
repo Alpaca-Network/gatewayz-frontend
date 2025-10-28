@@ -31,6 +31,7 @@ from src.services.models import (
 from src.services.huggingface_models import fetch_models_from_hug
 from src.config import Config
 from src.services.modelz_client import refresh_modelz_cache, get_modelz_cache_status as get_modelz_cache_status_func
+from src.services.pricing_lookup import get_model_pricing
 
 try:
     from check_and_fix_gateway_models import run_comprehensive_check  # type: ignore
@@ -85,6 +86,69 @@ def _render_gateway_dashboard(results: Dict[str, Any], log_output: str, auto_fix
         "fixed": results.get("fixed", 0),
     }
 
+    def format_price_value(value: Any) -> Optional[str]:
+        if value is None:
+            return None
+        value_str = str(value).strip()
+        if not value_str:
+            return None
+        # Remove leading currency symbol for numeric parsing
+        cleaned = value_str[1:] if value_str.startswith("$") else value_str
+        try:
+            numeric = float(cleaned)
+            if numeric == 0:
+                formatted = "0"
+            elif numeric < 0.01:
+                formatted = f"{numeric:.6f}".rstrip("0").rstrip(".")
+            elif numeric < 1:
+                formatted = f"{numeric:.4f}".rstrip("0").rstrip(".")
+            else:
+                formatted = f"{numeric:.2f}".rstrip("0").rstrip(".")
+            return f"${formatted}"
+        except ValueError:
+            return value_str
+
+    def format_pricing_display(pricing: Optional[Dict[str, Any]]) -> str:
+        if not isinstance(pricing, dict):
+            return ""
+        label_map = {
+            "prompt": "Prompt",
+            "completion": "Completion",
+            "input": "Input",
+            "output": "Output",
+            "cached_prompt": "Cached Prompt",
+            "cached_completion": "Cached Completion",
+            "request": "Request",
+            "image": "Image",
+            "audio": "Audio",
+            "video": "Video",
+            "training": "Training",
+            "fine_tune": "Fine-tune",
+        }
+        unit_map = {
+            "prompt": "/1M tokens",
+            "completion": "/1M tokens",
+            "input": "/1M tokens",
+            "output": "/1M tokens",
+            "cached_prompt": "/1M tokens",
+            "cached_completion": "/1M tokens",
+            "request": " each",
+            "image": " each",
+            "audio": " /min",
+            "video": " /min",
+            "training": " /hr",
+            "fine_tune": " /hr",
+        }
+        parts: List[str] = []
+        for key, raw_value in pricing.items():
+            normalized = format_price_value(raw_value)
+            if not normalized:
+                continue
+            label = label_map.get(key, key.replace("_", " ").title())
+            unit = unit_map.get(key, "")
+            parts.append(f"{label} {normalized}{unit}")
+        return " | ".join(parts)
+
     def status_badge(status: str) -> str:
         status_lower = (status or "unknown").lower()
         if status_lower in {"healthy", "pass", "configured"}:
@@ -123,9 +187,34 @@ def _render_gateway_dashboard(results: Dict[str, Any], log_output: str, auto_fix
 
         auto_fix_attempted = data.get("auto_fix_attempted")
         auto_fix_successful = data.get("auto_fix_successful")
-        auto_fix_text = "—"
+        auto_fix_text = "Not attempted"
         if auto_fix_attempted:
             auto_fix_text = "Succeeded" if auto_fix_successful else "Failed"
+
+        final_status_lower = (final_status or "unknown").lower()
+        toggle_disabled = (not data.get("configured")) or final_status_lower == "healthy"
+        toggle_hint = "Toggle to run fix"
+        if not data.get("configured"):
+            toggle_hint = "Configure API key to enable fixes"
+        elif final_status_lower == "healthy":
+            toggle_hint = "Gateway healthy"
+
+        toggle_attributes = 'disabled="disabled"' if toggle_disabled else ""
+        auto_fix_cell = """
+        <div class="fix-toggle">
+            <div class="status-text">{status_text}</div>
+            <label class="switch">
+                <input type="checkbox" onclick="event.stopPropagation()" onchange="handleFixToggle(event, '{gateway_id}', this)" {attributes}>
+                <span class="slider"></span>
+            </label>
+            <span class="toggle-hint">{hint}</span>
+        </div>
+        """.format(
+            status_text=escape(auto_fix_text),
+            gateway_id=escape(gateway_id),
+            attributes=toggle_attributes,
+            hint=escape(toggle_hint)
+        )
 
         # Get models from cache test
         models = cache_test.get("models", [])
@@ -133,12 +222,61 @@ def _render_gateway_dashboard(results: Dict[str, Any], log_output: str, auto_fix
         if models and len(models) > 0:
             model_items = []
             for model in models:
-                # Handle different model data structures
+                pricing_info: Optional[Dict[str, Any]] = None
+                pricing_source: Optional[str] = None
+
                 if isinstance(model, dict):
                     model_id = model.get("id") or model.get("model") or str(model)
+                    candidate_pricing = model.get("pricing")
+                    if isinstance(candidate_pricing, dict) and any(
+                        str(v).strip() for v in candidate_pricing.values() if v is not None
+                    ):
+                        pricing_info = candidate_pricing
+                        pricing_source = model.get("pricing_source")
                 else:
                     model_id = str(model)
-                model_items.append(f"<li>{escape(model_id)}</li>")
+
+                if pricing_info is None:
+                    manual_pricing = get_model_pricing(gateway_id, model_id)
+                    if manual_pricing:
+                        pricing_info = manual_pricing
+                        pricing_source = "manual"
+
+                pricing_display = format_pricing_display(pricing_info)
+                if pricing_display:
+                    pricing_html = """
+                        <div class="pricing">
+                            <span class="pricing-label">Pricing:</span>
+                            <span class="pricing-value">{pricing_details}</span>
+                            {source}
+                        </div>
+                    """.format(
+                        pricing_details=escape(pricing_display),
+                        source=(
+                            f'<span class="pricing-source">{escape(pricing_source)}</span>'
+                            if pricing_source
+                            else ""
+                        ),
+                    )
+                else:
+                    pricing_html = """
+                        <div class="pricing pricing-missing">
+                            <span class="pricing-label">Pricing:</span>
+                            <span class="pricing-value">Unavailable</span>
+                        </div>
+                    """
+
+                model_items.append(
+                    """
+                    <li>
+                        <span class="model-id">{model}</span>
+                        {pricing_html}
+                    </li>
+                    """.format(
+                        model=escape(model_id),
+                        pricing_html=pricing_html,
+                    )
+                )
             models_html = f"""
             <tr class="model-row" id="models-{escape(gateway_id)}" style="display: none;">
                 <td colspan="6" class="models-cell">
@@ -154,7 +292,7 @@ def _render_gateway_dashboard(results: Dict[str, Any], log_output: str, auto_fix
 
         rows.append(
             """
-            <tr class="gateway-row {clickable_class}" {onclick}>
+            <tr class="gateway-row {clickable_class}" data-gateway="{gateway_attr}" {onclick}>
                 <td>{name} {expand_icon}</td>
                 <td>{configured}</td>
                 <td>{endpoint_badge}<div class="details">{endpoint_details}</div></td>
@@ -166,6 +304,7 @@ def _render_gateway_dashboard(results: Dict[str, Any], log_output: str, auto_fix
             """.format(
                 clickable_class="clickable" if models_html else "",
                 onclick=f'onclick="toggleModels(\'{escape(gateway_id)}\')"' if models_html else "",
+                gateway_attr=escape(gateway_id),
                 name=escape(name),
                 expand_icon='<span class="expand-icon">▶</span>' if models_html else "",
                 configured=escape(configured),
@@ -174,7 +313,7 @@ def _render_gateway_dashboard(results: Dict[str, Any], log_output: str, auto_fix
                 cache_badge=status_badge(cache_status),
                 cache_details=escape(cache_details),
                 final_badge=status_badge(final_status),
-                auto_fix=escape(auto_fix_text),
+                auto_fix=auto_fix_cell,
                 models_row=models_html
             )
         )
@@ -397,6 +536,103 @@ def _render_gateway_dashboard(results: Dict[str, Any], log_output: str, auto_fix
                 color: #cbd5e1;
                 border: 1px solid rgba(148, 163, 184, 0.15);
             }}
+            .model-id {{
+                display: block;
+                font-weight: 600;
+                color: #f8fafc;
+                margin-bottom: 4px;
+            }}
+            .pricing {{
+                font-size: 0.75rem;
+                color: rgba(226, 232, 240, 0.75);
+                display: flex;
+                flex-wrap: wrap;
+                gap: 4px;
+                align-items: center;
+            }}
+            .pricing-label {{
+                font-weight: 600;
+                color: #94a3b8;
+            }}
+            .pricing-value {{
+                color: #cbd5f5;
+            }}
+            .pricing-source {{
+                background: rgba(59, 130, 246, 0.2);
+                color: #93c5fd;
+                border: 1px solid rgba(59, 130, 246, 0.35);
+                border-radius: 999px;
+                padding: 2px 8px;
+                font-size: 0.7rem;
+                text-transform: uppercase;
+                letter-spacing: 0.04em;
+            }}
+            .pricing-missing .pricing-value {{
+                color: rgba(226, 232, 240, 0.45);
+                font-style: italic;
+            }}
+            .fix-toggle {{
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+                align-items: flex-start;
+            }}
+            .fix-toggle .status-text {{
+                font-weight: 600;
+                font-size: 0.85rem;
+                color: #cbd5f5;
+            }}
+            .fix-toggle .toggle-hint {{
+                font-size: 0.75rem;
+                color: rgba(226, 232, 240, 0.6);
+            }}
+            .switch {{
+                position: relative;
+                display: inline-block;
+                width: 48px;
+                height: 24px;
+            }}
+            .switch input {{
+                opacity: 0;
+                width: 0;
+                height: 0;
+            }}
+            .slider {{
+                position: absolute;
+                cursor: pointer;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background-color: rgba(248, 113, 113, 0.35);
+                transition: 0.2s;
+                border-radius: 24px;
+                border: 1px solid rgba(248, 113, 113, 0.5);
+            }}
+            .slider:before {{
+                position: absolute;
+                content: "";
+                height: 18px;
+                width: 18px;
+                left: 3px;
+                bottom: 2px;
+                background-color: #0f172a;
+                transition: 0.2s;
+                border-radius: 50%;
+                box-shadow: 0 2px 4px rgba(15, 23, 42, 0.4);
+            }}
+            .switch input:checked + .slider {{
+                background-color: rgba(74, 222, 128, 0.45);
+                border-color: rgba(74, 222, 128, 0.7);
+            }}
+            .switch input:checked + .slider:before {{
+                transform: translateX(22px);
+            }}
+            .switch input:disabled + .slider {{
+                background-color: rgba(148, 163, 184, 0.2);
+                border-color: rgba(148, 163, 184, 0.3);
+                cursor: not-allowed;
+            }}
             .models-list::-webkit-scrollbar {{
                 width: 8px;
             }}
@@ -430,7 +666,7 @@ def _render_gateway_dashboard(results: Dict[str, Any], log_output: str, auto_fix
                     <th>Endpoint Check</th>
                     <th>Cache Check</th>
                     <th>Final Status</th>
-                    <th>Auto-fix</th>
+                    <th>Fix Gateway</th>
                 </tr>
             </thead>
             <tbody>
@@ -468,6 +704,65 @@ def _render_gateway_dashboard(results: Dict[str, Any], log_output: str, auto_fix
                     }}
                 }}
             }}
+
+            async function handleFixToggle(event, gatewayId, checkbox) {{
+                event.stopPropagation();
+                if (!checkbox.checked) {{
+                    return;
+                }}
+
+                const container = checkbox.closest('.fix-toggle');
+                const statusText = container ? container.querySelector('.status-text') : null;
+                const hintText = container ? container.querySelector('.toggle-hint') : null;
+                const originalStatus = statusText ? statusText.textContent : '';
+                const originalHint = hintText ? hintText.textContent : '';
+
+                checkbox.disabled = true;
+                if (statusText) {{
+                    statusText.textContent = 'Running fix...';
+                }}
+                if (hintText) {{
+                    hintText.textContent = 'Attempting auto-fix via API...';
+                }}
+
+                try {{
+                    const response = await fetch('/health/gateways/' + gatewayId + '/fix?auto_fix=true', {{
+                        method: 'POST'
+                    }});
+
+                    if (!response.ok) {{
+                        throw new Error('HTTP ' + response.status);
+                    }}
+
+                    const payload = await response.json();
+
+                    if (payload && payload.data) {{
+                        const resultStatus = payload.data.auto_fix_successful ? 'Succeeded' : 'Failed';
+                        if (statusText) {{
+                            statusText.textContent = 'Auto-fix ' + resultStatus;
+                        }}
+                    }} else if (statusText) {{
+                        statusText.textContent = 'Fix attempted';
+                    }}
+
+                    if (hintText) {{
+                        hintText.textContent = 'Fix completed. Refreshing...';
+                    }}
+
+                    checkbox.checked = false;
+                    setTimeout(() => window.location.reload(), 600);
+                }} catch (error) {{
+                    console.error('Failed to run fix for', gatewayId, error);
+                    if (statusText) {{
+                        statusText.textContent = originalStatus || 'Not attempted';
+                    }}
+                    if (hintText) {{
+                        hintText.textContent = 'Fix failed. Check logs.';
+                    }}
+                    checkbox.checked = false;
+                    checkbox.disabled = false;
+                }}
+            }}
         </script>
     </body>
     </html>
@@ -490,6 +785,86 @@ async def _run_gateway_check(auto_fix: bool) -> Tuple[Dict[str, Any], str]:
         return results, buffer.getvalue()
 
     return await run_in_threadpool(_runner)
+
+
+async def _run_single_gateway_check(gateway: str, auto_fix: bool) -> Tuple[Dict[str, Any], str]:
+    """Execute the check for a single gateway and capture stdout."""
+
+    if run_comprehensive_check is None:
+        raise HTTPException(
+            status_code=503,
+            detail="check_and_fix_gateway_models module is unavailable in this deployment."
+        )
+
+    def _runner() -> Tuple[Dict[str, Any], str]:
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            results = run_comprehensive_check(  # type: ignore[arg-type]
+                auto_fix=auto_fix,
+                verbose=False,
+                gateway=gateway
+            )
+        return results, buffer.getvalue()
+
+    return await run_in_threadpool(_runner)
+
+
+@router.post(
+    "/health/gateways/{gateway}/fix",
+    tags=["health"]
+)
+async def trigger_gateway_fix(
+    gateway: str,
+    auto_fix: bool = Query(
+        True,
+        description="Attempt to auto-fix the specified gateway after running diagnostics."
+    )
+):
+    """
+    Trigger a targeted gateway diagnostics run with optional auto-fix.
+
+    Returns structured status along with captured logs so operators can review
+    what happened without leaving the dashboard.
+    """
+    try:
+        results, log_output = await _run_single_gateway_check(gateway=gateway, auto_fix=auto_fix)
+        gateway_key = gateway.lower()
+        gateway_payload = results.get("gateways", {}).get(gateway_key)
+
+        if not gateway_payload:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Gateway '{gateway}' not found in health check results."
+            )
+
+        return {
+            "success": True,
+            "gateway": gateway_key,
+            "auto_fix": auto_fix,
+            "timestamp": results.get("timestamp"),
+            "data": {
+                "final_status": gateway_payload.get("final_status"),
+                "auto_fix_attempted": gateway_payload.get("auto_fix_attempted"),
+                "auto_fix_successful": gateway_payload.get("auto_fix_successful"),
+                "endpoint_test": gateway_payload.get("endpoint_test"),
+                "cache_test": gateway_payload.get("cache_test"),
+            },
+            "summary": {
+                "total_gateways": results.get("total_gateways"),
+                "healthy": results.get("healthy"),
+                "unhealthy": results.get("unhealthy"),
+                "unconfigured": results.get("unconfigured"),
+                "fixed": results.get("fixed"),
+            },
+            "logs": log_output.strip()
+        }
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:  # pragma: no cover - unexpected failures
+        logger.exception("Failed to trigger gateway fix for %s", gateway)
+        raise HTTPException(status_code=500, detail=f"Failed to run gateway fix: {exc}")
 
 
 # ============================================================================
@@ -1125,4 +1500,3 @@ async def clear_modelz_cache_endpoint():
     except Exception as e:
         logger.error(f"Failed to clear Modelz cache: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to clear Modelz cache: {str(e)}")
-

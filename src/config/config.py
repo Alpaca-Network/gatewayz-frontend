@@ -12,6 +12,7 @@ class Config:
     IS_PRODUCTION = APP_ENV == "production"
     IS_STAGING = APP_ENV == "staging"
     IS_DEVELOPMENT = APP_ENV == "development"
+    IS_TESTING = APP_ENV in {"testing", "test"} or os.environ.get("TESTING", "").lower() in {"1", "true", "yes"}
 
     # Supabase Configuration
     SUPABASE_URL = os.environ.get("SUPABASE_URL")

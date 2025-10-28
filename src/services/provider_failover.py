@@ -33,7 +33,7 @@ FALLBACK_PROVIDER_PRIORITY: tuple[str, ...] = (
     "openrouter",
 )
 FALLBACK_ELIGIBLE_PROVIDERS = set(FALLBACK_PROVIDER_PRIORITY)
-FAILOVER_STATUS_CODES = {401, 403, 404, 429, 502, 503, 504}
+FAILOVER_STATUS_CODES = {401, 403, 404, 502, 503, 504}
 
 
 def build_provider_failover_chain(initial_provider: str | None) -> List[str]:

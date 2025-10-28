@@ -307,8 +307,6 @@ async def chat_completions(
         # === 2.1) Inject conversation history if session_id provided ===
         if session_id:
             try:
-                from src.db.chat_history import get_chat_session
-
                 # Fetch the session with its message history
                 session = await _to_thread(get_chat_session, session_id, user['id'])
 

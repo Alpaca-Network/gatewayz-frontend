@@ -16,6 +16,7 @@ import pytest
 from unittest.mock import Mock, patch
 from fastapi.testclient import TestClient
 from datetime import datetime
+from urllib.parse import quote
 
 from src.main import app
 
@@ -26,8 +27,20 @@ from src.main import app
 
 @pytest.fixture
 def client():
-    """FastAPI test client"""
-    return TestClient(app)
+    """FastAPI test client with dependency overrides"""
+    from src.security.deps import get_api_key
+
+    # Override the get_api_key dependency to bypass authentication
+    async def override_get_api_key():
+        return "test_api_key"
+
+    app.dependency_overrides[get_api_key] = override_get_api_key
+
+    client = TestClient(app)
+    yield client
+
+    # Cleanup: Remove overrides after test
+    app.dependency_overrides.clear()
 
 
 @pytest.fixture
@@ -463,8 +476,10 @@ class TestAuditDateValidation:
         ]
 
         for date_str in valid_dates:
+            # URL-encode the date to properly handle special characters like +
+            encoded_date = quote(date_str, safe='')
             response = client.get(
-                f'/user/api-keys/audit-logs?start_date={date_str}',
+                f'/user/api-keys/audit-logs?start_date={encoded_date}',
                 headers={'Authorization': 'Bearer test_api_key'}
             )
 

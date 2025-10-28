@@ -151,42 +151,76 @@ def fetch_models_from_cerebras():
             # The SDK's models.list() returns a list of model objects
             models_response = client.models.list()
 
-            # Convert to list if it's an iterator/generator
-            if hasattr(models_response, '__iter__') and not isinstance(models_response, (list, dict)):
-                raw_models = list(models_response)
-            else:
-                raw_models = models_response if isinstance(models_response, list) else [models_response]
+            # Handle different response formats from the SDK
+            logger.debug(f"Cerebras SDK response type: {type(models_response)}")
 
-            # Extract data array if response is wrapped
-            # Check if ANY element has a 'data' key (not just the first one)
-            if raw_models:
-                # If first element is a dict with 'data' key, unwrap it
-                if isinstance(raw_models[0], dict) and 'data' in raw_models[0]:
-                    raw_models = raw_models[0].get('data', [])
-                # If raw_models is a list with one dict containing 'data', unwrap it
-                elif len(raw_models) == 1 and isinstance(raw_models[0], dict) and 'data' in raw_models[0]:
-                    raw_models = raw_models[0].get('data', [])
+            # Check if it has a 'data' attribute first (common API response pattern)
+            if hasattr(models_response, 'data'):
+                raw_models = models_response.data
+                logger.debug(f"Extracted from .data attribute, type: {type(raw_models)}")
+            # Check if it's already a list
+            elif isinstance(models_response, list):
+                raw_models = models_response
+                logger.debug("Response is already a list")
+            # Convert to list if it's an iterator/generator (but not dict-like)
+            elif hasattr(models_response, '__iter__') and not hasattr(models_response, 'items'):
+                raw_models = list(models_response)
+                logger.debug(f"Converted iterator to list, length: {len(raw_models)}")
+            else:
+                # Last resort: try to extract as single item
+                raw_models = [models_response]
+                logger.debug("Wrapped response in list")
+
+            # Additional unwrapping if the data is nested in a dict
+            if isinstance(raw_models, dict) and 'data' in raw_models:
+                raw_models = raw_models['data']
+                logger.debug("Unwrapped data from dict")
+            elif raw_models and len(raw_models) > 0:
+                # Check if first element is a tuple (e.g., from .items() conversion)
+                if isinstance(raw_models[0], tuple) and len(raw_models[0]) == 2 and raw_models[0][0] == 'data':
+                    # Extract the data list from the tuple ('data', [model_list])
+                    raw_models = raw_models[0][1]
+                    logger.debug("Unwrapped data from tuple format")
+                elif isinstance(raw_models[0], dict) and 'data' in raw_models[0]:
+                    raw_models = raw_models[0]['data']
+                    logger.debug("Unwrapped data from first element")
+
+            logger.info(f"Processing {len(raw_models) if isinstance(raw_models, list) else 'unknown'} raw models from Cerebras SDK")
 
             # Convert SDK model objects to dicts if needed
             models_list = []
-            for model in raw_models:
+            for idx, model in enumerate(raw_models):
                 try:
+                    # Log the type of each model object
+                    if idx == 0:
+                        logger.debug(f"First model type: {type(model)}, has model_dump: {hasattr(model, 'model_dump')}, has dict: {hasattr(model, 'dict')}")
+
+                    converted_model = None
                     if hasattr(model, 'model_dump'):
                         # Pydantic v2 model
-                        models_list.append(model.model_dump())
+                        converted_model = model.model_dump()
                     elif hasattr(model, 'dict'):
                         # Legacy Pydantic v1 model
-                        models_list.append(model.dict())
+                        converted_model = model.dict()
                     elif hasattr(model, '__dict__'):
                         # Regular object
-                        models_list.append(vars(model))
+                        converted_model = vars(model)
                     elif isinstance(model, dict):
                         # Already a dict
-                        models_list.append(model)
+                        converted_model = model
                     else:
-                        # Skip unsupported model objects instead of stringifying
+                        # Skip unsupported model objects
                         logger.warning(f"Skipping unsupported Cerebras model object of type {type(model)}")
                         continue
+
+                    # Validate that we got a proper dict with an id
+                    if converted_model and isinstance(converted_model, dict):
+                        if 'id' in converted_model:
+                            models_list.append(converted_model)
+                        else:
+                            logger.warning(f"Model dict missing 'id' field: {list(converted_model.keys())[:5]}")
+                    else:
+                        logger.warning(f"Failed to convert model to dict: {type(converted_model)}")
                 except Exception as conversion_error:
                     logger.warning(f"Failed to convert Cerebras model object: {conversion_error}")
                     continue
