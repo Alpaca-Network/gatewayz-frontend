@@ -1018,24 +1018,28 @@ def normalize_fireworks_model(fireworks_model: dict) -> dict:
 
 
 def fetch_specific_model_from_openrouter(provider_name: str, model_name: str):
-    """Fetch specific model data from OpenRouter API"""
+    """Fetch specific model data from OpenRouter by searching cached models"""
     try:
-        if not Config.OPENROUTER_API_KEY:
-            logger.error("OpenRouter API key not configured")
-            return None
+        # Construct the model ID
+        model_id = f"{provider_name}/{model_name}"
+        model_id_lower = model_id.lower()
 
-        headers = {
-            "Authorization": f"Bearer {Config.OPENROUTER_API_KEY}",
-            "Content-Type": "application/json"
-        }
+        # First check cache
+        openrouter_models = get_cached_models("openrouter")
+        if openrouter_models:
+            for model in openrouter_models:
+                if model.get("id", "").lower() == model_id_lower:
+                    return model
 
-        # Use the specific model endpoint
-        url = f"https://openrouter.ai/api/v1/models/{provider_name}/{model_name}/endpoints"
-        response = httpx.get(url, headers=headers)
-        response.raise_for_status()
+        # If not in cache, try to fetch fresh data
+        fresh_models = fetch_models_from_openrouter()
+        if fresh_models:
+            for model in fresh_models:
+                if model.get("id", "").lower() == model_id_lower:
+                    return model
 
-        model_data = response.json()
-        return model_data.get("data")
+        logger.warning(f"Model {model_id} not found in OpenRouter catalog")
+        return None
     except Exception as e:
         logger.error(f"Failed to fetch specific model {provider_name}/{model_name} from OpenRouter: {e}")
         return None

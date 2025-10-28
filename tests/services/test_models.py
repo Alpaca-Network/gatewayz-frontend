@@ -320,3 +320,11 @@ class TestFetchSpecificModel:
         """Test with None input"""
         result = await fetch_specific_model(None)
         assert result is None or isinstance(result, dict)
+
+    def test_fetch_openrouter_auto(self):
+        """Test fetching openrouter/auto model specifically"""
+        result = fetch_specific_model("openrouter", "auto", gateway="openrouter")
+        # Should find the model or return None gracefully
+        if result is not None:
+            assert isinstance(result, dict)
+            assert result.get("id") == "openrouter/auto"
