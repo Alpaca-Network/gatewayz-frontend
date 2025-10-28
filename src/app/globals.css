@@ -214,4 +214,29 @@ body {
   .marquee-track:hover {
     animation-play-state: paused;
   }
+
+  /* Shimmer animation for loading text */
+  @keyframes shimmer {
+    0% {
+      background-position: -200% center;
+    }
+    100% {
+      background-position: 200% center;
+    }
+  }
+
+  .shimmer-text {
+    background: linear-gradient(
+      90deg,
+      hsl(var(--muted-foreground)) 0%,
+      hsl(var(--foreground)) 20%,
+      hsl(var(--muted-foreground)) 40%,
+      hsl(var(--muted-foreground)) 100%
+    );
+    background-size: 200% auto;
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: shimmer 2s linear infinite;
+  }
 }
