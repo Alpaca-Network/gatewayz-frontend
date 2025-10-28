@@ -757,7 +757,7 @@ export default function ModelsClient({
               <div className="flex items-center gap-4">
                 <span className="text-sm text-muted-foreground whitespace-nowrap">
                   {isLoadingModels || isLoadingMore
-                    ? `${deduplicatedModels.length} of ~10,000 models (loading...)`
+                    ? `${filteredModels.length} of ~10,000 models (loading...)`
                     : `${filteredModels.length} / ${deduplicatedModels.length} models`
                   }
                 </span>
