@@ -267,7 +267,7 @@ export default function ModelProfilePage() {
                 };
 
                 console.log(`[ModelProfilePage] Fetching from all gateway APIs...`);
-                const [openrouterRes, portkeyRes, featherlessRes, chutesRes, fireworksRes, togetherRes, groqRes, huggingfaceRes, aimoRes] = await Promise.allSettled([
+                const [openrouterRes, portkeyRes, featherlessRes, chutesRes, fireworksRes, togetherRes, groqRes, deepinfraRes, googleRes, cerebrasRes, nebiusRes, xaiRes, novitaRes, huggingfaceRes, aimoRes, nearRes] = await Promise.allSettled([
                     fetchWithTimeout(`/api/models?gateway=openrouter`).catch(err => {
                         console.error('OpenRouter fetch error:', err);
                         return null;
@@ -296,12 +296,40 @@ export default function ModelProfilePage() {
                         console.error('Groq fetch error:', err);
                         return null;
                     }),
+                    fetchWithTimeout(`/api/models?gateway=deepinfra`).catch(err => {
+                        console.error('DeepInfra fetch error:', err);
+                        return null;
+                    }),
+                    fetchWithTimeout(`/api/models?gateway=google`).catch(err => {
+                        console.error('Google fetch error:', err);
+                        return null;
+                    }),
+                    fetchWithTimeout(`/api/models?gateway=cerebras`).catch(err => {
+                        console.error('Cerebras fetch error:', err);
+                        return null;
+                    }),
+                    fetchWithTimeout(`/api/models?gateway=nebius`).catch(err => {
+                        console.error('Nebius fetch error:', err);
+                        return null;
+                    }),
+                    fetchWithTimeout(`/api/models?gateway=xai`).catch(err => {
+                        console.error('xAI fetch error:', err);
+                        return null;
+                    }),
+                    fetchWithTimeout(`/api/models?gateway=novita`).catch(err => {
+                        console.error('Novita fetch error:', err);
+                        return null;
+                    }),
                     fetchWithTimeout(`/api/models?gateway=huggingface`, 70000).catch(err => {
                         console.error('HuggingFace fetch error:', err);
                         return null;
                     }),
                     fetchWithTimeout(`/api/models?gateway=aimo`, 70000).catch(err => {
                         console.error('AIMO fetch error:', err);
+                        return null;
+                    }),
+                    fetchWithTimeout(`/api/models?gateway=near`, 70000).catch(err => {
+                        console.error('NEAR fetch error:', err);
                         return null;
                     })
                 ]);
@@ -313,8 +341,15 @@ export default function ModelProfilePage() {
                     fireworks: fireworksRes?.status,
                     together: togetherRes?.status,
                     groq: groqRes?.status,
+                    deepinfra: deepinfraRes?.status,
+                    google: googleRes?.status,
+                    cerebras: cerebrasRes?.status,
+                    nebius: nebiusRes?.status,
+                    xai: xaiRes?.status,
+                    novita: novitaRes?.status,
                     huggingface: huggingfaceRes?.status,
-                    aimo: aimoRes?.status
+                    aimo: aimoRes?.status,
+                    near: nearRes?.status
                 });
 
                 const getData = async (result: PromiseSettledResult<Response | null>) => {
@@ -332,7 +367,7 @@ export default function ModelProfilePage() {
                     return [];
                 };
 
-                const [openrouterData, portkeyData, featherlessData, chutesData, fireworksData, togetherData, groqData, huggingfaceData, aimoData] = await Promise.all([
+                const [openrouterData, portkeyData, featherlessData, chutesData, fireworksData, togetherData, groqData, deepinfraData, googleData, cerebrasData, nebiusData, xaiData, novitaData, huggingfaceData, aimoData, nearData] = await Promise.all([
                     getData(openrouterRes),
                     getData(portkeyRes),
                     getData(featherlessRes),
@@ -340,8 +375,15 @@ export default function ModelProfilePage() {
                     getData(fireworksRes),
                     getData(togetherRes),
                     getData(groqRes),
+                    getData(deepinfraRes),
+                    getData(googleRes),
+                    getData(cerebrasRes),
+                    getData(nebiusRes),
+                    getData(xaiRes),
+                    getData(novitaRes),
                     getData(huggingfaceRes),
-                    getData(aimoRes)
+                    getData(aimoRes),
+                    getData(nearRes)
                 ]);
 
                 // Combine models from all gateways
@@ -353,8 +395,15 @@ export default function ModelProfilePage() {
                     ...fireworksData,
                     ...togetherData,
                     ...groqData,
+                    ...deepinfraData,
+                    ...googleData,
+                    ...cerebrasData,
+                    ...nebiusData,
+                    ...xaiData,
+                    ...novitaData,
                     ...huggingfaceData,
-                    ...aimoData
+                    ...aimoData,
+                    ...nearData
                 ];
 
                 // Deduplicate models by ID - keep the first occurrence
@@ -460,8 +509,15 @@ export default function ModelProfilePage() {
                     if (hasModel(fireworksData, 'fireworks')) providers.push('fireworks');
                     if (hasModel(togetherData, 'together')) providers.push('together');
                     if (hasModel(groqData, 'groq')) providers.push('groq');
+                    if (hasModel(deepinfraData, 'deepinfra')) providers.push('deepinfra');
+                    if (hasModel(googleData, 'google')) providers.push('google');
+                    if (hasModel(cerebrasData, 'cerebras')) providers.push('cerebras');
+                    if (hasModel(nebiusData, 'nebius')) providers.push('nebius');
+                    if (hasModel(xaiData, 'xai')) providers.push('xai');
+                    if (hasModel(novitaData, 'novita')) providers.push('novita');
                     if (hasModel(huggingfaceData, 'huggingface')) providers.push('huggingface');
                     if (hasModel(aimoData, 'aimo')) providers.push('aimo');
+                    if (hasModel(nearData, 'near')) providers.push('near');
 
                     console.log(`Model ${modelId} available in gateways:`, providers);
                     setModelProviders(providers);
@@ -884,8 +940,15 @@ console.log(response.choices[0].message.content);`
                                         fireworks: 'Fireworks',
                                         together: 'Together AI',
                                         groq: 'Groq',
+                                        deepinfra: 'DeepInfra',
+                                        google: 'Google',
+                                        cerebras: 'Cerebras',
+                                        nebius: 'Nebius',
+                                        xai: 'xAI',
+                                        novita: 'Novita',
                                         huggingface: 'Hugging Face',
-                                        aimo: 'AIMO Network'
+                                        aimo: 'AIMO Network',
+                                        near: 'NEAR'
                                     };
                                     const providerLogos: Record<string, string> = {
                                         openrouter: '/openrouter-logo.svg',
@@ -895,8 +958,15 @@ console.log(response.choices[0].message.content);`
                                         fireworks: '/fireworks-logo.svg',
                                         together: '/together-logo.svg',
                                         groq: '/groq-logo.svg',
+                                        deepinfra: '/deepinfra-logo.svg',
+                                        google: '/google-logo.svg',
+                                        cerebras: '/cerebras-logo.svg',
+                                        nebius: '/nebius-logo.svg',
+                                        xai: '/xai-logo.svg',
+                                        novita: '/novita-logo.svg',
                                         huggingface: '/huggingface-logo.svg',
-                                        aimo: '/aimo-logo.svg'
+                                        aimo: '/aimo-logo.svg',
+                                        near: '/near-logo.svg'
                                     };
 
                                     return (
