@@ -5,17 +5,59 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import Depends, HTTPException
 
-from src.db.rate_limits import get_user_rate_limits, check_rate_limit
-from src.db.users import get_user, get_user_usage_metrics, get_user_profile, update_user_profile, delete_user_account
+import src.db.rate_limits as rate_limits_module
+import src.db.users as users_module
+import src.db.credit_transactions as credit_transactions_module
 from src.schemas import UserProfileResponse, DeleteAccountResponse, UserProfileUpdate, DeleteAccountRequest
 from src.security.deps import get_api_key
 from fastapi import APIRouter
+import src.services.trial_validation as trial_module
 
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# Backwards compatibility wrappers for tests to patch
+def get_user(*args, **kwargs):
+    return users_module.get_user(*args, **kwargs)
+
+
+def get_user_usage_metrics(*args, **kwargs):
+    return users_module.get_user_usage_metrics(*args, **kwargs)
+
+
+def get_user_profile(*args, **kwargs):
+    return users_module.get_user_profile(*args, **kwargs)
+
+
+def update_user_profile(*args, **kwargs):
+    return users_module.update_user_profile(*args, **kwargs)
+
+
+def delete_user_account(*args, **kwargs):
+    return users_module.delete_user_account(*args, **kwargs)
+
+
+def get_user_rate_limits(*args, **kwargs):
+    return rate_limits_module.get_user_rate_limits(*args, **kwargs)
+
+
+def check_rate_limit(*args, **kwargs):
+    return rate_limits_module.check_rate_limit(*args, **kwargs)
+
+
+def validate_trial_access(*args, **kwargs):
+    return trial_module.validate_trial_access(*args, **kwargs)
+
+
+def get_user_transactions(*args, **kwargs):
+    return credit_transactions_module.get_user_transactions(*args, **kwargs)
+
+
+def get_transaction_summary(*args, **kwargs):
+    return credit_transactions_module.get_transaction_summary(*args, **kwargs)
 
 @router.get("/user/balance", tags=["authentication"])
 async def get_user_balance(api_key: str = Depends(get_api_key)):
@@ -25,7 +67,6 @@ async def get_user_balance(api_key: str = Depends(get_api_key)):
             raise HTTPException(status_code=401, detail="Invalid API key")
 
         # Check if this is a trial user
-        from src.services.trial_validation import validate_trial_access
         trial_validation = validate_trial_access(api_key)
 
         if trial_validation.get('is_trial', False):
@@ -250,10 +291,11 @@ async def delete_user_account_endpoint(
         if not success:
             raise HTTPException(status_code=500, detail="Failed to delete user account")
 
+        logger.debug("Account deletion returning user id %s (%s)", user.get("id"), type(user.get("id")))
         return {
             "status": "success",
             "message": "User account deleted successfully",
-            "user_id": user["id"],
+            "user_id": str(user["id"]),
             "timestamp": datetime.now(timezone.utc)
         }
 
@@ -296,8 +338,6 @@ async def get_credit_transactions_endpoint(
         if not user:
             raise HTTPException(status_code=401, detail="Invalid API key")
 
-        from src.db.credit_transactions import get_user_transactions, get_transaction_summary
-
         user_id = user['id']
 
         # Get transactions
@@ -337,5 +377,3 @@ async def get_credit_transactions_endpoint(
     except Exception as e:
         logger.error(f"Error getting credit transactions: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
-
-

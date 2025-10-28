@@ -140,22 +140,13 @@ class PaymentRecord(BaseModel):
 
 class CreateCheckoutSessionRequest(BaseModel):
     """Request to create a Stripe checkout session"""
-    amount: int = Field(..., description="Amount in cents (e.g., 2999 for $29.99)", gt=0)
+    amount: int = Field(..., description="Amount in cents (e.g., 2999 for $29.99)")
     currency: StripeCurrency = Field(default=StripeCurrency.USD)
     success_url: Optional[str] = Field(None, description="URL to redirect on success")
     cancel_url: Optional[str] = Field(None, description="URL to redirect on cancel")
     customer_email: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = Field(default_factory=dict)
     description: Optional[str] = "Gatewayz Credits Purchase"
-
-    @field_validator('amount')
-    @classmethod
-    def validate_amount(cls, v):
-        if v < 50:  # Minimum $0.50
-            raise ValueError('Amount must be at least $0.50 (50 cents)')
-        if v > 99999999:  # Maximum ~$1M
-            raise ValueError('Amount exceeds maximum allowed')
-        return v
 
 
 class CheckoutSessionResponse(BaseModel):

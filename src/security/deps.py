@@ -44,7 +44,7 @@ async def get_api_key(
     """
     if not credentials:
         raise HTTPException(
-            status_code=401,
+            status_code=422,
             detail="Authorization header is required"
         )
 

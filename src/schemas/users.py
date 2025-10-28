@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Union
 from datetime import datetime
 from enum import Enum
 
@@ -67,5 +67,5 @@ class DeleteAccountRequest(BaseModel):
 class DeleteAccountResponse(BaseModel):
     status: str
     message: str
-    user_id: int
+    user_id: Union[int, str]
     timestamp: datetime

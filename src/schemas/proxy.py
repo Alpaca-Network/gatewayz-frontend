@@ -1,12 +1,32 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 from typing import List, Dict, Any, Optional, Union
 from datetime import datetime
 from enum import Enum
 
 
+ALLOWED_CHAT_ROLES = {"system", "user", "assistant"}
+
+
 class Message(BaseModel):
     role: str
     content: str
+
+    @field_validator("role")
+    @classmethod
+    def validate_role(cls, role: str) -> str:
+        if role not in ALLOWED_CHAT_ROLES:
+            raise ValueError(
+                f"Invalid message role '{role}'. "
+                f"Supported roles are: {', '.join(sorted(ALLOWED_CHAT_ROLES))}."
+            )
+        return role
+
+    @field_validator("content")
+    @classmethod
+    def validate_content(cls, content: str) -> str:
+        if not isinstance(content, str) or not content.strip():
+            raise ValueError("Message content must be a non-empty string.")
+        return content
 
 
 class ProxyRequest(BaseModel):
@@ -24,6 +44,13 @@ class ProxyRequest(BaseModel):
 
     class Config:
         extra = "allow"
+
+    @field_validator("messages")
+    @classmethod
+    def validate_messages(cls, messages: List[Message]) -> List[Message]:
+        if not messages:
+            raise ValueError("messages must contain at least one message.")
+        return messages
 
 
 class ResponseFormatType(str, Enum):
@@ -67,6 +94,13 @@ class ResponseRequest(BaseModel):
     class Config:
         extra = "allow"
 
+    @field_validator("input")
+    @classmethod
+    def validate_input(cls, messages: List[InputMessage]) -> List[InputMessage]:
+        if not messages:
+            raise ValueError("input must contain at least one message.")
+        return messages
+
 
 # ============================================================================
 # Anthropic Messages API Schemas
@@ -86,6 +120,30 @@ class AnthropicMessage(BaseModel):
     """Message format for Anthropic Messages API"""
     role: str  # "user" or "assistant"
     content: Union[str, List[ContentBlock]]  # String or content blocks
+
+    @field_validator("role")
+    @classmethod
+    def validate_role(cls, role: str) -> str:
+        allowed_roles = {"user", "assistant"}
+        if role not in allowed_roles:
+            raise ValueError(
+                f"Invalid Anthropic message role '{role}'. "
+                f"Supported roles are: {', '.join(sorted(allowed_roles))}."
+            )
+        return role
+
+    @field_validator("content")
+    @classmethod
+    def validate_content(cls, content: Union[str, List[ContentBlock]]) -> Union[str, List[ContentBlock]]:
+        if isinstance(content, str):
+            if not content.strip():
+                raise ValueError("Message content must be a non-empty string.")
+        elif isinstance(content, list):
+            if len(content) == 0:
+                raise ValueError("Message content blocks cannot be empty.")
+        else:
+            raise ValueError("Message content must be a string or list of content blocks.")
+        return content
 
 
 class MessagesRequest(BaseModel):
@@ -117,3 +175,17 @@ class MessagesRequest(BaseModel):
 
     class Config:
         extra = "allow"
+
+    @field_validator("messages")
+    @classmethod
+    def validate_messages(cls, messages: List[AnthropicMessage]) -> List[AnthropicMessage]:
+        if not messages:
+            raise ValueError("messages must contain at least one message.")
+        return messages
+
+    @field_validator("max_tokens")
+    @classmethod
+    def validate_max_tokens(cls, max_tokens: int) -> int:
+        if max_tokens <= 0:
+            raise ValueError("max_tokens must be a positive integer.")
+        return max_tokens

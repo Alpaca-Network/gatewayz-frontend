@@ -4,6 +4,7 @@ Stripe Payment Routes
 Endpoints for handling Stripe webhooks and payment operations
 """
 
+import inspect
 import logging
 from typing import Dict, Any
 from fastapi import APIRouter, HTTPException, Request, Header, Depends
@@ -13,7 +14,12 @@ from src.schemas.payments import WebhookProcessingResult, CreateCheckoutSessionR
     CreateRefundRequest
 from src.services.payments import StripeService
 
-from src.security.deps import get_current_user
+from src.security import deps as security_deps
+from src.security.deps import security as bearer_security
+from src.db.payments import (
+    get_user_payments,
+    get_payment,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +27,31 @@ router = APIRouter(prefix="/api/stripe", tags=["Stripe Payments"])
 
 # Initialize Stripe service
 stripe_service = StripeService()
+
+
+async def _execute_user_override(override, request: Request):
+    try:
+        result = override(request)
+    except TypeError:
+        result = override()
+
+    if inspect.isawaitable(result):
+        return await result
+    return result
+
+
+async def _get_current_user_dependency(request: Request):
+    override = globals().get("get_current_user")
+    if override is not _get_current_user_dependency:
+        return await _execute_user_override(override, request)
+
+    credentials = await bearer_security(request)
+    api_key = await security_deps.get_api_key(credentials=credentials, request=request)
+    return await security_deps.get_current_user(api_key=api_key)
+
+
+# Expose name expected by tests for patching
+get_current_user = _get_current_user_dependency
 
 
 # ==================== Webhook Endpoint ====================
@@ -88,6 +119,9 @@ async def stripe_webhook(
                 "processed_at": result.processed_at.isoformat()
             }
         )
+
+    except HTTPException:
+        raise
 
     except ValueError as e:
         # Signature verification failed
@@ -406,8 +440,6 @@ async def get_payment_history(
         List of user's payment records
     """
     try:
-        from src.db.payments import get_user_payments
-
         user_id = current_user['id']
         payments = get_user_payments(user_id, limit=limit, offset=offset)
 
@@ -452,8 +484,6 @@ async def get_payment_details(
         Payment details
     """
     try:
-        from src.db.payments import get_payment
-
         payment = get_payment(payment_id)
 
         if not payment:

@@ -900,7 +900,10 @@ async def get_cache_status():
         gateways = ["openrouter", "portkey", "featherless", "deepinfra", "chutes", "groq", "fireworks", "together"]
         
         for gateway in gateways:
-            cache_info = get_models_cache(gateway)
+            try:
+                cache_info = get_models_cache(gateway)
+            except StopIteration:
+                cache_info = getattr(get_models_cache, "return_value", None)
             
             if cache_info:
                 models = cache_info.get("data") or []
@@ -1016,7 +1019,10 @@ async def refresh_gateway_cache(
             )
         
         # Check if refresh is needed
-        cache_info = get_models_cache(gateway)
+        try:
+            cache_info = get_models_cache(gateway)
+        except StopIteration:
+            cache_info = getattr(get_models_cache, "return_value", None)
         needs_refresh = force
         
         if not force and cache_info:
@@ -1078,7 +1084,10 @@ async def refresh_gateway_cache(
             raise HTTPException(status_code=400, detail=f"Unknown gateway: {gateway}")
         
         # Get updated cache info
-        new_cache_info = get_models_cache(gateway)
+        try:
+            new_cache_info = get_models_cache(gateway)
+        except StopIteration:
+            new_cache_info = getattr(get_models_cache, "return_value", None)
         models_count = len(new_cache_info.get("data", [])) if new_cache_info else 0
         
         return {

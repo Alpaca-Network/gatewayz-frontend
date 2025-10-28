@@ -1977,46 +1977,98 @@ def enhance_model_with_huggingface_data(openrouter_model: dict) -> dict:
         return openrouter_model
 
 
-def get_model_count_by_provider(provider_slug: str, models_data: list = None) -> int:
-    """Get count of models for a specific provider
+def _extract_model_provider_slug(model: dict) -> Optional[str]:
+    """Determine provider slug from a model payload."""
+    if not model:
+        return None
 
-    This function counts models by checking both:
-    1. The provider prefix in the model ID (e.g., "groq/llama" -> "groq")
-    2. The provider_slug field in the model data
-    3. The source_gateway field as a fallback (for gateway-specific providers)
+    provider_slug = model.get("provider_slug")
+    if provider_slug:
+        provider_slug = str(provider_slug).lower().lstrip("@")
+        if provider_slug:
+            return provider_slug
+
+    model_id = model.get("id", "")
+    if isinstance(model_id, str) and "/" in model_id:
+        provider_slug = model_id.split("/")[0].lower().lstrip("@")
+        if provider_slug:
+            return provider_slug
+
+    source_gateway = model.get("source_gateway")
+    if isinstance(source_gateway, str):
+        provider_slug = source_gateway.lower().lstrip("@")
+        if provider_slug:
+            return provider_slug
+
+    return None
+
+
+def _normalize_provider_slug(provider: Any) -> Optional[str]:
+    """Extract provider slug from a provider record."""
+    if provider is None:
+        return None
+
+    if isinstance(provider, str):
+        slug = provider
+    else:
+        slug = (
+            provider.get("slug")
+            or provider.get("id")
+            or provider.get("provider_slug")
+            or provider.get("name")
+        )
+
+    if not slug:
+        return None
+
+    return str(slug).lower().lstrip("@")
+
+
+def get_model_count_by_provider(
+    provider_or_models: Any, models_data: Optional[list] = None
+) -> Union[int, Dict[str, int]]:
+    """Return model counts.
+
+    Backwards-compatible shim that supports two call styles:
+    1. get_model_count_by_provider(\"openai\", models_list) -> int
+    2. get_model_count_by_provider(models_list, providers_list) -> dict
     """
     try:
-        if not models_data or not provider_slug:
-            return 0
+        # Legacy usage: provider slug string + models list -> integer count
+        if isinstance(provider_or_models, str) or provider_or_models is None:
+            provider_slug = (provider_or_models or "").lower().lstrip("@")
+            models = models_data or []
+            if not provider_slug or not models:
+                return 0
 
-        count = 0
-        provider_slug_lower = provider_slug.lower().lstrip('@')
-
-        for model in models_data:
-            # Strategy 1: Check the provider_slug field directly
-            model_provider_slug = model.get('provider_slug', '').lower().lstrip('@')
-            if model_provider_slug == provider_slug_lower:
-                count += 1
-                continue
-
-            # Strategy 2: Extract provider from model ID (format: provider/model-name)
-            model_id = model.get('id', '')
-            if '/' in model_id:
-                model_provider = model_id.split('/')[0].lower().lstrip('@')
-                if model_provider == provider_slug_lower:
+            count = 0
+            for model in models:
+                model_provider = _extract_model_provider_slug(model)
+                if model_provider == provider_slug:
                     count += 1
-                    continue
+            return count
 
-            # Strategy 3: Check source_gateway field (for gateway-specific providers)
-            source_gateway = model.get('source_gateway', '').lower()
-            if source_gateway == provider_slug_lower:
-                count += 1
-                continue
+        # New usage: models list + providers list -> dict mapping provider->count
+        models = provider_or_models or []
+        providers = models_data or []
 
-        return count
+        counts: Dict[str, int] = {}
+
+        for model in models:
+            slug = _extract_model_provider_slug(model)
+            if slug:
+                counts[slug] = counts.get(slug, 0) + 1
+
+        # Ensure all provided providers exist in result even if zero
+        for provider in providers:
+            slug = _normalize_provider_slug(provider)
+            if slug and slug not in counts:
+                counts[slug] = 0
+
+        return counts
     except Exception as e:
-        logger.error(f"Error counting models for provider {provider_slug}: {e}")
-        return 0
+        logger.error(f"Error counting models: {e}")
+        return {} if not isinstance(provider_or_models, str) else 0
 
 
 def enhance_model_with_provider_info(openrouter_model: dict, providers_data: list = None) -> dict:
@@ -2060,4 +2112,3 @@ def enhance_model_with_provider_info(openrouter_model: dict, providers_data: lis
     except Exception as e:
         logger.error(f"Error enhancing model with provider info: {e}")
         return openrouter_model
-
