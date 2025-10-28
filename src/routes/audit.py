@@ -4,6 +4,7 @@ import logging
 
 from src.db.api_keys import validate_api_key_permissions
 from src.db.users import get_user
+from src.db_security import get_audit_logs
 from fastapi import APIRouter
 from datetime import datetime
 
@@ -54,8 +55,6 @@ async def get_user_audit_logs(
                 raise HTTPException(status_code=400, detail="Invalid end_date format. Use ISO format.")
 
         # Get audit logs
-        from src.db_security import get_audit_logs
-
         logs = get_audit_logs(
             user_id=user["id"],
             key_id=key_id,

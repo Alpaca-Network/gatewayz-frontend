@@ -13,12 +13,11 @@ Tests cover:
 """
 
 import pytest
-from unittest.mock import Mock, patch, AsyncMock
+from unittest.mock import Mock, patch
 from fastapi.testclient import TestClient
 from datetime import datetime
 
 from src.main import app
-from src.security.deps import get_api_key
 
 
 # ============================================================
@@ -28,15 +27,7 @@ from src.security.deps import get_api_key
 @pytest.fixture
 def client():
     """FastAPI test client"""
-    # Override the get_api_key dependency
-    app.dependency_overrides[get_api_key] = lambda: 'test_api_key'
-
-    test_client = TestClient(app)
-
-    yield test_client
-
-    # Clean up dependency overrides
-    app.dependency_overrides.clear()
+    return TestClient(app)
 
 
 @pytest.fixture
@@ -100,7 +91,7 @@ def mock_audit_logs():
 class TestGetAuditLogs:
     """Test audit log retrieval endpoint"""
 
-    @patch('src.db_security.get_audit_logs')
+    @patch('src.routes.audit.get_audit_logs')
     @patch('src.routes.audit.validate_api_key_permissions')
     @patch('src.routes.audit.get_user')
     def test_get_audit_logs_success(
@@ -118,7 +109,8 @@ class TestGetAuditLogs:
         mock_get_logs.return_value = mock_audit_logs
 
         response = client.get(
-            '/user/api-keys/audit-logs'
+            '/user/api-keys/audit-logs',
+            headers={'Authorization': 'Bearer test_api_key'}
         )
 
         assert response.status_code == 200
@@ -141,7 +133,7 @@ class TestGetAuditLogs:
             limit=100
         )
 
-    @patch('src.db_security.get_audit_logs')
+    @patch('src.routes.audit.get_audit_logs')
     @patch('src.routes.audit.validate_api_key_permissions')
     @patch('src.routes.audit.get_user')
     def test_get_audit_logs_with_key_filter(
@@ -163,6 +155,7 @@ class TestGetAuditLogs:
 
         response = client.get(
             '/user/api-keys/audit-logs?key_id=456',
+            headers={'Authorization': 'Bearer test_api_key'}
         )
 
         assert response.status_code == 200
@@ -176,7 +169,7 @@ class TestGetAuditLogs:
         call_args = mock_get_logs.call_args[1]
         assert call_args['key_id'] == 456
 
-    @patch('src.db_security.get_audit_logs')
+    @patch('src.routes.audit.get_audit_logs')
     @patch('src.routes.audit.validate_api_key_permissions')
     @patch('src.routes.audit.get_user')
     def test_get_audit_logs_with_action_filter(
@@ -198,6 +191,7 @@ class TestGetAuditLogs:
 
         response = client.get(
             '/user/api-keys/audit-logs?action=key_created',
+            headers={'Authorization': 'Bearer test_api_key'}
         )
 
         assert response.status_code == 200
@@ -211,7 +205,7 @@ class TestGetAuditLogs:
         call_args = mock_get_logs.call_args[1]
         assert call_args['action'] == 'key_created'
 
-    @patch('src.db_security.get_audit_logs')
+    @patch('src.routes.audit.get_audit_logs')
     @patch('src.routes.audit.validate_api_key_permissions')
     @patch('src.routes.audit.get_user')
     def test_get_audit_logs_with_date_range(
@@ -230,6 +224,7 @@ class TestGetAuditLogs:
 
         response = client.get(
             '/user/api-keys/audit-logs?start_date=2024-01-15T00:00:00Z&end_date=2024-01-31T23:59:59Z',
+            headers={'Authorization': 'Bearer test_api_key'}
         )
 
         assert response.status_code == 200
@@ -242,7 +237,7 @@ class TestGetAuditLogs:
         assert isinstance(call_args['start_date'], datetime)
         assert isinstance(call_args['end_date'], datetime)
 
-    @patch('src.db_security.get_audit_logs')
+    @patch('src.routes.audit.get_audit_logs')
     @patch('src.routes.audit.validate_api_key_permissions')
     @patch('src.routes.audit.get_user')
     def test_get_audit_logs_with_limit(
@@ -261,6 +256,7 @@ class TestGetAuditLogs:
 
         response = client.get(
             '/user/api-keys/audit-logs?limit=2',
+            headers={'Authorization': 'Bearer test_api_key'}
         )
 
         assert response.status_code == 200
@@ -273,7 +269,7 @@ class TestGetAuditLogs:
         call_args = mock_get_logs.call_args[1]
         assert call_args['limit'] == 2
 
-    @patch('src.db_security.get_audit_logs')
+    @patch('src.routes.audit.get_audit_logs')
     @patch('src.routes.audit.validate_api_key_permissions')
     @patch('src.routes.audit.get_user')
     def test_get_audit_logs_combined_filters(
@@ -292,6 +288,7 @@ class TestGetAuditLogs:
 
         response = client.get(
             '/user/api-keys/audit-logs?key_id=456&action=key_created&start_date=2024-01-15T00:00:00Z&limit=10',
+            headers={'Authorization': 'Bearer test_api_key'}
         )
 
         assert response.status_code == 200
@@ -304,7 +301,7 @@ class TestGetAuditLogs:
         assert call_args['start_date'] is not None
         assert call_args['limit'] == 10
 
-    @patch('src.db_security.get_audit_logs')
+    @patch('src.routes.audit.get_audit_logs')
     @patch('src.routes.audit.validate_api_key_permissions')
     @patch('src.routes.audit.get_user')
     def test_get_audit_logs_empty(
@@ -322,6 +319,7 @@ class TestGetAuditLogs:
 
         response = client.get(
             '/user/api-keys/audit-logs',
+            headers={'Authorization': 'Bearer test_api_key'}
         )
 
         assert response.status_code == 200
@@ -349,7 +347,7 @@ class TestAuditAuthentication:
 
         response = client.get(
             '/user/api-keys/audit-logs',
-            headers={'X-API-Key': 'invalid_key'}
+            headers={'Authorization': 'Bearer invalid_key'}
         )
 
         assert response.status_code == 401
@@ -370,6 +368,7 @@ class TestAuditAuthentication:
 
         response = client.get(
             '/user/api-keys/audit-logs',
+            headers={'Authorization': 'Bearer test_api_key'}
         )
 
         assert response.status_code == 403
@@ -412,6 +411,7 @@ class TestAuditDateValidation:
 
         response = client.get(
             '/user/api-keys/audit-logs?start_date=invalid-date',
+            headers={'Authorization': 'Bearer test_api_key'}
         )
 
         assert response.status_code == 400
@@ -432,12 +432,13 @@ class TestAuditDateValidation:
 
         response = client.get(
             '/user/api-keys/audit-logs?end_date=not-a-date',
+            headers={'Authorization': 'Bearer test_api_key'}
         )
 
         assert response.status_code == 400
         assert 'Invalid end_date format' in response.json()['detail']
 
-    @patch('src.db_security.get_audit_logs')
+    @patch('src.routes.audit.get_audit_logs')
     @patch('src.routes.audit.validate_api_key_permissions')
     @patch('src.routes.audit.get_user')
     def test_get_audit_logs_valid_iso_dates(
@@ -455,16 +456,16 @@ class TestAuditDateValidation:
         mock_get_logs.return_value = mock_audit_logs
 
         # Test various valid ISO formats
-        # Note: The implementation supports Z (which gets converted to +00:00)
-        # but does not support explicit +00:00 format
         valid_dates = [
             '2024-01-15T10:00:00Z',
+            '2024-01-15T10:00:00+00:00',
             '2024-01-15T10:00:00.000Z'
         ]
 
         for date_str in valid_dates:
             response = client.get(
-                f'/user/api-keys/audit-logs?start_date={date_str}'
+                f'/user/api-keys/audit-logs?start_date={date_str}',
+                headers={'Authorization': 'Bearer test_api_key'}
             )
 
             # Should succeed with valid ISO dates
@@ -478,7 +479,7 @@ class TestAuditDateValidation:
 class TestAuditErrorHandling:
     """Test error handling"""
 
-    @patch('src.db_security.get_audit_logs')
+    @patch('src.routes.audit.get_audit_logs')
     @patch('src.routes.audit.validate_api_key_permissions')
     @patch('src.routes.audit.get_user')
     def test_get_audit_logs_database_error(
@@ -496,6 +497,7 @@ class TestAuditErrorHandling:
 
         response = client.get(
             '/user/api-keys/audit-logs',
+            headers={'Authorization': 'Bearer test_api_key'}
         )
 
         assert response.status_code == 500
@@ -512,6 +514,7 @@ class TestAuditErrorHandling:
 
         response = client.get(
             '/user/api-keys/audit-logs',
+            headers={'Authorization': 'Bearer test_api_key'}
         )
 
         assert response.status_code == 500
@@ -525,7 +528,7 @@ class TestAuditErrorHandling:
 class TestAuditIntegration:
     """Test audit log integration scenarios"""
 
-    @patch('src.db_security.get_audit_logs')
+    @patch('src.routes.audit.get_audit_logs')
     @patch('src.routes.audit.validate_api_key_permissions')
     @patch('src.routes.audit.get_user')
     def test_audit_log_filtering_workflow(
@@ -545,6 +548,7 @@ class TestAuditIntegration:
         mock_get_logs.return_value = mock_audit_logs
         response1 = client.get(
             '/user/api-keys/audit-logs',
+            headers={'Authorization': 'Bearer test_api_key'}
         )
         assert response1.json()['total_logs'] == 3
 
@@ -552,6 +556,7 @@ class TestAuditIntegration:
         mock_get_logs.return_value = [mock_audit_logs[0], mock_audit_logs[1]]
         response2 = client.get(
             '/user/api-keys/audit-logs?key_id=456',
+            headers={'Authorization': 'Bearer test_api_key'}
         )
         assert response2.json()['total_logs'] == 2
 
@@ -559,10 +564,11 @@ class TestAuditIntegration:
         mock_get_logs.return_value = [mock_audit_logs[0]]
         response3 = client.get(
             '/user/api-keys/audit-logs?key_id=456&action=key_created',
+            headers={'Authorization': 'Bearer test_api_key'}
         )
         assert response3.json()['total_logs'] == 1
 
-    @patch('src.db_security.get_audit_logs')
+    @patch('src.routes.audit.get_audit_logs')
     @patch('src.routes.audit.validate_api_key_permissions')
     @patch('src.routes.audit.get_user')
     def test_audit_log_pagination(
@@ -582,6 +588,7 @@ class TestAuditIntegration:
         mock_get_logs.return_value = mock_audit_logs[:2]
         response1 = client.get(
             '/user/api-keys/audit-logs?limit=2',
+            headers={'Authorization': 'Bearer test_api_key'}
         )
         assert response1.json()['total_logs'] == 2
 
@@ -589,10 +596,11 @@ class TestAuditIntegration:
         mock_get_logs.return_value = mock_audit_logs
         response2 = client.get(
             '/user/api-keys/audit-logs?limit=100',
+            headers={'Authorization': 'Bearer test_api_key'}
         )
         assert response2.json()['total_logs'] == 3
 
-    @patch('src.db_security.get_audit_logs')
+    @patch('src.routes.audit.get_audit_logs')
     @patch('src.routes.audit.validate_api_key_permissions')
     @patch('src.routes.audit.get_user')
     def test_audit_log_metadata_structure(
@@ -611,6 +619,7 @@ class TestAuditIntegration:
 
         response = client.get(
             '/user/api-keys/audit-logs',
+            headers={'Authorization': 'Bearer test_api_key'}
         )
 
         data = response.json()
