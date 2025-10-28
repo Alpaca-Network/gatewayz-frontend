@@ -237,6 +237,19 @@ body {
     background-clip: text;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
-    animation: shimmer 2s linear infinite;
+    display: inline-block;
+    animation: shimmer-text-pulse 1.8s ease-in-out infinite;
+    background-position: center;
+  }
+
+  @keyframes shimmer-text-pulse {
+    0%, 100% {
+      filter: brightness(0.95);
+      background-size: 200% auto;
+    }
+    50% {
+      filter: brightness(1.2);
+      background-size: 230% auto;
+    }
   }
 }

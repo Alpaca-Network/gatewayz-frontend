@@ -757,7 +757,7 @@ export default function ModelsClient({
               <div className="flex items-center gap-4">
                 <span className={`text-sm whitespace-nowrap ${isLoadingModels || isLoadingMore ? 'shimmer-text' : 'text-muted-foreground'}`}>
                   {isLoadingModels || isLoadingMore
-                    ? `Loading models...`
+                    ? `${deduplicatedModels.length} models available,  loading...`
                     : `${filteredModels.length} / ${deduplicatedModels.length} models`
                   }
                 </span>
