@@ -10,7 +10,7 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { addDays, format } from 'date-fns';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { ProvidersDisplay } from '@/components/models/provider-card';
-import { Maximize, Copy, Check, Loader2 } from 'lucide-react';
+import { Maximize, Copy, Check } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { providerData } from '@/lib/provider-data';
 import { generateChartData, generateStatsTable } from '@/lib/data';
@@ -22,17 +22,9 @@ import { API_BASE_URL } from '@/lib/config';
 import { models as staticModels } from '@/lib/models-data';
 import { getApiKey } from '@/lib/api';
 import { InlineChat } from '@/components/models/inline-chat';
-import { useDeferredModelData } from '@/hooks/use-deferred-model-data';
 
-// Lazy load heavy components (code splitting for on-demand loading)
+// Lazy load heavy components
 const TopAppsTable = lazy(() => import('@/components/dashboard/top-apps-table'));
-
-// Lazy load tab content components for better performance
-const PlaygroundTab = lazy(() => import('@/components/models/playground-tab'));
-const UseModelTab = lazy(() => import('@/components/models/use-model-tab'));
-const ProvidersTab = lazy(() => import('@/components/models/providers-tab'));
-const ActivityTab = lazy(() => import('@/components/models/activity-tab'));
-const AppsTab = lazy(() => import('@/components/models/apps-tab'));
 
 interface Model {
   id: string;
@@ -170,10 +162,15 @@ function transformStaticModel(staticModel: typeof staticModels[0]): Model {
 
 export default function ModelProfilePage() {
     const params = useParams();
+    const [model, setModel] = useState<Model | null>(null);
+    const [allModels, setAllModels] = useState<Model[]>([]);
+    const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<TabType>('Playground');
     const [copiedStates, setCopiedStates] = useState<{ [key: string]: boolean }>({});
     const [apiKey, setApiKey] = useState('gw_live_YOUR_API_KEY_HERE');
     const [selectedLanguage, setSelectedLanguage] = useState<'curl' | 'python' | 'openai-python' | 'typescript' | 'openai-typescript'>('curl');
+    const [modelProviders, setModelProviders] = useState<string[]>([]);
+    const [loadingProviders, setLoadingProviders] = useState(true);
 
     // Load API key from storage
     useEffect(() => {
@@ -196,98 +193,31 @@ export default function ModelProfilePage() {
         return id || '';
     }, [params.name]);
 
-    // Transform static models to API format
-    const staticModelsTransformed = useMemo(
-        () => staticModels.map(transformStaticModel),
-        []
-    );
+    useEffect(() => {
+        const CACHE_KEY = 'gatewayz_models_cache_v4_all_gateways';
+        const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
+        let mounted = true;
 
-    // Use deferred data loading hook (React Router defer pattern)
-    const {
-        model,
-        allModels,
-        modelProviders,
-        isLoading,
-        isCriticalDataLoaded,
-        isDeferredDataLoaded
-    } = useDeferredModelData(modelId, staticModelsTransformed);
+        // Load static data immediately for instant page render (only if found)
+        const staticModelsTransformed = staticModels.map(transformStaticModel);
+        let staticFoundModel = staticModelsTransformed.find((m: Model) => m.id === modelId);
 
-    const relatedModels = useMemo(() => {
-      if(!model) return [];
-      return allModels.filter(m => m.provider_slug === model.provider_slug && m.id !== model.id).slice(0,3);
-    }, [model, allModels]);
-
-    const copyToClipboard = async (text: string, id: string) => {
-        try {
-            await navigator.clipboard.writeText(text);
-            setCopiedStates({ ...copiedStates, [id]: true });
-            setTimeout(() => {
-                setCopiedStates({ ...copiedStates, [id]: false });
-            }, 2000);
-        } catch (error) {
-            console.error('Failed to copy:', error);
+        // If not found by full ID, try matching by name (for AIMO models)
+        if (!staticFoundModel) {
+            staticFoundModel = staticModelsTransformed.find((m: Model) => {
+                const modelNamePart = m.id.includes(':') ? m.id.split(':')[1] : m.id;
+                return modelNamePart === modelId || m.id.split('/').pop() === modelId;
+            });
         }
-    };
 
-    // Show loading state only if critical data hasn't loaded yet
-    if (isLoading && !isCriticalDataLoaded) {
-        return (
-            <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 text-center flex-1">
-                <div className="flex flex-col items-center gap-4">
-                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                    <p className="text-muted-foreground">Loading model...</p>
-                </div>
-            </div>
-        );
-    }
+        if (staticFoundModel && mounted) {
+            setModel(staticFoundModel);
+            setAllModels(staticModelsTransformed);
+            setLoading(false);
+        }
+        // If not found in static data, keep loading=true until API data arrives
 
-    // Show error state if model not found after full load
-    if (!isLoading && !model) {
-        return (
-            <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                <Card className="max-w-2xl mx-auto">
-                    <CardContent className="p-8 text-center">
-                        <h1 className="text-2xl font-bold mb-4">Model Not Found</h1>
-                        <p className="text-muted-foreground mb-6">
-                            The model <code className="px-2 py-1 bg-muted rounded text-sm">{modelId}</code> is not available through Gatewayz.
-                        </p>
-                        <div className="space-y-4 text-left">
-                            <div>
-                                <h2 className="font-semibold mb-2">Possible reasons:</h2>
-                                <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1">
-                                    <li>The model may not be supported by any of our gateway providers</li>
-                                    <li>The model ID may be incorrect or misspelled</li>
-                                    <li>The model may have been deprecated or removed by the provider</li>
-                                </ul>
-                            </div>
-                            <div>
-                                <h2 className="font-semibold mb-2">What you can do:</h2>
-                                <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1">
-                                    <li>Browse our <Link href="/models" className="text-primary hover:underline">available models</Link></li>
-                                    <li>Check the <Link href="/" className="text-primary hover:underline">homepage</Link> for featured models</li>
-                                    <li>Try searching for similar models with different naming formats</li>
-                                </ul>
-                            </div>
-                        </div>
-                        <div className="mt-6 flex gap-4 justify-center">
-                            <Link href="/models">
-                                <Button>Browse Models</Button>
-                            </Link>
-                            <Link href="/">
-                                <Button variant="outline">Go Home</Button>
-                            </Link>
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
-        );
-    }
-
-    // If model is loaded but we're still waiting for deferred data (providers), show loading indicator in those sections
-    const loadingProviders = !isDeferredDataLoaded;
-
-    // Old corrupted code starts here - DELETE EVERYTHING BELOW THIS COMMENT UNTIL relatedModels
-    if (false) {
+        const fetchModels = async () => {
             try {
                 console.log(`[ModelProfilePage] Starting to fetch gateway data for model: ${modelId}`);
                 // Check cache first
