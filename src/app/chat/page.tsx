@@ -722,13 +722,36 @@ const ThinkingLoader = ({ modelName }: { modelName: string | undefined }) => {
     );
 };
 
+const getReasoningSource = (model?: string) => {
+    if (!model) return 'gatewayz';
+    const normalized = model.toLowerCase();
+    const aiSdkSignatures = ['claude', 'gpt', 'gemini', 'perplexity', 'opus', 'sonnet', 'haiku', 'sonar'];
+    return aiSdkSignatures.some(signature => normalized.includes(signature)) ? 'ai-sdk' : 'gatewayz';
+};
+
 const ChatMessage = ({ message, modelName }: { message: Message, modelName: string | undefined}) => {
     const isUser = message.role === 'user';
     const processedContent = fixLatexSyntax(message.content);
+    const reasoningSource = getReasoningSource(message.model);
+    const hasAssistantContent = Boolean(!isUser && message.content && message.content.trim().length > 0);
+    const isAssistantThinking = !isUser && message.isStreaming && !hasAssistantContent;
 
-    // Show exciting loader when AI is thinking (streaming but no content yet)
-    if (!isUser && message.isStreaming && !message.content) {
-        return <ThinkingLoader modelName={modelName} />;
+    if (isAssistantThinking) {
+        return (
+            <div className="flex items-start gap-3">
+                <div className="flex flex-col gap-2 items-start max-w-[85%]">
+                    {message.reasoning && (
+                        <ReasoningDisplay
+                            reasoning={message.reasoning}
+                            isStreaming
+                            source={reasoningSource}
+                            className="w-full"
+                        />
+                    )}
+                    <ThinkingLoader modelName={modelName} />
+                </div>
+            </div>
+        );
     }
 
     return (
@@ -736,7 +759,12 @@ const ChatMessage = ({ message, modelName }: { message: Message, modelName: stri
              {/* {!isUser && <Avatar className="w-8 h-8"><AvatarFallback><Bot/></AvatarFallback></Avatar>} */}
             <div className={`flex flex-col gap-1 ${isUser ? 'items-end' : 'items-start'} max-w-[85%]`}>
                 {!isUser && message.reasoning && (
-                    <ReasoningDisplay reasoning={message.reasoning} className="w-full" />
+                    <ReasoningDisplay
+                        reasoning={message.reasoning}
+                        isStreaming={message.isStreaming}
+                        source={reasoningSource}
+                        className="w-full"
+                    />
                 )}
                 <div className={`rounded-lg p-3 ${isUser ? 'bg-blue-600 text-white' : 'bg-muted/30 dark:bg-muted/20 border border-border'} ${message.isStreaming ? 'streaming-message' : ''}`}>
                      {!isUser && <p className="text-xs font-semibold mb-1">{modelName}</p>}
@@ -2512,21 +2540,23 @@ function ChatPageContent() {
           {messages.length > 0 && (
             <div ref={chatContainerRef} className="flex-1 flex flex-col gap-4 lg:gap-6 overflow-y-auto p-4 lg:p-6 max-w-4xl mx-auto w-full">
               {messages.filter(msg => msg && msg.role).map((msg, index) => {
-                // Show thinking loader for streaming messages with no content
-                if (msg.role === 'assistant' && msg.isStreaming && !msg.content) {
-                  return <ThinkingLoader key={index} modelName={getModelDisplayName(msg.model)} />;
-                }
+                const isAssistant = msg.role === 'assistant';
+                const hasAssistantContent = Boolean(isAssistant && msg.content && msg.content.trim().length > 0);
+                const showThinkingLoader = isAssistant && msg.isStreaming && !hasAssistantContent;
+                const reasoningSource = getReasoningSource(msg.model);
 
                 return (
                   <div key={index} className={`flex items-start gap-3 ${msg.role === 'user' ? 'justify-end' : ''}`}>
                     <div className={`flex flex-col gap-2 ${msg.role === 'user' ? 'items-end' : 'items-start'} w-full`}>
-                      {msg.role === 'assistant' && msg.reasoning && msg.reasoning.trim().length > 0 && (
+                      {isAssistant && msg.reasoning && msg.reasoning.trim().length > 0 && (
                         <ReasoningDisplay
                           reasoning={msg.reasoning}
                           isStreaming={msg.isStreaming}
+                          source={reasoningSource}
                           className="w-full max-w-2xl"
                         />
                       )}
+
                       {msg.role === 'user' ? (
                         <div className="rounded-lg p-3 bg-blue-600 dark:bg-blue-600 text-white max-w-2xl">
                           {msg.image && (
@@ -2538,6 +2568,8 @@ function ChatPageContent() {
                           )}
                           <div className="text-sm whitespace-pre-wrap text-white">{msg.content}</div>
                         </div>
+                      ) : showThinkingLoader ? (
+                        <ThinkingLoader modelName={getModelDisplayName(msg.model)} />
                       ) : (
                         <div className="rounded-lg p-3 bg-muted/30 dark:bg-muted/20 border border-border max-w-2xl w-full">
                           <div className="flex items-center justify-between mb-2">

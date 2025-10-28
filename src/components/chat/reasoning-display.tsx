@@ -41,7 +41,7 @@ export function ReasoningDisplay({
   const trimmedReasoning = reasoning?.trim() ?? "";
   const hasPlainReasoning = trimmedReasoning.length > 0;
   const hasStructuredSteps = Boolean(steps && steps.length > 0);
-  const [isExpanded, setIsExpanded] = useState(() => isStreaming);
+  const [isExpanded, setIsExpanded] = useState(true);
 
   useEffect(() => {
     if (isStreaming) {
@@ -132,12 +132,7 @@ export function ReasoningDisplay({
         className
       )}
     >
-      <ChainOfThought
-        open={isExpanded}
-        defaultOpen={isStreaming}
-        onOpenChange={setIsExpanded}
-        className="space-y-0"
-      >
+      <ChainOfThought open={isExpanded} onOpenChange={setIsExpanded} className="space-y-0">
         <ChainOfThoughtHeader
           className="bg-amber-100/60 text-amber-900 dark:bg-amber-900/30 dark:text-amber-50"
           badge={headerBadge}
