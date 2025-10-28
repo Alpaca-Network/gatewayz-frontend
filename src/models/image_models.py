@@ -3,7 +3,7 @@ Image generation models
 """
 
 from pydantic import BaseModel, ConfigDict
-from typing import List, Optional, Literal
+from typing import List, Optional, Literal, Dict, Any
 
 class ImageGenerationRequest(BaseModel):
     """Request model for image generation"""
@@ -36,3 +36,4 @@ class ImageGenerationResponse(BaseModel):
     data: List[ImageData]
     provider: Optional[str] = None
     model: Optional[str] = None
+    gateway_usage: Optional[Dict[str, Any]] = None
