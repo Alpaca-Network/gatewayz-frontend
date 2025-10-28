@@ -109,10 +109,11 @@ class TestGatewayHealthChecker:
             'min_expected_models': 10
         }
 
-        success, message, count = check_module.test_gateway_cache('test_gateway', config)
+        success, message, count, models = check_module.test_gateway_cache('test_gateway', config)
 
         assert success is False, "Empty cache should fail"
         assert count == 0, "Empty cache should return 0 models"
+        assert models == [], "Empty cache should return empty models list"
 
     @pytest.mark.unit
     def test_cache_test_with_valid_cache(self):
@@ -125,10 +126,11 @@ class TestGatewayHealthChecker:
             'min_expected_models': 2
         }
 
-        success, message, count = check_module.test_gateway_cache('test_gateway', config)
+        success, message, count, models = check_module.test_gateway_cache('test_gateway', config)
 
         assert success is True, "Valid cache should pass"
         assert count == 3, "Should return correct model count"
+        assert len(models) == 3, "Should return correct models list"
 
     @pytest.mark.unit
     def test_clear_gateway_cache(self):
@@ -282,7 +284,7 @@ class TestGatewayCache:
             'min_expected_models': 1
         }
 
-        success, message, count = check_module.test_gateway_cache('test', config)
+        success, message, count, models = check_module.test_gateway_cache('test', config)
 
         assert 'h old' in message or 'day' in message, \
             "Should report age in message"
@@ -298,10 +300,11 @@ class TestGatewayCache:
             'min_expected_models': 5  # But expecting 5
         }
 
-        success, message, count = check_module.test_gateway_cache('test', config)
+        success, message, count, models = check_module.test_gateway_cache('test', config)
 
         assert success is False, "Should fail when models below minimum"
         assert count == 1, "Should report actual count"
+        assert len(models) == 1, "Should return the actual models"
 
 
 class TestGatewayIntegration:

@@ -127,18 +127,47 @@ def _render_gateway_dashboard(results: Dict[str, Any], log_output: str, auto_fix
         if auto_fix_attempted:
             auto_fix_text = "Succeeded" if auto_fix_successful else "Failed"
 
+        # Get models from cache test
+        models = cache_test.get("models", [])
+        models_html = ""
+        if models and len(models) > 0:
+            model_items = []
+            for model in models:
+                # Handle different model data structures
+                if isinstance(model, dict):
+                    model_id = model.get("id") or model.get("model") or str(model)
+                else:
+                    model_id = str(model)
+                model_items.append(f"<li>{escape(model_id)}</li>")
+            models_html = f"""
+            <tr class="model-row" id="models-{escape(gateway_id)}" style="display: none;">
+                <td colspan="6" class="models-cell">
+                    <div class="models-container">
+                        <strong>Successfully loaded models ({len(models)}):</strong>
+                        <ul class="models-list">
+                            {''.join(model_items)}
+                        </ul>
+                    </div>
+                </td>
+            </tr>
+            """
+
         rows.append(
             """
-            <tr>
-                <td>{name}</td>
+            <tr class="gateway-row {clickable_class}" {onclick}>
+                <td>{name} {expand_icon}</td>
                 <td>{configured}</td>
                 <td>{endpoint_badge}<div class="details">{endpoint_details}</div></td>
                 <td>{cache_badge}<div class="details">{cache_details}</div></td>
                 <td>{final_badge}</td>
                 <td>{auto_fix}</td>
             </tr>
+            {models_row}
             """.format(
+                clickable_class="clickable" if models_html else "",
+                onclick=f'onclick="toggleModels(\'{escape(gateway_id)}\')"' if models_html else "",
                 name=escape(name),
+                expand_icon='<span class="expand-icon">▶</span>' if models_html else "",
                 configured=escape(configured),
                 endpoint_badge=status_badge(endpoint_status),
                 endpoint_details=escape(endpoint_details),
@@ -146,6 +175,7 @@ def _render_gateway_dashboard(results: Dict[str, Any], log_output: str, auto_fix
                 cache_details=escape(cache_details),
                 final_badge=status_badge(final_status),
                 auto_fix=escape(auto_fix_text),
+                models_row=models_html
             )
         )
 
@@ -315,6 +345,72 @@ def _render_gateway_dashboard(results: Dict[str, Any], log_output: str, auto_fix
             .meta strong {{
                 color: #e2e8f0;
             }}
+            .gateway-row.clickable {{
+                cursor: pointer;
+                transition: background-color 0.2s ease;
+            }}
+            .gateway-row.clickable:hover {{
+                background: rgba(148, 163, 184, 0.08);
+            }}
+            .expand-icon {{
+                display: inline-block;
+                margin-left: 8px;
+                transition: transform 0.2s ease;
+                font-size: 0.8rem;
+                color: #94a3b8;
+            }}
+            .gateway-row.expanded .expand-icon {{
+                transform: rotate(90deg);
+            }}
+            .models-cell {{
+                background: rgba(30, 41, 59, 0.5);
+                padding: 20px !important;
+            }}
+            .models-container {{
+                background: rgba(15, 23, 42, 0.6);
+                border-radius: 8px;
+                padding: 16px;
+                border-left: 3px solid #4ade80;
+            }}
+            .models-container strong {{
+                color: #4ade80;
+                display: block;
+                margin-bottom: 12px;
+                font-size: 0.95rem;
+            }}
+            .models-list {{
+                list-style: none;
+                padding: 0;
+                margin: 0;
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+                gap: 8px;
+                max-height: 400px;
+                overflow-y: auto;
+            }}
+            .models-list li {{
+                background: rgba(148, 163, 184, 0.08);
+                padding: 8px 12px;
+                border-radius: 6px;
+                font-size: 0.85rem;
+                font-family: 'JetBrains Mono', 'Fira Code', monospace;
+                color: #cbd5e1;
+                border: 1px solid rgba(148, 163, 184, 0.15);
+            }}
+            .models-list::-webkit-scrollbar {{
+                width: 8px;
+            }}
+            .models-list::-webkit-scrollbar-track {{
+                background: rgba(15, 23, 42, 0.4);
+                border-radius: 4px;
+            }}
+            .models-list::-webkit-scrollbar-thumb {{
+                background: rgba(148, 163, 184, 0.3);
+                border-radius: 4px;
+            }}
+            .models-list::-webkit-scrollbar-thumb:hover {{
+                background: rgba(148, 163, 184, 0.5);
+            }}
         </style>
     </head>
     <body>
@@ -349,6 +445,30 @@ def _render_gateway_dashboard(results: Dict[str, Any], log_output: str, auto_fix
             <summary>View raw JSON payload</summary>
             <pre>{raw_json}</pre>
         </details>
+        <script>
+            function toggleModels(gatewayId) {{
+                const modelsRow = document.getElementById('models-' + gatewayId);
+                const gatewayRows = document.querySelectorAll('.gateway-row');
+
+                // Find the gateway row that was clicked
+                let clickedRow = null;
+                gatewayRows.forEach(row => {{
+                    if (row.onclick && row.onclick.toString().includes(gatewayId)) {{
+                        clickedRow = row;
+                    }}
+                }});
+
+                if (modelsRow) {{
+                    if (modelsRow.style.display === 'none' || modelsRow.style.display === '') {{
+                        modelsRow.style.display = 'table-row';
+                        if (clickedRow) clickedRow.classList.add('expanded');
+                    }} else {{
+                        modelsRow.style.display = 'none';
+                        if (clickedRow) clickedRow.classList.remove('expanded');
+                    }}
+                }}
+            }}
+        </script>
     </body>
     </html>
     """

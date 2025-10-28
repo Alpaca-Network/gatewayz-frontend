@@ -253,30 +253,30 @@ def test_gateway_endpoint(gateway_name: str, config: dict) -> Tuple[bool, str, i
         return False, f"Error: {str(e)[:100]}", 0
 
 
-def test_gateway_cache(gateway_name: str, config: dict) -> Tuple[bool, str, int]:
+def test_gateway_cache(gateway_name: str, config: dict) -> Tuple[bool, str, int, List]:
     """
     Test gateway using cached models from the application
-    
+
     Returns:
-        (success: bool, message: str, model_count: int)
+        (success: bool, message: str, model_count: int, models: List)
     """
     try:
         cache = config.get('cache')
         if not cache:
-            return False, "No cache configured", 0
-        
+            return False, "No cache configured", 0, []
+
         # Check cache data
         cached_models = cache.get('data')
         cache_timestamp = cache.get('timestamp')
-        
+
         if not cached_models:
-            return False, "Cache is empty", 0
-        
+            return False, "Cache is empty", 0, []
+
         model_count = len(cached_models) if isinstance(cached_models, list) else 0
-        
+
         if model_count == 0:
-            return False, "Cache has 0 models", 0
-        
+            return False, "Cache has 0 models", 0, []
+
         # Check cache age
         if cache_timestamp:
             cache_age = (datetime.now(timezone.utc) - cache_timestamp).total_seconds()
@@ -284,16 +284,16 @@ def test_gateway_cache(gateway_name: str, config: dict) -> Tuple[bool, str, int]
             age_str = f"{age_hours:.1f}h old" if age_hours >= 1 else f"{cache_age:.0f}s old"
         else:
             age_str = "unknown age"
-        
+
         # Check if model count meets minimum threshold
         min_expected = config.get('min_expected_models', 1)
         if model_count < min_expected:
-            return False, f"Only {model_count} models (expected ≥{min_expected}), {age_str}", model_count
-        
-        return True, f"{model_count} models cached, {age_str}", model_count
-        
+            return False, f"Only {model_count} models (expected ≥{min_expected}), {age_str}", model_count, cached_models
+
+        return True, f"{model_count} models cached, {age_str}", model_count, cached_models
+
     except Exception as e:
-        return False, f"Cache check error: {str(e)[:100]}", 0
+        return False, f"Cache check error: {str(e)[:100]}", 0, []
 
 
 def clear_gateway_cache(gateway_name: str, config: dict) -> bool:
@@ -333,8 +333,8 @@ def attempt_auto_fix(gateway_name: str, config: dict) -> Tuple[bool, str]:
             return False, "Refetch returned 0 models"
         
         # Step 3: Verify the fix
-        success, message, count = test_gateway_cache(gateway_name, config)
-        
+        success, message, count, _ = test_gateway_cache(gateway_name, config)
+
         if success:
             return True, f"Fixed! Now has {count} models"
         else:
@@ -410,11 +410,12 @@ def run_comprehensive_check(auto_fix: bool = True, verbose: bool = False) -> Dic
         
         # Test 2: Cache test
         print(f"\n2. Testing cached models:")
-        cache_success, cache_msg, cache_count = test_gateway_cache(gateway_name, config)
+        cache_success, cache_msg, cache_count, cached_models = test_gateway_cache(gateway_name, config)
         gateway_result['cache_test'] = {
             'success': cache_success,
             'message': cache_msg,
-            'model_count': cache_count
+            'model_count': cache_count,
+            'models': cached_models
         }
         
         if cache_success:
