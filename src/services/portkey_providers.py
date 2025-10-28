@@ -184,8 +184,9 @@ def fetch_models_from_cerebras():
                         # Already a dict
                         models_list.append(model)
                     else:
-                        # Try to convert to dict
-                        models_list.append({'id': str(model)})
+                        # Skip unsupported model objects instead of stringifying
+                        logger.warning(f"Skipping unsupported Cerebras model object of type {type(model)}")
+                        continue
                 except Exception as conversion_error:
                     logger.warning(f"Failed to convert Cerebras model object: {conversion_error}")
                     continue
