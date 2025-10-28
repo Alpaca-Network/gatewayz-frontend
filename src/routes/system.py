@@ -4,11 +4,18 @@ Phase 2 implementation
 """
 
 import os
+import io
+import json
 import logging
-from typing import Dict, List, Optional, Any
-from datetime import datetime, timezone, timedelta
+from typing import Dict, List, Optional, Any, Tuple
+from datetime import datetime, date, timezone, timedelta
+from contextlib import redirect_stdout
+from html import escape
+
+from fastapi.concurrency import run_in_threadpool
 
 from fastapi import APIRouter, Query, HTTPException
+from fastapi.responses import HTMLResponse
 import httpx
 
 from src.cache import get_models_cache, get_providers_cache, clear_models_cache, clear_providers_cache, get_modelz_cache, clear_modelz_cache
@@ -25,11 +32,344 @@ from src.services.huggingface_models import fetch_models_from_hug
 from src.config import Config
 from src.services.modelz_client import refresh_modelz_cache, get_modelz_cache_status as get_modelz_cache_status_func
 
+try:
+    from check_and_fix_gateway_models import run_comprehensive_check  # type: ignore
+except Exception:  # pragma: no cover - optional dependency for dashboard
+    run_comprehensive_check = None  # type: ignore
+
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _normalize_timestamp(value: Any) -> Optional[datetime]:
+    """Convert a cached timestamp into an aware ``datetime`` in UTC."""
+
+    if not value:
+        return None
+
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+    if isinstance(value, date):
+        return datetime.combine(value, datetime.min.time(), tzinfo=timezone.utc)
+
+    if isinstance(value, (int, float)):
+        try:
+            return datetime.fromtimestamp(value, tz=timezone.utc)
+        except (OSError, OverflowError, ValueError):
+            return None
+
+    if isinstance(value, str):
+        try:
+            cleaned = value.replace("Z", "+00:00") if value.endswith("Z") else value
+            parsed = datetime.fromisoformat(cleaned)
+            return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+        except ValueError:
+            return None
+
+    return None
+
+
+def _render_gateway_dashboard(results: Dict[str, Any], log_output: str, auto_fix: bool) -> str:
+    """Generate a minimal HTML dashboard for gateway health results."""
+
+    timestamp = escape(results.get("timestamp", ""))
+    summary = {
+        "total": results.get("total_gateways", 0),
+        "healthy": results.get("healthy", 0),
+        "unhealthy": results.get("unhealthy", 0),
+        "unconfigured": results.get("unconfigured", 0),
+        "fixed": results.get("fixed", 0),
+    }
+
+    def status_badge(status: str) -> str:
+        status_lower = (status or "unknown").lower()
+        if status_lower in {"healthy", "pass", "configured"}:
+            cls = "badge badge-healthy"
+        elif status_lower in {"unconfigured", "skipped"}:
+            cls = "badge badge-unconfigured"
+        elif status_lower in {"unhealthy", "fail", "error"}:
+            cls = "badge badge-unhealthy"
+        else:
+            cls = "badge badge-unknown"
+        return f'<span class="{cls}">{escape(status.title())}</span>'
+
+    rows = []
+    gateways: Dict[str, Any] = results.get("gateways", {}) or {}
+    for gateway_id in sorted(gateways.keys()):
+        data = gateways[gateway_id] or {}
+        name = data.get("name") or gateway_id.title()
+        final_status = data.get("final_status", "unknown")
+        configured = "Yes" if data.get("configured") else "No"
+
+        endpoint_test = data.get("endpoint_test") or {}
+        endpoint_status = "Pass" if endpoint_test.get("success") else "Fail"
+        endpoint_msg = endpoint_test.get("message") or "Not run"
+        endpoint_count = endpoint_test.get("model_count")
+        endpoint_details = endpoint_msg
+        if endpoint_count is not None:
+            endpoint_details += f" (models: {endpoint_count})"
+
+        cache_test = data.get("cache_test") or {}
+        cache_status = "Pass" if cache_test.get("success") else "Fail"
+        cache_msg = cache_test.get("message") or "Not run"
+        cache_count = cache_test.get("model_count")
+        cache_details = cache_msg
+        if cache_count is not None:
+            cache_details += f" (models: {cache_count})"
+
+        auto_fix_attempted = data.get("auto_fix_attempted")
+        auto_fix_successful = data.get("auto_fix_successful")
+        auto_fix_text = "—"
+        if auto_fix_attempted:
+            auto_fix_text = "Succeeded" if auto_fix_successful else "Failed"
+
+        rows.append(
+            """
+            <tr>
+                <td>{name}</td>
+                <td>{configured}</td>
+                <td>{endpoint_badge}<div class="details">{endpoint_details}</div></td>
+                <td>{cache_badge}<div class="details">{cache_details}</div></td>
+                <td>{final_badge}</td>
+                <td>{auto_fix}</td>
+            </tr>
+            """.format(
+                name=escape(name),
+                configured=escape(configured),
+                endpoint_badge=status_badge(endpoint_status),
+                endpoint_details=escape(endpoint_details),
+                cache_badge=status_badge(cache_status),
+                cache_details=escape(cache_details),
+                final_badge=status_badge(final_status),
+                auto_fix=escape(auto_fix_text),
+            )
+        )
+
+    rows_html = "\n".join(rows) or "<tr><td colspan=6>No gateways inspected.</td></tr>"
+
+    summary_cards = """
+        <div class="card">
+            <div class="metric">{total}</div>
+            <div class="label">Total Gateways</div>
+        </div>
+        <div class="card">
+            <div class="metric success">{healthy}</div>
+            <div class="label">Healthy</div>
+        </div>
+        <div class="card">
+            <div class="metric warning">{unconfigured}</div>
+            <div class="label">Unconfigured</div>
+        </div>
+        <div class="card">
+            <div class="metric danger">{unhealthy}</div>
+            <div class="label">Unhealthy</div>
+        </div>
+    """.format(
+        total=summary["total"],
+        healthy=summary["healthy"],
+        unconfigured=summary["unconfigured"],
+        unhealthy=summary["unhealthy"],
+    )
+
+    if auto_fix:
+        summary_cards += """
+            <div class=\"card\">
+                <div class=\"metric\">{fixed}</div>
+                <div class=\"label\">Auto-fixed</div>
+            </div>
+        """.format(fixed=summary["fixed"])
+
+    raw_json = escape(json.dumps(results, indent=2))
+    log_block = escape(log_output.strip()) if log_output else "No log output captured."
+
+    return f"""
+    <!DOCTYPE html>
+    <html lang=\"en\">
+    <head>
+        <meta charset=\"utf-8\" />
+        <title>Gateway Health Dashboard</title>
+        <style>
+            body {{
+                font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                background: #0f172a;
+                color: #e2e8f0;
+                margin: 0;
+                padding: 32px;
+            }}
+            h1 {{
+                margin-top: 0;
+                font-size: 2rem;
+            }}
+            .summary {{
+                display: flex;
+                flex-wrap: wrap;
+                gap: 16px;
+                margin: 24px 0;
+            }}
+            .card {{
+                background: rgba(148, 163, 184, 0.1);
+                border-radius: 12px;
+                padding: 16px 20px;
+                min-width: 160px;
+                box-shadow: 0 12px 24px rgba(15, 23, 42, 0.45);
+            }}
+            .metric {{
+                font-size: 1.75rem;
+                font-weight: 700;
+            }}
+            .metric.success {{ color: #4ade80; }}
+            .metric.danger {{ color: #f87171; }}
+            .metric.warning {{ color: #facc15; }}
+            .label {{
+                margin-top: 4px;
+                font-size: 0.9rem;
+                color: #cbd5f5;
+                opacity: 0.85;
+            }}
+            table {{
+                width: 100%;
+                border-collapse: collapse;
+                background: rgba(15, 23, 42, 0.8);
+                border-radius: 12px;
+                overflow: hidden;
+                box-shadow: 0 16px 32px rgba(15, 23, 42, 0.65);
+            }}
+            thead {{
+                background: rgba(30, 41, 59, 0.9);
+            }}
+            th, td {{
+                padding: 14px 16px;
+                text-align: left;
+                border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+                vertical-align: top;
+            }}
+            tr:last-child td {{
+                border-bottom: none;
+            }}
+            .badge {{
+                display: inline-block;
+                padding: 4px 10px;
+                border-radius: 999px;
+                font-size: 0.75rem;
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: 0.04em;
+            }}
+            .badge-healthy {{
+                background: rgba(74, 222, 128, 0.16);
+                color: #4ade80;
+                border: 1px solid rgba(74, 222, 128, 0.4);
+            }}
+            .badge-unhealthy {{
+                background: rgba(248, 113, 113, 0.16);
+                color: #f87171;
+                border: 1px solid rgba(248, 113, 113, 0.4);
+            }}
+            .badge-unconfigured {{
+                background: rgba(250, 204, 21, 0.16);
+                color: #facc15;
+                border: 1px solid rgba(250, 204, 21, 0.4);
+            }}
+            .badge-unknown {{
+                background: rgba(148, 163, 184, 0.16);
+                color: #e2e8f0;
+                border: 1px solid rgba(148, 163, 184, 0.35);
+            }}
+            .details {{
+                margin-top: 6px;
+                font-size: 0.85rem;
+                color: rgba(226, 232, 240, 0.8);
+            }}
+            details {{
+                margin-top: 24px;
+                background: rgba(30, 41, 59, 0.65);
+                border-radius: 12px;
+                padding: 16px 20px;
+                box-shadow: 0 10px 22px rgba(15, 23, 42, 0.5);
+            }}
+            summary {{
+                cursor: pointer;
+                font-weight: 600;
+            }}
+            pre {{
+                white-space: pre-wrap;
+                word-break: break-word;
+                font-family: 'JetBrains Mono', 'Fira Code', monospace;
+                background: rgba(15, 23, 42, 0.75);
+                padding: 16px;
+                border-radius: 8px;
+                color: #cbd5f5;
+                margin-top: 16px;
+            }}
+            .meta {{
+                display: flex;
+                gap: 12px;
+                align-items: center;
+                color: rgba(226, 232, 240, 0.75);
+                font-size: 0.95rem;
+            }}
+            .meta strong {{
+                color: #e2e8f0;
+            }}
+        </style>
+    </head>
+    <body>
+        <h1>Gateway Health Dashboard</h1>
+        <div class="meta">
+            <div><strong>Run completed:</strong> {timestamp or 'unknown'}</div>
+            <div><strong>Auto-fix:</strong> {'Enabled' if auto_fix else 'Disabled'}</div>
+        </div>
+        <div class="summary">
+            {summary_cards}
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Gateway</th>
+                    <th>Configured</th>
+                    <th>Endpoint Check</th>
+                    <th>Cache Check</th>
+                    <th>Final Status</th>
+                    <th>Auto-fix</th>
+                </tr>
+            </thead>
+            <tbody>
+                {rows_html}
+            </tbody>
+        </table>
+        <details>
+            <summary>View raw log output</summary>
+            <pre>{log_block}</pre>
+        </details>
+        <details>
+            <summary>View raw JSON payload</summary>
+            <pre>{raw_json}</pre>
+        </details>
+    </body>
+    </html>
+    """
+
+
+async def _run_gateway_check(auto_fix: bool) -> Tuple[Dict[str, Any], str]:
+    """Execute the comprehensive check in a thread and capture stdout."""
+
+    if run_comprehensive_check is None:
+        raise HTTPException(
+            status_code=503,
+            detail="check_and_fix_gateway_models module is unavailable in this deployment."
+        )
+
+    def _runner() -> Tuple[Dict[str, Any], str]:
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            results = run_comprehensive_check(auto_fix=auto_fix, verbose=False)  # type: ignore[arg-type]
+        return results, buffer.getvalue()
+
+    return await run_in_threadpool(_runner)
 
 
 # ============================================================================
@@ -76,22 +416,15 @@ async def get_cache_status():
                 cache_age_seconds = None
                 is_stale = False
                 if timestamp:
-                    # Handle both float timestamp and datetime object
-                    if isinstance(timestamp, datetime):
-                        age = (datetime.now(timezone.utc) - timestamp).total_seconds()
-                    else:
-                        # Assume it's a float (unix timestamp)
-                        age = datetime.now(timezone.utc).timestamp() - timestamp
-                    cache_age_seconds = int(age)
-                    is_stale = age > ttl
+                    normalized_timestamp = _normalize_timestamp(timestamp)
+                    if normalized_timestamp:
+                        age = (datetime.now(timezone.utc) - normalized_timestamp).total_seconds()
+                        cache_age_seconds = int(age)
+                        is_stale = age > ttl
                 
                 # Convert timestamp to ISO format string
-                last_refresh = None
-                if timestamp:
-                    if isinstance(timestamp, datetime):
-                        last_refresh = timestamp.isoformat()
-                    else:
-                        last_refresh = datetime.fromtimestamp(timestamp, tz=timezone.utc).isoformat()
+                normalized_timestamp = _normalize_timestamp(timestamp)
+                last_refresh = normalized_timestamp.isoformat() if normalized_timestamp else None
                 
                 cache_status[gateway] = {
                     "models_cached": len(models) if models else 0,
@@ -121,21 +454,15 @@ async def get_cache_status():
             cache_age_seconds = None
             is_stale = False
             if timestamp:
-                # Handle both float timestamp and datetime object
-                if isinstance(timestamp, datetime):
-                    age = (datetime.now(timezone.utc) - timestamp).total_seconds()
-                else:
-                    age = datetime.now(timezone.utc).timestamp() - timestamp
-                cache_age_seconds = int(age)
-                is_stale = age > ttl
+                normalized_timestamp = _normalize_timestamp(timestamp)
+                if normalized_timestamp:
+                    age = (datetime.now(timezone.utc) - normalized_timestamp).total_seconds()
+                    cache_age_seconds = int(age)
+                    is_stale = age > ttl
             
             # Convert timestamp to ISO format string
-            last_refresh = None
-            if timestamp:
-                if isinstance(timestamp, datetime):
-                    last_refresh = timestamp.isoformat()
-                else:
-                    last_refresh = datetime.fromtimestamp(timestamp, tz=timezone.utc).isoformat()
+            normalized_timestamp = _normalize_timestamp(timestamp)
+            last_refresh = normalized_timestamp.isoformat() if normalized_timestamp else None
             
             cache_status["providers"] = {
                 "providers_cached": len(providers) if providers else 0,
@@ -201,8 +528,10 @@ async def refresh_gateway_cache(
             timestamp = cache_info.get("timestamp")
             ttl = cache_info.get("ttl", 3600)
             if timestamp:
-                age = datetime.now(timezone.utc).timestamp() - timestamp
-                needs_refresh = age > ttl
+                normalized_timestamp = _normalize_timestamp(timestamp)
+                if normalized_timestamp:
+                    age = (datetime.now(timezone.utc) - normalized_timestamp).total_seconds()
+                    needs_refresh = age > ttl
         
         if not needs_refresh:
             return {
@@ -461,6 +790,55 @@ async def check_all_gateways():
         raise HTTPException(status_code=500, detail=f"Failed to check gateway health: {str(e)}")
 
 
+@router.get("/health/gateways/dashboard", response_class=HTMLResponse, tags=["health"])
+async def gateway_health_dashboard(
+    auto_fix: bool = Query(
+        False,
+        description="Attempt to auto-fix failing gateways using the CLI logic before rendering the dashboard."
+    )
+):
+    """Render an HTML dashboard view of the comprehensive gateway health check."""
+
+    results, log_output = await _run_gateway_check(auto_fix=auto_fix)
+    html = _render_gateway_dashboard(results, log_output, auto_fix)
+    return HTMLResponse(content=html)
+
+
+@router.get("/health/gateways/dashboard/data", tags=["health"])
+async def gateway_health_dashboard_data(
+    auto_fix: bool = Query(
+        False,
+        description="Attempt to auto-fix failing gateways using the CLI logic before returning the payload."
+    ),
+    include_logs: bool = Query(
+        False,
+        description="Include captured stdout logs from the CLI run in the response."
+    )
+):
+    """Expose the dashboard data as JSON for programmatic consumption."""
+
+    results, log_output = await _run_gateway_check(auto_fix=auto_fix)
+
+    payload: Dict[str, Any] = {
+        "success": True,
+        "timestamp": results.get("timestamp"),
+        "auto_fix": auto_fix,
+        "summary": {
+            "total_gateways": results.get("total_gateways"),
+            "healthy": results.get("healthy"),
+            "unhealthy": results.get("unhealthy"),
+            "unconfigured": results.get("unconfigured"),
+            "auto_fixed": results.get("fixed"),
+        },
+        "gateways": results.get("gateways", {}),
+    }
+
+    if include_logs:
+        payload["logs"] = log_output
+
+    return payload
+
+
 @router.get("/health/{gateway}", tags=["health"])
 async def check_single_gateway(gateway: str):
     """
@@ -488,10 +866,12 @@ async def check_single_gateway(gateway: str):
         if cache_info:
             models = cache_info.get("data") or []
             timestamp = cache_info.get("timestamp")
-            
+
+            normalized_timestamp = _normalize_timestamp(timestamp)
+
             gateway_health["cache"] = {
                 "models_cached": len(models),
-                "last_refresh": datetime.fromtimestamp(timestamp, tz=timezone.utc).isoformat() if timestamp else None,
+                "last_refresh": normalized_timestamp.isoformat() if normalized_timestamp else None,
                 "has_data": bool(models)
             }
         else:
