@@ -1,5 +1,9 @@
 # Performance Optimizations for Model Pages
 
+## ⚠️ Status: Ready for Integration
+
+The performance optimization hooks are **ready to use** but **not yet integrated** into the model pages. This document provides everything needed to integrate them when you're ready.
+
 ## Overview
 
 This document describes performance optimizations inspired by React Router v7's data loading patterns that can be applied to the Gatewayz model detail pages to dramatically improve load times.
