@@ -26,8 +26,20 @@ from src.main import app
 
 @pytest.fixture
 def client():
-    """FastAPI test client"""
-    return TestClient(app)
+    """FastAPI test client with dependency overrides"""
+    from src.security.deps import get_api_key
+
+    # Override the get_api_key dependency to bypass authentication
+    async def override_get_api_key():
+        return "test_api_key"
+
+    app.dependency_overrides[get_api_key] = override_get_api_key
+
+    client = TestClient(app)
+    yield client
+
+    # Cleanup: Remove overrides after test
+    app.dependency_overrides.clear()
 
 
 @pytest.fixture

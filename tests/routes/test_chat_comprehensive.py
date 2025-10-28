@@ -409,8 +409,19 @@ def client(sb, monkeypatch):
 
     # 7) NOW import app (after all mocks are in place)
     from src.main import app
+    from src.security.deps import get_api_key
 
-    return TestClient(app)
+    # Override the get_api_key dependency to bypass authentication
+    async def override_get_api_key():
+        return "test-key-123"
+
+    app.dependency_overrides[get_api_key] = override_get_api_key
+
+    client = TestClient(app)
+    yield client
+
+    # Cleanup
+    app.dependency_overrides.clear()
 
 
 # ==================================================
