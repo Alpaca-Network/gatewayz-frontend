@@ -16,6 +16,7 @@ import pytest
 from unittest.mock import Mock, patch
 from fastapi.testclient import TestClient
 from datetime import datetime
+from urllib.parse import quote
 
 from src.main import app
 
@@ -475,8 +476,10 @@ class TestAuditDateValidation:
         ]
 
         for date_str in valid_dates:
+            # URL-encode the date to properly handle special characters like +
+            encoded_date = quote(date_str, safe='')
             response = client.get(
-                f'/user/api-keys/audit-logs?start_date={date_str}',
+                f'/user/api-keys/audit-logs?start_date={encoded_date}',
                 headers={'Authorization': 'Bearer test_api_key'}
             )
 
