@@ -554,19 +554,19 @@ async def chat_completions(
                         logger.error("Unexpected upstream error (%s): %s", attempt_provider, exc)
                     http_exc = map_provider_error(attempt_provider, request_model, exc)
 
-                last_http_exc = http_exc
-                if idx < len(provider_chain) - 1 and should_failover(http_exc):
-                    next_provider = provider_chain[idx + 1]
-                    logger.warning(
-                        "Provider '%s' failed with status %s (%s). Falling back to '%s'.",
-                        attempt_provider,
-                        http_exc.status_code,
-                        http_exc.detail,
-                        next_provider,
-                    )
-                    continue
+                    last_http_exc = http_exc
+                    if idx < len(provider_chain) - 1 and should_failover(http_exc):
+                        next_provider = provider_chain[idx + 1]
+                        logger.warning(
+                            "Provider '%s' failed with status %s (%s). Falling back to '%s'.",
+                            attempt_provider,
+                            http_exc.status_code,
+                            http_exc.detail,
+                            next_provider,
+                        )
+                        continue
 
-                raise http_exc
+                    raise http_exc
 
             raise last_http_exc or HTTPException(status_code=502, detail="Upstream error")
 
@@ -662,19 +662,19 @@ async def chat_completions(
                     logger.error("Unexpected upstream error (%s): %s", attempt_provider, exc)
                 http_exc = map_provider_error(attempt_provider, request_model, exc)
 
-            last_http_exc = http_exc
-            if idx < len(provider_chain) - 1 and should_failover(http_exc):
-                next_provider = provider_chain[idx + 1]
-                logger.warning(
-                    "Provider '%s' failed with status %s (%s). Falling back to '%s'.",
-                    attempt_provider,
-                    http_exc.status_code,
-                    http_exc.detail,
-                    next_provider,
-                )
-                continue
+                last_http_exc = http_exc
+                if idx < len(provider_chain) - 1 and should_failover(http_exc):
+                    next_provider = provider_chain[idx + 1]
+                    logger.warning(
+                        "Provider '%s' failed with status %s (%s). Falling back to '%s'.",
+                        attempt_provider,
+                        http_exc.status_code,
+                        http_exc.detail,
+                        next_provider,
+                    )
+                    continue
 
-            raise http_exc
+                raise http_exc
 
         if processed is None:
             raise last_http_exc or HTTPException(status_code=502, detail="Upstream error")
