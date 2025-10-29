@@ -8,7 +8,6 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { ChevronDown, ArrowUp, ArrowDown } from 'lucide-react';
 import TokenStackedBarChart from '@/components/TokenStackedBarChart';
 import CategoryStackedAreaChart from '@/components/CategoryStackedAreaChart';
-import { API_BASE_URL } from '@/lib/config';
 import { extractTokenValue } from '@/lib/utils';
 import Link from 'next/link';
 
@@ -59,13 +58,13 @@ export default function RankingsPage() {
     const getModels = async () => {
       try {
         setLoading(true);
-        const response = await fetch(`${API_BASE_URL}/ranking/models`, {
+        const response = await fetch('/api/ranking/models', {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
           }
         });
-    
+
         if (response.ok) {
           const result = await response.json();
           setModels(result.data);
@@ -80,13 +79,13 @@ export default function RankingsPage() {
     }
     const getApps = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/ranking/apps`, {
+        const response = await fetch('/api/ranking/apps', {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
           }
         });
-  
+
         if (response.ok) {
           const result = await response.json();
           setApps(result.data);
