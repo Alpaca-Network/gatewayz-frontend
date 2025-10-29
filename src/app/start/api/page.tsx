@@ -12,6 +12,8 @@ import { useToast } from '@/hooks/use-toast';
 import posthog from 'posthog-js';
 import Link from 'next/link';
 import { API_BASE_URL } from '@/lib/config';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 interface ModelData {
   id: number;
@@ -37,7 +39,7 @@ export default function StartApiPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [apiKey, setApiKey] = useState('');
-  const [activeTab, setActiveTab] = useState<'curl' | 'python'>('curl');
+  const [activeTab, setActiveTab] = useState<'curl' | 'python' | 'javascript' | 'typescript'>('curl');
   const [copied, setCopied] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
   const [selectedModel, setSelectedModel] = useState('openai/gpt-4');
@@ -151,7 +153,37 @@ completion = client.chat.completions.create(
     ]
 )
 
-print(completion.choices[0].message.content)`
+print(completion.choices[0].message.content)`,
+    javascript: `import OpenAI from 'openai';
+
+const client = new OpenAI({
+  baseURL: "https://api.gatewayz.ai/v1",
+  apiKey: "${apiKey || 'YOUR_API_KEY'}"
+});
+
+const completion = await client.chat.completions.create({
+  model: "${selectedModel}",
+  messages: [
+    { role: "user", content: "Hello! What can you help me with?" }
+  ]
+});
+
+console.log(completion.choices[0].message.content);`,
+    typescript: `import OpenAI from 'openai';
+
+const client = new OpenAI({
+  baseURL: "https://api.gatewayz.ai/v1",
+  apiKey: "${apiKey || 'YOUR_API_KEY'}"
+});
+
+const completion = await client.chat.completions.create({
+  model: "${selectedModel}",
+  messages: [
+    { role: "user", content: "Hello! What can you help me with?" }
+  ]
+});
+
+console.log(completion.choices[0].message.content);`
   };
 
   if (!ready || !user) {
@@ -313,7 +345,9 @@ print(completion.choices[0].message.content)`
                   <div className="w-3 h-3 rounded-full bg-yellow-500/80"></div>
                   <div className="w-3 h-3 rounded-full bg-green-500/80"></div>
                 </div>
-                <span className="text-xs text-slate-400 ml-3 font-mono">first-call.{activeTab === 'python' ? 'py' : 'sh'}</span>
+                <span className="text-xs text-slate-400 ml-3 font-mono">
+                  first-call.{activeTab === 'python' ? 'py' : activeTab === 'javascript' ? 'js' : activeTab === 'typescript' ? 'ts' : 'sh'}
+                </span>
               </div>
               <Button
                 variant="ghost"
@@ -327,10 +361,10 @@ print(completion.choices[0].message.content)`
             </div>
 
             {/* Language Tabs */}
-            <div className="flex gap-1 px-4 pt-3 bg-slate-950/30">
+            <div className="flex gap-1 px-4 pt-3 bg-slate-950/30 overflow-x-auto">
               <button
                 onClick={() => setActiveTab('curl')}
-                className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-all ${
+                className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-all whitespace-nowrap ${
                   activeTab === 'curl'
                     ? 'bg-slate-950/80 text-cyan-400'
                     : 'text-slate-400 hover:text-slate-200'
@@ -340,7 +374,7 @@ print(completion.choices[0].message.content)`
               </button>
               <button
                 onClick={() => setActiveTab('python')}
-                className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-all ${
+                className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-all whitespace-nowrap ${
                   activeTab === 'python'
                     ? 'bg-slate-950/80 text-cyan-400'
                     : 'text-slate-400 hover:text-slate-200'
@@ -348,13 +382,43 @@ print(completion.choices[0].message.content)`
               >
                 🐍 Python
               </button>
+              <button
+                onClick={() => setActiveTab('javascript')}
+                className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-all whitespace-nowrap ${
+                  activeTab === 'javascript'
+                    ? 'bg-slate-950/80 text-cyan-400'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                JavaScript
+              </button>
+              <button
+                onClick={() => setActiveTab('typescript')}
+                className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-all whitespace-nowrap ${
+                  activeTab === 'typescript'
+                    ? 'bg-slate-950/80 text-cyan-400'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                TypeScript
+              </button>
             </div>
 
             {/* Code Display */}
-            <div className="bg-slate-950/80 p-6 overflow-x-auto">
-              <pre className="text-sm leading-relaxed font-mono text-slate-200">
+            <div className="bg-slate-950/80 overflow-x-auto">
+              <SyntaxHighlighter
+                language={activeTab === 'curl' ? 'bash' : activeTab}
+                style={vscDarkPlus}
+                customStyle={{
+                  margin: 0,
+                  padding: '1.5rem',
+                  fontSize: '0.875rem',
+                  lineHeight: '1.625',
+                  backgroundColor: 'transparent'
+                }}
+              >
                 {codeExamples[activeTab]}
-              </pre>
+              </SyntaxHighlighter>
             </div>
 
             {/* Bottom gradient */}
