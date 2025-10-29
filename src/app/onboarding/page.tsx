@@ -9,6 +9,8 @@ import Link from "next/link";
 import { getUserData, getApiKey } from '@/lib/api';
 import { API_BASE_URL } from '@/lib/config';
 import { useToast } from '@/hooks/use-toast';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 interface OnboardingTask {
   id: string;
@@ -235,7 +237,7 @@ export default function OnboardingPage() {
     setTimeout(() => setCopiedCode(false), 2000);
   };
 
-  const getCodeExample = (language: 'curl' | 'python' | 'javascript') => {
+  const getCodeExample = (language: 'curl' | 'python' | 'javascript' | 'typescript') => {
     const examples = {
       curl: `curl -X POST https://api.gatewayz.ai/v1/chat/completions \\
   -H "Authorization: Bearer ${apiKey || 'YOUR_API_KEY'}" \\
@@ -258,6 +260,19 @@ response = client.chat.completions.create(
 
 print(response.choices[0].message.content)`,
       javascript: `import OpenAI from 'openai';
+
+const client = new OpenAI({
+  apiKey: "${apiKey || 'YOUR_API_KEY'}",
+  baseURL: "https://api.gatewayz.ai/v1"
+});
+
+const response = await client.chat.completions.create({
+  model: "${selectedModel}",
+  messages: [{ role: "user", content: "Hello!" }]
+});
+
+console.log(response.choices[0].message.content);`,
+      typescript: `import OpenAI from 'openai';
 
 const client = new OpenAI({
   apiKey: "${apiKey || 'YOUR_API_KEY'}",
@@ -531,9 +546,20 @@ console.log(response.choices[0].message.content);`
                       {copiedCode ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
                     </Button>
                   </div>
-                  <pre className="p-4 bg-muted rounded-md text-xs overflow-x-auto">
-                    <code>{getCodeExample('curl')}</code>
-                  </pre>
+                  <div className="rounded-md overflow-hidden">
+                    <SyntaxHighlighter
+                      language="bash"
+                      style={vscDarkPlus}
+                      customStyle={{
+                        margin: 0,
+                        padding: '1rem',
+                        fontSize: '0.75rem',
+                        lineHeight: '1.5'
+                      }}
+                    >
+                      {getCodeExample('curl')}
+                    </SyntaxHighlighter>
+                  </div>
                 </div>
 
                 {/* Python Example */}
@@ -548,15 +574,26 @@ console.log(response.choices[0].message.content);`
                       {copiedCode ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
                     </Button>
                   </div>
-                  <pre className="p-4 bg-muted rounded-md text-xs overflow-x-auto">
-                    <code>{getCodeExample('python')}</code>
-                  </pre>
+                  <div className="rounded-md overflow-hidden">
+                    <SyntaxHighlighter
+                      language="python"
+                      style={vscDarkPlus}
+                      customStyle={{
+                        margin: 0,
+                        padding: '1rem',
+                        fontSize: '0.75rem',
+                        lineHeight: '1.5'
+                      }}
+                    >
+                      {getCodeExample('python')}
+                    </SyntaxHighlighter>
+                  </div>
                 </div>
 
                 {/* JavaScript Example */}
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium">JavaScript / TypeScript</span>
+                    <span className="text-sm font-medium">JavaScript</span>
                     <Button
                       variant="ghost"
                       size="sm"
@@ -565,9 +602,48 @@ console.log(response.choices[0].message.content);`
                       {copiedCode ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
                     </Button>
                   </div>
-                  <pre className="p-4 bg-muted rounded-md text-xs overflow-x-auto">
-                    <code>{getCodeExample('javascript')}</code>
-                  </pre>
+                  <div className="rounded-md overflow-hidden">
+                    <SyntaxHighlighter
+                      language="javascript"
+                      style={vscDarkPlus}
+                      customStyle={{
+                        margin: 0,
+                        padding: '1rem',
+                        fontSize: '0.75rem',
+                        lineHeight: '1.5'
+                      }}
+                    >
+                      {getCodeExample('javascript')}
+                    </SyntaxHighlighter>
+                  </div>
+                </div>
+
+                {/* TypeScript Example */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium">TypeScript</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => copyCode(getCodeExample('typescript'))}
+                    >
+                      {copiedCode ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                  <div className="rounded-md overflow-hidden">
+                    <SyntaxHighlighter
+                      language="typescript"
+                      style={vscDarkPlus}
+                      customStyle={{
+                        margin: 0,
+                        padding: '1rem',
+                        fontSize: '0.75rem',
+                        lineHeight: '1.5'
+                      }}
+                    >
+                      {getCodeExample('typescript')}
+                    </SyntaxHighlighter>
+                  </div>
                 </div>
               </div>
             </div>
