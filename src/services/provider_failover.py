@@ -115,6 +115,8 @@ def map_provider_error(
             status = 400
         elif status == 403:
             detail = f"{provider} authentication error"
+        elif status == 404:
+            detail = f"Model {model} not found or unavailable on {provider}"
         elif 500 <= status < 600:
             detail = "Upstream service error"
 

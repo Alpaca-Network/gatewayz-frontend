@@ -487,6 +487,22 @@ class TestMapProviderErrorOpenAI:
 
         assert mapped.status_code == 500
 
+    def test_map_api_status_error_404_generic(self):
+        """Test generic APIStatusError with 404 status provides proper error message"""
+        response = Mock()
+        response.status_code = 404
+        error = APIStatusError("Not Found", response=response, body=None)
+        error.status_code = 404
+        error.message = "Not Found"
+        mapped = map_provider_error("openrouter", "test-model", error)
+
+        assert mapped.status_code == 404
+        assert "test-model" in mapped.detail
+        assert "openrouter" in mapped.detail.lower()
+        assert "not found" in mapped.detail.lower()
+        # Should NOT be just "Not Found" - should include model and provider
+        assert mapped.detail != "Not Found"
+
 
 # ============================================================
 # TEST CLASS: Error Mapping - Generic Exceptions
