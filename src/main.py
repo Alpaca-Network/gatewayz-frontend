@@ -98,6 +98,15 @@ def create_app() -> FastAPI:
 
     # ==================== Load All Routes ====================
     logger.info("🚀 Loading application routes...")
+    print("🚀 Loading application routes...", flush=True)  # Force output for debugging
+
+    # Write to file for debugging in CI
+    try:
+        with open("/tmp/route_loading_debug.txt", "w") as f:
+            f.write("Starting route loading...\n")
+            f.flush()
+    except:
+        pass
 
     # Define all routes to load
     # IMPORTANT: chat & messages must be before catalog to avoid /v1/* being caught by /model/{provider}/{model}
@@ -144,22 +153,35 @@ def create_app() -> FastAPI:
             app.include_router(router)
 
             # Log success
-            logger.info(f"  ✅ {display_name} ({module_name})")
+            success_msg = f"  ✅ {display_name} ({module_name})"
+            logger.info(success_msg)
+            print(success_msg, flush=True)  # Force output for debugging
             loaded_count += 1
 
         except ImportError as e:
-            logger.error(f"  ⚠️  {display_name} ({module_name}) - Module not found: {e}")
+            error_msg = f"  ⚠️  {display_name} ({module_name}) - Module not found: {e}"
+            logger.error(error_msg)
+            print(error_msg, flush=True)  # Force output for debugging
             logger.error(f"       Full error details: {repr(e)}")
+            print(f"       Full error details: {repr(e)}", flush=True)
             import traceback
-            logger.error(f"       Traceback:\n{traceback.format_exc()}")
+            tb = traceback.format_exc()
+            logger.error(f"       Traceback:\n{tb}")
+            print(f"       Traceback:\n{tb}", flush=True)
             failed_count += 1
 
         except AttributeError as e:
-            logger.error(f"  ❌ {display_name} ({module_name}) - No router found: {e}")
+            error_msg = f"  ❌ {display_name} ({module_name}) - No router found: {e}"
+            logger.error(error_msg)
+            print(error_msg, flush=True)  # Force output for debugging
             failed_count += 1
 
         except Exception as e:
-            logger.error(f"  ❌ {display_name} ({module_name}) - Error: {e}")
+            error_msg = f"  ❌ {display_name} ({module_name}) - Error: {e}"
+            logger.error(error_msg)
+            print(error_msg, flush=True)  # Force output for debugging
+            import traceback
+            print(f"       Traceback:\n{traceback.format_exc()}", flush=True)
             failed_count += 1
 
     # Log summary

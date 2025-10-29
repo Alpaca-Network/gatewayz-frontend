@@ -3,7 +3,30 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from typing import Optional
 import httpx
-from braintrust import current_span, start_span, traced
+
+# Make braintrust optional for test environments
+try:
+    from braintrust import current_span, start_span, traced
+    BRAINTRUST_AVAILABLE = True
+except ImportError:
+    BRAINTRUST_AVAILABLE = False
+    # Create no-op decorators and functions when braintrust is not available
+    def traced(name=None, type=None):
+        def decorator(func):
+            return func
+        return decorator
+
+    class MockSpan:
+        def log(self, *args, **kwargs):
+            pass
+        def end(self):
+            pass
+
+    def start_span(name=None, type=None):
+        return MockSpan()
+
+    def current_span():
+        return MockSpan()
 
 import src.db.api_keys as api_keys_module
 import src.db.plans as plans_module
