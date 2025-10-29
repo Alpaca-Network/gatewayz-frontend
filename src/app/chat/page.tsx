@@ -1144,7 +1144,7 @@ function ChatPageContent() {
             setShouldAutoSend(false); // Reset flag to prevent re-sending
             handleSendMessage();
         }
-    }, [shouldAutoSend, activeSessionId, message, selectedModel, loading, isStreamingResponse, pendingMessage, handleSendMessage]);
+    }, [shouldAutoSend, activeSessionId, message, selectedModel, loading, isStreamingResponse, pendingMessage]);
 
     // Check for API key in localStorage as fallback authentication
     useEffect(() => {
@@ -1217,7 +1217,7 @@ function ChatPageContent() {
             handleSendMessage();
         }, 100);
 
-    }, [pendingMessage, ready, authenticated, hasApiKey, activeSessionId, handleSendMessage]);
+    }, [pendingMessage, ready, authenticated, hasApiKey, activeSessionId]);
 
     useEffect(() => {
         // Load sessions from API when authenticated and API key is available
@@ -1320,7 +1320,7 @@ function ChatPageContent() {
     }, [messages]);
 
     // Lazy load messages when switching to a session
-    const switchToSession = useCallback(async (sessionId: string) => {
+    const switchToSession = async (sessionId: string) => {
         const session = sessions.find(s => s.id === sessionId);
         if (!session) {
             return;
@@ -1360,9 +1360,9 @@ function ChatPageContent() {
                 setLoadingMessages(false);
             }
         }
-    }, [sessions, loadedSessionIds]);
+    };
 
-    const createNewChat = useCallback(async () => {
+    const createNewChat = async () => {
         // Prevent duplicate session creation
         if (creatingSessionRef.current) {
             return null;
@@ -1408,7 +1408,7 @@ function ChatPageContent() {
         } finally {
             creatingSessionRef.current = false;
         }
-    }, [sessions, selectedModel, toast, switchToSession]);
+    };
 
     const handleExamplePromptClick = (promptText: string) => {
         // Set the message input to the clicked prompt
@@ -1628,7 +1628,7 @@ function ChatPageContent() {
         [setHasApiKey]
     );
 
-    const handleSendMessage = useCallback(async () => {
+    const handleSendMessage = async () => {
         // Prevent sending if user hasn't actually typed anything
         if (!userHasTyped) {
             return;
@@ -1799,14 +1799,16 @@ function ChatPageContent() {
                         });
 
                         const chatAPI = new ChatHistoryAPI(apiKey, undefined, userData.privy_user_id);
-                        const result = await chatAPI.saveMessage(
-                            currentSession.apiSessionId,
-                            'user',
-                            userMessage,
-                            selectedModel.value,
-                            undefined // Token count not calculated yet
-                        );
-                        devLog('✅ User message saved to backend successfully:', result);
+                        if (currentSession.apiSessionId) {
+                            const result = await chatAPI.saveMessage(
+                                currentSession.apiSessionId,
+                                'user',
+                                userMessage,
+                                selectedModel.value,
+                                undefined // Token count not calculated yet
+                            );
+                            devLog('✅ User message saved to backend successfully:', result);
+                        }
                     } catch (error) {
                         devError('❌ Failed to save user message to backend:', error);
                         devError('Error details:', {
@@ -2142,14 +2144,16 @@ function ChatPageContent() {
                             });
 
                             const chatAPI = new ChatHistoryAPI(apiKey, undefined, userData.privy_user_id);
-                            const result = await chatAPI.saveMessage(
-                                currentSession.apiSessionId,
-                                'assistant',
-                                finalContent,
-                                modelValue,
-                                undefined // Token count not available from streaming
-                            );
-                            devLog('✅ Assistant message saved to backend successfully:', result);
+                            if (currentSession.apiSessionId) {
+                                const result = await chatAPI.saveMessage(
+                                    currentSession.apiSessionId,
+                                    'assistant',
+                                    finalContent,
+                                    modelValue,
+                                    undefined // Token count not available from streaming
+                                );
+                                devLog('✅ Assistant message saved to backend successfully:', result);
+                            }
 
                             // Log analytics event for successful message completion
                             logAnalyticsEvent('chat_message_completed', {
@@ -2372,20 +2376,7 @@ function ChatPageContent() {
             }));
             setLoading(false);
         }
-    }, [
-        userHasTyped,
-        isStreamingResponse,
-        message,
-        selectedModel,
-        selectedImage,
-        messages,
-        sessions,
-        activeSessionId,
-        toast,
-        login,
-        createNewChat,
-        creatingSessionRef
-    ]);
+    };
 
   // Show login screen if not authenticated
   if (!ready) {
