@@ -11,6 +11,7 @@ import { TrialCreditsNotice } from '@/components/dialogs/trial-credits-notice';
 import { Analytics } from '@vercel/analytics/next';
 import { SpeedInsights } from '@vercel/speed-insights/next';
 import { Inter } from 'next/font/google';
+import { ReactScanProvider } from '@/components/providers/react-scan-provider';
 // import { GTMLoader } from '@/components/analytics/gtm-loader'; // Temporarily disabled due to layout router issues
 
 const inter = Inter({
@@ -76,6 +77,7 @@ export default function RootLayout({
           defaultTheme="system"
           storageKey="ui-theme"
         >
+          <ReactScanProvider />
           <PrivyProviderWrapper className="flex flex-col min-h-screen">
             {/* <GTMLoader /> Temporarily disabled due to layout router issues */}
             <AppHeader />
