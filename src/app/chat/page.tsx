@@ -1109,7 +1109,7 @@ function ChatPageContent() {
         return sessions.find(s => s.id === activeSessionId) || null;
     }, [sessions, activeSessionId]);
 
-    const messages = activeSession?.messages || [];
+    const messages = (activeSession?.messages || []).filter(msg => msg && msg.role);
 
     // Auto-send message from URL parameter when session is ready
     useEffect(() => {
@@ -1992,7 +1992,7 @@ function ChatPageContent() {
                             const messages = [...session.messages];
                             const lastMessage = messages[messages.length - 1];
 
-                            if (lastMessage.role === 'assistant') {
+                            if (lastMessage && lastMessage.role === 'assistant') {
                                 lastMessage.content = accumulatedContent;
                                 lastMessage.reasoning = accumulatedReasoning;
                                 lastMessage.isStreaming = true;
@@ -2095,7 +2095,7 @@ function ChatPageContent() {
                                 const messages = [...session.messages];
                                 const lastMessage = messages[messages.length - 1];
 
-                                if (lastMessage.role === 'assistant') {
+                                if (lastMessage && lastMessage.role === 'assistant') {
                                     lastMessage.isStreaming = false;
                                 }
 
