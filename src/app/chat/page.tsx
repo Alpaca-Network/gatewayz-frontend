@@ -1789,7 +1789,7 @@ function ChatPageContent() {
                 // Fire and forget - save in background while streaming starts
                 const saveUserMessage = async () => {
                     try {
-                        console.log('🔄 Attempting to save user message to backend:', {
+                        devLog('🔄 Attempting to save user message to backend:', {
                             sessionId: currentSession.apiSessionId,
                             content: userMessage.substring(0, 100) + '...',
                             model: selectedModel.value,
@@ -1806,10 +1806,10 @@ function ChatPageContent() {
                             selectedModel.value,
                             undefined // Token count not calculated yet
                         );
-                        console.log('✅ User message saved to backend successfully:', result);
+                        devLog('✅ User message saved to backend successfully:', result);
                     } catch (error) {
-                        console.error('❌ Failed to save user message to backend:', error);
-                        console.error('Error details:', {
+                        devError('❌ Failed to save user message to backend:', error);
+                        devError('Error details:', {
                             message: error instanceof Error ? error.message : String(error),
                             stack: error instanceof Error ? error.stack : undefined,
                             sessionId: currentSession.apiSessionId,
@@ -1821,7 +1821,7 @@ function ChatPageContent() {
                 // Start saving in background - don't await
                 saveUserMessage();
             } else {
-                console.warn('⚠️ Cannot save user message - no API session ID:', {
+                devWarn('⚠️ Cannot save user message - no API session ID:', {
                     currentSession,
                     sessionId: currentSession?.apiSessionId,
                     currentSessionId
@@ -2011,7 +2011,7 @@ function ChatPageContent() {
                     apiKey,
                     requestBody
                 )) {
-                    console.log('📥 Received chunk:', {
+                    devLog('📥 Received chunk:', {
                         hasContent: !!chunk.content,
                         contentLength: chunk.content?.length || 0,
                         hasReasoning: !!chunk.reasoning,
@@ -2022,7 +2022,7 @@ function ChatPageContent() {
                     if (chunk.status === 'rate_limit_retry') {
                         const waitSeconds = Math.max(1, Math.ceil((chunk.retryAfterMs ?? 0) / 1000));
                         setRateLimitCountdown(waitSeconds);
-                        console.log(`Rate limit reached. Retrying in ${waitSeconds} seconds...`);
+                        devLog(`Rate limit reached. Retrying in ${waitSeconds} seconds...`);
                         continue;
                     }
 
@@ -2032,7 +2032,7 @@ function ChatPageContent() {
 
                         // Debug: Log content to see what we're receiving
                         if (content.includes('<thinking') || content.includes('</thinking') || content.includes('[THINKING') || content.includes('<think') || content.includes('</think')) {
-                            console.log('[THINKING DEBUG]', { content, inThinking, length: content.length });
+                            devLog('[THINKING DEBUG]', { content, inThinking, length: content.length });
                         }
 
                     // Process content character by character to handle thinking tags correctly
@@ -2052,7 +2052,7 @@ function ChatPageContent() {
                             if (openMatch) {
                                 inThinking = true;
                                 i += openMatch[0].length;
-                                console.log('[THINKING DEBUG] Opened thinking tag');
+                                devLog('[THINKING DEBUG] Opened thinking tag');
                                 continue;
                             }
 
@@ -2060,7 +2060,7 @@ function ChatPageContent() {
                             if (closeMatch) {
                                 inThinking = false;
                                 i += closeMatch[0].length;
-                                console.log('[THINKING DEBUG] Closed thinking tag');
+                                devLog('[THINKING DEBUG] Closed thinking tag');
                                 continue;
                             }
 
@@ -2076,7 +2076,7 @@ function ChatPageContent() {
 
                     // Also accumulate any reasoning sent explicitly from the API
                     if (chunk.reasoning) {
-                        console.log('[REASONING] Received explicit reasoning chunk:', chunk.reasoning.length, 'chars');
+                        devLog('[REASONING] Received explicit reasoning chunk:', chunk.reasoning.length, 'chars');
                         accumulatedReasoning += String(chunk.reasoning);
                     }
 
@@ -2125,7 +2125,7 @@ function ChatPageContent() {
                 setIsStreamingResponse(false);
 
                 const finalContent = accumulatedContent;
-                console.log({finalContent});
+                devLog({finalContent});
 
                 // OPTIMIZATION: Save the assistant's response to the backend asynchronously
                 // This allows the UI to be responsive immediately after streaming completes
@@ -2133,7 +2133,7 @@ function ChatPageContent() {
                     // Fire and forget - save in background
                     const saveAssistantMessage = async () => {
                         try {
-                            console.log('🔄 Attempting to save assistant message to backend:', {
+                            devLog('🔄 Attempting to save assistant message to backend:', {
                                 sessionId: currentSession.apiSessionId,
                                 content: finalContent.substring(0, 100) + '...',
                                 model: modelValue,
@@ -2149,7 +2149,7 @@ function ChatPageContent() {
                                 modelValue,
                                 undefined // Token count not available from streaming
                             );
-                            console.log('✅ Assistant message saved to backend successfully:', result);
+                            devLog('✅ Assistant message saved to backend successfully:', result);
 
                             // Log analytics event for successful message completion
                             logAnalyticsEvent('chat_message_completed', {
@@ -2161,8 +2161,8 @@ function ChatPageContent() {
                                 session_id: currentSessionId
                             });
                         } catch (error) {
-                            console.error('❌ Failed to save assistant message to backend:', error);
-                            console.error('Error details:', {
+                            devError('❌ Failed to save assistant message to backend:', error);
+                            devError('Error details:', {
                                 message: error instanceof Error ? error.message : String(error),
                                 stack: error instanceof Error ? error.stack : undefined,
                                 sessionId: currentSession.apiSessionId,
@@ -2174,7 +2174,7 @@ function ChatPageContent() {
                     // Start saving in background - don't await
                     saveAssistantMessage();
                 } else {
-                    console.warn('⚠️ Cannot save assistant message:', {
+                    devWarn('⚠️ Cannot save assistant message:', {
                         hasSessionId: !!currentSession?.apiSessionId,
                         hasContent: !!finalContent,
                         currentSession,

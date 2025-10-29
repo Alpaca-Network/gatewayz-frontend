@@ -121,7 +121,7 @@ export async function* streamChatResponse(
     const errorData = await response.json().catch(() => ({}));
 
     // Log full error details for debugging
-    console.error('API Error Response:', {
+    devError('API Error Response:', {
       status: response.status,
       statusText: response.statusText,
       errorData,
@@ -133,7 +133,7 @@ export async function* streamChatResponse(
     // Handle 400 Bad Request
     if (response.status === 400) {
       const errorMessage = errorData.detail || errorData.error?.message || errorData.message || 'Bad request';
-      console.error('400 Bad Request details:', errorData);
+      devError('400 Bad Request details:', errorData);
 
       // Check for common error patterns that indicate trial/credit issues
       if (errorMessage.toLowerCase().includes('trial has expired') ||
@@ -160,7 +160,7 @@ export async function* streamChatResponse(
     // Handle 500 Internal Server Error
     if (response.status === 500) {
       const errorMessage = errorData.detail || errorData.error?.message || errorData.message || 'Internal server error';
-      console.error('500 Internal Server Error details:', errorData);
+      devError('500 Internal Server Error details:', errorData);
       throw new Error(
         `Server error: ${errorMessage}. Please try again or contact support if the issue persists.`
       );
@@ -169,7 +169,7 @@ export async function* streamChatResponse(
     // Handle 404 Model Not Found
     if (response.status === 404) {
       const errorMessage = errorData.detail || errorData.error?.message || errorData.message || 'Model not found';
-      console.error('404 Model Not Found details:', errorData);
+      devError('404 Model Not Found details:', errorData);
       throw new Error(
         `Model not found: ${errorMessage}`
       );
@@ -210,9 +210,9 @@ export async function* streamChatResponse(
         const jitter = Math.floor(Math.random() * 250);
         waitTime += jitter;
 
-        console.log(`Rate limit hit, retrying in ${waitTime}ms (attempt ${retryCount + 1}/${maxRetries})...`);
+        devLog(`Rate limit hit, retrying in ${waitTime}ms (attempt ${retryCount + 1}/${maxRetries})...`);
         if (detailMessage) {
-          console.log('Rate limit detail:', detailMessage);
+          devLog('Rate limit detail:', detailMessage);
         }
 
         // Yield a signal chunk so UI can react without showing text in the transcript
@@ -364,7 +364,7 @@ export async function* streamChatResponse(
 
                 // Log when reasoning fields are present
                 if (deltaRecord.reasoning || deltaRecord.thinking || deltaRecord.analysis || deltaRecord.inner_thought || deltaRecord.thoughts) {
-                  console.log('[Streaming] Found reasoning field in delta:', {
+                  devLog('[Streaming] Found reasoning field in delta:', {
                     hasReasoning: !!deltaRecord.reasoning,
                     hasThinking: !!deltaRecord.thinking,
                     hasAnalysis: !!deltaRecord.analysis,
@@ -381,7 +381,7 @@ export async function* streamChatResponse(
                   }
                   if (reasoningText) {
                     chunk.reasoning = reasoningText;
-                    console.log('[Streaming] Adding reasoning to chunk from delta:', reasoningText.length, 'chars');
+                    devLog('[Streaming] Adding reasoning to chunk from delta:', reasoningText.length, 'chars');
                   }
                   if (finishReason) {
                     chunk.done = true;
