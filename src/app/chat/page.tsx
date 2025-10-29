@@ -1144,7 +1144,7 @@ function ChatPageContent() {
             setShouldAutoSend(false); // Reset flag to prevent re-sending
             handleSendMessage();
         }
-    }, [shouldAutoSend, activeSessionId, message, selectedModel, loading, isStreamingResponse, pendingMessage]);
+    }, [shouldAutoSend, activeSessionId, message, selectedModel, loading, isStreamingResponse, pendingMessage, handleSendMessage]);
 
     // Check for API key in localStorage as fallback authentication
     useEffect(() => {
@@ -1217,7 +1217,7 @@ function ChatPageContent() {
             handleSendMessage();
         }, 100);
 
-    }, [pendingMessage, ready, authenticated, hasApiKey, activeSessionId]);
+    }, [pendingMessage, ready, authenticated, hasApiKey, activeSessionId, handleSendMessage]);
 
     useEffect(() => {
         // Load sessions from API when authenticated and API key is available
@@ -1320,7 +1320,7 @@ function ChatPageContent() {
     }, [messages]);
 
     // Lazy load messages when switching to a session
-    const switchToSession = async (sessionId: string) => {
+    const switchToSession = useCallback(async (sessionId: string) => {
         const session = sessions.find(s => s.id === sessionId);
         if (!session) {
             return;
@@ -1360,9 +1360,9 @@ function ChatPageContent() {
                 setLoadingMessages(false);
             }
         }
-    };
+    }, [sessions, loadedSessionIds]);
 
-    const createNewChat = async () => {
+    const createNewChat = useCallback(async () => {
         // Prevent duplicate session creation
         if (creatingSessionRef.current) {
             return null;
@@ -1408,7 +1408,7 @@ function ChatPageContent() {
         } finally {
             creatingSessionRef.current = false;
         }
-    }
+    }, [sessions, selectedModel, toast, switchToSession]);
 
     const handleExamplePromptClick = (promptText: string) => {
         // Set the message input to the clicked prompt
@@ -1628,7 +1628,7 @@ function ChatPageContent() {
         [setHasApiKey]
     );
 
-    const handleSendMessage = async () => {
+    const handleSendMessage = useCallback(async () => {
         // Prevent sending if user hasn't actually typed anything
         if (!userHasTyped) {
             return;
@@ -2372,7 +2372,20 @@ function ChatPageContent() {
             }));
             setLoading(false);
         }
-    };
+    }, [
+        userHasTyped,
+        isStreamingResponse,
+        message,
+        selectedModel,
+        selectedImage,
+        messages,
+        sessions,
+        activeSessionId,
+        toast,
+        login,
+        createNewChat,
+        creatingSessionRef
+    ]);
 
   // Show login screen if not authenticated
   if (!ready) {
