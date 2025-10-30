@@ -1,7 +1,4 @@
-"use client";
-
-import { useMemo, lazy, Suspense, useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useMemo, lazy, Suspense, cache } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
@@ -22,6 +19,8 @@ import { API_BASE_URL } from '@/lib/config';
 import { models as staticModels } from '@/lib/models-data';
 import { getApiKey } from '@/lib/api';
 import { InlineChat } from '@/components/models/inline-chat';
+import { notFound } from 'next/navigation';
+import { getModelsForGateway } from '@/lib/models-service';
 
 // Lazy load heavy components
 const TopAppsTable = lazy(() => import('@/components/dashboard/top-apps-table'));
@@ -235,13 +234,23 @@ const fetchModelData = cache(async (modelId: string) => {
     }
 });
 
-// Client components cannot export generateStaticParams - dynamic rendering only
+// Generate static params for popular models (optional - improves build time)
+export async function generateStaticParams() {
+    // Return empty array to avoid building all model pages at build time
+    // Models will be generated on-demand using dynamic rendering
+    return [];
+}
 
-export default function ModelProfilePage() {
-    const params = useParams();
+export default async function ModelProfilePage({
+    params
+}: {
+    params: Promise<{ name: string | string[] }>
+}) {
+    // Await params in Next.js 15
+    const resolvedParams = await params;
 
     // Handle catch-all route - params.name will be an array like ['x-ai', 'grok-4-fast']
-    const nameParam = params.name as string | string[];
+    const nameParam = resolvedParams.name;
     let modelId = Array.isArray(nameParam) ? nameParam.join('/') : nameParam;
     // Decode URL-encoded characters (e.g., %40 -> @)
     modelId = decodeURIComponent(modelId);
