@@ -30,6 +30,8 @@ export type ModelOption = {
         downloads?: number;
         likes?: number;
     };
+    speedTier?: 'ultra-fast' | 'fast' | 'medium' | 'slow';
+    avgLatencyMs?: number;
 };
 
 interface ModelSelectProps {
@@ -86,6 +88,39 @@ const getDeveloper = (modelId: string): string => {
     return formatted[dev] || dev.charAt(0).toUpperCase() + dev.slice(1);
   }
   return 'Other';
+};
+
+// Determine model speed tier based on gateway and model characteristics
+const getModelSpeedTier = (modelId: string, gateway?: string): 'ultra-fast' | 'fast' | 'medium' | 'slow' | undefined => {
+  const id = modelId.toLowerCase();
+
+  // Ultra-fast providers (Cerebras, Groq) - known for extreme speed
+  if (gateway === 'cerebras' || id.includes('@cerebras/')) {
+    return 'ultra-fast'; // 1000+ tokens/sec
+  }
+  if (gateway === 'groq' || id.includes('groq/')) {
+    return 'ultra-fast'; // 500+ tokens/sec
+  }
+
+  // Fast providers and models
+  if (gateway === 'fireworks' || id.includes('fireworks/')) {
+    return 'fast'; // 200-500 tokens/sec
+  }
+  if (id.includes('gemini-flash') || id.includes('gpt-4o-mini') || id.includes('claude-haiku')) {
+    return 'fast';
+  }
+
+  // Medium speed - most standard models
+  if (id.includes('gpt-4') || id.includes('claude-sonnet') || id.includes('llama-3')) {
+    return 'medium';
+  }
+
+  // Slow - very large models or reasoning models
+  if (id.includes('o1') || id.includes('o3') || id.includes('deepseek-reasoner') || id.includes('qwq')) {
+    return 'slow'; // Reasoning models take longer
+  }
+
+  return undefined; // Unknown speed
 };
 
 export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) {
@@ -196,6 +231,9 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
             m.charAt(0).toUpperCase() + m.slice(1)
           ) || ['Text'];
 
+          // Get speed tier for performance indicators
+          const speedTier = getModelSpeedTier(model.id, sourceGateway);
+
           return {
             value: model.id,
             label: model.name,
@@ -203,6 +241,7 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
             sourceGateway,
             developer,
             modalities,
+            speedTier,
             huggingfaceMetrics: model.huggingface_metrics ? {
               downloads: model.huggingface_metrics.downloads || 0,
               likes: model.huggingface_metrics.likes || 0,
@@ -608,12 +647,20 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
                           )}
                         />
                         <span className="truncate flex-1">{model.label}</span>
-                        {model.category === 'Free' && (
-                          <span className="ml-2 text-xs font-semibold text-green-600 dark:text-green-400 flex items-center gap-1">
-                            <Sparkles className="h-3 w-3" />
-                            FREE
-                          </span>
-                        )}
+                        <div className="flex items-center gap-1">
+                          {model.speedTier === 'ultra-fast' && (
+                            <span className="text-xs font-bold text-purple-600 dark:text-purple-400">⚡</span>
+                          )}
+                          {model.speedTier === 'fast' && (
+                            <span className="text-xs font-bold text-blue-600 dark:text-blue-400">⚡</span>
+                          )}
+                          {model.category === 'Free' && (
+                            <span className="ml-1 text-xs font-semibold text-green-600 dark:text-green-400 flex items-center gap-1">
+                              <Sparkles className="h-3 w-3" />
+                              FREE
+                            </span>
+                          )}
+                        </div>
                       </CommandItem>
                     ))}
                   </div>
@@ -730,12 +777,20 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
                           )}
                         />
                         <span className="truncate flex-1">{model.label}</span>
-                        {model.category === 'Free' && (
-                          <span className="ml-2 text-xs font-semibold text-green-600 dark:text-green-400 flex items-center gap-1">
-                            <Sparkles className="h-3 w-3" />
-                            FREE
-                          </span>
-                        )}
+                        <div className="flex items-center gap-1">
+                          {model.speedTier === 'ultra-fast' && (
+                            <span className="text-xs font-bold text-purple-600 dark:text-purple-400">⚡</span>
+                          )}
+                          {model.speedTier === 'fast' && (
+                            <span className="text-xs font-bold text-blue-600 dark:text-blue-400">⚡</span>
+                          )}
+                          {model.category === 'Free' && (
+                            <span className="ml-1 text-xs font-semibold text-green-600 dark:text-green-400 flex items-center gap-1">
+                              <Sparkles className="h-3 w-3" />
+                              FREE
+                            </span>
+                          )}
+                        </div>
                       </CommandItem>
                     ))}
                   </div>
