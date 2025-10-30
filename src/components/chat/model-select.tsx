@@ -461,6 +461,74 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
     );
   }, [favoriteModels, debouncedSearchQuery]);
 
+  // Prefetch models on hover to improve perceived performance
+  const handlePrefetchModels = React.useCallback(() => {
+    if (!loadAllModels && models.length === INITIAL_MODELS_LIMIT) {
+      // Prefetch remaining models in background when user hovers
+      // This makes the "Load all models" action instant
+      const prefetchAllModels = async () => {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
+          const openrouterRes = await fetch(`/api/models?gateway=openrouter`, { signal: controller.signal });
+          clearTimeout(timeoutId);
+          const openrouterData = await openrouterRes.json();
+
+          // Cache prefetched models for instant access
+          const allModels = [...(openrouterData.data || [])];
+          const uniqueModelsMap = new Map();
+          allModels.forEach((model: any) => {
+            if (!uniqueModelsMap.has(model.id)) {
+              uniqueModelsMap.set(model.id, model);
+            }
+          });
+          const uniqueModels = Array.from(uniqueModelsMap.values());
+
+          const modelOptions: ModelOption[] = uniqueModels.map((model: any) => {
+            const sourceGateway = model.source_gateway || 'openrouter';
+            const promptPrice = Number(model.pricing?.prompt ?? 0);
+            const completionPrice = Number(model.pricing?.completion ?? 0);
+            const isPaid = promptPrice > 0 || completionPrice > 0;
+            const category = sourceGateway === 'portkey' ? 'Portkey' : (isPaid ? 'Paid' : 'Free');
+            const developer = getDeveloper(model.id);
+            const modalities = model.architecture?.input_modalities?.map((m: string) =>
+              m.charAt(0).toUpperCase() + m.slice(1)
+            ) || ['Text'];
+
+            return {
+              value: model.id,
+              label: model.name,
+              category,
+              sourceGateway,
+              developer,
+              modalities,
+              huggingfaceMetrics: model.huggingface_metrics ? {
+                downloads: model.huggingface_metrics.downloads || 0,
+                likes: model.huggingface_metrics.likes || 0,
+              } : undefined,
+            };
+          });
+
+          // Update cache for instant access
+          try {
+            localStorage.setItem(CACHE_KEY, JSON.stringify({
+              data: ensureRouterOption(modelOptions),
+              timestamp: Date.now()
+            }));
+          } catch (e) {
+            // Quota exceeded, ignore
+          }
+        } catch (error) {
+          // Prefetch failed, user can still load manually
+          console.log('Background model prefetch failed:', error);
+        }
+      };
+
+      prefetchAllModels();
+    }
+  }, [loadAllModels, models.length]);
+
   return (
     <Popover open={open} onOpenChange={(isOpen) => {
       setOpen(isOpen);
@@ -476,6 +544,7 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
           aria-expanded={open}
           className="w-[250px] justify-between bg-muted/30 hover:bg-muted/50"
           disabled={loading}
+          onMouseEnter={handlePrefetchModels}
         >
           {loading ? (
             <>

@@ -653,6 +653,124 @@ const SessionListItem = ({
     );
 };
 
+// Virtual scrolling component for efficient rendering of large session lists
+const VirtualSessionList = ({
+    groupedSessions,
+    activeSessionId,
+    switchToSession,
+    onRenameSession,
+    onDeleteSession
+}: {
+    groupedSessions: Record<string, ChatSession[]>,
+    activeSessionId: string | null,
+    switchToSession: (id: string) => void,
+    onRenameSession: (sessionId: string, newTitle: string) => void,
+    onDeleteSession: (sessionId: string) => void
+}) => {
+    const containerRef = useRef<HTMLDivElement>(null);
+    const [visibleRange, setVisibleRange] = useState({ start: 0, end: 20 });
+
+    // Flatten sessions with group headers for virtual scrolling
+    const flatItems = useMemo(() => {
+        const items: Array<{ type: 'header' | 'session', data: string | ChatSession, groupName?: string }> = [];
+        Object.entries(groupedSessions).forEach(([groupName, sessions]) => {
+            items.push({ type: 'header', data: groupName, groupName });
+            sessions.forEach(session => {
+                items.push({ type: 'session', data: session as ChatSession, groupName });
+            });
+        });
+        return items;
+    }, [groupedSessions]);
+
+    // Only render items within visible range + buffer (for smooth scrolling)
+    const ITEM_HEIGHT = 60; // Approximate height of each session item
+    const HEADER_HEIGHT = 30; // Height of group headers
+    const BUFFER = 10; // Render extra items outside viewport
+
+    useEffect(() => {
+        const container = containerRef.current;
+        if (!container) return;
+
+        const handleScroll = () => {
+            const scrollTop = container.scrollTop;
+            const containerHeight = container.clientHeight;
+
+            const start = Math.max(0, Math.floor(scrollTop / ITEM_HEIGHT) - BUFFER);
+            const end = Math.min(flatItems.length, Math.ceil((scrollTop + containerHeight) / ITEM_HEIGHT) + BUFFER);
+
+            setVisibleRange({ start, end });
+        };
+
+        container.addEventListener('scroll', handleScroll, { passive: true });
+        handleScroll(); // Initial calculation
+
+        return () => container.removeEventListener('scroll', handleScroll);
+    }, [flatItems.length]);
+
+    const totalHeight = flatItems.reduce((height, item) =>
+        height + (item.type === 'header' ? HEADER_HEIGHT : ITEM_HEIGHT), 0
+    );
+
+    return (
+        <div ref={containerRef} className="flex-grow overflow-y-auto" style={{ position: 'relative' }}>
+            {flatItems.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-32 text-center">
+                    <p className="text-sm text-muted-foreground">No conversations yet</p>
+                    <p className="text-xs text-muted-foreground mt-1">Start a new chat to begin</p>
+                </div>
+            ) : (
+                <div style={{ height: totalHeight, position: 'relative' }}>
+                    {flatItems.slice(visibleRange.start, visibleRange.end).map((item, index) => {
+                        const actualIndex = visibleRange.start + index;
+                        const offsetTop = flatItems.slice(0, actualIndex).reduce((height, prevItem) =>
+                            height + (prevItem.type === 'header' ? HEADER_HEIGHT : ITEM_HEIGHT), 0
+                        );
+
+                        if (item.type === 'header') {
+                            return (
+                                <div
+                                    key={`header-${item.data}`}
+                                    style={{
+                                        position: 'absolute',
+                                        top: offsetTop,
+                                        width: '100%',
+                                        height: HEADER_HEIGHT
+                                    }}
+                                >
+                                    <h3 className="text-xs font-semibold text-muted-foreground uppercase my-1.5 px-2">
+                                        {item.data as string}
+                                    </h3>
+                                </div>
+                            );
+                        }
+
+                        const session = item.data as ChatSession;
+                        return (
+                            <div
+                                key={session.id}
+                                style={{
+                                    position: 'absolute',
+                                    top: offsetTop,
+                                    width: '100%',
+                                    minHeight: ITEM_HEIGHT
+                                }}
+                            >
+                                <SessionListItem
+                                    session={session}
+                                    activeSessionId={activeSessionId}
+                                    switchToSession={switchToSession}
+                                    onRenameSession={onRenameSession}
+                                    onDeleteSession={onDeleteSession}
+                                />
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+        </div>
+    );
+};
+
 const ChatSidebar = ({ sessions, activeSessionId, switchToSession, createNewChat, onDeleteSession, onRenameSession }: {
     sessions: ChatSession[],
     activeSessionId: string | null,
@@ -704,32 +822,13 @@ const ChatSidebar = ({ sessions, activeSessionId, switchToSession, createNewChat
 
         </div>
 
-        <div className="flex-grow overflow-y-auto">
-            {Object.keys(groupedSessions).length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-32 text-center">
-                    <p className="text-sm text-muted-foreground">No conversations yet</p>
-                    <p className="text-xs text-muted-foreground mt-1">Start a new chat to begin</p>
-                </div>
-            ) : (
-                Object.entries(groupedSessions).map(([groupName, chatSessions]) => (
-                    <div key={groupName} className="min-w-0">
-                        <h3 className="text-xs font-semibold text-muted-foreground uppercase my-1.5 px-2">{groupName}</h3>
-                        <ul className="space-y-0.5 min-w-0">
-                            {chatSessions.map(session => (
-                                <SessionListItem
-                                    key={session.id}
-                                    session={session}
-                                    activeSessionId={activeSessionId}
-                                    switchToSession={switchToSession}
-                                    onRenameSession={onRenameSession}
-                                    onDeleteSession={onDeleteSession}
-                                />
-                            ))}
-                        </ul>
-                    </div>
-                ))
-            )}
-        </div>
+        <VirtualSessionList
+            groupedSessions={groupedSessions}
+            activeSessionId={activeSessionId}
+            switchToSession={switchToSession}
+            onRenameSession={onRenameSession}
+            onDeleteSession={onDeleteSession}
+        />
     </aside>
     )
 }
@@ -1538,7 +1637,7 @@ function ChatPageContent() {
         }
     }
 
-    const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
 
@@ -1552,30 +1651,94 @@ function ChatPageContent() {
             return;
         }
 
-        // Validate file size (max 5MB)
-        if (file.size > 5 * 1024 * 1024) {
+        // Validate file size (max 10MB before compression)
+        if (file.size > 10 * 1024 * 1024) {
             toast({
                 title: "File too large",
-                description: "Please select an image smaller than 5MB.",
+                description: "Please select an image smaller than 10MB.",
                 variant: 'destructive'
             });
             return;
         }
 
-        // Convert to base64
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            const base64 = event.target?.result as string;
-            setSelectedImage(base64);
-        };
-        reader.onerror = () => {
+        try {
+            // Optimize image: resize and convert to WebP for better compression
+            const optimizedImage = await optimizeImage(file);
+            setSelectedImage(optimizedImage);
+
             toast({
-                title: "Error reading file",
-                description: "Failed to read the image file.",
+                title: "Image uploaded",
+                description: "Your image has been optimized and is ready to send.",
+            });
+        } catch (error) {
+            toast({
+                title: "Error processing image",
+                description: "Failed to process the image file.",
                 variant: 'destructive'
             });
-        };
-        reader.readAsDataURL(file);
+        }
+    };
+
+    // Optimize image by resizing and converting to WebP
+    const optimizeImage = async (file: File): Promise<string> => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+
+            reader.onload = (event) => {
+                const img = new Image();
+                img.onload = () => {
+                    // Create canvas for image processing
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    if (!ctx) {
+                        reject(new Error('Failed to get canvas context'));
+                        return;
+                    }
+
+                    // Calculate optimal dimensions (max 1920x1080 for better performance)
+                    const MAX_WIDTH = 1920;
+                    const MAX_HEIGHT = 1080;
+                    let width = img.width;
+                    let height = img.height;
+
+                    if (width > MAX_WIDTH || height > MAX_HEIGHT) {
+                        const ratio = Math.min(MAX_WIDTH / width, MAX_HEIGHT / height);
+                        width = Math.floor(width * ratio);
+                        height = Math.floor(height * ratio);
+                    }
+
+                    // Set canvas dimensions
+                    canvas.width = width;
+                    canvas.height = height;
+
+                    // Draw image with high quality
+                    ctx.imageSmoothingEnabled = true;
+                    ctx.imageSmoothingQuality = 'high';
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    // Convert to WebP with compression (0.85 quality for good balance)
+                    // Fallback to JPEG if WebP not supported
+                    const supportsWebP = canvas.toDataURL('image/webp').indexOf('data:image/webp') === 0;
+                    const format = supportsWebP ? 'image/webp' : 'image/jpeg';
+                    const quality = 0.85;
+
+                    const optimizedBase64 = canvas.toDataURL(format, quality);
+
+                    // Log compression stats
+                    const originalSize = file.size;
+                    const optimizedSize = Math.round((optimizedBase64.length * 3) / 4);
+                    const savings = Math.round((1 - optimizedSize / originalSize) * 100);
+                    console.log(`Image optimized: ${(originalSize / 1024).toFixed(1)}KB → ${(optimizedSize / 1024).toFixed(1)}KB (${savings}% reduction)`);
+
+                    resolve(optimizedBase64);
+                };
+                img.onerror = () => reject(new Error('Failed to load image'));
+                img.src = event.target?.result as string;
+            };
+
+            reader.onerror = () => reject(new Error('Failed to read file'));
+            reader.readAsDataURL(file);
+        });
     };
 
     const handleRemoveImage = () => {
