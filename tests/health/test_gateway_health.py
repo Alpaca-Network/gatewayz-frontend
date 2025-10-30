@@ -185,12 +185,17 @@ class TestGatewayEndpointChecks:
             'min_expected_models': 1
         }
 
-        success, message, count = check_module.test_gateway_endpoint('test', config)
+        # Mock httpx.get to raise a timeout exception
+        with patch('httpx.get') as mock_get:
+            mock_get.side_effect = httpx.TimeoutException("Request timeout")
 
-        # Should handle timeout gracefully
-        assert isinstance(success, bool)
-        assert isinstance(message, str)
-        assert isinstance(count, int)
+            success, message, count = check_module.test_gateway_endpoint('test', config)
+
+            # Should handle timeout gracefully
+            assert isinstance(success, bool)
+            assert isinstance(message, str)
+            assert isinstance(count, int)
+            assert success is False, "Timeout should result in failure"
 
     @pytest.mark.unit
     def test_endpoint_check_response_parsing(self):

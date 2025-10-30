@@ -410,6 +410,12 @@ def client(sb, monkeypatch):
     # 7) NOW import app (after all mocks are in place)
     from src.main import app
     from src.security.deps import get_api_key
+    import src.routes.chat as chat_module
+
+    # Patch the chat module's imported functions (since it uses 'from ... import')
+    monkeypatch.setattr(chat_module, "make_openrouter_request_openai", mock_openrouter_request)
+    monkeypatch.setattr(chat_module, "process_openrouter_response", mock_process_openrouter_response)
+    monkeypatch.setattr(chat_module, "make_openrouter_request_openai_stream", mock_openrouter_stream)
 
     # Override the get_api_key dependency to bypass authentication
     async def override_get_api_key():

@@ -55,7 +55,8 @@ jobs:
     - name: Run all tests with coverage
       run: |
         # All tests with 25% minimum coverage enforced (Phase 3 baseline)
-        pytest tests/ -v --cov=src --cov-report=xml --cov-report=term --cov-fail-under=25
+        # Exclude smoke tests (they require a running server)
+        pytest tests/ -v --cov=src --cov-report=xml --cov-report=term --cov-fail-under=25 -m "not smoke"
 
     - name: Upload coverage reports
       uses: codecov/codecov-action@v4

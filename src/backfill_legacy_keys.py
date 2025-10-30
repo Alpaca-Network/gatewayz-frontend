@@ -4,7 +4,6 @@ from datetime import datetime
 
 from src.config.supabase_config import get_supabase_client
 
-
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 

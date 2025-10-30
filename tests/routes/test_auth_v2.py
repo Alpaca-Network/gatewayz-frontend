@@ -241,13 +241,18 @@ def client(sb, monkeypatch):
     import sys
     if 'src.routes.auth' in sys.modules:
         auth_module = sys.modules['src.routes.auth']
-        monkeypatch.setattr(auth_module, "get_user_by_privy_id", mock_get_user_by_privy_id)
-        monkeypatch.setattr(auth_module, "create_enhanced_user", mock_create_enhanced_user)
-        if hasattr(auth_module, "get_user_by_username"):
-            monkeypatch.setattr(auth_module, "get_user_by_username", mock_get_user_by_username)
+        # Auth module uses: import src.db.users as users_module
+        # So we need to patch users_module.get_user_by_privy_id, not auth_module.get_user_by_privy_id
+        if hasattr(auth_module, "users_module"):
+            monkeypatch.setattr(auth_module.users_module, "get_user_by_privy_id", mock_get_user_by_privy_id)
+            monkeypatch.setattr(auth_module.users_module, "create_enhanced_user", mock_create_enhanced_user)
+            monkeypatch.setattr(auth_module.users_module, "get_user_by_username", mock_get_user_by_username)
+        # Auth module uses: from src.db.activity import log_activity
         monkeypatch.setattr(auth_module, "log_activity", mock_log_activity)
+        # Auth module uses: import src.config.supabase_config as supabase_config
         # CRITICAL: Also patch get_supabase_client in the auth module
-        monkeypatch.setattr(auth_module, "get_supabase_client", lambda: sb)
+        if hasattr(auth_module, "supabase_config"):
+            monkeypatch.setattr(auth_module.supabase_config, "get_supabase_client", lambda: sb)
 
     # Also mock notification service
     import src.enhanced_notification_service as notif_module

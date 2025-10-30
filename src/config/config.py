@@ -1,4 +1,5 @@
 import os
+
 from dotenv import load_dotenv
 
 # Load environment variables from ..env file
@@ -17,7 +18,7 @@ class Config:
     # Supabase Configuration
     SUPABASE_URL = os.environ.get("SUPABASE_URL")
     SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
-    
+
     # OpenRouter Configuration
     OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
     OPENROUTER_SITE_URL = os.environ.get("OPENROUTER_SITE_URL", "https://your-site.com")
@@ -71,7 +72,7 @@ class Config:
 
     # OpenRouter Analytics Cookie (for transaction analytics API)
     OPENROUTER_COOKIE = os.environ.get("OPENROUTER_COOKIE")
-    
+
     # Admin Configuration
     ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL")
 
@@ -95,16 +96,16 @@ class Config:
         env_name = f"PORTKEY_VIRTUAL_KEY_{normalized}"
         provider_specific = os.environ.get(env_name)
         return provider_specific or cls.PORTKEY_DEFAULT_VIRTUAL_KEY
-    
+
     @classmethod
     def validate(cls):
         """Validate that all required environment variables are set"""
         # Skip validation in Vercel environment to prevent startup failures
         if os.environ.get("VERCEL"):
             return True
-            
+
         missing_vars = []
-        
+
         if not cls.SUPABASE_URL:
             missing_vars.append("SUPABASE_URL")
         if not cls.SUPABASE_KEY:
@@ -113,7 +114,7 @@ class Config:
             missing_vars.append("OPENROUTER_API_KEY")
         if not cls.PORTKEY_API_KEY:
             missing_vars.append("PORTKEY_API_KEY")
-        
+
         if missing_vars:
             raise RuntimeError(
                 f"Missing required environment variables: {', '.join(missing_vars)}\n"

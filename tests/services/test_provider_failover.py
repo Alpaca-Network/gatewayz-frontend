@@ -183,9 +183,10 @@ class TestShouldFailover:
         assert should_failover(exc) is True
 
     def test_should_failover_429(self):
-        """Test 429 Rate Limit triggers failover"""
+        """Test 429 Rate Limit does NOT trigger failover - client should retry"""
         exc = HTTPException(status_code=429, detail="Rate Limited")
-        assert should_failover(exc) is True
+        # 429 should be returned to client with Retry-After header, not trigger failover
+        assert should_failover(exc) is False
 
     def test_should_failover_502(self):
         """Test 502 Bad Gateway triggers failover"""
@@ -222,13 +223,13 @@ class TestShouldFailover:
         assert 401 in FAILOVER_STATUS_CODES
         assert 403 in FAILOVER_STATUS_CODES
         assert 404 in FAILOVER_STATUS_CODES
-        assert 429 in FAILOVER_STATUS_CODES
         assert 502 in FAILOVER_STATUS_CODES
         assert 503 in FAILOVER_STATUS_CODES
         assert 504 in FAILOVER_STATUS_CODES
 
         # Verify codes that should NOT trigger failover
         assert 400 not in FAILOVER_STATUS_CODES
+        assert 429 not in FAILOVER_STATUS_CODES  # 429 should be returned to client
         assert 500 not in FAILOVER_STATUS_CODES
 
 
@@ -376,7 +377,9 @@ class TestMapProviderErrorOpenAI:
 
     def test_map_api_connection_error(self):
         """Test APIConnectionError maps to 503"""
-        error = APIConnectionError("Connection failed")
+        # APIConnectionError requires a request parameter in newer OpenAI SDK versions
+        mock_request = Mock()
+        error = APIConnectionError(request=mock_request)
         mapped = map_provider_error("openrouter", "gpt-4", error)
 
         assert mapped.status_code == 503
@@ -384,7 +387,9 @@ class TestMapProviderErrorOpenAI:
 
     def test_map_api_timeout_error(self):
         """Test APITimeoutError maps to 504"""
-        error = APITimeoutError("Request timed out")
+        # APITimeoutError requires a request parameter in newer OpenAI SDK versions
+        mock_request = Mock()
+        error = APITimeoutError(request=mock_request)
         mapped = map_provider_error("openrouter", "gpt-4", error)
 
         assert mapped.status_code == 504
@@ -405,8 +410,11 @@ class TestMapProviderErrorOpenAI:
 
     def test_map_rate_limit_error_with_retry_after_body(self):
         """Test RateLimitError with retry_after in body"""
-        error = RateLimitError("Rate limited", response=None, body={"retry_after": 90})
-        error.body = {"retry_after": 90}
+        # Create a mock response with no retry-after header
+        response = Mock()
+        response.headers = {}
+        # RateLimitError requires message, response, and body parameters
+        error = RateLimitError(message="Rate limited", response=response, body={"retry_after": 90})
         mapped = map_provider_error("openrouter", "gpt-4", error)
 
         assert mapped.status_code == 429
@@ -563,7 +571,7 @@ class TestProviderFailoverIntegration:
             (401, True),   # Auth error - try another provider
             (403, True),   # Permission denied - try another provider
             (404, True),   # Model not found - try another provider
-            (429, True),   # Rate limited - try another provider
+            (429, False),  # Rate limited - return to client (don't failover)
             (502, True),   # Bad gateway - try another provider
             (503, True),   # Service unavailable - try another provider
             (504, True),   # Gateway timeout - try another provider
@@ -576,7 +584,7 @@ class TestProviderFailoverIntegration:
             exc = HTTPException(status_code=status_code, detail="Test")
             result = should_failover(exc)
             assert result == expected_should_failover, \
-                f"Status {status_code} should{'failover' if expected_should_failover else 'not failover'}"
+                f"Status {status_code} should {' ' if expected_should_failover else 'not '}failover"
 
     def test_error_mapping_preserves_provider_context(self):
         """Test error messages include provider and model context"""

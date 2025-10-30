@@ -327,10 +327,12 @@ class TestLowBalanceAlerts:
         mock_notif_result = Mock()
         mock_notif_result.data = [{'id': 1}]
 
-        notification_service.supabase.table.return_value.select.return_value.eq.return_value.execute.side_effect = [
+        # Need to handle the .gte() call in _has_recent_notification
+        mock_chain = notification_service.supabase.table.return_value.select.return_value.eq.return_value
+        mock_chain.eq.return_value.gte.return_value.execute.return_value = mock_notif_result
+        mock_chain.execute.side_effect = [
             mock_user_result,
             mock_prefs_result,
-            mock_notif_result
         ]
 
         mock_validate_trial.return_value = {'is_trial': False}
@@ -364,14 +366,16 @@ class TestTrialExpiryAlerts:
         mock_notif_result = Mock()
         mock_notif_result.data = []
 
-        notification_service.supabase.table.return_value.select.return_value.eq.return_value.execute.side_effect = [
+        # Need to handle the .gte() call in _has_recent_notification
+        mock_chain = notification_service.supabase.table.return_value.select.return_value.eq.return_value
+        mock_chain.eq.return_value.gte.return_value.execute.return_value = mock_notif_result
+        mock_chain.execute.side_effect = [
             mock_user_result,
             mock_prefs_result,
-            mock_notif_result
         ]
 
-        # Trial expiring in 1 day
-        trial_end = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+        # Trial expiring in exactly 1 day (add 25 hours to ensure .days = 1)
+        trial_end = (datetime.now(timezone.utc) + timedelta(hours=25)).isoformat()
         mock_validate_trial.return_value = {
             'is_trial': True,
             'trial_end_date': trial_end
@@ -382,7 +386,7 @@ class TestTrialExpiryAlerts:
         assert alert is not None
         assert isinstance(alert, TrialExpiryAlert)
         assert alert.user_id == 1
-        assert alert.days_remaining == 1
+        assert alert.remaining_days == 1
 
     @patch('src.services.notification.validate_trial_access')
     def test_check_trial_expiry_alert_not_trial_user(

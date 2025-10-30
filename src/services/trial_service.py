@@ -10,7 +10,8 @@ from typing import Optional
 from supabase import create_client, Client
 import os
 
-from src.schemas import SubscriptionPlansResponse, SubscriptionPlan, PlanType
+from src.schemas import SubscriptionPlansResponse, PlanType
+from src.schemas.plans import SubscriptionPlan
 from src.schemas.trials import StartTrialRequest, StartTrialResponse, SubscriptionStatus, TrialStatusResponse, \
     TrialStatus, ConvertTrialRequest, ConvertTrialResponse, TrackUsageRequest, TrackUsageResponse, TrialValidationResult
 

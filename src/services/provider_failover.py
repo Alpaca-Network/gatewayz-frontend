@@ -75,11 +75,12 @@ def map_provider_error(
         return HTTPException(status_code=400, detail=str(exc))
 
     # OpenAI SDK exceptions (used for OpenRouter and other compatible providers)
-    if APIConnectionError and isinstance(exc, APIConnectionError):
-        return HTTPException(status_code=503, detail="Upstream service unavailable")
-
+    # Check APITimeoutError before APIConnectionError as it may be a subclass
     if APITimeoutError and isinstance(exc, APITimeoutError):
         return HTTPException(status_code=504, detail="Upstream timeout")
+
+    if APIConnectionError and isinstance(exc, APIConnectionError):
+        return HTTPException(status_code=503, detail="Upstream service unavailable")
 
     if APIStatusError and isinstance(exc, APIStatusError):
         status = getattr(exc, "status_code", None)
@@ -105,8 +106,8 @@ def map_provider_error(
         )
         if auth_error_classes and isinstance(exc, auth_error_classes):
             detail = f"{provider} authentication error"
-            if status not in (401, 403):
-                status = 401
+            # Always map auth errors to 401 for consistency
+            status = 401
         elif NotFoundError and isinstance(exc, NotFoundError):
             detail = f"Model {model} not found or unavailable on {provider}"
             status = 404

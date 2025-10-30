@@ -177,8 +177,10 @@ class TestCheckoutSession:
     @patch('src.services.payments.get_user_by_id')
     @patch('src.services.payments.create_payment')
     @patch('stripe.checkout.Session.create')
+    @patch('src.config.supabase_config.get_supabase_client')
     def test_create_checkout_session_with_privy_did(
         self,
+        mock_get_supabase_client,
         mock_stripe_create,
         mock_create_payment,
         mock_get_user,
@@ -193,6 +195,13 @@ class TestCheckoutSession:
             'email': 'did:privy:abc123',
             'credits': 100.0
         }
+
+        # Mock Supabase client for Privy DID lookup
+        mock_supabase_client = Mock()
+        mock_supabase_client.table().select().eq().execute.return_value = Mock(
+            data=[{'privy_user_id': 'privy_123'}]
+        )
+        mock_get_supabase_client.return_value = mock_supabase_client
 
         mock_get_user.return_value = privy_user
         mock_create_payment.return_value = mock_payment
@@ -367,14 +376,14 @@ class TestWebhooks:
     ):
         """Test checkout completed webhook adds credits to user"""
 
-        mock_session = {
-            'id': 'cs_test_123',
-            'payment_intent': 'pi_test_123',
-            'metadata': {
-                'user_id': '1',
-                'credits': '1000',  # 1000 cents = $10
-                'payment_id': '1'
-            }
+        # Create a Mock object instead of dict to support attribute access
+        mock_session = Mock()
+        mock_session.id = 'cs_test_123'
+        mock_session.payment_intent = 'pi_test_123'
+        mock_session.metadata = {
+            'user_id': '1',
+            'credits': '1000',  # 1000 cents = $10
+            'payment_id': '1'
         }
 
         mock_event = {
@@ -421,11 +430,15 @@ class TestWebhooks:
             'status': 'pending'
         }
 
+        # Create a Mock object instead of dict to support attribute access
+        mock_payment_intent = Mock()
+        mock_payment_intent.id = 'pi_test_123'
+
         mock_event = {
             'id': 'evt_test_123',
             'type': 'payment_intent.succeeded',
             'data': {
-                'object': {'id': 'pi_test_123'}
+                'object': mock_payment_intent
             }
         }
         mock_construct_event.return_value = mock_event
@@ -458,11 +471,15 @@ class TestWebhooks:
             'status': 'pending'
         }
 
+        # Create a Mock object instead of dict to support attribute access
+        mock_payment_intent = Mock()
+        mock_payment_intent.id = 'pi_test_123'
+
         mock_event = {
             'id': 'evt_test_123',
             'type': 'payment_intent.payment_failed',
             'data': {
-                'object': {'id': 'pi_test_123'}
+                'object': mock_payment_intent
             }
         }
         mock_construct_event.return_value = mock_event
@@ -637,19 +654,21 @@ class TestPaymentIntegration:
         assert session_response.session_id == 'cs_test_123'
 
         # Step 2: Process webhook (customer completed payment)
+        # Create a Mock object instead of dict to support attribute access
+        mock_webhook_session = Mock()
+        mock_webhook_session.id = 'cs_test_123'
+        mock_webhook_session.payment_intent = 'pi_test_123'
+        mock_webhook_session.metadata = {
+            'user_id': '1',
+            'credits': '1000',
+            'payment_id': '1'
+        }
+
         mock_event = {
             'id': 'evt_test_123',
             'type': 'checkout.session.completed',
             'data': {
-                'object': {
-                    'id': 'cs_test_123',
-                    'payment_intent': 'pi_test_123',
-                    'metadata': {
-                        'user_id': '1',
-                        'credits': '1000',
-                        'payment_id': '1'
-                    }
-                }
+                'object': mock_webhook_session
             }
         }
         mock_construct_event.return_value = mock_event

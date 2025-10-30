@@ -113,12 +113,14 @@ jobs:
           # Run tests with coverage - TESTS NOW ENFORCED (Phase 3 started)
           # Target: 25% coverage (current baseline: 23.4%)
           # Will increase 10% monthly: 35% (Month 2), 50% (Month 3), 70% (Month 4), 90% (Month 5)
+          # Exclude smoke tests (they require a running server)
           pytest tests/ -v --tb=short \
             --cov=src \
             --cov-report=term \
             --cov-report=xml \
             --cov-report=html \
-            --cov-fail-under=25
+            --cov-fail-under=25 \
+            -m "not smoke"
 
           echo "✅ Tests passed with coverage above 25%"
 

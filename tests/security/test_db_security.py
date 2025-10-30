@@ -190,9 +190,12 @@ class TestCreateSecureAPIKey:
         assert result == "gw_live_key_12345"
 
         # Verify insert was called with expiration_date
-        insert_call = table_mock.insert.call_args[0][0]
-        assert 'expiration_date' in insert_call
-        assert insert_call['expiration_date'] is not None
+        # Note: insert is called 3 times (api_keys_new, rate_limit_configs, api_key_audit_logs)
+        # We need the FIRST call which is for api_keys_new
+        insert_calls = table_mock.insert.call_args_list
+        api_keys_insert = insert_calls[0][0][0]  # First call, first positional arg
+        assert 'expiration_date' in api_keys_insert
+        assert api_keys_insert['expiration_date'] is not None
 
     @patch('src.db_security.get_supabase_client')
     @patch('src.db_security.get_security_manager')
@@ -233,8 +236,11 @@ class TestCreateSecureAPIKey:
         assert result == "gw_live_key_12345"
 
         # Verify IP allowlist was stored
-        insert_call = table_mock.insert.call_args[0][0]
-        assert insert_call['ip_allowlist'] == ip_list
+        # Note: insert is called 3 times (api_keys_new, rate_limit_configs, api_key_audit_logs)
+        # We need the FIRST call which is for api_keys_new
+        insert_calls = table_mock.insert.call_args_list
+        api_keys_insert = insert_calls[0][0][0]  # First call, first positional arg
+        assert api_keys_insert['ip_allowlist'] == ip_list
 
     @patch('src.db_security.check_key_name_uniqueness')
     def test_create_secure_api_key_duplicate_name(
@@ -244,7 +250,8 @@ class TestCreateSecureAPIKey:
         """Test API key creation with duplicate name fails"""
         mock_check_uniqueness.return_value = False
 
-        with pytest.raises(ValueError) as exc_info:
+        # The function wraps ValueError in RuntimeError, so we expect RuntimeError
+        with pytest.raises(RuntimeError) as exc_info:
             create_secure_api_key(
                 user_id=100,
                 key_name="duplicate_key"
@@ -335,8 +342,11 @@ class TestCreateSecureAPIKey:
         assert result == "gw_live_key_12345"
 
         # Verify custom permissions were stored
-        insert_call = table_mock.insert.call_args[0][0]
-        assert insert_call['scope_permissions'] == custom_perms
+        # Note: insert is called 3 times (api_keys_new, rate_limit_configs, api_key_audit_logs)
+        # We need the FIRST call which is for api_keys_new
+        insert_calls = table_mock.insert.call_args_list
+        api_keys_insert = insert_calls[0][0][0]  # First call, first positional arg
+        assert api_keys_insert['scope_permissions'] == custom_perms
 
 
 # ============================================================

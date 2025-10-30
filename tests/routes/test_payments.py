@@ -246,7 +246,7 @@ class TestCheckoutSessions:
             json=request_data
         )
 
-        assert response.status_code == 400
+        assert response.status_code == 422  # Pydantic validation errors return 422
 
     @patch('src.routes.payments.stripe_service')
     @patch('src.routes.payments.get_current_user')

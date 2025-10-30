@@ -9,19 +9,19 @@ from src.config.config import Config
 # Re-export database configuration
 from src.config.db_config import (
     DatabaseConfig,
+    close_db_connections,
     get_db_config,
     get_db_connection,
+    is_db_available,
     test_db_connection,
-    close_db_connections,
-    is_db_available
 )
 
 # Re-export Supabase configuration
 from src.config.supabase_config import (
-    get_supabase_client,
     get_client,
+    get_supabase_client,
     init_db,
-    test_connection
+    test_connection,
 )
 
 # Re-export Redis configuration (if needed)
