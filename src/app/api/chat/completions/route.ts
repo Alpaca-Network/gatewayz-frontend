@@ -19,18 +19,27 @@ const processCompletion = wrapTraced(
       console.log('[API Proxy] Model:', body.model);
       console.log('[API Proxy] Stream:', body.stream);
 
-      const response = await fetch(targetUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': apiKey,
-        },
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(timeoutMs),
-      });
+      // Create an AbortController for timeout handling (AbortSignal.timeout may not be available)
+      const abortController = new AbortController();
+      const timeoutId = setTimeout(() => abortController.abort(), timeoutMs);
 
-      console.log('[API Proxy] Response status:', response.status);
-      console.log('[API Proxy] Response ok:', response.ok);
+      try {
+        const response = await fetch(targetUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': apiKey,
+          },
+          body: JSON.stringify(body),
+          signal: abortController.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        console.log('[API Proxy] Response status:', response.status);
+        console.log('[API Proxy] Response ok:', response.ok);
+        console.log('[API Proxy] Response headers:', Object.fromEntries(response.headers.entries()));
+        console.log('[API Proxy] Response body exists:', !!response.body);
 
       // If not streaming, parse and log the response
       if (!body.stream) {
@@ -103,6 +112,10 @@ const processCompletion = wrapTraced(
 
       console.log('[API Proxy] Setting up streaming response forwarding');
       return { stream: response.body, status: response.status };
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        throw fetchError;
+      }
     });
   },
   {
@@ -116,11 +129,16 @@ const processCompletion = wrapTraced(
  * This proxies requests to the Gatewayz API to bypass CORS issues in development
  */
 export async function POST(request: NextRequest) {
+  console.log('[API Proxy] POST request received');
   let timeoutMs = 30000; // Default timeout
 
   try {
+    console.log('[API Proxy] Parsing request body...');
     const body = await request.json();
+    console.log('[API Proxy] Request body parsed, model:', body.model, 'stream:', body.stream);
+
     const apiKey = request.headers.get('authorization');
+    console.log('[API Proxy] API key present:', !!apiKey);
 
     if (!apiKey) {
       return new Response(

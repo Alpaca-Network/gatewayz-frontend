@@ -105,6 +105,9 @@ export async function* streamChatResponse(
   const timeoutId = setTimeout(() => controller.abort(), 120000);
 
   try {
+    devLog('[Streaming] Initiating fetch request to:', url);
+    devLog('[Streaming] Request body:', requestBody);
+
     const response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -116,6 +119,11 @@ export async function* streamChatResponse(
     });
 
     clearTimeout(timeoutId);
+
+    devLog('[Streaming] Fetch completed. Status:', response.status);
+    devLog('[Streaming] Response headers:', Object.fromEntries(response.headers.entries()));
+    devLog('[Streaming] Response ok:', response.ok);
+    devLog('[Streaming] Response body exists:', !!response.body);
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
@@ -254,6 +262,7 @@ export async function* streamChatResponse(
 
   const reader = response.body?.getReader();
   if (!reader) {
+    devError('[Streaming] No readable stream in response body');
     throw new Error('Response body is not readable');
   }
 
@@ -261,11 +270,14 @@ export async function* streamChatResponse(
   let buffer = '';
   let chunkCount = 0;
 
+  devLog('[Streaming] Stream reader obtained successfully');
   devLog('[Streaming] Starting to read stream...');
 
   try {
     while (true) {
+      devLog(`[Streaming] About to read chunk ${chunkCount + 1}...`);
       const { done, value } = await reader.read();
+      devLog(`[Streaming] Read completed. Done: ${done}, Has value: ${!!value}, Value length: ${value?.length || 0}`);
 
       if (done) {
         devLog(`[Streaming] Stream completed. Total chunks processed: ${chunkCount}`);
