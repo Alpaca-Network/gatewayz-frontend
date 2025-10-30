@@ -135,6 +135,7 @@ def create_app() -> FastAPI:
         ("images", "Image Generation"),  # Image generation endpoints
         ("catalog", "Model Catalog"),
         ("system", "System & Health"),  # Cache management and health monitoring
+        ("optimization_monitor", "Optimization Monitoring"),  # Connection pool, cache, and priority stats
         ("root", "Root/Home"),
         ("auth", "Authentication"),
         ("users", "User Management"),
