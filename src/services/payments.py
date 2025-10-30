@@ -636,7 +636,15 @@ class StripeService:
 
             client.table('users').update(update_data).eq('id', user_id).execute()
 
-            logger.info(f"User {user_id} subscription activated: tier={tier}, subscription_id={subscription.id}")
+            # Clear trial status for all user's API keys
+            client.table('api_keys_new').update({
+                'is_trial': False,
+                'trial_converted': True,
+                'subscription_status': 'active',
+                'subscription_plan': tier
+            }).eq('user_id', user_id).execute()
+
+            logger.info(f"User {user_id} subscription activated: tier={tier}, subscription_id={subscription.id}, trial status cleared")
 
         except Exception as e:
             logger.error(f"Error handling subscription created: {e}", exc_info=True)
@@ -670,6 +678,16 @@ class StripeService:
                 logger.warning(f"User {user_id} subscription status changed to {status}, downgrading to basic tier")
 
             client.table('users').update(update_data).eq('id', user_id).execute()
+
+            # Clear trial status for all user's API keys when subscription becomes active
+            if status == 'active':
+                client.table('api_keys_new').update({
+                    'is_trial': False,
+                    'trial_converted': True,
+                    'subscription_status': 'active',
+                    'subscription_plan': tier
+                }).eq('user_id', user_id).execute()
+                logger.info(f"User {user_id} trial status cleared on subscription update to active")
 
             logger.info(f"User {user_id} subscription updated: status={status}, tier={tier}")
 

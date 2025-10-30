@@ -311,10 +311,13 @@ class TestSubscriptionCreditsIntegration:
         # Step 1: Subscription created
         stripe_service._handle_subscription_created(mock_pro_subscription)
 
-        # Verify subscription status updated
+        # Verify both users and api_keys_new tables were updated
         assert mock_client.table.called
-        table_call = mock_client.table.call_args[0][0]
-        assert table_call == 'users'
+        assert mock_client.table.call_count >= 2
+        # Check that both 'users' and 'api_keys_new' were called
+        table_calls = [call[0][0] for call in mock_client.table.call_args_list]
+        assert 'users' in table_calls
+        assert 'api_keys_new' in table_calls
 
         # Step 2: First invoice paid
         stripe_service._handle_invoice_paid(mock_pro_invoice)
@@ -544,3 +547,123 @@ class TestSubscriptionCreditsEdgeCases:
         # Execute - should raise error
         with pytest.raises(Exception):
             stripe_service._handle_invoice_paid(mock_pro_invoice)
+
+
+class TestTrialStatusClearedOnSubscription:
+    """Test that trial status is cleared when user subscribes"""
+
+    @patch('src.config.supabase_config.get_supabase_client')
+    def test_subscription_created_clears_trial_status(
+        self,
+        mock_get_supabase,
+        stripe_service,
+        mock_max_subscription
+    ):
+        """Test that creating a subscription clears is_trial flag on API keys"""
+        # Setup Supabase mock
+        mock_client = MagicMock()
+        mock_get_supabase.return_value = mock_client
+        mock_table_users = MagicMock()
+        mock_table_api_keys = MagicMock()
+
+        # Mock table method to return different mocks for users vs api_keys_new
+        def table_side_effect(table_name):
+            if table_name == 'users':
+                return mock_table_users
+            elif table_name == 'api_keys_new':
+                return mock_table_api_keys
+            return MagicMock()
+
+        mock_client.table.side_effect = table_side_effect
+
+        # Execute
+        stripe_service._handle_subscription_created(mock_max_subscription)
+
+        # Verify users table was updated
+        assert mock_table_users.update.called
+        users_update_data = mock_table_users.update.call_args[0][0]
+        assert users_update_data['subscription_status'] == 'active'
+        assert users_update_data['tier'] == 'max'
+
+        # Verify api_keys_new table was updated to clear trial status
+        assert mock_table_api_keys.update.called
+        api_keys_update_data = mock_table_api_keys.update.call_args[0][0]
+        assert api_keys_update_data['is_trial'] == False
+        assert api_keys_update_data['trial_converted'] == True
+        assert api_keys_update_data['subscription_status'] == 'active'
+        assert api_keys_update_data['subscription_plan'] == 'max'
+
+        # Verify it was filtered by user_id
+        mock_table_api_keys.update.return_value.eq.assert_called_with('user_id', 2)
+
+    @patch('src.config.supabase_config.get_supabase_client')
+    def test_subscription_updated_to_active_clears_trial_status(
+        self,
+        mock_get_supabase,
+        stripe_service,
+        mock_pro_subscription
+    ):
+        """Test that updating subscription to active clears is_trial flag"""
+        # Setup Supabase mock
+        mock_client = MagicMock()
+        mock_get_supabase.return_value = mock_client
+        mock_table_users = MagicMock()
+        mock_table_api_keys = MagicMock()
+
+        def table_side_effect(table_name):
+            if table_name == 'users':
+                return mock_table_users
+            elif table_name == 'api_keys_new':
+                return mock_table_api_keys
+            return MagicMock()
+
+        mock_client.table.side_effect = table_side_effect
+
+        # Execute
+        stripe_service._handle_subscription_updated(mock_pro_subscription)
+
+        # Verify api_keys_new table was updated to clear trial status
+        assert mock_table_api_keys.update.called
+        api_keys_update_data = mock_table_api_keys.update.call_args[0][0]
+        assert api_keys_update_data['is_trial'] == False
+        assert api_keys_update_data['trial_converted'] == True
+        assert api_keys_update_data['subscription_status'] == 'active'
+        assert api_keys_update_data['subscription_plan'] == 'pro'
+
+    @patch('src.config.supabase_config.get_supabase_client')
+    def test_subscription_updated_to_canceled_does_not_clear_trial(
+        self,
+        mock_get_supabase,
+        stripe_service
+    ):
+        """Test that canceling subscription does not clear trial status"""
+        # Setup - canceled subscription
+        canceled_sub = Mock(
+            id='sub_canceled_123',
+            customer='cus_123',
+            metadata={'user_id': '1', 'tier': 'pro'},
+            status='canceled'
+        )
+
+        mock_client = MagicMock()
+        mock_get_supabase.return_value = mock_client
+        mock_table_users = MagicMock()
+        mock_table_api_keys = MagicMock()
+
+        def table_side_effect(table_name):
+            if table_name == 'users':
+                return mock_table_users
+            elif table_name == 'api_keys_new':
+                return mock_table_api_keys
+            return MagicMock()
+
+        mock_client.table.side_effect = table_side_effect
+
+        # Execute
+        stripe_service._handle_subscription_updated(canceled_sub)
+
+        # Verify users table was updated with canceled status
+        assert mock_table_users.update.called
+
+        # Verify api_keys_new was NOT updated (because status is not 'active')
+        mock_table_api_keys.update.assert_not_called()
