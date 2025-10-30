@@ -12,6 +12,10 @@ import { getModelsForGateway } from '@/lib/models-service';
 import { ModelPageClient } from '@/components/models/model-page-client';
 import { generateChartData } from '@/lib/data';
 
+// Mark this page as dynamic since it fetches data at request time
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+
 interface Model {
   id: string;
   name: string;
