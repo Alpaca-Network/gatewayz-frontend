@@ -364,7 +364,7 @@ console.log(completion.choices[0].message);`,
       {/*</div>*/}
 
       <main className="w-full overflow-x-hidden">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8" style={{position: 'relative'}}>
+        <div className="max-w-7xl mx-auto px-2 sm:px-4 md:px-6 lg:px-8" style={{position: 'relative'}}>
           {/* Hero Section */}
           <Image
             src="/logo_transparent.svg"
@@ -376,21 +376,21 @@ console.log(completion.choices[0].message);`,
             style={{ zIndex: 0 }}
           />
 
-          <section className="pt-12 sm:pt-24 md:pt-32 lg:pt-40 pb-8 md:pb-12 max-w-5xl mx-auto px-2 sm:px-4 relative min-h-[100vh]" style={{ zIndex: 1 }}>
+          <section className="pt-12 sm:pt-20 md:pt-28 lg:pt-36 pb-8 md:pb-12 max-w-5xl mx-auto px-2 sm:px-4 relative min-h-[90vh] sm:min-h-[100vh]" style={{ zIndex: 1 }}>
             <TitleSection/>
 
             <PathChooserModal open={showPathChooser} onOpenChange={setShowPathChooser} />
 
             {/* Three Path Cards - Above the Fold */}
-            <div className="grid md:grid-cols-3 gap-6 mt-8 mb-12">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6 mt-8 sm:mt-12 mb-8 sm:mb-12">
             {/* API Path Card */}
             <Link href="/start/api" className="group">
-              <div className="bg-card border-2 border-border hover:border-blue-500 rounded-lg p-6 shadow-sm hover:shadow-md transition-all h-full flex flex-col">
-                <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                  <Code2 className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+              <div className="bg-card border-2 border-border hover:border-blue-500 rounded-lg p-4 sm:p-6 shadow-sm hover:shadow-md transition-all h-full flex flex-col">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center mb-3 sm:mb-4 group-hover:scale-110 transition-transform">
+                  <Code2 className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600 dark:text-blue-400" />
                 </div>
-                <h3 className="text-xl font-bold mb-2">Use the API</h3>
-                <p className="text-sm text-muted-foreground mb-4">
+                <h3 className="text-lg sm:text-xl font-bold mb-2">Use the API</h3>
+                <p className="text-sm text-muted-foreground mb-4 flex-grow">
                   Copy key → make your first API call in 30 seconds
                 </p>
                 <div className="mt-auto">
@@ -403,12 +403,12 @@ console.log(completion.choices[0].message);`,
 
             {/* Claude Code Path Card */}
             <Link href="/start/claude-code" className="group">
-              <div className="bg-card border-2 border-border hover:border-purple-500 rounded-lg p-6 shadow-sm hover:shadow-md transition-all h-full flex flex-col">
-                <div className="w-12 h-12 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                  <Terminal className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+              <div className="bg-card border-2 border-border hover:border-purple-500 rounded-lg p-4 sm:p-6 shadow-sm hover:shadow-md transition-all h-full flex flex-col">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center mb-3 sm:mb-4 group-hover:scale-110 transition-transform">
+                  <Terminal className="w-5 h-5 sm:w-6 sm:h-6 text-purple-600 dark:text-purple-400" />
                 </div>
-                <h3 className="text-xl font-bold mb-2">Install Claude Code</h3>
-                <p className="text-sm text-muted-foreground mb-4">
+                <h3 className="text-lg sm:text-xl font-bold mb-2">Install Claude Code</h3>
+                <p className="text-sm text-muted-foreground mb-4 flex-grow">
                   One command → AI-powered coding in minutes
                 </p>
                 <div className="mt-auto">
@@ -420,13 +420,13 @@ console.log(completion.choices[0].message);`,
             </Link>
 
             {/* Chat Path Card */}
-            <Link href="/start/chat" className="group">
-              <div className="bg-card border-2 border-border hover:border-green-500 rounded-lg p-6 shadow-sm hover:shadow-md transition-all h-full flex flex-col">
-                <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                  <MessageSquare className="w-6 h-6 text-green-600 dark:text-green-400" />
+            <Link href="/start/chat" className="group sm:col-span-2 md:col-span-1">
+              <div className="bg-card border-2 border-border hover:border-green-500 rounded-lg p-4 sm:p-6 shadow-sm hover:shadow-md transition-all h-full flex flex-col">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mb-3 sm:mb-4 group-hover:scale-110 transition-transform">
+                  <MessageSquare className="w-5 h-5 sm:w-6 sm:h-6 text-green-600 dark:text-green-400" />
                 </div>
-                <h3 className="text-xl font-bold mb-2">Open Chat</h3>
-                <p className="text-sm text-muted-foreground mb-4">
+                <h3 className="text-lg sm:text-xl font-bold mb-2">Open Chat</h3>
+                <p className="text-sm text-muted-foreground mb-4 flex-grow">
                   Start chatting → we pick the best model for you
                 </p>
                 <div className="mt-auto">
