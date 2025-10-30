@@ -6,27 +6,32 @@ All documentation and tools have been created to fix the "Subscription not confi
 
 ## 🎯 What You Need To Do Now
 
-### 1. Add Environment Variables to Railway
+### 1. Add Environment Variables to Vercel
 
-Go to your Railway dashboard and add these **two environment variables**:
+Go to your Vercel dashboard and add these **two environment variables**:
 
 ```bash
 NEXT_PUBLIC_STRIPE_PRO_PRICE_ID=price_1SNk2KLVT8n4vaEn7lHNPYWB
 NEXT_PUBLIC_STRIPE_MAX_PRICE_ID=price_1SNk4ALVT8n4vaEnBpdJejhy
 ```
 
-**How to add them in Railway:**
-1. Open your Railway project
-2. Click on your frontend service
-3. Go to "Variables" tab
-4. Click "New Variable"
-5. Add variable name and value
-6. Repeat for both variables
-7. Railway will automatically redeploy
+**How to add them in Vercel:**
+1. Go to https://vercel.com/dashboard
+2. Select your project (gatewayz-frontend)
+3. Click "Settings" tab
+4. Click "Environment Variables" in sidebar
+5. Add first variable (name and value)
+6. Select **all environments** (Production, Preview, Development)
+7. Click "Save"
+8. Repeat for second variable
 
-### 2. Wait for Deployment
+### 2. Redeploy (CRITICAL!)
 
-Railway will automatically redeploy your app with the new environment variables (usually takes 2-5 minutes).
+**Important:** After adding variables, you MUST redeploy:
+1. Go to "Deployments" tab
+2. Click "..." on the latest deployment
+3. Click "Redeploy"
+4. Wait for build to complete (1-3 minutes)
 
 ### 3. Test the Fix
 
@@ -50,7 +55,7 @@ Test with card: `4242 4242 4242 4242` (Stripe test card)
 - Pro Price ID: `price_1SNk2KLVT8n4vaEn7lHNPYWB` ($10 CAD/month)
 - Max Price ID: `price_1SNk4ALVT8n4vaEnBpdJejhy` ($75 CAD/month)
 
-### 🔧 Needs to be added (Railway):
+### 🔧 Needs to be added (Vercel):
 - `NEXT_PUBLIC_STRIPE_PRO_PRICE_ID`
 - `NEXT_PUBLIC_STRIPE_MAX_PRICE_ID`
 
@@ -81,20 +86,21 @@ If these aren't set up, subscriptions won't complete properly. Check `SUBSCRIPTI
 All in the repository on branch `terragon/fix-subscription-config-error-cqbnc5`:
 
 1. **QUICKSTART_SUBSCRIPTION_FIX.md** - 3-step quick start
-2. **RAILWAY_DEPLOYMENT.md** - Railway-specific instructions (THIS ONE!)
-3. **SUBSCRIPTION_CONFIG_README.md** - Complete reference guide
-4. **SUBSCRIPTION_FIX.md** - Detailed implementation guide
-5. **FIX_SUMMARY.md** - Technical summary
-6. **.env.local.template** - Environment variable template
-7. **scripts/check-subscription-config.js** - Configuration validator
+2. **VERCEL_DEPLOYMENT.md** - Vercel-specific instructions ⭐
+3. **RAILWAY_DEPLOYMENT.md** - Railway-specific instructions (if backend is there)
+4. **SUBSCRIPTION_CONFIG_README.md** - Complete reference guide
+5. **SUBSCRIPTION_FIX.md** - Detailed implementation guide
+6. **FIX_SUMMARY.md** - Technical summary
+7. **.env.local.template** - Environment variable template
+8. **scripts/check-subscription-config.js** - Configuration validator
 
 ## 🐛 If It Still Doesn't Work
 
-### 1. Verify Railway Variables
-Check that both variables show up in Railway's Variables tab and have the correct values.
+### 1. Verify Vercel Variables
+Check that both variables show up in Vercel's Environment Variables section and have the correct values.
 
 ### 2. Check Deployment Logs
-Look at Railway deployment logs for any errors related to environment variables.
+Look at Vercel deployment logs for any errors related to environment variables.
 
 ### 3. Verify Backend
 Make sure your backend has the `/api/stripe/subscription-checkout` endpoint implemented.
@@ -109,21 +115,24 @@ pnpm check-subscription
 
 ## ✅ Success Checklist
 
-- [ ] Added `NEXT_PUBLIC_STRIPE_PRO_PRICE_ID` to Railway
-- [ ] Added `NEXT_PUBLIC_STRIPE_MAX_PRICE_ID` to Railway
-- [ ] Railway redeployed successfully
+- [ ] Added `NEXT_PUBLIC_STRIPE_PRO_PRICE_ID` to Vercel
+- [ ] Added `NEXT_PUBLIC_STRIPE_MAX_PRICE_ID` to Vercel
+- [ ] Selected **all environments** for both variables
+- [ ] Redeployed from Vercel dashboard
+- [ ] Wait for build to complete
+- [ ] Hard refreshed browser (Ctrl+Shift+R)
 - [ ] Visited https://beta.gatewayz.ai/settings/credits
 - [ ] Clicked "Get Started" on Pro tier
-- [ ] Redirected to Stripe Checkout (no error)
+- [ ] Redirected to Stripe Checkout (no error) ✅
 - [ ] Completed test checkout successfully
 - [ ] User tier updated in database
 
 ## 🎉 That's It!
 
 The subscription error should be fixed once you:
-1. Add the two environment variables to Railway
-2. Wait for redeployment
-3. Test the subscription flow
+1. Add the two environment variables to **Vercel**
+2. **Redeploy** from Vercel dashboard
+3. Hard refresh browser and test
 
 **Need help?** Check the comprehensive guides in the repo or run `pnpm check-subscription` locally.
 
