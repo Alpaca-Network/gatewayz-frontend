@@ -1,11 +1,19 @@
 import type {NextConfig} from 'next';
 
-// Bundle analyzer for identifying heavy dependencies
+// Bundle analyzer for identifying heavy dependencies (optional)
+// Install with: npm install --save-dev @next/bundle-analyzer
 // Run with: ANALYZE=true npm run build
-const withBundleAnalyzer = require('@next/bundle-analyzer')({
-  enabled: process.env.ANALYZE === 'true',
-  openAnalyzer: true,
-});
+let withBundleAnalyzer = (config: NextConfig) => config;
+try {
+  if (process.env.ANALYZE === 'true') {
+    withBundleAnalyzer = require('@next/bundle-analyzer')({
+      enabled: true,
+      openAnalyzer: true,
+    });
+  }
+} catch (e) {
+  console.log('Bundle analyzer not installed. Install with: npm install --save-dev @next/bundle-analyzer');
+}
 
 const nextConfig: NextConfig = {
   /* config options here */
