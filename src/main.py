@@ -1,5 +1,6 @@
 import os
 import logging
+import secrets
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from src.services.startup import lifespan
@@ -9,6 +10,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 # Import configuration
 from src.config import Config
+from src.utils.validators import ensure_non_empty_string, ensure_api_key_like
 
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
@@ -36,10 +38,24 @@ _provider_cache = {
 
 # Admin key validation
 def get_admin_key(credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer())):
-    """Validate admin API key"""
+    """Validate admin API key with security improvements"""
     admin_key = credentials.credentials
-    if admin_key != os.environ.get("ADMIN_API_KEY", "admin_key_placeholder"):
+    
+    # Input validation
+    try:
+        ensure_non_empty_string(admin_key, "admin API key")
+        ensure_api_key_like(admin_key, field_name="admin API key", min_length=10)
+    except ValueError:
+        # Do not leak details; preserve current response contract
         raise HTTPException(status_code=401, detail="Invalid admin API key")
+
+    # Get expected key from environment
+    expected_key = os.environ.get("ADMIN_API_KEY", "admin_key_placeholder")
+    
+    # Use constant-time comparison to prevent timing attacks
+    if not secrets.compare_digest(admin_key, expected_key):
+        raise HTTPException(status_code=401, detail="Invalid admin API key")
+    
     return admin_key
 
 
@@ -214,6 +230,11 @@ def create_app() -> FastAPI:
             logger.info("  ⚙️  Validating configuration...")
             Config.validate()
             logger.info("  ✅ Configuration validated")
+
+            # Enforce admin key presence in production
+            if Config.IS_PRODUCTION and not os.environ.get("ADMIN_API_KEY"):
+                logger.error("  ❌ ADMIN_API_KEY is not set in production. Aborting startup.")
+                raise RuntimeError("ADMIN_API_KEY is required in production")
 
             # Initialize database
             try:
