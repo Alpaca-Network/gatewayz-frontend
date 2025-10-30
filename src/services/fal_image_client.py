@@ -1,13 +1,86 @@
 import logging
 import httpx
 import time
-from typing import Dict, Any
+import json
+from pathlib import Path
+from typing import Dict, Any, List, Optional
 
 from src.config import Config
 
 # Initialize logging
 logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
+
+# Cache for Fal.ai models catalog
+_fal_models_cache: Optional[List[Dict[str, Any]]] = None
+
+
+def load_fal_models_catalog() -> List[Dict[str, Any]]:
+    """Load Fal.ai models catalog from the static JSON file
+
+    Returns:
+        List of Fal.ai model definitions with metadata
+    """
+    global _fal_models_cache
+
+    if _fal_models_cache is not None:
+        return _fal_models_cache
+
+    try:
+        catalog_path = Path(__file__).parent.parent / "data" / "fal_catalog.json"
+
+        if catalog_path.exists():
+            logger.info(f"Loading Fal.ai models from catalog: {catalog_path}")
+            with open(catalog_path, 'r') as f:
+                raw_data = json.load(f)
+            
+            # Filter out metadata objects and only keep actual model objects
+            # Model objects must have an "id" field
+            _fal_models_cache = [item for item in raw_data if isinstance(item, dict) and "id" in item]
+            
+            logger.info(f"Loaded {len(_fal_models_cache)} Fal.ai models from catalog")
+            return _fal_models_cache
+        else:
+            logger.warning(f"Fal.ai catalog not found at {catalog_path}")
+            return []
+    except Exception as e:
+        logger.error(f"Failed to load Fal.ai models catalog: {e}")
+        return []
+
+
+def get_fal_models() -> List[Dict[str, Any]]:
+    """Get list of all available Fal.ai models
+
+    Returns:
+        List of model dictionaries with id, name, type, and description
+    """
+    return load_fal_models_catalog()
+
+
+def get_fal_models_by_type(model_type: str) -> List[Dict[str, Any]]:
+    """Get Fal.ai models filtered by type
+
+    Args:
+        model_type: Type of model (e.g., "text-to-image", "image-to-video", "text-to-video")
+
+    Returns:
+        List of models matching the specified type
+    """
+    all_models = load_fal_models_catalog()
+    return [model for model in all_models if model.get("type") == model_type]
+
+
+def validate_fal_model(model_id: str) -> bool:
+    """Check if a model ID is valid in the Fal.ai catalog
+
+    Args:
+        model_id: Model identifier to validate
+
+    Returns:
+        True if model exists in catalog, False otherwise
+    """
+    all_models = load_fal_models_catalog()
+    return any(model.get("id") == model_id for model in all_models)
 
 
 def make_fal_image_request(
@@ -19,15 +92,57 @@ def make_fal_image_request(
 ) -> Dict[str, Any]:
     """Make image generation request to Fal.ai
 
+    This endpoint supports ALL 839+ models available on Fal.ai!
+
+    You can use ANY model from https://fal.ai/models by passing its model ID.
+    The catalog includes popular models plus hundreds more across all categories.
+
+    POPULAR MODELS:
+    Text-to-Image:
+      - fal-ai/flux-pro/v1.1-ultra - Highest quality FLUX model
+      - fal-ai/flux/dev - Fast, high-quality generation
+      - fal-ai/flux/schnell - Ultra-fast generation (1-4 steps)
+      - fal-ai/imagen4/preview - Google's Imagen 4
+      - fal-ai/recraft/v3/text-to-image - Recraft v3
+      - fal-ai/stable-diffusion-v15 - Classic default
+      - fal-ai/aura-flow - High-quality generation
+      - fal-ai/omnigen-v1 - Versatile generation
+
+    Text-to-Video:
+      - fal-ai/veo3.1 - Google Veo 3.1 (latest)
+      - fal-ai/sora-2/text-to-video - OpenAI Sora 2
+      - fal-ai/sora-2/text-to-video/pro - Sora 2 Pro
+      - fal-ai/kling-video/v2.5-turbo/pro/text-to-video - Kling Turbo
+      - fal-ai/minimax/video-01 - MiniMax Video
+      - fal-ai/wan-25-preview/text-to-video - WAN 2.5
+
+    Image-to-Video:
+      - fal-ai/veo3.1/image-to-video
+      - fal-ai/sora-2/image-to-video
+      - fal-ai/kling-video/v2.5-turbo/pro/image-to-video
+      - fal-ai/wan-25-preview/image-to-video
+
+    Plus 800+ more models for:
+      - Image editing, upscaling, background removal
+      - Video-to-video, lipsync, effects
+      - Text-to-speech, audio generation
+      - 3D generation, LoRA training
+      - And much more!
+
+    USAGE:
+    Browse all models at https://fal.ai/models and use the model ID directly.
+    Example: model="fal-ai/flux/dev" or model="bria/fibo/generate"
+
     Args:
-        prompt: Text description of the image to generate
-        model: Model to use (e.g., "fal-ai/stable-diffusion-v15")
+        prompt: Text description of the content to generate
+        model: Model ID from https://fal.ai/models (default: "fal-ai/stable-diffusion-v15")
+               Supports ALL 839+ Fal.ai models - just pass the model ID!
         size: Image dimensions (e.g., "512x512", "1024x1024")
         n: Number of images to generate
-        **kwargs: Additional parameters like negative_prompt, guidance_scale, etc.
+        **kwargs: Model-specific parameters (negative_prompt, guidance_scale, etc.)
 
     Returns:
-        Dict containing generated images in OpenAI-compatible format
+        Dict containing generated content in OpenAI-compatible format
     """
     try:
         if not Config.FAL_API_KEY:
