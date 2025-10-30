@@ -1095,11 +1095,12 @@ function ChatPageContent() {
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const [editedTitle, setEditedTitle] = useState('');
     const [selectedModel, setSelectedModel] = useState<ModelOption | null>({
-        value: 'openrouter/auto',
-        label: 'Alpaca Router',
-        category: 'Router',
-        sourceGateway: 'openrouter',
-        developer: 'Alpaca'
+        value: '@cerebras/qwen-3-32b',
+        label: 'Qwen 3 32B',
+        category: 'Free',
+        sourceGateway: 'cerebras',
+        developer: 'Qwen',
+        speedTier: 'ultra-fast'
     });
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
     const { toast } = useToast();
@@ -2213,10 +2214,10 @@ function ChatPageContent() {
                 });
 
                 // OPTIMIZATION: Batch UI updates to reduce re-renders
-                // Only update UI every 50ms or when significant content arrives
+                // Only update UI every 16ms (60fps) for smooth streaming experience
                 let lastUpdateTime = Date.now();
                 let pendingUpdate = false;
-                const UPDATE_INTERVAL_MS = 50;
+                const UPDATE_INTERVAL_MS = 16; // ~60fps for smoother perceived performance
 
                 const performUIUpdate = () => {
                     pendingUpdate = false;
@@ -2833,6 +2834,16 @@ function ChatPageContent() {
                         <div className="rounded-lg p-3 bg-muted/30 dark:bg-muted/20 border border-border max-w-2xl w-full">
                           <div className="flex items-center justify-between mb-2">
                             <p className="text-xs font-semibold text-muted-foreground">{getModelDisplayName(msg.model)}</p>
+                            {msg.isStreaming && (
+                              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                <div className="flex gap-1">
+                                  <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" style={{ animationDelay: '0ms' }}></div>
+                                  <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" style={{ animationDelay: '150ms' }}></div>
+                                  <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" style={{ animationDelay: '300ms' }}></div>
+                                </div>
+                                <span className="font-medium">Streaming...</span>
+                              </div>
+                            )}
                           </div>
                           <div className="text-sm prose prose-sm max-w-none dark:prose-invert">
                             <MarkdownRenderer>{fixLatexSyntax(msg.content)}</MarkdownRenderer>
