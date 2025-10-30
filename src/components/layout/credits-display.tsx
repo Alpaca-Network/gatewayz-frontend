@@ -20,11 +20,26 @@ export function CreditsDisplay() {
       if (userData?.credits !== undefined && userData?.credits !== null) {
         const creditValue = Math.floor(userData.credits);
         console.log('[CreditsDisplay] Setting credits to:', creditValue);
-        setCredits(creditValue);
+
+        // Only update state if the value has actually changed
+        setCredits(prevCredits => {
+          if (prevCredits !== creditValue) {
+            return creditValue;
+          }
+          return prevCredits;
+        });
+
         // Normalize tier to lowercase to handle case sensitivity
         const normalizedTier = userData.tier?.toLowerCase() as UserTier | undefined;
         console.log('[CreditsDisplay] Normalized tier:', { original: userData.tier, normalized: normalizedTier, isPro: normalizedTier === 'pro', isMax: normalizedTier === 'max' });
-        setTier(normalizedTier);
+
+        // Only update tier if it has changed
+        setTier(prevTier => {
+          if (prevTier !== normalizedTier) {
+            return normalizedTier;
+          }
+          return prevTier;
+        });
       } else {
         console.log('[CreditsDisplay] No credits found in userData');
       }
