@@ -49,6 +49,7 @@ body {
 
     --search-bar: 0, 0%, 77%, 1; /* #4D4D4D */
     --sidebar-top: 65px;
+    --sidebar-height: calc(100vh - 65px);
   }
  
   .dark {
