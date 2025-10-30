@@ -172,7 +172,8 @@ export class ChatHistoryAPI {
         throw new Error(error.error || `HTTP ${response.status}: ${response.statusText}`);
       }
 
-      return await response.json();
+      const result = await response.json();
+      return result.data;
     }
 
     // Server-side: call backend directly
