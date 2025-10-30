@@ -150,7 +150,8 @@ export const processAuthResponse = (response: AuthResponse): void => {
       display_name: response.display_name,
       email: response.email,
       credits: creditsAsInteger,
-      tier: response.tier,
+      // Normalize tier to lowercase to handle case sensitivity from backend
+      tier: response.tier?.toLowerCase() as UserTier | undefined,
       subscription_status: response.subscription_status,
       subscription_end_date: response.subscription_end_date,
     };
