@@ -260,6 +260,11 @@ def get_model_id_mapping(provider: str) -> Dict[str, str]:
             # Google models
             "google/gemma-2-9b": "google/gemma-2-9b-it",
             "google/gemma-2-9b-it": "google/gemma-2-9b-it",
+        },
+        "chutes": {
+            # Chutes uses org/model format directly
+            # Most models pass through as-is from their catalog
+            # Keep the exact format from the catalog for proper routing
         }
     }
 
@@ -369,7 +374,7 @@ def detect_provider_from_model_id(model_id: str) -> Optional[str]:
         return "portkey"
 
     # Check all mappings to see if this model exists
-    for provider in ["fireworks", "openrouter", "featherless", "together", "portkey", "huggingface", "hug"]:
+    for provider in ["fireworks", "openrouter", "featherless", "together", "portkey", "huggingface", "hug", "chutes"]:
         mapping = get_model_id_mapping(provider)
         if model_id in mapping:
             logger.info(f"Detected provider '{provider}' for model '{model_id}'")
