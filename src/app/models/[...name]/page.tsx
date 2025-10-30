@@ -615,11 +615,8 @@ export default function ModelProfilePage() {
                 <div className="flex flex-wrap items-start justify-between gap-4">
                     <div className="flex-1">
                         <h1 className="text-3xl lg:text-4xl font-bold mb-2">{model.name}</h1>
-                        <p className="text-sm text-muted-foreground mb-3">
-                            Created Apr 14, 2025 | By <span className="text-blue-600">{model.provider_slug} AI</span>
-                        </p>
                         {/* Model ID with copy button */}
-                        <div className="flex items-center gap-2 mb-3">
+                        <div className="flex items-center gap-2 mb-2">
                             <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-muted rounded-md border">
                                 <code className="text-sm font-mono">{model.id}</code>
                                 <button
@@ -635,7 +632,23 @@ export default function ModelProfilePage() {
                                 </button>
                             </div>
                         </div>
-                        <div className="flex items-center gap-2 flex-wrap">
+                        {/* Pricing and Context Information */}
+                        <div className="flex items-center gap-2 flex-wrap text-sm text-muted-foreground">
+                            <span>Created Oct 30, 2025</span>
+                            <span>|</span>
+                            <span>{model.context_length > 0 ? `${(model.context_length / 1000).toLocaleString()}k` : 'N/A'} context</span>
+                            <span>|</span>
+                            <span>${(parseFloat(model.pricing.prompt) * 1000000).toFixed(2)}/M input tokens</span>
+                            <span>|</span>
+                            <span>${(parseFloat(model.pricing.completion) * 1000000).toFixed(2)}/M output tokens</span>
+                            {model.architecture.input_modalities.includes('audio') && (
+                                <>
+                                    <span>|</span>
+                                    <span>$0.0001/M audio tokens</span>
+                                </>
+                            )}
+                        </div>
+                        <div className="flex items-center gap-2 flex-wrap mt-3">
                             <Badge className="bg-black text-white hover:bg-gray-800">Free</Badge>
                             <Badge variant="secondary">Multi-Lingual</Badge>
                         </div>
