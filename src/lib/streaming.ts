@@ -142,6 +142,9 @@ export async function* streamChatResponse(
     if (response.status === 400) {
       const errorMessage = errorData.detail || errorData.error?.message || errorData.message || 'Bad request';
       devError('400 Bad Request details:', errorData);
+      // Log the actual error message for debugging credit issues
+      console.error('🔴 BACKEND ERROR MESSAGE:', errorMessage);
+      console.error('🔴 FULL ERROR DATA:', JSON.stringify(errorData, null, 2));
 
       // Check for common error patterns that indicate trial/credit issues
       if (errorMessage.toLowerCase().includes('trial has expired') ||
