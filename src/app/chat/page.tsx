@@ -1390,45 +1390,72 @@ function ChatPageContent() {
 
         // If we already have API key in localStorage, start loading immediately
         if (apiKey && userData?.privy_user_id) {
+            let isMounted = true; // Track if component is still mounted
+
             const loadSessions = async () => {
                 try {
                     const sessionsData = await apiHelpers.loadChatSessions('user-1');
+
+                    if (!isMounted) return; // Don't update state if unmounted
+
                     setSessions(sessionsData);
 
-                    // Check if there's already a new/empty chat, if not create one
-                    const hasNewChat = sessionsData.some(session =>
-                        session.messages.length === 0 &&
-                        session.title === 'Untitled Chat'
-                    );
+                    // Select the most recent session by default (most likely to have messages)
+                    // Sort by updatedAt descending to get the most recently active session
+                    const mostRecentSession = [...sessionsData].sort((a, b) =>
+                        b.updatedAt.getTime() - a.updatedAt.getTime()
+                    )[0];
 
-                    if (!hasNewChat) {
-                        createNewChat();
-                    } else {
-                        // Set the first new chat as active - use local data instead of state
-                        const firstNewChat = sessionsData.find(session =>
-                            session.messages.length === 0 &&
-                            session.title === 'Untitled Chat'
-                        );
-                        if (firstNewChat) {
-                            // Clear any stale message from the input field for new empty chats
-                            if (!userHasTypedRef.current) {
-                                setMessage('');
-                                setUserHasTyped(false); // Reset typing flag
-                                userHasTypedRef.current = false;
+                    if (mostRecentSession && mostRecentSession.apiSessionId) {
+                        console.log('[loadSessions] Setting most recent session as active:', mostRecentSession.id);
+
+                        // Set active session ID immediately
+                        setActiveSessionId(mostRecentSession.id);
+
+                        // Load messages for the active session
+                        setLoadingMessages(true);
+                        try {
+                            const messages = await apiHelpers.loadSessionMessages(
+                                mostRecentSession.id,
+                                mostRecentSession.apiSessionId
+                            );
+
+                            if (!isMounted) return;
+
+                            console.log('[loadSessions] Loaded messages:', messages.length);
+
+                            // Update the session with loaded messages
+                            setSessions(prev => prev.map(s =>
+                                s.id === mostRecentSession.id ? { ...s, messages } : s
+                            ));
+
+                            // Mark session as loaded
+                            setLoadedSessionIds(prev => new Set(prev).add(mostRecentSession.id));
+                        } catch (error) {
+                            console.error('[loadSessions] Failed to load messages:', error);
+                        } finally {
+                            if (isMounted) {
+                                setLoadingMessages(false);
                             }
-                            // Directly set active session ID instead of calling switchToSession
-                            // since setSessions hasn't completed yet
-                            setActiveSessionId(firstNewChat.id);
                         }
+                    } else {
+                        // No sessions exist, create a new chat
+                        createNewChat();
                     }
                 } catch (error) {
+                    console.error('[loadSessions] Failed to load sessions:', error);
                     // Failed to load sessions, fallback to creating a new chat
-                    createNewChat();
+                    if (isMounted) {
+                        createNewChat();
+                    }
                 }
             };
 
             loadSessions();
-            return;
+
+            return () => {
+                isMounted = false; // Cleanup: mark as unmounted
+            };
         }
 
         // If no API key yet, wait for authentication to complete
@@ -1493,8 +1520,17 @@ function ChatPageContent() {
     const switchToSession = async (sessionId: string) => {
         const session = sessions.find(s => s.id === sessionId);
         if (!session) {
+            console.warn('[switchToSession] Session not found:', sessionId);
             return;
         }
+
+        console.log('[switchToSession] Switching to session:', {
+            sessionId,
+            hasMessages: session.messages.length > 0,
+            messageCount: session.messages.length,
+            hasApiSessionId: !!session.apiSessionId,
+            alreadyLoaded: loadedSessionIds.has(sessionId)
+        });
 
         // Log analytics event for session switch
         logAnalyticsEvent('chat_session_switched', {
@@ -1508,14 +1544,17 @@ function ChatPageContent() {
 
         // If messages already loaded or session is new (no messages), skip loading
         if (loadedSessionIds.has(sessionId) || session.messages.length > 0) {
+            console.log('[switchToSession] Skipping message load (already loaded or has messages)');
             return;
         }
 
         // Load messages for this session
         if (session.apiSessionId) {
+            console.log('[switchToSession] Loading messages for session:', sessionId, 'apiSessionId:', session.apiSessionId);
             setLoadingMessages(true);
             try {
                 const messages = await apiHelpers.loadSessionMessages(sessionId, session.apiSessionId);
+                console.log('[switchToSession] Loaded messages:', messages.length);
 
                 // Update the session with loaded messages
                 setSessions(prev => prev.map(s =>
@@ -1525,10 +1564,12 @@ function ChatPageContent() {
                 // Mark session as loaded
                 setLoadedSessionIds(prev => new Set(prev).add(sessionId));
             } catch (error) {
-                // Failed to load messages
+                console.error('[switchToSession] Failed to load messages:', error);
             } finally {
                 setLoadingMessages(false);
             }
+        } else {
+            console.warn('[switchToSession] No apiSessionId for session:', sessionId);
         }
     };
 
