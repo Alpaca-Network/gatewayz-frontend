@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, lazy, Suspense } from 'react';
+import { useMemo, lazy, Suspense, useEffect, useState } from 'react';
+import { useParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
@@ -234,23 +235,13 @@ const fetchModelData = cache(async (modelId: string) => {
     }
 });
 
-// Generate static params for popular models (optional - improves build time)
-export async function generateStaticParams() {
-    // Return empty array to avoid building all model pages at build time
-    // Models will be generated on-demand using dynamic rendering
-    return [];
-}
+// Client components cannot export generateStaticParams - dynamic rendering only
 
-export default async function ModelProfilePage({
-    params
-}: {
-    params: Promise<{ name: string | string[] }>
-}) {
-    // Await params in Next.js 15
-    const resolvedParams = await params;
+export default function ModelProfilePage() {
+    const params = useParams();
 
     // Handle catch-all route - params.name will be an array like ['x-ai', 'grok-4-fast']
-    const nameParam = resolvedParams.name;
+    const nameParam = params.name as string | string[];
     let modelId = Array.isArray(nameParam) ? nameParam.join('/') : nameParam;
     // Decode URL-encoded characters (e.g., %40 -> @)
     modelId = decodeURIComponent(modelId);
