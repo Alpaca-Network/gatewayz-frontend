@@ -5,6 +5,8 @@ import os
 from pathlib import Path
 import csv
 from typing import Any, Dict, Optional, Union
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 
 from src.config import Config
 from src.cache import (
@@ -25,6 +27,8 @@ from src.cache import (
     _huggingface_models_cache,
     _aimo_models_cache,
     _near_models_cache,
+    is_cache_fresh,
+    should_revalidate_in_background,
 )
 from fastapi import APIRouter
 from datetime import datetime, timezone
@@ -172,6 +176,76 @@ def load_featherless_catalog_export() -> list:
     except Exception as exc:
         logger.error(f"Failed to load Featherless catalog export: {exc}", exc_info=True)
         return None
+
+
+# Thread pool for background cache revalidation
+_revalidation_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="cache-revalidate")
+
+
+def revalidate_cache_in_background(gateway: str, fetch_function):
+    """Trigger background revalidation of cache"""
+    def _revalidate():
+        try:
+            logger.info(f"Background revalidation started for {gateway}")
+            fetch_function()
+            logger.info(f"Background revalidation completed for {gateway}")
+        except Exception as e:
+            logger.warning(f"Background revalidation failed for {gateway}: {e}")
+
+    _revalidation_executor.submit(_revalidate)
+
+
+def get_all_models_parallel():
+    """Fetch models from all gateways in parallel for improved performance"""
+    try:
+        gateways = [
+            "openrouter", "portkey", "featherless", "deepinfra",
+            "google", "cerebras", "nebius", "xai", "novita",
+            "hug", "chutes", "groq", "fireworks", "together",
+            "aimo", "near"
+        ]
+
+        # Use ThreadPoolExecutor to fetch all gateways in parallel
+        # Since get_cached_models uses synchronous httpx, we use threads
+        with ThreadPoolExecutor(max_workers=16) as executor:
+            futures = {executor.submit(get_cached_models, gw): gw for gw in gateways}
+            all_models = []
+
+            for future in futures:
+                try:
+                    models = future.result(timeout=30)
+                    if models:
+                        all_models.extend(models)
+                except Exception as e:
+                    gateway_name = futures[future]
+                    logger.warning(f"Failed to fetch models from {gateway_name}: {e}")
+
+            return all_models
+    except Exception as e:
+        logger.error(f"Error in parallel model fetching: {e}")
+        # Fallback to sequential fetching
+        return get_all_models_sequential()
+
+
+def get_all_models_sequential():
+    """Fallback sequential fetching (original implementation)"""
+    openrouter_models = get_cached_models("openrouter") or []
+    portkey_models = get_cached_models("portkey") or []
+    featherless_models = get_cached_models("featherless") or []
+    deepinfra_models = get_cached_models("deepinfra") or []
+    google_models = get_cached_models("google") or []
+    cerebras_models = get_cached_models("cerebras") or []
+    nebius_models = get_cached_models("nebius") or []
+    xai_models = get_cached_models("xai") or []
+    novita_models = get_cached_models("novita") or []
+    hug_models = get_cached_models("hug") or []
+    chutes_models = get_cached_models("chutes") or []
+    groq_models = get_cached_models("groq") or []
+    fireworks_models = get_cached_models("fireworks") or []
+    together_models = get_cached_models("together") or []
+    aimo_models = get_cached_models("aimo") or []
+    near_models = get_cached_models("near") or []
+    return openrouter_models + portkey_models + featherless_models + deepinfra_models + google_models + cerebras_models + nebius_models + xai_models + novita_models + hug_models + chutes_models + groq_models + fireworks_models + together_models + aimo_models + near_models
 
 
 def get_cached_models(gateway: str = "openrouter"):
@@ -328,31 +402,20 @@ def get_cached_models(gateway: str = "openrouter"):
             return fetch_models_from_near()
 
         if gateway == "all":
-            openrouter_models = get_cached_models("openrouter") or []
-            portkey_models = get_cached_models("portkey") or []
-            featherless_models = get_cached_models("featherless") or []
-            deepinfra_models = get_cached_models("deepinfra") or []
-            google_models = get_cached_models("google") or []
-            cerebras_models = get_cached_models("cerebras") or []
-            nebius_models = get_cached_models("nebius") or []
-            xai_models = get_cached_models("xai") or []
-            novita_models = get_cached_models("novita") or []
-            hug_models = get_cached_models("hug") or []
-            chutes_models = get_cached_models("chutes") or []
-            groq_models = get_cached_models("groq") or []
-            fireworks_models = get_cached_models("fireworks") or []
-            together_models = get_cached_models("together") or []
-            aimo_models = get_cached_models("aimo") or []
-            near_models = get_cached_models("near") or []
-            return openrouter_models + portkey_models + featherless_models + deepinfra_models + google_models + cerebras_models + nebius_models + xai_models + novita_models + hug_models + chutes_models + groq_models + fireworks_models + together_models + aimo_models + near_models
+            # Fetch all gateways in parallel for improved performance
+            return get_all_models_parallel()
 
-        # Default to OpenRouter
-        if _models_cache["data"] and _models_cache["timestamp"]:
-            cache_age = (datetime.now(timezone.utc) - _models_cache["timestamp"]).total_seconds()
-            if cache_age < _models_cache["ttl"]:
-                return _models_cache["data"]
+        # Default to OpenRouter with stale-while-revalidate
+        if is_cache_fresh(_models_cache):
+            return _models_cache["data"]
 
-        # Cache expired or empty, fetch fresh data
+        # Check if we can serve stale cache while revalidating
+        if should_revalidate_in_background(_models_cache):
+            logger.info("Serving stale OpenRouter cache while revalidating in background")
+            revalidate_cache_in_background("openrouter", fetch_models_from_openrouter)
+            return _models_cache["data"]
+
+        # Cache expired or empty, fetch fresh data synchronously
         return fetch_models_from_openrouter()
     except Exception as e:
         logger.error(f"Error getting cached models for gateway '{gateway}': {e}")

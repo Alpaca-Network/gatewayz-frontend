@@ -6,6 +6,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from src.services.startup import lifespan
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 # Import configuration
@@ -108,6 +109,12 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # Add GZip compression middleware for model catalog responses
+    # Compress responses larger than 1KB (1000 bytes)
+    # This significantly reduces payload size for large model lists
+    app.add_middleware(GZipMiddleware, minimum_size=1000)
+    logger.info("  🗜️  GZip compression middleware enabled (threshold: 1KB)")
 
     # Security
     security = HTTPBearer()
