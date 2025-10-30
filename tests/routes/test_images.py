@@ -5,6 +5,7 @@ Comprehensive tests for image generation endpoint
 Tests cover:
 - Image generation with DeepInfra
 - Image generation with Portkey
+- Image generation with Fal.ai
 - Authentication and authorization
 - Credit validation and deduction
 - Request validation
@@ -75,6 +76,20 @@ def mock_portkey_response():
             {
                 'url': 'https://cdn.portkey.ai/image456.png',
                 'revised_prompt': 'A serene mountain landscape at sunset, photorealistic',
+                'b64_json': None
+            }
+        ]
+    }
+
+
+@pytest.fixture
+def mock_fal_response():
+    """Sample Fal.ai image generation response"""
+    return {
+        'created': 1677652288,
+        'data': [
+            {
+                'url': 'https://fal.media/files/elephant/image789.png',
                 'b64_json': None
             }
         ]
@@ -265,6 +280,72 @@ class TestImageGenerationSuccess:
 
         # Verify credits deducted for all images
         mock_deduct_credits.assert_called_once_with('test_api_key_12345', 300)
+
+    @patch('src.routes.images.get_user')
+    @patch('src.routes.images.make_fal_image_request')
+    @patch('src.routes.images.process_image_generation_response')
+    @patch('src.routes.images.deduct_credits')
+    @patch('src.routes.images.record_usage')
+    @patch('src.routes.images.increment_api_key_usage')
+    def test_generate_image_fal_success(
+        self,
+        mock_increment_usage,
+        mock_record_usage,
+        mock_deduct_credits,
+        mock_process_response,
+        mock_make_request,
+        mock_get_user,
+        client,
+        mock_user,
+        mock_fal_response
+    ):
+        """Test successful image generation with Fal.ai"""
+        # Setup mocks
+        mock_get_user.return_value = mock_user
+        mock_make_request.return_value = mock_fal_response
+        mock_process_response.return_value = {
+            'created': 1677652288,
+            'data': mock_fal_response['data'],
+            'provider': 'fal',
+            'model': 'fal-ai/stable-diffusion-v15'
+        }
+
+        request_data = {
+            'prompt': 'A serene mountain landscape at sunset',
+            'model': 'fal-ai/stable-diffusion-v15',
+            'provider': 'fal',
+            'size': '1024x1024',
+            'n': 1
+        }
+
+        # Execute
+        response = client.post(
+            '/v1/images/generations',
+            headers={'Authorization': 'Bearer test_api_key_12345'},
+            json=request_data
+        )
+
+        # Verify
+        assert response.status_code == 200
+        data = response.json()
+
+        # Verify response structure
+        assert 'data' in data
+        assert len(data['data']) == 1
+        assert 'url' in data['data'][0]
+        assert data['data'][0]['url'].startswith('https://')
+        assert data['provider'] == 'fal'
+        assert data['model'] == 'fal-ai/stable-diffusion-v15'
+
+        # Verify gateway usage metadata
+        assert 'gateway_usage' in data
+        assert data['gateway_usage']['tokens_charged'] == 100  # 100 tokens per image
+        assert data['gateway_usage']['images_generated'] == 1
+
+        # Verify credits were deducted
+        mock_deduct_credits.assert_called_once_with('test_api_key_12345', 100)
+        mock_record_usage.assert_called_once()
+        mock_increment_usage.assert_called_once_with('test_api_key_12345')
 
 
 # ============================================================

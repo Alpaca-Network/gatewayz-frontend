@@ -61,6 +61,9 @@ class Config:
     # Near AI Configuration
     NEAR_API_KEY = os.environ.get("NEAR_API_KEY")
 
+    # Fal.ai Configuration
+    FAL_API_KEY = os.environ.get("FAL_API_KEY")
+
     # Google Generative AI Configuration (for language models)
     GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
 

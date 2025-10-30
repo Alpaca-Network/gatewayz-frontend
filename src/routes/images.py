@@ -11,6 +11,7 @@ from src.db.users import get_user, deduct_credits, record_usage
 from src.models import ImageGenerationRequest, ImageGenerationResponse
 from src.security.deps import get_api_key
 from src.services.image_generation_client import make_portkey_image_request, make_deepinfra_image_request, make_google_vertex_image_request, process_image_generation_response
+from src.services.fal_image_client import make_fal_image_request
 from src.config import Config
 
 # Initialize logging
@@ -66,6 +67,17 @@ async def generate_images(req: ImageGenerationRequest, api_key: str = Depends(ge
         "google_project_id": "gatewayz-468519",
         "google_location": "us-central1",
         "google_endpoint_id": "6072619212881264640"
+    }
+    ```
+
+    Fal.ai:
+    ```json
+    {
+        "prompt": "A serene mountain landscape at sunset",
+        "model": "fal-ai/stable-diffusion-v15",
+        "size": "1024x1024",
+        "n": 1,
+        "provider": "fal"
     }
     ```
     """
@@ -180,10 +192,20 @@ async def generate_images(req: ImageGenerationRequest, api_key: str = Depends(ge
                     endpoint_id=google_endpoint_id
                 )
                 actual_provider = "google-vertex"
+            elif provider == "fal":
+                # Fal.ai request
+                make_request_func = partial(
+                    make_fal_image_request,
+                    prompt=prompt,
+                    model=model,
+                    size=req.size,
+                    n=req.n
+                )
+                actual_provider = "fal"
             else:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Provider '{provider}' is not supported for image generation. Use 'deepinfra', 'portkey', or 'google-vertex'"
+                    detail=f"Provider '{provider}' is not supported for image generation. Use 'deepinfra', 'portkey', 'google-vertex', or 'fal'"
                 )
 
             response = await loop.run_in_executor(executor, make_request_func)
