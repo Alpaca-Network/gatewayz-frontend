@@ -349,6 +349,14 @@ export async function* streamChatResponse(
               if (choice?.delta) {
                 const delta = choice.delta;
                 const deltaRecord = delta as Record<string, unknown>;
+
+                // OPTIMIZATION: Skip processing if delta only contains role (common in initial chunks)
+                // This improves performance when models send many empty initialization chunks
+                const deltaKeys = Object.keys(deltaRecord);
+                if (deltaKeys.length === 1 && deltaKeys[0] === 'role') {
+                  continue; // Skip to next line, don't process this empty chunk
+                }
+
                 const contentText =
                   toPlainText(deltaRecord.content) ||
                   toPlainText(deltaRecord.text) ||
@@ -465,13 +473,19 @@ export async function* streamChatResponse(
             }
 
             if (chunk) {
-              devLog('[Streaming] Yielding chunk:', {
-                hasContent: !!chunk.content,
-                contentLength: chunk.content?.length || 0,
-                hasReasoning: !!chunk.reasoning,
-                isDone: !!chunk.done
-              });
-              yield chunk;
+              // Only yield chunks that have actual content, reasoning, or are the final chunk
+              // Skip empty chunks to improve streaming performance
+              if (chunk.content || chunk.reasoning || chunk.done) {
+                devLog('[Streaming] Yielding chunk:', {
+                  hasContent: !!chunk.content,
+                  contentLength: chunk.content?.length || 0,
+                  hasReasoning: !!chunk.reasoning,
+                  isDone: !!chunk.done
+                });
+                yield chunk;
+              } else {
+                devLog('[Streaming] Skipping empty chunk');
+              }
             } else {
               devWarn('[Streaming] No chunk created from SSE data. This may indicate an unsupported response format or an error from the backend.');
               devWarn('[Streaming] Unrecognized data structure:', data);
