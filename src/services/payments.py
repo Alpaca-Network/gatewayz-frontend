@@ -715,8 +715,8 @@ class StripeService:
 
             # Calculate credits based on tier
             credits_map = {
-                'pro': 100.0,   # $100 credits per month
-                'max': 1000.0   # $1000 credits per month
+                'pro': 20.0,   # $20 credits per month
+                'max': 150.0   # $150 credits per month
             }
             credits = credits_map.get(tier, 0)
 
