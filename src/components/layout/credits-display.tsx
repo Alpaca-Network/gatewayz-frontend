@@ -21,7 +21,9 @@ export function CreditsDisplay() {
         const creditValue = Math.floor(userData.credits);
         console.log('[CreditsDisplay] Setting credits to:', creditValue);
         setCredits(creditValue);
-        setTier(userData.tier);
+        // Normalize tier to lowercase to handle case sensitivity
+        const normalizedTier = userData.tier?.toLowerCase() as UserTier | undefined;
+        setTier(normalizedTier);
       } else {
         console.log('[CreditsDisplay] No credits found in userData');
       }
