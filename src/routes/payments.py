@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException, Request, Header, Depends
 from fastapi.responses import JSONResponse
 
 from src.schemas.payments import WebhookProcessingResult, CreateCheckoutSessionRequest, CreatePaymentIntentRequest, \
-    CreateRefundRequest
+    CreateRefundRequest, CreateSubscriptionCheckoutRequest
 from src.services.payments import StripeService
 
 from src.security import deps as security_deps
@@ -64,13 +64,22 @@ async def stripe_webhook(
     """
     Stripe webhook endpoint - handles all Stripe events
 
-    This endpoint receives webhooks from Stripe for payment events:
+    This endpoint receives webhooks from Stripe for payment and subscription events:
+
+    Payment Events:
     - checkout.session.completed - User completed checkout, add credits
     - checkout.session.expired - Checkout expired, mark payment as canceled
     - payment_intent.succeeded - Payment succeeded, add credits
     - payment_intent.payment_failed - Payment failed, update status
     - payment_intent.canceled - Payment canceled by user
     - charge.refunded - Charge was refunded, deduct credits
+
+    Subscription Events:
+    - customer.subscription.created - Subscription created, upgrade user tier
+    - customer.subscription.updated - Subscription updated, sync status
+    - customer.subscription.deleted - Subscription canceled, downgrade tier
+    - invoice.paid - Subscription renewed, add monthly credits
+    - invoice.payment_failed - Payment failed, mark subscription past_due
 
     IMPORTANT: This endpoint must be configured in your Stripe Dashboard:
     1. Go to Stripe Dashboard > Developers > Webhooks
@@ -517,3 +526,71 @@ async def get_payment_details(
     except Exception as e:
         logger.error(f"Error getting payment details: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== Subscription Checkout ====================
+
+@router.post("/subscription-checkout", response_model=Dict[str, Any])
+async def create_subscription_checkout(
+        request: CreateSubscriptionCheckoutRequest,
+        current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """
+    Create a Stripe checkout session for subscription
+
+    This endpoint creates a Stripe-hosted checkout page for recurring subscriptions.
+    After payment, Stripe redirects to success_url or cancel_url.
+
+    Args:
+        request: Subscription checkout parameters (price_id, product_id, URLs)
+        current_user: Authenticated user from token
+
+    Returns:
+        Checkout session with URL and session ID
+
+    Example request body:
+    {
+        "price_id": "price_1SNk2KLVT8n4vaEn7lHNPYWB",
+        "product_id": "prod_TKOqQPhVRxNp4Q",
+        "customer_email": "user@example.com",
+        "success_url": "https://beta.gatewayz.ai/settings/credits?session_id={{CHECKOUT_SESSION_ID}}",
+        "cancel_url": "https://beta.gatewayz.ai/settings/credits",
+        "mode": "subscription"
+    }
+
+    Example response:
+    {
+        "session_id": "cs_test_xxxxx",
+        "url": "https://checkout.stripe.com/pay/cs_test_xxxxx",
+        "customer_id": "cus_xxxxx",
+        "status": "open"
+    }
+    """
+    try:
+        user_id = current_user['id']
+        logger.info(f"Creating subscription checkout for user {user_id}, price_id: {request.price_id}, product_id: {request.product_id}")
+
+        session = stripe_service.create_subscription_checkout(
+            user_id=user_id,
+            request=request
+        )
+
+        logger.info(f"Subscription checkout session created for user {user_id}: {session.session_id}")
+
+        return {
+            "session_id": session.session_id,
+            "url": session.url,
+            "customer_id": session.customer_id,
+            "status": session.status
+        }
+
+    except ValueError as e:
+        logger.error(f"Validation error creating subscription checkout: {e}", exc_info=True)
+        raise HTTPException(status_code=400, detail=str(e))
+
+    except Exception as e:
+        logger.error(f"Error creating subscription checkout: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to create subscription checkout: {str(e)}"
+        )
