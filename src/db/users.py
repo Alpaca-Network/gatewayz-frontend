@@ -681,7 +681,9 @@ def get_user_profile(api_key: str) -> Dict[str, Any]:
             "email": user.get("email"),
             "auth_method": user.get("auth_method"),
             "subscription_status": user.get("subscription_status"),
+            "tier": user.get("tier"),  # Include subscription tier (basic, pro, max)
             "trial_expires_at": user.get("trial_expires_at"),
+            "subscription_end_date": user.get("subscription_end_date"),  # Unix timestamp
             "is_active": user.get("is_active"),
             "registration_date": user.get("registration_date")
         }

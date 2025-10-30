@@ -47,7 +47,9 @@ def mock_user():
         'email': 'test@example.com',
         'credits': 100.0,
         'api_key': 'sk-test-key-12345',
-        'subscription_status': 'active'
+        'subscription_status': 'active',
+        'tier': 'pro',
+        'subscription_end_date': None
     }
 
 
@@ -61,7 +63,9 @@ def mock_trial_user():
         'credits': 10.0,
         'api_key': 'sk-trial-key-12345',
         'subscription_status': 'trial',
-        'trial_end_date': (datetime.now(timezone.utc) + timedelta(days=3)).isoformat()
+        'tier': 'basic',
+        'trial_end_date': (datetime.now(timezone.utc) + timedelta(days=3)).isoformat(),
+        'subscription_end_date': None
     }
 
 
@@ -109,7 +113,9 @@ def mock_user_profile():
         'email': 'test@example.com',
         'auth_method': 'email',
         'subscription_status': 'active',
+        'tier': 'pro',  # Subscription tier: basic, pro, or max
         'trial_expires_at': None,
+        'subscription_end_date': None,  # Unix timestamp for subscription end
         'is_active': True,
         'registration_date': '2024-01-01T00:00:00Z',
         'created_at': '2024-01-01T00:00:00Z',
