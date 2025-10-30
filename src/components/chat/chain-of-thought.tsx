@@ -75,12 +75,14 @@ export const ChainOfThought = memo(
 
     return (
       <ChainOfThoughtContext.Provider value={chainOfThoughtContext}>
-        <div
-          className={cn("flex flex-col gap-0", className)}
-          {...props}
-        >
-          {children}
-        </div>
+        <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+          <div
+            className={cn("flex flex-col gap-0", className)}
+            {...props}
+          >
+            {children}
+          </div>
+        </Collapsible>
       </ChainOfThoughtContext.Provider>
     );
   }
@@ -96,30 +98,28 @@ export type ChainOfThoughtHeaderProps = ComponentProps<
 
 export const ChainOfThoughtHeader = memo(
   ({ className, children, badge, ...props }: ChainOfThoughtHeaderProps) => {
-    const { isOpen, setIsOpen } = useChainOfThought();
+    const { isOpen } = useChainOfThought();
 
     return (
-      <Collapsible onOpenChange={setIsOpen} open={isOpen}>
-        <CollapsibleTrigger
+      <CollapsibleTrigger
+        className={cn(
+          "flex w-full items-center gap-2 px-3 py-2 text-sm font-medium transition-colors hover:text-foreground focus:outline-none focus-visible:outline-none",
+          className
+        )}
+        {...props}
+      >
+        <BrainIcon className="size-4 shrink-0" />
+        <span className="flex-1 text-left">{children ?? "Chain of Thought"}</span>
+        {badge && (
+          <span className="shrink-0 text-xs text-muted-foreground">{badge}</span>
+        )}
+        <ChevronDownIcon
           className={cn(
-            "flex w-full items-center gap-2 px-3 py-2 text-sm font-medium transition-colors hover:text-foreground focus:outline-none focus-visible:outline-none",
-            className
+            "size-4 shrink-0 transition-transform",
+            isOpen ? "rotate-180" : "rotate-0"
           )}
-          {...props}
-        >
-          <BrainIcon className="size-4 shrink-0" />
-          <span className="flex-1 text-left">{children ?? "Chain of Thought"}</span>
-          {badge && (
-            <span className="shrink-0 text-xs text-muted-foreground">{badge}</span>
-          )}
-          <ChevronDownIcon
-            className={cn(
-              "size-4 shrink-0 transition-transform",
-              isOpen ? "rotate-180" : "rotate-0"
-            )}
-          />
-        </CollapsibleTrigger>
-      </Collapsible>
+        />
+      </CollapsibleTrigger>
     );
   }
 );
@@ -132,21 +132,17 @@ export type ChainOfThoughtContentProps = ComponentProps<
 
 export const ChainOfThoughtContent = memo(
   ({ className, children, ...props }: ChainOfThoughtContentProps) => {
-    const { isOpen } = useChainOfThought();
-
     return (
-      <Collapsible open={isOpen}>
-        <CollapsibleContent
-          className={cn(
-            "px-4 pb-4 pt-2 space-y-3 text-sm text-muted-foreground",
-            "data-[state=closed]:animate-out data-[state=open]:animate-in data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:fade-in-0 data-[state=open]:slide-in-from-top-2",
-            className
-          )}
-          {...props}
-        >
-          {children}
-        </CollapsibleContent>
-      </Collapsible>
+      <CollapsibleContent
+        className={cn(
+          "px-4 pb-4 pt-2 space-y-3 text-sm text-muted-foreground",
+          "data-[state=closed]:animate-out data-[state=open]:animate-in data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:fade-in-0 data-[state=open]:slide-in-from-top-2",
+          className
+        )}
+        {...props}
+      >
+        {children}
+      </CollapsibleContent>
     );
   }
 );
