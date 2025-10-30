@@ -7,9 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend } from 'recharts';
-import { addDays, format } from 'date-fns';
+import { format } from 'date-fns';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { ProvidersDisplay } from '@/components/models/provider-card';
 import { Maximize, Copy, Check } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { providerData } from '@/lib/provider-data';
@@ -17,7 +16,6 @@ import { generateChartData, generateStatsTable } from '@/lib/data';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import ReactMarkdown from "react-markdown";
 import { cn } from '@/lib/utils';
-import { stringToColor } from '@/lib/utils';
 import { API_BASE_URL } from '@/lib/config';
 import { models as staticModels } from '@/lib/models-data';
 import { getApiKey } from '@/lib/api';
@@ -160,91 +158,33 @@ function transformStaticModel(staticModel: typeof staticModels[0]): Model {
     };
 }
 
-// Cached function to fetch model data server-side
-const fetchModelData = cache(async (modelId: string) => {
-    console.log(`[ModelProfilePage] Fetching model data for: ${modelId}`);
-
-    try {
-        // Fetch from all gateways in parallel using the existing service
-        const result = await getModelsForGateway('all');
-        const allModels = result.data || [];
-
-        // Find the specific model
-        let foundModel = allModels.find((m: Model) => m.id === modelId);
-
-        // Try alternative matching strategies
-        if (!foundModel) {
-            foundModel = allModels.find((m: Model) => {
-                const modelNamePart = m.id.includes(':') ? m.id.split(':')[1] : m.id;
-                return modelNamePart === modelId || m.id.split('/').pop() === modelId;
-            });
-        }
-
-        // Determine which gateways support this model
-        const providers: string[] = [];
-        const modelIdLower = modelId.toLowerCase();
-
-        // Check each gateway for the model
-        const gatewayChecks = [
-            'openrouter', 'portkey', 'featherless', 'chutes', 'fireworks',
-            'together', 'groq', 'deepinfra', 'google', 'cerebras', 'nebius',
-            'xai', 'novita', 'huggingface', 'aimo', 'near'
-        ];
-
-        for (const gateway of gatewayChecks) {
-            const hasModel = allModels.some((m: Model) => {
-                if (m.id.toLowerCase() === modelIdLower) return true;
-                const modelNamePart = m.id.includes(':') ? m.id.split(':')[1].toLowerCase() : m.id.toLowerCase();
-                if (modelNamePart === modelIdLower) return true;
-                const normalizedModelId = modelIdLower.replace(/[_\-\/]/g, '');
-                const normalizedDataId = m.id.toLowerCase().replace(/[_\-\/]/g, '');
-                if (normalizedModelId === normalizedDataId) return true;
-                if (m.name && m.name.toLowerCase() === foundModel?.name?.toLowerCase()) return true;
-                const lastPart = m.id.split('/').pop()?.toLowerCase();
-                if (lastPart === modelIdLower) return true;
-                return false;
-            });
-
-            if (hasModel) providers.push(gateway);
-        }
-
-        return {
-            model: foundModel,
-            allModels,
-            providers
-        };
-    } catch (error) {
-        console.error('[ModelProfilePage] Error fetching models:', error);
-
-        // Fallback to static data
-        const staticModelsTransformed = staticModels.map(transformStaticModel);
-        let staticFoundModel = staticModelsTransformed.find((m: Model) => m.id === modelId);
-
-        if (!staticFoundModel) {
-            staticFoundModel = staticModelsTransformed.find((m: Model) => {
-                const modelNamePart = m.id.includes(':') ? m.id.split(':')[1] : m.id;
-                return modelNamePart === modelId || m.id.split('/').pop() === modelId;
-            });
-        }
-
-        return {
-            model: staticFoundModel,
-            allModels: staticModelsTransformed,
-            providers: []
-        };
-    }
-});
-
-// Client components cannot export generateStaticParams - dynamic rendering only
-
 export default function ModelProfilePage() {
     const params = useParams();
+
+    // State declarations
+    const [model, setModel] = useState<Model | null>(null);
+    const [allModels, setAllModels] = useState<Model[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [loadingProviders, setLoadingProviders] = useState(true);
+    const [modelProviders, setModelProviders] = useState<string[]>([]);
+    const [activeTab, setActiveTab] = useState<TabType>('Playground');
+    const [selectedLanguage, setSelectedLanguage] = useState<'curl' | 'python' | 'openai-python' | 'typescript' | 'openai-typescript'>('curl');
+    const [copiedStates, setCopiedStates] = useState<Record<string, boolean>>({});
+    const [apiKey, setApiKey] = useState('gw_live_YOUR_API_KEY_HERE');
 
     // Handle catch-all route - params.name will be an array like ['x-ai', 'grok-4-fast']
     const nameParam = params.name as string | string[];
     let modelId = Array.isArray(nameParam) ? nameParam.join('/') : nameParam;
     // Decode URL-encoded characters (e.g., %40 -> @)
     modelId = decodeURIComponent(modelId);
+
+    // Load API key from storage
+    useEffect(() => {
+        const key = getApiKey();
+        if (key) {
+            setApiKey(key);
+        }
+    }, []);
 
     useEffect(() => {
         const CACHE_KEY = 'gatewayz_models_cache_v4_all_gateways';
