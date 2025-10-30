@@ -122,7 +122,9 @@ export const processAuthResponse = (response: AuthResponse): void => {
   console.log('Processing auth response:', {
     success: response.success,
     has_api_key: !!response.api_key,
-    api_key_preview: response.api_key ? `${response.api_key.substring(0, 10)}...` : 'None'
+    api_key_preview: response.api_key ? `${response.api_key.substring(0, 10)}...` : 'None',
+    credits_raw: response.credits,
+    credits_type: typeof response.credits,
   });
 
   if (response.success && response.api_key) {
@@ -130,7 +132,15 @@ export const processAuthResponse = (response: AuthResponse): void => {
     console.log('API key saved to localStorage');
 
     // Convert credits to integer to match backend expectations
-    const creditsAsInteger = Math.floor(response.credits);
+    // Handle undefined/null/NaN cases
+    const creditsAsInteger = response.credits !== undefined && response.credits !== null && !isNaN(response.credits)
+      ? Math.floor(response.credits)
+      : 0;
+
+    console.log('[processAuthResponse] Credits conversion:', {
+      original: response.credits,
+      converted: creditsAsInteger,
+    });
 
     const userData: UserData = {
       user_id: response.user_id,
@@ -146,7 +156,7 @@ export const processAuthResponse = (response: AuthResponse): void => {
     };
 
     saveUserData(userData);
-    console.log('User data saved to localStorage');
+    console.log('User data saved to localStorage:', userData);
 
     console.log('User authenticated successfully:', {
       user_id: response.user_id,
