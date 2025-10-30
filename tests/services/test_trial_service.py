@@ -452,7 +452,7 @@ class TestGetSubscriptionPlans:
             {
                 'id': 1,
                 'plan_name': 'starter',
-                'plan_type': 'monthly',
+                'plan_type': 'dev',  # Valid PlanType enum value
                 'monthly_price': 9.99,
                 'yearly_price': 99.99,
                 'max_requests_per_month': 10000,
@@ -626,14 +626,14 @@ class TestValidateTrialAccess:
                 trial_status=Mock(
                     is_trial=True,
                     trial_expired=False,
-                    trial_remaining_tokens=500000,
-                    trial_remaining_requests=500,
+                    trial_remaining_tokens=2000000,  # Enough tokens (2M)
+                    trial_remaining_requests=500,  # Enough requests
                     trial_remaining_credits=0.01,  # Very low credits
                     trial_end_date=datetime.now() + timedelta(days=2)
                 )
             )
 
-            # Request 1M tokens (estimated cost: $0.02)
+            # Request 1M tokens (estimated cost: $0.02, but only $0.01 credits remaining)
             result = await trial_service.validate_trial_access('test_key', tokens_used=1000000)
 
             assert result.is_valid is False

@@ -51,7 +51,7 @@ from src.schemas.payments import (
     PaymentResponse,
     PaymentUpdate,
     PaymentRecord,
-    SubscriptionPlan,
+    SubscriptionPlan as PaymentSubscriptionPlan,  # Rename to avoid conflict
     CreateSubscriptionRequest,
     SubscriptionResponse,
     CreditPurchaseRequest,
@@ -83,6 +83,7 @@ from src.schemas.payments import (
 from src.schemas.plans import (
     PlanResponse,
     SubscriptionHistory,
+    SubscriptionPlan,  # This is the correct one for trial service
     SubscriptionPlansResponse,
     UserPlanResponse,
     AssignPlanRequest,
