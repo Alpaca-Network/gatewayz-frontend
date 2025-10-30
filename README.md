@@ -313,8 +313,47 @@ For support and questions:
 - Review the component examples in `src/components/`
 - Check the Privy documentation for authentication issues
 
+## 🧪 Testing Tool Calling
+
+The platform includes comprehensive testing tools for validating tool/function calling capabilities across AI models.
+
+### Quick Start
+```bash
+# Set your API key
+export GATEWAYZ_API_KEY="your_api_key_here"
+
+# List models with tool calling support
+pnpm tsx test-tool-calling.ts --list
+
+# Run a simple test
+pnpm tsx test-tool-calling-simple.ts
+
+# Test with curl
+bash test-tool-calling-curl.sh
+```
+
+### Test Files
+- `test-tool-calling.ts` - Full test suite with multiple scenarios
+- `test-tool-calling-simple.ts` - Quick minimal example
+- `test-tool-calling-curl.sh` - Shell script using curl
+- `TOOL_CALLING_README.md` - Quick start guide
+- `TOOL_CALLING_TESTS.md` - Complete documentation
+- `TOOL_CALLING_EXAMPLE_OUTPUT.md` - Example outputs
+
+### Supported Models with Tool Calling
+- GPT-4o mini (OpenAI)
+- Qwen: Qwen2 72B A16B 2507 (FREE) ⭐
+- Qwen: Qwen2 57B A14B 2507
+- DeepSeek: DeepSeek V3.5
+- Anthropic: Claude 3.7 Sonnet
+- Google: Gemini 2.1 Pro
+- And more...
+
+See [TOOL_CALLING_README.md](TOOL_CALLING_README.md) for detailed instructions.
+
 ## 🔗 Related Documentation
 
+- [Tool Calling Tests](TOOL_CALLING_README.md) - Tool/function calling test suite
 - [Privy Documentation](https://docs.privy.io/)
 - [Next.js Documentation](https://nextjs.org/docs)
 - [Google Genkit Documentation](https://firebase.google.com/docs/genkit)
