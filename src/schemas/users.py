@@ -56,6 +56,7 @@ class UserProfileResponse(BaseModel):
     auth_method: Optional[str]
     subscription_status: Optional[str]
     tier: Optional[str] = None  # Subscription tier: 'basic', 'pro', or 'max'
+    tier_display_name: Optional[str] = None  # Display-friendly tier name: 'Basic', 'Pro', or 'MAX'
     trial_expires_at: Optional[str]
     subscription_end_date: Optional[int] = None  # Unix timestamp for subscription end date
     is_active: Optional[bool]

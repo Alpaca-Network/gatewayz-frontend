@@ -114,6 +114,7 @@ def mock_user_profile():
         'auth_method': 'email',
         'subscription_status': 'active',
         'tier': 'pro',  # Subscription tier: basic, pro, or max
+        'tier_display_name': 'Pro',  # Display-friendly tier name
         'trial_expires_at': None,
         'subscription_end_date': None,  # Unix timestamp for subscription end
         'is_active': True,
@@ -498,6 +499,66 @@ class TestUserProfile:
         assert data['email'] == 'test@example.com'
         assert data['credits'] == 100
         assert data['subscription_status'] == 'active'
+
+    @patch('src.routes.users.get_user')
+    @patch('src.routes.users.get_user_profile')
+    def test_get_profile_tier_display_names(
+        self,
+        mock_get_profile,
+        mock_get_user,
+        client,
+        mock_api_key,
+        mock_user,
+        mock_user_profile
+    ):
+        """Test that tier display names are correctly mapped for all tiers"""
+        # Test MAX tier
+        mock_user_max = {**mock_user, 'tier': 'max'}
+        mock_profile_max = {
+            **mock_user_profile,
+            'tier': 'max',
+            'tier_display_name': 'MAX'
+        }
+        mock_get_user.return_value = mock_user_max
+        mock_get_profile.return_value = mock_profile_max
+
+        response = client.get(
+            '/user/profile',
+            headers={'Authorization': f'Bearer {mock_api_key}'}
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data['tier'] == 'max'
+        assert data['tier_display_name'] == 'MAX'
+
+        # Test Pro tier
+        mock_profile_pro = {**mock_user_profile, 'tier': 'pro', 'tier_display_name': 'Pro'}
+        mock_get_profile.return_value = mock_profile_pro
+
+        response = client.get(
+            '/user/profile',
+            headers={'Authorization': f'Bearer {mock_api_key}'}
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data['tier'] == 'pro'
+        assert data['tier_display_name'] == 'Pro'
+
+        # Test Basic tier
+        mock_profile_basic = {**mock_user_profile, 'tier': 'basic', 'tier_display_name': 'Basic'}
+        mock_get_profile.return_value = mock_profile_basic
+
+        response = client.get(
+            '/user/profile',
+            headers={'Authorization': f'Bearer {mock_api_key}'}
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data['tier'] == 'basic'
+        assert data['tier_display_name'] == 'Basic'
 
     @patch('src.routes.users.get_user')
     @patch('src.routes.users.get_user_profile')
