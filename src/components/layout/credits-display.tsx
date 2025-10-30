@@ -23,6 +23,7 @@ export function CreditsDisplay() {
         setCredits(creditValue);
         // Normalize tier to lowercase to handle case sensitivity
         const normalizedTier = userData.tier?.toLowerCase() as UserTier | undefined;
+        console.log('[CreditsDisplay] Normalized tier:', { original: userData.tier, normalized: normalizedTier, isPro: normalizedTier === 'pro', isMax: normalizedTier === 'max' });
         setTier(normalizedTier);
       } else {
         console.log('[CreditsDisplay] No credits found in userData');
@@ -53,6 +54,8 @@ export function CreditsDisplay() {
   // Show plan name for PRO and MAX users
   const showPlanName = tier === 'pro' || tier === 'max';
   const planName = tier === 'pro' ? 'PRO' : tier === 'max' ? 'MAX' : '';
+
+  console.log('[CreditsDisplay] Rendering:', { credits, tier, showPlanName, planName });
 
   return (
     <Link href="/settings/credits">
