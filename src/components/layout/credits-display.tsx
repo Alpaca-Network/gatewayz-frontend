@@ -12,8 +12,15 @@ export function CreditsDisplay() {
   useEffect(() => {
     const updateCredits = () => {
       const userData = getUserData();
-      if (userData?.credits !== undefined) {
-        setCredits(Math.floor(userData.credits));
+      console.log('[CreditsDisplay] Loading credits from userData:', { userData, credits: userData?.credits });
+
+      // Accept 0 as a valid credit value
+      if (userData?.credits !== undefined && userData?.credits !== null) {
+        const creditValue = Math.floor(userData.credits);
+        console.log('[CreditsDisplay] Setting credits to:', creditValue);
+        setCredits(creditValue);
+      } else {
+        console.log('[CreditsDisplay] No credits found in userData');
       }
     };
 
@@ -32,7 +39,11 @@ export function CreditsDisplay() {
     };
   }, []);
 
-  if (credits === null) return null;
+  // Show 0 credits instead of hiding the component
+  if (credits === null) {
+    console.log('[CreditsDisplay] Credits is null, not rendering');
+    return null;
+  }
 
   return (
     <Link href="/settings/credits">

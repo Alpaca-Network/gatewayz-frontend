@@ -254,6 +254,12 @@ export function GatewayzAuthProvider({ children, onAuthError }: GatewayzAuthProv
 
   const handleAuthSuccess = useCallback(
     (authData: AuthResponse, isNewUserExpected: boolean) => {
+      console.log("[Auth] Processing auth success with data:", {
+        credits: authData.credits,
+        is_new_user: authData.is_new_user,
+        user_id: authData.user_id
+      });
+
       processAuthResponse(authData);
       updateStateFromStorage();
       lastSyncedPrivyIdRef.current = authData.privy_user_id || null;
@@ -269,9 +275,16 @@ export function GatewayzAuthProvider({ children, onAuthError }: GatewayzAuthProv
         console.log("Referral code cleared from localStorage after successful auth");
       }
 
+      // Verify localStorage was written before redirecting
+      const savedUserData = getUserData();
+      console.log("[Auth] Verified saved user data before redirect:", savedUserData);
+
       if (authData.is_new_user ?? isNewUserExpected) {
         console.log("[Auth] New user detected, redirecting to onboarding");
-        window.location.href = "/onboarding";
+        // Small delay to ensure localStorage write completes
+        setTimeout(() => {
+          window.location.href = "/onboarding";
+        }, 100);
       }
     },
     [updateStateFromStorage]
