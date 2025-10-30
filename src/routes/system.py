@@ -201,10 +201,10 @@ def _render_gateway_dashboard(results: Dict[str, Any], log_output: str, auto_fix
 
         toggle_attributes = 'disabled="disabled"' if toggle_disabled else ""
         auto_fix_cell = """
-        <div class="fix-toggle">
+        <div class="fix-toggle" onclick="event.stopPropagation()">
             <div class="status-text">{status_text}</div>
-            <label class="switch">
-                <input type="checkbox" onclick="event.stopPropagation()" onchange="handleFixToggle(event, '{gateway_id}', this)" {attributes}>
+            <label class="switch" onclick="event.stopPropagation()">
+                <input type="checkbox" onchange="handleFixToggle(event, '{gateway_id}', this)" {attributes}>
                 <span class="slider"></span>
             </label>
             <span class="toggle-hint">{hint}</span>
@@ -591,6 +591,7 @@ def _render_gateway_dashboard(results: Dict[str, Any], log_output: str, auto_fix
                 display: inline-block;
                 width: 48px;
                 height: 24px;
+                cursor: pointer;
             }}
             .switch input {{
                 opacity: 0;
@@ -609,6 +610,10 @@ def _render_gateway_dashboard(results: Dict[str, Any], log_output: str, auto_fix
                 border-radius: 24px;
                 border: 1px solid rgba(248, 113, 113, 0.5);
             }}
+            .slider:hover {{
+                background-color: rgba(248, 113, 113, 0.45);
+                border-color: rgba(248, 113, 113, 0.65);
+            }}
             .slider:before {{
                 position: absolute;
                 content: "";
@@ -625,12 +630,19 @@ def _render_gateway_dashboard(results: Dict[str, Any], log_output: str, auto_fix
                 background-color: rgba(74, 222, 128, 0.45);
                 border-color: rgba(74, 222, 128, 0.7);
             }}
+            .switch input:checked + .slider:hover {{
+                background-color: rgba(74, 222, 128, 0.55);
+                border-color: rgba(74, 222, 128, 0.85);
+            }}
             .switch input:checked + .slider:before {{
                 transform: translateX(22px);
             }}
             .switch input:disabled + .slider {{
                 background-color: rgba(148, 163, 184, 0.2);
                 border-color: rgba(148, 163, 184, 0.3);
+                cursor: not-allowed;
+            }}
+            .switch:has(input:disabled) {{
                 cursor: not-allowed;
             }}
             .models-list::-webkit-scrollbar {{
