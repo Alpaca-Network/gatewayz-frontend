@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import csv
+from typing import Optional
 
 from src.config import Config
 from src.cache import (
