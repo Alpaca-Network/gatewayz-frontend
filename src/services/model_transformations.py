@@ -168,9 +168,17 @@ def get_model_id_mapping(provider: str) -> Dict[str, str]:
             "openai/gpt-4": "openai/gpt-4",
             "openai/gpt-4-turbo": "openai/gpt-4-turbo",
             "openai/gpt-3.5-turbo": "openai/gpt-3.5-turbo",
+            # Claude 3 models
             "anthropic/claude-3-opus": "anthropic/claude-3-opus-20240229",
             "anthropic/claude-3-sonnet": "anthropic/claude-3-sonnet-20240229",
             "anthropic/claude-3-haiku": "anthropic/claude-3-haiku-20240307",
+            # Claude Sonnet 4.5 - support multiple input formats
+            "claude-sonnet-4-5-20250929": "anthropic/claude-sonnet-4.5",
+            "anthropic/claude-sonnet-4.5": "anthropic/claude-sonnet-4.5",
+            "anthropic/claude-4.5-sonnet": "anthropic/claude-sonnet-4.5",
+            "anthropic/claude-4.5-sonnet-20250929": "anthropic/claude-sonnet-4.5",
+            "claude-sonnet-4.5": "anthropic/claude-sonnet-4.5",
+            # Other models
             "meta-llama/llama-3.1-70b": "meta-llama/llama-3.1-70b-instruct",
             "deepseek-ai/deepseek-v3": "deepseek/deepseek-chat",
         },
