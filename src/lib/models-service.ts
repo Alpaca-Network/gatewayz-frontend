@@ -57,6 +57,7 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
     'huggingface',
     'aimo',
     'near',
+    'fal',
     'all'
   ];
   if (!validGateways.includes(gateway)) {
@@ -84,7 +85,8 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
         'novita',
         'huggingface',
         'aimo',
-        'near'
+        'near',
+        'fal'
       ];
 
       const results = await Promise.all(
@@ -345,7 +347,8 @@ function getStaticFallbackModels(gateway: string): any[] {
       'novita',
       'huggingface',
       'aimo',
-      'near'
+      'near',
+      'fal'
     ];
     const modelsPerGateway = Math.ceil(models.length / allGateways.length);
 
@@ -372,7 +375,8 @@ function getStaticFallbackModels(gateway: string): any[] {
       'novita',
       'huggingface',
       'aimo',
-      'near'
+      'near',
+      'fal'
     ];
     const modelsPerGateway = Math.ceil(models.length / allGateways.length);
     let gatewayModels;
