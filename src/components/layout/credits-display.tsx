@@ -3,22 +3,25 @@
 import { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { getUserData } from '@/lib/api';
-import { Coins } from 'lucide-react';
+import type { UserTier } from '@/lib/api';
+import { Coins, Crown } from 'lucide-react';
 import Link from 'next/link';
 
 export function CreditsDisplay() {
   const [credits, setCredits] = useState<number | null>(null);
+  const [tier, setTier] = useState<UserTier | undefined>(undefined);
 
   useEffect(() => {
     const updateCredits = () => {
       const userData = getUserData();
-      console.log('[CreditsDisplay] Loading credits from userData:', { userData, credits: userData?.credits });
+      console.log('[CreditsDisplay] Loading credits from userData:', { userData, credits: userData?.credits, tier: userData?.tier });
 
       // Accept 0 as a valid credit value
       if (userData?.credits !== undefined && userData?.credits !== null) {
         const creditValue = Math.floor(userData.credits);
         console.log('[CreditsDisplay] Setting credits to:', creditValue);
         setCredits(creditValue);
+        setTier(userData.tier);
       } else {
         console.log('[CreditsDisplay] No credits found in userData');
       }
@@ -45,6 +48,10 @@ export function CreditsDisplay() {
     return null;
   }
 
+  // Show plan name for PRO and MAX users
+  const showPlanName = tier === 'pro' || tier === 'max';
+  const planName = tier === 'pro' ? 'PRO' : tier === 'max' ? 'MAX' : '';
+
   return (
     <Link href="/settings/credits">
       <Button
@@ -52,10 +59,21 @@ export function CreditsDisplay() {
         size="sm"
         className="h-8 px-2 sm:px-3 gap-1.5 bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-950/50 text-amber-900 dark:text-amber-100"
       >
-        <Coins className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
-        <span className="font-semibold text-xs sm:text-sm">
-          {credits.toLocaleString()}
-        </span>
+        {showPlanName ? (
+          <>
+            <Crown className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+            <span className="font-semibold text-xs sm:text-sm">
+              {planName}
+            </span>
+          </>
+        ) : (
+          <>
+            <Coins className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+            <span className="font-semibold text-xs sm:text-sm">
+              {credits.toLocaleString()}
+            </span>
+          </>
+        )}
       </Button>
     </Link>
   );
