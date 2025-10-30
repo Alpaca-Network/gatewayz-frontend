@@ -139,6 +139,12 @@ export async function POST(request: NextRequest) {
 
     const apiKey = request.headers.get('authorization');
     console.log('[API Proxy] API key present:', !!apiKey);
+    if (apiKey) {
+      const keyPrefix = apiKey.substring(0, 15);
+      console.log('[API Proxy] API key prefix:', keyPrefix);
+      console.log('[API Proxy] Is temp key?', apiKey.includes('gw_temp_'));
+      console.log('[API Proxy] Is live key?', apiKey.includes('gw_live_'));
+    }
 
     if (!apiKey) {
       return new Response(
