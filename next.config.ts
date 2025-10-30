@@ -1,5 +1,20 @@
 import type {NextConfig} from 'next';
 
+// Bundle analyzer for identifying heavy dependencies (optional)
+// Install with: npm install --save-dev @next/bundle-analyzer
+// Run with: ANALYZE=true npm run build
+let withBundleAnalyzer = (config: NextConfig) => config;
+try {
+  if (process.env.ANALYZE === 'true') {
+    withBundleAnalyzer = require('@next/bundle-analyzer')({
+      enabled: true,
+      openAnalyzer: true,
+    });
+  }
+} catch (e) {
+  console.log('Bundle analyzer not installed. Install with: npm install --save-dev @next/bundle-analyzer');
+}
+
 const nextConfig: NextConfig = {
   /* config options here */
   typescript: {
@@ -94,4 +109,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default withBundleAnalyzer(nextConfig);
