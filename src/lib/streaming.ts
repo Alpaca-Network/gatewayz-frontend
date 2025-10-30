@@ -149,10 +149,16 @@ export async function* streamChatResponse(
       // Check for common error patterns that indicate trial/credit issues
       if (errorMessage.toLowerCase().includes('trial has expired') ||
           errorMessage.toLowerCase().includes('upgrade to') ||
-          errorMessage.toLowerCase().includes('insufficient credits') ||
-          errorMessage.toLowerCase().includes('upstream rejected')) {
+          errorMessage.toLowerCase().includes('insufficient credits')) {
         throw new Error(
           'Trial credits have been used up. You can still use FREE models! Look for models with the "FREE" badge in the model selector, or add credits to use premium models.'
+        );
+      }
+
+      // Handle "upstream rejected" errors with the actual backend message
+      if (errorMessage.toLowerCase().includes('upstream rejected')) {
+        throw new Error(
+          `Backend error: ${errorMessage}. This may be a temporary issue with the model provider. Please try again or select a different model.`
         );
       }
 
@@ -425,9 +431,16 @@ export async function* streamChatResponse(
 
               // Check if it's a trial expiration error
               if (errorMessage.toLowerCase().includes('trial has expired') ||
-                  errorMessage.toLowerCase().includes('streaming error')) {
+                  errorMessage.toLowerCase().includes('insufficient credits')) {
                 throw new Error(
                   'Trial credits have been used up. You can still use FREE models! Look for models with the "FREE" badge in the model selector, or add credits to use premium models.'
+                );
+              }
+
+              // Handle "upstream rejected" errors with the actual backend message
+              if (errorMessage.toLowerCase().includes('upstream rejected')) {
+                throw new Error(
+                  `Backend error: ${errorMessage}. This may be a temporary issue with the model provider. Please try again or select a different model.`
                 );
               }
 
