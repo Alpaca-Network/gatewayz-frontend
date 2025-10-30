@@ -278,6 +278,7 @@ export async function* streamChatResponse(
   const decoder = new TextDecoder();
   let buffer = '';
   let chunkCount = 0;
+  let receivedDoneSignal = false;
 
   devLog('[Streaming] Stream reader obtained successfully');
   devLog('[Streaming] Starting to read stream...');
@@ -305,11 +306,15 @@ export async function* streamChatResponse(
       for (const line of lines) {
         const trimmedLine = line.trim();
 
-        if (!trimmedLine || trimmedLine === 'data: [DONE]') {
-          if (trimmedLine === 'data: [DONE]') {
-            devLog('[Streaming] Received [DONE] signal');
-          }
+        if (!trimmedLine) {
           continue;
+        }
+
+        // Handle [DONE] signal by breaking out of the loop
+        if (trimmedLine === 'data: [DONE]') {
+          devLog('[Streaming] Received [DONE] signal - ending stream');
+          receivedDoneSignal = true;
+          break;
         }
 
         if (trimmedLine.startsWith('data: ')) {
@@ -526,7 +531,19 @@ export async function* streamChatResponse(
           devLog('[Streaming] Line does not start with "data: ":', trimmedLine.substring(0, 50));
         }
       }
+
+      // Break out of the outer while loop if we received [DONE] signal
+      if (receivedDoneSignal) {
+        devLog('[Streaming] Breaking out of read loop due to [DONE] signal');
+        // Yield a final done chunk to signal completion to the UI
+        yield { done: true };
+        break;
+      }
     }
+
+    // If we exited the loop normally (stream closed by server), also yield done
+    devLog('[Streaming] Stream ended normally, yielding final done signal');
+    yield { done: true };
   } finally {
     devLog('[Streaming] Stream reader released');
     reader.releaseLock();
