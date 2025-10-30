@@ -152,7 +152,13 @@ export class ChatHistoryAPI {
     // Route through Next.js API to avoid CORS issues
     const isClientSide = typeof window !== 'undefined';
     if (isClientSide) {
-      const response = await fetch(`/api/chat/sessions/${sessionId}`, {
+      let url = `/api/chat/sessions/${sessionId}`;
+      // Add privy_user_id to query string for consistency with other methods
+      if (this.privyUserId) {
+        url += `?privy_user_id=${encodeURIComponent(this.privyUserId)}`;
+      }
+
+      const response = await fetch(url, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${this.apiKey}`,
@@ -184,7 +190,13 @@ export class ChatHistoryAPI {
     // Route through Next.js API to avoid CORS issues
     const isClientSide = typeof window !== 'undefined';
     if (isClientSide) {
-      const response = await fetch(`/api/chat/sessions/${sessionId}`, {
+      let url = `/api/chat/sessions/${sessionId}`;
+      // Add privy_user_id to query string for consistency with other methods
+      if (this.privyUserId) {
+        url += `?privy_user_id=${encodeURIComponent(this.privyUserId)}`;
+      }
+
+      const response = await fetch(url, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${this.apiKey}`,
