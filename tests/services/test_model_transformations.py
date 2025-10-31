@@ -44,3 +44,32 @@ def test_detect_provider_from_model_id_existing_providers():
     for model_id, expected in test_cases:
         result = detect_provider_from_model_id(model_id)
         assert result == expected, f"Expected '{expected}' for {model_id}, got {result}"
+
+
+def test_detect_provider_google_vertex_models():
+    """Test that Google Vertex AI models are correctly detected"""
+    test_cases = [
+        ("gemini-2.5-flash", "google-vertex"),
+        ("gemini-2.0-flash", "google-vertex"),
+        ("gemini-1.5-pro", "google-vertex"),
+        ("google/gemini-2.5-flash", "google-vertex"),
+        ("google/gemini-2.0-flash", "google-vertex"),
+        ("@google/models/gemini-2.5-flash", "google-vertex"),  # Key test case - should NOT be portkey
+        ("@google/models/gemini-2.0-flash", "google-vertex"),
+    ]
+
+    for model_id, expected in test_cases:
+        result = detect_provider_from_model_id(model_id)
+        assert result == expected, f"Expected '{expected}' for {model_id}, got {result}"
+
+
+def test_detect_provider_portkey_models():
+    """Test that Portkey models with @ prefix are correctly detected"""
+    test_cases = [
+        ("@anthropic/claude-3-sonnet", "portkey"),
+        ("@openai/gpt-4", "portkey"),
+    ]
+
+    for model_id, expected in test_cases:
+        result = detect_provider_from_model_id(model_id)
+        assert result == expected, f"Expected '{expected}' for {model_id}, got {result}"

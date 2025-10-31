@@ -57,7 +57,8 @@ def transform_model_id(model_id: str, provider: str) -> str:
         return model_id
 
     # If already has Portkey @ prefix, return as-is (already lowercase)
-    if model_id.startswith("@"):
+    # EXCEPT for Google Vertex AI models which may use @google/models/ format
+    if model_id.startswith("@") and not model_id.startswith("@google/models/"):
         logger.debug(f"Model ID already in Portkey format: {model_id}")
         return model_id
 
@@ -289,31 +290,41 @@ def get_model_id_mapping(provider: str) -> Dict[str, str]:
             "gemini-2.5-flash-preview": "gemini-2.5-flash-preview-09-2025",
             "google/gemini-2.5-flash-preview-09-2025": "gemini-2.5-flash-preview-09-2025",
             "google/gemini-2.5-flash": "gemini-2.5-flash-preview-09-2025",
+            "@google/models/gemini-2.5-flash-preview-09-2025": "gemini-2.5-flash-preview-09-2025",
+            "@google/models/gemini-2.5-flash": "gemini-2.5-flash-preview-09-2025",
             "gemini-2.5-pro-preview-09-2025": "gemini-2.5-pro-preview-09-2025",
             "gemini-2.5-pro": "gemini-2.5-pro-preview-09-2025",
             "google/gemini-2.5-pro": "gemini-2.5-pro-preview-09-2025",
+            "@google/models/gemini-2.5-pro": "gemini-2.5-pro-preview-09-2025",
 
             # Gemini 2.0 models
             "gemini-2.0-flash": "gemini-2.0-flash",
             "gemini-2.0-flash-thinking": "gemini-2.0-flash-thinking",
             "gemini-2.0-flash-001": "gemini-2.0-flash-001",
+            "google/gemini-2.0-flash": "gemini-2.0-flash",
+            "@google/models/gemini-2.0-flash": "gemini-2.0-flash",
             "gemini-2.0-pro": "gemini-2.0-pro",
             "gemini-2.0-pro-001": "gemini-2.0-pro-001",
+            "google/gemini-2.0-pro": "gemini-2.0-pro",
+            "@google/models/gemini-2.0-pro": "gemini-2.0-pro",
 
             # Gemini 1.5 models
             "gemini-1.5-pro": "gemini-1.5-pro",
             "gemini-1.5-pro-002": "gemini-1.5-pro-002",
+            "google/gemini-1.5-pro": "gemini-1.5-pro",
+            "@google/models/gemini-1.5-pro": "gemini-1.5-pro",
             "gemini-1.5-flash": "gemini-1.5-flash",
             "gemini-1.5-flash-002": "gemini-1.5-flash-002",
+            "google/gemini-1.5-flash": "gemini-1.5-flash",
+            "@google/models/gemini-1.5-flash": "gemini-1.5-flash",
 
             # Gemini 1.0 models
             "gemini-1.0-pro": "gemini-1.0-pro",
             "gemini-1.0-pro-vision": "gemini-1.0-pro-vision",
+            "google/gemini-1.0-pro": "gemini-1.0-pro",
+            "@google/models/gemini-1.0-pro": "gemini-1.0-pro",
 
             # Aliases for convenience
-            "google/gemini-2.0-flash": "gemini-2.0-flash",
-            "google/gemini-1.5-pro": "gemini-1.5-pro",
-            "google/gemini-1.5-flash": "gemini-1.5-flash",
             "gemini-2.0": "gemini-2.0-flash",
             "gemini-1.5": "gemini-1.5-pro",
         },
@@ -427,11 +438,11 @@ def detect_provider_from_model_id(model_id: str) -> Optional[str]:
     if model_id.startswith("accounts/fireworks/models/"):
         return "fireworks"
 
-    if model_id.startswith("@"):
-        return "portkey"
-
-    # Check for Google Vertex AI models
+    # Check for Google Vertex AI models first (before Portkey check)
     if model_id.startswith("projects/") and "/models/" in model_id:
+        return "google-vertex"
+    if model_id.startswith("@google/models/") and any(pattern in model_id.lower() for pattern in ["gemini-2.5", "gemini-2.0", "gemini-1.5", "gemini-1.0"]):
+        # Patterns like "@google/models/gemini-2.5-flash"
         return "google-vertex"
     if any(pattern in model_id.lower() for pattern in ["gemini-2.5", "gemini-2.0", "gemini-1.5", "gemini-1.0"]) and "/" not in model_id:
         # Simple patterns like "gemini-2.5-flash", "gemini-2.0-flash" or "gemini-1.5-pro"
@@ -439,6 +450,12 @@ def detect_provider_from_model_id(model_id: str) -> Optional[str]:
     if model_id.startswith("google/") and "gemini" in model_id.lower():
         # Patterns like "google/gemini-2.5-flash"
         return "google-vertex"
+
+    # Portkey format is @org/model (must have / to be valid)
+    if model_id.startswith("@") and "/" in model_id:
+        # Only Portkey if not a Google format
+        if not model_id.startswith("@google/models/"):
+            return "portkey"
 
     # Check all mappings to see if this model exists
     for provider in ["fireworks", "openrouter", "featherless", "together", "portkey", "huggingface", "hug", "chutes", "google-vertex", "vercel-ai-gateway", "fal"]:
