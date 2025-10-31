@@ -15,6 +15,8 @@ from src.services.models import (
     enhance_model_with_huggingface_data,
     get_model_count_by_provider,
     fetch_specific_model,
+    fetch_specific_model_from_fal,
+    detect_model_gateway,
 )
 
 
@@ -333,3 +335,90 @@ class TestFetchSpecificModel:
         if result is not None:
             assert isinstance(result, dict)
             assert result.get("id") == "openrouter/auto"
+
+
+class TestFalAiIntegration:
+    """Test Fal.ai model integration"""
+
+    @patch('src.services.models.get_cached_models')
+    def test_fetch_specific_model_from_fal_success(self, mock_get_cached_models):
+        """Test successful fetch from Fal.ai cache"""
+        # Mock cached Fal models
+        mock_fal_models = [
+            {"id": "fal-ai/stable-diffusion-v15", "name": "Stable Diffusion v1.5"},
+            {"id": "minimax/video-01", "name": "Video Generation Model"}
+        ]
+        mock_get_cached_models.return_value = mock_fal_models
+        
+        result = fetch_specific_model_from_fal("fal-ai", "stable-diffusion-v15")
+        
+        assert result is not None
+        assert result["id"] == "fal-ai/stable-diffusion-v15"
+        assert result["name"] == "Stable Diffusion v1.5"
+        mock_get_cached_models.assert_called_once_with("fal")
+
+    @patch('src.services.models.get_cached_models')
+    def test_fetch_specific_model_from_fal_case_insensitive(self, mock_get_cached_models):
+        """Test case-insensitive matching"""
+        mock_fal_models = [
+            {"id": "Fal-AI/Stable-Diffusion-V15", "name": "Stable Diffusion v1.5"}
+        ]
+        mock_get_cached_models.return_value = mock_fal_models
+        
+        result = fetch_specific_model_from_fal("fal-ai", "stable-diffusion-v15")
+        
+        assert result is not None
+        assert result["id"] == "Fal-AI/Stable-Diffusion-V15"
+
+    @patch('src.services.models.get_cached_models')
+    def test_fetch_specific_model_from_fal_not_found(self, mock_get_cached_models):
+        """Test model not found in cache"""
+        mock_fal_models = [
+            {"id": "fal-ai/other-model", "name": "Other Model"}
+        ]
+        mock_get_cached_models.return_value = mock_fal_models
+        
+        result = fetch_specific_model_from_fal("fal-ai", "nonexistent-model")
+        
+        assert result is None
+
+    @patch('src.services.models.get_cached_models')
+    def test_fetch_specific_model_from_fal_empty_cache(self, mock_get_cached_models):
+        """Test with empty cache"""
+        mock_get_cached_models.return_value = []
+        
+        result = fetch_specific_model_from_fal("fal-ai", "stable-diffusion-v15")
+        
+        assert result is None
+
+    @patch('src.services.models.get_cached_models')
+    def test_fetch_specific_model_from_fal_exception(self, mock_get_cached_models):
+        """Test exception handling"""
+        mock_get_cached_models.side_effect = Exception("Cache error")
+        
+        result = fetch_specific_model_from_fal("fal-ai", "stable-diffusion-v15")
+        
+        assert result is None
+
+    @patch('src.services.models.get_cached_models')
+    def test_detect_model_gateway_fal(self, mock_get_cached_models):
+        """Test that Fal models are detected in gateway detection"""
+        def mock_cache_side_effect(gateway):
+            if gateway == "fal":
+                return [{"id": "fal-ai/stable-diffusion-v15", "name": "Stable Diffusion v1.5"}]
+            return []
+        
+        mock_get_cached_models.side_effect = mock_cache_side_effect
+        
+        result = detect_model_gateway("fal-ai", "stable-diffusion-v15")
+        
+        assert result == "fal"
+
+    @patch('src.services.models.get_cached_models')
+    def test_detect_model_gateway_fallback_to_openrouter(self, mock_get_cached_models):
+        """Test fallback to openrouter when model not found"""
+        mock_get_cached_models.return_value = []
+        
+        result = detect_model_gateway("unknown", "model")
+        
+        assert result == "openrouter"

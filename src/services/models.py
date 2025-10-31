@@ -1953,15 +1953,35 @@ def fetch_specific_model_from_huggingface(provider_name: str, model_name: str):
         return None
 
 
+def fetch_specific_model_from_fal(provider_name: str, model_name: str):
+    """Fetch specific model data from Fal.ai by using cached catalog"""
+    try:
+        model_id = f"{provider_name}/{model_name}"
+        model_id_lower = model_id.lower()
+
+        # Fall back to cached Fal catalog
+        fal_models = get_cached_models("fal")
+        if fal_models:
+            for model in fal_models:
+                if model.get("id", "").lower() == model_id_lower:
+                    return model
+
+        logger.warning(f"Model {model_id} not found in Fal.ai catalog")
+        return None
+    except Exception as e:
+        logger.error(f"Failed to fetch specific model {provider_name}/{model_name} from Fal.ai: {e}")
+        return None
+
+
 def detect_model_gateway(provider_name: str, model_name: str) -> str:
     """Detect which gateway a model belongs to by searching all caches
-    
+
     Returns:
         Gateway name: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', 'groq', 'fireworks', or None
     """
     try:
         model_id = f"{provider_name}/{model_name}".lower()
-        
+
         # Check each gateway's cache
         gateways = [
             "openrouter",
@@ -1978,15 +1998,16 @@ def detect_model_gateway(provider_name: str, model_name: str) -> str:
             "xai",
             "novita",
             "huggingface",
+            "fal",
         ]
-        
+
         for gateway in gateways:
             models = get_cached_models(gateway)
             if models:
                 for model in models:
                     if model.get("id", "").lower() == model_id:
                         return "huggingface" if gateway in ("hug", "huggingface") else gateway
-        
+
         # Default to openrouter if not found
         return "openrouter"
     except Exception as e:
@@ -2054,6 +2075,7 @@ def fetch_specific_model(provider_name: str, model_name: str, gateway: str = Non
             "fireworks": fetch_specific_model_from_fireworks,
             "together": fetch_specific_model_from_together,
             "huggingface": fetch_specific_model_from_huggingface,
+            "fal": fetch_specific_model_from_fal,
         }
 
         for candidate in candidate_gateways:

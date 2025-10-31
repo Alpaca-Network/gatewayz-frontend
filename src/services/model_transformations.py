@@ -382,7 +382,7 @@ def detect_provider_from_model_id(model_id: str) -> Optional[str]:
         return "portkey"
 
     # Check all mappings to see if this model exists
-    for provider in ["fireworks", "openrouter", "featherless", "together", "portkey", "huggingface", "hug", "chutes"]:
+    for provider in ["fireworks", "openrouter", "featherless", "together", "portkey", "huggingface", "hug", "chutes", "fal"]:
         mapping = get_model_id_mapping(provider)
         if model_id in mapping:
             logger.info(f"Detected provider '{provider}' for model '{model_id}'")
@@ -412,6 +412,10 @@ def detect_provider_from_model_id(model_id: str) -> Optional[str]:
         # Anthropic models go to OpenRouter
         if org == "anthropic":
             return "openrouter"
+
+        # Fal.ai models (e.g., "fal-ai/stable-diffusion-v15", "minimax/video-01")
+        if org == "fal-ai" or org in ["fal", "minimax", "stabilityai", "hunyuan3d", "meshy", "tripo3d"]:
+            return "fal"
 
     logger.debug(f"Could not detect provider for model '{model_id}'")
     return None
