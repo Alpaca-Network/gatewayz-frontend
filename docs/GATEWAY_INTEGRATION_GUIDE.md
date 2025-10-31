@@ -20,6 +20,7 @@ Use this checklist when adding a new gateway to ensure nothing is missed:
 - [ ] Create model normalization function
 - [ ] Register gateway in cache getter
 - [ ] Add to parallel/sequential fetchers
+- [ ] Add to gateway health dashboard
 - [ ] Update catalog endpoints
 - [ ] Update API documentation
 - [ ] Add tests
@@ -281,7 +282,68 @@ def get_all_models_sequential():
     return openrouter_models + portkey_models + ... + fal_models + your_gateway_models  # ADD YOUR GATEWAY
 ```
 
-### 7. Update Catalog Endpoints (`src/routes/catalog.py`)
+### 7. Add to Gateway Health Dashboard (`check_and_fix_gateway_models.py`)
+
+The gateway health dashboard at `/health/gateways/dashboard` monitors all gateways. Add your gateway to the configuration:
+
+**a. Import the cache:**
+
+```python
+from src.cache import (
+    _models_cache,
+    # ... other caches ...
+    _your_gateway_models_cache,  # ADD THIS LINE
+)
+```
+
+**b. Add to GATEWAY_CONFIG:**
+
+```python
+GATEWAY_CONFIG = {
+    # ... existing gateways ...
+    'your_gateway': {
+        'name': 'Your Gateway',
+        'url': 'https://api.your-gateway.com/v1/models',  # Or None for static catalogs
+        'api_key_env': 'YOUR_GATEWAY_API_KEY',
+        'api_key': Config.YOUR_GATEWAY_API_KEY,
+        'cache': _your_gateway_models_cache,
+        'min_expected_models': 10,  # Minimum expected model count
+        'header_type': 'bearer'  # or 'portkey', 'google', etc.
+    },
+}
+```
+
+**Notes:**
+- If your gateway uses a static catalog (no live API), set `url` to `None`
+- For static catalogs, you can use a dummy API key like `'static_catalog'`
+- The dashboard will show cache status even without a live API endpoint
+
+### 8. Update System Routes Dashboard (`src/routes/system.py`)
+
+The system routes also include a simpler health check dashboard. Update the gateway lists:
+
+```python
+# In get_cache_status() function
+gateways = ["openrouter", "portkey", ..., "fal", "your_gateway"]  # ADD YOUR GATEWAY
+
+# In refresh_gateway_cache() function
+valid_gateways = ["openrouter", "portkey", ..., "fal", "your_gateway"]  # ADD YOUR GATEWAY
+
+# In clear_all_caches() function
+gateways = ["openrouter", "portkey", ..., "fal", "your_gateway"]  # ADD YOUR GATEWAY
+
+# In check_all_gateways() function, add your gateway configuration
+gateway_endpoints = {
+    # ... existing gateways ...
+    "your_gateway": {
+        "url": "https://api.your-gateway.com/v1/models",
+        "api_key": Config.YOUR_GATEWAY_API_KEY,
+        "headers": {"Authorization": f"Bearer {Config.YOUR_GATEWAY_API_KEY}"} if Config.YOUR_GATEWAY_API_KEY else {}
+    }
+}
+```
+
+### 9. Update Catalog Endpoints (`src/routes/catalog.py`)
 
 #### a. Update Gateway Parameter Descriptions
 
@@ -373,7 +435,7 @@ And update `.env.example`:
 YOUR_GATEWAY_API_KEY=your_api_key_here
 ```
 
-### 9. Add Tests
+### 10. Add Tests
 
 Create a test file `tests/services/test_your_gateway_client.py`:
 
@@ -418,7 +480,7 @@ class TestYourGatewayIntegration:
         assert normalized["context_length"] == 8192
 ```
 
-### 10. Update Documentation
+### 11. Update Documentation
 
 Add gateway-specific information to:
 - `README.md` - Add to list of supported gateways
@@ -481,13 +543,14 @@ modality_map = {
 
 After completing all steps, verify:
 
-1. **Compilation:** `python3 -m py_compile src/cache.py src/services/models.py src/routes/catalog.py`
+1. **Compilation:** `python3 -m py_compile src/cache.py src/services/models.py src/routes/catalog.py check_and_fix_gateway_models.py`
 2. **Tests Pass:** `pytest tests/services/test_your_gateway_client.py`
 3. **API Endpoint Works:**
    - `curl http://localhost:8000/catalog/v1/models?gateway=your_gateway`
    - `curl http://localhost:8000/catalog/v1/models?gateway=all`
-4. **No 0 Models Warning:** Check frontend console for "⚠️ Gateways with 0 models"
-5. **Frontend Display:** Models appear in the frontend catalog
+4. **Dashboard Shows Gateway:** Visit `https://api.gatewayz.ai/health/gateways/dashboard` and verify your gateway appears
+5. **No 0 Models Warning:** Check frontend console for "⚠️ Gateways with 0 models"
+6. **Frontend Display:** Models appear in the frontend catalog
 
 ## Gateway-Specific Notes
 
@@ -497,6 +560,11 @@ After completing all steps, verify:
 - Supports image, video, audio, and 3D generation models
 - No pricing exposed in catalog (set to null)
 - Modality mapped from `type` field
+- **Dashboard Configuration:**
+  - URL set to `None` (no live API endpoint)
+  - Uses dummy API key `'static_catalog'` to mark as configured
+  - Min expected models: 50
+  - Dashboard shows cache status only (no endpoint test)
 
 ### Near AI
 - Decentralized AI infrastructure with private, verifiable services
@@ -569,9 +637,11 @@ Key files to review when adding a gateway:
 
 1. `src/cache.py` - Cache configuration
 2. `src/services/models.py` - Model fetching and normalization
-3. `src/routes/catalog.py` - API endpoints
-4. `src/config/config.py` - Configuration
-5. `tests/services/test_*_client.py` - Tests
+3. `src/routes/catalog.py` - Catalog API endpoints
+4. `src/routes/system.py` - System health and cache endpoints
+5. `check_and_fix_gateway_models.py` - Gateway health dashboard
+6. `src/config/config.py` - Configuration
+7. `tests/services/test_*_client.py` - Tests
 
 ## Questions?
 

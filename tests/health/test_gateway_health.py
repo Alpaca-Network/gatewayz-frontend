@@ -47,7 +47,7 @@ class TestGatewayHealthChecker:
         expected_gateways = [
             'openrouter', 'portkey', 'featherless', 'chutes', 'groq',
             'fireworks', 'together', 'deepinfra', 'google', 'cerebras',
-            'nebius', 'xai', 'novita', 'huggingface', 'aimo', 'near'
+            'nebius', 'xai', 'novita', 'huggingface', 'aimo', 'near', 'fal'
         ]
 
         for gateway in expected_gateways:
@@ -164,10 +164,12 @@ class TestGatewayHealthChecker:
         """Test that all gateway URLs are properly formatted"""
         for gateway_name, config in check_module.GATEWAY_CONFIG.items():
             url = config['url']
-            assert isinstance(url, str), \
-                f"Gateway '{gateway_name}' URL should be a string"
-            assert url.startswith('http'), \
-                f"Gateway '{gateway_name}' URL should start with http(s)"
+            # URL can be None for static catalog gateways (like Fal)
+            if url is not None:
+                assert isinstance(url, str), \
+                    f"Gateway '{gateway_name}' URL should be a string or None"
+                assert url.startswith('http'), \
+                    f"Gateway '{gateway_name}' URL should start with http(s)"
 
 
 class TestGatewayEndpointChecks:

@@ -42,6 +42,7 @@ from src.cache import (
     _huggingface_models_cache,
     _aimo_models_cache,
     _near_models_cache,
+    _fal_models_cache,
 )
 
 # Gateway configuration with API endpoints
@@ -188,6 +189,15 @@ GATEWAY_CONFIG = {
         'api_key': Config.NEAR_API_KEY,
         'cache': _near_models_cache,
         'min_expected_models': 5,
+        'header_type': 'bearer'
+    },
+    'fal': {
+        'name': 'Fal.ai',
+        'url': None,  # Fal uses static catalog, no direct API endpoint
+        'api_key_env': 'FAL_KEY',
+        'api_key': getattr(Config, 'FAL_KEY', 'static_catalog'),  # Fal doesn't require API key for catalog
+        'cache': _fal_models_cache,
+        'min_expected_models': 50,
         'header_type': 'bearer'
     },
 }
