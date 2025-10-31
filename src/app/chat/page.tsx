@@ -2257,45 +2257,43 @@ function ChatPageContent() {
                 messagesCount: currentSession?.messages?.length || 0
             });
 
-            // OPTIMIZATION: Save the user message to the backend asynchronously (don't block streaming)
-            // This improves time-to-first-token by 200-500ms
+            // OPTIMIZATION: Save the user message to the backend before streaming
+            // This ensures the backend has the user message before processing the stream
+            // which prevents race conditions where the API can't find the context
             if (currentSession?.apiSessionId) {
-                // Fire and forget - save in background while streaming starts
-                const saveUserMessage = async () => {
-                    try {
-                        devLog('🔄 Attempting to save user message to backend:', {
-                            sessionId: currentSession.apiSessionId,
-                            content: userMessage.substring(0, 100) + '...',
-                            model: selectedModel.value,
-                            hasImage: !!userImage,
-                            apiKey: apiKey ? `${apiKey.substring(0, 10)}...` : 'NO_API_KEY',
-                            privyUserId: userData.privy_user_id
-                        });
+                try {
+                    devLog('🔄 Attempting to save user message to backend:', {
+                        sessionId: currentSession.apiSessionId,
+                        content: userMessage.substring(0, 100) + '...',
+                        model: selectedModel.value,
+                        hasImage: !!userImage,
+                        apiKey: apiKey ? `${apiKey.substring(0, 10)}...` : 'NO_API_KEY',
+                        privyUserId: userData.privy_user_id
+                    });
 
-                        const chatAPI = new ChatHistoryAPI(apiKey, undefined, userData.privy_user_id);
-                        if (currentSession.apiSessionId) {
-                            const result = await chatAPI.saveMessage(
-                                currentSession.apiSessionId,
-                                'user',
-                                userMessage,
-                                selectedModel.value,
-                                undefined // Token count not calculated yet
-                            );
-                            devLog('✅ User message saved to backend successfully:', result);
-                        }
-                    } catch (error) {
-                        devError('❌ Failed to save user message to backend:', error);
-                        devError('Error details:', {
-                            message: error instanceof Error ? error.message : String(error),
-                            stack: error instanceof Error ? error.stack : undefined,
-                            sessionId: currentSession.apiSessionId,
-                            hasApiKey: !!apiKey,
-                            hasPrivyUserId: !!userData.privy_user_id
-                        });
+                    const chatAPI = new ChatHistoryAPI(apiKey, undefined, userData.privy_user_id);
+                    if (currentSession.apiSessionId) {
+                        const result = await chatAPI.saveMessage(
+                            currentSession.apiSessionId,
+                            'user',
+                            userMessage,
+                            selectedModel.value,
+                            undefined // Token count not calculated yet
+                        );
+                        devLog('✅ User message saved to backend successfully:', result);
                     }
-                };
-                // Start saving in background - don't await
-                saveUserMessage();
+                } catch (error) {
+                    devError('❌ Failed to save user message to backend:', error);
+                    devError('Error details:', {
+                        message: error instanceof Error ? error.message : String(error),
+                        stack: error instanceof Error ? error.stack : undefined,
+                        sessionId: currentSession.apiSessionId,
+                        hasApiKey: !!apiKey,
+                        hasPrivyUserId: !!userData.privy_user_id
+                    });
+                    // Don't throw - let the stream request proceed anyway
+                    // The message is already in the UI optimistically
+                }
             } else {
                 devWarn('⚠️ Cannot save user message - no API session ID:', {
                     currentSession,
