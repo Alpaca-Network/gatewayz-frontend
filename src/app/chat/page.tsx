@@ -33,6 +33,8 @@ import {
   Trash2,
   RefreshCw,
   Image as ImageIcon,
+  Video as VideoIcon,
+  Mic as AudioIcon,
   X,
   Sparkles
 } from 'lucide-react';
@@ -140,6 +142,8 @@ type Message = {
     content: string;
     reasoning?: string;
     image?: string; // Base64 image data
+    video?: string; // Base64 video data
+    audio?: string; // Base64 audio data
     isStreaming?: boolean; // Track if message is currently streaming
     model?: string; // Model ID that generated this message
 };
@@ -1103,10 +1107,14 @@ function ChatPageContent() {
         speedTier: 'ultra-fast'
     });
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
+    const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
+    const [selectedAudio, setSelectedAudio] = useState<string | null>(null);
     const { toast } = useToast();
     const chatContainerRef = useRef<HTMLDivElement>(null);
     const messageInputRef = useRef<HTMLInputElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const videoInputRef = useRef<HTMLInputElement>(null);
+    const audioInputRef = useRef<HTMLInputElement>(null);
 
     // Helper function to get display name for a model ID
     const getModelDisplayName = (modelId?: string): string => {
@@ -1130,6 +1138,26 @@ function ChatPageContent() {
         return modelId;
     };
 
+    // Helper function to get dynamic placeholder text based on model capabilities
+    const getPlaceholderText = (): string => {
+        if (!selectedModel) return 'Start A Message';
+
+        const capabilities = [];
+        if (selectedModel.modalities?.includes('Image')) capabilities.push('image');
+        if (selectedModel.modalities?.includes('Video')) capabilities.push('video');
+        if (selectedModel.modalities?.includes('Audio')) capabilities.push('audio');
+
+        if (capabilities.length === 0) {
+            return 'Start A Message';
+        } else if (capabilities.length === 1) {
+            return `Type a message or add an ${capabilities[0]}...`;
+        } else if (capabilities.length === 2) {
+            return `Type a message or add ${capabilities.join(' and ')}...`;
+        } else {
+            return `Type a message or add ${capabilities.join(', ')}...`;
+        }
+    };
+
     useEffect(() => {
         userHasTypedRef.current = userHasTyped;
     }, [userHasTyped]);
@@ -1151,7 +1179,7 @@ function ChatPageContent() {
     const [authReady, setAuthReady] = useState(false);
 
     // Queue message to be sent after authentication completes
-    const [pendingMessage, setPendingMessage] = useState<{message: string, model: ModelOption | null, image: string | null} | null>(null);
+    const [pendingMessage, setPendingMessage] = useState<{message: string, model: ModelOption | null, image?: string | null, video?: string | null, audio?: string | null} | null>(null);
 
     // Test backend connectivity function
     const testBackendConnectivity = async () => {
@@ -1790,6 +1818,120 @@ function ChatPageContent() {
         }
     };
 
+    const handleVideoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        // Validate file type
+        if (!file.type.startsWith('video/')) {
+            toast({
+                title: "Invalid file type",
+                description: "Please select a video file.",
+                variant: 'destructive'
+            });
+            return;
+        }
+
+        // Validate file size (max 100MB for video)
+        const maxSize = 100 * 1024 * 1024;
+        if (file.size > maxSize) {
+            toast({
+                title: "File too large",
+                description: "Please select a video smaller than 100MB.",
+                variant: 'destructive'
+            });
+            return;
+        }
+
+        try {
+            // Convert video to base64
+            const videoBase64 = await fileToBase64(file);
+            setSelectedVideo(videoBase64);
+
+            toast({
+                title: "Video uploaded",
+                description: `${file.name} is ready to send.`,
+            });
+        } catch (error) {
+            toast({
+                title: "Error processing video",
+                description: "Failed to process the video file.",
+                variant: 'destructive'
+            });
+        }
+    };
+
+    const handleAudioSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        // Validate file type
+        if (!file.type.startsWith('audio/')) {
+            toast({
+                title: "Invalid file type",
+                description: "Please select an audio file.",
+                variant: 'destructive'
+            });
+            return;
+        }
+
+        // Validate file size (max 50MB for audio)
+        const maxSize = 50 * 1024 * 1024;
+        if (file.size > maxSize) {
+            toast({
+                title: "File too large",
+                description: "Please select an audio file smaller than 50MB.",
+                variant: 'destructive'
+            });
+            return;
+        }
+
+        try {
+            // Convert audio to base64
+            const audioBase64 = await fileToBase64(file);
+            setSelectedAudio(audioBase64);
+
+            toast({
+                title: "Audio uploaded",
+                description: `${file.name} is ready to send.`,
+            });
+        } catch (error) {
+            toast({
+                title: "Error processing audio",
+                description: "Failed to process the audio file.",
+                variant: 'destructive'
+            });
+        }
+    };
+
+    // Helper function to convert file to base64
+    const fileToBase64 = (file: File): Promise<string> => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+                resolve(reader.result as string);
+            };
+            reader.onerror = () => {
+                reject(new Error('Failed to read file'));
+            };
+            reader.readAsDataURL(file);
+        });
+    };
+
+    const handleRemoveVideo = () => {
+        setSelectedVideo(null);
+        if (videoInputRef.current) {
+            videoInputRef.current.value = '';
+        }
+    };
+
+    const handleRemoveAudio = () => {
+        setSelectedAudio(null);
+        if (audioInputRef.current) {
+            audioInputRef.current.value = '';
+        }
+    };
+
     const handleRegenerate = async () => {
         if (!activeSessionId || messages.length === 0) return;
         
@@ -1832,9 +1974,17 @@ function ChatPageContent() {
         }
         setSelectedModel(model);
 
-        // Clear selected image if switching to a text-only model
-        if (model && !model.modalities?.includes('Image') && selectedImage) {
-            handleRemoveImage();
+        // Clear selected media if switching to a model that doesn't support those modalities
+        if (model) {
+            if (!model.modalities?.includes('Image') && selectedImage) {
+                handleRemoveImage();
+            }
+            if (!model.modalities?.includes('Video') && selectedVideo) {
+                handleRemoveVideo();
+            }
+            if (!model.modalities?.includes('Audio') && selectedAudio) {
+                handleRemoveAudio();
+            }
         }
     };
 
@@ -1937,7 +2087,9 @@ function ChatPageContent() {
             setPendingMessage({
                 message: message.trim(),
                 model: selectedModel,
-                image: selectedImage
+                image: selectedImage,
+                video: selectedVideo,
+                audio: selectedAudio
             });
 
             // Show toast that we're logging them in
@@ -1970,7 +2122,9 @@ function ChatPageContent() {
             setPendingMessage({
                 message: trimmedMessage,
                 model: selectedModel,
-                image: selectedImage
+                image: selectedImage,
+                video: selectedVideo,
+                audio: selectedAudio
             });
 
             if (!creatingSessionRef.current) {
@@ -1988,11 +2142,15 @@ function ChatPageContent() {
         const isFirstMessage = messages.length === 0;
         const userMessage = message;
         const userImage = selectedImage;
+        const userVideo = selectedVideo;
+        const userAudio = selectedAudio;
 
         const updatedMessages: Message[] = [...messages, {
             role: 'user' as const,
             content: userMessage,
-            image: userImage || undefined
+            image: userImage || undefined,
+            video: userVideo || undefined,
+            audio: userAudio || undefined
         }];
 
         // Generate title if this is the first message
@@ -2023,8 +2181,16 @@ function ChatPageContent() {
 
         setMessage('');
         setSelectedImage(null);
+        setSelectedVideo(null);
+        setSelectedAudio(null);
         if (fileInputRef.current) {
             fileInputRef.current.value = '';
+        }
+        if (videoInputRef.current) {
+            videoInputRef.current.value = '';
+        }
+        if (audioInputRef.current) {
+            audioInputRef.current.value = '';
         }
         setIsStreamingResponse(true); // Set streaming state immediately
         setLoading(false); // Don't show loading spinner
@@ -2113,13 +2279,35 @@ function ChatPageContent() {
             console.log('Model:', selectedModel.value);
             console.log('Session ID:', currentSession?.apiSessionId || 'none');
 
-            // Prepare message content with image if present
+            // Prepare message content with image, video, and audio if present
             let messageContent: any = userMessage;
-            if (userImage) {
-                messageContent = [
-                    { type: 'text', text: userMessage },
-                    { type: 'image_url', image_url: { url: userImage } }
+            if (userImage || userVideo || userAudio) {
+                const contentArray: any[] = [
+                    { type: 'text', text: userMessage }
                 ];
+
+                if (userImage) {
+                    contentArray.push({
+                        type: 'image_url',
+                        image_url: { url: userImage }
+                    });
+                }
+
+                if (userVideo) {
+                    contentArray.push({
+                        type: 'video_url',
+                        video_url: { url: userVideo }
+                    });
+                }
+
+                if (userAudio) {
+                    contentArray.push({
+                        type: 'audio_url',
+                        audio_url: { url: userAudio }
+                    });
+                }
+
+                messageContent = contentArray;
             }
 
             // Note: Assistant message already added optimistically above, no need to add again
@@ -2170,14 +2358,36 @@ function ChatPageContent() {
                 // Add all previous messages from the conversation
                 for (const msg of messages) {
                     if (msg.role === 'user') {
-                        // Handle user messages with potential images
-                        if (msg.image) {
+                        // Handle user messages with potential images, videos, or audio
+                        if (msg.image || msg.video || msg.audio) {
+                            const contentArray: any[] = [
+                                { type: 'text', text: msg.content }
+                            ];
+
+                            if (msg.image) {
+                                contentArray.push({
+                                    type: 'image_url',
+                                    image_url: { url: msg.image }
+                                });
+                            }
+
+                            if (msg.video) {
+                                contentArray.push({
+                                    type: 'video_url',
+                                    video_url: { url: msg.video }
+                                });
+                            }
+
+                            if (msg.audio) {
+                                contentArray.push({
+                                    type: 'audio_url',
+                                    audio_url: { url: msg.audio }
+                                });
+                            }
+
                             conversationHistory.push({
                                 role: 'user',
-                                content: [
-                                    { type: 'text', text: msg.content },
-                                    { type: 'image_url', image_url: { url: msg.image } }
-                                ]
+                                content: contentArray
                             });
                         } else {
                             // Plain text message - use string content for chat/completions endpoint
@@ -2250,6 +2460,8 @@ function ChatPageContent() {
                     model: modelValue,
                     gateway: selectedModel.sourceGateway,
                     has_image: !!selectedImage,
+                    has_video: !!selectedVideo,
+                    has_audio: !!selectedAudio,
                     message_length: messageContent.length,
                     session_id: currentSessionId
                 });
@@ -2867,6 +3079,22 @@ function ChatPageContent() {
                               className="max-w-[280px] lg:max-w-md max-h-48 lg:max-h-64 rounded-lg mb-2 object-contain border border-white/20"
                             />
                           )}
+                          {msg.video && (
+                            <video
+                              src={msg.video}
+                              controls
+                              className="max-w-[280px] lg:max-w-md max-h-48 lg:max-h-64 rounded-lg mb-2 object-contain border border-white/20"
+                              title="Uploaded video"
+                            />
+                          )}
+                          {msg.audio && (
+                            <audio
+                              src={msg.audio}
+                              controls
+                              className="max-w-[280px] lg:max-w-md mb-2 border-0"
+                              title="Uploaded audio"
+                            />
+                          )}
                           <div className="text-sm whitespace-pre-wrap text-white">{msg.content}</div>
                         </div>
                       ) : showThinkingLoader ? (
@@ -2972,6 +3200,48 @@ function ChatPageContent() {
                     </Button>
                   </div>
                 )}
+                {/* Video preview */}
+                {selectedVideo && (
+                  <div className="mb-3 relative inline-block">
+                    <div className="relative group">
+                      <video
+                        src={selectedVideo}
+                        className="max-w-[280px] lg:max-w-md max-h-32 lg:max-h-48 rounded-lg border-2 border-border shadow-md object-contain"
+                      />
+                      <div className="absolute inset-0 bg-black/5 dark:bg-white/5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </div>
+                    <Button
+                      variant="destructive"
+                      size="icon"
+                      className="absolute -top-2 -right-2 h-7 w-7 rounded-full shadow-lg"
+                      onClick={handleRemoveVideo}
+                      title="Remove video"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
+                {/* Audio preview */}
+                {selectedAudio && (
+                  <div className="mb-3">
+                    <div className="relative inline-block">
+                      <audio
+                        src={selectedAudio}
+                        controls
+                        className="rounded-lg border-2 border-border shadow-md"
+                      />
+                      <Button
+                        variant="destructive"
+                        size="icon"
+                        className="absolute -top-2 -right-2 h-7 w-7 rounded-full shadow-lg"
+                        onClick={handleRemoveAudio}
+                        title="Remove audio"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
                 {rateLimitCountdown > 0 && (
                   <div className="mb-2 px-4 py-2 bg-yellow-500/10 border border-yellow-500/20 rounded-lg text-center">
                     <p className="text-sm text-yellow-600 dark:text-yellow-400">
@@ -2987,6 +3257,20 @@ function ChatPageContent() {
                     onChange={handleImageSelect}
                     className="hidden"
                   />
+                  <input
+                    ref={videoInputRef}
+                    type="file"
+                    accept="video/*"
+                    onChange={handleVideoSelect}
+                    className="hidden"
+                  />
+                  <input
+                    ref={audioInputRef}
+                    type="file"
+                    accept="audio/*"
+                    onChange={handleAudioSelect}
+                    className="hidden"
+                  />
                   {/* Only show image button for models that support image input */}
                   {selectedModel?.modalities?.includes('Image') && (
                     <Button
@@ -3000,9 +3284,35 @@ function ChatPageContent() {
                       <ImageIcon className="h-5 w-5" />
                     </Button>
                   )}
+                  {/* Only show video button for models that support video input */}
+                  {selectedModel?.modalities?.includes('Video') && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 rounded-lg"
+                      onClick={() => videoInputRef.current?.click()}
+                      disabled={!ready || (!authenticated && !hasApiKey)}
+                      title="Upload a video"
+                    >
+                      <VideoIcon className="h-5 w-5" />
+                    </Button>
+                  )}
+                  {/* Only show audio button for models that support audio input */}
+                  {selectedModel?.modalities?.includes('Audio') && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 rounded-lg"
+                      onClick={() => audioInputRef.current?.click()}
+                      disabled={!ready || (!authenticated && !hasApiKey)}
+                      title="Upload audio"
+                    >
+                      <AudioIcon className="h-5 w-5" />
+                    </Button>
+                  )}
                   <Input
                     ref={messageInputRef}
-                    placeholder={!ready ? "Authenticating..." : (!authenticated && !hasApiKey) ? "Please log in..." : selectedModel?.modalities?.includes('Image') ? "Type a message or add an image..." : "Start A Message"}
+                    placeholder={!ready ? "Authenticating..." : (!authenticated && !hasApiKey) ? "Please log in..." : getPlaceholderText()}
                     value={message}
                     onChange={(e) => {
                       setMessage(e.target.value);
