@@ -488,7 +488,8 @@ export default function ModelProfilePage() {
                             if (normalizedModelId === normalizedDataId) return true;
 
                             // Check if the model name matches (as a fallback)
-                            if (m.name && m.name.toLowerCase() === model?.name?.toLowerCase()) return true;
+                            // Note: model may not be defined yet in this context, so we skip this check
+                            // if (m.name && m.name.toLowerCase() === model?.name?.toLowerCase()) return true;
 
                             // Check if the last part of the ID matches (for provider/model format)
                             const lastPart = m.id.split('/').pop()?.toLowerCase();
@@ -639,10 +640,10 @@ export default function ModelProfilePage() {
                             <span>|</span>
                             <span>{model.context_length > 0 ? `${(model.context_length / 1000).toLocaleString()}k` : 'N/A'} context</span>
                             <span>|</span>
-                            <span>${(parseFloat(model.pricing.prompt) * 1000000).toFixed(2)}/M input tokens</span>
+                            <span>${model.pricing && model.pricing.prompt ? (parseFloat(model.pricing.prompt) * 1000000).toFixed(2) : 'N/A'}/M input tokens</span>
                             <span>|</span>
-                            <span>${(parseFloat(model.pricing.completion) * 1000000).toFixed(2)}/M output tokens</span>
-                            {model.architecture.input_modalities.includes('audio') && (
+                            <span>${model.pricing && model.pricing.completion ? (parseFloat(model.pricing.completion) * 1000000).toFixed(2) : 'N/A'}/M output tokens</span>
+                            {model.architecture && model.architecture.input_modalities && model.architecture.input_modalities.includes('audio') && (
                                 <>
                                     <span>|</span>
                                     <span>$0.0001/M audio tokens</span>
@@ -1008,13 +1009,13 @@ console.log(response.choices[0].message.content);`
                                                 <div>
                                                     <p className="text-sm text-muted-foreground">Input Cost</p>
                                                     <p className="text-lg font-semibold">
-                                                        ${(parseFloat(model.pricing.prompt) * 1000000).toFixed(2)}/M
+                                                        ${model.pricing && model.pricing.prompt ? (parseFloat(model.pricing.prompt) * 1000000).toFixed(2) : 'N/A'}/M
                                                     </p>
                                                 </div>
                                                 <div>
                                                     <p className="text-sm text-muted-foreground">Output Cost</p>
                                                     <p className="text-lg font-semibold">
-                                                        ${(parseFloat(model.pricing.completion) * 1000000).toFixed(2)}/M
+                                                        ${model.pricing && model.pricing.completion ? (parseFloat(model.pricing.completion) * 1000000).toFixed(2) : 'N/A'}/M
                                                     </p>
                                                 </div>
                                                 <div>
