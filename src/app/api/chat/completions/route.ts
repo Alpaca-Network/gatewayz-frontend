@@ -139,6 +139,12 @@ export async function POST(request: NextRequest) {
 
     const apiKey = request.headers.get('authorization');
     console.log('[API Proxy] API key present:', !!apiKey);
+    if (apiKey) {
+      const keyPrefix = apiKey.substring(0, 15);
+      console.log('[API Proxy] API key prefix:', keyPrefix);
+      console.log('[API Proxy] Is temp key?', apiKey.includes('gw_temp_'));
+      console.log('[API Proxy] Is live key?', apiKey.includes('gw_live_'));
+    }
 
     if (!apiKey) {
       return new Response(
@@ -168,27 +174,59 @@ export async function POST(request: NextRequest) {
       const timeoutId = setTimeout(() => abortController.abort(), timeoutMs);
 
       try {
+        const requestStartTime = Date.now();
+        console.log('[API Proxy] Making fetch request to backend');
+        console.log('[API Proxy] Target URL:', targetUrl.toString());
+        console.log('[API Proxy] Request headers:', {
+          'Content-Type': 'application/json',
+          'Authorization': apiKey ? apiKey.substring(0, 20) + '...' : 'none'
+        });
+
         const response = await fetch(targetUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': apiKey,
+            'Accept': 'text/event-stream',
           },
           body: JSON.stringify(body),
           signal: abortController.signal,
         });
 
         clearTimeout(timeoutId);
+        const responseTime = Date.now() - requestStartTime;
 
-        console.log('[API Proxy] Streaming response received. Status:', response.status);
+        console.log('[API Proxy] Streaming response received');
+        console.log('[API Proxy] Response time:', responseTime + 'ms');
+        console.log('[API Proxy] Response status:', response.status);
         console.log('[API Proxy] Response ok:', response.ok);
         console.log('[API Proxy] Content-Type:', response.headers.get('content-type'));
         console.log('[API Proxy] Response body exists:', !!response.body);
 
         if (!response.ok) {
           const errorText = await response.text();
-          console.error('[API Proxy] Error response:', errorText);
-          return new Response(errorText, {
+          console.error('[API Proxy] Backend returned error status:', response.status);
+          console.error('[API Proxy] Error response text:', errorText.substring(0, 500));
+          console.error('[API Proxy] Error response (first 1000 chars):', errorText.substring(0, 1000));
+          console.error('[API Proxy] Full request body:', JSON.stringify(body, null, 2));
+
+          // Try to parse the error as JSON
+          let errorData;
+          try {
+            errorData = JSON.parse(errorText);
+          } catch {
+            errorData = { raw: errorText };
+          }
+
+          return new Response(JSON.stringify({
+            error: 'Backend API Error',
+            status: response.status,
+            statusText: response.statusText,
+            message: errorData.message || errorData.detail || errorText.substring(0, 500),
+            model: body.model,
+            gateway: body.gateway,
+            errorData: errorData
+          }), {
             status: response.status,
             headers: { 'Content-Type': 'application/json' },
           });

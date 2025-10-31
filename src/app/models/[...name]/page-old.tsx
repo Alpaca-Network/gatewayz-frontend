@@ -1,14 +1,12 @@
-"use client";
-
-import { useMemo, lazy, Suspense, useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useMemo, lazy, Suspense, cache } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend } from 'recharts';
-import { format } from 'date-fns';
+import { addDays, format } from 'date-fns';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { ProvidersDisplay } from '@/components/models/provider-card';
 import { Maximize, Copy, Check } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { providerData } from '@/lib/provider-data';
@@ -16,10 +14,13 @@ import { generateChartData, generateStatsTable } from '@/lib/data';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import ReactMarkdown from "react-markdown";
 import { cn } from '@/lib/utils';
+import { stringToColor } from '@/lib/utils';
 import { API_BASE_URL } from '@/lib/config';
 import { models as staticModels } from '@/lib/models-data';
 import { getApiKey } from '@/lib/api';
 import { InlineChat } from '@/components/models/inline-chat';
+import { notFound } from 'next/navigation';
+import { getModelsForGateway } from '@/lib/models-service';
 
 // Lazy load heavy components
 const TopAppsTable = lazy(() => import('@/components/dashboard/top-apps-table'));
@@ -158,33 +159,101 @@ function transformStaticModel(staticModel: typeof staticModels[0]): Model {
     };
 }
 
-export default function ModelProfilePage() {
-    const params = useParams();
+// Cached function to fetch model data server-side
+const fetchModelData = cache(async (modelId: string) => {
+    console.log(`[ModelProfilePage] Fetching model data for: ${modelId}`);
 
-    // State declarations
-    const [model, setModel] = useState<Model | null>(null);
-    const [allModels, setAllModels] = useState<Model[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [loadingProviders, setLoadingProviders] = useState(true);
-    const [modelProviders, setModelProviders] = useState<string[]>([]);
-    const [activeTab, setActiveTab] = useState<TabType>('Playground');
-    const [selectedLanguage, setSelectedLanguage] = useState<'curl' | 'python' | 'openai-python' | 'typescript' | 'openai-typescript'>('curl');
-    const [copiedStates, setCopiedStates] = useState<Record<string, boolean>>({});
-    const [apiKey, setApiKey] = useState('gw_live_YOUR_API_KEY_HERE');
+    try {
+        // Fetch from all gateways in parallel using the existing service
+        const result = await getModelsForGateway('all');
+        const allModels = result.data || [];
+
+        // Find the specific model
+        let foundModel = allModels.find((m: Model) => m.id === modelId);
+
+        // Try alternative matching strategies
+        if (!foundModel) {
+            foundModel = allModels.find((m: Model) => {
+                const modelNamePart = m.id.includes(':') ? m.id.split(':')[1] : m.id;
+                return modelNamePart === modelId || m.id.split('/').pop() === modelId;
+            });
+        }
+
+        // Determine which gateways support this model
+        const providers: string[] = [];
+        const modelIdLower = modelId.toLowerCase();
+
+        // Check each gateway for the model
+        const gatewayChecks = [
+            'openrouter', 'portkey', 'featherless', 'chutes', 'fireworks',
+            'together', 'groq', 'deepinfra', 'google', 'cerebras', 'nebius',
+            'xai', 'novita', 'huggingface', 'aimo', 'near'
+        ];
+
+        for (const gateway of gatewayChecks) {
+            const hasModel = allModels.some((m: Model) => {
+                if (m.id.toLowerCase() === modelIdLower) return true;
+                const modelNamePart = m.id.includes(':') ? m.id.split(':')[1].toLowerCase() : m.id.toLowerCase();
+                if (modelNamePart === modelIdLower) return true;
+                const normalizedModelId = modelIdLower.replace(/[_\-\/]/g, '');
+                const normalizedDataId = m.id.toLowerCase().replace(/[_\-\/]/g, '');
+                if (normalizedModelId === normalizedDataId) return true;
+                if (m.name && m.name.toLowerCase() === foundModel?.name?.toLowerCase()) return true;
+                const lastPart = m.id.split('/').pop()?.toLowerCase();
+                if (lastPart === modelIdLower) return true;
+                return false;
+            });
+
+            if (hasModel) providers.push(gateway);
+        }
+
+        return {
+            model: foundModel,
+            allModels,
+            providers
+        };
+    } catch (error) {
+        console.error('[ModelProfilePage] Error fetching models:', error);
+
+        // Fallback to static data
+        const staticModelsTransformed = staticModels.map(transformStaticModel);
+        let staticFoundModel = staticModelsTransformed.find((m: Model) => m.id === modelId);
+
+        if (!staticFoundModel) {
+            staticFoundModel = staticModelsTransformed.find((m: Model) => {
+                const modelNamePart = m.id.includes(':') ? m.id.split(':')[1] : m.id;
+                return modelNamePart === modelId || m.id.split('/').pop() === modelId;
+            });
+        }
+
+        return {
+            model: staticFoundModel,
+            allModels: staticModelsTransformed,
+            providers: []
+        };
+    }
+});
+
+// Generate static params for popular models (optional - improves build time)
+export async function generateStaticParams() {
+    // Return empty array to avoid building all model pages at build time
+    // Models will be generated on-demand using dynamic rendering
+    return [];
+}
+
+export default async function ModelProfilePage({
+    params
+}: {
+    params: Promise<{ name: string | string[] }>
+}) {
+    // Await params in Next.js 15
+    const resolvedParams = await params;
 
     // Handle catch-all route - params.name will be an array like ['x-ai', 'grok-4-fast']
-    const nameParam = params.name as string | string[];
+    const nameParam = resolvedParams.name;
     let modelId = Array.isArray(nameParam) ? nameParam.join('/') : nameParam;
     // Decode URL-encoded characters (e.g., %40 -> @)
     modelId = decodeURIComponent(modelId);
-
-    // Load API key from storage
-    useEffect(() => {
-        const key = getApiKey();
-        if (key) {
-            setApiKey(key);
-        }
-    }, []);
 
     useEffect(() => {
         const CACHE_KEY = 'gatewayz_models_cache_v4_all_gateways';
@@ -260,7 +329,7 @@ export default function ModelProfilePage() {
                 };
 
                 console.log(`[ModelProfilePage] Fetching from all gateway APIs...`);
-                const [openrouterRes, portkeyRes, featherlessRes, chutesRes, fireworksRes, togetherRes, groqRes, deepinfraRes, googleRes, cerebrasRes, nebiusRes, xaiRes, novitaRes, huggingfaceRes, aimoRes, nearRes, falRes] = await Promise.allSettled([
+                const [openrouterRes, portkeyRes, featherlessRes, chutesRes, fireworksRes, togetherRes, groqRes, deepinfraRes, googleRes, cerebrasRes, nebiusRes, xaiRes, novitaRes, huggingfaceRes, aimoRes, nearRes] = await Promise.allSettled([
                     fetchWithTimeout(`/api/models?gateway=openrouter`).catch(err => {
                         console.error('OpenRouter fetch error:', err);
                         return null;
@@ -324,10 +393,6 @@ export default function ModelProfilePage() {
                     fetchWithTimeout(`/api/models?gateway=near`, 70000).catch(err => {
                         console.error('NEAR fetch error:', err);
                         return null;
-                    }),
-                    fetchWithTimeout(`/api/models?gateway=fal`, 70000).catch(err => {
-                        console.error('FAL fetch error:', err);
-                        return null;
                     })
                 ]);
                 console.log(`[ModelProfilePage] Gateway API responses:`, {
@@ -346,8 +411,7 @@ export default function ModelProfilePage() {
                     novita: novitaRes?.status,
                     huggingface: huggingfaceRes?.status,
                     aimo: aimoRes?.status,
-                    near: nearRes?.status,
-                    fal: falRes?.status
+                    near: nearRes?.status
                 });
 
                 const getData = async (result: PromiseSettledResult<Response | null>) => {
@@ -365,7 +429,7 @@ export default function ModelProfilePage() {
                     return [];
                 };
 
-                const [openrouterData, portkeyData, featherlessData, chutesData, fireworksData, togetherData, groqData, deepinfraData, googleData, cerebrasData, nebiusData, xaiData, novitaData, huggingfaceData, aimoData, nearData, falData] = await Promise.all([
+                const [openrouterData, portkeyData, featherlessData, chutesData, fireworksData, togetherData, groqData, deepinfraData, googleData, cerebrasData, nebiusData, xaiData, novitaData, huggingfaceData, aimoData, nearData] = await Promise.all([
                     getData(openrouterRes),
                     getData(portkeyRes),
                     getData(featherlessRes),
@@ -381,8 +445,7 @@ export default function ModelProfilePage() {
                     getData(novitaRes),
                     getData(huggingfaceRes),
                     getData(aimoRes),
-                    getData(nearRes),
-                    getData(falRes)
+                    getData(nearRes)
                 ]);
 
                 // Combine models from all gateways
@@ -402,8 +465,7 @@ export default function ModelProfilePage() {
                     ...novitaData,
                     ...huggingfaceData,
                     ...aimoData,
-                    ...nearData,
-                    ...falData
+                    ...nearData
                 ];
 
                 // Deduplicate models by ID - keep the first occurrence
@@ -488,8 +550,7 @@ export default function ModelProfilePage() {
                             if (normalizedModelId === normalizedDataId) return true;
 
                             // Check if the model name matches (as a fallback)
-                            // Note: model may not be defined yet in this context, so we skip this check
-                            // if (m.name && m.name.toLowerCase() === model?.name?.toLowerCase()) return true;
+                            if (m.name && m.name.toLowerCase() === model?.name?.toLowerCase()) return true;
 
                             // Check if the last part of the ID matches (for provider/model format)
                             const lastPart = m.id.split('/').pop()?.toLowerCase();
@@ -519,7 +580,6 @@ export default function ModelProfilePage() {
                     if (hasModel(huggingfaceData, 'huggingface')) providers.push('huggingface');
                     if (hasModel(aimoData, 'aimo')) providers.push('aimo');
                     if (hasModel(nearData, 'near')) providers.push('near');
-                    if (hasModel(falData, 'fal')) providers.push('fal');
 
                     console.log(`Model ${modelId} available in gateways:`, providers);
                     setModelProviders(providers);
@@ -640,10 +700,10 @@ export default function ModelProfilePage() {
                             <span>|</span>
                             <span>{model.context_length > 0 ? `${(model.context_length / 1000).toLocaleString()}k` : 'N/A'} context</span>
                             <span>|</span>
-                            <span>${model.pricing && model.pricing.prompt ? (parseFloat(model.pricing.prompt) * 1000000).toFixed(2) : 'N/A'}/M input tokens</span>
+                            <span>${(parseFloat(model.pricing.prompt) * 1000000).toFixed(2)}/M input tokens</span>
                             <span>|</span>
-                            <span>${model.pricing && model.pricing.completion ? (parseFloat(model.pricing.completion) * 1000000).toFixed(2) : 'N/A'}/M output tokens</span>
-                            {model.architecture && model.architecture.input_modalities && model.architecture.input_modalities.includes('audio') && (
+                            <span>${(parseFloat(model.pricing.completion) * 1000000).toFixed(2)}/M output tokens</span>
+                            {model.architecture.input_modalities.includes('audio') && (
                                 <>
                                     <span>|</span>
                                     <span>$0.0001/M audio tokens</span>
@@ -963,8 +1023,7 @@ console.log(response.choices[0].message.content);`
                                         novita: 'Novita',
                                         huggingface: 'Hugging Face',
                                         aimo: 'AIMO Network',
-                                        near: 'NEAR',
-                                        fal: 'FAL'
+                                        near: 'NEAR'
                                     };
                                     const providerLogos: Record<string, string> = {
                                         openrouter: '/openrouter-logo.svg',
@@ -982,8 +1041,7 @@ console.log(response.choices[0].message.content);`
                                         novita: '/novita-logo.svg',
                                         huggingface: '/huggingface-logo.svg',
                                         aimo: '/aimo-logo.svg',
-                                        near: '/near-logo.svg',
-                                        fal: '/fal-logo.svg'
+                                        near: '/near-logo.svg'
                                     };
 
                                     return (
@@ -1009,13 +1067,13 @@ console.log(response.choices[0].message.content);`
                                                 <div>
                                                     <p className="text-sm text-muted-foreground">Input Cost</p>
                                                     <p className="text-lg font-semibold">
-                                                        ${model.pricing && model.pricing.prompt ? (parseFloat(model.pricing.prompt) * 1000000).toFixed(2) : 'N/A'}/M
+                                                        ${(parseFloat(model.pricing.prompt) * 1000000).toFixed(2)}/M
                                                     </p>
                                                 </div>
                                                 <div>
                                                     <p className="text-sm text-muted-foreground">Output Cost</p>
                                                     <p className="text-lg font-semibold">
-                                                        ${model.pricing && model.pricing.completion ? (parseFloat(model.pricing.completion) * 1000000).toFixed(2) : 'N/A'}/M
+                                                        ${(parseFloat(model.pricing.completion) * 1000000).toFixed(2)}/M
                                                     </p>
                                                 </div>
                                                 <div>

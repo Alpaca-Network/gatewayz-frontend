@@ -14,6 +14,8 @@ export type Model = {
   series: string;
   supportedParameters: string[];
   requiredTier?: UserTier;
+  speedTier?: 'ultra-fast' | 'fast' | 'medium' | 'slow'; // Response speed indicator
+  avgLatencyMs?: number; // Average time-to-first-token in milliseconds
 };
 
 export const models: Model[] = [

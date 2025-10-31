@@ -81,12 +81,10 @@ export function OnboardingBanner() {
       document.documentElement.classList.add('has-onboarding-banner');
       document.documentElement.style.setProperty('--sidebar-top', '130px');
       document.documentElement.style.setProperty('--sidebar-height', 'calc(100vh - 130px)');
-      console.log('Added has-onboarding-banner class and set sidebar position');
     } else {
       document.documentElement.classList.remove('has-onboarding-banner');
       document.documentElement.style.setProperty('--sidebar-top', '65px');
       document.documentElement.style.setProperty('--sidebar-height', 'calc(100vh - 65px)');
-      console.log('Removed has-onboarding-banner class and reset sidebar position');
     }
   }, [pathname]);
 
@@ -95,7 +93,6 @@ export function OnboardingBanner() {
     document.documentElement.classList.remove('has-onboarding-banner');
     document.documentElement.style.setProperty('--sidebar-top', '65px');
     document.documentElement.style.setProperty('--sidebar-height', 'calc(100vh - 65px)');
-    console.log('Removed has-onboarding-banner class (dismissed) and reset sidebar position');
     // Remember dismissal for this session
     sessionStorage.setItem('onboarding_banner_dismissed', 'true');
   };
