@@ -40,23 +40,43 @@ _CURRENT_VERSION, _KEYRING = _load_keyring_from_env()
 
 
 def encrypt_api_key(plaintext: str) -> Tuple[str, int]:
-    """Encrypt API key. If encryption is unavailable, return plaintext and version 0.
-    This ensures the application continues working with sensible defaults.
+    """Encrypt API key. Requires encryption to be properly configured.
+
+    Raises RuntimeError if encryption keys are not configured, ensuring
+    API keys are never stored in plaintext.
     """
+    if Fernet is None:
+        raise RuntimeError(
+            "Cryptography library not available. Cannot encrypt API keys. "
+            "Install cryptography package to continue."
+        )
+
+    f = _KEYRING.get(_CURRENT_VERSION) if isinstance(_KEYRING, dict) else None
+    if f is None:
+        raise RuntimeError(
+            "No encryption keys configured. Set KEY_VERSION and KEYRING_<version> "
+            "environment variables to enable API key encryption."
+        )
+
     try:
-        f = _KEYRING.get(_CURRENT_VERSION) if isinstance(_KEYRING, dict) else None
-        if f is None:
-            return plaintext, 0
         token = f.encrypt(plaintext.encode("utf-8"))
         return token.decode("utf-8"), _CURRENT_VERSION
-    except Exception:
-        # Any encryption error falls back to plaintext with version 0
-        return plaintext, 0
+    except Exception as e:
+        raise RuntimeError(f"Failed to encrypt API key: {str(e)}")
 
 
 def sha256_key_hash(plaintext: str) -> str:
-    """Deterministic hash for lookup/rate limiting. Optional salt support via env."""
+    """Deterministic hash for lookup/rate limiting. Requires configured salt via env.
+
+    Raises RuntimeError if KEY_HASH_SALT is not configured, preventing weak hashing.
+    """
     salt = os.getenv("KEY_HASH_SALT", "")
+    if not salt or len(salt) < 16:
+        raise RuntimeError(
+            "KEY_HASH_SALT must be configured with at least 16 characters. "
+            "Generate a strong random salt and set it in your environment."
+        )
+
     h = hashlib.sha256()
     h.update(salt.encode("utf-8"))
     h.update(plaintext.encode("utf-8"))

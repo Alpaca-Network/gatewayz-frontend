@@ -35,11 +35,21 @@ def hash_api_key(api_key: str) -> str:
 
     Returns:
         Hexadecimal hash string
+
+    Raises:
+        RuntimeError: If API_GATEWAY_SALT is not configured
     """
     try:
-        salt = os.environ.get("API_GATEWAY_SALT", "api_gateway_salt_2024").encode()
-        hash_obj = hmac.new(salt, api_key.encode("utf-8"), hashlib.sha256)
+        salt = os.environ.get("API_GATEWAY_SALT", "")
+        if not salt or len(salt) < 16:
+            raise RuntimeError(
+                "API_GATEWAY_SALT must be configured with at least 16 characters. "
+                "Generate a strong random salt and set it in your environment."
+            )
+        hash_obj = hmac.new(salt.encode(), api_key.encode("utf-8"), hashlib.sha256)
         return hash_obj.hexdigest()
+    except RuntimeError:
+        raise
     except Exception as e:
         logger.error(f"Error hashing API key: {e}")
         raise

@@ -51,8 +51,12 @@ def get_admin_key(credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer
         raise HTTPException(status_code=401, detail="Invalid admin API key")
 
     # Get expected key from environment
-    expected_key = os.environ.get("ADMIN_API_KEY", "admin_key_placeholder")
-    
+    expected_key = os.environ.get("ADMIN_API_KEY")
+
+    # Ensure admin key is configured
+    if not expected_key:
+        raise HTTPException(status_code=401, detail="Invalid admin API key")
+
     # Use constant-time comparison to prevent timing attacks
     if not secrets.compare_digest(admin_key, expected_key):
         raise HTTPException(status_code=401, detail="Invalid admin API key")
@@ -106,8 +110,8 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=allowed_origins,
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allow_headers=["Content-Type", "Authorization", "Accept", "Origin"],
     )
 
     # Add GZip compression middleware for model catalog responses

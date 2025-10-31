@@ -23,7 +23,7 @@ router = APIRouter()
 def _send_welcome_email_background(user_id: str, username: str, email: str, credits: float):
     """Send welcome email in background for existing users"""
     try:
-        logger.info(f"Background task: Sending welcome email to user {user_id} with email {email}")
+        logger.info(f"Background task: Sending welcome email to user {user_id}")
         success = notif_module.enhanced_notification_service.send_welcome_email_if_needed(
             user_id=user_id,
             username=username,
@@ -132,7 +132,7 @@ async def privy_auth(request: PrivyAuthRequest, background_tasks: BackgroundTask
             # Use a fallback email format instead of calling external API
             email = f"{request.user.id}@privy.user"
 
-        logger.info(f"Email extraction result for user {request.user.id}: {email}")
+        logger.info(f"Email extraction completed for user {request.user.id}")
 
         # Generate username from email or privy ID (for fallback check)
         username = email.split('@')[0] if email else f"user_{request.user.id[:8]}"
@@ -157,7 +157,7 @@ async def privy_auth(request: PrivyAuthRequest, background_tasks: BackgroundTask
         if existing_user:
             # Existing user - return their info
             logger.info(f"Existing Privy user found: {existing_user['id']}")
-            logger.info(f"User details - ID: {existing_user['id']}, Email: {existing_user.get('email')}, Welcome sent: {existing_user.get('welcome_email_sent', 'Not set')}")
+            logger.info(f"User welcome email status: {existing_user.get('welcome_email_sent', 'Not set')}")
 
             # OPTIMIZATION: Get API key with a single query instead of two separate queries
             client = supabase_config.get_supabase_client()
@@ -171,13 +171,13 @@ async def privy_auth(request: PrivyAuthRequest, background_tasks: BackgroundTask
                 # Return the first key (will be primary if it exists, otherwise first active key)
                 api_key_to_return = all_keys_result.data[0]['api_key']
                 key_type = "primary" if all_keys_result.data[0].get('is_primary') else "active"
-                logger.info(f"Returning {key_type} API key for user {existing_user['id']}: {api_key_to_return[:15]}...")
+                logger.info(f"Returning {key_type} API key for user {existing_user['id']}")
             else:
-                logger.warning(f"No API keys found in api_keys_new for user {existing_user['id']}, using legacy key from users table: {api_key_to_return[:15] if api_key_to_return else 'None'}...")
+                logger.warning(f"No API keys found in api_keys_new for user {existing_user['id']}, using legacy key from users table")
 
             # OPTIMIZATION: Send welcome email in background to avoid blocking the response
             user_email = existing_user.get('email') or email
-            logger.info(f"Welcome email check - User ID: {existing_user['id']}, Email: {user_email}, Welcome sent: {existing_user.get('welcome_email_sent', 'Not set')}")
+            logger.info(f"Welcome email check - User ID: {existing_user['id']}, Welcome sent: {existing_user.get('welcome_email_sent', 'Not set')}")
 
             if user_email:
                 # Send email in background
@@ -360,7 +360,7 @@ async def privy_auth(request: PrivyAuthRequest, background_tasks: BackgroundTask
 async def register_user(request: UserRegistrationRequest):
     """Register a new user with username and email"""
     try:
-        logger.info(f"Registration request for: {request.username} ({request.email})")
+        logger.info(f"Registration request for user: {request.username}")
 
         client = supabase_config.get_supabase_client()
 
@@ -472,7 +472,7 @@ async def register_user(request: UserRegistrationRequest):
             if success:
                 from src.db.users import mark_welcome_email_sent
                 mark_welcome_email_sent(user_data['user_id'])
-                logger.info(f"Welcome email sent to {request.email}")
+                logger.info(f"Welcome email sent for user {user_data['user_id']}")
         except Exception as e:
             logger.warning(f"Failed to send welcome email: {e}")
 
