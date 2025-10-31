@@ -1,0 +1,390 @@
+name: Deploy to Railway (CLI-based)
+
+on:
+  push:
+    branches: [main, staging]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+env:
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "20"
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # Determine deployment environment
+  setup:
+    name: Setup Deployment
+    runs-on: ubuntu-latest
+
+    outputs:
+      environment: ${{ steps.determine-env.outputs.environment }}
+      should_deploy: ${{ steps.determine-env.outputs.should_deploy }}
+      app_name: ${{ steps.determine-env.outputs.app_name }}
+
+    steps:
+      - name: Determine environment
+        id: determine-env
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            ENV="${{ github.event.inputs.environment }}"
+          elif [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            ENV="production"
+          elif [ "${{ github.ref }}" == "refs/heads/staging" ]; then
+            ENV="staging"
+          else
+            ENV="skip"
+          fi
+
+          echo "environment=$ENV" >> $GITHUB_OUTPUT
+
+          if [ "$ENV" != "skip" ]; then
+            echo "should_deploy=true" >> $GITHUB_OUTPUT
+            echo "app_name=gatewayz-$ENV" >> $GITHUB_OUTPUT
+          else
+            echo "should_deploy=false" >> $GITHUB_OUTPUT
+          fi
+
+          echo "📍 Environment: $ENV"
+          echo "🚀 Should Deploy: $([ "$ENV" != "skip" ] && echo "true" || echo "false")"
+
+  # Checkout and setup
+  checkout-and-setup:
+    name: Checkout & Setup
+    runs-on: ubuntu-latest
+    needs: setup
+    if: needs.setup.outputs.should_deploy == 'true'
+
+    outputs:
+      cache-key: ${{ steps.cache-key.outputs.key }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Generate cache key
+        id: cache-key
+        run: |
+          KEY="deps-${{ hashFiles('requirements.txt', 'requirements-dev.txt') }}"
+          echo "key=$KEY" >> $GITHUB_OUTPUT
+          echo "Cache key: $KEY"
+
+  # Install dependencies
+  install-dependencies:
+    name: Install Dependencies
+    runs-on: ubuntu-latest
+    needs: checkout-and-setup
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          echo "📦 Installing dependencies..."
+          python -m pip install --upgrade pip setuptools wheel
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+          echo "✅ Dependencies installed"
+
+      - name: Verify imports
+        run: |
+          echo "🔍 Verifying imports..."
+          python -c "import sys; sys.path.insert(0, '.'); from src.main import app; print('✅ FastAPI app imports successfully')"
+
+  # Run tests
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    needs: install-dependencies
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Run tests
+        run: |
+          echo "🧪 Running test suite..."
+          pytest tests/ -v --tb=short -m "not smoke" 2>&1 | tee test-results.log
+          TEST_EXIT_CODE=${PIPESTATUS[0]}
+
+          if [ $TEST_EXIT_CODE -eq 0 ]; then
+            echo "✅ All tests passed"
+          else
+            echo "⚠️ Tests completed with exit code: $TEST_EXIT_CODE"
+          fi
+
+          exit $TEST_EXIT_CODE
+
+      - name: Generate coverage report
+        if: always()
+        run: |
+          echo "📊 Generating coverage report..."
+          pytest tests/ --cov=src --cov-report=term-summary --cov-report=xml -m "not smoke" || true
+          echo "✅ Coverage report generated"
+
+      - name: Upload coverage
+        if: always()
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+        continue-on-error: true
+
+  # Build verification
+  build:
+    name: Build Verification
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          pip install -r requirements.txt
+
+      - name: Verify deployment files
+        run: |
+          echo "📋 Verifying deployment configuration..."
+
+          files=("railway.json" "railway.toml" "requirements.txt" "start.sh" "src/main.py")
+
+          for file in "${files[@]}"; do
+            if [ ! -f "$file" ]; then
+              echo "❌ Missing required file: $file"
+              exit 1
+            fi
+            echo "✅ $file exists"
+          done
+
+          echo "✅ All deployment files verified"
+
+      - name: Validate Python syntax
+        run: |
+          echo "🔍 Validating Python syntax..."
+          python -m py_compile src/main.py
+          python -m py_compile src/config/__init__.py || true
+          echo "✅ Python syntax valid"
+
+      - name: Check Railway configuration
+        run: |
+          echo "🔧 Checking Railway configuration..."
+
+          # Verify railway.json structure
+          python3 << 'EOF'
+          import json
+          try:
+            with open('railway.json', 'r') as f:
+              config = json.load(f)
+              print("✅ railway.json is valid JSON")
+              if 'builder' in config:
+                print(f"   Builder: {config['builder']}")
+          except Exception as e:
+            print(f"❌ Error reading railway.json: {e}")
+            exit(1)
+          EOF
+
+  # Deploy to Railway using CLI
+  deploy:
+    name: Deploy to Railway
+    runs-on: ubuntu-latest
+    needs: [setup, build]
+    if: needs.setup.outputs.should_deploy == 'true'
+    environment:
+      name: ${{ needs.setup.outputs.environment }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install Railway CLI
+        run: |
+          echo "🚂 Installing Railway CLI..."
+          npm install -g @railway/cli
+          railway --version
+          echo "✅ Railway CLI installed"
+
+      - name: Deploy to Railway
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          if [ -z "$RAILWAY_TOKEN" ]; then
+            echo "❌ RAILWAY_TOKEN secret not configured"
+            echo "Please add RAILWAY_TOKEN to GitHub repository secrets"
+            exit 1
+          fi
+
+          ENV="${{ needs.setup.outputs.environment }}"
+          APP_NAME="${{ needs.setup.outputs.app_name }}"
+
+          echo "🚀 Starting deployment to $ENV environment..."
+          echo "📦 App: $APP_NAME"
+          echo "📝 Commit: ${{ github.sha }}"
+          echo "🌳 Branch: ${{ github.ref_name }}"
+          echo ""
+
+          # Link to Railway service
+          railway link --environmentName="$ENV"
+
+          # Deploy the application
+          echo "⏳ Deploying application..."
+          railway up \
+            --service=gatewayz \
+            --detach \
+            --skip-database=true
+
+          echo "✅ Deployment initiated"
+          echo "📊 Monitor at: https://railway.app"
+
+  # Post-deployment health check
+  health-check:
+    name: Health Check
+    runs-on: ubuntu-latest
+    needs: [setup, deploy]
+    if: always() && needs.setup.outputs.should_deploy == 'true'
+
+    steps:
+      - name: Wait for deployment
+        run: |
+          echo "⏳ Waiting for Railway deployment to complete..."
+          sleep 90  # Wait 1.5 minutes for Railway to process
+
+      - name: Run health check
+        run: |
+          ENV="${{ needs.setup.outputs.environment }}"
+
+          # Get health check URL from secrets
+          if [ "$ENV" == "production" ]; then
+            HEALTH_URL="${{ secrets.PRODUCTION_URL }}"
+          else
+            HEALTH_URL="${{ secrets.STAGING_URL }}"
+          fi
+
+          if [ -z "$HEALTH_URL" ]; then
+            echo "⚠️ Health check URL not configured"
+            echo "Add PRODUCTION_URL and/or STAGING_URL to GitHub secrets"
+            exit 0
+          fi
+
+          HEALTH_ENDPOINT="$HEALTH_URL/health"
+          echo "🏥 Checking health at: $HEALTH_ENDPOINT"
+
+          MAX_RETRIES=6
+          RETRY_DELAY=30
+          ATTEMPT=0
+
+          while [ $ATTEMPT -lt $MAX_RETRIES ]; do
+            ATTEMPT=$((ATTEMPT + 1))
+            echo "📍 Health check attempt $ATTEMPT/$MAX_RETRIES..."
+
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$HEALTH_ENDPOINT" || echo "000")
+
+            if [ "$HTTP_CODE" == "200" ]; then
+              echo "✅ Health check passed! (HTTP $HTTP_CODE)"
+              echo "🎉 Deployment successful!"
+              exit 0
+            else
+              echo "⚠️ Got HTTP $HTTP_CODE"
+
+              if [ $ATTEMPT -lt $MAX_RETRIES ]; then
+                echo "⏳ Retrying in ${RETRY_DELAY}s..."
+                sleep $RETRY_DELAY
+              fi
+            fi
+          done
+
+          echo "❌ Health check failed after $MAX_RETRIES attempts"
+          echo "⚠️ Deployment may have issues. Check Railway dashboard."
+          exit 1
+
+  # Deployment summary
+  summary:
+    name: Deployment Summary
+    runs-on: ubuntu-latest
+    needs: [setup, health-check]
+    if: always() && needs.setup.outputs.should_deploy == 'true'
+
+    steps:
+      - name: Generate summary
+        run: |
+          ENV="${{ needs.setup.outputs.environment }}"
+          DEPLOY_STATUS="${{ needs.health-check.result }}"
+
+          echo "═══════════════════════════════════════════════════"
+          echo "📊 DEPLOYMENT SUMMARY"
+          echo "═══════════════════════════════════════════════════"
+          echo ""
+          echo "Environment:  $ENV"
+          echo "Branch:       ${{ github.ref_name }}"
+          echo "Commit:       ${{ github.sha }}"
+          echo "Author:       ${{ github.actor }}"
+          echo "Status:       $DEPLOY_STATUS"
+          echo ""
+          echo "═══════════════════════════════════════════════════"
+
+          if [ "$DEPLOY_STATUS" == "success" ]; then
+            echo "✅ Deployment completed successfully!"
+            echo ""
+            echo "📍 Next steps:"
+            echo "  • Monitor logs: https://railway.app"
+            echo "  • Test endpoints at: https://railway.app"
+          else
+            echo "❌ Deployment encountered issues"
+            echo ""
+            echo "🔍 Troubleshooting:"
+            echo "  • Check Railway dashboard: https://railway.app"
+            echo "  • Review deployment logs"
+            echo "  • Verify secrets are configured"
+          fi

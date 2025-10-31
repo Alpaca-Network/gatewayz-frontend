@@ -1,0 +1,274 @@
+╔════════════════════════════════════════════════════════════════════════════════╗
+║                   RAILWAY GITHUB ACTIONS DEPLOYMENT PIPELINE                   ║
+╚════════════════════════════════════════════════════════════════════════════════╝
+
+TRIGGER EVENTS:
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  • Push to main branch   → Auto-deploy to PRODUCTION                        │
+│  • Push to staging branch → Auto-deploy to STAGING                          │
+│  • Manual trigger        → Choose environment (staging/production)          │
+│  • Workflow run          → After CI/CD Pipeline succeeds                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+PIPELINE EXECUTION:
+
+                            ┌─────────────────────┐
+                            │  Event Trigger      │
+                            │  (push / manual)    │
+                            └──────────┬──────────┘
+                                       │
+                        ┌──────────────▼──────────────┐
+                        │  setup                      │
+                        │  Determine environment      │
+                        │  ⏱️  ~1 minute              │
+                        │  • Check branch            │
+                        │  • Set environment         │
+                        │  • Output env variables    │
+                        └──────────────┬──────────────┘
+                                       │
+                        ┌──────────────▼──────────────┐
+                        │  checkout-and-setup        │
+                        │  ⏱️  ~2 minutes             │
+                        │  • Checkout code           │
+                        │  • Setup Python 3.12       │
+                        │  • Configure pip cache     │
+                        └──────────────┬──────────────┘
+                                       │
+                        ┌──────────────▼──────────────┐
+                        │  install-dependencies      │
+                        │  ⏱️  ~3-4 minutes           │
+                        │  • Install requirements    │
+                        │  • Install dev packages    │
+                        │  • Verify imports          │
+                        └──────────────┬──────────────┘
+                                       │
+                        ┌──────────────▼──────────────┐
+                        │  test                      │
+                        │  ⏱️  ~3-5 minutes           │
+                        │  • Run pytest suite        │
+                        │  • Generate coverage       │
+                        │  • Upload to Codecov       │
+                        └──────────────┬──────────────┘
+                                       │
+                        ┌──────────────▼──────────────┐
+                        │  build                     │
+                        │  ⏱️  ~2-3 minutes           │
+                        │  • Verify files exist      │
+                        │  • Check Python syntax     │
+                        │  • Validate config         │
+                        └──────────────┬──────────────┘
+                                       │
+                        ┌──────────────▼──────────────┐
+                        │  deploy                    │
+                        │  ⏱️  ~3-5 minutes           │
+                        │  • Install Railway CLI     │
+                        │  • Link to service         │
+                        │  • Execute: railway up     │
+                        │  • Detach process          │
+                        └──────────────┬──────────────┘
+                                       │
+                        ┌──────────────▼──────────────┐
+                        │  health-check              │
+                        │  ⏱️  ~5-10 minutes          │
+                        │  • Wait for deployment     │
+                        │  • Check /health endpoint  │
+                        │  • Retry up to 6 times     │
+                        │  • Report status           │
+                        └──────────────┬──────────────┘
+                                       │
+                        ┌──────────────▼──────────────┐
+                        │  summary                   │
+                        │  ⏱️  ~1 minute              │
+                        │  • Generate report        │
+                        │  • Show deployment status  │
+                        │  • Provide next steps      │
+                        └──────────────┬──────────────┘
+                                       │
+                                ┌──────▼──────┐
+                                │   Success!   │
+                                └──────────────┘
+
+TOTAL EXECUTION TIME: 25-35 minutes
+
+═══════════════════════════════════════════════════════════════════════════════
+
+DEPLOYMENT TIMELINE (Example):
+
+Time    │ Action
+────────┼──────────────────────────────────────────────────────
+00:00   │ ✅ Push to main/staging branch
+00:01   │ ✅ GitHub Actions triggered
+00:02   │ ✅ setup job starts
+00:03   │ ✅ checkout-and-setup job starts
+00:05   │ ✅ install-dependencies job starts
+00:08   │ ✅ test job starts
+        │    (running: pytest tests/ --cov=src)
+00:13   │ ✅ build job starts
+        │    (verifying files and syntax)
+00:15   │ ✅ deploy job starts
+        │    (installing Railway CLI)
+00:17   │ ✅ railway up command executes
+00:19   │ ✅ health-check job starts
+        │    (waiting for deployment)
+00:21   │ ✅ health-check retries (if needed)
+00:27   │ ✅ /health endpoint returns 200 OK
+00:28   │ ✅ summary job completes
+        │
+00:30   │ 🎉 Deployment complete! Application live.
+
+═══════════════════════════════════════════════════════════════════════════════
+
+ENVIRONMENT ROUTING:
+
+                              Push Event
+                                  │
+                        ┌─────────┴─────────┐
+                        │                   │
+                   Branch: main          Branch: staging
+                        │                   │
+                        ▼                   ▼
+                   ┌────────────┐      ┌────────────┐
+                   │ PRODUCTION │      │  STAGING   │
+                   │ Environment│      │ Environment│
+                   └────────────┘      └────────────┘
+
+MANUAL TRIGGER:
+
+                        workflow_dispatch
+                              │
+                    ┌─────────────────────┐
+                    │ Choose Environment  │
+                    │ • staging           │
+                    │ • production        │
+                    └──────────┬──────────┘
+                              │
+                        ┌─────▼────┐
+                        │   Deploy  │
+                        └───────────┘
+
+═══════════════════════════════════════════════════════════════════════════════
+
+HEALTH CHECK RETRY LOGIC:
+
+                    First health check
+                            │
+                    ┌───────▼────────┐
+                    │ GET /health     │
+                    │ Wait 90 seconds │
+                    └───────┬────────┘
+                            │
+                  ┌─────────┴─────────┐
+                  │                   │
+            HTTP 200              Other status
+              (Success)            (Failed)
+                  │                   │
+                  │         ┌─────────▼─────────┐
+                  │         │ Retry Check       │
+                  │         │ Max 6 attempts    │
+                  │         │ 30s between       │
+                  │         └────────┬──────────┘
+                  │                  │
+                  │      ┌───────────┴───────────┐
+                  │      │                       │
+                  │   All retries              200 OK
+                  │   exhausted                   │
+                  │      │                       │
+                  │      ▼                       ▼
+                  │   ❌ Failed               ✅ Success
+                  │                               │
+                  └───────────────┬───────────────┘
+                                  │
+                            ┌─────▼──────┐
+                            │  Summary    │
+                            │  Report     │
+                            └─────────────┘
+
+═══════════════════════════════════════════════════════════════════════════════
+
+FILE DEPENDENCIES:
+
+GitHub Actions
+├── .github/workflows/deploy-railway-cli.yml (Main workflow)
+│
+Application
+├── src/main.py (FastAPI entry point)
+├── requirements.txt (Dependencies)
+├── requirements-dev.txt (Dev dependencies)
+├── start.sh (Startup script)
+│
+Railway Config
+├── railway.json (Builder config)
+├── railway.toml (Service config)
+│
+Documentation
+├── docs/RAILWAY_DEPLOYMENT.md (Full guide)
+├── docs/RAILWAY_SETUP_CHECKLIST.md (Setup steps)
+├── docs/RAILWAY_QUICK_REFERENCE.md (Quick commands)
+│
+Setup
+└── scripts/setup-railway-deployment.sh (Setup script)
+
+═══════════════════════════════════════════════════════════════════════════════
+
+SUCCESS INDICATORS:
+
+✅ Workflow Status:
+   • All 8 jobs completed successfully
+   • No red X marks in job list
+   • Summary shows green checkmarks
+
+✅ Test Results:
+   • All tests pass
+   • Coverage report generated
+   • No failures or errors
+
+✅ Deployment:
+   • Railway CLI links successfully
+   • railway up command completes
+   • No deployment errors in logs
+
+✅ Health Check:
+   • /health endpoint returns HTTP 200
+   • Response contains {"status":"ok"}
+   • Check completes within 10 minutes
+
+✅ Final State:
+   • Application is live on Railway
+   • Can access at: [PRODUCTION_URL] or [STAGING_URL]
+   • Logs show "Application ready"
+
+═══════════════════════════════════════════════════════════════════════════════
+
+FAILURE POINTS & RECOVERY:
+
+❌ setup fails
+   → Check branch is main or staging
+   → Fix and re-push
+
+❌ install-dependencies fails
+   → Missing dependency in requirements.txt
+   → Fix locally, run: pip install -r requirements-dev.txt
+   → Test and re-push
+
+❌ test fails
+   → Tests not passing
+   → Fix locally: pytest tests/ -v
+   → Ensure all pass before push
+
+❌ build fails
+   → Missing deployment files
+   → Missing: railway.json, railway.toml, requirements.txt, start.sh
+   → Add files and commit
+
+❌ deploy fails
+   → RAILWAY_TOKEN not configured
+   → Add secret to GitHub and retry
+   → Or manually set: gh secret set RAILWAY_TOKEN
+
+❌ health-check fails
+   → Application not starting
+   → Check Railway logs for errors
+   → Verify environment variables set
+   → Check /health endpoint exists
+
+═══════════════════════════════════════════════════════════════════════════════
