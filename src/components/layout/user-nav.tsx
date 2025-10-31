@@ -22,6 +22,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useEffect } from "react";
 import { Copy, ExternalLink } from "lucide-react";
+import { useTier } from "@/hooks/use-tier";
 
 interface UserNavProps {
   user: any; // Privy user object
@@ -31,6 +32,7 @@ export function UserNav({ user }: UserNavProps) {
   const { logout } = usePrivy();
   const { toast } = useToast();
   const router = useRouter();
+  const { tier, tierInfo } = useTier();
 
   const handleSignOut = async () => {
     try {
@@ -93,14 +95,25 @@ export function UserNav({ user }: UserNavProps) {
       <DropdownMenuContent className="w-64 mt-2" align="end" forceMount>
         <DropdownMenuLabel className="font-normal py-4">
           <div className="flex flex-col space-y-2">
-            <div className="flex items-baseline gap-2 flex-wrap">
-              <p className="text-sm font-medium leading-none">
-                {user?.email?.address || user?.google?.email || user?.github?.email || user?.github?.name || "User"}
-              </p>
-              {(user?.email?.address || user?.google?.email || user?.github?.email || user?.github?.username) && (
-                <p className="text-xs leading-none text-muted-foreground">
-                  ({user?.email?.address || user?.google?.email || user?.github?.email || user?.github?.username})
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-baseline gap-2 flex-wrap flex-1">
+                <p className="text-sm font-medium leading-none">
+                  {user?.email?.address || user?.google?.email || user?.github?.email || user?.github?.name || "User"}
                 </p>
+                {(user?.email?.address || user?.google?.email || user?.github?.email || user?.github?.username) && (
+                  <p className="text-xs leading-none text-muted-foreground">
+                    ({user?.email?.address || user?.google?.email || user?.github?.email || user?.github?.username})
+                  </p>
+                )}
+              </div>
+              {tier !== 'basic' && (
+                <div className={`px-2 py-1 rounded text-xs font-semibold whitespace-nowrap ${
+                  tier === 'pro'
+                    ? 'bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100'
+                    : 'bg-purple-100 dark:bg-purple-900 text-purple-900 dark:text-purple-100'
+                }`}>
+                  {tier.toUpperCase()}
+                </div>
               )}
             </div>
             {getWalletAddress(user) && (
