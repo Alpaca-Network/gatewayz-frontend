@@ -28,6 +28,7 @@ except ImportError:  # pragma: no cover - handled gracefully below
 FALLBACK_PROVIDER_PRIORITY: tuple[str, ...] = (
     "huggingface",
     "featherless",
+    "vercel-ai-gateway",
     "fireworks",
     "together",
     "openrouter",

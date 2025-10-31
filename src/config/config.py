@@ -61,6 +61,9 @@ class Config:
     # Near AI Configuration
     NEAR_API_KEY = os.environ.get("NEAR_API_KEY")
 
+    # Vercel AI Gateway Configuration
+    VERCEL_AI_GATEWAY_API_KEY = os.environ.get("VERCEL_AI_GATEWAY_API_KEY")
+
     # Fal.ai Configuration
     FAL_API_KEY = os.environ.get("FAL_API_KEY")
 

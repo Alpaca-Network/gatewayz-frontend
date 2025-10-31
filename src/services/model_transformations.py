@@ -316,6 +316,12 @@ def get_model_id_mapping(provider: str) -> Dict[str, str]:
             "google/gemini-1.5-flash": "gemini-1.5-flash",
             "gemini-2.0": "gemini-2.0-flash",
             "gemini-1.5": "gemini-1.5-pro",
+        },
+        "vercel-ai-gateway": {
+            # Vercel AI Gateway uses standard model identifiers
+            # The gateway automatically routes requests to the appropriate provider
+            # Using pass-through format - any model ID is supported
+            # Minimal mappings to avoid conflicts with other providers during auto-detection
         }
     }
 
@@ -435,7 +441,7 @@ def detect_provider_from_model_id(model_id: str) -> Optional[str]:
         return "google-vertex"
 
     # Check all mappings to see if this model exists
-    for provider in ["fireworks", "openrouter", "featherless", "together", "portkey", "huggingface", "hug", "chutes", "google-vertex", "fal"]:
+    for provider in ["fireworks", "openrouter", "featherless", "together", "portkey", "huggingface", "hug", "chutes", "google-vertex", "vercel-ai-gateway", "fal"]:
         mapping = get_model_id_mapping(provider)
         if model_id in mapping:
             logger.info(f"Detected provider '{provider}' for model '{model_id}'")
