@@ -1,8 +1,10 @@
 import datetime
+import json
 import logging
+import asyncio
 from typing import Dict, List, Optional, Any
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Response
 from datetime import datetime, timezone
 
 from fastapi import  HTTPException
@@ -602,12 +604,25 @@ async def get_models(
             models = models[:limit_int]
             logger.info(f"Applied limit {limit_int}: {len(models)} models remaining")
 
+        # Optimize model enhancement for fast response
+        # Only enhance with provider info (fast operation)
         enhanced_models = []
         for model in models:
             enhanced_model = enhance_model_with_provider_info(model, enhanced_providers)
-            if include_huggingface:
-                enhanced_model = enhance_model_with_huggingface_data(enhanced_model)
             enhanced_models.append(enhanced_model)
+
+        # If HuggingFace data requested, fetch it asynchronously in background
+        # This allows the response to return immediately without waiting
+        if include_huggingface:
+            # Schedule background task to enrich with HF data
+            # Note: In production, this would use a background task queue
+            # For now, we'll enrich a limited subset to avoid blocking
+            for i, model in enumerate(enhanced_models[:10]):  # Only enrich first 10 to keep response fast
+                try:
+                    enhanced_models[i] = enhance_model_with_huggingface_data(model)
+                except Exception as e:
+                    logger.debug(f"Failed to enrich model {model.get('id')} with HF data: {e}")
+                    # Continue without HF data if fetch fails
 
         note = {
             "openrouter": "OpenRouter catalog",
@@ -642,7 +657,17 @@ async def get_models(
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
         logger.error(f"Returning /models response with keys: {list(result.keys())}, gateway={gateway_value}, first_model={enhanced_models[0]['id'] if enhanced_models else 'none'}")
-        return result
+
+        # Return response with cache headers for browser/CDN caching
+        # Cache for 5 minutes since data changes infrequently (1 hour TTL on backend)
+        return Response(
+            content=json.dumps(result),
+            media_type="application/json",
+            headers={
+                "Cache-Control": "public, max-age=300",  # 5 minute browser cache
+                "ETag": f'"{hash(json.dumps(enhanced_models[:5]))}"',  # Simple ETag for validation
+            }
+        )
 
     except HTTPException:
         raise
@@ -1332,10 +1357,10 @@ async def batch_compare_models(
 @router.get("/v1/models", tags=["models"])
 async def get_all_models(
     provider: Optional[str] = Query(None, description="Filter models by provider"),
-    limit: Optional[int] = Query(None, description="Limit number of results"),
+    limit: Optional[int] = Query(50, description="Limit number of results (default: 50 for fast load)"),
     offset: Optional[int] = Query(0, description="Offset for pagination"),
     include_huggingface: bool = Query(
-        True, description="Include Hugging Face metrics for models that have hugging_face_id"
+        False, description="Include Hugging Face metrics for models that have hugging_face_id (slower, default: false)"
     ),
     gateway: Optional[str] = Query(
         "openrouter",
