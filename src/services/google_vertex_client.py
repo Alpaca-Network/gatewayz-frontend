@@ -33,22 +33,51 @@ logger = logging.getLogger(__name__)
 def get_google_vertex_credentials():
     """Get Google Cloud credentials for Vertex AI
 
-    Uses service account credentials if GOOGLE_APPLICATION_CREDENTIALS is set,
-    otherwise falls back to default application credentials.
+    Tries multiple credential sources in order:
+    1. GOOGLE_VERTEX_CREDENTIALS_JSON environment variable (for Vercel/serverless)
+    2. GOOGLE_APPLICATION_CREDENTIALS file path (for development)
+    3. Application Default Credentials (ADC) from google.auth.default()
     """
     try:
+        # First, try to get credentials from JSON environment variable (Vercel/serverless)
+        import os
+        creds_json_env = os.environ.get("GOOGLE_VERTEX_CREDENTIALS_JSON")
+        if creds_json_env:
+            logger.info("Loading Google Vertex credentials from GOOGLE_VERTEX_CREDENTIALS_JSON environment variable")
+            import json as json_module
+            try:
+                creds_dict = json_module.loads(creds_json_env)
+                credentials = Credentials.from_service_account_info(creds_dict)
+                credentials.refresh(Request())
+                logger.info("Successfully loaded Google Vertex credentials from JSON environment variable")
+                return credentials
+            except Exception as e:
+                logger.warning(f"Failed to load credentials from JSON env var: {e}")
+                # Fall through to next method
+
+        # Second, try file-based credentials (development)
         if Config.GOOGLE_APPLICATION_CREDENTIALS:
+            logger.info(f"Loading Google Vertex credentials from file: {Config.GOOGLE_APPLICATION_CREDENTIALS}")
             credentials = Credentials.from_service_account_file(
                 Config.GOOGLE_APPLICATION_CREDENTIALS
             )
             credentials.refresh(Request())
-        else:
-            credentials, _ = google.auth.default()
-            if not credentials.valid:
-                credentials.refresh(Request())
+            logger.info("Successfully loaded Google Vertex credentials from file")
+            return credentials
+
+        # Third, try Application Default Credentials (ADC)
+        logger.info("Attempting to use Application Default Credentials (ADC)")
+        credentials, _ = google.auth.default()
+        if not credentials.valid:
+            credentials.refresh(Request())
+        logger.info("Successfully loaded Application Default Credentials")
         return credentials
     except Exception as e:
-        logger.error(f"Failed to get Google Cloud credentials: {e}")
+        logger.error(f"Failed to get Google Cloud credentials: {e}", exc_info=True)
+        logger.error("Please set one of:")
+        logger.error("  1. GOOGLE_VERTEX_CREDENTIALS_JSON (base64 or JSON string for serverless)")
+        logger.error("  2. GOOGLE_APPLICATION_CREDENTIALS (file path for development)")
+        logger.error("  3. Configure Application Default Credentials via gcloud")
         raise
 
 
