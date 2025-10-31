@@ -57,10 +57,24 @@ async function getPriorityModels(): Promise<Model[]> {
 
     const allModels = results.flatMap(result => result.data || []);
 
-    // Deduplicate by ID
-    const uniqueModels = Array.from(
-      new Map(allModels.map(m => [m.id, m])).values()
-    );
+    // Deduplicate intelligently by normalized name + provider slug
+    const modelMap = new Map<string, Model>();
+    for (const model of allModels) {
+      // Normalize the model name for deduplication
+      const normalizedName = (model.name || '')
+        .toLowerCase()
+        .replace(/^(google:|openai:|meta:|anthropic:|models\/)/i, '')
+        .replace(/\s+/g, '-')
+        .replace(/[^\w-]/g, '');
+
+      const dedupKey = `${normalizedName}:::${model.provider_slug || 'unknown'}`;
+
+      if (!modelMap.has(dedupKey)) {
+        modelMap.set(dedupKey, model);
+      }
+    }
+
+    const uniqueModels = Array.from(modelMap.values());
 
     const duration = Date.now() - startTime;
     console.log(`[Models Page] Priority models fetched: ${uniqueModels.length} models in ${duration}ms`);
@@ -83,10 +97,24 @@ async function getDeferredModels(): Promise<Model[]> {
 
     const allModels = results.flatMap(result => result.data || []);
 
-    // Deduplicate by ID
-    const uniqueModels = Array.from(
-      new Map(allModels.map(m => [m.id, m])).values()
-    );
+    // Deduplicate intelligently by normalized name + provider slug
+    const modelMap = new Map<string, Model>();
+    for (const model of allModels) {
+      // Normalize the model name for deduplication
+      const normalizedName = (model.name || '')
+        .toLowerCase()
+        .replace(/^(google:|openai:|meta:|anthropic:|models\/)/i, '')
+        .replace(/\s+/g, '-')
+        .replace(/[^\w-]/g, '');
+
+      const dedupKey = `${normalizedName}:::${model.provider_slug || 'unknown'}`;
+
+      if (!modelMap.has(dedupKey)) {
+        modelMap.set(dedupKey, model);
+      }
+    }
+
+    const uniqueModels = Array.from(modelMap.values());
 
     const duration = Date.now() - startTime;
     console.log(`[Models Page] Deferred models fetched: ${uniqueModels.length} models in ${duration}ms`);
@@ -108,11 +136,26 @@ async function DeferredModelsLoader({
   // This will stream in after priority models are rendered
   const deferredModels = await deferredModelsPromise;
 
-  // Combine and deduplicate
+  // Combine and deduplicate intelligently by normalized name + provider slug
   const allModels = [...priorityModels, ...deferredModels];
-  const uniqueModels = Array.from(
-    new Map(allModels.map(m => [m.id, m])).values()
-  );
+  const modelMap = new Map<string, Model>();
+
+  for (const model of allModels) {
+    // Normalize the model name for deduplication
+    const normalizedName = (model.name || '')
+      .toLowerCase()
+      .replace(/^(google:|openai:|meta:|anthropic:|models\/)/i, '')
+      .replace(/\s+/g, '-')
+      .replace(/[^\w-]/g, '');
+
+    const dedupKey = `${normalizedName}:::${model.provider_slug || 'unknown'}`;
+
+    if (!modelMap.has(dedupKey)) {
+      modelMap.set(dedupKey, model);
+    }
+  }
+
+  const uniqueModels = Array.from(modelMap.values());
 
   console.log(`[Models Page] Total combined models: ${uniqueModels.length}`);
   return <ModelsClient initialModels={uniqueModels} isLoadingMore={false} />;

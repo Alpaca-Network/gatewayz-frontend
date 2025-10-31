@@ -93,11 +93,31 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
         gatewaysToFetch.map(gw => fetchModelsFromGateway(gw, limit))
       );
 
-      // Combine and deduplicate models by ID
+      // Combine and deduplicate models intelligently
       const combinedModels = results.flat();
-      const uniqueModels = Array.from(
-        new Map(combinedModels.map(m => [m.id, m])).values()
-      );
+
+      // Create a normalized key for deduplication
+      // This handles cases where the same model has different IDs from different gateways
+      const modelMap = new Map<string, any>();
+
+      for (const model of combinedModels) {
+        // Normalize the model name: remove prefixes, lowercase, remove special chars, handle versioning
+        const normalizedName = (model.name || '')
+          .toLowerCase()
+          .replace(/^(google:|openai:|meta:|anthropic:|models\/)/i, '') // Remove provider prefixes
+          .replace(/\s+/g, '-') // Replace spaces with hyphens
+          .replace(/[^\w-]/g, ''); // Remove special characters except hyphens
+
+        // Use normalized name + provider slug as dedup key
+        const dedupKey = `${normalizedName}:::${model.provider_slug || 'unknown'}`;
+
+        // Keep the first occurrence (usually from higher-priority gateways like openrouter)
+        if (!modelMap.has(dedupKey)) {
+          modelMap.set(dedupKey, model);
+        }
+      }
+
+      const uniqueModels = Array.from(modelMap.values());
 
       console.log(`[Models] Combined ${combinedModels.length} total (${uniqueModels.length} unique) from ${gatewaysToFetch.length} gateways`);
 
