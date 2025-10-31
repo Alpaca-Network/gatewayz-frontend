@@ -27,6 +27,7 @@ from src.cache import (
     _huggingface_models_cache,
     _aimo_models_cache,
     _near_models_cache,
+    _fal_models_cache,
     is_cache_fresh,
     should_revalidate_in_background,
 )
@@ -202,7 +203,7 @@ def get_all_models_parallel():
             "openrouter", "portkey", "featherless", "deepinfra",
             "google", "cerebras", "nebius", "xai", "novita",
             "hug", "chutes", "groq", "fireworks", "together",
-            "aimo", "near"
+            "aimo", "near", "fal"
         ]
 
         # Use ThreadPoolExecutor to fetch all gateways in parallel
@@ -245,7 +246,8 @@ def get_all_models_sequential():
     together_models = get_cached_models("together") or []
     aimo_models = get_cached_models("aimo") or []
     near_models = get_cached_models("near") or []
-    return openrouter_models + portkey_models + featherless_models + deepinfra_models + google_models + cerebras_models + nebius_models + xai_models + novita_models + hug_models + chutes_models + groq_models + fireworks_models + together_models + aimo_models + near_models
+    fal_models = get_cached_models("fal") or []
+    return openrouter_models + portkey_models + featherless_models + deepinfra_models + google_models + cerebras_models + nebius_models + xai_models + novita_models + hug_models + chutes_models + groq_models + fireworks_models + together_models + aimo_models + near_models + fal_models
 
 
 def get_cached_models(gateway: str = "openrouter"):
@@ -400,6 +402,14 @@ def get_cached_models(gateway: str = "openrouter"):
                 if cache_age < cache["ttl"]:
                     return cache["data"]
             return fetch_models_from_near()
+
+        if gateway == "fal":
+            cache = _fal_models_cache
+            if cache["data"] and cache["timestamp"]:
+                cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
+                if cache_age < cache["ttl"]:
+                    return cache["data"]
+            return fetch_models_from_fal()
 
         if gateway == "all":
             # Fetch all gateways in parallel for improved performance
@@ -1517,6 +1527,122 @@ def normalize_near_model(near_model: dict) -> dict:
     }
 
     return enrich_model_with_pricing(normalized, "near")
+
+
+def fetch_models_from_fal():
+    """Fetch models from Fal.ai catalog
+
+    Loads models from the static Fal.ai catalog JSON file which contains
+    curated models from the 839+ available on fal.ai
+    """
+    try:
+        from src.services.fal_image_client import get_fal_models
+
+        # Get models from catalog
+        raw_models = get_fal_models()
+
+        if not raw_models:
+            logger.warning("No Fal.ai models found in catalog")
+            return []
+
+        # Normalize models
+        normalized_models = [
+            normalize_fal_model(model) for model in raw_models if model
+        ]
+
+        _fal_models_cache["data"] = normalized_models
+        _fal_models_cache["timestamp"] = datetime.now(timezone.utc)
+
+        logger.info(f"Fetched {len(normalized_models)} Fal.ai models from catalog")
+        return _fal_models_cache["data"]
+    except Exception as e:
+        logger.error(f"Failed to fetch models from Fal.ai catalog: {e}")
+        return []
+
+
+def normalize_fal_model(fal_model: dict) -> dict:
+    """Normalize Fal.ai catalog entries to resemble OpenRouter model shape
+
+    Fal.ai features:
+    - 839+ models across text-to-image, text-to-video, image-to-video, etc.
+    - Models include FLUX, Stable Diffusion, Veo, Sora, and many more
+    - Supports image, video, audio, and 3D generation
+    """
+    model_id = fal_model.get("id")
+    if not model_id:
+        logger.warning(f"Fal.ai model missing 'id' field: {fal_model}")
+        return None
+
+    # Extract provider from model ID (e.g., "fal-ai/flux-pro" -> "fal-ai")
+    provider_slug = model_id.split("/")[0] if "/" in model_id else "fal-ai"
+
+    # Use name or derive from ID
+    display_name = fal_model.get("name") or model_id.split("/")[-1]
+
+    # Get description
+    description = fal_model.get("description", f"Fal.ai {display_name} model")
+
+    # Determine modality based on type
+    model_type = fal_model.get("type", "text-to-image")
+    modality_map = {
+        "text-to-image": "text->image",
+        "text-to-video": "text->video",
+        "image-to-image": "image->image",
+        "image-to-video": "image->video",
+        "video-to-video": "video->video",
+        "text-to-audio": "text->audio",
+        "text-to-speech": "text->audio",
+        "audio-to-audio": "audio->audio",
+        "image-to-3d": "image->3d",
+        "vision": "image->text",
+    }
+    modality = modality_map.get(model_type, "text->image")
+
+    # Parse input/output modalities
+    input_mod, output_mod = modality.split("->") if "->" in modality else ("text", "image")
+
+    architecture = {
+        "modality": modality,
+        "input_modalities": [input_mod],
+        "output_modalities": [output_mod],
+        "model_type": model_type,
+        "tags": fal_model.get("tags", []),
+    }
+
+    # Fal.ai doesn't expose pricing in catalog, set to null
+    pricing = {
+        "prompt": None,
+        "completion": None,
+        "request": None,
+        "image": None,
+    }
+
+    slug = model_id
+    canonical_slug = model_id
+
+    normalized = {
+        "id": slug,
+        "slug": slug,
+        "canonical_slug": canonical_slug,
+        "hugging_face_id": None,
+        "name": display_name,
+        "created": None,
+        "description": description,
+        "context_length": None,  # Not applicable for image/video models
+        "architecture": architecture,
+        "pricing": pricing,
+        "top_provider": None,
+        "per_request_limits": None,
+        "supported_parameters": [],
+        "default_parameters": {},
+        "provider_slug": provider_slug,
+        "provider_site_url": "https://fal.ai",
+        "model_logo_url": None,
+        "source_gateway": "fal",
+        "raw_fal": fal_model,
+    }
+
+    return enrich_model_with_pricing(normalized, "fal")
 
 
 def fetch_specific_model_from_together(provider_name: str, model_name: str):

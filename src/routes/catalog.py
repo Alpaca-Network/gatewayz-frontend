@@ -182,7 +182,7 @@ async def get_providers(
     offset: Optional[int] = Query(0, description="Offset for pagination"),
     gateway: Optional[str] = Query(
         "openrouter",
-        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', 'groq', 'fireworks', 'together', 'google', 'cerebras', 'nebius', 'xai', 'novita', 'huggingface' (or 'hug'), 'aimo', or 'all'",
+        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', 'groq', 'fireworks', 'together', 'google', 'cerebras', 'nebius', 'xai', 'novita', 'huggingface' (or 'hug'), 'aimo', 'near', 'fal', or 'all'",
     ),
 ):
     """Get all available provider list with detailed metric data including model count and logo URLs"""
@@ -215,7 +215,7 @@ async def get_providers(
                 raise HTTPException(status_code=503, detail="Portkey models data unavailable")
 
         # Add support for other gateways
-        other_gateways = ["featherless", "deepinfra", "chutes", "groq", "fireworks", "together"]
+        other_gateways = ["featherless", "deepinfra", "chutes", "groq", "fireworks", "together", "fal"]
         all_models = {}  # Track models for each gateway
 
         for gw in other_gateways:
@@ -290,7 +290,7 @@ async def get_models(
     ),
     gateway: Optional[str] = Query(
         "openrouter",
-        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', 'groq', 'fireworks', 'together', 'google', 'cerebras', 'nebius', 'xai', 'novita', 'huggingface' (or 'hug'), 'aimo', or 'all'",
+        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', 'groq', 'fireworks', 'together', 'google', 'cerebras', 'nebius', 'xai', 'novita', 'huggingface' (or 'hug'), 'aimo', 'near', 'fal', or 'all'",
     ),
 ):
     """Get all metric data of available models with optional filtering, pagination, Hugging Face integration, and provider logos"""
@@ -322,6 +322,7 @@ async def get_models(
         hug_models: List[dict] = []
         aimo_models: List[dict] = []
         near_models: List[dict] = []
+        fal_models: List[dict] = []
 
         if gateway_value in ("openrouter", "all"):
             openrouter_models = get_cached_models("openrouter") or []
@@ -419,6 +420,12 @@ async def get_models(
                 logger.error("No Near models data available from cache")
                 raise HTTPException(status_code=503, detail="Models data unavailable")
 
+        if gateway_value in ("fal", "all"):
+            fal_models = get_cached_models("fal") or []
+            if gateway_value == "fal" and not fal_models:
+                logger.error("No Fal models data available from cache")
+                raise HTTPException(status_code=503, detail="Models data unavailable")
+
         if gateway_value == "openrouter":
             models = openrouter_models
         elif gateway_value == "portkey":
@@ -451,11 +458,13 @@ async def get_models(
             models = aimo_models
         elif gateway_value == "near":
             models = near_models
+        elif gateway_value == "fal":
+            models = fal_models
         else:
             # For "all" gateway, merge all models but avoid duplicates from Portkey-based providers
             # Note: google, cerebras, nebius, xai, novita, hug are filtered FROM Portkey models,
             # so we DON'T include them separately in the merge to avoid counting them twice
-            models = merge_models_by_slug(openrouter_models, portkey_models, featherless_models, deepinfra_models, chutes_models, groq_models, fireworks_models, together_models, aimo_models, near_models)
+            models = merge_models_by_slug(openrouter_models, portkey_models, featherless_models, deepinfra_models, chutes_models, groq_models, fireworks_models, together_models, aimo_models, near_models, fal_models)
 
         if not models:
             logger.error("No models data available after applying gateway selection")
@@ -616,7 +625,9 @@ async def get_models(
             "novita": "Novita catalog",
             "hug": "Hugging Face catalog",
             "aimo": "AIMO Network catalog",
-            "all": "Combined OpenRouter, Portkey, Featherless, DeepInfra, Chutes, Groq, Fireworks, Together, Google, Cerebras, Nebius, Xai, Novita, Hugging Face, and AIMO catalogs",
+            "near": "Near AI catalog",
+            "fal": "Fal.ai catalog",
+            "all": "Combined OpenRouter, Portkey, Featherless, DeepInfra, Chutes, Groq, Fireworks, Together, Google, Cerebras, Nebius, Xai, Novita, Hugging Face, AIMO, Near AI, and Fal.ai catalogs",
         }.get(gateway_value, "OpenRouter catalog")
 
         result = {
@@ -1328,7 +1339,7 @@ async def get_all_models(
     ),
     gateway: Optional[str] = Query(
         "openrouter",
-        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', 'groq', 'fireworks', 'together', 'google', 'cerebras', 'nebius', 'xai', 'novita', 'huggingface' (or 'hug'), 'aimo', or 'all'",
+        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', 'groq', 'fireworks', 'together', 'google', 'cerebras', 'nebius', 'xai', 'novita', 'huggingface' (or 'hug'), 'aimo', 'near', 'fal', or 'all'",
     ),
 ):
     return await get_models(
