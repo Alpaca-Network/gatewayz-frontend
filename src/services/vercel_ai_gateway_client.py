@@ -104,3 +104,122 @@ def process_vercel_ai_gateway_response(response):
     except Exception as e:
         logger.error(f"Failed to process Vercel AI Gateway response: {e}")
         raise
+
+
+def fetch_model_pricing_from_vercel(model_id: str):
+    """Fetch pricing information for a specific model from Vercel AI Gateway
+
+    Vercel AI Gateway routes requests to various providers (OpenAI, Google, Anthropic, etc.)
+    This function attempts to determine the pricing by looking up the base provider's pricing.
+
+    Args:
+        model_id: Model identifier (e.g., "openai/gpt-4", "claude-3-sonnet")
+
+    Returns:
+        dict with 'prompt' and 'completion' pricing per 1M tokens, or None if not available
+    """
+    try:
+        import httpx
+
+        # Try to get pricing from Vercel's pricing endpoint if available
+        # Note: As of documentation check, Vercel doesn't expose model pricing via API
+        # Instead, we cross-reference with known provider pricing
+
+        api_key = Config.VERCEL_AI_GATEWAY_API_KEY
+        if not api_key or api_key == "placeholder-key":
+            logger.debug(f"Cannot fetch pricing for {model_id}: no valid API key configured")
+            return None
+
+        # Attempt to fetch from Vercel pricing endpoint (if it exists)
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+
+        try:
+            response = httpx.get(
+                "https://ai-gateway.vercel.sh/v1/pricing",
+                headers=headers,
+                timeout=5.0
+            )
+
+            if response.status_code == 200:
+                pricing_data = response.json()
+                # Look for model in response
+                if isinstance(pricing_data, dict):
+                    if model_id in pricing_data:
+                        return pricing_data[model_id]
+                    # Try without provider prefix
+                    model_name = model_id.split("/")[-1] if "/" in model_id else model_id
+                    if model_name in pricing_data:
+                        return pricing_data[model_name]
+        except (httpx.RequestError, httpx.TimeoutException) as e:
+            logger.debug(f"Vercel pricing endpoint not available: {e}")
+
+        # Fallback: use provider-specific pricing lookup
+        return get_provider_pricing_for_vercel_model(model_id)
+
+    except Exception as e:
+        logger.error(f"Failed to fetch pricing for Vercel model {model_id}: {e}")
+        return None
+
+
+def get_provider_pricing_for_vercel_model(model_id: str):
+    """Get pricing for a Vercel model by looking up the underlying provider's pricing
+
+    Vercel routes models to providers like OpenAI, Google, Anthropic, etc.
+    We can determine pricing by identifying the provider and looking up their rates.
+
+    Args:
+        model_id: Model identifier (e.g., "openai/gpt-4", "anthropic/claude-3-sonnet")
+
+    Returns:
+        dict with 'prompt' and 'completion' pricing per 1M tokens
+    """
+    try:
+        # Extract provider from model ID if available
+        if "/" in model_id:
+            provider_prefix = model_id.split("/")[0].lower()
+        else:
+            # Try to infer from model name
+            model_name = model_id.lower()
+            if "gpt" in model_name or "dall-e" in model_name:
+                provider_prefix = "openai"
+            elif "claude" in model_name:
+                provider_prefix = "anthropic"
+            elif "gemini" in model_name:
+                provider_prefix = "google"
+            elif "llama" in model_name:
+                provider_prefix = "meta"
+            else:
+                return None
+
+        # Cross-reference with known provider pricing from the system
+        # This leverages the existing pricing infrastructure
+        try:
+            from src.services.pricing import get_model_pricing
+
+            # Try the full model ID first
+            pricing = get_model_pricing(model_id)
+            if pricing and pricing.get("found"):
+                return {
+                    "prompt": pricing.get("prompt", "0"),
+                    "completion": pricing.get("completion", "0")
+                }
+
+            # Try without the provider prefix
+            model_name_only = model_id.split("/")[-1] if "/" in model_id else model_id
+            pricing = get_model_pricing(model_name_only)
+            if pricing and pricing.get("found"):
+                return {
+                    "prompt": pricing.get("prompt", "0"),
+                    "completion": pricing.get("completion", "0")
+                }
+        except ImportError:
+            logger.debug("pricing module not available for cross-reference")
+
+        return None
+
+    except Exception as e:
+        logger.debug(f"Failed to get provider pricing for {model_id}: {e}")
+        return None

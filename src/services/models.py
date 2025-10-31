@@ -29,6 +29,7 @@ from src.cache import (
     _aimo_models_cache,
     _near_models_cache,
     _fal_models_cache,
+    _vercel_ai_gateway_models_cache,
     is_cache_fresh,
     should_revalidate_in_background,
 )
@@ -420,6 +421,14 @@ def get_cached_models(gateway: str = "openrouter"):
                 if cache_age < cache["ttl"]:
                     return cache["data"]
             return fetch_models_from_fal()
+
+        if gateway == "vercel-ai-gateway":
+            cache = _vercel_ai_gateway_models_cache
+            if cache["data"] and cache["timestamp"]:
+                cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
+                if cache_age < cache["ttl"]:
+                    return cache["data"]
+            return fetch_models_from_vercel_ai_gateway()
 
         if gateway == "all":
             # Fetch all gateways in parallel for improved performance
@@ -1653,6 +1662,138 @@ def normalize_fal_model(fal_model: dict) -> dict:
     }
 
     return enrich_model_with_pricing(normalized, "fal")
+
+
+def fetch_models_from_vercel_ai_gateway():
+    """Fetch models from Vercel AI Gateway via OpenAI-compatible API
+
+    Vercel AI Gateway provides access to models from multiple providers
+    through a unified OpenAI-compatible endpoint.
+    """
+    try:
+        from src.services.vercel_ai_gateway_client import get_vercel_ai_gateway_client
+
+        client = get_vercel_ai_gateway_client()
+        response = client.models.list()
+
+        if not response or not hasattr(response, 'data'):
+            logger.warning("No models returned from Vercel AI Gateway")
+            return []
+
+        # Normalize models
+        normalized_models = [
+            normalize_vercel_model(model) for model in response.data if model
+        ]
+
+        _vercel_ai_gateway_models_cache["data"] = normalized_models
+        _vercel_ai_gateway_models_cache["timestamp"] = datetime.now(timezone.utc)
+
+        logger.info(f"Fetched {len(normalized_models)} models from Vercel AI Gateway")
+        return _vercel_ai_gateway_models_cache["data"]
+    except Exception as e:
+        logger.error(f"Failed to fetch models from Vercel AI Gateway: {e}")
+        return []
+
+
+def normalize_vercel_model(model) -> dict:
+    """Normalize Vercel AI Gateway model to catalog schema
+
+    Vercel models can originate from various providers (OpenAI, Google, Anthropic, etc.)
+    The gateway automatically routes requests to the appropriate provider.
+    Pricing is dynamically fetched from the underlying provider's pricing data.
+    """
+    # Extract model ID
+    model_id = getattr(model, 'id', None)
+    if not model_id:
+        logger.warning(f"Vercel model missing 'id' field: {model}")
+        return None
+
+    # Determine provider from model ID
+    # Models come in formats like "openai/gpt-4", "google/gemini-pro", etc.
+    if "/" in model_id:
+        provider_slug = model_id.split("/")[0]
+        display_name = model_id.split("/")[1]
+    else:
+        provider_slug = "vercel"
+        display_name = model_id
+
+    # Get description - Vercel doesn't provide this, so we create one
+    description = getattr(model, 'description', None) or f"Model available through Vercel AI Gateway"
+
+    # Get context length if available
+    context_length = getattr(model, 'context_length', 4096)
+
+    # Get created date if available
+    created = getattr(model, 'created_at', None)
+
+    # Fetch pricing dynamically from Vercel or underlying provider
+    pricing = get_vercel_model_pricing(model_id)
+
+    normalized = {
+        "id": model_id,
+        "slug": f"vercel/{model_id}",
+        "canonical_slug": f"vercel/{model_id}",
+        "hugging_face_id": None,
+        "name": display_name,
+        "created": created,
+        "description": description,
+        "context_length": context_length,
+        "architecture": {
+            "modality": "text->text",
+            "input_modalities": ["text"],
+            "output_modalities": ["text"],
+            "instruct_type": "chat"
+        },
+        "pricing": pricing,
+        "top_provider": None,
+        "per_request_limits": None,
+        "supported_parameters": [],
+        "default_parameters": {},
+        "provider_slug": provider_slug,
+        "provider_site_url": "https://vercel.com/ai-gateway",
+        "model_logo_url": "https://cdn.jsdelivr.net/gh/simple-icons/simple-icons@develop/icons/vercel.svg",
+        "source_gateway": "vercel-ai-gateway",
+    }
+
+    return normalized
+
+
+def get_vercel_model_pricing(model_id: str) -> dict:
+    """Get pricing for a Vercel AI Gateway model
+
+    Fetches pricing from Vercel or the underlying provider.
+    Falls back to default zero pricing if unavailable.
+
+    Args:
+        model_id: Model identifier (e.g., "openai/gpt-4")
+
+    Returns:
+        dict with 'prompt', 'completion', 'request', and 'image' pricing fields
+    """
+    try:
+        from src.services.vercel_ai_gateway_client import fetch_model_pricing_from_vercel
+
+        # Attempt to fetch pricing from Vercel or underlying provider
+        pricing_data = fetch_model_pricing_from_vercel(model_id)
+
+        if pricing_data:
+            # Normalize to standard schema with default zeros for missing fields
+            return {
+                "prompt": str(pricing_data.get("prompt", "0")),
+                "completion": str(pricing_data.get("completion", "0")),
+                "request": str(pricing_data.get("request", "0")),
+                "image": str(pricing_data.get("image", "0")),
+            }
+    except Exception as e:
+        logger.debug(f"Failed to fetch Vercel pricing for {model_id}: {e}")
+
+    # Fallback: return default zero pricing
+    return {
+        "prompt": "0",
+        "completion": "0",
+        "request": "0",
+        "image": "0",
+    }
 
 
 def fetch_specific_model_from_together(provider_name: str, model_name: str):
