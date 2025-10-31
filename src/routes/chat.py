@@ -157,7 +157,11 @@ async def stream_generator(stream, user, api_key, model, trial, environment_tag,
     has_thinking = False
 
     try:
+        chunk_count = 0
         for chunk in stream:
+            chunk_count += 1
+            logger.debug(f"[STREAM] Processing chunk {chunk_count} for model {model}")
+
             # Extract chunk data
             chunk_dict = {
                 "id": chunk.id,
@@ -180,6 +184,7 @@ async def stream_generator(stream, user, api_key, model, trial, environment_tag,
                     content = choice.delta.content
                     choice_dict["delta"]["content"] = content
                     accumulated_content += content
+                    logger.debug(f"[STREAM] Chunk {chunk_count}: Added {len(content)} characters of content")
 
                     # Detect thinking tags for debug logging
                     if '<thinking>' in content or '[THINKING' in content or 'thinking>' in content:
@@ -188,8 +193,12 @@ async def stream_generator(stream, user, api_key, model, trial, environment_tag,
                         # Log when we first detect thinking
                         if accumulated_thinking.count('<thinking>') == 1:
                             logger.info(f"[THINKING DEBUG] Detected thinking tag in stream for model {model}")
+                else:
+                    logger.debug(f"[STREAM] Chunk {chunk_count}: No content in delta")
 
                 chunk_dict["choices"].append(choice_dict)
+
+            logger.debug(f"[STREAM] Chunk {chunk_count} dict: {json.dumps(chunk_dict, default=str)}")
 
             # Check for usage in chunk (some providers send it in final chunk)
             if hasattr(chunk, 'usage') and chunk.usage:
@@ -202,6 +211,8 @@ async def stream_generator(stream, user, api_key, model, trial, environment_tag,
                 logger.debug(f"[THINKING DEBUG] Streaming chunk with thinking content: {json.dumps(choice_dict)}")
 
             yield f"data: {json.dumps(chunk_dict)}\n\n"
+
+        logger.info(f"[STREAM] Stream completed with {chunk_count} chunks, accumulated content length: {len(accumulated_content)}")
 
         # If no usage was provided, estimate based on content
         if total_tokens == 0:

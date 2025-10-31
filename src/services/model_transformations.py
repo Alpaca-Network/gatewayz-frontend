@@ -283,17 +283,33 @@ def get_model_id_mapping(provider: str) -> Dict[str, str]:
         "google-vertex": {
             # Google Vertex AI models - simple names
             # Full resource names are constructed by the client
+            # Gemini 2.5 models (newest)
+            "gemini-2.5-flash-preview-09-2025": "gemini-2.5-flash-preview-09-2025",
+            "gemini-2.5-flash": "gemini-2.5-flash-preview-09-2025",
+            "gemini-2.5-flash-preview": "gemini-2.5-flash-preview-09-2025",
+            "google/gemini-2.5-flash-preview-09-2025": "gemini-2.5-flash-preview-09-2025",
+            "google/gemini-2.5-flash": "gemini-2.5-flash-preview-09-2025",
+            "gemini-2.5-pro-preview-09-2025": "gemini-2.5-pro-preview-09-2025",
+            "gemini-2.5-pro": "gemini-2.5-pro-preview-09-2025",
+            "google/gemini-2.5-pro": "gemini-2.5-pro-preview-09-2025",
+
+            # Gemini 2.0 models
             "gemini-2.0-flash": "gemini-2.0-flash",
             "gemini-2.0-flash-thinking": "gemini-2.0-flash-thinking",
             "gemini-2.0-flash-001": "gemini-2.0-flash-001",
             "gemini-2.0-pro": "gemini-2.0-pro",
             "gemini-2.0-pro-001": "gemini-2.0-pro-001",
+
+            # Gemini 1.5 models
             "gemini-1.5-pro": "gemini-1.5-pro",
             "gemini-1.5-pro-002": "gemini-1.5-pro-002",
             "gemini-1.5-flash": "gemini-1.5-flash",
             "gemini-1.5-flash-002": "gemini-1.5-flash-002",
+
+            # Gemini 1.0 models
             "gemini-1.0-pro": "gemini-1.0-pro",
             "gemini-1.0-pro-vision": "gemini-1.0-pro-vision",
+
             # Aliases for convenience
             "google/gemini-2.0-flash": "gemini-2.0-flash",
             "google/gemini-1.5-pro": "gemini-1.5-pro",
@@ -411,8 +427,11 @@ def detect_provider_from_model_id(model_id: str) -> Optional[str]:
     # Check for Google Vertex AI models
     if model_id.startswith("projects/") and "/models/" in model_id:
         return "google-vertex"
-    if any(pattern in model_id.lower() for pattern in ["gemini", "google"]) and "/" not in model_id:
-        # Simple patterns like "gemini-2.0-flash" or "gemini-1.5-pro"
+    if any(pattern in model_id.lower() for pattern in ["gemini-2.5", "gemini-2.0", "gemini-1.5", "gemini-1.0"]) and "/" not in model_id:
+        # Simple patterns like "gemini-2.5-flash", "gemini-2.0-flash" or "gemini-1.5-pro"
+        return "google-vertex"
+    if model_id.startswith("google/") and "gemini" in model_id.lower():
+        # Patterns like "google/gemini-2.5-flash"
         return "google-vertex"
 
     # Check all mappings to see if this model exists
