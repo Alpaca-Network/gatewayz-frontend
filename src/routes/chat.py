@@ -48,6 +48,7 @@ from src.services.huggingface_client import make_huggingface_request_openai, pro
 from src.services.aimo_client import make_aimo_request_openai, process_aimo_response, make_aimo_request_openai_stream
 from src.services.xai_client import make_xai_request_openai, process_xai_response, make_xai_request_openai_stream
 from src.services.chutes_client import make_chutes_request_openai, process_chutes_response, make_chutes_request_openai_stream
+from src.services.google_vertex_client import make_google_vertex_request_openai, process_google_vertex_response, make_google_vertex_request_openai_stream
 from src.services.model_transformations import detect_provider_from_model_id, transform_model_id
 from src.services.provider_failover import build_provider_failover_chain, map_provider_error, should_failover
 import src.services.rate_limiting as rate_limiting_service
@@ -546,6 +547,10 @@ async def chat_completions(
                         stream = await _to_thread(
                             make_chutes_request_openai_stream, messages, request_model, **optional
                         )
+                    elif attempt_provider == "google-vertex":
+                        stream = await _to_thread(
+                            make_google_vertex_request_openai_stream, messages, request_model, **optional
+                        )
                     else:
                         stream = await _to_thread(
                             make_openrouter_request_openai_stream, messages, request_model, **optional
@@ -673,6 +678,12 @@ async def chat_completions(
                         timeout=request_timeout,
                     )
                     processed = await _to_thread(process_chutes_response, resp_raw)
+                elif attempt_provider == "google-vertex":
+                    resp_raw = await asyncio.wait_for(
+                        _to_thread(make_google_vertex_request_openai, messages, request_model, **optional),
+                        timeout=request_timeout,
+                    )
+                    processed = await _to_thread(process_google_vertex_response, resp_raw)
                 else:
                     resp_raw = await asyncio.wait_for(
                         _to_thread(make_openrouter_request_openai, messages, request_model, **optional),

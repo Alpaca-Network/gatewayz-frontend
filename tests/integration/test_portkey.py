@@ -3,6 +3,7 @@ Test script to verify Portkey integration
 """
 import os
 import sys
+import pytest
 
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
@@ -60,6 +61,8 @@ def test_portkey_chat_completion():
         return False
 
 
+@pytest.mark.timeout(120)
+@pytest.mark.skip(reason="Long-running integration test requiring external API calls - run manually with sufficient timeout")
 def test_provider_comparison():
     """Test different providers through Portkey"""
     print("\n" + "=" * 60)

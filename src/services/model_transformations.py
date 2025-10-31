@@ -273,6 +273,27 @@ def get_model_id_mapping(provider: str) -> Dict[str, str]:
             # Chutes uses org/model format directly
             # Most models pass through as-is from their catalog
             # Keep the exact format from the catalog for proper routing
+        },
+        "google-vertex": {
+            # Google Vertex AI models - simple names
+            # Full resource names are constructed by the client
+            "gemini-2.0-flash": "gemini-2.0-flash",
+            "gemini-2.0-flash-thinking": "gemini-2.0-flash-thinking",
+            "gemini-2.0-flash-001": "gemini-2.0-flash-001",
+            "gemini-2.0-pro": "gemini-2.0-pro",
+            "gemini-2.0-pro-001": "gemini-2.0-pro-001",
+            "gemini-1.5-pro": "gemini-1.5-pro",
+            "gemini-1.5-pro-002": "gemini-1.5-pro-002",
+            "gemini-1.5-flash": "gemini-1.5-flash",
+            "gemini-1.5-flash-002": "gemini-1.5-flash-002",
+            "gemini-1.0-pro": "gemini-1.0-pro",
+            "gemini-1.0-pro-vision": "gemini-1.0-pro-vision",
+            # Aliases for convenience
+            "google/gemini-2.0-flash": "gemini-2.0-flash",
+            "google/gemini-1.5-pro": "gemini-1.5-pro",
+            "google/gemini-1.5-flash": "gemini-1.5-flash",
+            "gemini-2.0": "gemini-2.0-flash",
+            "gemini-1.5": "gemini-1.5-pro",
         }
     }
 
@@ -381,8 +402,15 @@ def detect_provider_from_model_id(model_id: str) -> Optional[str]:
     if model_id.startswith("@"):
         return "portkey"
 
+    # Check for Google Vertex AI models
+    if model_id.startswith("projects/") and "/models/" in model_id:
+        return "google-vertex"
+    if any(pattern in model_id.lower() for pattern in ["gemini", "google"]) and "/" not in model_id:
+        # Simple patterns like "gemini-2.0-flash" or "gemini-1.5-pro"
+        return "google-vertex"
+
     # Check all mappings to see if this model exists
-    for provider in ["fireworks", "openrouter", "featherless", "together", "portkey", "huggingface", "hug", "chutes", "fal"]:
+    for provider in ["fireworks", "openrouter", "featherless", "together", "portkey", "huggingface", "hug", "chutes", "google-vertex", "fal"]:
         mapping = get_model_id_mapping(provider)
         if model_id in mapping:
             logger.info(f"Detected provider '{provider}' for model '{model_id}'")
@@ -396,6 +424,10 @@ def detect_provider_from_model_id(model_id: str) -> Optional[str]:
     # Check by model patterns
     if "/" in model_id:
         org, model_name = model_id.split("/", 1)
+
+        # Google Vertex models (e.g., "google/gemini-2.0-flash")
+        if org == "google":
+            return "google-vertex"
 
         # OpenRouter models (e.g., "openrouter/auto")
         if org == "openrouter":

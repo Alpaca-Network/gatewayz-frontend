@@ -147,6 +147,13 @@ _fal_models_cache = {
     "stale_ttl": 7200
 }
 
+_google_vertex_models_cache = {
+    "data": None,
+    "timestamp": None,
+    "ttl": 3600,  # 1 hour TTL for Google Vertex AI models
+    "stale_ttl": 7200
+}
+
 # BACKWARD COMPATIBILITY: Alias for old cache name
 # Some deployed modules may still reference the old name
 _hug_models_cache = _huggingface_models_cache
@@ -165,6 +172,7 @@ def get_models_cache(gateway: str):
         "fireworks": _fireworks_models_cache,
         "together": _together_models_cache,
         "google": _google_models_cache,
+        "google-vertex": _google_vertex_models_cache,
         "cerebras": _cerebras_models_cache,
         "nebius": _nebius_models_cache,
         "xai": _xai_models_cache,
@@ -196,6 +204,7 @@ def clear_models_cache(gateway: str):
         "fireworks": _fireworks_models_cache,
         "together": _together_models_cache,
         "google": _google_models_cache,
+        "google-vertex": _google_vertex_models_cache,
         "cerebras": _cerebras_models_cache,
         "nebius": _nebius_models_cache,
         "xai": _xai_models_cache,

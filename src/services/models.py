@@ -20,6 +20,7 @@ from src.cache import (
     _together_models_cache,
     _deepinfra_models_cache,
     _google_models_cache,
+    _google_vertex_models_cache,
     _cerebras_models_cache,
     _nebius_models_cache,
     _xai_models_cache,
@@ -36,6 +37,7 @@ from datetime import datetime, timezone
 from src.services.pricing_lookup import enrich_model_with_pricing
 from src.services.portkey_providers import (
     fetch_models_from_google,
+    fetch_models_from_google_vertex,
     fetch_models_from_cerebras,
     fetch_models_from_nebius,
     fetch_models_from_xai,
@@ -50,19 +52,19 @@ import httpx
 def sanitize_pricing(pricing: dict) -> dict:
     """
     Sanitize pricing data by converting negative values to 0.
-    
+
     OpenRouter uses -1 to indicate dynamic pricing (e.g., for auto-routing models).
     We convert these to 0 to avoid issues in cost calculations.
-    
+
     Args:
         pricing: Pricing dictionary from API
-        
+
     Returns:
         Sanitized pricing dictionary
     """
     if not pricing or not isinstance(pricing, dict):
         return pricing
-    
+
     sanitized = pricing.copy()
     for key in ['prompt', 'completion', 'request', 'image', 'web_search', 'internal_reasoning']:
         if key in sanitized:
@@ -77,7 +79,7 @@ def sanitize_pricing(pricing: dict) -> dict:
             except (ValueError, TypeError):
                 # Keep the original value if conversion fails
                 pass
-    
+
     return sanitized
 
 # Initialize logging
@@ -318,6 +320,14 @@ def get_cached_models(gateway: str = "openrouter"):
                 if cache_age < cache["ttl"]:
                     return cache["data"]
             return fetch_models_from_google()
+
+        if gateway == "google-vertex":
+            cache = _google_vertex_models_cache
+            if cache["data"] and cache["timestamp"]:
+                cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
+                if cache_age < cache["ttl"]:
+                    return cache["data"]
+            return fetch_models_from_google_vertex()
 
         if gateway == "cerebras":
             cache = _cerebras_models_cache
@@ -756,7 +766,7 @@ def normalize_featherless_model(featherless_model: dict) -> dict:
         "source_gateway": "featherless",
         "raw_featherless": featherless_model
     }
-    
+
     # Enrich with manual pricing if available
     return enrich_model_with_pricing(normalized, "featherless")
 
@@ -922,7 +932,7 @@ def normalize_chutes_model(chutes_model: dict) -> dict:
         "tags": tags,
         "raw_chutes": chutes_model
     }
-    
+
     # Enrich with manual pricing if available (overrides hourly pricing)
     return enrich_model_with_pricing(normalized, "chutes")
 
@@ -1672,21 +1682,21 @@ def fetch_specific_model_from_portkey(provider_name: str, model_name: str):
     try:
         # Construct the model ID
         model_id = f"{provider_name}/{model_name}"
-        
+
         # First check cache
         portkey_models = get_cached_models("portkey")
         if portkey_models:
             for model in portkey_models:
                 if model.get("id", "").lower() == model_id.lower():
                     return model
-        
+
         # If not in cache, try to fetch fresh data
         fresh_models = fetch_models_from_portkey()
         if fresh_models:
             for model in fresh_models:
                 if model.get("id", "").lower() == model_id.lower():
                     return model
-        
+
         logger.warning(f"Model {model_id} not found in Portkey catalog")
         return None
     except Exception as e:
@@ -1699,21 +1709,21 @@ def fetch_specific_model_from_featherless(provider_name: str, model_name: str):
     try:
         # Construct the model ID
         model_id = f"{provider_name}/{model_name}"
-        
+
         # First check cache
         featherless_models = get_cached_models("featherless")
         if featherless_models:
             for model in featherless_models:
                 if model.get("id", "").lower() == model_id.lower():
                     return model
-        
+
         # If not in cache, try to fetch fresh data
         fresh_models = fetch_models_from_featherless()
         if fresh_models:
             for model in fresh_models:
                 if model.get("id", "").lower() == model_id.lower():
                     return model
-        
+
         logger.warning(f"Model {model_id} not found in Featherless catalog")
         return None
     except Exception as e:
@@ -1742,13 +1752,13 @@ def fetch_specific_model_from_deepinfra(provider_name: str, model_name: str):
 
         models_data = response.json()
         models = models_data.get("data", [])
-        
+
         # Search for the specific model
         for model in models:
             if model.get("id", "").lower() == model_id.lower():
                 # Normalize to our schema
                 return normalize_deepinfra_model(model)
-        
+
         logger.warning(f"Model {model_id} not found in DeepInfra catalog")
         return None
     except Exception as e:
@@ -1847,7 +1857,7 @@ def normalize_deepinfra_model(deepinfra_model: dict) -> dict:
         "source_gateway": "deepinfra",
         "raw_deepinfra": deepinfra_model
     }
-    
+
     # Enrich with manual pricing if available
     return enrich_model_with_pricing(normalized, "deepinfra")
 
@@ -1857,21 +1867,21 @@ def fetch_specific_model_from_chutes(provider_name: str, model_name: str):
     try:
         # Construct the model ID
         model_id = f"{provider_name}/{model_name}"
-        
+
         # First check cache
         chutes_models = get_cached_models("chutes")
         if chutes_models:
             for model in chutes_models:
                 if model.get("id", "").lower() == model_id.lower():
                     return model
-        
+
         # If not in cache, try to fetch fresh data
         fresh_models = fetch_models_from_chutes()
         if fresh_models:
             for model in fresh_models:
                 if model.get("id", "").lower() == model_id.lower():
                     return model
-        
+
         logger.warning(f"Model {model_id} not found in Chutes catalog")
         return None
     except Exception as e:
@@ -2017,12 +2027,12 @@ def detect_model_gateway(provider_name: str, model_name: str) -> str:
 
 def fetch_specific_model(provider_name: str, model_name: str, gateway: str = None):
     """Fetch specific model from the appropriate gateway
-    
+
     Args:
         provider_name: Provider name (e.g., 'openai', 'anthropic')
         model_name: Model name (e.g., 'gpt-4', 'claude-3')
         gateway: Optional gateway override. If not provided, auto-detects
-        
+
     Returns:
         Model data dict or None if not found
     """

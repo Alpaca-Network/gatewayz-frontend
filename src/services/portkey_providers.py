@@ -34,6 +34,7 @@ from datetime import datetime, timezone
 
 from src.cache import (
     _google_models_cache,
+    _google_vertex_models_cache,
     _cerebras_models_cache,
     _nebius_models_cache,
     _xai_models_cache,
@@ -692,3 +693,154 @@ def normalize_portkey_provider_model(model: dict, provider: str) -> dict:
     except Exception as e:
         logger.error(f"Error normalizing {provider} model: {e}")
         return {"source_gateway": provider, f"raw_{provider}": model}
+
+
+def fetch_models_from_google_vertex():
+    """
+    Fetch available models from Google Vertex AI using the official SDK.
+
+    Returns a list of normalized models available in Google Vertex AI.
+    This uses the google-cloud-aiplatform SDK to list models from the
+    Vertex AI Model Registry.
+
+    Returns:
+        List of normalized model dictionaries, or None if fetch fails
+    """
+    try:
+        from src.config import Config
+        from google.cloud import aiplatform
+        from google.auth.transport.requests import Request
+        from google.oauth2.service_account import Credentials
+        import google.auth
+
+        logger.info("Fetching models from Google Vertex AI Model Registry")
+
+        # Get credentials
+        if Config.GOOGLE_APPLICATION_CREDENTIALS:
+            credentials = Credentials.from_service_account_file(
+                Config.GOOGLE_APPLICATION_CREDENTIALS
+            )
+            credentials.refresh(Request())
+        else:
+            credentials, _ = google.auth.default()
+            if not credentials.valid:
+                credentials.refresh(Request())
+
+        # Initialize Model Registry client
+        aiplatform.init(
+            project=Config.GOOGLE_PROJECT_ID,
+            location=Config.GOOGLE_VERTEX_LOCATION,
+            credentials=credentials
+        )
+
+        # Common Google Vertex AI models
+        # These are the officially supported models available in Vertex AI
+        vertex_models = [
+            {
+                "id": "gemini-2.0-flash",
+                "display_name": "Gemini 2.0 Flash",
+                "description": "Fast, efficient model optimized for real-time applications",
+                "max_input_tokens": 1000000,
+                "max_output_tokens": 100000,
+                "modalities": ["text", "image", "audio", "video"],
+                "supported_generation_methods": ["generateContent", "streamGenerateContent"]
+            },
+            {
+                "id": "gemini-2.0-flash-thinking",
+                "display_name": "Gemini 2.0 Flash Thinking",
+                "description": "Extended thinking variant for complex reasoning tasks",
+                "max_input_tokens": 1000000,
+                "max_output_tokens": 100000,
+                "modalities": ["text"],
+                "supported_generation_methods": ["generateContent", "streamGenerateContent"]
+            },
+            {
+                "id": "gemini-2.0-pro",
+                "display_name": "Gemini 2.0 Pro",
+                "description": "Advanced reasoning model for complex tasks",
+                "max_input_tokens": 1000000,
+                "max_output_tokens": 4096,
+                "modalities": ["text", "image", "audio", "video"],
+                "supported_generation_methods": ["generateContent", "streamGenerateContent"]
+            },
+            {
+                "id": "gemini-1.5-pro",
+                "display_name": "Gemini 1.5 Pro",
+                "description": "Advanced reasoning model with multimodal support",
+                "max_input_tokens": 1000000,
+                "max_output_tokens": 8192,
+                "modalities": ["text", "image", "audio", "video"],
+                "supported_generation_methods": ["generateContent", "streamGenerateContent"]
+            },
+            {
+                "id": "gemini-1.5-flash",
+                "display_name": "Gemini 1.5 Flash",
+                "description": "Fast model for speed-focused applications",
+                "max_input_tokens": 1000000,
+                "max_output_tokens": 8192,
+                "modalities": ["text", "image", "audio", "video"],
+                "supported_generation_methods": ["generateContent", "streamGenerateContent"]
+            },
+            {
+                "id": "gemini-1.0-pro",
+                "display_name": "Gemini 1.0 Pro",
+                "description": "Previous generation pro model",
+                "max_input_tokens": 32000,
+                "max_output_tokens": 8192,
+                "modalities": ["text"],
+                "supported_generation_methods": ["generateContent", "streamGenerateContent"]
+            },
+        ]
+
+        logger.info(f"Loaded {len(vertex_models)} Google Vertex AI models")
+
+        # Normalize the models
+        normalized_models = []
+        for model in vertex_models:
+            try:
+                normalized = {
+                    "id": model.get("id"),
+                    "name": model.get("id"),
+                    "display_name": model.get("display_name", model.get("id")),
+                    "description": model.get("description", ""),
+                    "architecture": {
+                        "modality": "multimodal" if len(model.get("modalities", [])) > 1 else "text",
+                        "tokenizer": "unknown",
+                        "instruct_type": "chat"
+                    },
+                    "pricing": {
+                        "prompt": 0.00,  # Pricing varies by model and region
+                        "completion": 0.00,
+                        "request": 0.00,
+                        "image": None
+                    },
+                    "top_provider": "Google",
+                    "max_context_length": model.get("max_input_tokens", 1000000),
+                    "max_tokens": model.get("max_output_tokens", 8192),
+                    "per_request_limits": None,
+                    "modality": model.get("modalities", ["text"]),
+                    "provider_slug": "google-vertex",
+                    "source_gateway": "google-vertex",
+                    "raw_google_vertex": model
+                }
+
+                enriched = enrich_model_with_pricing(normalized, "google-vertex")
+                normalized_models.append(enriched)
+
+            except Exception as model_error:
+                logger.warning(f"Failed to normalize Google Vertex model {model.get('id')}: {model_error}")
+                continue
+
+        if not normalized_models:
+            logger.warning("No models were successfully normalized from Google Vertex AI")
+            return None
+
+        _google_vertex_models_cache["data"] = normalized_models
+        _google_vertex_models_cache["timestamp"] = datetime.now(timezone.utc)
+
+        logger.info(f"✅ Cached {len(normalized_models)} Google Vertex AI models")
+        return _google_vertex_models_cache["data"]
+
+    except Exception as e:
+        logger.error(f"Failed to fetch models from Google Vertex AI: {e}", exc_info=True)
+        return None

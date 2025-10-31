@@ -21,13 +21,13 @@ def test_detect_provider_from_model_id_fal_orgs():
     """Test that various Fal-related orgs are detected as 'fal' provider"""
     test_cases = [
         "fal/some-model",
-        "minimax/video-01", 
+        "minimax/video-01",
         "stabilityai/stable-diffusion-xl",
         "hunyuan3d/some-model",
         "meshy/mesh-model",
         "tripo3d/3d-model"
     ]
-    
+
     for model_id in test_cases:
         result = detect_provider_from_model_id(model_id)
         assert result == "fal", f"Expected 'fal' for {model_id}, got {result}"
@@ -40,7 +40,7 @@ def test_detect_provider_from_model_id_existing_providers():
         ("openai/gpt-4", "openrouter"),
         ("meta-llama/llama-2-7b", None),  # This model doesn't match any specific provider
     ]
-    
+
     for model_id, expected in test_cases:
         result = detect_provider_from_model_id(model_id)
         assert result == expected, f"Expected '{expected}' for {model_id}, got {result}"
