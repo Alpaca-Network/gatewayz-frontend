@@ -107,12 +107,14 @@ export async function* streamChatResponse(
   try {
     devLog('[Streaming] Initiating fetch request to:', url);
     devLog('[Streaming] Request body:', requestBody);
+    devLog('[Streaming] API Key prefix:', apiKey.substring(0, 20) + '...');
 
     const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
+        'Accept': 'text/event-stream',
       },
       body: JSON.stringify(requestBody),
       signal: controller.signal,
@@ -124,6 +126,7 @@ export async function* streamChatResponse(
     devLog('[Streaming] Response headers:', Object.fromEntries(response.headers.entries()));
     devLog('[Streaming] Response ok:', response.ok);
     devLog('[Streaming] Response body exists:', !!response.body);
+    devLog('[Streaming] Content-Type:', response.headers.get('content-type'));
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
@@ -295,7 +298,14 @@ export async function* streamChatResponse(
       }
 
       chunkCount++;
-      buffer += decoder.decode(value, { stream: true });
+      const decodedValue = decoder.decode(value, { stream: true });
+      buffer += decodedValue;
+
+      // Log raw decoded value for debugging
+      if (decodedValue.length > 0) {
+        devLog(`[Streaming] Raw decoded value (first 200 chars):`, decodedValue.substring(0, 200));
+      }
+
       const lines = buffer.split('\n');
 
       // Keep the last incomplete line in the buffer
@@ -309,6 +319,9 @@ export async function* streamChatResponse(
         if (!trimmedLine) {
           continue;
         }
+
+        // Always log non-empty lines for debugging
+        devLog('[Streaming] Processing line:', trimmedLine.substring(0, 100));
 
         // Handle [DONE] signal by breaking out of the loop
         if (trimmedLine === 'data: [DONE]') {
@@ -327,7 +340,7 @@ export async function* streamChatResponse(
               hasChoices: !!data.choices,
               hasType: !!data.type,
               dataKeys: Object.keys(data),
-              fullData: data  // Log the full data structure to debug
+              fullData: JSON.stringify(data)  // Convert to string for better logging
             });
 
             let chunk: StreamChunk | null = null;
@@ -520,6 +533,12 @@ export async function* streamChatResponse(
                 devLog('[Streaming] Skipping empty chunk');
               }
             } else {
+              // Check if the data has error indicators
+              if (data.error || data.detail || data.message) {
+                const errorMsg = data.error?.message || data.detail || data.message;
+                devError('[Streaming] Possible error in SSE data:', errorMsg);
+                console.error('[Streaming] Backend may have returned an error:', data);
+              }
               devWarn('[Streaming] No chunk created from SSE data. This may indicate an unsupported response format or an error from the backend.');
               devWarn('[Streaming] Unrecognized data structure:', data);
               devWarn('[Streaming] Data as JSON:', JSON.stringify(data, null, 2));
@@ -543,6 +562,16 @@ export async function* streamChatResponse(
 
     // If we exited the loop normally (stream closed by server), also yield done
     devLog('[Streaming] Stream ended normally, yielding final done signal');
+
+    // Important: Log if we received any content at all
+    if (chunkCount === 0) {
+      const errorMsg = 'Stream closed without receiving any data from the backend. This may indicate the model is unavailable, the API key is invalid, or there\'s an issue with the model provider.';
+      console.warn('[Streaming] WARNING:', errorMsg);
+      console.warn('[Streaming] Model:', requestBody.model);
+      console.warn('[Streaming] API Base URL:', url);
+      // Don't throw an error here, just log it and let the UI show "No response received"
+    }
+
     yield { done: true };
   } finally {
     devLog('[Streaming] Stream reader released');
