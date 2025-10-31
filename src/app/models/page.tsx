@@ -26,7 +26,7 @@ interface Model {
 }
 
 // Fast-loading gateways (typically under 1s with new timeout)
-const PRIORITY_GATEWAYS = ['openrouter', 'groq', 'together', 'fireworks'];
+const PRIORITY_GATEWAYS = ['openrouter', 'groq', 'together', 'fireworks', 'vercel-ai-gateway'];
 
 // Slower gateways that can be deferred
 const DEFERRED_GATEWAYS = [
