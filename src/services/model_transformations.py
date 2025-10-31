@@ -74,6 +74,12 @@ def transform_model_id(model_id: str, provider: str) -> str:
         else:
             logger.info(f"Preserving 'openrouter/auto' - this model requires the full ID")
 
+    # Special handling for Near: strip 'near/' prefix if present
+    if provider_lower == "near" and model_id.startswith("near/"):
+        stripped = model_id[len("near/"):]
+        logger.info(f"Stripped 'near/' prefix: '{model_id}' -> '{stripped}' for Near")
+        model_id = stripped
+
     # Get the mapping for this provider
     mapping = get_model_id_mapping(provider_lower)
 
@@ -428,6 +434,10 @@ def detect_provider_from_model_id(model_id: str) -> Optional[str]:
         # Google Vertex models (e.g., "google/gemini-2.0-flash")
         if org == "google":
             return "google-vertex"
+
+        # Near AI models (e.g., "near/deepseek-chat-v3-0324")
+        if org == "near":
+            return "near"
 
         # OpenRouter models (e.g., "openrouter/auto")
         if org == "openrouter":
