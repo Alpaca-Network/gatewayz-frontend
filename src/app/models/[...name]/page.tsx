@@ -260,7 +260,7 @@ export default function ModelProfilePage() {
                 };
 
                 console.log(`[ModelProfilePage] Fetching from all gateway APIs...`);
-                const [openrouterRes, portkeyRes, featherlessRes, chutesRes, fireworksRes, togetherRes, groqRes, deepinfraRes, googleRes, cerebrasRes, nebiusRes, xaiRes, novitaRes, huggingfaceRes, aimoRes, nearRes] = await Promise.allSettled([
+                const [openrouterRes, portkeyRes, featherlessRes, chutesRes, fireworksRes, togetherRes, groqRes, deepinfraRes, googleRes, cerebrasRes, nebiusRes, xaiRes, novitaRes, huggingfaceRes, aimoRes, nearRes, falRes] = await Promise.allSettled([
                     fetchWithTimeout(`/api/models?gateway=openrouter`).catch(err => {
                         console.error('OpenRouter fetch error:', err);
                         return null;
@@ -324,6 +324,10 @@ export default function ModelProfilePage() {
                     fetchWithTimeout(`/api/models?gateway=near`, 70000).catch(err => {
                         console.error('NEAR fetch error:', err);
                         return null;
+                    }),
+                    fetchWithTimeout(`/api/models?gateway=fal`, 70000).catch(err => {
+                        console.error('FAL fetch error:', err);
+                        return null;
                     })
                 ]);
                 console.log(`[ModelProfilePage] Gateway API responses:`, {
@@ -342,7 +346,8 @@ export default function ModelProfilePage() {
                     novita: novitaRes?.status,
                     huggingface: huggingfaceRes?.status,
                     aimo: aimoRes?.status,
-                    near: nearRes?.status
+                    near: nearRes?.status,
+                    fal: falRes?.status
                 });
 
                 const getData = async (result: PromiseSettledResult<Response | null>) => {
@@ -360,7 +365,7 @@ export default function ModelProfilePage() {
                     return [];
                 };
 
-                const [openrouterData, portkeyData, featherlessData, chutesData, fireworksData, togetherData, groqData, deepinfraData, googleData, cerebrasData, nebiusData, xaiData, novitaData, huggingfaceData, aimoData, nearData] = await Promise.all([
+                const [openrouterData, portkeyData, featherlessData, chutesData, fireworksData, togetherData, groqData, deepinfraData, googleData, cerebrasData, nebiusData, xaiData, novitaData, huggingfaceData, aimoData, nearData, falData] = await Promise.all([
                     getData(openrouterRes),
                     getData(portkeyRes),
                     getData(featherlessRes),
@@ -376,7 +381,8 @@ export default function ModelProfilePage() {
                     getData(novitaRes),
                     getData(huggingfaceRes),
                     getData(aimoRes),
-                    getData(nearRes)
+                    getData(nearRes),
+                    getData(falRes)
                 ]);
 
                 // Combine models from all gateways
@@ -396,7 +402,8 @@ export default function ModelProfilePage() {
                     ...novitaData,
                     ...huggingfaceData,
                     ...aimoData,
-                    ...nearData
+                    ...nearData,
+                    ...falData
                 ];
 
                 // Deduplicate models by ID - keep the first occurrence
@@ -511,6 +518,7 @@ export default function ModelProfilePage() {
                     if (hasModel(huggingfaceData, 'huggingface')) providers.push('huggingface');
                     if (hasModel(aimoData, 'aimo')) providers.push('aimo');
                     if (hasModel(nearData, 'near')) providers.push('near');
+                    if (hasModel(falData, 'fal')) providers.push('fal');
 
                     console.log(`Model ${modelId} available in gateways:`, providers);
                     setModelProviders(providers);
@@ -954,7 +962,8 @@ console.log(response.choices[0].message.content);`
                                         novita: 'Novita',
                                         huggingface: 'Hugging Face',
                                         aimo: 'AIMO Network',
-                                        near: 'NEAR'
+                                        near: 'NEAR',
+                                        fal: 'FAL'
                                     };
                                     const providerLogos: Record<string, string> = {
                                         openrouter: '/openrouter-logo.svg',
@@ -972,7 +981,8 @@ console.log(response.choices[0].message.content);`
                                         novita: '/novita-logo.svg',
                                         huggingface: '/huggingface-logo.svg',
                                         aimo: '/aimo-logo.svg',
-                                        near: '/near-logo.svg'
+                                        near: '/near-logo.svg',
+                                        fal: '/fal-logo.svg'
                                     };
 
                                     return (
