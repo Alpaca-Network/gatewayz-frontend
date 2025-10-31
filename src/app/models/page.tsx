@@ -25,7 +25,7 @@ interface Model {
   created?: number;
 }
 
-// Fast-loading gateways (typically under 2s)
+// Fast-loading gateways (typically under 1s with new timeout)
 const PRIORITY_GATEWAYS = ['openrouter', 'groq', 'together', 'fireworks'];
 
 // Slower gateways that can be deferred
@@ -45,10 +45,15 @@ async function getPriorityModels(): Promise<Model[]> {
     console.log('[Models Page] Fetching priority models from fast gateways:', PRIORITY_GATEWAYS);
     const startTime = Date.now();
 
-    // Fetch from priority gateways in parallel
-    const results = await Promise.all(
-      PRIORITY_GATEWAYS.map(gateway => getModelsForGateway(gateway))
+    // Fetch from priority gateways in parallel with timeout for fast failure
+    const promises = PRIORITY_GATEWAYS.map(gateway =>
+      Promise.race([
+        getModelsForGateway(gateway),
+        new Promise(resolve => setTimeout(() => resolve({ data: [] }), 3000)) // 3s timeout
+      ])
     );
+
+    const results = await Promise.all(promises);
 
     const allModels = results.flatMap(result => result.data || []);
 
