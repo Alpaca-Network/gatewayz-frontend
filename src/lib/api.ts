@@ -127,7 +127,7 @@ export const processAuthResponse = (response: AuthResponse): void => {
     credits_type: typeof response.credits,
   });
 
-  if (response.success && response.api_key) {
+  if (response.api_key) {
     saveApiKey(response.api_key);
     console.log('API key saved to localStorage');
 
@@ -178,9 +178,10 @@ export const processAuthResponse = (response: AuthResponse): void => {
       window.dispatchEvent(event);
     }
   } else {
-    console.warn('Authentication response invalid:', {
+    console.warn('Authentication response missing API key:', {
       success: response.success,
-      has_api_key: !!response.api_key
+      has_api_key: !!response.api_key,
+      response_keys: Object.keys(response)
     });
   }
 };
