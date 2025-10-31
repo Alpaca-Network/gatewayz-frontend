@@ -1300,7 +1300,19 @@ function ChatPageContent() {
         return sessions.find(s => s.id === activeSessionId) || null;
     }, [sessions, activeSessionId]);
 
-    const messages = (activeSession?.messages || []).filter(msg => msg && msg.role);
+    // Filter and deduplicate messages to prevent unsent messages from appearing in history
+    // Messages are deduplicated by checking for consecutive duplicates (same role + content)
+    const messages = ((activeSession?.messages || []).filter(msg => msg && msg.role) as Message[]).reduce((acc, msg, idx, arr) => {
+        // Skip if this is a duplicate of the previous message (same role and content)
+        if (idx > 0) {
+            const prevMsg = arr[idx - 1];
+            if (prevMsg && prevMsg.role === msg.role && prevMsg.content === msg.content) {
+                console.warn('[MessageDedup] Skipping duplicate message:', { role: msg.role, contentLength: msg.content.length });
+                return acc;
+            }
+        }
+        return [...acc, msg];
+    }, [] as Message[]);
 
     // Auto-send message from URL parameter when session is ready
     useEffect(() => {
@@ -2145,6 +2157,25 @@ function ChatPageContent() {
         const userVideo = selectedVideo;
         const userAudio = selectedAudio;
 
+        // Check if the last message is identical to prevent duplicate user messages from being added
+        const lastMessage = messages[messages.length - 1];
+        const isDuplicateMessage = lastMessage &&
+            lastMessage.role === 'user' &&
+            lastMessage.content === userMessage &&
+            lastMessage.image === (userImage || undefined) &&
+            lastMessage.video === (userVideo || undefined) &&
+            lastMessage.audio === (userAudio || undefined);
+
+        if (isDuplicateMessage) {
+            console.warn('[MessageDedup] Attempted to add duplicate message, aborting send:', { content: userMessage.substring(0, 50) });
+            toast({
+                title: "Duplicate message",
+                description: "This message was already sent.",
+                variant: 'default'
+            });
+            return;
+        }
+
         const updatedMessages: Message[] = [...messages, {
             role: 'user' as const,
             content: userMessage,
@@ -2183,6 +2214,8 @@ function ChatPageContent() {
         setSelectedImage(null);
         setSelectedVideo(null);
         setSelectedAudio(null);
+        setUserHasTyped(false); // Reset the flag so unsent messages don't get re-sent
+        userHasTypedRef.current = false;
         if (fileInputRef.current) {
             fileInputRef.current.value = '';
         }
