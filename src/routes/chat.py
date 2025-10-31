@@ -444,7 +444,7 @@ async def chat_completions(
         original_model = req.model
 
         optional = {}
-        for name in ("max_tokens", "temperature", "top_p", "frequency_penalty", "presence_penalty"):
+        for name in ("max_tokens", "temperature", "top_p", "frequency_penalty", "presence_penalty", "tools"):
             val = getattr(req, name, None)
             if val is not None:
                 optional[name] = val
@@ -1022,7 +1022,7 @@ async def unified_responses(
         original_model = req.model
 
         optional = {}
-        for name in ("max_tokens", "temperature", "top_p", "frequency_penalty", "presence_penalty"):
+        for name in ("max_tokens", "temperature", "top_p", "frequency_penalty", "presence_penalty", "tools"):
             val = getattr(req, name, None)
             if val is not None:
                 optional[name] = val
