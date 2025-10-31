@@ -682,7 +682,7 @@ async def get_specific_model(
     include_huggingface: bool = Query(True, description="Include Hugging Face metrics if available"),
     gateway: Optional[str] = Query(
         None,
-        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', 'groq', 'fireworks', 'together', or auto-detect if not specified",
+        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', 'groq', 'fireworks', 'together', 'google', 'cerebras', 'nebius', 'xai', 'novita', 'huggingface' (or 'hug'), 'aimo', 'near', 'fal', or auto-detect if not specified",
     ),
 ):
     """Get specific model data of a given provider with detailed information from any gateway
@@ -693,14 +693,18 @@ async def get_specific_model(
     - Featherless: Model catalog data  
     - DeepInfra: Model catalog data from DeepInfra's API
     - Chutes: Model catalog data from Chutes.ai
+    - Fal.ai: Image/video/audio generation models (e.g., fal-ai/stable-diffusion-v15)
+    - Hugging Face: Open-source models from Hugging Face Hub
+    - And other gateways: groq, fireworks, together, google, cerebras, nebius, xai, novita, aimo, near
     
     If gateway is not specified, it will automatically detect which gateway the model belongs to.
     
     Examples:
-        GET /catalog/model/openai/gpt-4?gateway=openrouter
-        GET /catalog/model/anthropic/claude-3?gateway=portkey
-        GET /catalog/model/meta-llama/llama-3?gateway=featherless
-        GET /catalog/model/meta-llama/Meta-Llama-3.1-8B-Instruct?gateway=deepinfra
+        GET /v1/models/openai/gpt-4?gateway=openrouter
+        GET /v1/models/anthropic/claude-3?gateway=portkey
+        GET /v1/models/meta-llama/llama-3?gateway=featherless
+        GET /v1/models/fal-ai/stable-diffusion-v15?gateway=fal
+        GET /v1/models/fal-ai/stable-diffusion-v15 (auto-detects fal gateway)
     """
     # Prevent this route from catching /v1/* API endpoints
     normalized_provider = normalize_developer_segment(provider_name) or provider_name
@@ -1419,9 +1423,28 @@ async def get_specific_model_api(
     include_huggingface: bool = Query(True, description="Include Hugging Face metrics if available"),
     gateway: Optional[str] = Query(
         None,
-        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', 'groq', 'fireworks', 'together', or auto-detect if not specified",
+        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', 'groq', 'fireworks', 'together', 'google', 'cerebras', 'nebius', 'xai', 'novita', 'huggingface' (or 'hug'), 'aimo', 'near', 'fal', or auto-detect if not specified",
     ),
 ):
+    return await get_specific_model(
+        provider_name=provider_name,
+        model_name=model_name,
+        include_huggingface=include_huggingface,
+        gateway=gateway,
+    )
+
+
+@router.get("/models/{provider_name}/{model_name:path}", tags=["models"])
+async def get_specific_model_api_legacy(
+    provider_name: str,
+    model_name: str,
+    include_huggingface: bool = Query(True, description="Include Hugging Face metrics if available"),
+    gateway: Optional[str] = Query(
+        None,
+        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', 'groq', 'fireworks', 'together', 'google', 'cerebras', 'nebius', 'xai', 'novita', 'huggingface' (or 'hug'), 'aimo', 'near', 'fal', or auto-detect if not specified",
+    ),
+):
+    """Legacy endpoint without /v1/ prefix for backward compatibility"""
     return await get_specific_model(
         provider_name=provider_name,
         model_name=model_name,
