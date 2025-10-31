@@ -58,6 +58,7 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
     'aimo',
     'near',
     'fal',
+    'vercel-ai-gateway', // Vercel AI Gateway
     'all'
   ];
   if (!validGateways.includes(gateway)) {
@@ -86,7 +87,8 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
         'huggingface',
         'aimo',
         'near',
-        'fal'
+        'fal',
+        'vercel-ai-gateway'
       ];
 
       const results = await Promise.all(
@@ -167,7 +169,7 @@ function buildHeaders(gateway: string): Record<string, string> {
 async function fetchModelsFromGateway(gateway: string, limit?: number): Promise<any[]> {
   const allModels: any[] = [];
   const requestLimit = limit || 50000; // Request up to 50k models per page (backend limit)
-  const FAST_GATEWAYS = ['openrouter', 'groq', 'together', 'fireworks'];
+  const FAST_GATEWAYS = ['openrouter', 'groq', 'together', 'fireworks', 'vercel-ai-gateway'];
   const timeoutMs = FAST_GATEWAYS.includes(gateway) ? 3000 : 5000;
 
   let offset = 0;
@@ -256,7 +258,8 @@ function getStaticFallbackModels(gateway: string): any[] {
       'huggingface',
       'aimo',
       'near',
-      'fal'
+      'fal',
+      'vercel-ai-gateway'
     ];
     const modelsPerGateway = Math.ceil(models.length / allGateways.length);
 
@@ -284,7 +287,8 @@ function getStaticFallbackModels(gateway: string): any[] {
       'huggingface',
       'aimo',
       'near',
-      'fal'
+      'fal',
+      'vercel-ai-gateway'
     ];
     const modelsPerGateway = Math.ceil(models.length / allGateways.length);
     let gatewayModels;
