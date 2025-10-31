@@ -243,7 +243,7 @@ The main application entry point that:
 - Manages application lifecycle
 
 Key features:
-- **Title**: "Gatewayz Universal Inference API"
+- **TitleSection**: "Gatewayz Universal Inference API"
 - **Version**: 2.0.1
 - **CORS**: Enabled for all origins (configurable)
 - **Authentication**: HTTP Bearer token

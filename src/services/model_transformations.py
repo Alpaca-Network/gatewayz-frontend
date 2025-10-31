@@ -168,9 +168,17 @@ def get_model_id_mapping(provider: str) -> Dict[str, str]:
             "openai/gpt-4": "openai/gpt-4",
             "openai/gpt-4-turbo": "openai/gpt-4-turbo",
             "openai/gpt-3.5-turbo": "openai/gpt-3.5-turbo",
+            # Claude 3 models
             "anthropic/claude-3-opus": "anthropic/claude-3-opus-20240229",
             "anthropic/claude-3-sonnet": "anthropic/claude-3-sonnet-20240229",
             "anthropic/claude-3-haiku": "anthropic/claude-3-haiku-20240307",
+            # Claude Sonnet 4.5 - support multiple input formats
+            "claude-sonnet-4-5-20250929": "anthropic/claude-sonnet-4.5",
+            "anthropic/claude-sonnet-4.5": "anthropic/claude-sonnet-4.5",
+            "anthropic/claude-4.5-sonnet": "anthropic/claude-sonnet-4.5",
+            "anthropic/claude-4.5-sonnet-20250929": "anthropic/claude-sonnet-4.5",
+            "claude-sonnet-4.5": "anthropic/claude-sonnet-4.5",
+            # Other models
             "meta-llama/llama-3.1-70b": "meta-llama/llama-3.1-70b-instruct",
             "deepseek-ai/deepseek-v3": "deepseek/deepseek-chat",
         },
@@ -260,6 +268,32 @@ def get_model_id_mapping(provider: str) -> Dict[str, str]:
             # Google models
             "google/gemma-2-9b": "google/gemma-2-9b-it",
             "google/gemma-2-9b-it": "google/gemma-2-9b-it",
+        },
+        "chutes": {
+            # Chutes uses org/model format directly
+            # Most models pass through as-is from their catalog
+            # Keep the exact format from the catalog for proper routing
+        },
+        "google-vertex": {
+            # Google Vertex AI models - simple names
+            # Full resource names are constructed by the client
+            "gemini-2.0-flash": "gemini-2.0-flash",
+            "gemini-2.0-flash-thinking": "gemini-2.0-flash-thinking",
+            "gemini-2.0-flash-001": "gemini-2.0-flash-001",
+            "gemini-2.0-pro": "gemini-2.0-pro",
+            "gemini-2.0-pro-001": "gemini-2.0-pro-001",
+            "gemini-1.5-pro": "gemini-1.5-pro",
+            "gemini-1.5-pro-002": "gemini-1.5-pro-002",
+            "gemini-1.5-flash": "gemini-1.5-flash",
+            "gemini-1.5-flash-002": "gemini-1.5-flash-002",
+            "gemini-1.0-pro": "gemini-1.0-pro",
+            "gemini-1.0-pro-vision": "gemini-1.0-pro-vision",
+            # Aliases for convenience
+            "google/gemini-2.0-flash": "gemini-2.0-flash",
+            "google/gemini-1.5-pro": "gemini-1.5-pro",
+            "google/gemini-1.5-flash": "gemini-1.5-flash",
+            "gemini-2.0": "gemini-2.0-flash",
+            "gemini-1.5": "gemini-1.5-pro",
         }
     }
 
@@ -368,8 +402,15 @@ def detect_provider_from_model_id(model_id: str) -> Optional[str]:
     if model_id.startswith("@"):
         return "portkey"
 
+    # Check for Google Vertex AI models
+    if model_id.startswith("projects/") and "/models/" in model_id:
+        return "google-vertex"
+    if any(pattern in model_id.lower() for pattern in ["gemini", "google"]) and "/" not in model_id:
+        # Simple patterns like "gemini-2.0-flash" or "gemini-1.5-pro"
+        return "google-vertex"
+
     # Check all mappings to see if this model exists
-    for provider in ["fireworks", "openrouter", "featherless", "together", "portkey", "huggingface", "hug"]:
+    for provider in ["fireworks", "openrouter", "featherless", "together", "portkey", "huggingface", "hug", "chutes", "google-vertex", "fal"]:
         mapping = get_model_id_mapping(provider)
         if model_id in mapping:
             logger.info(f"Detected provider '{provider}' for model '{model_id}'")
@@ -384,6 +425,14 @@ def detect_provider_from_model_id(model_id: str) -> Optional[str]:
     if "/" in model_id:
         org, model_name = model_id.split("/", 1)
 
+        # Google Vertex models (e.g., "google/gemini-2.0-flash")
+        if org == "google":
+            return "google-vertex"
+
+        # OpenRouter models (e.g., "openrouter/auto")
+        if org == "openrouter":
+            return "openrouter"
+
         # DeepSeek models are primarily on Fireworks in this system
         if org == "deepseek-ai" and "deepseek" in model_name.lower():
             return "fireworks"
@@ -395,6 +444,10 @@ def detect_provider_from_model_id(model_id: str) -> Optional[str]:
         # Anthropic models go to OpenRouter
         if org == "anthropic":
             return "openrouter"
+
+        # Fal.ai models (e.g., "fal-ai/stable-diffusion-v15", "minimax/video-01")
+        if org == "fal-ai" or org in ["fal", "minimax", "stabilityai", "hunyuan3d", "meshy", "tripo3d"]:
+            return "fal"
 
     logger.debug(f"Could not detect provider for model '{model_id}'")
     return None

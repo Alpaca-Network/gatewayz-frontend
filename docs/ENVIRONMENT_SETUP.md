@@ -246,6 +246,18 @@ DEEPINFRA_API_KEY=
 
 # ============= OPTIONAL - ADMIN =============
 ADMIN_API_KEY=
+ 
+# ============= OPTIONAL - API KEY ENCRYPTION =============
+# App works without these (falls back safely). Set to enable encryption at rest.
+# Current key version used for new encryptions
+KEY_VERSION=1
+
+# Keyring entries: one per version. Generate with Python:
+#   from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())
+KEYRING_1=
+
+# Optional salt for deterministic key hashing (used for lookups/rate limits)
+KEY_HASH_SALT=
 ```
 
 ## Support
@@ -258,4 +270,4 @@ If you encounter issues:
 
 ---
 
-**Last Updated:** 2025-10-08
+**Last Updated:** 2025-10-29

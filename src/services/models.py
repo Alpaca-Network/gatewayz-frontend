@@ -4,6 +4,9 @@ import json
 import os
 from pathlib import Path
 import csv
+from typing import Any, Dict, Optional, Union
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 
 from src.config import Config
 from src.cache import (
@@ -17,17 +20,24 @@ from src.cache import (
     _together_models_cache,
     _deepinfra_models_cache,
     _google_models_cache,
+    _google_vertex_models_cache,
     _cerebras_models_cache,
     _nebius_models_cache,
     _xai_models_cache,
     _novita_models_cache,
     _huggingface_models_cache,
+    _aimo_models_cache,
+    _near_models_cache,
+    _fal_models_cache,
+    is_cache_fresh,
+    should_revalidate_in_background,
 )
 from fastapi import APIRouter
 from datetime import datetime, timezone
 from src.services.pricing_lookup import enrich_model_with_pricing
 from src.services.portkey_providers import (
     fetch_models_from_google,
+    fetch_models_from_google_vertex,
     fetch_models_from_cerebras,
     fetch_models_from_nebius,
     fetch_models_from_xai,
@@ -37,6 +47,40 @@ from src.services.huggingface_models import fetch_models_from_hug, get_huggingfa
 from src.services.model_transformations import detect_provider_from_model_id
 
 import httpx
+
+
+def sanitize_pricing(pricing: dict) -> dict:
+    """
+    Sanitize pricing data by converting negative values to 0.
+
+    OpenRouter uses -1 to indicate dynamic pricing (e.g., for auto-routing models).
+    We convert these to 0 to avoid issues in cost calculations.
+
+    Args:
+        pricing: Pricing dictionary from API
+
+    Returns:
+        Sanitized pricing dictionary
+    """
+    if not pricing or not isinstance(pricing, dict):
+        return pricing
+
+    sanitized = pricing.copy()
+    for key in ['prompt', 'completion', 'request', 'image', 'web_search', 'internal_reasoning']:
+        if key in sanitized:
+            try:
+                value = sanitized[key]
+                if value is not None:
+                    # Convert to float and check if negative
+                    float_value = float(value)
+                    if float_value < 0:
+                        sanitized[key] = "0"
+                        logger.debug(f"Converted negative pricing {key}={value} to 0")
+            except (ValueError, TypeError):
+                # Keep the original value if conversion fails
+                pass
+
+    return sanitized
 
 # Initialize logging
 logging.basicConfig(level=logging.ERROR)
@@ -137,6 +181,77 @@ def load_featherless_catalog_export() -> list:
         return None
 
 
+# Thread pool for background cache revalidation
+_revalidation_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="cache-revalidate")
+
+
+def revalidate_cache_in_background(gateway: str, fetch_function):
+    """Trigger background revalidation of cache"""
+    def _revalidate():
+        try:
+            logger.info(f"Background revalidation started for {gateway}")
+            fetch_function()
+            logger.info(f"Background revalidation completed for {gateway}")
+        except Exception as e:
+            logger.warning(f"Background revalidation failed for {gateway}: {e}")
+
+    _revalidation_executor.submit(_revalidate)
+
+
+def get_all_models_parallel():
+    """Fetch models from all gateways in parallel for improved performance"""
+    try:
+        gateways = [
+            "openrouter", "portkey", "featherless", "deepinfra",
+            "google", "cerebras", "nebius", "xai", "novita",
+            "hug", "chutes", "groq", "fireworks", "together",
+            "aimo", "near", "fal"
+        ]
+
+        # Use ThreadPoolExecutor to fetch all gateways in parallel
+        # Since get_cached_models uses synchronous httpx, we use threads
+        with ThreadPoolExecutor(max_workers=16) as executor:
+            futures = {executor.submit(get_cached_models, gw): gw for gw in gateways}
+            all_models = []
+
+            for future in futures:
+                try:
+                    models = future.result(timeout=30)
+                    if models:
+                        all_models.extend(models)
+                except Exception as e:
+                    gateway_name = futures[future]
+                    logger.warning(f"Failed to fetch models from {gateway_name}: {e}")
+
+            return all_models
+    except Exception as e:
+        logger.error(f"Error in parallel model fetching: {e}")
+        # Fallback to sequential fetching
+        return get_all_models_sequential()
+
+
+def get_all_models_sequential():
+    """Fallback sequential fetching (original implementation)"""
+    openrouter_models = get_cached_models("openrouter") or []
+    portkey_models = get_cached_models("portkey") or []
+    featherless_models = get_cached_models("featherless") or []
+    deepinfra_models = get_cached_models("deepinfra") or []
+    google_models = get_cached_models("google") or []
+    cerebras_models = get_cached_models("cerebras") or []
+    nebius_models = get_cached_models("nebius") or []
+    xai_models = get_cached_models("xai") or []
+    novita_models = get_cached_models("novita") or []
+    hug_models = get_cached_models("hug") or []
+    chutes_models = get_cached_models("chutes") or []
+    groq_models = get_cached_models("groq") or []
+    fireworks_models = get_cached_models("fireworks") or []
+    together_models = get_cached_models("together") or []
+    aimo_models = get_cached_models("aimo") or []
+    near_models = get_cached_models("near") or []
+    fal_models = get_cached_models("fal") or []
+    return openrouter_models + portkey_models + featherless_models + deepinfra_models + google_models + cerebras_models + nebius_models + xai_models + novita_models + hug_models + chutes_models + groq_models + fireworks_models + together_models + aimo_models + near_models + fal_models
+
+
 def get_cached_models(gateway: str = "openrouter"):
     """Get cached models or fetch from the requested gateway if cache is expired"""
     try:
@@ -206,6 +321,14 @@ def get_cached_models(gateway: str = "openrouter"):
                     return cache["data"]
             return fetch_models_from_google()
 
+        if gateway == "google-vertex":
+            cache = _google_vertex_models_cache
+            if cache["data"] and cache["timestamp"]:
+                cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
+                if cache_age < cache["ttl"]:
+                    return cache["data"]
+            return fetch_models_from_google_vertex()
+
         if gateway == "cerebras":
             cache = _cerebras_models_cache
             if cache["data"] and cache["timestamp"]:
@@ -245,13 +368,26 @@ def get_cached_models(gateway: str = "openrouter"):
             if cache["data"] and cache["timestamp"]:
                 cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
                 if cache_age < cache["ttl"]:
-                    cached_ids = {model.get("id", "").lower() for model in cache["data"]}
-                    essential_missing = any(model_id.lower() not in cached_ids for model_id in ESSENTIAL_MODELS)
-                    if not essential_missing:
-                        return cache["data"]
-                    logger.info("Hugging Face cache missing essential models; refetching catalog")
+                    # Validate cache has reasonable number of models (should be 500+, not just 9)
+                    cache_size = len(cache["data"])
+                    if cache_size < 100:
+                        logger.warning(f"⚠️  Hugging Face cache is suspiciously small ({cache_size} models). This might indicate a failed fetch or incomplete data. Refetching...")
+                    else:
+                        cached_ids = {model.get("id", "").lower() for model in cache["data"]}
+                        essential_missing = any(model_id.lower() not in cached_ids for model_id in ESSENTIAL_MODELS)
+                        if not essential_missing:
+                            logger.debug(f"Using cached Hugging Face models ({cache_size} models, age: {cache_age:.0f}s)")
+                            return cache["data"]
+                        logger.info("Hugging Face cache missing essential models; refetching catalog")
 
+            logger.info("Fetching fresh Hugging Face models catalog...")
             result = fetch_models_from_hug()
+
+            # Validate result
+            if result:
+                logger.info(f"✅ Successfully loaded {len(result)} Hugging Face models")
+            else:
+                logger.error("❌ Failed to fetch Hugging Face models - API may be unavailable or rate limited")
 
             # WORKAROUND: Explicitly update cache in case of module import issues
             if result and not cache["data"]:
@@ -261,30 +397,45 @@ def get_cached_models(gateway: str = "openrouter"):
 
             return result
 
+        if gateway == "aimo":
+            cache = _aimo_models_cache
+            if cache["data"] and cache["timestamp"]:
+                cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
+                if cache_age < cache["ttl"]:
+                    return cache["data"]
+            return fetch_models_from_aimo()
+
+        if gateway == "near":
+            cache = _near_models_cache
+            if cache["data"] and cache["timestamp"]:
+                cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
+                if cache_age < cache["ttl"]:
+                    return cache["data"]
+            return fetch_models_from_near()
+
+        if gateway == "fal":
+            cache = _fal_models_cache
+            if cache["data"] and cache["timestamp"]:
+                cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
+                if cache_age < cache["ttl"]:
+                    return cache["data"]
+            return fetch_models_from_fal()
+
         if gateway == "all":
-            openrouter_models = get_cached_models("openrouter") or []
-            portkey_models = get_cached_models("portkey") or []
-            featherless_models = get_cached_models("featherless") or []
-            deepinfra_models = get_cached_models("deepinfra") or []
-            google_models = get_cached_models("google") or []
-            cerebras_models = get_cached_models("cerebras") or []
-            nebius_models = get_cached_models("nebius") or []
-            xai_models = get_cached_models("xai") or []
-            novita_models = get_cached_models("novita") or []
-            hug_models = get_cached_models("hug") or []
-            chutes_models = get_cached_models("chutes") or []
-            groq_models = get_cached_models("groq") or []
-            fireworks_models = get_cached_models("fireworks") or []
-            together_models = get_cached_models("together") or []
-            return openrouter_models + portkey_models + featherless_models + deepinfra_models + google_models + cerebras_models + nebius_models + xai_models + novita_models + hug_models + chutes_models + groq_models + fireworks_models + together_models
+            # Fetch all gateways in parallel for improved performance
+            return get_all_models_parallel()
 
-        # Default to OpenRouter
-        if _models_cache["data"] and _models_cache["timestamp"]:
-            cache_age = (datetime.now(timezone.utc) - _models_cache["timestamp"]).total_seconds()
-            if cache_age < _models_cache["ttl"]:
-                return _models_cache["data"]
+        # Default to OpenRouter with stale-while-revalidate
+        if is_cache_fresh(_models_cache):
+            return _models_cache["data"]
 
-        # Cache expired or empty, fetch fresh data
+        # Check if we can serve stale cache while revalidating
+        if should_revalidate_in_background(_models_cache):
+            logger.info("Serving stale OpenRouter cache while revalidating in background")
+            revalidate_cache_in_background("openrouter", fetch_models_from_openrouter)
+            return _models_cache["data"]
+
+        # Cache expired or empty, fetch fresh data synchronously
         return fetch_models_from_openrouter()
     except Exception as e:
         logger.error(f"Error getting cached models for gateway '{gateway}': {e}")
@@ -310,6 +461,9 @@ def fetch_models_from_openrouter():
         models = models_data.get("data", [])
         for model in models:
             model.setdefault("source_gateway", "openrouter")
+            # Sanitize pricing to convert negative values (e.g., -1 for autorouter) to 0
+            if "pricing" in model:
+                model["pricing"] = sanitize_pricing(model["pricing"])
         _models_cache["data"] = models
         _models_cache["timestamp"] = datetime.now(timezone.utc)
 
@@ -440,20 +594,20 @@ def normalize_portkey_model(portkey_model: dict, openrouter_models: list = None)
 
             # Strategy 1: Exact match
             if or_slug.lower() == slug.lower():
-                pricing = or_model.get("pricing")
+                pricing = sanitize_pricing(or_model.get("pricing"))
                 description_suffix = "Pricing from OpenRouter (exact match)."
                 break
 
             # Strategy 2: Match without prefixes/suffixes
             if or_slug_clean.lower() == clean_slug.lower():
-                pricing = or_model.get("pricing")
+                pricing = sanitize_pricing(or_model.get("pricing"))
                 description_suffix = "Pricing from OpenRouter (approximate match)."
                 break
 
             # Strategy 3: Match canonical slug
             or_canonical = or_model.get("canonical_slug", "")
             if or_canonical and or_canonical.lower() == clean_slug.lower():
-                pricing = or_model.get("pricing")
+                pricing = sanitize_pricing(or_model.get("pricing"))
                 description_suffix = "Pricing from OpenRouter (canonical match)."
                 break
 
@@ -612,7 +766,7 @@ def normalize_featherless_model(featherless_model: dict) -> dict:
         "source_gateway": "featherless",
         "raw_featherless": featherless_model
     }
-    
+
     # Enrich with manual pricing if available
     return enrich_model_with_pricing(normalized, "featherless")
 
@@ -778,7 +932,7 @@ def normalize_chutes_model(chutes_model: dict) -> dict:
         "tags": tags,
         "raw_chutes": chutes_model
     }
-    
+
     # Enrich with manual pricing if available (overrides hourly pricing)
     return enrich_model_with_pricing(normalized, "chutes")
 
@@ -948,24 +1102,28 @@ def normalize_fireworks_model(fireworks_model: dict) -> dict:
 
 
 def fetch_specific_model_from_openrouter(provider_name: str, model_name: str):
-    """Fetch specific model data from OpenRouter API"""
+    """Fetch specific model data from OpenRouter by searching cached models"""
     try:
-        if not Config.OPENROUTER_API_KEY:
-            logger.error("OpenRouter API key not configured")
-            return None
+        # Construct the model ID
+        model_id = f"{provider_name}/{model_name}"
+        model_id_lower = model_id.lower()
 
-        headers = {
-            "Authorization": f"Bearer {Config.OPENROUTER_API_KEY}",
-            "Content-Type": "application/json"
-        }
+        # First check cache
+        openrouter_models = get_cached_models("openrouter")
+        if openrouter_models:
+            for model in openrouter_models:
+                if model.get("id", "").lower() == model_id_lower:
+                    return model
 
-        # Use the specific model endpoint
-        url = f"https://openrouter.ai/api/v1/models/{provider_name}/{model_name}/endpoints"
-        response = httpx.get(url, headers=headers)
-        response.raise_for_status()
+        # If not in cache, try to fetch fresh data
+        fresh_models = fetch_models_from_openrouter()
+        if fresh_models:
+            for model in fresh_models:
+                if model.get("id", "").lower() == model_id_lower:
+                    return model
 
-        model_data = response.json()
-        return model_data.get("data")
+        logger.warning(f"Model {model_id} not found in OpenRouter catalog")
+        return None
     except Exception as e:
         logger.error(f"Failed to fetch specific model {provider_name}/{model_name} from OpenRouter: {e}")
         return None
@@ -1076,6 +1234,427 @@ def normalize_together_model(together_model: dict) -> dict:
     return enrich_model_with_pricing(normalized, "together")
 
 
+def fetch_models_from_aimo():
+    """Fetch models from AIMO Network API
+
+    Note: AIMO is a decentralized AI marketplace with OpenAI-compatible API.
+    Models are fetched from the marketplace endpoint if available.
+    """
+    try:
+        if not Config.AIMO_API_KEY:
+            logger.error("AIMO API key not configured")
+            return None
+
+        headers = {
+            "Authorization": f"Bearer {Config.AIMO_API_KEY}",
+            "Content-Type": "application/json",
+        }
+
+        # Try to fetch models from AIMO marketplace
+        # Note: Using standard OpenAI-compatible /models endpoint
+        response = httpx.get(
+            "https://devnet.aimo.network/api/v1/models",
+            headers=headers,
+            timeout=20.0,
+        )
+        response.raise_for_status()
+
+        payload = response.json()
+        raw_models = payload.get("data", [])
+
+        if not raw_models:
+            logger.warning("No models returned from AIMO API")
+            return []
+
+        # Normalize models and filter out None values (models without providers)
+        normalized_models = [
+            normalized for model in raw_models
+            if model and (normalized := normalize_aimo_model(model)) is not None
+        ]
+
+        _aimo_models_cache["data"] = normalized_models
+        _aimo_models_cache["timestamp"] = datetime.now(timezone.utc)
+
+        logger.info(f"Fetched {len(normalized_models)} AIMO models")
+        return _aimo_models_cache["data"]
+    except httpx.HTTPStatusError as e:
+        logger.error(f"AIMO HTTP error: {e.response.status_code} - {e.response.text}")
+        return []
+    except Exception as e:
+        logger.error(f"Failed to fetch models from AIMO: {e}")
+        return []
+
+
+def normalize_aimo_model(aimo_model: dict) -> dict:
+    """Normalize AIMO catalog entries to resemble OpenRouter model shape
+
+    AIMO models use format: provider_pubkey:model_name
+    Model data structure:
+    - name: base model name (e.g., "DeepSeek-V3-1")
+    - display_name: human-readable name
+    - providers: list of provider objects with id, name, and pricing
+    """
+    model_name = aimo_model.get("name")
+    if not model_name:
+        logger.warning(f"AIMO model missing 'name' field: {aimo_model}")
+        return None
+
+    # Get provider information (use first provider if multiple)
+    providers = aimo_model.get("providers", [])
+    if not providers:
+        logger.warning(f"AIMO model '{model_name}' has no providers")
+        return None
+
+    # For now, use the first provider
+    provider = providers[0]
+    provider_id = provider.get("id")
+    provider_name = provider.get("name", "unknown")
+
+    # Construct model ID in AIMO format: provider_pubkey:model_name
+    model_id = f"{provider_id}:{model_name}"
+
+    slug = model_id
+    # Extract provider from model ID (format: provider_pubkey:model_name)
+    provider_slug = "aimo"
+    if ":" in model_id:
+        provider_slug = model_id.split(":")[0]
+
+    display_name = aimo_model.get("display_name") or model_name.replace("-", " ").title()
+    base_description = f"AIMO Network decentralized model {model_name} provided by {provider_name}."
+    description = base_description
+
+    context_length = aimo_model.get("context_length", 0)
+
+    # Extract pricing from provider object
+    pricing = {
+        "prompt": None,
+        "completion": None,
+        "request": None,
+        "image": None,
+        "web_search": None,
+        "internal_reasoning": None,
+    }
+
+    # AIMO provider pricing
+    provider_pricing = provider.get("pricing", {})
+    if provider_pricing:
+        prompt_price = provider_pricing.get("prompt")
+        completion_price = provider_pricing.get("completion")
+        # Convert to string if not None
+        pricing["prompt"] = str(prompt_price) if prompt_price is not None else None
+        pricing["completion"] = str(completion_price) if completion_price is not None else None
+
+    # Extract architecture from AIMO model
+    aimo_arch = aimo_model.get("architecture", {})
+    input_modalities = aimo_arch.get("input_modalities", ["text"])
+    output_modalities = aimo_arch.get("output_modalities", ["text"])
+
+    # Determine modality string
+    if input_modalities == ["text"] and output_modalities == ["text"]:
+        modality = "text->text"
+    else:
+        modality = "multimodal"
+
+    architecture = {
+        "modality": modality,
+        "input_modalities": input_modalities,
+        "output_modalities": output_modalities,
+        "tokenizer": None,
+        "instruct_type": None,
+    }
+
+    normalized = {
+        "id": slug,
+        "slug": slug,
+        "canonical_slug": slug,
+        "hugging_face_id": None,
+        "name": display_name,
+        "created": aimo_model.get("created"),
+        "description": description,
+        "context_length": context_length,
+        "architecture": architecture,
+        "pricing": pricing,
+        "top_provider": None,
+        "per_request_limits": None,
+        "supported_parameters": [],
+        "default_parameters": {},
+        "provider_slug": provider_slug,
+        "provider_site_url": "https://aimo.network",
+        "model_logo_url": None,
+        "source_gateway": "aimo",
+        "raw_aimo": aimo_model,
+    }
+
+    return enrich_model_with_pricing(normalized, "aimo")
+
+
+def fetch_models_from_near():
+    """Fetch models from Near AI API
+
+    Note: Near AI is a decentralized AI infrastructure providing private, verifiable, and user-owned AI services.
+    Models are fetched from the OpenAI-compatible /models endpoint.
+    If the API doesn't return models, fallback to known Near AI models.
+    """
+    try:
+        if not Config.NEAR_API_KEY:
+            logger.error("Near AI API key not configured")
+            return None
+
+        headers = {
+            "Authorization": f"Bearer {Config.NEAR_API_KEY}",
+            "Content-Type": "application/json",
+        }
+
+        try:
+            # Try to fetch models from Near AI
+            # Note: Using standard OpenAI-compatible /models endpoint
+            response = httpx.get(
+                "https://cloud-api.near.ai/v1/models",
+                headers=headers,
+                timeout=20.0,
+            )
+            response.raise_for_status()
+
+            payload = response.json()
+            raw_models = payload.get("data", [])
+
+            if raw_models:
+                # Normalize models
+                normalized_models = [
+                    normalize_near_model(model) for model in raw_models if model
+                ]
+
+                _near_models_cache["data"] = normalized_models
+                _near_models_cache["timestamp"] = datetime.now(timezone.utc)
+
+                logger.info(f"Fetched {len(normalized_models)} Near AI models from API")
+                return _near_models_cache["data"]
+        except (httpx.HTTPStatusError, httpx.RequestError) as e:
+            logger.warning(f"Near AI API request failed: {e}. Using fallback model list.")
+
+        # Fallback to known Near AI models if API doesn't return results
+        logger.info("Using fallback Near AI model list")
+        fallback_models = [
+            {"id": "deepseek-chat-v3-0324", "owned_by": "DeepSeek"},
+            {"id": "gpt-oss-120b", "owned_by": "GPT"},
+            {"id": "llama-3-70b", "owned_by": "Meta"},
+            {"id": "qwen-2-72b", "owned_by": "Alibaba"},
+        ]
+
+        normalized_models = [
+            normalize_near_model(model) for model in fallback_models if model
+        ]
+
+        _near_models_cache["data"] = normalized_models
+        _near_models_cache["timestamp"] = datetime.now(timezone.utc)
+
+        logger.info(f"Using {len(normalized_models)} fallback Near AI models")
+        return _near_models_cache["data"]
+    except Exception as e:
+        logger.error(f"Failed to fetch models from Near AI: {e}")
+        return []
+
+
+def normalize_near_model(near_model: dict) -> dict:
+    """Normalize Near AI catalog entries to resemble OpenRouter model shape
+
+    Near AI features:
+    - Private, verifiable AI infrastructure
+    - Decentralized execution
+    - User-owned AI services
+    - Cryptographic verification and on-chain auditing
+    """
+    model_id = near_model.get("id")
+    if not model_id:
+        logger.warning(f"Near AI model missing 'id' field: {near_model}")
+        return None
+
+    slug = f"near/{model_id}"
+    provider_slug = "near"
+
+    display_name = near_model.get("display_name") or model_id.replace("-", " ").replace("_", " ").title()
+    owned_by = near_model.get("owned_by", "Near Protocol")
+
+    # Highlight security features in description
+    base_description = near_model.get("description") or f"Near AI hosted model {model_id}."
+    security_features = " Security: Private AI inference with decentralized execution, cryptographic verification, and on-chain auditing."
+    description = f"{base_description}{security_features}"
+
+    metadata = near_model.get("metadata") or {}
+    context_length = metadata.get("context_length") or near_model.get("context_length") or 0
+
+    pricing = {
+        "prompt": None,
+        "completion": None,
+        "request": None,
+        "image": None,
+        "web_search": None,
+        "internal_reasoning": None,
+    }
+
+    # Extract pricing if available from Near AI
+    pricing_info = near_model.get("pricing", {})
+    if pricing_info:
+        pricing["prompt"] = str(pricing_info.get("prompt")) if pricing_info.get("prompt") is not None else None
+        pricing["completion"] = str(pricing_info.get("completion")) if pricing_info.get("completion") is not None else None
+
+    architecture = {
+        "modality": metadata.get("modality", "text->text"),
+        "input_modalities": metadata.get("input_modalities") or ["text"],
+        "output_modalities": metadata.get("output_modalities") or ["text"],
+        "tokenizer": metadata.get("tokenizer"),
+        "instruct_type": metadata.get("instruct_type"),
+    }
+
+    normalized = {
+        "id": slug,
+        "slug": slug,
+        "canonical_slug": slug,
+        "hugging_face_id": metadata.get("huggingface_repo"),
+        "name": display_name,
+        "created": near_model.get("created"),
+        "description": description,
+        "context_length": context_length,
+        "architecture": architecture,
+        "pricing": pricing,
+        "top_provider": None,
+        "per_request_limits": None,
+        "supported_parameters": metadata.get("supported_parameters", []),
+        "default_parameters": metadata.get("default_parameters", {}),
+        "provider_slug": provider_slug,
+        "provider_site_url": "https://near.ai",
+        "model_logo_url": None,
+        "source_gateway": "near",
+        "raw_near": near_model,
+        # Highlight security features as metadata
+        "security_features": {
+            "private_inference": True,
+            "decentralized": True,
+            "verifiable": True,
+            "on_chain_auditing": True,
+            "user_owned": True,
+        },
+    }
+
+    return enrich_model_with_pricing(normalized, "near")
+
+
+def fetch_models_from_fal():
+    """Fetch models from Fal.ai catalog
+
+    Loads models from the static Fal.ai catalog JSON file which contains
+    curated models from the 839+ available on fal.ai
+    """
+    try:
+        from src.services.fal_image_client import get_fal_models
+
+        # Get models from catalog
+        raw_models = get_fal_models()
+
+        if not raw_models:
+            logger.warning("No Fal.ai models found in catalog")
+            return []
+
+        # Normalize models
+        normalized_models = [
+            normalize_fal_model(model) for model in raw_models if model
+        ]
+
+        _fal_models_cache["data"] = normalized_models
+        _fal_models_cache["timestamp"] = datetime.now(timezone.utc)
+
+        logger.info(f"Fetched {len(normalized_models)} Fal.ai models from catalog")
+        return _fal_models_cache["data"]
+    except Exception as e:
+        logger.error(f"Failed to fetch models from Fal.ai catalog: {e}")
+        return []
+
+
+def normalize_fal_model(fal_model: dict) -> dict:
+    """Normalize Fal.ai catalog entries to resemble OpenRouter model shape
+
+    Fal.ai features:
+    - 839+ models across text-to-image, text-to-video, image-to-video, etc.
+    - Models include FLUX, Stable Diffusion, Veo, Sora, and many more
+    - Supports image, video, audio, and 3D generation
+    """
+    model_id = fal_model.get("id")
+    if not model_id:
+        logger.warning(f"Fal.ai model missing 'id' field: {fal_model}")
+        return None
+
+    # Extract provider from model ID (e.g., "fal-ai/flux-pro" -> "fal-ai")
+    provider_slug = model_id.split("/")[0] if "/" in model_id else "fal-ai"
+
+    # Use name or derive from ID
+    display_name = fal_model.get("name") or model_id.split("/")[-1]
+
+    # Get description
+    description = fal_model.get("description", f"Fal.ai {display_name} model")
+
+    # Determine modality based on type
+    model_type = fal_model.get("type", "text-to-image")
+    modality_map = {
+        "text-to-image": "text->image",
+        "text-to-video": "text->video",
+        "image-to-image": "image->image",
+        "image-to-video": "image->video",
+        "video-to-video": "video->video",
+        "text-to-audio": "text->audio",
+        "text-to-speech": "text->audio",
+        "audio-to-audio": "audio->audio",
+        "image-to-3d": "image->3d",
+        "vision": "image->text",
+    }
+    modality = modality_map.get(model_type, "text->image")
+
+    # Parse input/output modalities
+    input_mod, output_mod = modality.split("->") if "->" in modality else ("text", "image")
+
+    architecture = {
+        "modality": modality,
+        "input_modalities": [input_mod],
+        "output_modalities": [output_mod],
+        "model_type": model_type,
+        "tags": fal_model.get("tags", []),
+    }
+
+    # Fal.ai doesn't expose pricing in catalog, set to null
+    pricing = {
+        "prompt": None,
+        "completion": None,
+        "request": None,
+        "image": None,
+    }
+
+    slug = model_id
+    canonical_slug = model_id
+
+    normalized = {
+        "id": slug,
+        "slug": slug,
+        "canonical_slug": canonical_slug,
+        "hugging_face_id": None,
+        "name": display_name,
+        "created": None,
+        "description": description,
+        "context_length": None,  # Not applicable for image/video models
+        "architecture": architecture,
+        "pricing": pricing,
+        "top_provider": None,
+        "per_request_limits": None,
+        "supported_parameters": [],
+        "default_parameters": {},
+        "provider_slug": provider_slug,
+        "provider_site_url": "https://fal.ai",
+        "model_logo_url": None,
+        "source_gateway": "fal",
+        "raw_fal": fal_model,
+    }
+
+    return enrich_model_with_pricing(normalized, "fal")
+
+
 def fetch_specific_model_from_together(provider_name: str, model_name: str):
     """Fetch specific model data from Together by searching cached models"""
     try:
@@ -1103,21 +1682,21 @@ def fetch_specific_model_from_portkey(provider_name: str, model_name: str):
     try:
         # Construct the model ID
         model_id = f"{provider_name}/{model_name}"
-        
+
         # First check cache
         portkey_models = get_cached_models("portkey")
         if portkey_models:
             for model in portkey_models:
                 if model.get("id", "").lower() == model_id.lower():
                     return model
-        
+
         # If not in cache, try to fetch fresh data
         fresh_models = fetch_models_from_portkey()
         if fresh_models:
             for model in fresh_models:
                 if model.get("id", "").lower() == model_id.lower():
                     return model
-        
+
         logger.warning(f"Model {model_id} not found in Portkey catalog")
         return None
     except Exception as e:
@@ -1130,21 +1709,21 @@ def fetch_specific_model_from_featherless(provider_name: str, model_name: str):
     try:
         # Construct the model ID
         model_id = f"{provider_name}/{model_name}"
-        
+
         # First check cache
         featherless_models = get_cached_models("featherless")
         if featherless_models:
             for model in featherless_models:
                 if model.get("id", "").lower() == model_id.lower():
                     return model
-        
+
         # If not in cache, try to fetch fresh data
         fresh_models = fetch_models_from_featherless()
         if fresh_models:
             for model in fresh_models:
                 if model.get("id", "").lower() == model_id.lower():
                     return model
-        
+
         logger.warning(f"Model {model_id} not found in Featherless catalog")
         return None
     except Exception as e:
@@ -1173,13 +1752,13 @@ def fetch_specific_model_from_deepinfra(provider_name: str, model_name: str):
 
         models_data = response.json()
         models = models_data.get("data", [])
-        
+
         # Search for the specific model
         for model in models:
             if model.get("id", "").lower() == model_id.lower():
                 # Normalize to our schema
                 return normalize_deepinfra_model(model)
-        
+
         logger.warning(f"Model {model_id} not found in DeepInfra catalog")
         return None
     except Exception as e:
@@ -1197,8 +1776,21 @@ def normalize_deepinfra_model(deepinfra_model: dict) -> dict:
     provider_slug = model_id.split("/")[0] if "/" in model_id else "deepinfra"
     display_name = model_id.replace("-", " ").replace("_", " ").title()
 
-    description = f"DeepInfra hosted model: {model_id}. Pricing data may vary by region and usage."
+    # Get model type to determine modality
+    model_type = deepinfra_model.get("type") or deepinfra_model.get("reported_type") or "text"
 
+    # Build description with deprecation notice if applicable
+    base_description = deepinfra_model.get("description") or f"DeepInfra hosted model: {model_id}."
+    if deepinfra_model.get("deprecated"):
+        replaced_by = deepinfra_model.get("replaced_by")
+        if replaced_by:
+            base_description = f"{base_description} Note: This model is deprecated and has been replaced by {replaced_by}."
+        else:
+            base_description = f"{base_description} Note: This model is deprecated."
+    description = f"{base_description} Pricing data may vary by region and usage."
+
+    # Extract pricing information
+    pricing_info = deepinfra_model.get("pricing", {})
     pricing = {
         "prompt": None,
         "completion": None,
@@ -1208,10 +1800,38 @@ def normalize_deepinfra_model(deepinfra_model: dict) -> dict:
         "internal_reasoning": None
     }
 
+    # If pricing is time-based (for image generation), convert to image pricing
+    if pricing_info.get("type") == "time" and model_type in ("text-to-image", "image"):
+        cents_per_sec = pricing_info.get("cents_per_sec", 0)
+        # Convert cents per second to dollars per image (assume ~5 seconds per image)
+        pricing["image"] = str(cents_per_sec * 5 / 100) if cents_per_sec else None
+
+    # Determine modality based on model type
+    modality = "text->text"
+    input_modalities = ["text"]
+    output_modalities = ["text"]
+
+    if model_type in ("text-to-image", "image"):
+        modality = "text->image"
+        input_modalities = ["text"]
+        output_modalities = ["image"]
+    elif model_type in ("text-to-speech", "tts"):
+        modality = "text->audio"
+        input_modalities = ["text"]
+        output_modalities = ["audio"]
+    elif model_type in ("speech-to-text", "stt"):
+        modality = "audio->text"
+        input_modalities = ["audio"]
+        output_modalities = ["text"]
+    elif model_type == "multimodal":
+        modality = "multimodal"
+        input_modalities = ["text", "image"]
+        output_modalities = ["text"]
+
     architecture = {
-        "modality": "text->text",
-        "input_modalities": ["text"],
-        "output_modalities": ["text"],
+        "modality": modality,
+        "input_modalities": input_modalities,
+        "output_modalities": output_modalities,
         "tokenizer": None,
         "instruct_type": None
     }
@@ -1237,7 +1857,7 @@ def normalize_deepinfra_model(deepinfra_model: dict) -> dict:
         "source_gateway": "deepinfra",
         "raw_deepinfra": deepinfra_model
     }
-    
+
     # Enrich with manual pricing if available
     return enrich_model_with_pricing(normalized, "deepinfra")
 
@@ -1247,21 +1867,21 @@ def fetch_specific_model_from_chutes(provider_name: str, model_name: str):
     try:
         # Construct the model ID
         model_id = f"{provider_name}/{model_name}"
-        
+
         # First check cache
         chutes_models = get_cached_models("chutes")
         if chutes_models:
             for model in chutes_models:
                 if model.get("id", "").lower() == model_id.lower():
                     return model
-        
+
         # If not in cache, try to fetch fresh data
         fresh_models = fetch_models_from_chutes()
         if fresh_models:
             for model in fresh_models:
                 if model.get("id", "").lower() == model_id.lower():
                     return model
-        
+
         logger.warning(f"Model {model_id} not found in Chutes catalog")
         return None
     except Exception as e:
@@ -1343,15 +1963,35 @@ def fetch_specific_model_from_huggingface(provider_name: str, model_name: str):
         return None
 
 
+def fetch_specific_model_from_fal(provider_name: str, model_name: str):
+    """Fetch specific model data from Fal.ai by using cached catalog"""
+    try:
+        model_id = f"{provider_name}/{model_name}"
+        model_id_lower = model_id.lower()
+
+        # Fall back to cached Fal catalog
+        fal_models = get_cached_models("fal")
+        if fal_models:
+            for model in fal_models:
+                if model.get("id", "").lower() == model_id_lower:
+                    return model
+
+        logger.warning(f"Model {model_id} not found in Fal.ai catalog")
+        return None
+    except Exception as e:
+        logger.error(f"Failed to fetch specific model {provider_name}/{model_name} from Fal.ai: {e}")
+        return None
+
+
 def detect_model_gateway(provider_name: str, model_name: str) -> str:
     """Detect which gateway a model belongs to by searching all caches
-    
+
     Returns:
         Gateway name: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', 'groq', 'fireworks', or None
     """
     try:
         model_id = f"{provider_name}/{model_name}".lower()
-        
+
         # Check each gateway's cache
         gateways = [
             "openrouter",
@@ -1368,15 +2008,16 @@ def detect_model_gateway(provider_name: str, model_name: str) -> str:
             "xai",
             "novita",
             "huggingface",
+            "fal",
         ]
-        
+
         for gateway in gateways:
             models = get_cached_models(gateway)
             if models:
                 for model in models:
                     if model.get("id", "").lower() == model_id:
                         return "huggingface" if gateway in ("hug", "huggingface") else gateway
-        
+
         # Default to openrouter if not found
         return "openrouter"
     except Exception as e:
@@ -1386,12 +2027,12 @@ def detect_model_gateway(provider_name: str, model_name: str) -> str:
 
 def fetch_specific_model(provider_name: str, model_name: str, gateway: str = None):
     """Fetch specific model from the appropriate gateway
-    
+
     Args:
         provider_name: Provider name (e.g., 'openai', 'anthropic')
         model_name: Model name (e.g., 'gpt-4', 'claude-3')
         gateway: Optional gateway override. If not provided, auto-detects
-        
+
     Returns:
         Model data dict or None if not found
     """
@@ -1444,6 +2085,7 @@ def fetch_specific_model(provider_name: str, model_name: str, gateway: str = Non
             "fireworks": fetch_specific_model_from_fireworks,
             "together": fetch_specific_model_from_together,
             "huggingface": fetch_specific_model_from_huggingface,
+            "fal": fetch_specific_model_from_fal,
         }
 
         for candidate in candidate_gateways:
@@ -1561,24 +2203,98 @@ def enhance_model_with_huggingface_data(openrouter_model: dict) -> dict:
         return openrouter_model
 
 
-def get_model_count_by_provider(provider_slug: str, models_data: list = None) -> int:
-    """Get count of models for a specific provider"""
-    try:
-        if not models_data or not provider_slug:
-            return 0
+def _extract_model_provider_slug(model: dict) -> Optional[str]:
+    """Determine provider slug from a model payload."""
+    if not model:
+        return None
 
-        count = 0
-        for model in models_data:
-            model_id = model.get('id', '')
-            if '/' in model_id:
-                model_provider = model_id.split('/')[0]
+    provider_slug = model.get("provider_slug")
+    if provider_slug:
+        provider_slug = str(provider_slug).lower().lstrip("@")
+        if provider_slug:
+            return provider_slug
+
+    model_id = model.get("id", "")
+    if isinstance(model_id, str) and "/" in model_id:
+        provider_slug = model_id.split("/")[0].lower().lstrip("@")
+        if provider_slug:
+            return provider_slug
+
+    source_gateway = model.get("source_gateway")
+    if isinstance(source_gateway, str):
+        provider_slug = source_gateway.lower().lstrip("@")
+        if provider_slug:
+            return provider_slug
+
+    return None
+
+
+def _normalize_provider_slug(provider: Any) -> Optional[str]:
+    """Extract provider slug from a provider record."""
+    if provider is None:
+        return None
+
+    if isinstance(provider, str):
+        slug = provider
+    else:
+        slug = (
+            provider.get("slug")
+            or provider.get("id")
+            or provider.get("provider_slug")
+            or provider.get("name")
+        )
+
+    if not slug:
+        return None
+
+    return str(slug).lower().lstrip("@")
+
+
+def get_model_count_by_provider(
+    provider_or_models: Any, models_data: Optional[list] = None
+) -> Union[int, Dict[str, int]]:
+    """Return model counts.
+
+    Backwards-compatible shim that supports two call styles:
+    1. get_model_count_by_provider(\"openai\", models_list) -> int
+    2. get_model_count_by_provider(models_list, providers_list) -> dict
+    """
+    try:
+        # Legacy usage: provider slug string + models list -> integer count
+        if isinstance(provider_or_models, str) or provider_or_models is None:
+            provider_slug = (provider_or_models or "").lower().lstrip("@")
+            models = models_data or []
+            if not provider_slug or not models:
+                return 0
+
+            count = 0
+            for model in models:
+                model_provider = _extract_model_provider_slug(model)
                 if model_provider == provider_slug:
                     count += 1
+            return count
 
-        return count
+        # New usage: models list + providers list -> dict mapping provider->count
+        models = provider_or_models or []
+        providers = models_data or []
+
+        counts: Dict[str, int] = {}
+
+        for model in models:
+            slug = _extract_model_provider_slug(model)
+            if slug:
+                counts[slug] = counts.get(slug, 0) + 1
+
+        # Ensure all provided providers exist in result even if zero
+        for provider in providers:
+            slug = _normalize_provider_slug(provider)
+            if slug and slug not in counts:
+                counts[slug] = 0
+
+        return counts
     except Exception as e:
-        logger.error(f"Error counting models for provider {provider_slug}: {e}")
-        return 0
+        logger.error(f"Error counting models: {e}")
+        return {} if not isinstance(provider_or_models, str) else 0
 
 
 def enhance_model_with_provider_info(openrouter_model: dict, providers_data: list = None) -> dict:
@@ -1622,4 +2338,3 @@ def enhance_model_with_provider_info(openrouter_model: dict, providers_data: lis
     except Exception as e:
         logger.error(f"Error enhancing model with provider info: {e}")
         return openrouter_model
-

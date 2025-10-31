@@ -1,0 +1,232 @@
+name: CD - Continuous Deployment
+
+on:
+  push:
+    branches: [main, staging]
+  workflow_run:
+    workflows: ["CI/CD Pipeline"]
+    types:
+      - completed
+    branches: [main, staging]
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  # Only deploy if CI passed
+  check-ci-status:
+    name: Check CI Status
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion == 'success' || github.event_name == 'push'
+
+    outputs:
+      should_deploy: ${{ steps.check.outputs.deploy }}
+      environment: ${{ steps.check.outputs.environment }}
+
+    steps:
+      - name: Determine deployment environment
+        id: check
+        run: |
+          if [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            echo "deploy=true" >> $GITHUB_OUTPUT
+            echo "environment=production" >> $GITHUB_OUTPUT
+            echo "🚀 Deploying to PRODUCTION"
+          elif [ "${{ github.ref }}" == "refs/heads/staging" ]; then
+            echo "deploy=true" >> $GITHUB_OUTPUT
+            echo "environment=staging" >> $GITHUB_OUTPUT
+            echo "🚀 Deploying to STAGING"
+          else
+            echo "deploy=false" >> $GITHUB_OUTPUT
+            echo "⏸️  No deployment for this branch"
+          fi
+
+  # Pre-deployment checks
+  pre-deployment:
+    name: Pre-Deployment Checks
+    runs-on: ubuntu-latest
+    needs: check-ci-status
+    if: needs.check-ci-status.outputs.should_deploy == 'true'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Verify deployment files
+        run: |
+          echo "📋 Checking deployment configuration..."
+
+          # Check Railway config
+          if [ ! -f "railway.json" ]; then
+            echo "❌ railway.json not found!"
+            exit 1
+          fi
+          echo "✅ railway.json exists"
+
+          if [ ! -f "railway.toml" ]; then
+            echo "❌ railway.toml not found!"
+            exit 1
+          fi
+          echo "✅ railway.toml exists"
+
+          # Check requirements
+          if [ ! -f "requirements.txt" ]; then
+            echo "❌ requirements.txt not found!"
+            exit 1
+          fi
+          echo "✅ requirements.txt exists"
+
+          # Check start script
+          if [ ! -f "start.sh" ]; then
+            echo "❌ start.sh not found!"
+            exit 1
+          fi
+          echo "✅ start.sh exists"
+
+          echo "✅ All deployment files present"
+
+      - name: Validate Python syntax
+        run: |
+          python3 -m py_compile src/main.py
+          echo "✅ Python syntax valid"
+
+  # Railway deployment (automatic via Railway's GitHub integration)
+  deploy-railway:
+    name: Deploy to Railway
+    runs-on: ubuntu-latest
+    needs: [check-ci-status, pre-deployment]
+    if: needs.check-ci-status.outputs.should_deploy == 'true'
+    environment:
+      name: ${{ needs.check-ci-status.outputs.environment }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Railway deployment (via auto-deploy)
+        run: |
+          ENV="${{ needs.check-ci-status.outputs.environment }}"
+          echo "🚂 Railway will auto-deploy this commit to $ENV"
+          echo "📍 Branch: ${{ github.ref_name }}"
+          echo "📝 Commit: ${{ github.sha }}"
+          echo ""
+          echo "Railway's GitHub integration will handle the deployment automatically."
+          echo "Monitor deployment at: https://railway.app"
+
+      # Optional: Deploy via Railway CLI (if you want explicit control)
+      # Requires RAILWAY_TOKEN secret
+      # - name: Install Railway CLI
+      #   run: npm install -g @railway/cli
+      #
+      # - name: Deploy to Railway
+      #   env:
+      #     RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+      #   run: |
+      #     railway up --detach
+
+  # Post-deployment verification
+  post-deployment:
+    name: Post-Deployment Health Check
+    runs-on: ubuntu-latest
+    needs: [check-ci-status, deploy-railway]
+    if: needs.check-ci-status.outputs.should_deploy == 'true'
+
+    steps:
+      - name: Wait for deployment
+        run: |
+          echo "⏳ Waiting for Railway deployment to complete..."
+          echo "This typically takes 2-3 minutes"
+          sleep 120  # Wait 2 minutes for Railway to deploy
+
+      - name: Health check
+        run: |
+          ENV="${{ needs.check-ci-status.outputs.environment }}"
+
+          # Set health check URL based on environment
+          if [ "$ENV" == "production" ]; then
+            HEALTH_URL="${{ secrets.PRODUCTION_URL }}/health"
+          else
+            HEALTH_URL="${{ secrets.STAGING_URL }}/health"
+          fi
+
+          # Skip if URL not configured
+          if [ -z "$HEALTH_URL" ] || [ "$HEALTH_URL" == "/health" ]; then
+            echo "⚠️  Health check URL not configured in secrets"
+            echo "Add PRODUCTION_URL and STAGING_URL to GitHub secrets"
+            exit 0
+          fi
+
+          echo "🏥 Checking health at: $HEALTH_URL"
+
+          # Try health check with retries
+          MAX_RETRIES=5
+          RETRY_COUNT=0
+
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            if curl -f -s -o /dev/null -w "%{http_code}" "$HEALTH_URL" | grep -q "200"; then
+              echo "✅ Health check passed!"
+              echo "🎉 Deployment successful!"
+              exit 0
+            else
+              RETRY_COUNT=$((RETRY_COUNT + 1))
+              echo "⏳ Attempt $RETRY_COUNT/$MAX_RETRIES failed, retrying in 30s..."
+              sleep 30
+            fi
+          done
+
+          echo "❌ Health check failed after $MAX_RETRIES attempts"
+          echo "⚠️  Manual verification required"
+          exit 1
+
+  # Deployment notification
+  notify-deployment:
+    name: Deployment Notification
+    runs-on: ubuntu-latest
+    needs: [check-ci-status, post-deployment]
+    if: always() && needs.check-ci-status.outputs.should_deploy == 'true'
+
+    steps:
+      - name: Deployment status
+        run: |
+          ENV="${{ needs.check-ci-status.outputs.environment }}"
+
+          if [ "${{ needs.post-deployment.result }}" == "success" ]; then
+            echo "✅ Deployment to $ENV SUCCESSFUL"
+            echo "🚀 Branch: ${{ github.ref_name }}"
+            echo "📝 Commit: ${{ github.sha }}"
+            echo "👤 Author: ${{ github.actor }}"
+          else
+            echo "❌ Deployment to $ENV FAILED"
+            echo "🔍 Check Railway dashboard for details"
+          fi
+
+      # Optional: Post to Slack/Discord
+      # - name: Notify Slack
+      #   if: needs.post-deployment.result == 'success'
+      #   uses: slackapi/slack-github-action@v1
+      #   with:
+      #     webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+      #     payload: |
+      #       {
+      #         "text": "🚀 Deployed to ${{ needs.check-ci-status.outputs.environment }}: ${{ github.ref_name }}"
+      #       }
+
+  # Rollback job (manual trigger only)
+  rollback:
+    name: Rollback Deployment
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Manual rollback instructions
+        run: |
+          echo "🔄 Manual Rollback Required"
+          echo ""
+          echo "To rollback deployment:"
+          echo "1. Go to Railway Dashboard"
+          echo "2. Navigate to Deployments"
+          echo "3. Find the last working deployment"
+          echo "4. Click 'Redeploy'"
+          echo ""
+          echo "Or via Git:"
+          echo "git revert ${{ github.sha }}"
+          echo "git push"

@@ -177,7 +177,7 @@ response = openai.ChatCompletion.create(
 ### Chat Sessions
 
 - **Persistent Sessions**: Store chat conversations
-- **Session Metadata**: Title, model, timestamps
+- **Session Metadata**: TitleSection, model, timestamps
 - **Message Threading**: Maintain conversation context
 - **Session Search**: Find specific conversations
 

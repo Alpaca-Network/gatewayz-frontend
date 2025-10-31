@@ -98,6 +98,8 @@ async def get_transaction_analytics(
             detail=f"Failed to connect to OpenRouter API: {str(e)}"
         )
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Unexpected error fetching transaction analytics: {e}", exc_info=True)
         raise HTTPException(
@@ -246,10 +248,11 @@ async def get_transaction_summary(
             "summary": summary
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error creating transaction summary: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=f"Failed to create summary: {str(e)}"
         )
-

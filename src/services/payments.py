@@ -22,7 +22,7 @@ from src.db.payments import (
 from src.db.users import get_user_by_id, add_credits_to_user
 from src.schemas.payments import CreateCheckoutSessionRequest, CheckoutSessionResponse, StripeCurrency, \
     CreatePaymentIntentRequest, PaymentIntentResponse, WebhookProcessingResult, CreditPackagesResponse, CreditPackage, \
-    RefundResponse, CreateRefundRequest, PaymentStatus
+    RefundResponse, CreateRefundRequest, PaymentStatus, CreateSubscriptionCheckoutRequest, SubscriptionCheckoutResponse
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +70,7 @@ class StripeService:
             if user_email.startswith('did:privy:'):
                 logger.warning(f"User {user_id} has Privy DID as email: {user_email}")
                 # Try to get email from Privy linked accounts via Supabase
-                from src.supabase_config import get_supabase_client
+                from src.config.supabase_config import get_supabase_client
                 client = get_supabase_client()
                 user_result = client.table('users').select('privy_user_id').eq('id', user_id).execute()
                 if user_result.data and user_result.data[0].get('privy_user_id'):
@@ -287,12 +287,25 @@ class StripeService:
 
             logger.info(f"Processing webhook: {event['type']}")
 
+            # One-time payment events
             if event['type'] == 'checkout.session.completed':
                 self._handle_checkout_completed(event['data']['object'])
             elif event['type'] == 'payment_intent.succeeded':
                 self._handle_payment_succeeded(event['data']['object'])
             elif event['type'] == 'payment_intent.payment_failed':
                 self._handle_payment_failed(event['data']['object'])
+
+            # Subscription events
+            elif event['type'] == 'customer.subscription.created':
+                self._handle_subscription_created(event['data']['object'])
+            elif event['type'] == 'customer.subscription.updated':
+                self._handle_subscription_updated(event['data']['object'])
+            elif event['type'] == 'customer.subscription.deleted':
+                self._handle_subscription_deleted(event['data']['object'])
+            elif event['type'] == 'invoice.paid':
+                self._handle_invoice_paid(event['data']['object'])
+            elif event['type'] == 'invoice.payment_failed':
+                self._handle_invoice_payment_failed(event['data']['object'])
 
             return WebhookProcessingResult(
                 success=True,
@@ -343,7 +356,7 @@ class StripeService:
             # Check for referral bonus (first purchase of $10+)
             try:
                 from src.services.referral import apply_referral_bonus, mark_first_purchase
-                from src.supabase_config import get_supabase_client
+                from src.config.supabase_config import get_supabase_client
 
                 client = get_supabase_client()
                 user_result = client.table('users').select('*').eq('id', user_id).execute()
@@ -476,3 +489,300 @@ class StripeService:
         except stripe.StripeError as e:
             logger.error(f"Stripe error creating refund: {e}")
             raise Exception(f"Refund failed: {str(e)}")
+
+    # ==================== Subscription Checkout ====================
+
+    def create_subscription_checkout(
+            self,
+            user_id: int,
+            request: CreateSubscriptionCheckoutRequest
+    ) -> SubscriptionCheckoutResponse:
+        """
+        Create a Stripe checkout session for subscription
+
+        Args:
+            user_id: User ID
+            request: Subscription checkout request parameters
+
+        Returns:
+            SubscriptionCheckoutResponse with session_id and checkout URL
+        """
+        try:
+            # Get user details
+            user = get_user_by_id(user_id)
+            if not user:
+                raise ValueError(f"User {user_id} not found")
+
+            # Extract real email if stored email is a Privy DID
+            user_email = user.get('email', '')
+            if user_email.startswith('did:privy:'):
+                logger.warning(f"User {user_id} has Privy DID as email: {user_email}")
+                if request.customer_email:
+                    user_email = request.customer_email
+                else:
+                    user_email = None
+                    logger.warning(f"No customer_email in request for user {user_id} with Privy DID")
+
+            # Get or create Stripe customer
+            stripe_customer_id = user.get('stripe_customer_id')
+
+            if not stripe_customer_id:
+                # Create new Stripe customer
+                logger.info(f"Creating Stripe customer for user {user_id}")
+                customer = stripe.Customer.create(
+                    email=request.customer_email or user_email,
+                    metadata={
+                        'user_id': str(user_id),
+                        'username': user.get('username', ''),
+                    }
+                )
+                stripe_customer_id = customer.id
+
+                # Save customer ID to database
+                from src.config.supabase_config import get_supabase_client
+                client = get_supabase_client()
+                client.table('users').update({
+                    'stripe_customer_id': stripe_customer_id,
+                    'updated_at': datetime.now(timezone.utc).isoformat()
+                }).eq('id', user_id).execute()
+
+                logger.info(f"Stripe customer created: {stripe_customer_id} for user {user_id}")
+
+            # Determine tier from product_id
+            tier_map = {
+                'prod_TKOqQPhVRxNp4Q': 'pro',
+                'prod_TKOqRE2L6qXu7s': 'max'
+            }
+            tier = tier_map.get(request.product_id, 'basic')
+
+            logger.info(f"Creating subscription checkout for user {user_id}, tier: {tier}, price_id: {request.price_id}")
+
+            # Create Stripe Checkout Session for subscription
+            session_params = {
+                'customer': stripe_customer_id,
+                'payment_method_types': ['card'],
+                'line_items': [{
+                    'price': request.price_id,
+                    'quantity': 1,
+                }],
+                'mode': request.mode,
+                'success_url': request.success_url,
+                'cancel_url': request.cancel_url,
+                'metadata': {
+                    'user_id': str(user_id),
+                    'product_id': request.product_id,
+                    'tier': tier,
+                    **(request.metadata or {})
+                }
+            }
+
+            # Add subscription_data for subscription mode
+            if request.mode == 'subscription':
+                session_params['subscription_data'] = {
+                    'metadata': {
+                        'user_id': str(user_id),
+                        'product_id': request.product_id,
+                        'tier': tier
+                    }
+                }
+
+            session = stripe.checkout.Session.create(**session_params)
+
+            logger.info(f"Subscription checkout session created: {session.id} for user {user_id}")
+            logger.info(f"Checkout URL: {session.url}")
+
+            return SubscriptionCheckoutResponse(
+                session_id=session.id,
+                url=session.url,
+                customer_id=stripe_customer_id,
+                status=session.status
+            )
+
+        except stripe.StripeError as e:
+            logger.error(f"Stripe error creating subscription checkout: {e}")
+            raise Exception(f"Payment processing error: {str(e)}")
+
+        except Exception as e:
+            logger.error(f"Error creating subscription checkout: {e}")
+            raise
+
+    # ==================== Subscription Webhook Handlers ====================
+
+    def _handle_subscription_created(self, subscription):
+        """Handle subscription created event"""
+        try:
+            user_id = int(subscription.metadata.get('user_id'))
+            tier = subscription.metadata.get('tier', 'pro')
+            product_id = subscription.metadata.get('product_id')
+
+            logger.info(f"Subscription created for user {user_id}: {subscription.id}, tier: {tier}")
+
+            # Update user's subscription status and tier
+            from src.config.supabase_config import get_supabase_client
+            client = get_supabase_client()
+
+            update_data = {
+                'subscription_status': 'active',
+                'tier': tier,
+                'stripe_subscription_id': subscription.id,
+                'stripe_product_id': product_id,
+                'stripe_customer_id': subscription.customer,
+                'updated_at': datetime.now(timezone.utc).isoformat()
+            }
+
+            # Add subscription end date if available
+            if subscription.current_period_end:
+                update_data['subscription_end_date'] = subscription.current_period_end
+
+            client.table('users').update(update_data).eq('id', user_id).execute()
+
+            # Clear trial status for all user's API keys
+            client.table('api_keys_new').update({
+                'is_trial': False,
+                'trial_converted': True,
+                'subscription_status': 'active',
+                'subscription_plan': tier
+            }).eq('user_id', user_id).execute()
+
+            logger.info(f"User {user_id} subscription activated: tier={tier}, subscription_id={subscription.id}, trial status cleared")
+
+        except Exception as e:
+            logger.error(f"Error handling subscription created: {e}", exc_info=True)
+            raise
+
+    def _handle_subscription_updated(self, subscription):
+        """Handle subscription updated event"""
+        try:
+            user_id = int(subscription.metadata.get('user_id'))
+            status = subscription.status  # active, past_due, canceled, etc.
+            tier = subscription.metadata.get('tier', 'pro')
+
+            logger.info(f"Subscription updated for user {user_id}: {subscription.id}, status: {status}, tier: {tier}")
+
+            # Update user's subscription status
+            from src.config.supabase_config import get_supabase_client
+            client = get_supabase_client()
+
+            update_data = {
+                'subscription_status': status,
+                'tier': tier,
+                'updated_at': datetime.now(timezone.utc).isoformat()
+            }
+
+            if subscription.current_period_end:
+                update_data['subscription_end_date'] = subscription.current_period_end
+
+            # If subscription is canceled or past_due, potentially downgrade
+            if status in ['canceled', 'past_due', 'unpaid']:
+                update_data['tier'] = 'basic'
+                logger.warning(f"User {user_id} subscription status changed to {status}, downgrading to basic tier")
+
+            client.table('users').update(update_data).eq('id', user_id).execute()
+
+            # Clear trial status for all user's API keys when subscription becomes active
+            if status == 'active':
+                client.table('api_keys_new').update({
+                    'is_trial': False,
+                    'trial_converted': True,
+                    'subscription_status': 'active',
+                    'subscription_plan': tier
+                }).eq('user_id', user_id).execute()
+                logger.info(f"User {user_id} trial status cleared on subscription update to active")
+
+            logger.info(f"User {user_id} subscription updated: status={status}, tier={tier}")
+
+        except Exception as e:
+            logger.error(f"Error handling subscription updated: {e}", exc_info=True)
+            raise
+
+    def _handle_subscription_deleted(self, subscription):
+        """Handle subscription deleted/canceled event"""
+        try:
+            user_id = int(subscription.metadata.get('user_id'))
+
+            logger.info(f"Subscription deleted for user {user_id}: {subscription.id}")
+
+            # Downgrade user to basic tier
+            from src.config.supabase_config import get_supabase_client
+            client = get_supabase_client()
+
+            client.table('users').update({
+                'subscription_status': 'canceled',
+                'tier': 'basic',
+                'stripe_subscription_id': None,
+                'updated_at': datetime.now(timezone.utc).isoformat()
+            }).eq('id', user_id).execute()
+
+            logger.info(f"User {user_id} subscription canceled, downgraded to basic tier")
+
+        except Exception as e:
+            logger.error(f"Error handling subscription deleted: {e}", exc_info=True)
+            raise
+
+    def _handle_invoice_paid(self, invoice):
+        """Handle invoice paid event - add credits for subscription renewal"""
+        try:
+            # Get subscription from invoice
+            if not invoice.subscription:
+                logger.info(f"Invoice {invoice.id} is not for a subscription, skipping")
+                return
+
+            subscription = stripe.Subscription.retrieve(invoice.subscription)
+            user_id = int(subscription.metadata.get('user_id'))
+            tier = subscription.metadata.get('tier', 'pro')
+
+            # Calculate credits based on tier
+            credits_map = {
+                'pro': 20.0,   # $20 credits per month
+                'max': 150.0   # $150 credits per month
+            }
+            credits = credits_map.get(tier, 0)
+
+            if credits > 0:
+                # Add credits to user account
+                add_credits_to_user(
+                    user_id=user_id,
+                    credits=credits,
+                    transaction_type='subscription_renewal',
+                    description=f"Monthly subscription credits - {tier.upper()} tier",
+                    metadata={
+                        'stripe_invoice_id': invoice.id,
+                        'stripe_subscription_id': subscription.id,
+                        'tier': tier
+                    }
+                )
+
+                logger.info(f"Added {credits} credits to user {user_id} for {tier} subscription renewal (invoice: {invoice.id})")
+            else:
+                logger.warning(f"No credits configured for tier: {tier}")
+
+        except Exception as e:
+            logger.error(f"Error handling invoice paid: {e}", exc_info=True)
+            raise
+
+    def _handle_invoice_payment_failed(self, invoice):
+        """Handle invoice payment failed event"""
+        try:
+            if not invoice.subscription:
+                logger.info(f"Invoice {invoice.id} is not for a subscription, skipping")
+                return
+
+            subscription = stripe.Subscription.retrieve(invoice.subscription)
+            user_id = int(subscription.metadata.get('user_id'))
+
+            logger.warning(f"Invoice payment failed for user {user_id}: {invoice.id}")
+
+            # Update user's subscription status to past_due
+            from src.config.supabase_config import get_supabase_client
+            client = get_supabase_client()
+
+            client.table('users').update({
+                'subscription_status': 'past_due',
+                'updated_at': datetime.now(timezone.utc).isoformat()
+            }).eq('id', user_id).execute()
+
+            logger.info(f"User {user_id} subscription marked as past_due due to failed payment")
+
+        except Exception as e:
+            logger.error(f"Error handling invoice payment failed: {e}", exc_info=True)
+            raise

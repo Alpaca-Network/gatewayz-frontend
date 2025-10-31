@@ -4,7 +4,7 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime, timedelta, timezone
 
 from src.db.api_keys import create_api_key
-from src.supabase_config import get_supabase_client
+from src.config.supabase_config import get_supabase_client
 import secrets
 
 logger = logging.getLogger(__name__)
@@ -670,6 +670,15 @@ def get_user_profile(api_key: str) -> Dict[str, Any]:
 
         logger.info(f"Building profile for user {user.get('id')}")
 
+        # Map tier to display-friendly name
+        tier = user.get("tier")
+        tier_display_map = {
+            'basic': 'Basic',
+            'pro': 'Pro',
+            'max': 'MAX'
+        }
+        tier_display_name = tier_display_map.get(tier) if tier else None
+
         # Return profile data
         profile = {
             "user_id": user["id"],
@@ -681,7 +690,10 @@ def get_user_profile(api_key: str) -> Dict[str, Any]:
             "email": user.get("email"),
             "auth_method": user.get("auth_method"),
             "subscription_status": user.get("subscription_status"),
+            "tier": tier,  # Include subscription tier (basic, pro, max)
+            "tier_display_name": tier_display_name,  # Display-friendly name (Basic, Pro, MAX)
             "trial_expires_at": user.get("trial_expires_at"),
+            "subscription_end_date": user.get("subscription_end_date"),  # Unix timestamp
             "is_active": user.get("is_active"),
             "registration_date": user.get("registration_date")
         }

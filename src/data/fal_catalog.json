@@ -1,0 +1,576 @@
+[
+  {
+    "_readme": "Fal.ai Model Catalog - IMPORTANT: Fal.ai has 839 models available! This file contains only the most popular/recommended models for easy discovery. You can use ANY model from https://fal.ai/models or https://fal.ai/explore/search by passing its model ID directly to make_fal_image_request().",
+    "_total_models_available": 839,
+    "_browse_all_models_url": "https://fal.ai/models",
+    "_search_models_url": "https://fal.ai/explore/search",
+    "_implementation_note": "The endpoint supports ALL 839 models dynamically - just pass the model ID!",
+    "_model_categories": {
+      "text-to-image": "~150 models including FLUX variants, Stable Diffusion, Ideogram, Recraft, etc.",
+      "image-to-image": "~200 models for editing, upscaling, style transfer, virtual try-on, etc.",
+      "text-to-video": "~80 models including Veo, Sora, Kling, Minimax, Wan, LTX Video, etc.",
+      "image-to-video": "~120 models for animation, motion transfer, talking avatars, etc.",
+      "video-to-video": "~100 models for editing, lipsync, effects, interpolation, etc.",
+      "text-to-audio": "~50 models for music, speech, sound effects generation",
+      "text-to-speech": "~40 models from MiniMax, ElevenLabs, Chatterbox, etc.",
+      "audio-to-audio": "~30 models for voice cloning, audio editing, mixing",
+      "image-to-3d": "~20 models from Hunyuan3D, Meshy, Tripo3D, etc.",
+      "vision": "~30 models for OCR, captioning, detection, segmentation",
+      "training": "~15 models for LoRA training and fine-tuning",
+      "utility": "~40 models for background removal, upscaling, preprocessing, etc."
+    },
+    "_usage_example": "Just use any model ID like 'fal-ai/flux/dev', 'fal-ai/veo3.1', 'minimax/video-01', etc."
+  },
+  {
+    "id": "fal-ai/flux-pro/v1.1-ultra",
+    "name": "FLUX Pro v1.1 Ultra",
+    "provider": "fal-ai",
+    "type": "text-to-image",
+    "description": "High-quality text-to-image generation with FLUX Pro v1.1 Ultra",
+    "tags": ["popular", "high-quality"]
+  },
+  {
+    "id": "fal-ai/flux/dev",
+    "name": "FLUX.1 [dev]",
+    "provider": "fal-ai",
+    "type": "text-to-image",
+    "description": "Fast, high-quality image generation with FLUX.1 dev model",
+    "tags": ["popular", "fast"]
+  },
+  {
+    "id": "fal-ai/flux/schnell",
+    "name": "FLUX.1 [schnell]",
+    "provider": "fal-ai",
+    "type": "text-to-image",
+    "description": "Ultra-fast image generation in 1-4 steps with FLUX.1 schnell",
+    "tags": ["popular", "ultra-fast"]
+  },
+  {
+    "id": "fal-ai/flux-pro",
+    "name": "FLUX Pro",
+    "provider": "fal-ai",
+    "type": "text-to-image",
+    "description": "Professional-grade FLUX text-to-image generation",
+    "tags": ["popular", "pro"]
+  },
+  {
+    "id": "fal-ai/aura-flow",
+    "name": "Aura Flow",
+    "provider": "fal-ai",
+    "type": "text-to-image",
+    "description": "High-quality text-to-image generation with Aura Flow",
+    "tags": ["popular"]
+  },
+  {
+    "id": "fal-ai/omnigen-v1",
+    "name": "OmniGen v1",
+    "provider": "fal-ai",
+    "type": "text-to-image",
+    "description": "Versatile text-to-image generation with OmniGen",
+    "tags": ["popular"]
+  },
+  {
+    "id": "fal-ai/imagen4/preview",
+    "name": "Imagen 4 Preview",
+    "provider": "fal-ai",
+    "type": "text-to-image",
+    "description": "Google's Imagen 4 text-to-image model (preview)",
+    "tags": ["preview", "google"]
+  },
+  {
+    "id": "fal-ai/flux-pro/kontext",
+    "name": "FLUX Pro Kontext",
+    "provider": "fal-ai",
+    "type": "text-to-image",
+    "description": "FLUX Pro with context-aware generation",
+    "tags": []
+  },
+  {
+    "id": "fal-ai/flux-krea-lora/stream",
+    "name": "FLUX Krea LoRA Stream",
+    "provider": "fal-ai",
+    "type": "text-to-image",
+    "description": "Streaming text-to-image with FLUX Krea LoRA",
+    "tags": ["streaming"]
+  },
+  {
+    "id": "fal-ai/recraft/v3/text-to-image",
+    "name": "Recraft v3",
+    "provider": "fal-ai",
+    "type": "text-to-image",
+    "description": "Recraft v3 text-to-image generation",
+    "tags": []
+  },
+  {
+    "id": "fal-ai/hidream-i1-full",
+    "name": "HiDream I1 Full",
+    "provider": "fal-ai",
+    "type": "text-to-image",
+    "description": "HiDream I1 full model for text-to-image",
+    "tags": []
+  },
+  {
+    "id": "bria/fibo/generate",
+    "name": "BRIA FIBO Generate",
+    "provider": "bria",
+    "type": "text-to-image",
+    "description": "BRIA FIBO image generation",
+    "tags": []
+  },
+  {
+    "id": "fal-ai/qwen-image",
+    "name": "Qwen Image",
+    "provider": "fal-ai",
+    "type": "text-to-image",
+    "description": "Qwen-based image generation",
+    "tags": []
+  },
+  {
+    "id": "fal-ai/reve/edit",
+    "name": "Reve Edit",
+    "provider": "fal-ai",
+    "type": "image-to-image",
+    "description": "Image editing with Reve",
+    "tags": ["editing"]
+  },
+  {
+    "id": "fal-ai/nano-banana/edit",
+    "name": "Nano Banana Edit",
+    "provider": "fal-ai",
+    "type": "image-to-image",
+    "description": "Fast image editing with Nano Banana",
+    "tags": ["editing", "fast"]
+  },
+  {
+    "id": "fal-ai/flux-kontext-lora",
+    "name": "FLUX Kontext LoRA",
+    "provider": "fal-ai",
+    "type": "image-to-image",
+    "description": "Context-aware image transformation with FLUX LoRA",
+    "tags": []
+  },
+  {
+    "id": "fal-ai/flux-kontext-lora/inpaint",
+    "name": "FLUX Kontext LoRA Inpaint",
+    "provider": "fal-ai",
+    "type": "image-to-image",
+    "description": "Inpainting with FLUX Kontext LoRA",
+    "tags": ["inpainting"]
+  },
+  {
+    "id": "fal-ai/bytedance/seedream/v4/edit",
+    "name": "SeeDream v4 Edit",
+    "provider": "bytedance",
+    "type": "image-to-image",
+    "description": "ByteDance SeeDream v4 image editing",
+    "tags": ["editing"]
+  },
+  {
+    "id": "fal-ai/wan-25-preview/image-to-image",
+    "name": "WAN 2.5 Preview I2I",
+    "provider": "fal-ai",
+    "type": "image-to-image",
+    "description": "WAN 2.5 image-to-image transformation (preview)",
+    "tags": ["preview"]
+  },
+  {
+    "id": "fal-ai/wan/v2.2-a14b/image-to-image",
+    "name": "WAN v2.2 A14B I2I",
+    "provider": "fal-ai",
+    "type": "image-to-image",
+    "description": "WAN v2.2 A14B image-to-image",
+    "tags": []
+  },
+  {
+    "id": "fal-ai/veo3.1",
+    "name": "Veo 3.1",
+    "provider": "fal-ai",
+    "type": "text-to-video",
+    "description": "Google Veo 3.1 text-to-video generation",
+    "tags": ["popular", "google"]
+  },
+  {
+    "id": "fal-ai/veo3.1/fast",
+    "name": "Veo 3.1 Fast",
+    "provider": "fal-ai",
+    "type": "text-to-video",
+    "description": "Fast text-to-video with Veo 3.1",
+    "tags": ["fast", "google"]
+  },
+  {
+    "id": "fal-ai/longcat-video/text-to-video/720p",
+    "name": "LongCat Video 720p",
+    "provider": "fal-ai",
+    "type": "text-to-video",
+    "description": "LongCat text-to-video at 720p resolution",
+    "tags": []
+  },
+  {
+    "id": "fal-ai/longcat-video/text-to-video/480p",
+    "name": "LongCat Video 480p",
+    "provider": "fal-ai",
+    "type": "text-to-video",
+    "description": "LongCat text-to-video at 480p resolution",
+    "tags": []
+  },
+  {
+    "id": "fal-ai/longcat-video/distilled/text-to-video/720p",
+    "name": "LongCat Distilled 720p",
+    "provider": "fal-ai",
+    "type": "text-to-video",
+    "description": "Distilled LongCat text-to-video at 720p",
+    "tags": ["fast"]
+  },
+  {
+    "id": "fal-ai/kling-video/v2.5-turbo/pro/text-to-video",
+    "name": "Kling Video v2.5 Turbo Pro",
+    "provider": "fal-ai",
+    "type": "text-to-video",
+    "description": "Kling v2.5 Turbo Pro text-to-video",
+    "tags": ["turbo", "pro"]
+  },
+  {
+    "id": "fal-ai/sora-2/text-to-video",
+    "name": "Sora 2",
+    "provider": "fal-ai",
+    "type": "text-to-video",
+    "description": "OpenAI Sora 2 text-to-video generation",
+    "tags": ["openai"]
+  },
+  {
+    "id": "fal-ai/sora-2/text-to-video/pro",
+    "name": "Sora 2 Pro",
+    "provider": "fal-ai",
+    "type": "text-to-video",
+    "description": "OpenAI Sora 2 Pro text-to-video",
+    "tags": ["openai", "pro"]
+  },
+  {
+    "id": "fal-ai/veo3.1/reference-to-video",
+    "name": "Veo 3.1 Reference-to-Video",
+    "provider": "fal-ai",
+    "type": "image-to-video",
+    "description": "Veo 3.1 reference-based video generation",
+    "tags": ["google"]
+  },
+  {
+    "id": "fal-ai/veo3.1/image-to-video",
+    "name": "Veo 3.1 Image-to-Video",
+    "provider": "fal-ai",
+    "type": "image-to-video",
+    "description": "Veo 3.1 image-to-video generation",
+    "tags": ["google"]
+  },
+  {
+    "id": "fal-ai/veo3.1/fast/image-to-video",
+    "name": "Veo 3.1 Fast I2V",
+    "provider": "fal-ai",
+    "type": "image-to-video",
+    "description": "Fast image-to-video with Veo 3.1",
+    "tags": ["fast", "google"]
+  },
+  {
+    "id": "fal-ai/kling-video/v2.5-turbo/pro/image-to-video",
+    "name": "Kling Video v2.5 Turbo Pro I2V",
+    "provider": "fal-ai",
+    "type": "image-to-video",
+    "description": "Kling v2.5 Turbo Pro image-to-video",
+    "tags": ["turbo", "pro"]
+  },
+  {
+    "id": "fal-ai/wan-25-preview/image-to-video",
+    "name": "WAN 2.5 Preview I2V",
+    "provider": "fal-ai",
+    "type": "image-to-video",
+    "description": "WAN 2.5 image-to-video (preview)",
+    "tags": ["preview"]
+  },
+  {
+    "id": "fal-ai/longcat-video/image-to-video/720p",
+    "name": "LongCat I2V 720p",
+    "provider": "fal-ai",
+    "type": "image-to-video",
+    "description": "LongCat image-to-video at 720p",
+    "tags": []
+  },
+  {
+    "id": "fal-ai/longcat-video/image-to-video/480p",
+    "name": "LongCat I2V 480p",
+    "provider": "fal-ai",
+    "type": "image-to-video",
+    "description": "LongCat image-to-video at 480p",
+    "tags": []
+  },
+  {
+    "id": "fal-ai/longcat-video/distilled/image-to-video/720p",
+    "name": "LongCat Distilled I2V 720p",
+    "provider": "fal-ai",
+    "type": "image-to-video",
+    "description": "Distilled LongCat image-to-video at 720p",
+    "tags": ["fast"]
+  },
+  {
+    "id": "fal-ai/longcat-video/distilled/image-to-video/480p",
+    "name": "LongCat Distilled I2V 480p",
+    "provider": "fal-ai",
+    "type": "image-to-video",
+    "description": "Distilled LongCat image-to-video at 480p",
+    "tags": ["fast"]
+  },
+  {
+    "id": "fal-ai/sora-2/image-to-video",
+    "name": "Sora 2 Image-to-Video",
+    "provider": "fal-ai",
+    "type": "image-to-video",
+    "description": "Sora 2 image-to-video generation",
+    "tags": ["openai"]
+  },
+  {
+    "id": "fal-ai/sora-2/image-to-video/pro",
+    "name": "Sora 2 Pro I2V",
+    "provider": "fal-ai",
+    "type": "image-to-video",
+    "description": "Sora 2 Pro image-to-video",
+    "tags": ["openai", "pro"]
+  },
+  {
+    "id": "fal-ai/wan-effects",
+    "name": "WAN Effects",
+    "provider": "fal-ai",
+    "type": "image-to-video",
+    "description": "WAN visual effects for image-to-video",
+    "tags": ["effects"]
+  },
+  {
+    "id": "fal-ai/wan-pro/image-to-video",
+    "name": "WAN Pro Image-to-Video",
+    "provider": "fal-ai",
+    "type": "image-to-video",
+    "description": "WAN Pro image-to-video generation",
+    "tags": ["pro"]
+  },
+  {
+    "id": "fal-ai/veo2/image-to-video",
+    "name": "Veo 2 Image-to-Video",
+    "provider": "fal-ai",
+    "type": "image-to-video",
+    "description": "Google Veo 2 image-to-video",
+    "tags": ["google"]
+  },
+  {
+    "id": "fal-ai/kling-video/v1.6/pro/image-to-video",
+    "name": "Kling Video v1.6 Pro I2V",
+    "provider": "fal-ai",
+    "type": "image-to-video",
+    "description": "Kling v1.6 Pro image-to-video",
+    "tags": ["pro"]
+  },
+  {
+    "id": "fal-ai/minimax/video-01/image-to-video",
+    "name": "MiniMax Video 01 I2V",
+    "provider": "minimax",
+    "type": "image-to-video",
+    "description": "MiniMax Video 01 image-to-video",
+    "tags": []
+  },
+  {
+    "id": "fal-ai/minimax/hailuo-2.3/pro/image-to-video",
+    "name": "MiniMax Hailuo 2.3 Pro I2V",
+    "provider": "minimax",
+    "type": "image-to-video",
+    "description": "MiniMax Hailuo 2.3 Pro image-to-video",
+    "tags": ["pro"]
+  },
+  {
+    "id": "fal-ai/video-as-prompt",
+    "name": "Video as Prompt",
+    "provider": "fal-ai",
+    "type": "video-to-video",
+    "description": "Use video as a prompt for generation",
+    "tags": []
+  },
+  {
+    "id": "fal-ai/sora-2/video-to-video/remix",
+    "name": "Sora 2 Video Remix",
+    "provider": "fal-ai",
+    "type": "video-to-video",
+    "description": "Sora 2 video-to-video remixing",
+    "tags": ["openai", "remix"]
+  },
+  {
+    "id": "creatify/lipsync",
+    "name": "Creatify Lipsync",
+    "provider": "creatify",
+    "type": "video-to-video",
+    "description": "Lip synchronization for videos",
+    "tags": ["lipsync"]
+  },
+  {
+    "id": "fal-ai/sync-lipsync/v2",
+    "name": "Sync Lipsync v2",
+    "provider": "fal-ai",
+    "type": "video-to-video",
+    "description": "Video lip sync v2",
+    "tags": ["lipsync"]
+  },
+  {
+    "id": "fal-ai/pixverse/lipsync",
+    "name": "Pixverse Lipsync",
+    "provider": "fal-ai",
+    "type": "video-to-video",
+    "description": "Pixverse lip synchronization",
+    "tags": ["lipsync"]
+  },
+  {
+    "id": "fal-ai/chatterbox/text-to-speech",
+    "name": "Chatterbox TTS",
+    "provider": "fal-ai",
+    "type": "text-to-speech",
+    "description": "Chatterbox text-to-speech synthesis",
+    "tags": []
+  },
+  {
+    "id": "fal-ai/minimax/speech-02-hd",
+    "name": "MiniMax Speech 02 HD",
+    "provider": "minimax",
+    "type": "text-to-speech",
+    "description": "MiniMax Speech 02 HD quality TTS",
+    "tags": ["hd"]
+  },
+  {
+    "id": "fal-ai/minimax/speech-2.6-turbo",
+    "name": "MiniMax Speech 2.6 Turbo",
+    "provider": "minimax",
+    "type": "text-to-speech",
+    "description": "Fast TTS with MiniMax Speech 2.6 Turbo",
+    "tags": ["turbo"]
+  },
+  {
+    "id": "fal-ai/minimax/speech-2.6-hd",
+    "name": "MiniMax Speech 2.6 HD",
+    "provider": "minimax",
+    "type": "text-to-speech",
+    "description": "High quality TTS with MiniMax Speech 2.6 HD",
+    "tags": ["hd"]
+  },
+  {
+    "id": "fal-ai/playai/tts/dialog",
+    "name": "PlayAI Dialog TTS",
+    "provider": "playai",
+    "type": "text-to-audio",
+    "description": "PlayAI dialog text-to-audio",
+    "tags": ["dialog"]
+  },
+  {
+    "id": "fal-ai/bytedance/seed3d/image-to-3d",
+    "name": "Seed3D Image-to-3D",
+    "provider": "bytedance",
+    "type": "image-to-3d",
+    "description": "ByteDance Seed3D image-to-3D conversion",
+    "tags": ["3d"]
+  },
+  {
+    "id": "fal-ai/omnipart",
+    "name": "OmniPart",
+    "provider": "fal-ai",
+    "type": "image-to-3d",
+    "description": "OmniPart 3D generation",
+    "tags": ["3d"]
+  },
+  {
+    "id": "fal-ai/flux-lora-fast-training",
+    "name": "FLUX LoRA Fast Training",
+    "provider": "fal-ai",
+    "type": "training",
+    "description": "Fast LoRA training for FLUX models",
+    "tags": ["training", "lora"]
+  },
+  {
+    "id": "fal-ai/flux-lora-portrait-trainer",
+    "name": "FLUX LoRA Portrait Trainer",
+    "provider": "fal-ai",
+    "type": "training",
+    "description": "Portrait-focused LoRA training for FLUX",
+    "tags": ["training", "lora", "portrait"]
+  },
+  {
+    "id": "fal-ai/flux-kontext-trainer",
+    "name": "FLUX Kontext Trainer",
+    "provider": "fal-ai",
+    "type": "training",
+    "description": "Context-aware FLUX model training",
+    "tags": ["training"]
+  },
+  {
+    "id": "fal-ai/flux-pro-trainer",
+    "name": "FLUX Pro Trainer",
+    "provider": "fal-ai",
+    "type": "training",
+    "description": "Professional FLUX model training",
+    "tags": ["training", "pro"]
+  },
+  {
+    "id": "fal-ai/wan-trainer/t2v-14b",
+    "name": "WAN T2V Trainer 14B",
+    "provider": "fal-ai",
+    "type": "training",
+    "description": "WAN text-to-video model training (14B)",
+    "tags": ["training", "video"]
+  },
+  {
+    "id": "fal-ai/qwen-image-edit-trainer",
+    "name": "Qwen Image Edit Trainer",
+    "provider": "fal-ai",
+    "type": "training",
+    "description": "Qwen image editing model training",
+    "tags": ["training", "editing"]
+  },
+  {
+    "id": "fal-ai/qwen-image-edit-plus-trainer",
+    "name": "Qwen Image Edit Plus Trainer",
+    "provider": "fal-ai",
+    "type": "training",
+    "description": "Enhanced Qwen image editing model training",
+    "tags": ["training", "editing"]
+  },
+  {
+    "id": "fal-ai/x-ailab/nsfw",
+    "name": "NSFW Content Filter",
+    "provider": "fal-ai",
+    "type": "utility",
+    "description": "Content moderation and NSFW detection",
+    "tags": ["moderation", "safety"]
+  },
+  {
+    "id": "fal-ai/topaz/upscale/image",
+    "name": "Topaz Image Upscale",
+    "provider": "topaz",
+    "type": "utility",
+    "description": "High-quality image upscaling with Topaz",
+    "tags": ["upscale", "enhancement"]
+  },
+  {
+    "id": "fal-ai/bria/background/remove",
+    "name": "BRIA Background Removal",
+    "provider": "bria",
+    "type": "utility",
+    "description": "Automatic background removal",
+    "tags": ["background-removal", "editing"]
+  },
+  {
+    "id": "fal-ai/topaz/upscale/video",
+    "name": "Topaz Video Upscale",
+    "provider": "topaz",
+    "type": "utility",
+    "description": "High-quality video upscaling with Topaz",
+    "tags": ["upscale", "video", "enhancement"]
+  },
+  {
+    "id": "fal-ai/stable-diffusion-v15",
+    "name": "Stable Diffusion v1.5",
+    "provider": "fal-ai",
+    "type": "text-to-image",
+    "description": "Classic Stable Diffusion v1.5 text-to-image",
+    "tags": ["classic", "default"]
+  }
+]

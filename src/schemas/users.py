@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Union
 from datetime import datetime
 from enum import Enum
 
@@ -55,7 +55,10 @@ class UserProfileResponse(BaseModel):
     email: Optional[str]
     auth_method: Optional[str]
     subscription_status: Optional[str]
+    tier: Optional[str] = None  # Subscription tier: 'basic', 'pro', or 'max'
+    tier_display_name: Optional[str] = None  # Display-friendly tier name: 'Basic', 'Pro', or 'MAX'
     trial_expires_at: Optional[str]
+    subscription_end_date: Optional[int] = None  # Unix timestamp for subscription end date
     is_active: Optional[bool]
     registration_date: Optional[str]
     created_at: Optional[str]
@@ -67,5 +70,5 @@ class DeleteAccountRequest(BaseModel):
 class DeleteAccountResponse(BaseModel):
     status: str
     message: str
-    user_id: int
+    user_id: Union[int, str]
     timestamp: datetime

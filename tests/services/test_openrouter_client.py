@@ -65,7 +65,7 @@ def test_get_openrouter_client_success(monkeypatch, mod):
     # headers
     hdrs = fake_instances[0].default_headers
     assert hdrs["HTTP-Referer"] == "https://gatewayz.example"
-    assert hdrs["X-Title"] == "Gatewayz"
+    assert hdrs["X-TitleSection"] == "Gatewayz"
 
 
 def test_get_openrouter_client_missing_key_raises(monkeypatch, mod):

@@ -25,7 +25,7 @@ class TrialStatus(BaseModel):
     trial_used_credits: float = 0.00
     trial_converted: bool = False
     subscription_status: SubscriptionStatus = SubscriptionStatus.TRIAL
-    subscription_plan: str = "free_trial"
+    subscription_plan: Optional[str] = "free_trial"
     trial_active: bool = False
     trial_expired: bool = False
     trial_remaining_tokens: int = 0

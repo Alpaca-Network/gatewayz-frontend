@@ -1,13 +1,17 @@
 import os
 import logging
+import secrets
 
 from fastapi import Depends, FastAPI, HTTPException, Request
+from src.services.startup import lifespan
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 # Import configuration
 from src.config import Config
+from src.utils.validators import ensure_non_empty_string, ensure_api_key_like
 
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
@@ -35,10 +39,24 @@ _provider_cache = {
 
 # Admin key validation
 def get_admin_key(credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer())):
-    """Validate admin API key"""
+    """Validate admin API key with security improvements"""
     admin_key = credentials.credentials
-    if admin_key != os.environ.get("ADMIN_API_KEY", "admin_key_placeholder"):
+    
+    # Input validation
+    try:
+        ensure_non_empty_string(admin_key, "admin API key")
+        ensure_api_key_like(admin_key, field_name="admin API key", min_length=10)
+    except ValueError:
+        # Do not leak details; preserve current response contract
         raise HTTPException(status_code=401, detail="Invalid admin API key")
+
+    # Get expected key from environment
+    expected_key = os.environ.get("ADMIN_API_KEY", "admin_key_placeholder")
+    
+    # Use constant-time comparison to prevent timing attacks
+    if not secrets.compare_digest(admin_key, expected_key):
+        raise HTTPException(status_code=401, detail="Invalid admin API key")
+    
     return admin_key
 
 
@@ -46,19 +64,44 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="Gatewayz Universal Inference API",
         description="Gateway for AI model access powered by Gatewayz",
-        version="2.0.3"  # Multi-sort strategy for 1204 HuggingFace models + auto :hf-inference suffix
+        version="2.0.3",  # Multi-sort strategy for 1204 HuggingFace models + auto :hf-inference suffix
+        lifespan=lifespan
     )
 
     # Add CORS middleware
     # Note: When allow_credentials=True, allow_origins cannot be ["*"]
     # Must specify exact origins for security
-    allowed_origins = [
-        "https://gatewayz.ai",
-        "https://beta.gatewayz.ai",
-        "http://localhost:3000",
-        "http://localhost:3001",
-    ]
 
+    # Environment-aware CORS origins
+    # Always include beta.gatewayz.ai for frontend access
+    base_origins = [
+        "https://beta.gatewayz.ai",
+        "https://staging.gatewayz.ai",
+    ]
+    
+    if Config.IS_PRODUCTION:
+        allowed_origins = [
+            "https://gatewayz.ai",
+            "https://www.gatewayz.ai",
+        ] + base_origins
+    elif Config.IS_STAGING:
+        allowed_origins = [
+            "http://localhost:3000",  # For testing against staging
+            "http://localhost:3001",
+        ] + base_origins
+    else:  # development
+        allowed_origins = [
+            "http://localhost:3000",
+            "http://localhost:3001",
+            "http://127.0.0.1:3000",
+            "http://127.0.0.1:3001",
+        ] + base_origins
+
+    # Log CORS configuration for debugging
+    logger.info(f"🌐 CORS Configuration:")
+    logger.info(f"   Environment: {Config.APP_ENV}")
+    logger.info(f"   Allowed Origins: {allowed_origins}")
+    
     app.add_middleware(
         CORSMiddleware,
         allow_origins=allowed_origins,
@@ -67,21 +110,39 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # Add GZip compression middleware for model catalog responses
+    # Compress responses larger than 1KB (1000 bytes)
+    # This significantly reduces payload size for large model lists
+    app.add_middleware(GZipMiddleware, minimum_size=1000)
+    logger.info("  🗜️  GZip compression middleware enabled (threshold: 1KB)")
+
     # Security
     security = HTTPBearer()
 
     # ==================== Load All Routes ====================
     logger.info("🚀 Loading application routes...")
+    print("🚀 Loading application routes...", flush=True)  # Force output for debugging
+
+    # Write to file for debugging in CI
+    try:
+        with open("/tmp/route_loading_debug.txt", "w") as f:
+            f.write("Starting route loading...\n")
+            f.flush()
+    except:
+        pass
 
     # Define all routes to load
     # IMPORTANT: chat & messages must be before catalog to avoid /v1/* being caught by /model/{provider}/{model}
     routes_to_load = [
         ("health", "Health Check"),
+        ("availability", "Model Availability"),
         ("ping", "Ping Service"),
         ("chat", "Chat Completions"),  # Moved before catalog
         ("messages", "Anthropic Messages API"),  # Claude-compatible endpoint
+        ("images", "Image Generation"),  # Image generation endpoints
         ("catalog", "Model Catalog"),
         ("system", "System & Health"),  # Cache management and health monitoring
+        ("optimization_monitor", "Optimization Monitoring"),  # Connection pool, cache, and priority stats
         ("root", "Root/Home"),
         ("auth", "Authentication"),
         ("users", "User Management"),
@@ -116,22 +177,35 @@ def create_app() -> FastAPI:
             app.include_router(router)
 
             # Log success
-            logger.info(f"  ✅ {display_name} ({module_name})")
+            success_msg = f"  ✅ {display_name} ({module_name})"
+            logger.info(success_msg)
+            print(success_msg, flush=True)  # Force output for debugging
             loaded_count += 1
 
         except ImportError as e:
-            logger.error(f"  ⚠️  {display_name} ({module_name}) - Module not found: {e}")
+            error_msg = f"  ⚠️  {display_name} ({module_name}) - Module not found: {e}"
+            logger.error(error_msg)
+            print(error_msg, flush=True)  # Force output for debugging
             logger.error(f"       Full error details: {repr(e)}")
+            print(f"       Full error details: {repr(e)}", flush=True)
             import traceback
-            logger.error(f"       Traceback:\n{traceback.format_exc()}")
+            tb = traceback.format_exc()
+            logger.error(f"       Traceback:\n{tb}")
+            print(f"       Traceback:\n{tb}", flush=True)
             failed_count += 1
 
         except AttributeError as e:
-            logger.error(f"  ❌ {display_name} ({module_name}) - No router found: {e}")
+            error_msg = f"  ❌ {display_name} ({module_name}) - No router found: {e}"
+            logger.error(error_msg)
+            print(error_msg, flush=True)  # Force output for debugging
             failed_count += 1
 
         except Exception as e:
-            logger.error(f"  ❌ {display_name} ({module_name}) - Error: {e}")
+            error_msg = f"  ❌ {display_name} ({module_name}) - Error: {e}"
+            logger.error(error_msg)
+            print(error_msg, flush=True)  # Force output for debugging
+            import traceback
+            print(f"       Traceback:\n{traceback.format_exc()}", flush=True)
             failed_count += 1
 
     # Log summary
@@ -165,10 +239,15 @@ def create_app() -> FastAPI:
             Config.validate()
             logger.info("  ✅ Configuration validated")
 
+            # Enforce admin key presence in production
+            if Config.IS_PRODUCTION and not os.environ.get("ADMIN_API_KEY"):
+                logger.error("  ❌ ADMIN_API_KEY is not set in production. Aborting startup.")
+                raise RuntimeError("ADMIN_API_KEY is required in production")
+
             # Initialize database
             try:
                 logger.info("  🗄️  Initializing database...")
-                from src.supabase_config import init_db
+                from src.config.supabase_config import init_db
                 init_db()
                 logger.info("  ✅ Database initialized")
 
@@ -178,7 +257,7 @@ def create_app() -> FastAPI:
             # Set default admin user
             try:
                 from src.db.roles import update_user_role, get_user_role, UserRole
-                from src.supabase_config import get_supabase_client
+                from src.config.supabase_config import get_supabase_client
 
                 ADMIN_EMAIL = Config.ADMIN_EMAIL
 
@@ -205,7 +284,7 @@ def create_app() -> FastAPI:
             except Exception as admin_e:
                 logger.warning(f"  ⚠️  Admin setup warning: {admin_e}")
 
-            # Initialize analytics services (Statsig and PostHog)
+            # Initialize analytics services (Statsig, PostHog, and Braintrust)
             try:
                 logger.info("  📊 Initializing analytics services...")
 
@@ -218,6 +297,14 @@ def create_app() -> FastAPI:
                 from src.services.posthog_service import posthog_service
                 posthog_service.initialize()
                 logger.info("  ✅ PostHog analytics initialized")
+
+                # Initialize Braintrust
+                try:
+                    from braintrust import init_logger
+                    braintrust_logger = init_logger(project="Gatewayz Backend")
+                    logger.info("  ✅ Braintrust tracing initialized")
+                except Exception as bt_e:
+                    logger.warning(f"  ⚠️  Braintrust initialization warning: {bt_e}")
 
             except Exception as analytics_e:
                 logger.warning(f"  ⚠️  Analytics initialization warning: {analytics_e}")

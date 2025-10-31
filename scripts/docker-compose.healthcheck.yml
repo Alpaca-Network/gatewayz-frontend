@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  healthcheck-scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile.healthcheck
+    container_name: gateway-healthcheck-scheduler
+    restart: unless-stopped
+
+    # Environment variables from .env file
+    env_file:
+      - .env
+
+    # Add any additional environment overrides
+    environment:
+      PYTHONUNBUFFERED: "1"
+      # Optional: Override schedule interval (in minutes)
+      # HEALTHCHECK_INTERVAL: "60"
+
+    # Volume mounts for persistent storage
+    volumes:
+      - ./logs:/root/repo/logs
+      - ./healthcheck_results:/root/repo/healthcheck_results
+      - ./healthcheck_config.json:/root/repo/healthcheck_config.json
+
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 500M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "python3", "healthcheck_scheduler.py", "--status"]
+      interval: 5m
+      timeout: 1m
+      retries: 3
+      start_period: 1m
+
+# Optional: Use external networks if integrating with other services
+networks:
+  default:
+    name: gateway-network
+    driver: bridge

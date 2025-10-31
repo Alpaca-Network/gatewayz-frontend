@@ -4,8 +4,9 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime, timedelta, timezone
 
 from src.db.plans import check_plan_entitlements
-from src.supabase_config import get_supabase_client
+from src.config.supabase_config import get_supabase_client
 import secrets
+from src.utils.crypto import encrypt_api_key, sha256_key_hash, last4
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +107,15 @@ def create_api_key(user_id: int, key_name: str, environment_tag: str = 'live',
                 'subscription_plan': 'free_trial'
             }
 
+        # Prepare encrypted fields (non-breaking: we still store plaintext api_key for now)
+        try:
+            encrypted_token, key_version = encrypt_api_key(api_key)
+            api_key_hash = sha256_key_hash(api_key)
+            api_key_last4 = last4(api_key)
+        except Exception as enc_e:
+            logger.warning(f"Encryption unavailable or failed; proceeding without encrypted fields: {enc_e}")
+            encrypted_token, key_version, api_key_hash, api_key_last4 = None, None, None, (api_key[-4:] if api_key else None)
+
         # Combine base data with trial data
         api_key_data = {
             'user_id': user_id,
@@ -120,7 +130,12 @@ def create_api_key(user_id: int, key_name: str, environment_tag: str = 'live',
             'scope_permissions': scope_permissions,
             'ip_allowlist': ip_allowlist or [],
             'domain_referrers': domain_referrers or [],
-            'last_used_at': datetime.now(timezone.utc).isoformat()
+            'last_used_at': datetime.now(timezone.utc).isoformat(),
+            # New optional encrypted fields (columns added via migration)
+            'encrypted_key': encrypted_token,
+            'key_version': key_version,
+            'key_hash': api_key_hash,
+            'last4': api_key_last4,
         }
 
         # Add trial data if this is a primary key

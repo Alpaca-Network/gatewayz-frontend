@@ -13,8 +13,8 @@ from src.db.users import get_user
 
 logger = logging.getLogger(__name__)
 
-# HTTP Bearer security scheme
-security = HTTPBearer()
+# HTTP Bearer security scheme with auto_error=False to allow custom error handling
+security = HTTPBearer(auto_error=False)
 
 
 async def get_api_key(
@@ -40,11 +40,11 @@ async def get_api_key(
         Validated API key string
 
     Raises:
-        HTTPException: 401/403/422/429 depending on error type
+        HTTPException: 401/403/429 depending on error type
     """
     if not credentials:
         raise HTTPException(
-            status_code=422,
+            status_code=401,
             detail="Authorization header is required"
         )
 

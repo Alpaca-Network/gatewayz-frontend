@@ -2,7 +2,7 @@ import logging
 import datetime
 from typing import Dict, Any
 from datetime import datetime, timezone
-from src.supabase_config import get_supabase_client
+from src.config.supabase_config import get_supabase_client
 
 logger = logging.getLogger(__name__)
 
@@ -137,9 +137,10 @@ def get_trial_analytics() -> Dict[str, Any]:
                     else:
                         end_date = datetime.fromisoformat(trial_end_date)
 
-                    # Convert to naive UTC for comparison
-                    if end_date.tzinfo is not None:
-                        end_date = end_date.replace(tzinfo=None)
+                    # Ensure both datetimes have timezone info for comparison
+                    if end_date.tzinfo is None:
+                        # If end_date is naive, assume it's UTC
+                        end_date = end_date.replace(tzinfo=timezone.utc)
 
                     if end_date > current_time:
                         active_trials += 1

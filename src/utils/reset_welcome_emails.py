@@ -4,7 +4,7 @@ Utility to reset welcome_email_sent field for users who should receive welcome e
 """
 
 import logging
-from src.supabase_config import get_supabase_client
+from src.config.supabase_config import get_supabase_client
 
 logger = logging.getLogger(__name__)
 

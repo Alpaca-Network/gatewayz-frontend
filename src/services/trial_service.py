@@ -10,7 +10,8 @@ from typing import Optional
 from supabase import create_client, Client
 import os
 
-from src.schemas import SubscriptionPlansResponse, SubscriptionPlan, PlanType
+from src.schemas import SubscriptionPlansResponse, PlanType
+from src.schemas.plans import SubscriptionPlan
 from src.schemas.trials import StartTrialRequest, StartTrialResponse, SubscriptionStatus, TrialStatusResponse, \
     TrialStatus, ConvertTrialRequest, ConvertTrialResponse, TrackUsageRequest, TrackUsageResponse, TrialValidationResult
 
@@ -290,20 +291,23 @@ class TrialService:
                 plans = []
                 for plan_data in result.data:
                     plan = SubscriptionPlan(
-                        id=plan_data['id'],
+                        id=plan_data.get('id'),
                         plan_name=plan_data['plan_name'],
                         plan_type=PlanType(plan_data['plan_type']),
-                        monthly_price=plan_data['monthly_price'],
-                        yearly_price=plan_data['yearly_price'],
-                        max_requests_per_month=plan_data['max_requests_per_month'],
-                        max_tokens_per_month=plan_data['max_tokens_per_month'],
-                        max_requests_per_day=plan_data['max_requests_per_day'],
-                        max_tokens_per_day=plan_data['max_tokens_per_day'],
-                        max_concurrent_requests=plan_data['max_concurrent_requests'],
-                        features=plan_data['features'],
-                        is_active=plan_data['is_active'],
-                        created_at=datetime.fromisoformat(plan_data['created_at'].replace('Z', '+00:00')) if plan_data['created_at'] else None,
-                        updated_at=datetime.fromisoformat(plan_data['updated_at'].replace('Z', '+00:00')) if plan_data['updated_at'] else None
+                        description=plan_data.get('description', ''),
+                        monthly_price=plan_data.get('monthly_price', 0.0),
+                        yearly_price=plan_data.get('yearly_price'),
+                        monthly_request_limit=plan_data.get('max_requests_per_month', plan_data.get('monthly_request_limit', 1000)),
+                        monthly_token_limit=plan_data.get('max_tokens_per_month', plan_data.get('monthly_token_limit', 100000)),
+                        daily_request_limit=plan_data.get('max_requests_per_day', plan_data.get('daily_request_limit', 1000)),
+                        daily_token_limit=plan_data.get('max_tokens_per_day', plan_data.get('daily_token_limit', 100000)),
+                        max_concurrent_requests=plan_data.get('max_concurrent_requests', 5),
+                        price_per_token=plan_data.get('price_per_token'),
+                        features=plan_data.get('features', []),
+                        is_active=plan_data.get('is_active', True),
+                        is_pay_as_you_go=plan_data.get('is_pay_as_you_go', False),
+                        created_at=datetime.fromisoformat(plan_data['created_at'].replace('Z', '+00:00')) if plan_data.get('created_at') else None,
+                        updated_at=datetime.fromisoformat(plan_data['updated_at'].replace('Z', '+00:00')) if plan_data.get('updated_at') else None
                     )
                     plans.append(plan)
                 
@@ -338,6 +342,7 @@ class TrialService:
                     is_expired=False,
                     remaining_tokens=0,
                     remaining_requests=0,
+                    remaining_credits=0.0,
                     error_message="Failed to get trial status"
                 )
             
@@ -351,6 +356,7 @@ class TrialService:
                     is_expired=False,
                     remaining_tokens=0,
                     remaining_requests=0,
+                    remaining_credits=0.0,
                     error_message="Not a trial account"
                 )
             
@@ -362,6 +368,7 @@ class TrialService:
                     is_expired=True,
                     remaining_tokens=0,
                     remaining_requests=0,
+                    remaining_credits=0.0,
                     trial_end_date=status.trial_end_date,
                     error_message="Trial has expired"
                 )

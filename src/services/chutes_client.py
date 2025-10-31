@@ -9,15 +9,16 @@ logger = logging.getLogger(__name__)
 
 def get_chutes_client():
     """Get Chutes.ai client using OpenAI-compatible interface
-    
+
     Chutes.ai provides OpenAI-compatible API endpoints for various models
+    API endpoint: https://llm.chutes.ai/v1/chat/completions
     """
     try:
         if not Config.CHUTES_API_KEY:
             raise ValueError("Chutes API key not configured")
-        
+
         return OpenAI(
-            base_url="https://api.chutes.ai/v1",
+            base_url="https://llm.chutes.ai/v1",
             api_key=Config.CHUTES_API_KEY
         )
     except Exception as e:

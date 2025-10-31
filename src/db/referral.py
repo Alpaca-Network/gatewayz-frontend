@@ -45,6 +45,8 @@ class User(db.Model):
         self.username = username
         self.referral_code = generate_referral_code()
         self.referred_by_code = referred_by_code
+        self.credits = 0.0
+        self.has_made_first_purchase = False
 
     def get_remaining_referral_uses(self):
         """Get how many times the user's referral code can still be used"""
@@ -90,6 +92,13 @@ class CouponUsage(db.Model):
     # Status
     is_valid = db.Column(db.Boolean, default=True)
 
+    def __init__(self, **kwargs):
+        super(CouponUsage, self).__init__(**kwargs)
+        if self.bonus_amount is None:
+            self.bonus_amount = 10.0
+        if self.is_valid is None:
+            self.is_valid = True
+
     def to_dict(self):
         return {
             'id': self.id,
@@ -117,6 +126,11 @@ class Purchase(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     user = db.relationship('User', backref='purchases')
+
+    def __init__(self, **kwargs):
+        super(Purchase, self).__init__(**kwargs)
+        if self.referral_bonus_applied is None:
+            self.referral_bonus_applied = False
 
     def to_dict(self):
         return {

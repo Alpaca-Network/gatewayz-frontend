@@ -33,7 +33,7 @@ FALLBACK_PROVIDER_PRIORITY: tuple[str, ...] = (
     "openrouter",
 )
 FALLBACK_ELIGIBLE_PROVIDERS = set(FALLBACK_PROVIDER_PRIORITY)
-FAILOVER_STATUS_CODES = {401, 403, 404, 429, 502, 503, 504}
+FAILOVER_STATUS_CODES = {401, 403, 404, 502, 503, 504}
 
 
 def build_provider_failover_chain(initial_provider: str | None) -> List[str]:
@@ -75,11 +75,12 @@ def map_provider_error(
         return HTTPException(status_code=400, detail=str(exc))
 
     # OpenAI SDK exceptions (used for OpenRouter and other compatible providers)
-    if APIConnectionError and isinstance(exc, APIConnectionError):
-        return HTTPException(status_code=503, detail="Upstream service unavailable")
-
+    # Check APITimeoutError before APIConnectionError as it may be a subclass
     if APITimeoutError and isinstance(exc, APITimeoutError):
         return HTTPException(status_code=504, detail="Upstream timeout")
+
+    if APIConnectionError and isinstance(exc, APIConnectionError):
+        return HTTPException(status_code=503, detail="Upstream service unavailable")
 
     if APIStatusError and isinstance(exc, APIStatusError):
         status = getattr(exc, "status_code", None)
@@ -105,8 +106,8 @@ def map_provider_error(
         )
         if auth_error_classes and isinstance(exc, auth_error_classes):
             detail = f"{provider} authentication error"
-            if status not in (401, 403):
-                status = 401
+            # Always map auth errors to 401 for consistency
+            status = 401
         elif NotFoundError and isinstance(exc, NotFoundError):
             detail = f"Model {model} not found or unavailable on {provider}"
             status = 404
@@ -115,6 +116,8 @@ def map_provider_error(
             status = 400
         elif status == 403:
             detail = f"{provider} authentication error"
+        elif status == 404:
+            detail = f"Model {model} not found or unavailable on {provider}"
         elif 500 <= status < 600:
             detail = "Upstream service error"
 

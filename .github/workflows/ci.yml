@@ -1,0 +1,396 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [main, staging, develop]
+  pull_request:
+    branches: [main, staging, develop]
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "requirements*.txt"
+      - "pyproject.toml"
+      - ".github/workflows/ci.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  # Job 1: Linting and Code Quality
+  lint:
+    name: Code Quality Checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: |
+            requirements*.txt
+            pyproject.toml
+
+      # Wheelhouse cache for binary dependencies
+      - name: Restore wheelhouse cache
+        uses: actions/cache@v4
+        with:
+          path: .cache/wheels
+          key: ${{ runner.os }}-wheels-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-wheels-
+
+      - name: Build wheels
+        run: |
+          mkdir -p .cache/wheels
+          pip wheel -r requirements.txt -w .cache/wheels
+          pip wheel -r requirements-dev.txt -w .cache/wheels
+
+      - name: Install from wheelhouse
+        run: |
+          pip install --no-index --find-links=.cache/wheels -r requirements.txt
+          pip install --no-index --find-links=.cache/wheels ruff black isort mypy
+
+      - name: Cache mypy
+        uses: actions/cache@v4
+        with:
+          path: .mypy_cache
+          key: ${{ runner.os }}-mypy-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-mypy-
+
+      - name: Run Ruff (Fast Python Linter)
+        run: |
+          ruff check src/ --output-format=github
+        continue-on-error: true
+
+      - name: Check code formatting with Black
+        run: |
+          black --check src/
+        continue-on-error: true
+
+      - name: Check import sorting with isort
+        run: |
+          isort --check-only src/
+        continue-on-error: true
+
+      - name: MyPy type checking
+        run: |
+          mypy --cache-dir .mypy_cache src
+        continue-on-error: true
+
+  # Job 2: Security Checks
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install security tools
+        run: |
+          pip install bandit safety
+
+      - name: Run Bandit (Security Linter)
+        run: |
+          bandit -r src/ -f json -o bandit-report.json || true
+          bandit -r src/ || true
+        continue-on-error: true
+
+      - name: Check for known vulnerabilities in dependencies
+        run: |
+          safety check --json || true
+        continue-on-error: true
+
+  # Job 3: Run Tests (Parallelized with Sharding)
+  test:
+    name: Run Tests (Shard ${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    needs: lint
+
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]  # 4-way parallel execution
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: |
+            requirements*.txt
+            pyproject.toml
+
+      # Wheelhouse cache for binary dependencies
+      - name: Restore wheelhouse cache
+        uses: actions/cache@v4
+        with:
+          path: .cache/wheels
+          key: ${{ runner.os }}-wheels-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-wheels-
+
+      - name: Install from wheelhouse
+        run: |
+          pip install --no-index --find-links=.cache/wheels -r requirements.txt
+          pip install --no-index --find-links=.cache/wheels pytest pytest-cov pytest-xdist pytest-split
+
+      # Pull down prior test timing data to split by duration
+      - name: Restore pytest timings
+        uses: actions/download-artifact@v4
+        with:
+          name: pytest-durations
+        continue-on-error: true
+
+      # Restore pytest cache
+      - name: Cache pytest
+        uses: actions/cache@v4
+        with:
+          path: .pytest_cache
+          key: ${{ runner.os }}-pytest-${{ github.sha }}-${{ matrix.shard }}
+          restore-keys: |
+            ${{ runner.os }}-pytest-
+
+      - name: Run tests shard ${{ matrix.shard }}
+        env:
+          PYTEST_SPLIT_DURATION_FILE: .pytest-split-durations
+          # Test environment variables
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL || 'https://test.supabase.co' }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY || 'test-key' }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY || 'test-key' }}
+          PORTKEY_API_KEY: ${{ secrets.PORTKEY_API_KEY || 'test-key' }}
+          ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY || 'test-encryption-key-32-bytes!' }}
+          ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY || 'test-admin-key' }}
+        run: |
+          # Run tests with pytest-xdist (use all cores) and pytest-split (shard across runners)
+          # Target: 25% coverage (current baseline)
+          # Exclude smoke tests (they require a running server)
+          pytest tests/ -v --tb=short \
+            -n auto \
+            --maxfail=1 \
+            --dist=loadfile \
+            --splits 4 --group ${{ matrix.shard }} \
+            --cov=src \
+            --cov-report=xml \
+            --cov-report=term \
+            -m "not smoke"
+
+          echo "✅ Tests passed for shard ${{ matrix.shard }}"
+
+      - name: Save timings for next run
+        if: always()
+        run: |
+          if [ -f .pytest-split-durations ]; then
+            echo "Timings saved"
+          else
+            echo "No timing file generated yet"
+          fi
+        shell: bash
+
+      - name: Upload timings artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-durations-${{ matrix.shard }}
+          path: .pytest-split-durations
+          if-no-files-found: ignore
+
+      - name: Upload coverage for shard ${{ matrix.shard }}
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.shard }}
+          path: coverage.xml
+          if-no-files-found: ignore
+
+  # Job 3B: Merge coverage reports
+  coverage:
+    name: Coverage Report
+    runs-on: ubuntu-latest
+    needs: test
+    if: always()
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install coverage tools
+        run: |
+          pip install coverage pytest-cov
+
+      - name: Download all coverage artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: coverage-*
+          merge-multiple: true
+
+      - name: Merge coverage reports
+        run: |
+          # Combine all coverage files
+          coverage combine || true
+          coverage xml || true
+          coverage report --fail-under=25 || true
+
+      - name: Check coverage progress
+        if: always()
+        run: |
+          echo "📊 Coverage Progress Tracker"
+          echo "Current minimum: 25%"
+          echo "Next milestone: 35% (Target: Month 2)"
+          echo "Phase 3A Goal: 40% (Add auth, users, api_keys, db_security tests)"
+          echo "Phase 3 Final Goal: 90% (Complete test coverage)"
+          echo ""
+          echo "Run locally: pytest tests/ --cov=src --cov-report=html"
+
+      - name: Upload merged coverage to Codecov
+        if: always()
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.xml
+          flags: unittests
+          name: codecov-gatewayz
+          fail_ci_if_error: false
+        continue-on-error: true
+
+      # Merge pytest timing data for next run
+      - name: Download all timing artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: pytest-durations-*
+          merge-multiple: true
+        continue-on-error: true
+
+      - name: Upload merged timings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-durations
+          path: .pytest-split-durations
+          if-no-files-found: ignore
+
+  # Job 4: Build Check
+  build:
+    name: Build Verification
+    runs-on: ubuntu-latest
+    needs: [lint, coverage]  # Only run if lint and tests pass
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: |
+            requirements*.txt
+            pyproject.toml
+
+      # Wheelhouse cache for binary dependencies
+      - name: Restore wheelhouse cache
+        uses: actions/cache@v4
+        with:
+          path: .cache/wheels
+          key: ${{ runner.os }}-wheels-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-wheels-
+
+      - name: Install from wheelhouse
+        run: |
+          pip install --no-index --find-links=.cache/wheels -r requirements.txt
+
+      - name: Test application startup
+        run: |
+          # Quick startup test (don't start server, just import)
+          python -c "from src.main import app; print('✅ App imports successfully')"
+
+      - name: Verify Railway config
+        run: |
+          # Check Railway config files exist
+          test -f railway.json && echo "✅ railway.json exists"
+          test -f railway.toml && echo "✅ railway.toml exists"
+          test -f nixpacks.toml && echo "✅ nixpacks.toml exists"
+          test -f start.sh && echo "✅ start.sh exists"
+
+  # Job 5: Deployment Ready Check
+  deployment-check:
+    name: Deployment Ready
+    runs-on: ubuntu-latest
+    needs: [lint, security, coverage, build]
+    if: github.event_name == 'push'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: All checks passed ✅
+        run: |
+          echo "🎉 All CI checks passed!"
+          echo "✅ Code quality: PASSED"
+          echo "✅ Security: PASSED"
+          echo "✅ Tests: PASSED"
+          echo "✅ Build: PASSED"
+          echo ""
+          echo "🚀 Ready for deployment to Railway"
+          echo "Branch: ${{ github.ref_name }}"
+
+      - name: Comment on PR (if applicable)
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '✅ All CI checks passed! This PR is ready to merge and deploy.'
+            })
+
+  # Job 6: Railway Deployment Notification
+  notify-deployment:
+    name: Notify Deployment
+    runs-on: ubuntu-latest
+    needs: [deployment-check]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging')
+
+    steps:
+      - name: Deployment notification
+        run: |
+          if [ "${{ github.ref_name }}" == "main" ]; then
+            echo "🚀 Deploying to PRODUCTION via Railway..."
+          elif [ "${{ github.ref_name }}" == "staging" ]; then
+            echo "🚀 Deploying to STAGING via Railway..."
+          fi

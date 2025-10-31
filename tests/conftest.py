@@ -8,9 +8,64 @@ import string
 from datetime import datetime
 
 # Set test environment variables before any imports
+# NOTE: These are MOCK/FAKE placeholder credentials for testing only
 os.environ.setdefault('TESTING', 'true')
+os.environ.setdefault('APP_ENV', 'testing')
+os.environ.setdefault('SUPABASE_URL', 'https://xxxxxxxxxxxxx.supabase.co')
+os.environ.setdefault('SUPABASE_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh4eHh4eHh4eHh4eHgiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTYwMDAwMDAwMCwiZXhwIjoxOTAwMDAwMDAwfQ.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
+os.environ.setdefault('OPENROUTER_API_KEY', 'sk-or-v1-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
+os.environ.setdefault('PORTKEY_API_KEY', 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
+os.environ.setdefault('ADMIN_API_KEY', 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
+os.environ.setdefault('ENCRYPTION_KEY', 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
+os.environ.setdefault('STRIPE_SECRET_KEY', 'sk_test_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
+os.environ.setdefault('STRIPE_WEBHOOK_SECRET', 'whsec_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
+os.environ.setdefault('FRONTEND_URL', 'http://localhost:3000')
 
-from src.supabase_config import get_supabase_client
+from src.config.supabase_config import get_supabase_client
+from tests.factories import (
+    UserFactory,
+    ApiKeyFactory,
+    ChatCompletionFactory,
+    ModelFactory,
+    PaymentFactory,
+    ReferralFactory,
+)
+
+
+@pytest.fixture
+def user_factory():
+    """Provide UserFactory for tests"""
+    return UserFactory
+
+
+@pytest.fixture
+def api_key_factory():
+    """Provide ApiKeyFactory for tests"""
+    return ApiKeyFactory
+
+
+@pytest.fixture
+def chat_factory():
+    """Provide ChatCompletionFactory for tests"""
+    return ChatCompletionFactory
+
+
+@pytest.fixture
+def model_factory():
+    """Provide ModelFactory for tests"""
+    return ModelFactory
+
+
+@pytest.fixture
+def payment_factory():
+    """Provide PaymentFactory for tests"""
+    return PaymentFactory
+
+
+@pytest.fixture
+def referral_factory():
+    """Provide ReferralFactory for tests"""
+    return ReferralFactory
 
 
 @pytest.fixture
@@ -35,7 +90,13 @@ def test_prefix():
 @pytest.fixture(scope="session")
 def supabase_client():
     """Get Supabase client for tests"""
-    return get_supabase_client()
+    try:
+        client = get_supabase_client()
+        # Quick connection test with reduced timeout
+        client.table("users").select("id").limit(1).execute()
+        return client
+    except Exception as e:
+        pytest.skip(f"Database not available: {e}")
 
 
 @pytest.fixture(scope="function")
@@ -135,14 +196,29 @@ def isolated_test_data(supabase_client, test_prefix):
 @pytest.fixture(autouse=True)
 def skip_if_no_database(request):
     """Skip tests that require database if credentials are not available"""
-    # Check if this is a database test
-    if 'db' in str(request.fspath):
-        try:
-            client = get_supabase_client()
-            # Quick connection test
-            client.table("users").select("id").limit(1).execute()
-        except Exception as e:
-            pytest.skip(f"Database not available: {e}")
+    # Skip if test uses in-memory stub (sb fixture)
+    if 'sb' in request.fixturenames:
+        return  # Don't skip tests that use the in-memory stub
+
+    # Don't skip health check and ping tests - they don't require a database
+    if 'TestHealthEndpoints' in str(request.cls) or 'test_ping' in str(request.function):
+        return
+
+    # Check if this is a database or integration test
+    if 'db' in str(request.fspath) or 'integration' in str(request.fspath):
+        # Cache the database check result
+        if not hasattr(skip_if_no_database, '_db_available'):
+            try:
+                client = get_supabase_client()
+                # Quick connection test
+                client.table("users").select("id").limit(1).execute()
+                skip_if_no_database._db_available = True
+            except Exception as e:
+                skip_if_no_database._db_available = False
+                skip_if_no_database._db_error = str(e)
+
+        if not skip_if_no_database._db_available:
+            pytest.skip(f"Database not available: {skip_if_no_database._db_error}")
 
 
 @pytest.fixture

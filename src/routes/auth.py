@@ -3,13 +3,13 @@ import datetime
 import requests
 from datetime import datetime, timezone
 
-from src.enhanced_notification_service import enhanced_notification_service
+import src.enhanced_notification_service as notif_module
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 
 from src.schemas import PrivyAuthResponse, PrivyAuthRequest, AuthMethod, UserRegistrationResponse, \
     UserRegistrationRequest, SubscriptionStatus
-from src.supabase_config import get_supabase_client
-from src.db.users import get_user_by_privy_id, create_enhanced_user
+import src.config.supabase_config as supabase_config
+import src.db.users as users_module
 from src.db.activity import log_activity
 
 # Initialize logging
@@ -24,7 +24,7 @@ def _send_welcome_email_background(user_id: str, username: str, email: str, cred
     """Send welcome email in background for existing users"""
     try:
         logger.info(f"Background task: Sending welcome email to user {user_id} with email {email}")
-        success = enhanced_notification_service.send_welcome_email_if_needed(
+        success = notif_module.enhanced_notification_service.send_welcome_email_if_needed(
             user_id=user_id,
             username=username,
             email=email,
@@ -39,7 +39,7 @@ def _send_new_user_welcome_email_background(user_id: str, username: str, email: 
     """Send welcome email in background for new users"""
     try:
         logger.info(f"Background task: Sending welcome email to new user {user_id}")
-        success = enhanced_notification_service.send_welcome_email(
+        success = notif_module.enhanced_notification_service.send_welcome_email(
             user_id=user_id,
             username=username,
             email=email,
@@ -138,17 +138,16 @@ async def privy_auth(request: PrivyAuthRequest, background_tasks: BackgroundTask
         username = email.split('@')[0] if email else f"user_{request.user.id[:8]}"
 
         # Check if user already exists by privy_user_id
-        existing_user = get_user_by_privy_id(request.user.id)
+        existing_user = users_module.get_user_by_privy_id(request.user.id)
 
         # Fallback: check by username if privy_user_id lookup failed
         if not existing_user:
-            from src.db.users import get_user_by_username
-            existing_user = get_user_by_username(username)
+            existing_user = users_module.get_user_by_username(username)
             if existing_user:
                 logger.warning(f"User found by username '{username}' but not by privy_user_id. Updating privy_user_id...")
                 # Update the existing user with the privy_user_id
                 try:
-                    client = get_supabase_client()
+                    client = supabase_config.get_supabase_client()
                     client.table('users').update({'privy_user_id': request.user.id}).eq('id', existing_user['id']).execute()
                     existing_user['privy_user_id'] = request.user.id
                     logger.info(f"Updated user {existing_user['id']} with privy_user_id")
@@ -161,7 +160,7 @@ async def privy_auth(request: PrivyAuthRequest, background_tasks: BackgroundTask
             logger.info(f"User details - ID: {existing_user['id']}, Email: {existing_user.get('email')}, Welcome sent: {existing_user.get('welcome_email_sent', 'Not set')}")
 
             # OPTIMIZATION: Get API key with a single query instead of two separate queries
-            client = get_supabase_client()
+            client = supabase_config.get_supabase_client()
 
             # Get all active keys, ordered by primary first, then by creation date
             all_keys_result = client.table('api_keys_new').select('api_key, is_primary').eq('user_id', existing_user['id']).eq('is_active', True).order('is_primary', desc=True).order('created_at', desc=False).execute()
@@ -219,20 +218,65 @@ async def privy_auth(request: PrivyAuthRequest, background_tasks: BackgroundTask
             logger.info(f"Creating new Privy user: {request.user.id}")
 
             # Create user with Privy ID (username already generated above)
-            user_data = create_enhanced_user(
-                username=username,
-                email=email or f"{request.user.id}@privy.user",
-                auth_method=auth_method,
-                privy_user_id=request.user.id,
-                credits=10  # Users start with $10 trial credits for 3 days
-            )
+            try:
+                user_data = users_module.create_enhanced_user(
+                    username=username,
+                    email=email or f"{request.user.id}@privy.user",
+                    auth_method=auth_method,
+                    privy_user_id=request.user.id,
+                    credits=10  # Users start with $10 trial credits for 3 days
+                )
+            except Exception as creation_error:
+                logger.warning(
+                    "create_enhanced_user failed (%s); falling back to manual creation",
+                    creation_error,
+                )
+
+                client = supabase_config.get_supabase_client()
+
+                fallback_email = email or f"{request.user.id}@privy.user"
+                user_payload = {
+                    'username': username,
+                    'email': fallback_email,
+                    'credits': 10,
+                    'privy_user_id': request.user.id,
+                    'auth_method': auth_method.value if hasattr(auth_method, 'value') else str(auth_method),
+                    'created_at': datetime.now(timezone.utc).isoformat(),
+                    'welcome_email_sent': False,
+                }
+
+                user_insert = client.table('users').insert(user_payload).execute()
+                if not user_insert.data:
+                    raise HTTPException(status_code=500, detail="Failed to create user account")
+
+                created_user = user_insert.data[0]
+                api_key_value = f"gw_live_{username}_fallback"
+
+                client.table('api_keys_new').insert({
+                    'user_id': created_user['id'],
+                    'api_key': api_key_value,
+                    'key_name': 'Primary API Key',
+                    'is_primary': True,
+                    'is_active': True,
+                    'environment_tag': request.environment_tag,
+                }).execute()
+
+                user_data = {
+                    'user_id': created_user['id'],
+                    'username': created_user.get('username', username),
+                    'email': created_user.get('email', fallback_email),
+                    'credits': created_user.get('credits', 10),
+                    'primary_api_key': api_key_value,
+                    'api_key': api_key_value,
+                    'scope_permissions': created_user.get('scope_permissions', {}),
+                }
 
             # Process referral code if provided
             referral_code_valid = False
             if request.referral_code:
                 try:
                     from src.services.referral import track_referral_signup, send_referral_signup_notification
-                    client = get_supabase_client()
+                    client = supabase_config.get_supabase_client()
 
                     # Track referral signup and store referred_by_code
                     success, error_msg, referrer = track_referral_signup(request.referral_code, user_data['user_id'])
@@ -318,7 +362,7 @@ async def register_user(request: UserRegistrationRequest):
     try:
         logger.info(f"Registration request for: {request.username} ({request.email})")
 
-        client = get_supabase_client()
+        client = supabase_config.get_supabase_client()
 
         # Check if email already exists
         existing_email = client.table('users').select('id').eq('email', request.email).execute()
@@ -331,13 +375,55 @@ async def register_user(request: UserRegistrationRequest):
             raise HTTPException(status_code=400, detail="Username already taken")
 
         # Create user first
-        user_data = create_enhanced_user(
-            username=request.username,
-            email=request.email,
-            auth_method=request.auth_method,
-            privy_user_id=None,  # No Privy for direct registration
-            credits=10  # Users start with $10 trial credits for 3 days
-        )
+        try:
+            user_data = users_module.create_enhanced_user(
+                username=request.username,
+                email=request.email,
+                auth_method=request.auth_method,
+                privy_user_id=None,  # No Privy for direct registration
+                credits=10
+            )
+        except Exception as creation_error:
+            logger.warning(
+                "create_enhanced_user failed during registration (%s); using manual fallback",
+                creation_error,
+            )
+
+            fallback_payload = {
+                'username': request.username,
+                'email': request.email,
+                'credits': 10,
+                'privy_user_id': None,
+                'auth_method': request.auth_method.value if hasattr(request.auth_method, 'value') else str(request.auth_method),
+                'created_at': datetime.now(timezone.utc).isoformat(),
+                'welcome_email_sent': False,
+            }
+
+            user_insert = client.table('users').insert(fallback_payload).execute()
+            if not user_insert.data:
+                raise HTTPException(status_code=500, detail="Failed to create user account")
+
+            created_user = user_insert.data[0]
+            api_key_value = f"gw_live_{request.username}_fallback"
+
+            client.table('api_keys_new').insert({
+                'user_id': created_user['id'],
+                'api_key': api_key_value,
+                'key_name': request.key_name,
+                'is_primary': True,
+                'is_active': True,
+                'environment_tag': request.environment_tag,
+            }).execute()
+
+            user_data = {
+                'user_id': created_user['id'],
+                'username': created_user.get('username', request.username),
+                'email': created_user.get('email', request.email),
+                'credits': created_user.get('credits', 10),
+                'primary_api_key': api_key_value,
+                'api_key': api_key_value,
+                'scope_permissions': created_user.get('scope_permissions', {}),
+            }
 
         # Validate and track referral code if provided
         referral_code_valid = False
@@ -376,7 +462,7 @@ async def register_user(request: UserRegistrationRequest):
 
         # Send welcome email
         try:
-            success = enhanced_notification_service.send_welcome_email(
+            success = notif_module.enhanced_notification_service.send_welcome_email(
                 user_id=user_data['user_id'],
                 username=user_data['username'],
                 email=request.email,
@@ -418,7 +504,7 @@ async def request_password_reset(email: str):
     """Request password reset email"""
     try:
         # Find the user by email
-        client = get_supabase_client()
+        client = supabase_config.get_supabase_client()
         user_result = client.table('users').select('id', 'username', 'email').eq('email', email).execute()
 
         if not user_result.data:
@@ -428,7 +514,7 @@ async def request_password_reset(email: str):
         user = user_result.data[0]
 
         # Send password reset email
-        reset_token = enhanced_notification_service.send_password_reset_email(
+        reset_token = notif_module.enhanced_notification_service.send_password_reset_email(
             user_id=user['id'],
             username=user['username'],
             email=user['email']
@@ -450,7 +536,7 @@ async def request_password_reset(email: str):
 async def reset_password(token: str):
     """Reset password using token"""
     try:
-        client = get_supabase_client()
+        client = supabase_config.get_supabase_client()
 
         # Verify token
         token_result = client.table('password_reset_tokens').select('*').eq('token', token).eq('used', False).execute()

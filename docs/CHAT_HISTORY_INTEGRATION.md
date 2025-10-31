@@ -121,7 +121,7 @@ Authorization: Bearer {api_key}
 Content-Type: application/json
 
 {
-  "title": "Updated Title",
+  "title": "Updated TitleSection",
   "model": "openai/gpt-4"
 }
 ```

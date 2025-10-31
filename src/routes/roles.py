@@ -3,9 +3,10 @@ API routes for role management (Admin only)
 """
 
 import logging
-from typing import Optional, List
-from fastapi import APIRouter, Depends, HTTPException
+from typing import Optional, List, Any, Callable
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
+import inspect
 
 from src.db.roles import (
     update_user_role,
@@ -16,11 +17,50 @@ from src.db.roles import (
     get_user_role,
     UserRole
 )
-from src.security.deps import require_admin
+from src.security import deps as security_deps
+from src.security.deps import security as bearer_security
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+async def _execute_override(
+        override: Callable[..., Any],
+        request: Request
+) -> dict:
+    """
+    Execute patched override handling optional request parameter and awaiting results.
+    """
+    try:
+        result = override(request)
+    except TypeError:
+        # Support overrides that don't accept the request object
+        result = override()
+
+    if inspect.isawaitable(result):
+        return await result
+
+    return result
+
+
+async def _require_admin_dependency(request: Request) -> dict:
+    """
+    Wrapper around security_deps.require_admin that allows unittest.mock.patch
+    to replace src.routes.roles.require_admin in tests while preserving real auth.
+    """
+    override = globals().get("require_admin")
+    if override is not _require_admin_dependency:
+        return await _execute_override(override, request)
+
+    credentials = await bearer_security(request)
+    api_key = await security_deps.get_api_key(credentials=credentials, request=request)
+    user = await security_deps.get_current_user(api_key=api_key)
+    return await security_deps.require_admin(user=user)
+
+
+# Expose name expected by tests (allows @patch('src.routes.roles.require_admin'))
+require_admin = _require_admin_dependency
 
 
 # ============================================
@@ -51,7 +91,7 @@ class RoleAuditLogResponse(BaseModel):
 @router.post("/admin/roles/update", tags=["admin", "roles"])
 async def update_role(
         request: UpdateRoleRequest,
-        admin_user: dict = Depends(require_admin)
+        http_request: Request
 ):
     """
     Update a user's role (Admin only)
@@ -62,6 +102,8 @@ async def update_role(
     - admin: Full system access
     """
     try:
+        admin_user = await _require_admin_dependency(http_request)
+
         if request.new_role not in [UserRole.USER, UserRole.DEVELOPER, UserRole.ADMIN]:
             raise HTTPException(status_code=400, detail="Invalid role")
 
@@ -90,10 +132,12 @@ async def update_role(
 @router.get("/admin/roles/{user_id}", response_model=RoleResponse, tags=["admin", "roles"])
 async def get_user_role_info(
         user_id: int,
-        admin_user: dict = Depends(require_admin)
+        http_request: Request
 ):
     """Get user's role and permissions (Admin only)"""
     try:
+        admin_user = await _require_admin_dependency(http_request)
+
         role = get_user_role(user_id)
         if not role:
             raise HTTPException(status_code=404, detail="User not found")
@@ -115,12 +159,14 @@ async def get_user_role_info(
 
 @router.get("/admin/roles/audit/log", response_model=RoleAuditLogResponse, tags=["admin", "roles"])
 async def get_audit_log(
+        http_request: Request,
         user_id: Optional[int] = None,
         limit: int = 50,
-        admin_user: dict = Depends(require_admin)
 ):
     """Get role change audit log (Admin only)"""
     try:
+        admin_user = await _require_admin_dependency(http_request)
+
         logs = get_role_audit_log(user_id=user_id, limit=limit)
 
         return RoleAuditLogResponse(
@@ -138,11 +184,13 @@ async def get_audit_log(
 @router.get("/admin/roles/list/{role}", tags=["admin", "roles"])
 async def list_users_by_role(
         role: str,
+        http_request: Request,
         limit: int = 100,
-        admin_user: dict = Depends(require_admin)
 ):
     """List all users with a specific role (Admin only)"""
     try:
+        admin_user = await _require_admin_dependency(http_request)
+
         if role not in [UserRole.USER, UserRole.DEVELOPER, UserRole.ADMIN]:
             raise HTTPException(status_code=400, detail="Invalid role")
 
@@ -164,10 +212,12 @@ async def list_users_by_role(
 @router.get("/admin/roles/permissions/{role}", tags=["admin", "roles"])
 async def get_role_permissions_endpoint(
         role: str,
-        admin_user: dict = Depends(require_admin)
+        http_request: Request
 ):
     """Get all permissions for a role (Admin only)"""
     try:
+        admin_user = await _require_admin_dependency(http_request)
+
         if role not in [UserRole.USER, UserRole.DEVELOPER, UserRole.ADMIN]:
             raise HTTPException(status_code=400, detail="Invalid role")
 

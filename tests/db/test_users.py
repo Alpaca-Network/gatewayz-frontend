@@ -395,3 +395,514 @@ def test_mark_welcome_email_sent_and_delete_user_account(sb):
 
     assert users.delete_user_account("kw") is True
     assert [r for r in sb.tables["users"] if r.get("api_key") == "kw"] == []
+
+
+# ============================================================================
+# COMPREHENSIVE EDGE CASE AND ERROR PATH TESTS (For 100% Coverage)
+# ============================================================================
+
+def test_create_enhanced_user_with_privy_id(sb):
+    """Test user creation with privy_user_id"""
+    import src.db.users as users
+
+    out = users.create_enhanced_user(
+        username="alice_privy",
+        email="alice_privy@example.com",
+        auth_method="google",
+        credits=20,
+        privy_user_id="privy_xyz_123"
+    )
+
+    users_rows = sb.tables["users"]
+    row = [r for r in users_rows if r["username"] == "alice_privy"][0]
+    assert row["privy_user_id"] == "privy_xyz_123"
+    assert row["auth_method"] == "google"
+    assert row["credits"] == 20
+    assert out["credits"] == 20
+
+
+def test_create_enhanced_user_failure_no_data(sb, monkeypatch):
+    """Test user creation when insert returns no data"""
+    import src.db.users as users
+
+    # Make insert return empty data
+    def mock_insert(data):
+        class BadResult:
+            def execute(self):
+                class EmptyResult:
+                    data = []
+                return EmptyResult()
+        return BadResult()
+
+    # Temporarily break the insert
+    original_table = sb.table
+    def broken_table(name):
+        t = original_table(name)
+        if name == "users":
+            t.insert = mock_insert
+        return t
+
+    monkeypatch.setattr(sb, "table", broken_table)
+
+    with pytest.raises(RuntimeError, match="Failed to create enhanced user"):
+        users.create_enhanced_user(
+            username="fail_user",
+            email="fail@example.com",
+            auth_method="email"
+        )
+
+
+def test_create_enhanced_user_exception_handling(sb, monkeypatch):
+    """Test exception handling in create_enhanced_user"""
+    import src.db.users as users
+
+    # Make table() raise an exception
+    def raise_exception(name):
+        raise Exception("Database connection failed")
+
+    monkeypatch.setattr(sb, "table", raise_exception)
+
+    with pytest.raises(RuntimeError, match="Failed to create enhanced user"):
+        users.create_enhanced_user(
+            username="error_user",
+            email="error@example.com",
+            auth_method="email"
+        )
+
+
+def test_get_user_not_found(sb):
+    """Test get_user when API key doesn't exist"""
+    import src.db.users as users
+
+    result = users.get_user("nonexistent_key")
+    assert result is None
+
+
+def test_get_user_exception_handling(sb, monkeypatch):
+    """Test get_user exception handling"""
+    import src.db.users as users
+
+    def raise_exception(name):
+        raise Exception("Database error")
+
+    monkeypatch.setattr(sb, "table", raise_exception)
+
+    result = users.get_user("any_key")
+    assert result is None
+
+
+def test_get_user_by_id_not_found(sb):
+    """Test get_user_by_id when user doesn't exist"""
+    import src.db.users as users
+
+    result = users.get_user_by_id(99999)
+    assert result is None
+
+
+def test_get_user_by_id_exception_handling(sb, monkeypatch):
+    """Test get_user_by_id exception handling"""
+    import src.db.users as users
+
+    def raise_exception(name):
+        raise Exception("Database error")
+
+    monkeypatch.setattr(sb, "table", raise_exception)
+
+    result = users.get_user_by_id(123)
+    assert result is None
+
+
+def test_get_user_by_username_not_found(sb):
+    """Test get_user_by_username when user doesn't exist"""
+    import src.db.users as users
+
+    result = users.get_user_by_username("nonexistent_username")
+    assert result is None
+
+
+def test_get_user_by_username_found(sb):
+    """Test get_user_by_username when user exists"""
+    import src.db.users as users
+
+    sb.table("users").insert({
+        "id": 555,
+        "username": "findme",
+        "email": "findme@test.com",
+        "credits": 10
+    }).execute()
+
+    result = users.get_user_by_username("findme")
+    assert result is not None
+    assert result["username"] == "findme"
+    assert result["email"] == "findme@test.com"
+
+
+def test_get_user_by_username_exception_handling(sb, monkeypatch):
+    """Test get_user_by_username exception handling"""
+    import src.db.users as users
+
+    def raise_exception(name):
+        raise Exception("Database error")
+
+    monkeypatch.setattr(sb, "table", raise_exception)
+
+    result = users.get_user_by_username("any_username")
+    assert result is None
+
+
+def test_add_credits_to_user_success(sb):
+    """Test add_credits_to_user successfully adds credits"""
+    import src.db.users as users
+
+    sb.table("users").insert({
+        "id": 100,
+        "username": "credittest",
+        "email": "credits@test.com",
+        "credits": 5.0
+    }).execute()
+
+    users.add_credits_to_user(
+        user_id=100,
+        credits=10.0,
+        transaction_type="payment",
+        description="Test payment",
+        metadata={"payment_id": "pay_123"}
+    )
+
+    user = [r for r in sb.tables["users"] if r["id"] == 100][0]
+    assert user["credits"] == 15.0
+
+
+def test_add_credits_to_user_exception_handling(sb, monkeypatch):
+    """Test add_credits_to_user exception handling"""
+    import src.db.users as users
+
+    sb.table("users").insert({
+        "id": 101,
+        "username": "erroruser",
+        "email": "error@test.com",
+        "credits": 5.0
+    }).execute()
+
+    # Break the update - need to break it when update is called
+    original_table = sb.table
+    def broken_table(name):
+        t = original_table(name)
+        if name == "users":
+            original_update = t.update
+            def bad_update(data):
+                raise Exception("Update failed")
+            t.update = bad_update
+        return t
+
+    monkeypatch.setattr(sb, "table", broken_table)
+
+    # Should log error but raise the exception
+    with pytest.raises(Exception, match="Update failed"):
+        users.add_credits_to_user(
+            user_id=101,
+            credits=10.0,
+            transaction_type="payment",
+            description="Test"
+        )
+
+
+def test_add_credits_success(sb):
+    """Test add_credits function"""
+    import src.db.users as users
+
+    sb.table("users").insert({
+        "id": 200,
+        "username": "addcredits",
+        "email": "add@test.com",
+        "credits": 5.0,
+        "api_key": "key_200"
+    }).execute()
+
+    users.add_credits("key_200", 10)
+
+    user = users.get_user("key_200")
+    assert user["credits"] == 15.0
+
+
+def test_deduct_credits_with_metadata(sb):
+    """Test deduct_credits with metadata"""
+    import src.db.users as users
+
+    sb.table("users").insert({
+        "id": 300,
+        "username": "deduct",
+        "email": "deduct@test.com",
+        "credits": 100.0,
+        "api_key": "key_300"
+    }).execute()
+
+    users.deduct_credits(
+        api_key="key_300",
+        tokens=10.0,
+        description="API usage",
+        metadata={"model": "gpt-4", "endpoint": "/v1/chat/completions"}
+    )
+
+    user = users.get_user("key_300")
+    assert user["credits"] == 90.0
+
+
+def test_deduct_credits_user_not_found(sb):
+    """Test deduct_credits when user not found"""
+    import src.db.users as users
+
+    # When user not found, get_user returns None, which triggers error
+    with pytest.raises(RuntimeError, match="Failed to deduct credits"):
+        users.deduct_credits(
+            api_key="nonexistent_key",
+            tokens=10.0,
+            description="Test"
+        )
+
+
+def test_deduct_credits_exception_handling(sb, monkeypatch):
+    """Test deduct_credits exception handling"""
+    import src.db.users as users
+
+    sb.table("users").insert({
+        "id": 301,
+        "username": "error",
+        "email": "error@test.com",
+        "credits": 50.0,
+        "api_key": "key_301"
+    }).execute()
+
+    # Break the update
+    original_table = sb.table
+    def broken_table(name):
+        if name == "users":
+            class BadTable:
+                def select(self, *args):
+                    return original_table(name).select(*args)
+                def update(self, data):
+                    raise Exception("Update failed")
+            return BadTable()
+        return original_table(name)
+
+    monkeypatch.setattr(sb, "table", broken_table)
+
+    with pytest.raises(Exception):
+        users.deduct_credits("key_301", 5.0, "Test")
+
+
+def test_get_all_users_exception_handling(sb, monkeypatch):
+    """Test get_all_users exception handling"""
+    import src.db.users as users
+
+    def raise_exception(name):
+        raise Exception("Database error")
+
+    monkeypatch.setattr(sb, "table", raise_exception)
+
+    result = users.get_all_users()
+    assert result == []
+
+
+def test_delete_user_exception_handling(sb, monkeypatch):
+    """Test delete_user exception handling"""
+    import src.db.users as users
+
+    sb.table("users").insert({
+        "id": 400,
+        "username": "delete_test",
+        "email": "delete@test.com",
+        "credits": 5.0,
+        "api_key": "key_400"
+    }).execute()
+
+    def raise_exception(name):
+        raise Exception("Delete failed")
+
+    monkeypatch.setattr(sb, "table", raise_exception)
+
+    # delete_user doesn't raise exceptions, it just logs them
+    try:
+        users.delete_user("key_400")
+    except Exception:
+        pass  # Should not raise
+
+
+def test_get_user_count_exception_handling(sb, monkeypatch):
+    """Test get_user_count exception handling"""
+    import src.db.users as users
+
+    def raise_exception(name):
+        raise Exception("Count failed")
+
+    monkeypatch.setattr(sb, "table", raise_exception)
+
+    result = users.get_user_count()
+    assert result == 0
+
+
+def test_record_usage_exception_handling(sb, monkeypatch):
+    """Test record_usage exception handling"""
+    import src.db.users as users
+
+    def raise_exception(name):
+        raise Exception("Insert failed")
+
+    monkeypatch.setattr(sb, "table", raise_exception)
+
+    # Should not raise, just log
+    users.record_usage(
+        user_id=1,
+        api_key="test_key",
+        model="gpt-4",
+        tokens_used=100,
+        cost=0.5
+    )
+
+
+def test_record_usage_with_latency(sb):
+    """Test record_usage with latency parameter"""
+    import src.db.users as users
+
+    sb.table("users").insert({
+        "id": 500,
+        "username": "latency_test",
+        "email": "latency@test.com",
+        "credits": 10
+    }).execute()
+
+    # Just verify the function doesn't crash with latency parameter
+    users.record_usage(
+        user_id=500,
+        api_key="key_500",
+        model="gpt-4",
+        tokens_used=100,
+        cost=0.5,
+        latency_ms=1500
+    )
+
+    # Function successfully ran without errors - that's what we're testing
+    assert True
+
+
+def test_get_user_usage_metrics_no_user(sb):
+    """Test get_user_usage_metrics when user not found"""
+    import src.db.users as users
+
+    result = users.get_user_usage_metrics("nonexistent_key")
+    assert result is None
+
+
+def test_get_user_usage_metrics_exception_handling(sb, monkeypatch):
+    """Test get_user_usage_metrics exception handling"""
+    import src.db.users as users
+
+    def raise_exception(name):
+        raise Exception("Query failed")
+
+    monkeypatch.setattr(sb, "table", raise_exception)
+
+    result = users.get_user_usage_metrics("any_key")
+    assert result is None
+
+
+def test_get_admin_monitor_data_exception_handling(sb, monkeypatch):
+    """Test get_admin_monitor_data exception handling"""
+    import src.db.users as users
+
+    def raise_exception(name):
+        raise Exception("Query failed")
+
+    monkeypatch.setattr(sb, "table", raise_exception)
+
+    result = users.get_admin_monitor_data()
+    # Should return default structure even on error
+    assert "total_users" in result
+    assert result["total_users"] == 0
+
+
+def test_update_user_profile_exception_handling(sb, monkeypatch):
+    """Test update_user_profile exception handling"""
+    import src.db.users as users
+
+    sb.table("users").insert({
+        "id": 600,
+        "username": "profile_test",
+        "email": "profile@test.com",
+        "credits": 5.0,
+        "api_key": "key_600"
+    }).execute()
+
+    def raise_exception(name):
+        raise Exception("Update failed")
+
+    monkeypatch.setattr(sb, "table", raise_exception)
+
+    with pytest.raises(RuntimeError, match="Failed to update user profile"):
+        users.update_user_profile("key_600", {"name": "Test"})
+
+
+def test_get_user_profile_not_found(sb):
+    """Test get_user_profile when user not found"""
+    import src.db.users as users
+
+    result = users.get_user_profile("nonexistent_key")
+    assert result is None
+
+
+def test_get_user_profile_exception_handling(sb, monkeypatch):
+    """Test get_user_profile exception handling"""
+    import src.db.users as users
+
+    def raise_exception(name):
+        raise Exception("Query failed")
+
+    monkeypatch.setattr(sb, "table", raise_exception)
+
+    result = users.get_user_profile("any_key")
+    assert result is None
+
+
+def test_mark_welcome_email_sent_exception_handling(sb, monkeypatch):
+    """Test mark_welcome_email_sent exception handling"""
+    import src.db.users as users
+
+    def raise_exception(name):
+        raise Exception("Update failed")
+
+    monkeypatch.setattr(sb, "table", raise_exception)
+
+    # Function raises RuntimeError, not returns False
+    with pytest.raises(RuntimeError, match="Failed to mark welcome email"):
+        users.mark_welcome_email_sent(123)
+
+
+def test_delete_user_account_not_found(sb):
+    """Test delete_user_account when user not found"""
+    import src.db.users as users
+
+    # Function raises RuntimeError when user not found
+    with pytest.raises(RuntimeError, match="Failed to delete user account"):
+        users.delete_user_account("nonexistent_key")
+
+
+def test_delete_user_account_exception_handling(sb, monkeypatch):
+    """Test delete_user_account exception handling"""
+    import src.db.users as users
+
+    sb.table("users").insert({
+        "id": 700,
+        "username": "delete_account_test",
+        "email": "delete_account@test.com",
+        "credits": 5.0,
+        "api_key": "key_700"
+    }).execute()
+
+    def raise_exception(name):
+        raise Exception("Delete failed")
+
+    monkeypatch.setattr(sb, "table", raise_exception)
+
+    # Function raises RuntimeError on any exception
+    with pytest.raises(RuntimeError, match="Failed to delete user account"):
+        users.delete_user_account("key_700")

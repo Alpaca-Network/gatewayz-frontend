@@ -24,7 +24,7 @@ def get_openrouter_client():
             api_key=Config.OPENROUTER_API_KEY,
             default_headers={
                 "HTTP-Referer": Config.OPENROUTER_SITE_URL,
-                "X-Title": Config.OPENROUTER_SITE_NAME
+                "X-TitleSection": Config.OPENROUTER_SITE_NAME
             }
         )
     except Exception as e:

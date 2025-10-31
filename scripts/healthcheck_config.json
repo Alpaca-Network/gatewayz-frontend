@@ -1,0 +1,10 @@
+{
+  "schedule_type": "interval",
+  "interval_minutes": 60,
+  "cron_expression": "0 * * * *",
+  "export_json": true,
+  "keep_history": true,
+  "max_history_files": 168,
+  "notify_on_unhealthy": false,
+  "notification_webhook": null
+}

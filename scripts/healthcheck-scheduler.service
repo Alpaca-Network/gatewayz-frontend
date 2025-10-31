@@ -1,0 +1,35 @@
+[Unit]
+Description=Gateway Model Healthcheck Scheduler
+Documentation=https://github.com/Terragon-AI/gateway
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/repo
+Environment="PYTHONUNBUFFERED=1"
+Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+ExecStart=/usr/bin/python3 /root/repo/healthcheck_scheduler.py
+
+# Restart policy
+Restart=on-failure
+RestartSec=30s
+
+# Resource limits
+MemoryLimit=500M
+CPUQuota=50%
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=healthcheck-scheduler
+
+# Security
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/root/repo/logs /root/repo/healthcheck_results /root/repo/healthcheck_results.json
+
+[Install]
+WantedBy=multi-user.target

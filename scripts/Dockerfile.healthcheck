@@ -1,0 +1,38 @@
+# Dockerfile for running healthcheck scheduler in Docker
+# Usage: docker build -f Dockerfile.healthcheck -t gateway-healthcheck .
+#        docker run -d --env-file .env -v /logs:/root/repo/logs gateway-healthcheck
+
+FROM python:3.12-slim
+
+WORKDIR /root/repo
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy project files
+COPY requirements.txt .
+COPY healthcheck_all_models.py .
+COPY healthcheck_scheduler.py .
+COPY healthcheck_config.json .
+COPY src/ ./src/
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt apscheduler
+
+# Create necessary directories
+RUN mkdir -p logs healthcheck_results
+
+# Make scripts executable
+RUN chmod +x healthcheck_all_models.py healthcheck_scheduler.py
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+
+# Healthcheck for Docker
+HEALTHCHECK --interval=5m --timeout=1m --start-period=1m --retries=3 \
+    CMD python3 healthcheck_scheduler.py --status | grep -q '"running": true' || exit 1
+
+# Run the scheduler
+CMD ["python3", "healthcheck_scheduler.py"]

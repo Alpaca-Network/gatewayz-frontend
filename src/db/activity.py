@@ -6,7 +6,7 @@ Handles logging and retrieval of user API activity
 import logging
 from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Any, Optional
-from src.supabase_config import get_supabase_client
+from src.config.supabase_config import get_supabase_client
 
 logger = logging.getLogger(__name__)
 
@@ -294,7 +294,7 @@ def get_provider_from_model(model: str) -> str:
         return 'Google'
     elif 'llama' in model_lower or 'meta' in model_lower:
         return 'Meta'
-    elif 'mistral' in model_lower:
+    elif 'mistral' in model_lower or 'mixtral' in model_lower:
         return 'Mistral AI'
     elif 'qwen' in model_lower:
         return 'Alibaba'

@@ -1,8 +1,10 @@
 import datetime
+import json
 import logging
+import asyncio
 from typing import Dict, List, Optional, Any
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Response
 from datetime import datetime, timezone
 
 from fastapi import  HTTPException
@@ -182,7 +184,7 @@ async def get_providers(
     offset: Optional[int] = Query(0, description="Offset for pagination"),
     gateway: Optional[str] = Query(
         "openrouter",
-        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', 'groq', 'fireworks', 'together', 'google', 'cerebras', 'nebius', 'xai', 'novita', 'huggingface' (or 'hug'), or 'all'",
+        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', 'groq', 'fireworks', 'together', 'google', 'cerebras', 'nebius', 'xai', 'novita', 'huggingface' (or 'hug'), 'aimo', 'near', 'fal', or 'all'",
     ),
 ):
     """Get all available provider list with detailed metric data including model count and logo URLs"""
@@ -215,7 +217,7 @@ async def get_providers(
                 raise HTTPException(status_code=503, detail="Portkey models data unavailable")
 
         # Add support for other gateways
-        other_gateways = ["featherless", "deepinfra", "chutes", "groq", "fireworks", "together", "google", "cerebras", "nebius", "xai", "novita", "hug"]
+        other_gateways = ["featherless", "deepinfra", "chutes", "groq", "fireworks", "together", "fal"]
         all_models = {}  # Track models for each gateway
 
         for gw in other_gateways:
@@ -290,7 +292,7 @@ async def get_models(
     ),
     gateway: Optional[str] = Query(
         "openrouter",
-        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', 'groq', 'fireworks', 'together', 'google', 'cerebras', 'nebius', 'xai', 'novita', 'huggingface' (or 'hug'), or 'all'",
+        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', 'groq', 'fireworks', 'together', 'google', 'cerebras', 'nebius', 'xai', 'novita', 'huggingface' (or 'hug'), 'aimo', 'near', 'fal', or 'all'",
     ),
 ):
     """Get all metric data of available models with optional filtering, pagination, Hugging Face integration, and provider logos"""
@@ -320,6 +322,9 @@ async def get_models(
         xai_models: List[dict] = []
         novita_models: List[dict] = []
         hug_models: List[dict] = []
+        aimo_models: List[dict] = []
+        near_models: List[dict] = []
+        fal_models: List[dict] = []
 
         if gateway_value in ("openrouter", "all"):
             openrouter_models = get_cached_models("openrouter") or []
@@ -405,6 +410,24 @@ async def get_models(
                 logger.error("No Hugging Face models data available from cache")
                 raise HTTPException(status_code=503, detail="Models data unavailable")
 
+        if gateway_value in ("aimo", "all"):
+            aimo_models = get_cached_models("aimo") or []
+            if gateway_value == "aimo" and not aimo_models:
+                logger.error("No AIMO models data available from cache")
+                raise HTTPException(status_code=503, detail="Models data unavailable")
+
+        if gateway_value in ("near", "all"):
+            near_models = get_cached_models("near") or []
+            if gateway_value == "near" and not near_models:
+                logger.error("No Near models data available from cache")
+                raise HTTPException(status_code=503, detail="Models data unavailable")
+
+        if gateway_value in ("fal", "all"):
+            fal_models = get_cached_models("fal") or []
+            if gateway_value == "fal" and not fal_models:
+                logger.error("No Fal models data available from cache")
+                raise HTTPException(status_code=503, detail="Models data unavailable")
+
         if gateway_value == "openrouter":
             models = openrouter_models
         elif gateway_value == "portkey":
@@ -433,11 +456,17 @@ async def get_models(
             models = novita_models
         elif gateway_value == "hug":
             models = hug_models
+        elif gateway_value == "aimo":
+            models = aimo_models
+        elif gateway_value == "near":
+            models = near_models
+        elif gateway_value == "fal":
+            models = fal_models
         else:
             # For "all" gateway, merge all models but avoid duplicates from Portkey-based providers
             # Note: google, cerebras, nebius, xai, novita, hug are filtered FROM Portkey models,
             # so we DON'T include them separately in the merge to avoid counting them twice
-            models = merge_models_by_slug(openrouter_models, portkey_models, featherless_models, deepinfra_models, chutes_models, groq_models, fireworks_models, together_models)
+            models = merge_models_by_slug(openrouter_models, portkey_models, featherless_models, deepinfra_models, chutes_models, groq_models, fireworks_models, together_models, aimo_models, near_models, fal_models)
 
         if not models:
             logger.error("No models data available after applying gateway selection")
@@ -531,6 +560,12 @@ async def get_models(
             annotated_hug = annotate_provider_sources(hug_providers, "hug")
             provider_groups.append(annotated_hug)
 
+        if gateway_value in ("aimo", "all"):
+            models_for_providers = aimo_models if gateway_value == "all" else models
+            aimo_providers = derive_providers_from_models(models_for_providers, "aimo")
+            annotated_aimo = annotate_provider_sources(aimo_providers, "aimo")
+            provider_groups.append(annotated_aimo)
+
         enhanced_providers = merge_provider_lists(*provider_groups)
         logger.info(f"Retrieved {len(enhanced_providers)} enhanced providers from cache")
 
@@ -569,12 +604,25 @@ async def get_models(
             models = models[:limit_int]
             logger.info(f"Applied limit {limit_int}: {len(models)} models remaining")
 
+        # Optimize model enhancement for fast response
+        # Only enhance with provider info (fast operation)
         enhanced_models = []
         for model in models:
             enhanced_model = enhance_model_with_provider_info(model, enhanced_providers)
-            if include_huggingface:
-                enhanced_model = enhance_model_with_huggingface_data(enhanced_model)
             enhanced_models.append(enhanced_model)
+
+        # If HuggingFace data requested, fetch it asynchronously in background
+        # This allows the response to return immediately without waiting
+        if include_huggingface:
+            # Schedule background task to enrich with HF data
+            # Note: In production, this would use a background task queue
+            # For now, we'll enrich a limited subset to avoid blocking
+            for i, model in enumerate(enhanced_models[:10]):  # Only enrich first 10 to keep response fast
+                try:
+                    enhanced_models[i] = enhance_model_with_huggingface_data(model)
+                except Exception as e:
+                    logger.debug(f"Failed to enrich model {model.get('id')} with HF data: {e}")
+                    # Continue without HF data if fetch fails
 
         note = {
             "openrouter": "OpenRouter catalog",
@@ -591,7 +639,10 @@ async def get_models(
             "xai": "Xai catalog",
             "novita": "Novita catalog",
             "hug": "Hugging Face catalog",
-            "all": "Combined OpenRouter, Portkey, Featherless, DeepInfra, Chutes, Groq, Fireworks, Together, Google, Cerebras, Nebius, Xai, Novita, and Hugging Face catalogs",
+            "aimo": "AIMO Network catalog",
+            "near": "Near AI catalog",
+            "fal": "Fal.ai catalog",
+            "all": "Combined OpenRouter, Portkey, Featherless, DeepInfra, Chutes, Groq, Fireworks, Together, Google, Cerebras, Nebius, Xai, Novita, Hugging Face, AIMO, Near AI, and Fal.ai catalogs",
         }.get(gateway_value, "OpenRouter catalog")
 
         result = {
@@ -606,7 +657,17 @@ async def get_models(
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
         logger.error(f"Returning /models response with keys: {list(result.keys())}, gateway={gateway_value}, first_model={enhanced_models[0]['id'] if enhanced_models else 'none'}")
-        return result
+
+        # Return response with cache headers for browser/CDN caching
+        # Cache for 5 minutes since data changes infrequently (1 hour TTL on backend)
+        return Response(
+            content=json.dumps(result),
+            media_type="application/json",
+            headers={
+                "Cache-Control": "public, max-age=300",  # 5 minute browser cache
+                "ETag": f'"{hash(json.dumps(enhanced_models[:5]))}"',  # Simple ETag for validation
+            }
+        )
 
     except HTTPException:
         raise
@@ -1296,14 +1357,14 @@ async def batch_compare_models(
 @router.get("/v1/models", tags=["models"])
 async def get_all_models(
     provider: Optional[str] = Query(None, description="Filter models by provider"),
-    limit: Optional[int] = Query(None, description="Limit number of results"),
+    limit: Optional[int] = Query(50, description="Limit number of results (default: 50 for fast load)"),
     offset: Optional[int] = Query(0, description="Offset for pagination"),
     include_huggingface: bool = Query(
-        True, description="Include Hugging Face metrics for models that have hugging_face_id"
+        False, description="Include Hugging Face metrics for models that have hugging_face_id (slower, default: false)"
     ),
     gateway: Optional[str] = Query(
         "openrouter",
-        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', 'groq', 'fireworks', 'together', 'google', 'cerebras', 'nebius', 'xai', 'novita', 'huggingface' (or 'hug'), or 'all'",
+        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', 'groq', 'fireworks', 'together', 'google', 'cerebras', 'nebius', 'xai', 'novita', 'huggingface' (or 'hug'), 'aimo', 'near', 'fal', or 'all'",
     ),
 ):
     return await get_models(

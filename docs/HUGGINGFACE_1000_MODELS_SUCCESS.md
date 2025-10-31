@@ -15,7 +15,7 @@ Successfully increased the HuggingFace model catalog from 100 to 1,000 models by
 ## What Changed
 
 ### Commit: [6f031bd](https://github.com/Alpaca-Network/gatewayz-backend/commit/6f031bd6788dcce4e57612aec529ed929c9bc8de)
-**Title:** "feat: add pagination support to Featherless API to fetch all 12k+ models"
+**TitleSection:** "feat: add pagination support to Featherless API to fetch all 12k+ models"
 
 ### Key Changes to HuggingFace Integration
 
