@@ -22,14 +22,18 @@ export async function logAnalyticsEvent(
   value?: string
 ): Promise<void> {
   try {
-    const apiKey = localStorage.getItem('api_key') || process.env.NEXT_PUBLIC_DEV_API_KEY;
+    // Try multiple API key storage locations for compatibility
+    const apiKey = localStorage.getItem('gatewayz_api_key')
+      || localStorage.getItem('api_key')
+      || process.env.NEXT_PUBLIC_DEV_API_KEY;
 
     if (!apiKey) {
       console.warn('[Analytics] No API key found, skipping event:', eventName);
       return;
     }
 
-    const response = await fetch(`${API_BASE_URL}/v1/analytics/events`, {
+    // Use the Next.js API route proxy instead of calling backend directly
+    const response = await fetch('/api/analytics/events', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -58,14 +62,18 @@ export async function logAnalyticsEventBatch(
   events: AnalyticsEvent[]
 ): Promise<void> {
   try {
-    const apiKey = localStorage.getItem('api_key') || process.env.NEXT_PUBLIC_DEV_API_KEY;
+    // Try multiple API key storage locations for compatibility
+    const apiKey = localStorage.getItem('gatewayz_api_key')
+      || localStorage.getItem('api_key')
+      || process.env.NEXT_PUBLIC_DEV_API_KEY;
 
     if (!apiKey) {
       console.warn('[Analytics] No API key found, skipping batch events');
       return;
     }
 
-    const response = await fetch(`${API_BASE_URL}/v1/analytics/batch`, {
+    // Use the Next.js API route proxy instead of calling backend directly
+    const response = await fetch('/api/analytics/batch', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

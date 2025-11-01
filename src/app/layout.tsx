@@ -5,6 +5,7 @@ import { AppHeader } from '@/components/layout/app-header';
 import { AppFooter } from '@/components/layout/app-footer';
 import { ThemeProvider } from '@/components/theme-provider';
 import { PrivyProviderWrapper } from '@/components/providers/privy-provider';
+import { StatsigProviderWrapper } from '@/components/providers/statsig-provider';
 import { OnboardingBanner } from '@/components/onboarding/onboarding-banner';
 import { WelcomeDialog } from '@/components/dialogs/welcome-dialog';
 import { TrialCreditsNotice } from '@/components/dialogs/trial-credits-notice';
@@ -81,18 +82,20 @@ export default function RootLayout({
         >
           <ReactScanProvider />
           <PrivyProviderWrapper className="flex flex-col min-h-screen">
-            {/* <GTMLoader /> Temporarily disabled due to layout router issues */}
-            <AppHeader />
-            <OnboardingBanner />
-            <main className="flex-1 flex flex-col">
-              {children}
-            </main>
-            <Toaster />
-            <AppFooter />
-            <WelcomeDialog />
-            <TrialCreditsNotice />
-            <Analytics />
-            <SpeedInsights />
+            <StatsigProviderWrapper>
+              {/* <GTMLoader /> Temporarily disabled due to layout router issues */}
+              <AppHeader />
+              <OnboardingBanner />
+              <main className="flex-1 flex flex-col">
+                {children}
+              </main>
+              <Toaster />
+              <AppFooter />
+              <WelcomeDialog />
+              <TrialCreditsNotice />
+              <Analytics />
+              <SpeedInsights />
+            </StatsigProviderWrapper>
           </PrivyProviderWrapper>
         </ThemeProvider>
       </body>
