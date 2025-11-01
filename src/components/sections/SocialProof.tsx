@@ -31,24 +31,24 @@ export default function SocialProof({ compact = false, className = "", showText 
   ];
 
   return (
-    <Wrapper className={compact ? className : "py-12 md:py-16 w-full bg-gradient-to-b from-white to-indigo-50/20"}>
+    <Wrapper className={compact ? className : "py-12 md:py-16 w-full bg-gradient-to-b from-background to-muted/20"}>
       <div className="container mx-auto max-w-6xl px-4">
         <div className="grid sm:grid-cols-3 gap-8">
           {stats.map((stat) => (
-            <div 
+            <div
               key={stat.label}
-              className="text-center p-8 bg-white rounded-2xl border border-gray-200 hover:border-indigo-300 hover:shadow-lg transition-all duration-300"
+              className="text-center p-8 bg-card rounded-2xl border border-border hover:border-primary/30 hover:shadow-lg transition-all duration-300"
             >
-              <div className="w-14 h-14 mx-auto rounded-xl bg-gradient-to-br from-indigo-50 to-indigo-100 flex items-center justify-center mb-4">
-                <stat.icon className="w-7 h-7 text-indigo-600" />
+              <div className="w-14 h-14 mx-auto rounded-xl bg-primary/10 dark:bg-primary/20 flex items-center justify-center mb-4">
+                <stat.icon className="w-7 h-7 text-primary" />
               </div>
-              <div className="text-4xl font-bold bg-gradient-to-r from-indigo-600 to-blue-600 bg-clip-text text-transparent mb-2">
+              <div className="text-4xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent mb-2">
                 {stat.value}
               </div>
-              <div className="text-sm font-semibold text-gray-900 mb-1">
+              <div className="text-sm font-semibold text-foreground mb-1">
                 {stat.label}
               </div>
-              <p className="text-xs text-gray-600">
+              <p className="text-xs text-muted-foreground">
                 {stat.description}
               </p>
             </div>
