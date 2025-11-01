@@ -17,6 +17,9 @@ from src.utils.validators import ensure_non_empty_string, ensure_api_key_like
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Constants
+ERROR_INVALID_ADMIN_API_KEY = "Invalid admin API key"
+
 # Cache dictionaries for models and providers
 _models_cache = {
     "data": None,
@@ -48,18 +51,18 @@ def get_admin_key(credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer
         ensure_api_key_like(admin_key, field_name="admin API key", min_length=10)
     except ValueError:
         # Do not leak details; preserve current response contract
-        raise HTTPException(status_code=401, detail="Invalid admin API key")
+        raise HTTPException(status_code=401, detail=ERROR_INVALID_ADMIN_API_KEY)
 
     # Get expected key from environment
     expected_key = os.environ.get("ADMIN_API_KEY")
 
     # Ensure admin key is configured
     if not expected_key:
-        raise HTTPException(status_code=401, detail="Invalid admin API key")
+        raise HTTPException(status_code=401, detail=ERROR_INVALID_ADMIN_API_KEY)
 
     # Use constant-time comparison to prevent timing attacks
     if not secrets.compare_digest(admin_key, expected_key):
-        raise HTTPException(status_code=401, detail="Invalid admin API key")
+        raise HTTPException(status_code=401, detail=ERROR_INVALID_ADMIN_API_KEY)
     
     return admin_key
 

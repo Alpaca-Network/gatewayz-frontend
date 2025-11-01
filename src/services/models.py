@@ -1579,7 +1579,7 @@ def fetch_models_from_fal():
         return []
 
 
-def normalize_fal_model(fal_model: dict) -> dict:
+def normalize_fal_model(fal_model: dict) -> Optional[dict]:
     """Normalize Fal.ai catalog entries to resemble OpenRouter model shape
 
     Fal.ai features:

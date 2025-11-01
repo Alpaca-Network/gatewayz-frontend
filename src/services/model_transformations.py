@@ -16,6 +16,9 @@ MODEL_PROVIDER_OVERRIDES = {
     "katanemo/arch-router-1.5b": "huggingface",
 }
 
+# Constants
+GOOGLE_MODELS_PREFIX = "@google/models/"
+
 
 def transform_model_id(model_id: str, provider: str) -> str:
     """
@@ -58,7 +61,7 @@ def transform_model_id(model_id: str, provider: str) -> str:
 
     # If already has Portkey @ prefix, return as-is (already lowercase)
     # EXCEPT for Google Vertex AI models which may use @google/models/ format
-    if model_id.startswith("@") and not model_id.startswith("@google/models/"):
+    if model_id.startswith("@") and not model_id.startswith(GOOGLE_MODELS_PREFIX):
         logger.debug(f"Model ID already in Portkey format: {model_id}")
         return model_id
 
@@ -441,7 +444,7 @@ def detect_provider_from_model_id(model_id: str) -> Optional[str]:
     # Check for Google Vertex AI models first (before Portkey check)
     if model_id.startswith("projects/") and "/models/" in model_id:
         return "google-vertex"
-    if model_id.startswith("@google/models/") and any(pattern in model_id.lower() for pattern in ["gemini-2.5", "gemini-2.0", "gemini-1.5", "gemini-1.0"]):
+    if model_id.startswith(GOOGLE_MODELS_PREFIX) and any(pattern in model_id.lower() for pattern in ["gemini-2.5", "gemini-2.0", "gemini-1.5", "gemini-1.0"]):
         # Patterns like "@google/models/gemini-2.5-flash"
         return "google-vertex"
     if any(pattern in model_id.lower() for pattern in ["gemini-2.5", "gemini-2.0", "gemini-1.5", "gemini-1.0"]) and "/" not in model_id:
@@ -454,7 +457,7 @@ def detect_provider_from_model_id(model_id: str) -> Optional[str]:
     # Portkey format is @org/model (must have / to be valid)
     if model_id.startswith("@") and "/" in model_id:
         # Only Portkey if not a Google format
-        if not model_id.startswith("@google/models/"):
+        if not model_id.startswith(GOOGLE_MODELS_PREFIX):
             return "portkey"
 
     # Check all mappings to see if this model exists

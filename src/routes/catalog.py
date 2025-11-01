@@ -30,6 +30,20 @@ logger = logging.getLogger(__name__)
 # Single router for all model catalog endpoints
 router = APIRouter()
 
+# Constants for query parameter descriptions (to avoid duplication)
+DESC_INCLUDE_HUGGINGFACE = "Include Hugging Face metrics if available"
+DESC_GATEWAY_AUTO_DETECT = (
+    "Gateway to use: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', "
+    "'groq', 'fireworks', 'together', 'google', 'cerebras', 'nebius', 'xai', 'novita', "
+    "'huggingface' (or 'hug'), 'aimo', 'near', 'fal', or auto-detect if not specified"
+)
+DESC_GATEWAY_WITH_ALL = (
+    "Gateway to use: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', "
+    "'groq', 'fireworks', 'together', 'google', 'cerebras', 'nebius', 'xai', 'novita', "
+    "'huggingface' (or 'hug'), 'aimo', 'near', 'fal', or 'all'"
+)
+ERROR_MODELS_DATA_UNAVAILABLE = "Models data unavailable"
+
 
 def normalize_developer_segment(value: Optional[str]) -> Optional[str]:
     """Align developer/provider identifiers with Hugging Face style slugs."""
@@ -184,7 +198,7 @@ async def get_providers(
     offset: Optional[int] = Query(0, description="Offset for pagination"),
     gateway: Optional[str] = Query(
         "openrouter",
-        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', 'groq', 'fireworks', 'together', 'google', 'cerebras', 'nebius', 'xai', 'novita', 'huggingface' (or 'hug'), 'aimo', 'near', 'fal', or 'all'",
+        description=DESC_GATEWAY_WITH_ALL,
     ),
 ):
     """Get all available provider list with detailed metric data including model count and logo URLs"""
@@ -292,7 +306,7 @@ async def get_models(
     ),
     gateway: Optional[str] = Query(
         "openrouter",
-        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', 'groq', 'fireworks', 'together', 'google', 'cerebras', 'nebius', 'xai', 'novita', 'huggingface' (or 'hug'), 'aimo', 'near', 'fal', or 'all'",
+        description=DESC_GATEWAY_WITH_ALL,
     ),
 ):
     """Get all metric data of available models with optional filtering, pagination, Hugging Face integration, and provider logos"""
@@ -330,103 +344,103 @@ async def get_models(
             openrouter_models = get_cached_models("openrouter") or []
             if gateway_value == "openrouter" and not openrouter_models:
                 logger.error("No OpenRouter models data available from cache")
-                raise HTTPException(status_code=503, detail="Models data unavailable")
+                raise HTTPException(status_code=503, detail=ERROR_MODELS_DATA_UNAVAILABLE)
 
         if gateway_value in ("portkey", "all"):
             portkey_models = get_cached_models("portkey") or []
             if gateway_value == "portkey" and not portkey_models:
                 logger.error("No Portkey models data available from cache")
-                raise HTTPException(status_code=503, detail="Models data unavailable")
+                raise HTTPException(status_code=503, detail=ERROR_MODELS_DATA_UNAVAILABLE)
 
         if gateway_value in ("featherless", "all"):
             featherless_models = get_cached_models("featherless") or []
             if gateway_value == "featherless" and not featherless_models:
                 logger.error("No Featherless models data available from cache")
-                raise HTTPException(status_code=503, detail="Models data unavailable")
+                raise HTTPException(status_code=503, detail=ERROR_MODELS_DATA_UNAVAILABLE)
 
         if gateway_value in ("deepinfra", "all"):
             deepinfra_models = get_cached_models("deepinfra") or []
             if gateway_value == "deepinfra" and not deepinfra_models:
                 logger.error("No DeepInfra models data available from cache")
-                raise HTTPException(status_code=503, detail="Models data unavailable")
+                raise HTTPException(status_code=503, detail=ERROR_MODELS_DATA_UNAVAILABLE)
 
         if gateway_value in ("chutes", "all"):
             chutes_models = get_cached_models("chutes") or []
             if gateway_value == "chutes" and not chutes_models:
                 logger.error("No Chutes models data available from cache")
-                raise HTTPException(status_code=503, detail="Models data unavailable")
+                raise HTTPException(status_code=503, detail=ERROR_MODELS_DATA_UNAVAILABLE)
 
         if gateway_value in ("groq", "all"):
             groq_models = get_cached_models("groq") or []
             if gateway_value == "groq" and not groq_models:
                 logger.error("No Groq models data available from cache")
-                raise HTTPException(status_code=503, detail="Models data unavailable")
+                raise HTTPException(status_code=503, detail=ERROR_MODELS_DATA_UNAVAILABLE)
 
         if gateway_value in ("fireworks", "all"):
             fireworks_models = get_cached_models("fireworks") or []
             if gateway_value == "fireworks" and not fireworks_models:
                 logger.error("No Fireworks models data available from cache")
-                raise HTTPException(status_code=503, detail="Models data unavailable")
+                raise HTTPException(status_code=503, detail=ERROR_MODELS_DATA_UNAVAILABLE)
 
         if gateway_value in ("together", "all"):
             together_models = get_cached_models("together") or []
             if gateway_value == "together" and not together_models:
                 logger.error("No Together models data available from cache")
-                raise HTTPException(status_code=503, detail="Models data unavailable")
+                raise HTTPException(status_code=503, detail=ERROR_MODELS_DATA_UNAVAILABLE)
 
         if gateway_value in ("google", "all"):
             google_models = get_cached_models("google") or []
             if gateway_value == "google" and not google_models:
                 logger.error("No Google models data available from cache")
-                raise HTTPException(status_code=503, detail="Models data unavailable")
+                raise HTTPException(status_code=503, detail=ERROR_MODELS_DATA_UNAVAILABLE)
 
         if gateway_value in ("cerebras", "all"):
             cerebras_models = get_cached_models("cerebras") or []
             if gateway_value == "cerebras" and not cerebras_models:
                 logger.error("No Cerebras models data available from cache")
-                raise HTTPException(status_code=503, detail="Models data unavailable")
+                raise HTTPException(status_code=503, detail=ERROR_MODELS_DATA_UNAVAILABLE)
 
         if gateway_value in ("nebius", "all"):
             nebius_models = get_cached_models("nebius") or []
             if gateway_value == "nebius" and not nebius_models:
                 logger.error("No Nebius models data available from cache")
-                raise HTTPException(status_code=503, detail="Models data unavailable")
+                raise HTTPException(status_code=503, detail=ERROR_MODELS_DATA_UNAVAILABLE)
 
         if gateway_value in ("xai", "all"):
             xai_models = get_cached_models("xai") or []
             if gateway_value == "xai" and not xai_models:
                 logger.error("No Xai models data available from cache")
-                raise HTTPException(status_code=503, detail="Models data unavailable")
+                raise HTTPException(status_code=503, detail=ERROR_MODELS_DATA_UNAVAILABLE)
 
         if gateway_value in ("novita", "all"):
             novita_models = get_cached_models("novita") or []
             if gateway_value == "novita" and not novita_models:
                 logger.error("No Novita models data available from cache")
-                raise HTTPException(status_code=503, detail="Models data unavailable")
+                raise HTTPException(status_code=503, detail=ERROR_MODELS_DATA_UNAVAILABLE)
 
         if gateway_value in ("hug", "all"):
             hug_models = get_cached_models("hug") or []
             if gateway_value == "hug" and not hug_models:
                 logger.error("No Hugging Face models data available from cache")
-                raise HTTPException(status_code=503, detail="Models data unavailable")
+                raise HTTPException(status_code=503, detail=ERROR_MODELS_DATA_UNAVAILABLE)
 
         if gateway_value in ("aimo", "all"):
             aimo_models = get_cached_models("aimo") or []
             if gateway_value == "aimo" and not aimo_models:
                 logger.error("No AIMO models data available from cache")
-                raise HTTPException(status_code=503, detail="Models data unavailable")
+                raise HTTPException(status_code=503, detail=ERROR_MODELS_DATA_UNAVAILABLE)
 
         if gateway_value in ("near", "all"):
             near_models = get_cached_models("near") or []
             if gateway_value == "near" and not near_models:
                 logger.error("No Near models data available from cache")
-                raise HTTPException(status_code=503, detail="Models data unavailable")
+                raise HTTPException(status_code=503, detail=ERROR_MODELS_DATA_UNAVAILABLE)
 
         if gateway_value in ("fal", "all"):
             fal_models = get_cached_models("fal") or []
             if gateway_value == "fal" and not fal_models:
                 logger.error("No Fal models data available from cache")
-                raise HTTPException(status_code=503, detail="Models data unavailable")
+                raise HTTPException(status_code=503, detail=ERROR_MODELS_DATA_UNAVAILABLE)
 
         if gateway_value == "openrouter":
             models = openrouter_models
@@ -470,7 +484,7 @@ async def get_models(
 
         if not models:
             logger.error("No models data available after applying gateway selection")
-            raise HTTPException(status_code=503, detail="Models data unavailable")
+            raise HTTPException(status_code=503, detail=ERROR_MODELS_DATA_UNAVAILABLE)
 
         provider_groups: List[List[dict]] = []
 
@@ -679,10 +693,10 @@ async def get_models(
 async def get_specific_model(
     provider_name: str,
     model_name: str,
-    include_huggingface: bool = Query(True, description="Include Hugging Face metrics if available"),
+    include_huggingface: bool = Query(True, description=DESC_INCLUDE_HUGGINGFACE),
     gateway: Optional[str] = Query(
         None,
-        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', 'groq', 'fireworks', 'together', 'google', 'cerebras', 'nebius', 'xai', 'novita', 'huggingface' (or 'hug'), 'aimo', 'near', 'fal', or auto-detect if not specified",
+        description=DESC_GATEWAY_AUTO_DETECT,
     ),
 ):
     """Get specific model data of a given provider with detailed information from any gateway
@@ -815,7 +829,7 @@ async def get_developer_models(
         models = get_cached_models(gateway_value)
 
         if not models:
-            raise HTTPException(status_code=503, detail="Models data unavailable")
+            raise HTTPException(status_code=503, detail=ERROR_MODELS_DATA_UNAVAILABLE)
 
         # Filter models by developer/provider
         developer_lower = developer_name.lower()
@@ -1368,7 +1382,7 @@ async def get_all_models(
     ),
     gateway: Optional[str] = Query(
         "openrouter",
-        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', 'groq', 'fireworks', 'together', 'google', 'cerebras', 'nebius', 'xai', 'novita', 'huggingface' (or 'hug'), 'aimo', 'near', 'fal', or 'all'",
+        description=DESC_GATEWAY_WITH_ALL,
     ),
 ):
     return await get_models(
@@ -1420,10 +1434,10 @@ async def compare_model_gateways_api(
 async def get_specific_model_api(
     provider_name: str,
     model_name: str,
-    include_huggingface: bool = Query(True, description="Include Hugging Face metrics if available"),
+    include_huggingface: bool = Query(True, description=DESC_INCLUDE_HUGGINGFACE),
     gateway: Optional[str] = Query(
         None,
-        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', 'groq', 'fireworks', 'together', 'google', 'cerebras', 'nebius', 'xai', 'novita', 'huggingface' (or 'hug'), 'aimo', 'near', 'fal', or auto-detect if not specified",
+        description=DESC_GATEWAY_AUTO_DETECT,
     ),
 ):
     return await get_specific_model(
@@ -1438,10 +1452,10 @@ async def get_specific_model_api(
 async def get_specific_model_api_legacy(
     provider_name: str,
     model_name: str,
-    include_huggingface: bool = Query(True, description="Include Hugging Face metrics if available"),
+    include_huggingface: bool = Query(True, description=DESC_INCLUDE_HUGGINGFACE),
     gateway: Optional[str] = Query(
         None,
-        description="Gateway to use: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', 'groq', 'fireworks', 'together', 'google', 'cerebras', 'nebius', 'xai', 'novita', 'huggingface' (or 'hug'), 'aimo', 'near', 'fal', or auto-detect if not specified",
+        description=DESC_GATEWAY_AUTO_DETECT,
     ),
 ):
     """Legacy endpoint without /v1/ prefix for backward compatibility"""
