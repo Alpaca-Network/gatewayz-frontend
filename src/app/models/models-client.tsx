@@ -71,7 +71,8 @@ const GATEWAY_CONFIG: Record<string, { name: string; color: string; icon?: React
   hug: { name: 'Hugging Face', color: 'bg-yellow-600' }, // Backend uses 'hug' abbreviation
   aimo: { name: 'AiMo', color: 'bg-pink-600' },
   near: { name: 'NEAR', color: 'bg-teal-600' },
-  fal: { name: 'Fal', color: 'bg-emerald-600' }
+  fal: { name: 'Fal', color: 'bg-emerald-600' },
+  'vercel-ai-gateway': { name: 'Vercel AI', color: 'bg-slate-900' }
 };
 
 const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
@@ -573,7 +574,7 @@ export default function ModelsClient({
     // Define all known gateways that should appear in the filter
     // This ensures all gateways are visible even if they have 0 models currently
     // Excludes 'portkey' as it's deprecated (use individual Portkey SDK providers instead)
-    const allKnownGateways = ['featherless', 'openrouter', 'groq', 'together', 'fireworks', 'chutes', 'deepinfra', 'google', 'cerebras', 'nebius', 'xai', 'novita', 'huggingface', 'aimo', 'near', 'fal'];
+    const allKnownGateways = ['featherless', 'openrouter', 'groq', 'together', 'fireworks', 'chutes', 'deepinfra', 'google', 'cerebras', 'nebius', 'xai', 'novita', 'huggingface', 'aimo', 'near', 'fal', 'vercel-ai-gateway'];
 
     // Log gateway counts for debugging
     const gatewayStats = allKnownGateways.map(g => ({

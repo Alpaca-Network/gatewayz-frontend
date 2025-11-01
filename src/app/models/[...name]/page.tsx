@@ -260,7 +260,7 @@ export default function ModelProfilePage() {
                 };
 
                 console.log(`[ModelProfilePage] Fetching from all gateway APIs...`);
-                const [openrouterRes, portkeyRes, featherlessRes, chutesRes, fireworksRes, togetherRes, groqRes, deepinfraRes, googleRes, cerebrasRes, nebiusRes, xaiRes, novitaRes, huggingfaceRes, aimoRes, nearRes] = await Promise.allSettled([
+                const [openrouterRes, portkeyRes, featherlessRes, chutesRes, fireworksRes, togetherRes, groqRes, deepinfraRes, googleRes, cerebrasRes, nebiusRes, xaiRes, novitaRes, huggingfaceRes, aimoRes, nearRes, falRes] = await Promise.allSettled([
                     fetchWithTimeout(`/api/models?gateway=openrouter`).catch(err => {
                         console.error('OpenRouter fetch error:', err);
                         return null;
@@ -324,6 +324,10 @@ export default function ModelProfilePage() {
                     fetchWithTimeout(`/api/models?gateway=near`, 70000).catch(err => {
                         console.error('NEAR fetch error:', err);
                         return null;
+                    }),
+                    fetchWithTimeout(`/api/models?gateway=fal`, 70000).catch(err => {
+                        console.error('FAL fetch error:', err);
+                        return null;
                     })
                 ]);
                 console.log(`[ModelProfilePage] Gateway API responses:`, {
@@ -342,7 +346,8 @@ export default function ModelProfilePage() {
                     novita: novitaRes?.status,
                     huggingface: huggingfaceRes?.status,
                     aimo: aimoRes?.status,
-                    near: nearRes?.status
+                    near: nearRes?.status,
+                    fal: falRes?.status
                 });
 
                 const getData = async (result: PromiseSettledResult<Response | null>) => {
@@ -360,7 +365,7 @@ export default function ModelProfilePage() {
                     return [];
                 };
 
-                const [openrouterData, portkeyData, featherlessData, chutesData, fireworksData, togetherData, groqData, deepinfraData, googleData, cerebrasData, nebiusData, xaiData, novitaData, huggingfaceData, aimoData, nearData] = await Promise.all([
+                const [openrouterData, portkeyData, featherlessData, chutesData, fireworksData, togetherData, groqData, deepinfraData, googleData, cerebrasData, nebiusData, xaiData, novitaData, huggingfaceData, aimoData, nearData, falData] = await Promise.all([
                     getData(openrouterRes),
                     getData(portkeyRes),
                     getData(featherlessRes),
@@ -376,7 +381,8 @@ export default function ModelProfilePage() {
                     getData(novitaRes),
                     getData(huggingfaceRes),
                     getData(aimoRes),
-                    getData(nearRes)
+                    getData(nearRes),
+                    getData(falRes)
                 ]);
 
                 // Combine models from all gateways
@@ -396,7 +402,8 @@ export default function ModelProfilePage() {
                     ...novitaData,
                     ...huggingfaceData,
                     ...aimoData,
-                    ...nearData
+                    ...nearData,
+                    ...falData
                 ];
 
                 // Deduplicate models by ID - keep the first occurrence
@@ -481,7 +488,8 @@ export default function ModelProfilePage() {
                             if (normalizedModelId === normalizedDataId) return true;
 
                             // Check if the model name matches (as a fallback)
-                            if (m.name && m.name.toLowerCase() === model?.name?.toLowerCase()) return true;
+                            // Note: model may not be defined yet in this context, so we skip this check
+                            // if (m.name && m.name.toLowerCase() === model?.name?.toLowerCase()) return true;
 
                             // Check if the last part of the ID matches (for provider/model format)
                             const lastPart = m.id.split('/').pop()?.toLowerCase();
@@ -511,6 +519,7 @@ export default function ModelProfilePage() {
                     if (hasModel(huggingfaceData, 'huggingface')) providers.push('huggingface');
                     if (hasModel(aimoData, 'aimo')) providers.push('aimo');
                     if (hasModel(nearData, 'near')) providers.push('near');
+                    if (hasModel(falData, 'fal')) providers.push('fal');
 
                     console.log(`Model ${modelId} available in gateways:`, providers);
                     setModelProviders(providers);
@@ -631,10 +640,10 @@ export default function ModelProfilePage() {
                             <span>|</span>
                             <span>{model.context_length > 0 ? `${(model.context_length / 1000).toLocaleString()}k` : 'N/A'} context</span>
                             <span>|</span>
-                            <span>${(parseFloat(model.pricing.prompt) * 1000000).toFixed(2)}/M input tokens</span>
+                            <span>${model.pricing && model.pricing.prompt ? (parseFloat(model.pricing.prompt) * 1000000).toFixed(2) : 'N/A'}/M input tokens</span>
                             <span>|</span>
-                            <span>${(parseFloat(model.pricing.completion) * 1000000).toFixed(2)}/M output tokens</span>
-                            {model.architecture.input_modalities.includes('audio') && (
+                            <span>${model.pricing && model.pricing.completion ? (parseFloat(model.pricing.completion) * 1000000).toFixed(2) : 'N/A'}/M output tokens</span>
+                            {model.architecture && model.architecture.input_modalities && model.architecture.input_modalities.includes('audio') && (
                                 <>
                                     <span>|</span>
                                     <span>$0.0001/M audio tokens</span>
@@ -954,7 +963,8 @@ console.log(response.choices[0].message.content);`
                                         novita: 'Novita',
                                         huggingface: 'Hugging Face',
                                         aimo: 'AIMO Network',
-                                        near: 'NEAR'
+                                        near: 'NEAR',
+                                        fal: 'FAL'
                                     };
                                     const providerLogos: Record<string, string> = {
                                         openrouter: '/openrouter-logo.svg',
@@ -972,7 +982,8 @@ console.log(response.choices[0].message.content);`
                                         novita: '/novita-logo.svg',
                                         huggingface: '/huggingface-logo.svg',
                                         aimo: '/aimo-logo.svg',
-                                        near: '/near-logo.svg'
+                                        near: '/near-logo.svg',
+                                        fal: '/fal-logo.svg'
                                     };
 
                                     return (
@@ -998,13 +1009,13 @@ console.log(response.choices[0].message.content);`
                                                 <div>
                                                     <p className="text-sm text-muted-foreground">Input Cost</p>
                                                     <p className="text-lg font-semibold">
-                                                        ${(parseFloat(model.pricing.prompt) * 1000000).toFixed(2)}/M
+                                                        ${model.pricing && model.pricing.prompt ? (parseFloat(model.pricing.prompt) * 1000000).toFixed(2) : 'N/A'}/M
                                                     </p>
                                                 </div>
                                                 <div>
                                                     <p className="text-sm text-muted-foreground">Output Cost</p>
                                                     <p className="text-lg font-semibold">
-                                                        ${(parseFloat(model.pricing.completion) * 1000000).toFixed(2)}/M
+                                                        ${model.pricing && model.pricing.completion ? (parseFloat(model.pricing.completion) * 1000000).toFixed(2) : 'N/A'}/M
                                                     </p>
                                                 </div>
                                                 <div>
