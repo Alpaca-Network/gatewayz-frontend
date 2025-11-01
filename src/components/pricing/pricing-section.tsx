@@ -165,8 +165,8 @@ export function PricingSection() {
     <div className="w-full py-12 bg-gradient-to-b from-background to-muted/20">
       <div className="max-w-6xl mx-auto px-4">
         {/* Header */}
-        <div className="text-center mb-12">
-          <h2 className="text-3xl sm:text-4xl font-bold mb-3">Simple Pricing</h2>
+        <div className="text-center mb-16 space-y-4">
+          <h2 className="text-3xl sm:text-4xl font-bold">Simple Pricing</h2>
           <p className="text-muted-foreground text-base sm:text-lg max-w-2xl mx-auto">
             Gatewayz is a universal inference engine providing access to 10,000+ models. One API at the lowest cost. Try now with free credits today.
           </p>
