@@ -1,21 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { validateApiKey } from '@/app/api/middleware/auth';
+import { handleApiError } from '@/app/api/middleware/error-handler';
+import { API_BASE_URL } from '@/lib/config';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
-
 // GET /api/user/activity/log - Get activity log
 export async function GET(request: NextRequest) {
   try {
-    const apiKey = request.headers.get('authorization')?.replace('Bearer ', '');
-
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: 'API key required' },
-        { status: 401 }
-      );
-    }
+    const { key: apiKey, error } = await validateApiKey(request);
+    if (error) return error;
 
     // Get query parameters
     const searchParams = request.nextUrl.searchParams;
@@ -54,10 +49,6 @@ export async function GET(request: NextRequest) {
     const data = await response.json();
     return NextResponse.json(data);
   } catch (error) {
-    console.error('Error fetching activity log:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch activity log' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'Activity Log API');
   }
 }

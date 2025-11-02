@@ -1,1 +1,0 @@
-Sections for the Gatewayz landing page. Keep copy concise and powerful. Update visuals and text as needed.

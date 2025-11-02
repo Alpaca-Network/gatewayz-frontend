@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
+import { handleApiError } from '@/app/api/middleware/error-handler';
+import { API_BASE_URL } from '@/lib/config';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -30,10 +30,6 @@ export async function GET() {
     const data = await response.json();
     return NextResponse.json(data);
   } catch (error) {
-    console.error('Error fetching ranking models:', error);
-    return NextResponse.json(
-      { success: false, error: 'Failed to fetch ranking models', data: [] },
-      { status: 500 }
-    );
+    return handleApiError(error, 'Ranking Models API');
   }
 }

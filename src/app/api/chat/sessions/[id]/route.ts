@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { validateApiKey } from '@/app/api/middleware/auth';
+import { handleApiError } from '@/app/api/middleware/error-handler';
+import { CHAT_HISTORY_API_URL } from '@/lib/config';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_CHAT_HISTORY_API_URL || 'https://api.gatewayz.ai';
 
 // GET /api/chat/sessions/[id] - Get specific session with messages
 export async function GET(
@@ -12,16 +13,11 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const apiKey = request.headers.get('authorization')?.replace('Bearer ', '');
 
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: 'API key required' },
-        { status: 401 }
-      );
-    }
+    const { key: apiKey, error } = await validateApiKey(request);
+    if (error) return error;
 
-    const url = `${API_BASE_URL}/v1/chat/sessions/${id}`;
+    const url = `${CHAT_HISTORY_API_URL}/v1/chat/sessions/${id}`;
     
     const response = await fetch(url, {
       method: 'GET',
@@ -48,11 +44,7 @@ export async function GET(
     const data = await response.json();
     return NextResponse.json(data);
   } catch (error) {
-    console.error('Error fetching chat session:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch chat session' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'Chat Session API - GET');
   }
 }
 
@@ -65,16 +57,11 @@ export async function PUT(
     const { id } = await params;
     const body = await request.json();
     const { title, model } = body;
-    const apiKey = request.headers.get('authorization')?.replace('Bearer ', '');
 
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: 'API key required' },
-        { status: 401 }
-      );
-    }
+    const { key: apiKey, error } = await validateApiKey(request);
+    if (error) return error;
 
-    const url = `${API_BASE_URL}/v1/chat/sessions/${id}`;
+    const url = `${CHAT_HISTORY_API_URL}/v1/chat/sessions/${id}`;
     
     const response = await fetch(url, {
       method: 'PUT',
@@ -96,11 +83,7 @@ export async function PUT(
     const data = await response.json();
     return NextResponse.json(data);
   } catch (error) {
-    console.error('Error updating chat session:', error);
-    return NextResponse.json(
-      { error: 'Failed to update chat session' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'Chat Session API - PUT');
   }
 }
 
@@ -111,16 +94,11 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const apiKey = request.headers.get('authorization')?.replace('Bearer ', '');
 
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: 'API key required' },
-        { status: 401 }
-      );
-    }
+    const { key: apiKey, error } = await validateApiKey(request);
+    if (error) return error;
 
-    const url = `${API_BASE_URL}/v1/chat/sessions/${id}`;
+    const url = `${CHAT_HISTORY_API_URL}/v1/chat/sessions/${id}`;
     
     const response = await fetch(url, {
       method: 'DELETE',
@@ -140,10 +118,6 @@ export async function DELETE(
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Error deleting chat session:', error);
-    return NextResponse.json(
-      { error: 'Failed to delete chat session' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'Chat Session API - DELETE');
   }
 }
