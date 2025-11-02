@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { validateApiKey } from "@/app/api/middleware/auth";
 import { handleApiError } from "@/app/api/middleware/error-handler";
 import { API_BASE_URL } from "@/lib/config";
+import { proxyFetch } from "@/lib/proxy-fetch";
 
 /**
  * GET /api/user/api-keys
@@ -15,7 +16,7 @@ export async function GET(request: NextRequest) {
 
     console.log("[API /api/user/api-keys GET] Proxying API keys request to backend");
 
-    const response = await fetch(`${API_BASE_URL}/user/api-keys`, {
+    const response = await proxyFetch(`${API_BASE_URL}/user/api-keys`, {
       method: "GET",
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -62,7 +63,7 @@ export async function POST(request: NextRequest) {
 
     console.log("[API /api/user/api-keys POST] Proxying create API key request to backend");
 
-    const response = await fetch(`${API_BASE_URL}/user/api-keys`, {
+    const response = await proxyFetch(`${API_BASE_URL}/user/api-keys`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,

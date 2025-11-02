@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { validateApiKey } from "@/app/api/middleware/auth";
 import { handleApiError } from "@/app/api/middleware/error-handler";
 import { API_BASE_URL } from "@/lib/config";
+import { proxyFetch } from "@/lib/proxy-fetch";
 
 /**
  * DELETE /api/user/api-keys/[keyId]
@@ -21,7 +22,7 @@ export async function DELETE(
 
     console.log(`[API /api/user/api-keys/${keyId} DELETE] Proxying delete API key request to backend`);
 
-    const response = await fetch(`${API_BASE_URL}/user/api-keys/${keyId}`, {
+    const response = await proxyFetch(`${API_BASE_URL}/user/api-keys/${keyId}`, {
       method: "DELETE",
       headers: {
         Authorization: `Bearer ${apiKey}`,
