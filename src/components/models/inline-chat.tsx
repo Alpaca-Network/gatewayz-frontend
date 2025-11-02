@@ -78,6 +78,10 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
     const streamingMessageIndex = messages.length + 1;
     setMessages(prev => [...prev, { role: 'assistant', content: '', thinking: '', isStreaming: true }]);
 
+    // Declare these outside try block so they're accessible in catch block
+    let accumulatedContent = '';
+    let accumulatedThinking = '';
+
     try {
       // Call the backend API directly to avoid Vercel's 60-second timeout
       // CORS headers are configured in vercel.json to allow beta.gatewayz.ai
@@ -99,8 +103,6 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
         max_tokens: 8000  // Increased for reasoning models like DeepSeek
       };
 
-      let accumulatedContent = '';
-      let accumulatedThinking = '';
       let inThinking = false;
 
       // Use the streaming utility with proper error handling and retries
@@ -231,8 +233,11 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
 
       // Add helpful context if no response was received
       if (accumulatedContent.length === 0) {
-        errorMessage = errorMessage || 'No response from model. ';
-        errorMessage += 'This could mean: the model is unavailable, your API key is invalid, or the model provider is having issues. Try again or select a different model.';
+        // If the error message doesn't already explain the issue, add context
+        if (!errorMessage.includes('not properly configured') && !errorMessage.includes('not support')) {
+          errorMessage = errorMessage || 'No response from model. ';
+          errorMessage += ' This could mean: the model is unavailable, your API key is invalid, or the model provider is having issues. Try again or select a different model.';
+        }
       }
 
       setError(errorMessage);

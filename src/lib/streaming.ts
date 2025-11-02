@@ -565,11 +565,12 @@ export async function* streamChatResponse(
 
     // Important: Log if we received any content at all
     if (chunkCount === 0) {
-      const errorMsg = 'Stream closed without receiving any data from the backend. This may indicate the model is unavailable, the API key is invalid, or there\'s an issue with the model provider.';
-      console.warn('[Streaming] WARNING:', errorMsg);
-      console.warn('[Streaming] Model:', requestBody.model);
-      console.warn('[Streaming] API Base URL:', url);
-      // Don't throw an error here, just log it and let the UI show "No response received"
+      const errorMsg = `No response received from model "${requestBody.model}". This model may not be properly configured, may be unavailable, or may not support the requested features. Please try a different model or check the model's availability status.`;
+      console.error('[Streaming] ERROR:', errorMsg);
+      console.error('[Streaming] Model:', requestBody.model);
+      console.error('[Streaming] API Base URL:', url);
+      // Throw an error so the UI can show a proper error message
+      throw new Error(errorMsg);
     }
 
     yield { done: true };
