@@ -297,7 +297,7 @@ class TestTrialCredits:
         }]
 
         # Mock API key creation
-        mock_create_key.return_value = 'gw_live_test123'
+        mock_create_key.return_value = ('gw_live_test123', 1)
 
         # Mock update result
         update_result = Mock()

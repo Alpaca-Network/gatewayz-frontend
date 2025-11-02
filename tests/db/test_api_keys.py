@@ -124,6 +124,15 @@ def mod(fake_supabase, monkeypatch):
     plans_mod = types.SimpleNamespace(check_plan_entitlements=lambda user_id: {"monthly_request_limit": 5000})
     monkeypatch.setitem(sys.modules, "src.db.plans", plans_mod)
 
+    # stub audit logger
+    security_mod = types.SimpleNamespace(
+        get_audit_logger=lambda: types.SimpleNamespace(
+            log_api_key_creation=lambda *args, **kwargs: None,
+            log_api_key_deletion=lambda *args, **kwargs: None
+        )
+    )
+    monkeypatch.setitem(sys.modules, "src.security.security", security_mod)
+
     # ensure deterministic secrets.token_urlsafe
     import secrets as real_secrets
     monkeypatch.setattr(real_secrets, "token_urlsafe", lambda n=32: "TOK", raising=True)
@@ -154,7 +163,7 @@ def test_check_key_name_uniqueness(mod, fake_supabase):
 
 def test_create_api_key_primary_sets_trial_and_prefix_and_audit(monkeypatch, mod, fake_supabase):
     # user 99, enforce plan limit, deterministic token -> "gw_live_TOK"
-    api_key = mod.create_api_key(
+    api_key, key_id = mod.create_api_key(
         user_id=99,
         key_name="Main",
         environment_tag="live",

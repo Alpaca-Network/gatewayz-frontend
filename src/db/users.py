@@ -47,7 +47,7 @@ def create_enhanced_user(username: str, email: str, auth_method: str, credits: i
         user_id = user['id']
 
         # Generate primary API key
-        primary_key = create_api_key(
+        primary_key, _ = create_api_key(
             user_id=user_id,
             key_name='Primary Key',
             environment_tag='live',

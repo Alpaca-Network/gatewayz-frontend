@@ -59,7 +59,7 @@ async def create_user_api_key(
             # Create a new API key with Phase 4 security features (using an existing working system)
             try:
                 # Use the existing create_api_key function for now (it works)
-                new_api_key = create_api_key(
+                new_api_key, key_id = create_api_key(
                     user_id=user["id"],
                     key_name=request.key_name,
                     environment_tag=request.environment_tag,
@@ -75,19 +75,14 @@ async def create_user_api_key(
                     from src.security.security import get_audit_logger
                     audit_logger = get_audit_logger()
 
-                    # Get the created key ID for audit logging
-                    client = get_supabase_client()
-                    key_result = client.table('api_keys_new').select('*').eq('api_key', new_api_key).execute()
-
-                    if key_result.data:
-                        key_id = key_result.data[0]['id']
-                        audit_logger.log_api_key_creation(
-                            user["id"],
-                            key_id,
-                            request.key_name,
-                            request.environment_tag,
-                            "user"
-                        )
+                    # Log the API key creation using the key_id from the create operation
+                    audit_logger.log_api_key_creation(
+                        user["id"],
+                        key_id,
+                        request.key_name,
+                        request.environment_tag,
+                        "user"
+                    )
                 except Exception as audit_error:
                     # Don't fail the whole request if audit logging fails
                     logger.warning("Audit logging failed for API key creation: %s", sanitize_for_logging(str(audit_error)))

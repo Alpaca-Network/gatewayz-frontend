@@ -226,6 +226,15 @@ def sb(monkeypatch):
     monkeypatch.setattr(users_mod, "get_supabase_client", lambda: stub)
     monkeypatch.setattr(api_keys_mod, "get_supabase_client", lambda: stub)
 
+    # stub audit logger for when create_api_key is called
+    security_mod = types.SimpleNamespace(
+        get_audit_logger=lambda: types.SimpleNamespace(
+            log_api_key_creation=lambda *args, **kwargs: None,
+            log_api_key_deletion=lambda *args, **kwargs: None
+        )
+    )
+    monkeypatch.setitem(__import__("sys").modules, "src.security.security", security_mod)
+
     # fake credit transaction module used inside functions via local import
     tx_log = []
     fake_tx = types.SimpleNamespace(
@@ -238,7 +247,7 @@ def sb(monkeypatch):
     stub._tx_log = tx_log
 
     # predictable create_api_key
-    monkeypatch.setattr("src.db.users.create_api_key", lambda **kwargs: "gw_live_primary_TESTKEY")
+    monkeypatch.setattr("src.db.users.create_api_key", lambda **kwargs: ("gw_live_primary_TESTKEY", 1))
 
     return stub
 

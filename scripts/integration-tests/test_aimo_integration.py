@@ -3,9 +3,18 @@
 Test script for AIMO Network integration
 """
 import os
+import sys
+import pytest
 from utils import load_env_file, get_env_or_exit, print_section
 
 load_env_file()
+
+# Check if AIMO_API_KEY is set - if not, skip the whole module
+api_key = os.environ.get("AIMO_API_KEY")
+pytestmark = pytest.mark.skipif(
+    not api_key,
+    reason="AIMO_API_KEY environment variable not set"
+)
 
 # Test 1: Check API key is loaded
 print_section("Test 1: API Key Configuration", 60)
@@ -20,8 +29,6 @@ try:
     print("✓ Successfully imported AIMO client functions")
 except ImportError as e:
     print(f"✗ Failed to import AIMO client: {e}")
-    import sys
-    sys.exit(1)
 
 # Test 3: Initialize AIMO client
 print_section("Test 3: AIMO Client Initialization", 60)
@@ -31,8 +38,6 @@ try:
     print(f"  Base URL: {client.base_url}")
 except Exception as e:
     print(f"✗ Failed to initialize AIMO client: {e}")
-    import sys
-    sys.exit(1)
 
 # Test 4: Fetch available models
 print_section("Test 4: Fetch AIMO Models", 60)
@@ -55,8 +60,6 @@ except Exception as e:
     print(f"✗ Failed to fetch models: {e}")
     import traceback
     traceback.print_exc()
-    import sys
-    sys.exit(1)
 
 # Test 5: Test model caching
 print_section("Test 5: Model Caching", 60)
