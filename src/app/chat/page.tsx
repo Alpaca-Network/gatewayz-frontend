@@ -124,6 +124,7 @@ const MarkdownRenderer = ({ children, className }: { children: string; className
     );
 };
 import { streamChatResponse } from '@/lib/streaming';
+import { ChatStreamHandler } from '@/lib/chat-stream-handler';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 // Lazy load ReasoningDisplay for better initial load performance
@@ -2479,10 +2480,9 @@ function ChatPageContent() {
                     url: url
                 });
 
-                // Accumulate content locally to avoid state closure issues
-                let accumulatedContent = '';
-                let accumulatedReasoning = '';
-                let inThinking = false;
+                // Use ChatStreamHandler to properly manage streaming state and avoid ReferenceErrors
+                const streamHandler = new ChatStreamHandler();
+                streamHandler.reset();
 
                 console.log('🌊 Starting to stream response...');
 
@@ -2511,8 +2511,8 @@ function ChatPageContent() {
                             const lastMessage = messages[messages.length - 1];
 
                             if (lastMessage && lastMessage.role === 'assistant') {
-                                lastMessage.content = accumulatedContent;
-                                lastMessage.reasoning = accumulatedReasoning;
+                                lastMessage.content = streamHandler.state.accumulatedContent;
+                                lastMessage.reasoning = streamHandler.state.accumulatedReasoning;
                                 lastMessage.isStreaming = true;
                             }
 
@@ -2552,52 +2552,18 @@ function ChatPageContent() {
 
                         // Debug: Log content to see what we're receiving
                         if (content.includes('<thinking') || content.includes('</thinking') || content.includes('[THINKING') || content.includes('<think') || content.includes('</think')) {
-                            devLog('[THINKING DEBUG]', { content, inThinking, length: content.length });
+                            devLog('[THINKING DEBUG]', { content, inThinking: streamHandler.state.inThinking, length: content.length });
                         }
 
-                    // Process content character by character to handle thinking tags correctly
-                        let normalizedContent = String(content);
-                        normalizedContent = normalizedContent
-                            .replace(/\[THINKING\]/gi, '<thinking>')
-                            .replace(/\[\/THINKING\]/gi, '</thinking>')
-                            .replace(/<think>/gi, '<thinking>')
-                            .replace(/<\/think>/gi, '</thinking>')
-                            .replace(/<\|startofthinking\|>/gi, '<thinking>')
-                            .replace(/<\|endofthinking\|>/gi, '</thinking>');
-
-                        let i = 0;
-                        while (i < normalizedContent.length) {
-                            const remaining = normalizedContent.slice(i);
-                            const openMatch = remaining.match(/^<\|?(?:thinking|think)>/i);
-                            if (openMatch) {
-                                inThinking = true;
-                                i += openMatch[0].length;
-                                devLog('[THINKING DEBUG] Opened thinking tag');
-                                continue;
-                            }
-
-                            const closeMatch = remaining.match(/^<\|?\/(?:thinking|think)>/i);
-                            if (closeMatch) {
-                                inThinking = false;
-                                i += closeMatch[0].length;
-                                devLog('[THINKING DEBUG] Closed thinking tag');
-                                continue;
-                            }
-
-                            const char = normalizedContent[i];
-                            if (inThinking) {
-                                accumulatedReasoning += char;
-                            } else {
-                                accumulatedContent += char;
-                            }
-                            i++;
-                        }
+                        // Use handler to process content with thinking tags
+                        streamHandler.processContentWithThinking(content);
+                        streamHandler.incrementChunkCount();
                     }
 
                     // Also accumulate any reasoning sent explicitly from the API
                     if (chunk.reasoning) {
                         devLog('[REASONING] Received explicit reasoning chunk:', chunk.reasoning.length, 'chars');
-                        accumulatedReasoning += String(chunk.reasoning);
+                        streamHandler.addReasoning(String(chunk.reasoning));
                     }
 
                     // OPTIMIZATION: Batch UI updates - only update every 50ms
@@ -2632,20 +2598,24 @@ function ChatPageContent() {
                     } else if (!pendingUpdate) {
                         // Schedule an update for later
                         pendingUpdate = true;
-                        setTimeout(() => {
+                        const timeoutId = setTimeout(() => {
                             if (pendingUpdate) {
                                 performUIUpdate();
                                 lastUpdateTime = Date.now();
                             }
                         }, UPDATE_INTERVAL_MS - timeSinceLastUpdate);
+                        // Register timeout so it can be cleaned up if error occurs
+                        streamHandler.registerTimeout(timeoutId);
                     }
                 }
 
-                // Use the accumulated content instead of reading from stale state
+                // Mark streaming as complete and get final content
+                streamHandler.complete();
                 setIsStreamingResponse(false);
 
-                const finalContent = accumulatedContent;
-                devLog({finalContent});
+                const finalContent = streamHandler.getFinalContent();
+                const finalReasoning = streamHandler.getFinalReasoning();
+                devLog({finalContent, finalReasoning, chunkCount: streamHandler.state.chunkCount});
 
                 // OPTIMIZATION: Save the assistant's response to the backend asynchronously
                 // This allows the UI to be responsive immediately after streaming completes
@@ -2678,8 +2648,8 @@ function ChatPageContent() {
                                 model: modelValue,
                                 gateway: selectedModel.sourceGateway,
                                 response_length: finalContent.length,
-                                has_reasoning: !!accumulatedReasoning,
-                                reasoning_length: accumulatedReasoning?.length || 0,
+                                has_reasoning: !!finalReasoning,
+                                reasoning_length: finalReasoning?.length || 0,
                                 session_id: currentSessionId
                             });
                         } catch (error) {
@@ -2735,6 +2705,10 @@ function ChatPageContent() {
                 }
 
             } catch (streamError) {
+                // Clean up any pending timeouts to prevent ReferenceErrors
+                streamHandler?.cleanup();
+                streamHandler?.complete();
+
                 setIsStreamingResponse(false);
                 console.error('❌ Streaming error occurred:', streamError);
                 console.error('Full error object:', {
@@ -2747,6 +2721,15 @@ function ChatPageContent() {
 
                 const errorMessage = streamError instanceof Error ? streamError.message : 'Failed to get response';
                 console.error('Error message for analysis:', errorMessage);
+
+                // Log error context with accumulated content
+                if (streamHandler) {
+                    streamHandler.addError(streamError instanceof Error ? streamError : new Error(errorMessage), {
+                        model: selectedModel?.value,
+                        gateway: selectedModel?.sourceGateway
+                    });
+                    console.error('Stream handler error summary:', streamHandler.getErrorSummary());
+                }
 
                 // Log analytics event for streaming error
                 logAnalyticsEvent('chat_message_failed', {
