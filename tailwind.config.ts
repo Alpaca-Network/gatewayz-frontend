@@ -9,6 +9,9 @@ export default {
   ],
   theme: {
     extend: {
+      gridTemplateColumns: {
+        '24': 'repeat(24, minmax(0, 1fr))',
+      },
       fontFamily: {
         sans: ['var(--font-inter)'],
         body: ['Inter', 'sans-serif'],
@@ -56,6 +59,11 @@ export default {
           '4': 'hsl(var(--chart-4))',
           '5': 'hsl(var(--chart-5))',
         },
+        header: {
+          DEFAULT: 'rgb(var(--header))',
+          foreground: 'hsl(var(--header-foreground))',
+        },
+        'footer-border': 'rgb(var(--footer-border))',
         sidebar: {
           DEFAULT: 'hsl(var(--sidebar-background))',
           foreground: 'hsl(var(--sidebar-foreground))',
@@ -98,11 +106,52 @@ export default {
           '0%': { '--gradient-angle': '0deg' },
           '100%': { '--gradient-angle': '360deg' },
         },
+        'shimmer': {
+          '0%': { backgroundPosition: '-1000px 0' },
+          '100%': { backgroundPosition: '1000px 0' },
+        },
+        'pulse-glow': {
+          '0%, 100%': { opacity: '1' },
+          '50%': { opacity: '0.5' },
+        },
+        'fade-in-up': {
+          '0%': {
+            opacity: '0',
+            transform: 'translateY(20px)'
+          },
+          '100%': {
+            opacity: '1',
+            transform: 'translateY(0)'
+          },
+        },
+        'fade-in': {
+          '0%': {
+            opacity: '0'
+          },
+          '100%': {
+            opacity: '1'
+          },
+        },
+        'scale-in': {
+          '0%': {
+            opacity: '0',
+            transform: 'scale(0.95)'
+          },
+          '100%': {
+            opacity: '1',
+            transform: 'scale(1)'
+          },
+        },
       },
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
         'gradient-spin': 'gradient-spin 2.5s linear infinite',
+        'shimmer': 'shimmer 2s infinite',
+        'pulse-glow': 'pulse-glow 2s ease-in-out infinite',
+        'fade-in-up': 'fade-in-up 0.6s ease-out forwards',
+        'fade-in': 'fade-in 0.6s ease-out forwards',
+        'scale-in': 'scale-in 0.5s ease-out forwards',
       },
       // This is needed to register the custom property
       // @ts-ignore
@@ -113,5 +162,8 @@ export default {
       }
     },
   },
-  plugins: [require('tailwindcss-animate')],
+  plugins: [
+    require('tailwindcss-animate'),
+    require('@tailwindcss/typography'),
+  ],
 } satisfies Config;

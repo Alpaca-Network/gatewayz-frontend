@@ -1,13 +1,10 @@
-
 "use client";
 
 import { useParams } from 'next/navigation';
-import { topModels, organizationsData } from '@/lib/data';
-import { models as allModelsData, type Model } from '@/lib/models-data';
-import { Building, Bot, BarChart, HardHat, Package, ChevronDown, Link as LinkIcon, Github, Twitter } from 'lucide-react';
+import { Building, Bot, BarChart, HardHat, Package, ChevronDown, Link as LinkIcon, Github, Twitter, TrendingUp } from 'lucide-react';
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from '@/components/ui/badge';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import {
   Select,
   SelectContent,
@@ -21,57 +18,97 @@ import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import Image from 'next/image';
 import { stringToColor } from '@/lib/utils';
+import { API_BASE_URL } from '@/lib/config';
 
-const ModelCard = ({ model }: { model: Model }) => (
-  <Link href={`/models/${encodeURIComponent(model.name)}`}>
-    <Card className="p-6 flex flex-col h-full hover:border-primary">
-      <div className="flex justify-between items-start">
-        <div>
-          <h3 className="text-lg font-semibold flex items-center gap-2">
-            {model.name} {model.isFree && <Badge>Free</Badge>}
-          </h3>
-          <Badge variant="outline" className="mt-2" style={{ backgroundColor: stringToColor(model.category) }}>{model.category}</Badge>
+interface ApiModel {
+  id: string;
+  name: string;
+  description: string | null;
+  context_length: number;
+  pricing: {
+    prompt: string;
+    completion: string;
+  } | null;
+  architecture: {
+    input_modalities: string[] | null;
+    output_modalities: string[] | null;
+  } | null;
+  supported_parameters: string[] | null;
+  provider_slug: string;
+}
+
+interface RankingModel {
+    id: number;
+    rank: number;
+    model_name: string;
+    author: string;
+    tokens: string;
+    trend_percentage: string;
+    trend_direction: 'up' | 'down';
+    trend_icon: string;
+    trend_color: string;
+    model_url: string;
+    author_url: string;
+    time_period: string;
+    scraped_at: string;
+    logo_url: string;
+}
+
+const ApiModelCard = ({ model }: { model: ApiModel }) => {
+  const isFree = parseFloat(model.pricing?.prompt || '0') === 0 && parseFloat(model.pricing?.completion || '0') === 0;
+  const inputCost = (parseFloat(model.pricing?.prompt || '0') * 1000000).toFixed(2);
+  const outputCost = (parseFloat(model.pricing?.completion || '0') * 1000000).toFixed(2);
+  const contextK = model.context_length > 0 ? Math.round(model.context_length / 1000) : 0;
+
+  // Preserve literal slash in URL (e.g., "provider/model-name")
+  const modelUrl = model.id.includes('/')
+    ? `/models/${model.id}`
+    : `/models/${encodeURIComponent(model.id)}`;
+
+  return (
+    <Link href={modelUrl}>
+      <Card className="p-6 flex flex-col h-full hover:border-primary transition-colors">
+        <div className="flex justify-between items-start gap-3 mb-3">
+          <div className="min-w-0 flex-1">
+            <h3 className="text-lg font-semibold flex items-center gap-2 flex-wrap mb-2">
+              <span className="truncate">{model.name}</span>
+              {isFree && <Badge className="text-xs bg-black text-white">Free</Badge>}
+              <Badge variant="secondary" className="text-xs">Multi-Lingual</Badge>
+            </h3>
+          </div>
+          <div className="text-sm text-muted-foreground whitespace-nowrap flex-shrink-0 font-medium">{contextK > 0 ? `${contextK}K` : 'Pending'}</div>
         </div>
-        <div className="text-sm text-muted-foreground whitespace-nowrap">{model.tokens}</div>
-      </div>
-      <p className="text-muted-foreground mt-4 text-sm flex-grow">{model.description}</p>
-      <div className="flex items-center gap-4 text-xs text-muted-foreground mt-4 pt-4 border-t">
-        <span>by {model.developer}</span>
-        <span>{model.context}K context</span>
-        <span>${model.inputCost}/M input</span>
-        <span>${model.outputCost}/M output</span>
-      </div>
-    </Card>
-  </Link>
-);
+        <p className="text-muted-foreground text-sm flex-grow line-clamp-2 mb-4">
+          {model.description || 'No description available'}
+        </p>
+        <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground pt-3 border-t">
+          <span className="whitespace-nowrap">{contextK > 0 ? `${contextK}K context` : 'Pending sync'}</span>
+          <span className="whitespace-nowrap">${inputCost}/M in</span>
+          <span className="whitespace-nowrap">${outputCost}/M out</span>
+        </div>
+      </Card>
+    </Link>
+  );
+};
 
-const StatCard = ({ icon: Icon, title, value }: { icon: React.ElementType, title: string, value: string | number }) => (
-    <Card>
-        <CardContent className="p-6 flex flex-col items-center text-center gap-2">
-            <div className="bg-primary/10 p-3 rounded-lg">
-                <Icon className="w-6 h-6 text-primary" />
-            </div>
-            <div>
-                <p className="text-muted-foreground text-sm">{title}</p>
-                <p className="text-2xl font-bold">{value}</p>
-            </div>
-        </CardContent>
+const StatCard = ({ title, value, subtitle }: { title: string, value: string | number, subtitle?: string }) => (
+    <Card className="bg-card border rounded-lg p-6">
+        <p className="text-sm text-muted-foreground mb-2">{title}</p>
+        <p className="text-3xl font-bold mb-1">{value}</p>
+        {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
     </Card>
 );
 
-type TimeFrame = 'weekly' | 'monthly' | '3months' | '6months' | 'yearly' | 'alltime';
+type TimeFrame = 'month' | 'week' | 'today';
 
 const generateChartData = (timeFrame: TimeFrame) => {
     const now = new Date();
     let days;
     switch(timeFrame) {
-        case 'weekly': days = 7; break;
-        case 'monthly': days = 30; break;
-        case '3months': days = 90; break;
-        case '6months': days = 180; break;
-        case 'alltime': days = 365 * 5; break; // 5 years for all time
-        case 'yearly':
-        default: days = 365; break;
+        case 'week': days = 7; break;
+        case 'today': days = 1; break;
+        case 'month':
+        default: days = 30; break;
     }
 
     return Array.from({ length: days }, (_, i) => {
@@ -85,11 +122,11 @@ const generateChartData = (timeFrame: TimeFrame) => {
 
 const getTicks = (data: { date: string }[], maxTicks = 8) => {
     if (!data || data.length === 0) return [];
-    
+
     const tickCount = Math.min(data.length, maxTicks);
     if (tickCount <= 1) return [data[0]?.date];
     const interval = Math.max(1, Math.floor((data.length -1) / (tickCount -1)));
-    
+
     const ticks = [];
     for (let i = 0; i < data.length; i += interval) {
         ticks.push(data[i].date);
@@ -101,61 +138,169 @@ const getTicks = (data: { date: string }[], maxTicks = 8) => {
             ticks.push(data[data.length - 1].date)
         }
     }
-    
+
     return ticks;
 };
 
 
 export default function OrganizationPage() {
   const params = useParams();
-  const [timeFrame, setTimeFrame] = useState<TimeFrame>('yearly');
+  const [timeFrame, setTimeFrame] = useState<TimeFrame>('month');
+  const [apiModels, setApiModels] = useState<ApiModel[]>([]);
+  const [rankingModels, setRankingModels] = useState<RankingModel[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [organizationLogo, setOrganizationLogo] = useState<string>('');
 
   const organizationName = useMemo(() => {
     const name = params.name as string;
     return name ? decodeURIComponent(name) : '';
   }, [params.name]);
 
+  // Fetch ranking models to get stats
+  useEffect(() => {
+    const fetchRankingModels = async () => {
+        try {
+            const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
+            const response = await fetch(`${apiBaseUrl}/ranking/models`);
+            const data = await response.json();
 
-  const orgModels = useMemo(() => {
-    return allModelsData.filter(model => model.developer.toLowerCase() === organizationName.toLowerCase());
+            if (data.success && data.data) {
+                // Filter models for this organization
+                const orgModels = data.data.filter((m: RankingModel) =>
+                    m.author.toLowerCase() === organizationName.toLowerCase()
+                );
+                setRankingModels(orgModels);
+
+                // Set logo from first model
+                if (orgModels.length > 0 && orgModels[0].logo_url) {
+                    setOrganizationLogo(orgModels[0].logo_url);
+                }
+            }
+        } catch (error) {
+            console.error('Failed to fetch ranking models:', error);
+        }
+    };
+
+    if (organizationName) {
+        fetchRankingModels();
+    }
   }, [organizationName]);
 
-  const orgRankingData = useMemo(() => {
-    return topModels.find(model => model.organization.toLowerCase() === organizationName.toLowerCase());
-  }, [organizationName]);
-  
-  const orgSocialData = useMemo(() => {
-    return organizationsData.find(org => org.name.toLowerCase() === organizationName.toLowerCase());
-  }, [organizationName]);
-  
-  const topRankedModel = useMemo(() => {
-      const orgRankedModels = topModels.filter(m => m.organization.toLowerCase() === organizationName.toLowerCase());
-      if (orgRankedModels.length === 0) return 'N/A';
-      return orgRankedModels.sort((a,b) => b.tokens - a.tokens)[0].name;
+  // Fetch models from API catalog
+  useEffect(() => {
+    const fetchModels = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch(`${API_BASE_URL}/models?developer=${encodeURIComponent(organizationName.toLowerCase())}`);
+        const data = await response.json();
+        const models = data.data || [];
+
+        console.log(`API returned ${models.length} models for ${organizationName} from models endpoint`);
+
+        // Client-side filtering to ensure only models from this organization are shown
+        // The model ID typically starts with "org-name/" or the model has a provider_slug matching the org
+        const filteredModels = models.filter((model: ApiModel) => {
+          const modelIdLower = model.id.toLowerCase();
+          const orgNameLower = organizationName.toLowerCase();
+
+          // Check if model ID starts with "organization/"
+          if (modelIdLower.startsWith(`${orgNameLower}/`)) {
+            return true;
+          }
+
+          // Check if provider_slug matches
+          if (model.provider_slug && model.provider_slug.toLowerCase() === orgNameLower) {
+            return true;
+          }
+
+          // Extract author from model ID (format: "author/model-name")
+          const modelAuthor = model.id.split('/')[0]?.toLowerCase();
+          if (modelAuthor === orgNameLower) {
+            return true;
+          }
+
+          return false;
+        });
+
+        console.log(`After client-side filtering: ${filteredModels.length} models for ${organizationName}`);
+        setApiModels(filteredModels);
+      } catch (error) {
+        console.error('Failed to fetch models:', error);
+        setApiModels([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (organizationName) {
+      fetchModels();
+    }
   }, [organizationName]);
 
-  const totalTokens = useMemo(() => {
-      const total = orgModels.reduce((acc, model) => {
-        const tokenValue = parseFloat(model.tokens);
-        if (model.tokens.includes('B')) return acc + tokenValue * 1e9;
-        if (model.tokens.includes('M')) return acc + tokenValue * 1e6;
-        return acc + tokenValue;
-      }, 0);
-      if (total > 1e12) return `${(total / 1e12).toFixed(1)}T`;
-      if (total > 1e9) return `${(total / 1e9).toFixed(1)}B`;
-      if (total > 1e6) return `${(total / 1e6).toFixed(1)}M`;
-      return total.toLocaleString();
-  }, [orgModels]);
+  // Calculate stats from ranking data
+  const stats = useMemo(() => {
+    if (rankingModels.length === 0) {
+        return {
+            totalTokens: '0',
+            totalValue: '$0',
+            topProvider: organizationName,
+            topModel: 'N/A'
+        };
+    }
+
+    // Calculate total tokens
+    const totalTokensNum = rankingModels.reduce((sum, model) => {
+        const tokensStr = model.tokens.replace(/[^0-9.]/g, '');
+        const multiplier = model.tokens.includes('T') ? 1000000000000 :
+                          model.tokens.includes('B') ? 1000000000 :
+                          model.tokens.includes('M') ? 1000000 : 1;
+        return sum + (parseFloat(tokensStr) || 0) * multiplier;
+    }, 0);
+
+    // Format total tokens
+    const formatTokens = (num: number): string => {
+        if (num >= 1000000000000) return (num / 1000000000000).toFixed(1) + 'T';
+        if (num >= 1000000000) return (num / 1000000000).toFixed(1) + 'B';
+        if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+        return num.toString();
+    };
+
+    // Estimate value (rough estimate based on tokens)
+    const estimatedValue = totalTokensNum * 0.00001; // $0.01 per 1000 tokens
+    const formatValue = (num: number): string => {
+        if (num >= 1000000000) return `$${(num / 1000000000).toFixed(0)}B`;
+        if (num >= 1000000) return `$${(num / 1000000).toFixed(0)}M`;
+        if (num >= 1000) return `$${(num / 1000).toFixed(0)}K`;
+        return `$${num.toFixed(0)}`;
+    };
+
+    // Get top model (highest rank = lowest number)
+    const topModel = rankingModels.reduce((top, model) =>
+        model.rank < top.rank ? model : top
+    , rankingModels[0]);
+
+    return {
+        totalTokens: formatTokens(totalTokensNum),
+        totalValue: formatValue(estimatedValue),
+        topProvider: organizationName,
+        topModel: topModel.model_name
+    };
+  }, [rankingModels, organizationName]);
 
   const chartData = useMemo(() => generateChartData(timeFrame), [timeFrame]);
   const chartTicks = useMemo(() => getTicks(chartData), [chartData]);
 
+  const timeFrameLabels = {
+      month: 'Past Month',
+      week: 'Past Week',
+      today: 'Today'
+  };
 
   if (!organizationName) {
     return <div>Loading...</div>;
   }
-  
-  if (!orgRankingData && orgModels.length === 0) {
+
+  if (!loading && rankingModels.length === 0 && apiModels.length === 0) {
     return (
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 text-center">
             <h1 className="text-2xl font-bold">Organization not found.</h1>
@@ -164,57 +309,42 @@ export default function OrganizationPage() {
   }
 
   return (
-    <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 max-w-screen-2xl">
+        {/* Header */}
         <header className="mb-8">
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mb-4">
-                <Image
-                    src={`https://placehold.co/40x40.png`}
-                    alt={`${organizationName} logo`}
-                    width={40}
-                    height={40}
-                    className="rounded-lg"
-                    data-ai-hint={`${organizationName} logo`}
-                />
+            <div className="flex items-center gap-4 mb-6">
+                {organizationLogo ? (
+                    <img
+                        src={organizationLogo}
+                        alt={`${organizationName} logo`}
+                        className="w-16 h-16 rounded-lg object-contain"
+                    />
+                ) : (
+                    <div className="w-16 h-16 rounded-lg bg-muted flex items-center justify-center">
+                        <Building className="w-8 h-8 text-muted-foreground" />
+                    </div>
+                )}
                 <h1 className="text-4xl font-bold">{organizationName.charAt(0).toUpperCase() + organizationName.slice(1)}</h1>
-                 <div className="flex items-center gap-2">
-                  {orgSocialData?.website && (
-                    <Link href={orgSocialData.website} target="_blank" rel="noopener noreferrer">
-                      <Button variant="ghost" size="icon"><LinkIcon className="h-5 w-5 text-muted-foreground" /></Button>
-                    </Link>
-                  )}
-                  {orgSocialData?.github && (
-                     <Link href={orgSocialData.github} target="_blank" rel="noopener noreferrer">
-                      <Button variant="ghost" size="icon"><Github className="h-5 w-5 text-muted-foreground" /></Button>
-                    </Link>
-                  )}
-                   {orgSocialData?.twitter && (
-                     <Link href={orgSocialData.twitter} target="_blank" rel="noopener noreferrer">
-                      <Button variant="ghost" size="icon"><Twitter className="h-5 w-5 text-muted-foreground" /></Button>
-                    </Link>
-                  )}
-                </div>
             </div>
         </header>
-        
+
+        {/* Tokens Generated Chart */}
         <Card className="mb-8">
           <CardContent className="p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold">Total Tokens Generated</h3>
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-semibold">Tokens Generated</h3>
               <Select value={timeFrame} onValueChange={(value) => setTimeFrame(value as TimeFrame)}>
                 <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Select time frame" />
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="weekly">Weekly</SelectItem>
-                  <SelectItem value="monthly">Monthly</SelectItem>
-                  <SelectItem value="3months">Past 3 Months</SelectItem>
-                  <SelectItem value="6months">Past 6 Months</SelectItem>
-                  <SelectItem value="yearly">Yearly</SelectItem>
-                  <SelectItem value="alltime">All Time</SelectItem>
+                  <SelectItem value="month">Past Month</SelectItem>
+                  <SelectItem value="week">Past Week</SelectItem>
+                  <SelectItem value="today">Today</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            <div className="h-[300px]">
+            <div className="h-[400px]">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart
                   data={chartData}
@@ -222,57 +352,102 @@ export default function OrganizationPage() {
                 >
                   <defs>
                     <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.8}/>
-                      <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
+                      <stop offset="5%" stopColor="#60a5fa" stopOpacity={0.8}/>
+                      <stop offset="95%" stopColor="#60a5fa" stopOpacity={0.1}/>
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis 
-                    dataKey="date" 
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis
+                    dataKey="date"
                     ticks={chartTicks}
                     tickFormatter={(str) => {
                       if (!str) return '';
                       const date = new Date(str);
-                       if (differenceInDays(new Date(chartData[chartData.length - 1]?.date), new Date(chartData[0]?.date)) > 365 * 2) {
-                        return format(date, 'yyyy');
-                      }
-                      if (differenceInDays(new Date(chartData[chartData.length - 1]?.date), new Date(chartData[0]?.date)) > 180) {
-                        return format(date, 'MMM yy');
+                       if (timeFrame === 'month') {
+                        return format(date, 'MMM d');
                       }
                       return format(date, 'MMM d');
                     }}
+                    tick={{ fontSize: 12 }}
                   />
-                  <YAxis />
-                  <Tooltip 
+                  <YAxis
+                    tickFormatter={(value) => `${(value / 1000).toFixed(0)}K`}
+                    tick={{ fontSize: 12 }}
+                  />
+                  <Tooltip
                      contentStyle={{
                         backgroundColor: 'hsl(var(--background))',
                         borderColor: 'hsl(var(--border))',
                       }}
+                      formatter={(value: any) => [`${value} tokens`, 'Generated']}
+                      labelFormatter={(label) => format(new Date(label), 'PPP')}
                   />
-                  <Legend />
-                  <Area type="monotone" dataKey="tokens" stroke="hsl(var(--primary))" fillOpacity={1} fill="url(#chartGradient)" activeDot={{ r: 8 }} dot={false} />
+                  <Area
+                    type="monotone"
+                    dataKey="tokens"
+                    stroke="#60a5fa"
+                    fillOpacity={1}
+                    fill="url(#chartGradient)"
+                    strokeWidth={2}
+                    dot={false}
+                  />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
           </CardContent>
         </Card>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-            <StatCard icon={BarChart} title="Total Tokens" value={totalTokens} />
-            <StatCard icon={HardHat} title="Top Provider" value={orgRankingData?.provider || 'N/A'} />
-            <StatCard icon={Bot} title="Top Model" value={topRankedModel} />
+        {/* Stats Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <StatCard
+                title="Total Tokens"
+                value={stats.totalTokens}
+                subtitle="Tokens Generated"
+            />
+            <StatCard
+                title="Total Value"
+                value={stats.totalValue}
+                subtitle="Estimated Value"
+            />
+            <StatCard
+                title="Top Provider"
+                value={stats.topProvider}
+                subtitle="Primary Provider"
+            />
+            <StatCard
+                title="Top Model"
+                value={stats.topModel}
+                subtitle="Most Popular"
+            />
         </div>
 
+        {/* Models Section */}
         <main>
-            <h2 className="text-2xl font-bold mb-6">Models by {organizationName.charAt(0).toUpperCase() + organizationName.slice(1)} ({orgModels.length})</h2>
-            {orgModels.length > 0 ? (
+            <h2 className="text-2xl font-bold mb-6">
+                Models By {organizationName.charAt(0).toUpperCase() + organizationName.slice(1)}
+                <span className="text-muted-foreground ml-2">{apiModels.length} Models</span>
+            </h2>
+            {loading ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                    {orgModels.map(model => (
-                        <ModelCard key={model.name} model={model} />
+                    {Array.from({ length: 6 }).map((_, i) => (
+                        <Card key={i} className="p-6">
+                            <div className="animate-pulse space-y-4">
+                                <div className="h-6 bg-gray-200 rounded w-3/4"></div>
+                                <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+                                <div className="h-16 bg-gray-200 rounded"></div>
+                                <div className="h-4 bg-gray-200 rounded w-full"></div>
+                            </div>
+                        </Card>
+                    ))}
+                </div>
+            ) : apiModels.length > 0 ? (
+                <div className="grid grid-cols-1 gap-4">
+                    {apiModels.map(model => (
+                        <ApiModelCard key={model.id} model={model} />
                     ))}
                 </div>
             ) : (
-                <p className="text-muted-foreground">No models found for this organization in the detailed list.</p>
+                <p className="text-muted-foreground text-center py-12">No models found for this organization.</p>
             )}
         </main>
     </div>

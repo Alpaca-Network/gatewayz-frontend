@@ -1,8 +1,7 @@
 
 "use client"
 
-import { useMemo, useState } from 'react';
-import { models, type Model } from "@/lib/models-data";
+import { useMemo, useState, useEffect } from 'react';
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -12,58 +11,115 @@ import Image from 'next/image';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 
-type Organization = {
-    name: string;
-    models: Model[];
-    totalTokens: string;
-    topModel: string;
-    performanceChange: number; // For trending sort
+type RankingModel = {
+    id: number;
+    rank: number;
+    model_name: string;
+    author: string;
+    tokens: string;
+    trend_percentage: string;
+    trend_direction: 'up' | 'down';
+    trend_icon: string;
+    trend_color: string;
+    model_url: string;
+    author_url: string;
+    time_period: string;
+    scraped_at: string;
+    logo_url: string;
 }
 
-const OrganizationCard = ({ org }: { org: Organization }) => (
-    <Card className="flex flex-col">
-        <CardContent className="p-6 pb-2 flex-grow">
-            <div className="flex items-center gap-4 mb-4">
-                <Image 
-                    src={`https://placehold.co/48x48.png`}
-                    alt={`${org.name} logo`}
-                    width={48}
-                    height={48}
-                    className="rounded-lg"
-                    data-ai-hint={`${org.name} logo`}
-                />
-                <h3 className="text-xl font-bold">{org.name}</h3>
-            </div>
-            <div className="space-y-3 text-sm">
-                <div className="flex items-center gap-2 text-muted-foreground">
-                    <Package className="w-4 h-4" />
-                    <span>{org.models.length} Models</span>
+type Organization = {
+    id: string;
+    name: string;
+    author: string;
+    modelCount: number;
+    totalTokens: string;
+    topModel: string;
+    performanceChange: number;
+    models: RankingModel[];
+    logoUrl?: string;
+}
+
+const OrganizationCard = ({ org }: { org: Organization }) => {
+    const avgTrendPercentage = org.performanceChange;
+    const trendColor = avgTrendPercentage >= 0 ? 'text-green-600' : 'text-red-600';
+    const trendSign = avgTrendPercentage >= 0 ? '+' : '';
+
+    // Map author names to logo file names
+    const getLogoUrl = (author: string): string | null => {
+        const logoMap: Record<string, string> = {
+            'openai': '/openai-logo.svg',
+            'google': '/google-logo.svg',
+            'anthropic': '/anthropic-logo.svg',
+            'meta': '/Meta_Logo-black.svg',
+            'deepseek': '/deepseek-logo.svg',
+            'mistralai': '/Meta_Logo-black.svg', // Fallback until Mistral logo is added
+            'x-ai': '/xai-logo.svg',
+            'x ai': '/xai-logo.svg',
+            'openrouter': '/OpenAI_Logo-black.svg', // Fallback until OpenRouter logo is added
+        };
+        return logoMap[author.toLowerCase()] || null;
+    };
+
+    const logoUrl = org.logoUrl || getLogoUrl(org.author);
+
+    return (
+        <Card className="flex flex-col bg-card border rounded-lg">
+            <CardContent className="p-6 pb-2 flex-grow">
+                <div className="flex items-start gap-4 mb-4">
+                    <div className="w-12 h-12 rounded-full flex items-center justify-center bg-background border overflow-hidden">
+                        {logoUrl ? (
+                            <img src={logoUrl} alt={org.name} className="w-10 h-10 object-contain" />
+                        ) : (
+                            <Bot className="w-6 h-6 text-muted-foreground" />
+                        )}
+                    </div>
+                    <div>
+                        <h3 className="text-lg font-bold">{org.name}</h3>
+                        <p className="text-sm text-muted-foreground">{org.modelCount} Models</p>
+                    </div>
                 </div>
-                <div className="flex items-center gap-2 text-muted-foreground">
-                    <BarChart className="w-4 h-4" />
-                    <span>{org.totalTokens} Tokens</span>
+                <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="text-2xl font-bold">{org.totalTokens}</p>
+                            <p className="text-xs text-muted-foreground">Tokens Generated</p>
+                        </div>
+                        <div className="text-right">
+                            <p className={`text-lg font-bold ${trendColor}`}>
+                                {trendSign}{avgTrendPercentage.toFixed(2)}%
+                            </p>
+                            <p className="text-xs text-muted-foreground">Avg Growth</p>
+                        </div>
+                    </div>
+                    <div className="pt-2 border-t">
+                        <p className="text-xs text-muted-foreground">Top Model</p>
+                        <p className="text-sm font-medium truncate">{org.topModel}</p>
+                    </div>
                 </div>
-                 <div className="flex items-center gap-2 text-muted-foreground">
-                    <Bot className="w-4 h-4" />
-                    <span className="truncate">Top Model: {org.topModel}</span>
-                </div>
-            </div>
-        </CardContent>
-        <CardFooter className="p-6 pt-4">
-             <Link href={`/organizations/${encodeURIComponent(org.name)}`} className="w-full">
-                <Button variant="outline" className="w-full">
-                    View Profile <ArrowRight className="ml-2" />
-                </Button>
-            </Link>
-        </CardFooter>
-    </Card>
-);
+            </CardContent>
+            <CardFooter className="p-6 pt-4">
+                <Link href={`/organizations/${encodeURIComponent(org.author)}`} className="w-full">
+                    <Button variant="outline" className="w-full">
+                        View Profile <ArrowRight className="ml-2 h-4 w-4" />
+                    </Button>
+                </Link>
+            </CardFooter>
+        </Card>
+    );
+};
 
 
 export default function DevelopersPage() {
     const [searchTerm, setSearchTerm] = useState("");
     const [activeTab, setActiveTab] = useState<'top' | 'trending'>('top');
     const [timeFrame, setTimeFrame] = useState<'month' | 'week' | 'today'>('month');
+    const [rankingModels, setRankingModels] = useState<RankingModel[]>([]);
+    const [apiModels, setApiModels] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [organizationLogos, setOrganizationLogos] = useState<Map<string, string>>(new Map());
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 30;
 
     const timeFrameLabels: Record<typeof timeFrame, string> = {
         month: 'Past Month',
@@ -71,146 +127,412 @@ export default function DevelopersPage() {
         today: 'Today',
     };
 
-    const organizations: Organization[] = useMemo(() => {
-        const orgMap = new Map<string, Model[]>();
+    const timeFrameMapping: Record<typeof timeFrame, string> = {
+        month: 'Top this month',
+        week: 'Top this week',
+        today: 'Top today',
+    };
 
-        models.forEach(model => {
-            if (!orgMap.has(model.developer)) {
-                orgMap.set(model.developer, []);
+    useEffect(() => {
+        const fetchData = async () => {
+            try {
+                setLoading(true);
+                const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
+                
+                // Fetch ranking models
+                const rankingUrl = `${apiBaseUrl}/ranking/models`;
+                console.log('Fetching ranking models from:', rankingUrl);
+                const rankingResponse = await fetch(rankingUrl);
+                console.log('Ranking response status:', rankingResponse.status);
+
+                if (rankingResponse.ok) {
+                    const rankingData = await rankingResponse.json();
+                    console.log('Received ranking data:', rankingData.success, 'models count:', rankingData.data?.length);
+                    if (rankingData.success && rankingData.data) {
+                        setRankingModels(rankingData.data);
+                        console.log('Set ranking models:', rankingData.data.length);
+                    }
+                }
+
+                // Fetch all models to get complete developer list
+                const modelsUrl = `${apiBaseUrl}/v1/models?limit=5000`;
+                console.log('Fetching models from:', modelsUrl);
+                const modelsResponse = await fetch(modelsUrl);
+                console.log('Models response status:', modelsResponse.status);
+
+                if (modelsResponse.ok) {
+                    const modelsData = await modelsResponse.json();
+                    console.log('Received models data:', modelsData.data?.length);
+                    if (modelsData.data) {
+                        setApiModels(modelsData.data);
+                        console.log('Set API models:', modelsData.data.length);
+                    }
+                }
+            } catch (error) {
+                console.log('Failed to fetch data:', error);
+            } finally {
+                setLoading(false);
             }
-            orgMap.get(model.developer)!.push(model);
+        };
+
+        fetchData();
+    }, []);
+
+    // Build organization logos from API response
+    useEffect(() => {
+        const logoMap = new Map<string, string>();
+        
+        // Use logo_url from the API response for each model
+        rankingModels.forEach(model => {
+            if (model.logo_url) {
+                logoMap.set(model.author, model.logo_url);
+            }
         });
 
-        const timeMultiplier = {
-            month: 1,
-            week: 1/4,
-            today: 1/30,
-        };
-        const volatility = {
-            month: 1,
-            week: 1.5,
-            today: 3,
-        };
-        
-        const parseTokens = (tokenStr: string) => {
-            const num = parseFloat(tokenStr);
-            if (tokenStr.includes('B')) return num * 1e9;
-            if (tokenStr.includes('M')) return num * 1e6;
-            return num;
-        };
+        setOrganizationLogos(logoMap);
+    }, [rankingModels]);
 
-        const orgArray = Array.from(orgMap.entries()).map(([name, orgModels]) => {
+    const organizations: Organization[] = useMemo(() => {
+        console.log('Processing organizations, rankingModels count:', rankingModels.length);
+        console.log('Active tab:', activeTab, 'Time frame:', timeFrame);
 
-            const total = orgModels.reduce((acc, model) => acc + parseTokens(model.tokens), 0);
-            const adjustedTotal = total * timeMultiplier[timeFrame] * (1 + (Math.random() - 0.5) * 0.1);
+        // Filter models by time period and tab
+        const timePeriod = timeFrameMapping[timeFrame];
+        console.log('Looking for time period:', timePeriod);
+
+        const filteredModels = rankingModels.filter(model => {
+            if (activeTab === 'trending') {
+                return model.time_period.toLowerCase() === 'trending';
+            } else {
+                return model.time_period.toLowerCase() === timePeriod.toLowerCase();
+            }
+        });
+
+        console.log('Filtered models count:', filteredModels.length);
+
+        // List of gateways/providers that should not be shown as developers
+        // Only include actual gateway/router services, not model developers
+        const excludedProviders = [
+          'openrouter',
+          'portkey',
+          'featherless',
+          'together',
+          'fireworks',
+          'chutes',
+          'groq',
+          'deepinfra'
+        ];
+
+        // Group models by author, excluding gateways
+        const orgMap = new Map<string, RankingModel[]>();
+        filteredModels.forEach(model => {
+            const authorLower = model.author.toLowerCase();
+
+            // Skip if this is a gateway/provider, not a model developer
+            if (excludedProviders.includes(authorLower)) {
+                return;
+            }
+
+            if (!orgMap.has(model.author)) {
+                orgMap.set(model.author, []);
+            }
+            orgMap.get(model.author)!.push(model);
+        });
+
+        // Get all unique developers from API models data (excluding gateways)
+        const allDevelopers = new Set<string>();
+        apiModels.forEach(model => {
+            const developer = (model.provider_slug || '').toLowerCase();
+            if (developer && !excludedProviders.includes(developer)) {
+                allDevelopers.add(model.provider_slug);
+            }
+        });
+
+        // Add developers that aren't in ranking data with empty model arrays
+        allDevelopers.forEach(developer => {
+            if (!orgMap.has(developer)) {
+                orgMap.set(developer, []);
+            }
+        });
+
+        // Convert to Organization objects
+        return Array.from(orgMap.entries()).map(([author, rankingModelsForAuthor]) => {
+            // If no ranking models, get count from models data
+            const hasRankingData = rankingModelsForAuthor.length > 0;
             
-            let totalTokensFormatted: string;
-            if (adjustedTotal >= 1e9) totalTokensFormatted = `${(adjustedTotal / 1e9).toFixed(1)}B`;
-            else if (adjustedTotal >= 1e6) totalTokensFormatted = `${(adjustedTotal / 1e6).toFixed(1)}M`;
-            else totalTokensFormatted = adjustedTotal.toLocaleString();
+            // Parse tokens and sum them up
+            const totalTokensNum = rankingModelsForAuthor.reduce((sum, model) => {
+                const tokensStr = model.tokens.replace(/[^0-9.]/g, '');
+                const multiplier = model.tokens.includes('T') ? 1000000000000 :
+                                  model.tokens.includes('B') ? 1000000000 :
+                                  model.tokens.includes('M') ? 1000000 : 1;
+                return sum + (parseFloat(tokensStr) || 0) * multiplier;
+            }, 0);
 
-            const topModel = orgModels.sort((a,b) => parseTokens(b.tokens) - parseTokens(a.tokens))[0]?.name || 'N/A';
+            // Format total tokens
+            const formatTokens = (num: number): string => {
+                if (num >= 1000000000000) return (num / 1000000000000).toFixed(1) + 'T';
+                if (num >= 1000000000) return (num / 1000000000).toFixed(1) + 'B';
+                if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+                if (num === 0) return 'N/A';
+                return num.toString();
+            };
+
+            // Calculate average trend percentage
+            const avgTrend = hasRankingData ? rankingModelsForAuthor.reduce((sum, model) => {
+                const trendNum = parseFloat(model.trend_percentage.replace('%', ''));
+                return sum + (isNaN(trendNum) ? 0 : trendNum);
+            }, 0) / rankingModelsForAuthor.length : 0;
+
+            // Get top model (highest rank, which means lowest rank number)
+            const topModel = hasRankingData ? rankingModelsForAuthor.reduce((top, model) =>
+                model.rank < top.rank ? model : top
+            , rankingModelsForAuthor[0]) : null;
             
-            // Fake performance change for trending sort
-            const performanceChange = (Math.random() - 0.3) * 20 * volatility[timeFrame];
+            // Get model count from API models data
+            const developerModels = apiModels.filter((m: any) => (m.provider_slug || '').toLowerCase() === author.toLowerCase());
+            const actualModelCount = developerModels.length > 0 ? developerModels.length : rankingModelsForAuthor.length;
+
+            // Format author name for display
+            const formatAuthorName = (author: string): string => {
+                const formatted: Record<string, string> = {
+                    'openai': 'OpenAI',
+                    'anthropic': 'Anthropic',
+                    'google': 'Google',
+                    'qwen': 'Qwen',
+                    'x-ai': 'xAI',
+                    'xai': 'xAI',
+                    'meta-llama': 'Meta',
+                    'deepseek': 'DeepSeek',
+                    'mistralai': 'Mistral AI',
+                    'meta': 'Meta',
+                    'cohere': 'Cohere',
+                    'amazon': 'Amazon',
+                    'microsoft': 'Microsoft',
+                    'arcee-ai': 'Arcee AI',
+                    'bytedance': 'ByteDance',
+                    'cognitivecomputations': 'Cognitive Computations',
+                    'nousresearch': 'Nous Research',
+                    'thudm': 'THUDM',
+                    'tngtech': 'TNG Technology',
+                    'z-ai': 'Z.AI',
+                    'katanemo': 'Katanemo',
+                    'moonshotai': 'Moonshot AI',
+                    'switchpoint': 'Switchpoint'
+                };
+                return formatted[author.toLowerCase()] || author.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+            };
 
             return {
-                name,
-                models: orgModels,
-                totalTokens: totalTokensFormatted,
-                topModel,
-                performanceChange,
+                id: author,
+                name: formatAuthorName(author),
+                author: author,
+                modelCount: actualModelCount,
+                totalTokens: formatTokens(totalTokensNum),
+                topModel: topModel ? topModel.model_name : (developerModels[0]?.name || 'N/A'),
+                performanceChange: avgTrend,
+                models: rankingModelsForAuthor,
+                logoUrl: organizationLogos.get(author),
             };
+        }).sort((a, b) => {
+            // For "Top" tab, sort by total tokens generated in the time period (descending)
+            if (activeTab === 'top') {
+                const aTokensStr = a.totalTokens.replace(/[^0-9.]/g, '');
+                const bTokensStr = b.totalTokens.replace(/[^0-9.]/g, '');
+
+                const aMultiplier = a.totalTokens.includes('T') ? 1000000000000 :
+                                   a.totalTokens.includes('B') ? 1000000000 :
+                                   a.totalTokens.includes('M') ? 1000000 : 1;
+                const bMultiplier = b.totalTokens.includes('T') ? 1000000000000 :
+                                   b.totalTokens.includes('B') ? 1000000000 :
+                                   b.totalTokens.includes('M') ? 1000000 : 1;
+
+                const aTokens = parseFloat(aTokensStr) * aMultiplier;
+                const bTokens = parseFloat(bTokensStr) * bMultiplier;
+
+                return bTokens - aTokens;
+            }
+
+            // For "Trending" tab, use priority order matching model dropdown
+            const priorityOrgs = ['OpenAI', 'Anthropic', 'Google', 'Qwen', 'xAI', 'Meta', 'DeepSeek', 'Mistral AI'];
+
+            const aPriority = priorityOrgs.indexOf(a.name);
+            const bPriority = priorityOrgs.indexOf(b.name);
+
+            // If both are in priority list, sort by priority order
+            if (aPriority !== -1 && bPriority !== -1) {
+                return aPriority - bPriority;
+            }
+
+            // Priority orgs come first
+            if (aPriority !== -1) return -1;
+            if (bPriority !== -1) return 1;
+
+            // For non-priority orgs, sort by total tokens (descending)
+            const aTokens = parseFloat(a.totalTokens.replace(/[^0-9.]/g, ''));
+            const bTokens = parseFloat(b.totalTokens.replace(/[^0-9.]/g, ''));
+            return bTokens - aTokens;
         });
-
-        return orgArray;
-
-    }, [timeFrame]);
+    }, [rankingModels, apiModels, timeFrame, activeTab, organizationLogos]);
 
     const filteredOrgs = useMemo(() => {
-        const parseTokens = (tokenStr: string) => {
-            const num = parseFloat(tokenStr);
-            if (tokenStr.includes('B')) return num * 1e9;
-            if (tokenStr.includes('M')) return num * 1e6;
-            return num;
-        };
-
-        const sorted = organizations.sort((a,b) => {
-            if (activeTab === 'trending') {
-                return b.performanceChange - a.performanceChange;
-            }
-            // Default to top models
-            return parseTokens(b.totalTokens) - a.totalTokens;
-        });
-
-        return sorted.filter(org => 
+        return organizations.filter(org =>
             org.name.toLowerCase().includes(searchTerm.toLowerCase())
         );
     }, [organizations, searchTerm, activeTab]);
 
+    // Calculate pagination
+    const totalPages = Math.ceil(filteredOrgs.length / itemsPerPage);
+    const paginatedOrgs = useMemo(() => {
+        const startIndex = (currentPage - 1) * itemsPerPage;
+        const endIndex = startIndex + itemsPerPage;
+        return filteredOrgs.slice(startIndex, endIndex);
+    }, [filteredOrgs, currentPage, itemsPerPage]);
+
+    // Reset to page 1 when filters change
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchTerm, activeTab, timeFrame]);
+
 
     return (
-        <div className="mx-auto max-w-screen-2xl px-4 sm:px-6 lg:px-8 py-8">
-            <header className="text-center mb-8">
-                <h1 className="text-4xl font-bold tracking-tight">Developers</h1>
-                <p className="mt-2 text-lg text-muted-foreground">
-                    Discover the organizations building the future of AI.
-                </p>
-            </header>
-            
-            <div className="max-w-xl mx-auto mb-6">
-                <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                        placeholder="Filter developers..."
-                        className="pl-9 bg-input"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                    />
-                </div>
-            </div>
-
-            <div className="flex justify-between items-center mb-8">
-                <div className="flex items-center gap-2">
-                    <Button 
-                        variant={activeTab === 'top' ? 'secondary' : 'ghost'} 
-                        onClick={() => setActiveTab('top')}
-                    >
-                        Top Models
-                    </Button>
-                    <Button 
-                        variant={activeTab === 'trending' ? 'secondary' : 'ghost'}
-                        onClick={() => setActiveTab('trending')}
-                    >
-                        Trending
-                    </Button>
-                </div>
+        <div className="min-h-[calc(100vh-130px)] bg-background pb-32">
+            <div className="mx-auto max-w-screen-2xl px-4 sm:px-6 lg:px-8 py-8">
+                <header className="text-center mb-8">
+                    <h1 className="text-4xl font-bold tracking-tight">Developers</h1>
+                    <p className="mt-2 text-lg text-muted-foreground">
+                        Discover The Organisations Building The Future Of AI
+                    </p>
+                </header>
                 
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="outline" className="w-[160px] justify-between">
-                        {timeFrameLabels[timeFrame]} <ChevronDown className="w-4 h-4" />
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
-                        <DropdownMenuItem onSelect={() => setTimeFrame('month')}>Past Month</DropdownMenuItem>
-                        <DropdownMenuItem onSelect={() => setTimeFrame('week')}>Past Week</DropdownMenuItem>
-                        <DropdownMenuItem onSelect={() => setTimeFrame('today')}>Today</DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
-            </div>
-
-            <main>
-                {filteredOrgs.length > 0 ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                        {filteredOrgs.map(org => (
-                            <OrganizationCard key={org.name} org={org} />
-                        ))}
+                <div className="max-w-xl mx-auto mb-6">
+                    <div className="relative">
+                        <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                            placeholder="Search Organisation..."
+                            className="pr-9 border"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
                     </div>
-                ) : (
-                    <p className="text-center text-muted-foreground mt-12">No developers found.</p>
-                )}
-            </main>
+                </div>
+
+                <div className="flex justify-between items-center mb-8">
+                    <div className="flex items-center gap-2">
+                        <Button
+                            variant={activeTab === 'top' ? 'default' : 'ghost'}
+                            onClick={() => setActiveTab('top')}
+                            className={activeTab === 'top' ? 'bg-muted text-foreground' : ''}
+                        >
+                            Top
+                        </Button>
+                        <Button
+                            variant={activeTab === 'trending' ? 'default' : 'ghost'}
+                            onClick={() => setActiveTab('trending')}
+                            className={activeTab === 'trending' ? 'bg-muted text-foreground' : ''}
+                        >
+                            Trending
+                        </Button>
+                    </div>
+
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="outline" className="w-[160px] justify-between">
+                            {timeFrameLabels[timeFrame]} <ChevronDown className="w-4 h-4" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
+                            <DropdownMenuItem onSelect={() => setTimeFrame('month')}>Past Month</DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => setTimeFrame('week')}>Past Week</DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => setTimeFrame('today')}>Today</DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                </div>
+
+                <main>
+                    {loading ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {Array.from({ length: 12 }).map((_, i) => (
+                                <Card key={i} className="flex flex-col bg-card border rounded-lg">
+                                    <CardContent className="p-6">
+                                        <div className="animate-pulse space-y-4">
+                                            <div className="flex items-start gap-4">
+                                                <div className="w-12 h-12 bg-gray-200 rounded-full"></div>
+                                                <div className="flex-1 space-y-2">
+                                                    <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                                                    <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                                                </div>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <div className="h-8 bg-gray-200 rounded w-1/2"></div>
+                                                <div className="h-3 bg-gray-200 rounded w-2/3"></div>
+                                            </div>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            ))}
+                        </div>
+                    ) : filteredOrgs.length > 0 ? (
+                        <>
+                            <div className="mb-6 text-sm text-muted-foreground">
+                                Showing {((currentPage - 1) * itemsPerPage) + 1}-{Math.min(currentPage * itemsPerPage, filteredOrgs.length)} of {filteredOrgs.length} developers
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {paginatedOrgs.map(org => (
+                                    <OrganizationCard key={org.id} org={org} />
+                                ))}
+                            </div>
+                            {totalPages > 1 && (
+                                <div className="flex items-center justify-center gap-2 mt-12">
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                        disabled={currentPage === 1}
+                                    >
+                                        Previous
+                                    </Button>
+                                    <div className="flex items-center gap-1">
+                                        {Array.from({ length: totalPages }, (_, i) => i + 1)
+                                            .filter(page => {
+                                                // Show first page, last page, current page, and pages around current
+                                                return page === 1 || 
+                                                       page === totalPages || 
+                                                       (page >= currentPage - 1 && page <= currentPage + 1);
+                                            })
+                                            .map((page, idx, arr) => (
+                                                <>
+                                                    {idx > 0 && arr[idx - 1] !== page - 1 && (
+                                                        <span key={`ellipsis-${page}`} className="px-2">...</span>
+                                                    )}
+                                                    <Button
+                                                        key={page}
+                                                        variant={currentPage === page ? 'default' : 'outline'}
+                                                        onClick={() => setCurrentPage(page)}
+                                                        className={currentPage === page ? 'bg-muted text-foreground' : ''}
+                                                    >
+                                                        {page}
+                                                    </Button>
+                                                </>
+                                            ))
+                                        }
+                                    </div>
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                        disabled={currentPage === totalPages}
+                                    >
+                                        Next
+                                    </Button>
+                                </div>
+                            )}
+                        </>
+                    ) : (
+                        <p className="text-center text-muted-foreground mt-12">
+                            {searchTerm ? 'No developers found matching your search.' : 'No developers found for this time period.'}
+                        </p>
+                    )}
+                </main>
+            </div>
         </div>
     );
 }

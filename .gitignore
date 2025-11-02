@@ -9,6 +9,7 @@
 !.yarn/plugins
 !.yarn/releases
 !.yarn/versions
+.claude
 
 # testing
 /coverage
@@ -42,4 +43,5 @@ next-env.d.ts
 
 # firebase
 firebase-debug.log
-firestore-debug.log
+firestore-debug.log.env.local
+.claude/settings.local.json

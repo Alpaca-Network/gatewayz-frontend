@@ -4,9 +4,9 @@ import type { ProviderInfo } from "./provider-data";
 export type ModelData = {
   name: string;
   organization: string;
-  category: 'Language' | 'Vision' | 'Multimodal' | 'Audio & Speech Models' | 'Code Models' | 'Reinforcement Learning' | 'Embedding Models' | 'Domain-Specific';
-  subCategories?: ('Text' | 'Image' | 'Audio' | 'Video')[];
-  provider: 'OpenAI' | 'Google' | 'Anthropic' | 'Meta' | 'Mistral' | 'Other';
+  category: string;
+  subCategories?: string[];
+  provider: string;
   tokens: number;
   value: string;
   change: number;

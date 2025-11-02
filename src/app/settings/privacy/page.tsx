@@ -6,7 +6,7 @@ import { Info } from "lucide-react";
 import Link from "next/link";
 import { Separator } from "@/components/ui/separator";
 
-const PrivacySettingRow = ({ title, description, children, defaultChecked = false }: { title: string, description: string, children: React.ReactNode, defaultChecked?: boolean }) => (
+const PrivacySettingRow = ({ title, description, defaultChecked = false }: { title: string, description: string, defaultChecked?: boolean }) => (
   <div className="flex items-start justify-between py-4">
     <div className="flex-1 pr-8">
       <h4 className="font-medium">{title}</h4>

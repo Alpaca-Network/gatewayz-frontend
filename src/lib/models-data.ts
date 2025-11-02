@@ -1,3 +1,4 @@
+import type { UserTier } from './api';
 
 export type Model = {
   name: string;
@@ -12,6 +13,9 @@ export type Model = {
   modalities: string[];
   series: string;
   supportedParameters: string[];
+  requiredTier?: UserTier;
+  speedTier?: 'ultra-fast' | 'fast' | 'medium' | 'slow'; // Response speed indicator
+  avgLatencyMs?: number; // Average time-to-first-token in milliseconds
 };
 
 export const models: Model[] = [
@@ -125,6 +129,20 @@ export const models: Model[] = [
     outputCost: 2.5,
     modalities: ['Text'],
     series: 'Llama',
+    supportedParameters: ['temperature', 'top_p'],
+  },
+  {
+    name: 'Arch-Router-1.5B',
+    isFree: true,
+    tokens: '19.2B tokens',
+    category: 'Router',
+    description: 'Arch-Router-1.5B is a routing model based on Qwen2.5-1.5B-Instruct, designed for intelligent request routing and preference tasks.',
+    developer: 'katanemo',
+    context: 256,
+    inputCost: 0,
+    outputCost: 0,
+    modalities: ['Text'],
+    series: 'Other',
     supportedParameters: ['temperature', 'top_p'],
   }
 ];

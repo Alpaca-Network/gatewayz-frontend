@@ -4,176 +4,459 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { ArrowRight, ChevronRight, GitMerge, ShieldCheck, TrendingUp, Zap } from 'lucide-react';
+import { ArrowRight, ChevronRight, GitMerge, ShieldCheck, TrendingUp, User, Zap, Code2, Terminal, MessageSquare, Check as CheckIcon, Send } from 'lucide-react';
 import Link from 'next/link';
+import { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
+import { usePrivy } from '@privy-io/react-auth';
+import { Check, Copy } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import { getApiKey } from '@/lib/api';
+import { API_BASE_URL } from '@/lib/config';
+import Image from 'next/image';
+import { PathChooserModal } from '@/components/onboarding/path-chooser-modal';
+import posthog from 'posthog-js';
+import {CodeExample} from "@/components/sections/CodeExample";
+import TitleSection from "@/components/sections/TitleSection";
+import LogoMarquee from "@/components/sections/LogoMarquee";
+import HowItWorks from "@/components/sections/HowItWorks";
+import Benefits from "@/components/sections/Benefits";
+import {FeaturesModern} from "@/components/sections/FeaturesModern";
+import ProblemSolution from "@/components/sections/ProblemSolution";
+import FAQ from "@/components/sections/FAQ";
 
-const FeaturedModelCard = ({ model, isNew }: { model: { name: string, by: string, tokens: string, latency: string, growth: string, color: string }, isNew?: boolean }) => (
-    <div className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50">
-      <div className="flex items-center gap-3">
-        <div className={`w-1.5 h-8 rounded-full ${model.color}`}></div>
-        <div>
-          <p className="font-semibold text-sm flex items-center">{model.name} {isNew && <span className="text-xs bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded-full ml-2">New</span>}</p>
-          <p className="text-xs text-muted-foreground">by {model.by}</p>
-        </div>
-      </div>
-      <div className="flex items-center gap-6 text-sm">
-        <div className="text-right">
-          <p>{model.tokens}</p>
-          <p className="text-xs text-muted-foreground">Tokens/sec</p>
-        </div>
-        <div className="text-right">
-          <p>{model.latency}</p>
-          <p className="text-xs text-muted-foreground">Latency</p>
-        </div>
-        <div className={`text-right ${model.growth.startsWith('-') ? 'text-red-500' : 'text-green-500'}`}>
-          <p>{model.growth}</p>
-          <p className="text-xs text-muted-foreground">Weekly growth</p>
-        </div>
-      </div>
-    </div>
-)
+interface FeaturedModel {
+  name: string;
+  by: string;
+  tokens: string;
+  latency: string;
+  growth: string;
+  color: string;
+  logo_url?: string;
+}
 
-const StatItem = ({ value, label }: { value: string, label: string }) => (
-  <div className="text-center">
-    <p className="text-4xl md:text-5xl font-bold tracking-tighter">{value}</p>
-    <p className="text-sm text-muted-foreground mt-1">{label}</p>
-  </div>
-)
-
-const HowItWorksStep = ({ number, title, description, children }: { number: number, title: string, description: string, children: React.ReactNode }) => (
-  <div className="space-y-4">
-    <div className="flex items-center gap-4">
-      <div className="w-8 h-8 flex items-center justify-center rounded-full bg-primary/10 text-primary font-bold">{number}</div>
-      <h3 className="text-lg font-semibold">{title}</h3>
-    </div>
-    <p className="text-muted-foreground pl-12">{description}</p>
-    <div className="pl-12">{children}</div>
-  </div>
-)
-
-const FeatureCard = ({ icon: Icon, title, description, linkText, linkHref }: { icon: React.ElementType, title: string, description: string, linkText: string, linkHref: string }) => (
-  <Card className="p-6 text-center">
-    <div className="flex justify-center mb-4">
-      <div className="w-16 h-16 flex items-center justify-center rounded-2xl bg-muted">
-        <Icon className="w-8 h-8 text-primary"/>
-      </div>
-    </div>
-    <h3 className="text-lg font-semibold mb-2">{title}</h3>
-    <p className="text-muted-foreground text-sm mb-4">{description}</p>
-    <Link href={linkHref}>
-      <Button variant="link" className="text-primary">{linkText} <ArrowRight className="w-4 h-4 ml-1"/></Button>
-    </Link>
-  </Card>
-)
-
-const AnnouncementCard = ({ title, description, date, isNew }: { title: string, description: string, date: string, isNew?: boolean }) => (
-    <div className="p-4 rounded-lg hover:bg-muted/50">
-        <h4 className="font-semibold text-base mb-1">{title} {isNew && <span className="text-xs bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded-full ml-2">New</span>}</h4>
-        <p className="text-sm text-muted-foreground mb-2">{description}</p>
-        <p className="text-xs text-muted-foreground">{date}</p>
-    </div>
-)
-
+interface RankingModelData {
+  id: number;
+  rank: number;
+  model_name: string;
+  author: string;
+  tokens: string;
+  trend_percentage: string;
+  trend_direction: "up" | "down";
+  trend_icon: string;
+  trend_color: string;
+  model_url: string;
+  author_url: string;
+  time_period: string;
+  scraped_at: string;
+  logo_url: string;
+}
 
 export default function Home() {
-  const featuredModels = [
-      { name: 'Gemini 2.5 Pro', by: 'google', tokens: '170.06', latency: '2.6s', growth: '-6.83%', color: 'bg-blue-400' },
-      { name: 'GPT-5 Chat', by: 'openai', tokens: '20.98', latency: '850ms', growth: '--', color: 'bg-green-400' },
-      { name: 'Claude Sonnet 4', by: 'anthropic', tokens: '585.26', latency: '1.9s', growth: '-9.04%', color: 'bg-purple-400' },
-  ];
-  
+  const [activeModelIndex, setActiveModelIndex] = useState<number | null>(0);
+  const [message, setMessage] = useState('');
+  const router = useRouter();
+  const { user, ready, login } = usePrivy();
+  const [apiKey, setApiKey] = useState('');
+  const carouselRef = useRef<HTMLDivElement>(null);
+  const [carouselOffset, setCarouselOffset] = useState(0);
+  const [activeCodeTab, setActiveCodeTab] = useState<'python' | 'javascript' | 'curl'>('python');
+  const [codeCopied, setCodeCopied] = useState(false);
+  const [showApiKey, setShowApiKey] = useState(true);
+  const { toast } = useToast();
+  const [showPathChooser, setShowPathChooser] = useState(false);
+
+  // Load the actual API key when user is authenticated
+  useEffect(() => {
+    const loadApiKey = () => {
+      // Wait for Privy to be ready
+      if (!ready) {
+        return;
+      }
+
+      if (user) {
+        const userApiKey = getApiKey();
+        if (userApiKey) {
+          setApiKey(userApiKey);
+        } else {
+          // User is authenticated but no API key yet - show placeholder
+          setApiKey('');
+        }
+      } else {
+        setApiKey(''); // Show placeholder when not authenticated
+      }
+    };
+
+    // Load initially
+    loadApiKey();
+
+    // Listen for storage changes (in case API key is set in another component)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'gatewayz_api_key') {
+        loadApiKey();
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+
+    // Poll for changes every 5 seconds to catch same-tab updates (reduced from 1s for performance)
+    const interval = setInterval(loadApiKey, 5000);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      clearInterval(interval);
+    };
+  }, [user, ready]);
+
+  // Dynamic code examples with actual API key
+  const codeExamples = {
+    python: `from openai import OpenAI
+
+client = OpenAI(
+    base_url="https://api.gatewayz.ai/v1",
+    api_key="${apiKey || 'YOUR_API_KEY'}"
+)
+
+completion = client.chat.completions.create(
+    model="gpt-4",
+    messages=[
+        {"role": "user", "content": "Hello!"}
+    ]
+)
+
+print(completion.choices[0].message)`,
+
+    javascript: `import OpenAI from "openai";
+
+const openai = new OpenAI({
+  baseURL: "https://api.gatewayz.ai/v1",
+  apiKey: "${apiKey || 'YOUR_API_KEY'}",
+});
+
+const completion = await openai.chat.completions.create({
+  model: "gpt-4",
+  messages: [
+    { role: "user", content: "Hello!" }
+  ],
+});
+
+console.log(completion.choices[0].message);`,
+
+    curl: `curl https://api.gatewayz.ai/v1/chat/completions \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer ${apiKey || 'YOUR_API_KEY'}" \\
+  -d '{
+    "model": "gpt-4",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Hello!"
+      }
+    ]
+  }'`
+  };
+  const [featuredModels, setFeaturedModels] = useState<FeaturedModel[]>([]);
+  const [isLoadingModels, setIsLoadingModels] = useState(true);
+
+  // Fetch models from rankings API
+  useEffect(() => {
+    const fetchRankingModels = async () => {
+      try {
+        setIsLoadingModels(true);
+        const response = await fetch(`${API_BASE_URL}/ranking/models`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          }
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          const rankingModels: RankingModelData[] = result.data || [];
+
+          // Map ranking data to featured model format
+          const mappedModels: FeaturedModel[] = rankingModels.slice(0, 10).map((model) => {
+            // Get logo based on author
+            const authorLower = model.author.toLowerCase();
+            let logo_url = '/logo_black.svg'; // Default logo
+
+            if (authorLower.includes('google')) {
+              logo_url = '/Google_Logo-black.svg';
+            } else if (authorLower.includes('openai')) {
+              logo_url = '/OpenAI_Logo-black.svg';
+            } else if (authorLower.includes('anthropic')) {
+              logo_url = '/anthropic-logo.svg';
+            } else if (authorLower.includes('meta')) {
+              logo_url = '/Meta_Logo-black.svg';
+            } else if (authorLower.includes('deepseek')) {
+              logo_url = '/deepseek-icon.svg';
+            } else if (authorLower.includes('x-ai') || authorLower.includes('xai')) {
+              logo_url = '/xai-logo.svg';
+            }
+
+            // Format growth percentage
+            const growth = model.trend_direction === 'up'
+              ? `+${model.trend_percentage}`
+              : model.trend_direction === 'down'
+                ? `-${model.trend_percentage}`
+                : model.trend_percentage;
+
+            return {
+              name: model.model_name,
+              by: model.author,
+              tokens: model.tokens,
+              latency: '--', // Not provided by ranking API
+              growth: growth,
+              color: model.trend_direction === 'up' ? 'bg-green-400' : model.trend_direction === 'down' ? 'bg-red-400' : 'bg-gray-400',
+              logo_url: logo_url
+            };
+          });
+
+          setFeaturedModels(mappedModels);
+        } else {
+          console.error('Failed to fetch ranking models');
+          // Set fallback models if API fails
+          setFeaturedModels([
+            { name: 'Gemini 2.5 Pro', by: 'google', tokens: '170.06', latency: '2.6s', growth: '+13.06%', color: 'bg-blue-400', logo_url: '/Google_Logo-black.svg' },
+            { name: 'GPT-4', by: 'openai', tokens: '20.98', latency: '850ms', growth: '--', color: 'bg-green-400', logo_url: '/OpenAI_Logo-black.svg' },
+            { name: 'Claude Sonnet 4', by: 'anthropic', tokens: '585.26', latency: '1.9s', growth: '-9.04%', color: 'bg-purple-400', logo_url: '/anthropic-logo.svg' }
+          ]);
+        }
+      } catch (error) {
+        console.error('Error fetching ranking models:', error);
+        // Set fallback models on error
+        setFeaturedModels([
+          { name: 'Gemini 2.5 Pro', by: 'google', tokens: '170.06', latency: '2.6s', growth: '+13.06%', color: 'bg-blue-400', logo_url: '/Google_Logo-black.svg' },
+          { name: 'GPT-4', by: 'openai', tokens: '20.98', latency: '850ms', growth: '--', color: 'bg-green-400', logo_url: '/OpenAI_Logo-black.svg' },
+          { name: 'Claude Sonnet 4', by: 'anthropic', tokens: '585.26', latency: '1.9s', growth: '-9.04%', color: 'bg-purple-400', logo_url: '/anthropic-logo.svg' }
+        ]);
+      } finally {
+        setIsLoadingModels(false);
+      }
+    };
+
+    fetchRankingModels();
+  }, []);
+
+  // Auto-advance carousel every 3 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setActiveModelIndex((prev) => {
+        if (prev === null) return 0;
+        return (prev + 1) % featuredModels.length;
+      });
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [featuredModels.length]);
+
+  // Double the models array for infinite scrolling
+  const displayModels = [...featuredModels, ...featuredModels];
+
+  // Calculate offset - just measure collapsed card widths, not the expanded one
+  useEffect(() => {
+    const updateOffset = () => {
+      if (carouselRef.current && activeModelIndex !== null) {
+        // Assume compact cards are ~96px on desktop, ~80px on mobile
+        // Expanded card is ~400px on desktop, ~280px on mobile
+        const compactWidth = window.innerWidth >= 640 ? 96 : 80;
+        const gap = 8;
+
+        // Calculate offset: number of cards before active * (compact width + gap)
+        const offset = activeModelIndex * (compactWidth + gap);
+
+        setCarouselOffset(-offset);
+      }
+    };
+
+    updateOffset();
+    const timer = setTimeout(updateOffset, 100);
+
+    return () => clearTimeout(timer);
+  }, [activeModelIndex]);
+
+  const handleModelClick = (index: number) => {
+    setActiveModelIndex(index);
+  };
+
+  const handleSendMessage = () => {
+    if (message.trim() && activeModelIndex !== null) {
+      const selectedModel = featuredModels[activeModelIndex];
+      // Navigate to chat page with the selected model
+      router.push(`/chat?model=${encodeURIComponent(selectedModel.name)}&message=${encodeURIComponent(message)}`);
+    }
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleSendMessage();
+    }
+  };
+
+  const handleCopyApiKey = () => {
+    if (apiKey) {
+      navigator.clipboard.writeText(apiKey);
+      toast({
+        title: "API Key Copied",
+        description: "Your API key has been copied to clipboard.",
+      });
+    }
+  };
+
+  const handleGenerateApiKey = () => {
+    if (user) {
+      // If already logged in, redirect to credits page to claim trial
+      router.push('/settings/credits');
+    } else {
+      // If not logged in, trigger login
+      login();
+    }
+  };
+
+  const handleCopyCode = () => {
+    navigator.clipboard.writeText(codeExamples[activeCodeTab]);
+    setCodeCopied(true);
+    toast({
+      title: "Code copied!",
+      description: "The code has been copied to your clipboard.",
+    });
+    setTimeout(() => setCodeCopied(false), 2000);
+  };
+
+  // Track page view on mount
+  useEffect(() => {
+    posthog.capture('view_homepage');
+  }, []);
+
   return (
-    <div className="bg-background text-foreground">
-      <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-20">
-        {/* Hero Section */}
-        <section className="grid md:grid-cols-2 gap-12 items-center mb-24">
-          <div className="space-y-6">
-            <h1 className="text-5xl md:text-6xl font-extrabold tracking-tighter">The Unified Interface For LLMs</h1>
-            <p className="text-lg text-muted-foreground">Better prices, better uptime, no subscription.</p>
-            <div className="relative">
-              <Input placeholder="Start a message..." className="h-12 pr-14" />
-              <Button size="icon" className="absolute right-2 top-1/2 -translate-y-1/2 h-9 w-9">
-                <ArrowRight className="w-5 h-5" />
-              </Button>
-            </div>
+    <div className="bg-background text-foreground w-full overflow-x-hidden overflow-y-auto h-full">
+      {/* Claude Code Integration Banner - Commented out in master */}
+      {/*<div className="bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-md overflow-hidden">*/}
+      {/*  <div className="w-full px-3 sm:px-4 md:px-6 lg:px-8 py-2 sm:py-4">*/}
+      {/*    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-4">*/}
+      {/*      <div className="flex items-start gap-2 sm:gap-3 flex-1 min-w-0">*/}
+      {/*        <div className="bg-white/20 backdrop-blur-sm rounded-lg p-1.5 sm:p-2 flex-shrink-0">*/}
+      {/*          <svg className="w-4 h-4 sm:w-6 sm:h-6" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">*/}
+      {/*            <path d="M13 2L3 14h8l-1 8 10-12h-8l1-8z" fill="currentColor"/>*/}
+      {/*          </svg>*/}
+      {/*        </div>*/}
+      {/*        <div className="flex-1 min-w-0">*/}
+      {/*          <p className="font-semibold text-xs sm:text-base leading-tight">*/}
+      {/*            🚀 New: Integrate Claude Code with Gatewayz API*/}
+      {/*          </p>*/}
+      {/*          <p className="text-[11px] sm:text-sm text-white/90 leading-tight mt-0.5">*/}
+      {/*            Access multiple AI models, save costs, and build faster*/}
+      {/*          </p>*/}
+      {/*        </div>*/}
+      {/*      </div>*/}
+      {/*      <Link href="/start/claude-code" className="w-full sm:w-auto flex-shrink-0">*/}
+      {/*        <Button*/}
+      {/*          variant="secondary"*/}
+      {/*          size="sm"*/}
+      {/*          className="bg-background text-purple-600 dark:text-purple-400 hover:bg-muted whitespace-nowrap w-full sm:w-auto text-xs sm:text-sm py-1.5 sm:py-2"*/}
+      {/*          onClick={() => posthog.capture('claude_code_banner_clicked')}*/}
+      {/*        >*/}
+      {/*          Get Started →*/}
+      {/*        </Button>*/}
+      {/*      </Link>*/}
+      {/*    </div>*/}
+      {/*  </div>*/}
+      {/*</div>*/}
+
+      <main className="w-full overflow-x-hidden">
+        <div className="max-w-7xl mx-auto px-2 sm:px-4 md:px-6 lg:px-8" style={{position: 'relative'}}>
+          {/* Hero Section */}
+          <Image
+            src="/logo_transparent.svg"
+            alt="Background logo"
+            width={768}
+            height={768}
+            priority
+            className="absolute top-8 left-1/2 transform -translate-x-1/2 w-[200px] h-[200px] sm:w-[450px] sm:h-[450px] lg:w-[640px] lg:h-[640px] xl:w-[768px] xl:h-[768px] pointer-events-none opacity-30 sm:opacity-100"
+            style={{ zIndex: 0 }}
+          />
+
+          <section className="pt-12 sm:pt-20 md:pt-28 lg:pt-36 pb-8 md:pb-12 max-w-5xl mx-auto px-2 sm:px-4 relative min-h-[90vh] sm:min-h-[100vh]" style={{ zIndex: 1 }}>
+            <TitleSection/>
+
+            <PathChooserModal open={showPathChooser} onOpenChange={setShowPathChooser} />
+
+            {/* Three Path Cards - Above the Fold */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6 mt-8 sm:mt-12 mb-8 sm:mb-12">
+            {/* API Path Card */}
+            <Link href="/start/api" className="group">
+              <div className="bg-card border-2 border-border hover:border-blue-500 rounded-lg p-4 sm:p-6 shadow-sm hover:shadow-md transition-all h-full flex flex-col">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center mb-3 sm:mb-4 group-hover:scale-110 transition-transform">
+                  <Code2 className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600 dark:text-blue-400" />
+                </div>
+                <h3 className="text-lg sm:text-xl font-bold mb-2">Use the API</h3>
+                <p className="text-sm text-muted-foreground mb-4 flex-grow">
+                  Copy key → make your first API call in 30 seconds
+                </p>
+                <div className="mt-auto">
+                  <div className="text-sm font-medium text-blue-600 dark:text-blue-400 group-hover:underline">
+                    Get Started →
+                  </div>
+                </div>
+              </div>
+            </Link>
+
+            {/* Claude Code Path Card */}
+            <Link href="/start/claude-code" className="group">
+              <div className="bg-card border-2 border-border hover:border-purple-500 rounded-lg p-4 sm:p-6 shadow-sm hover:shadow-md transition-all h-full flex flex-col">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center mb-3 sm:mb-4 group-hover:scale-110 transition-transform">
+                  <Terminal className="w-5 h-5 sm:w-6 sm:h-6 text-purple-600 dark:text-purple-400" />
+                </div>
+                <h3 className="text-lg sm:text-xl font-bold mb-2">Install Claude Code</h3>
+                <p className="text-sm text-muted-foreground mb-4 flex-grow">
+                  One command → AI-powered coding in minutes
+                </p>
+                <div className="mt-auto">
+                  <div className="text-sm font-medium text-purple-600 dark:text-purple-400 group-hover:underline">
+                    Get Started →
+                  </div>
+                </div>
+              </div>
+            </Link>
+
+            {/* Chat Path Card */}
+            <Link href="/start/chat" className="group sm:col-span-2 md:col-span-1">
+              <div className="bg-card border-2 border-border hover:border-green-500 rounded-lg p-4 sm:p-6 shadow-sm hover:shadow-md transition-all h-full flex flex-col">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mb-3 sm:mb-4 group-hover:scale-110 transition-transform">
+                  <MessageSquare className="w-5 h-5 sm:w-6 sm:h-6 text-green-600 dark:text-green-400" />
+                </div>
+                <h3 className="text-lg sm:text-xl font-bold mb-2">Open Chat</h3>
+                <p className="text-sm text-muted-foreground mb-4 flex-grow">
+                  Start chatting → we pick the best model for you
+                </p>
+                <div className="mt-auto">
+                  <div className="text-sm font-medium text-green-600 dark:text-green-400 group-hover:underline">
+                    Get Started →
+                  </div>
+                </div>
+              </div>
+            </Link>
           </div>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="text-lg">Featured Models</CardTitle>
-              <Link href="/rankings">
-                <Button variant="link" className="text-sm">View Trending <ArrowRight className="w-4 h-4 ml-1"/></Button>
-              </Link>
-            </CardHeader>
-            <CardContent className="space-y-2">
-                {featuredModels.map((model, i) => <FeaturedModelCard key={i} model={model} isNew={model.name.includes('GPT-5')} />)}
-            </CardContent>
-          </Card>
-        </section>
+          </section>
 
-        {/* Stats Section */}
-        <section className="grid grid-cols-2 md:grid-cols-4 gap-8 my-24">
-            <StatItem value="8.4T" label="Monthly Tokens" />
-            <StatItem value="2.5M+" label="Global Users" />
-            <StatItem value="60+" label="Active Providers" />
-            <StatItem value="400+" label="Models" />
-        </section>
+          <div className="my-12 w-full animate-fade-in opacity-0 delay-400">
+            <LogoMarquee />
+          </div>
 
-        {/* How It Works Section */}
-        <section className="grid md:grid-cols-3 gap-12 my-24">
-            <HowItWorksStep number={1} title="Signup" description="Create an account to get started. You can set up an org for your team later.">
-                <div className="p-4 bg-muted rounded-lg h-24"></div>
-            </HowItWorksStep>
-             <HowItWorksStep number={2} title="Buy credits" description="Credits can be used with any model or provider.">
-                <div className="p-4 bg-muted rounded-lg h-24"></div>
-            </HowItWorksStep>
-             <HowItWorksStep number={3} title="Get your API key" description="Create an API key and start making requests. Fully OpenAI compatible.">
-                <div className="p-4 bg-muted rounded-lg h-24"></div>
-            </HowItWorksStep>
-        </section>
+          <CodeExample/>
 
-        {/* Features Section */}
-        <section className="grid md:grid-cols-2 lg:grid-cols-4 gap-8 my-24">
-            <FeatureCard icon={Zap} title="One API for Any Model" description="Access all major models through a single, unified interface. OpenAI SDK works out of the box." linkText="Browse all" linkHref="/models" />
-            <FeatureCard icon={GitMerge} title="Higher Availability" description="Reliable AI models via our distributed infrastructure. Fall back to other providers when one goes down." linkText="Learn more" linkHref="#" />
-            <FeatureCard icon={TrendingUp} title="Price and Performance" description="Keep costs in check without sacrificing speed. OpenRouter runs at the edge, adding just ~25ms between your users and their inference." linkText="Learn more" linkHref="#" />
-            <FeatureCard icon={ShieldCheck} title="Custom Data Policies" description="Protect your organization with fine-grained data policies. Ensure prompts only go to the models and providers you trust." linkText="View docs" linkHref="#" />
-        </section>
+          <HowItWorks/>
 
-        {/* Explore & Announcements */}
-        <section className="grid md:grid-cols-2 gap-12 my-24">
-            <div className="space-y-8">
-                <div className="p-6 border rounded-lg">
-                    <h3 className="text-lg font-semibold mb-2">Explore Models</h3>
-                    <p className="text-muted-foreground text-sm mb-4">Discover AI models across our collection, from all major labs and providers.</p>
-                    <Link href="/models"><Button variant="outline">View models <ArrowRight className="w-4 h-4 ml-2" /></Button></Link>
-                </div>
-                 <div className="p-6 border rounded-lg">
-                    <h3 className="text-lg font-semibold mb-2">Model & App Rankings</h3>
-                    <p className="text-muted-foreground text-sm mb-4">Explore token usage across models, labs, and public applications.</p>
-                    <Link href="/rankings"><Button variant="outline">View rankings <ArrowRight className="w-4 h-4 ml-2" /></Button></Link>
-                </div>
-            </div>
-            <div>
-                 <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-xl font-semibold">Recent Announcements</h3>
-                    <Link href="#"><Button variant="link">View all <ArrowRight className="w-4 h-4 ml-1"/></Button></Link>
-                 </div>
-                 <div className="space-y-4">
-                    <AnnouncementCard title="GPT-5 is now live" description="GPT-5 is here on OpenRouter - long-context, built for complex reasoning and code workflows." date="8/7/2025" isNew />
-                    <AnnouncementCard title="Audio Inputs and PDF URLs for Apps" description="Add voice input and send PDFs by URL, on any model." date="8/4/2025" isNew />
-                    <AnnouncementCard title="Presets: How To Seamlessly Transfer Model Configurations Across Apps" description="Customize once and use everywhere. Server-side presets now simplify your model workflows." date="7/29/2025" />
-                 </div>
-            </div>
-        </section>
+          <FeaturesModern/>
 
+          <ProblemSolution/>
+
+          {/*<Benefits/>*/}
+
+          <FAQ/>
+        </div>
       </main>
 
-      {/* Footer */}
-      <footer className="border-t">
-          <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 flex justify-center items-center text-sm text-muted-foreground">
-            <p>&copy; 2025 GATEWAYZ</p>
-          </div>
-      </footer>
     </div>
   );
 }
