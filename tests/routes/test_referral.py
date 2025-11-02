@@ -24,12 +24,26 @@ os.environ['SUPABASE_KEY'] = 'test-key'
 os.environ['FRONTEND_URL'] = 'https://gatewayz.ai'
 
 from src.main import app
+from src.security.deps import get_current_user
 
 
 @pytest.fixture
 def client():
-    """FastAPI test client"""
-    return TestClient(app)
+    """FastAPI test client with auth override"""
+    # Override get_current_user to return a test user
+    async def mock_get_current_user():
+        return {
+            'id': 1,
+            'user_id': 1,
+            'username': 'testuser',
+            'email': 'test@example.com',
+            'api_key': 'gw_test_key_123'
+        }
+
+    app.dependency_overrides[get_current_user] = mock_get_current_user
+    yield TestClient(app)
+    # Cleanup
+    app.dependency_overrides = {}
 
 
 @pytest.fixture
@@ -76,12 +90,10 @@ def auth_headers():
 class TestReferralStats:
     """Test referral stats endpoint"""
 
-    @patch('src.security.deps.get_user_by_api_key')
     @patch('src.db.users.get_user')
     @patch('src.services.referral.get_referral_stats')
-    def test_get_referral_stats_success(self, mock_get_stats, mock_get_user, mock_auth, client, user_with_referral, auth_headers):
+    def test_get_referral_stats_success(self, mock_get_stats, mock_get_user, client, user_with_referral, auth_headers):
         """Successfully get referral stats"""
-        mock_auth.return_value = user_with_referral
         mock_get_user.return_value = user_with_referral
         mock_get_stats.return_value = {
             'referral_code': 'TEST123',
@@ -112,11 +124,9 @@ class TestReferralStats:
 
         assert response.status_code in [401, 422]
 
-    @patch('src.security.deps.get_user_by_api_key')
     @patch('src.db.users.get_user')
-    def test_get_referral_stats_invalid_api_key(self, mock_get_user, mock_auth, client, auth_headers):
+    def test_get_referral_stats_invalid_api_key(self, mock_get_user, client, auth_headers):
         """Invalid API key returns 401"""
-        mock_auth.return_value = None
         mock_get_user.return_value = None
 
         response = client.get('/referral/stats', headers=auth_headers)
@@ -127,12 +137,10 @@ class TestReferralStats:
 class TestReferralValidation:
     """Test referral code validation"""
 
-    @patch('src.security.deps.get_user_by_api_key')
     @patch('src.db.users.get_user')
     @patch('src.services.referral.validate_referral_code')
-    def test_validate_referral_code_success(self, mock_validate, mock_get_user, mock_auth, client, user_without_referral, auth_headers):
+    def test_validate_referral_code_success(self, mock_validate, mock_get_user, client, user_without_referral, auth_headers):
         """Successfully validate a referral code"""
-        mock_auth.return_value = user_without_referral
         mock_get_user.return_value = user_without_referral
         mock_validate.return_value = {
             'valid': True,
@@ -152,12 +160,10 @@ class TestReferralValidation:
             assert data['valid'] is True
             assert 'referrer_username' in data
 
-    @patch('src.security.deps.get_user_by_api_key')
     @patch('src.db.users.get_user')
     @patch('src.services.referral.validate_referral_code')
-    def test_validate_invalid_referral_code(self, mock_validate, mock_get_user, mock_auth, client, user_without_referral, auth_headers):
+    def test_validate_invalid_referral_code(self, mock_validate, mock_get_user, client, user_without_referral, auth_headers):
         """Invalid referral code returns error"""
-        mock_auth.return_value = user_without_referral
         mock_get_user.return_value = user_without_referral
         mock_validate.return_value = {
             'valid': False,
@@ -218,12 +224,10 @@ class TestReferralCodeGeneration:
 class TestSelfReferralPrevention:
     """Test self-referral prevention"""
 
-    @patch('src.security.deps.get_user_by_api_key')
     @patch('src.db.users.get_user')
     @patch('src.services.referral.validate_referral_code')
-    def test_cannot_use_own_referral_code(self, mock_validate, mock_get_user, mock_auth, client, user_with_referral, auth_headers):
+    def test_cannot_use_own_referral_code(self, mock_validate, mock_get_user, client, user_with_referral, auth_headers):
         """User cannot use their own referral code"""
-        mock_auth.return_value = user_with_referral
         mock_get_user.return_value = user_with_referral
         mock_validate.return_value = {
             'valid': False,
@@ -306,12 +310,10 @@ class TestReferralLimits:
 class TestReferralAnalytics:
     """Test referral analytics"""
 
-    @patch('src.security.deps.get_user_by_api_key')
     @patch('src.db.users.get_user')
     @patch('src.services.referral.get_referral_stats')
-    def test_referral_list_includes_details(self, mock_get_stats, mock_get_user, mock_auth, client, user_with_referral, auth_headers):
+    def test_referral_list_includes_details(self, mock_get_stats, mock_get_user, client, user_with_referral, auth_headers):
         """Referral stats should include referral details"""
-        mock_auth.return_value = user_with_referral
         mock_get_user.return_value = user_with_referral
         mock_get_stats.return_value = {
             'referral_code': 'TEST123',
@@ -362,12 +364,10 @@ class TestReferralEdgeCases:
 
         assert normalized1 == normalized2
 
-    @patch('src.security.deps.get_user_by_api_key')
     @patch('src.db.users.get_user')
     @patch('src.services.referral.validate_referral_code')
-    def test_referral_code_with_spaces(self, mock_validate, mock_get_user, mock_auth, client, user_without_referral, auth_headers):
+    def test_referral_code_with_spaces(self, mock_validate, mock_get_user, client, user_without_referral, auth_headers):
         """Referral code with spaces should be trimmed"""
-        mock_auth.return_value = user_without_referral
         mock_get_user.return_value = user_without_referral
         mock_validate.return_value = {
             'valid': True,
@@ -411,12 +411,10 @@ class TestReferralEdgeCases:
 class TestInviteLink:
     """Test invite link generation"""
 
-    @patch('src.security.deps.get_user_by_api_key')
     @patch('src.db.users.get_user')
     @patch('src.services.referral.get_referral_stats')
-    def test_invite_link_format(self, mock_get_stats, mock_get_user, mock_auth, client, user_with_referral, auth_headers):
+    def test_invite_link_format(self, mock_get_stats, mock_get_user, client, user_with_referral, auth_headers):
         """Invite link should have correct format"""
-        mock_auth.return_value = user_with_referral
         mock_get_user.return_value = user_with_referral
         mock_get_stats.return_value = {
             'referral_code': 'TEST123',

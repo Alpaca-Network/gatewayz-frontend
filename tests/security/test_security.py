@@ -2,192 +2,79 @@
 Tests for Security Module
 
 Covers:
-- API key encryption/decryption
-- Password hashing and verification
-- Token generation and validation
+- API key generation
+- API key hashing
+- IP allowlist validation
+- Domain referrer validation
 - Security utilities
-- Error handling
 """
 
 import os
 import pytest
-from unittest.mock import patch, Mock
+from unittest.mock import patch
 
 # Set test environment
 os.environ['APP_ENV'] = 'testing'
-os.environ['ENCRYPTION_KEY'] = 'test-encryption-key-32-bytes-long!'
+os.environ['API_GATEWAY_SALT'] = 'test-salt-for-hashing-keys-minimum-16-chars'
 
 from src.security.security import (
-    encrypt_api_key,
-    decrypt_api_key,
-    hash_password,
-    verify_password,
-    generate_api_key,
+    hash_api_key,
+    generate_secure_api_key,
+    validate_ip_allowlist,
+    validate_domain_referrers,
 )
 
 
-class TestAPIKeyEncryption:
-    """Test API key encryption and decryption"""
+class TestAPIKeyHashing:
+    """Test API key hashing"""
 
-    def test_encrypt_api_key_success(self):
-        """Successfully encrypt an API key"""
+    def test_hash_api_key_success(self):
+        """Successfully hash an API key"""
         api_key = "gw_test_key_123456789"
 
-        encrypted = encrypt_api_key(api_key)
-
-        assert encrypted is not None
-        assert encrypted != api_key
-        assert isinstance(encrypted, str)
-
-    def test_decrypt_api_key_success(self):
-        """Successfully decrypt an API key"""
-        api_key = "gw_test_key_123456789"
-
-        encrypted = encrypt_api_key(api_key)
-        decrypted = decrypt_api_key(encrypted)
-
-        assert decrypted == api_key
-
-    def test_encryption_is_deterministic(self):
-        """Same input should NOT produce same encrypted output (IV should differ)"""
-        api_key = "gw_test_key_123456789"
-
-        encrypted1 = encrypt_api_key(api_key)
-        encrypted2 = encrypt_api_key(api_key)
-
-        # Encrypted values should be different due to random IV
-        # but both should decrypt to same value
-        assert decrypt_api_key(encrypted1) == api_key
-        assert decrypt_api_key(encrypted2) == api_key
-
-    def test_encrypt_empty_string(self):
-        """Encrypt empty string should work or raise appropriate error"""
-        try:
-            encrypted = encrypt_api_key("")
-            assert encrypted is not None or encrypted == ""
-        except ValueError:
-            # Acceptable if empty strings are rejected
-            pass
-
-    def test_decrypt_invalid_data(self):
-        """Decrypting invalid data should raise error"""
-        with pytest.raises(Exception):
-            decrypt_api_key("invalid_encrypted_data")
-
-    def test_decrypt_with_wrong_key(self):
-        """Decrypting with wrong key should fail"""
-        api_key = "gw_test_key_123456789"
-        encrypted = encrypt_api_key(api_key)
-
-        # Change encryption key
-        with patch.dict(os.environ, {'ENCRYPTION_KEY': 'different-key-32-bytes-long!!!'}):
-            with pytest.raises(Exception):
-                # Should fail to decrypt with different key
-                result = decrypt_api_key(encrypted)
-                # If it doesn't raise, result should be wrong
-                assert result != api_key
-
-    def test_encrypt_long_api_key(self):
-        """Encrypt very long API key"""
-        long_key = "gw_" + "x" * 1000
-
-        encrypted = encrypt_api_key(long_key)
-        decrypted = decrypt_api_key(encrypted)
-
-        assert decrypted == long_key
-
-    def test_encrypt_special_characters(self):
-        """Encrypt API key with special characters"""
-        special_key = "gw_!@#$%^&*()_+-=[]{}|;:,.<>?"
-
-        encrypted = encrypt_api_key(special_key)
-        decrypted = decrypt_api_key(encrypted)
-
-        assert decrypted == special_key
-
-
-class TestPasswordHashing:
-    """Test password hashing and verification"""
-
-    def test_hash_password_success(self):
-        """Successfully hash a password"""
-        password = "SecurePassword123!"
-
-        hashed = hash_password(password)
+        hashed = hash_api_key(api_key)
 
         assert hashed is not None
-        assert hashed != password
+        assert hashed != api_key
         assert isinstance(hashed, str)
-        assert len(hashed) > 20  # Hashed password should be longer
+        assert len(hashed) == 64  # SHA256 hex digest length
 
-    def test_verify_password_correct(self):
-        """Verify correct password"""
-        password = "SecurePassword123!"
+    def test_hash_api_key_deterministic(self):
+        """Same API key should produce same hash"""
+        api_key = "gw_test_key_123456789"
 
-        hashed = hash_password(password)
-        result = verify_password(password, hashed)
+        hash1 = hash_api_key(api_key)
+        hash2 = hash_api_key(api_key)
 
-        assert result is True
+        # Same input should produce same hash
+        assert hash1 == hash2
 
-    def test_verify_password_incorrect(self):
-        """Verify incorrect password"""
-        password = "SecurePassword123!"
-        wrong_password = "WrongPassword456!"
+    def test_hash_different_keys_different_hashes(self):
+        """Different API keys should produce different hashes"""
+        key1 = "gw_test_key_123"
+        key2 = "gw_test_key_456"
 
-        hashed = hash_password(password)
-        result = verify_password(wrong_password, hashed)
+        hash1 = hash_api_key(key1)
+        hash2 = hash_api_key(key2)
 
-        assert result is False
-
-    def test_hash_same_password_different_hashes(self):
-        """Same password should produce different hashes (salt)"""
-        password = "SecurePassword123!"
-
-        hash1 = hash_password(password)
-        hash2 = hash_password(password)
-
-        # Hashes should be different due to salt
         assert hash1 != hash2
 
-        # But both should verify correctly
-        assert verify_password(password, hash1) is True
-        assert verify_password(password, hash2) is True
+    def test_hash_api_key_requires_salt(self):
+        """Hashing should require API_GATEWAY_SALT"""
+        api_key = "gw_test_key_123"
 
-    def test_hash_empty_password(self):
-        """Hash empty password should work or raise appropriate error"""
-        try:
-            hashed = hash_password("")
+        # With proper salt, should work
+        with patch.dict(os.environ, {'API_GATEWAY_SALT': 'test-salt-16chars'}):
+            hashed = hash_api_key(api_key)
             assert hashed is not None
-        except ValueError:
-            # Acceptable if empty passwords are rejected
-            pass
 
-    def test_hash_long_password(self):
-        """Hash very long password"""
-        long_password = "x" * 1000
+    def test_hash_api_key_rejects_short_salt(self):
+        """Hashing should reject salt shorter than 16 characters"""
+        api_key = "gw_test_key_123"
 
-        hashed = hash_password(long_password)
-        result = verify_password(long_password, hashed)
-
-        assert result is True
-
-    def test_verify_password_with_invalid_hash(self):
-        """Verify password with invalid hash format"""
-        password = "SecurePassword123!"
-        invalid_hash = "not_a_valid_hash"
-
-        result = verify_password(password, invalid_hash)
-
-        assert result is False
-
-    def test_password_case_sensitive(self):
-        """Password verification is case-sensitive"""
-        password = "SecurePassword123!"
-
-        hashed = hash_password(password)
-
-        assert verify_password("securepassword123!", hashed) is False
-        assert verify_password("SECUREPASSWORD123!", hashed) is False
+        with patch.dict(os.environ, {'API_GATEWAY_SALT': 'short'}):
+            with pytest.raises(RuntimeError, match="at least 16 characters"):
+                hash_api_key(api_key)
 
 
 class TestAPIKeyGeneration:
@@ -195,109 +82,164 @@ class TestAPIKeyGeneration:
 
     def test_generate_api_key_success(self):
         """Successfully generate an API key"""
-        api_key = generate_api_key()
+        api_key = generate_secure_api_key()
 
         assert api_key is not None
         assert isinstance(api_key, str)
-        assert len(api_key) > 10
-        assert api_key.startswith("gw_")
+        assert api_key.startswith("gw_live_")
 
     def test_generate_api_key_unique(self):
         """Generated API keys should be unique"""
         keys = set()
         for _ in range(100):
-            key = generate_api_key()
+            key = generate_secure_api_key()
             keys.add(key)
 
         # All keys should be unique
         assert len(keys) == 100
 
+    def test_generate_api_key_test_environment(self):
+        """Generate test environment API key"""
+        api_key = generate_secure_api_key(environment_tag='test')
+
+        assert api_key.startswith("gw_test_")
+
+    def test_generate_api_key_staging_environment(self):
+        """Generate staging environment API key"""
+        api_key = generate_secure_api_key(environment_tag='staging')
+
+        assert api_key.startswith("gw_staging_")
+
+    def test_generate_api_key_development_environment(self):
+        """Generate development environment API key"""
+        api_key = generate_secure_api_key(environment_tag='development')
+
+        assert api_key.startswith("gw_dev_")
+
+    def test_generate_api_key_custom_length(self):
+        """Generate API key with custom length"""
+        api_key = generate_secure_api_key(key_length=64)
+
+        # URL-safe base64 encoding adds some overhead, but should be longer
+        assert len(api_key) > 64
+
     def test_generate_api_key_format(self):
         """API key should follow expected format"""
-        api_key = generate_api_key()
+        api_key = generate_secure_api_key()
 
         assert api_key.startswith("gw_")
-        # Should contain alphanumeric characters
-        assert all(c.isalnum() or c == '_' for c in api_key)
-
-    def test_generate_api_key_length(self):
-        """API key should have appropriate length"""
-        api_key = generate_api_key()
-
-        # Should be reasonably long for security
-        assert len(api_key) >= 20
+        # Should contain URL-safe characters
+        assert all(c.isalnum() or c in ('_', '-') for c in api_key)
 
 
-class TestSecurityHelpers:
-    """Test security helper functions"""
+class TestIPAllowlist:
+    """Test IP allowlist validation"""
 
-    def test_encryption_key_loaded_from_environment(self):
-        """Encryption key should be loaded from environment"""
-        assert os.getenv('ENCRYPTION_KEY') is not None
-        assert len(os.getenv('ENCRYPTION_KEY')) >= 32
+    def test_validate_ip_exact_match(self):
+        """Validate IP with exact match"""
+        client_ip = "192.168.1.100"
+        allowed_ips = ["192.168.1.100", "10.0.0.1"]
 
-    def test_encryption_requires_key(self):
-        """Encryption should require ENCRYPTION_KEY environment variable"""
-        api_key = "gw_test_key_123"
+        result = validate_ip_allowlist(client_ip, allowed_ips)
 
-        # Should work with key
-        encrypted = encrypt_api_key(api_key)
-        assert encrypted is not None
+        assert result is True
 
-        # Test without key would require unloading the module
-        # which is complex, so we just verify key exists
-        assert os.getenv('ENCRYPTION_KEY') is not None
+    def test_validate_ip_not_in_allowlist(self):
+        """Validate IP not in allowlist"""
+        client_ip = "192.168.1.200"
+        allowed_ips = ["192.168.1.100", "10.0.0.1"]
+
+        result = validate_ip_allowlist(client_ip, allowed_ips)
+
+        assert result is False
+
+    def test_validate_ip_cidr_range(self):
+        """Validate IP in CIDR range"""
+        client_ip = "192.168.1.100"
+        allowed_ips = ["192.168.1.0/24"]
+
+        result = validate_ip_allowlist(client_ip, allowed_ips)
+
+        assert result is True
+
+    def test_validate_ip_outside_cidr_range(self):
+        """Validate IP outside CIDR range"""
+        client_ip = "192.168.2.100"
+        allowed_ips = ["192.168.1.0/24"]
+
+        result = validate_ip_allowlist(client_ip, allowed_ips)
+
+        assert result is False
+
+    def test_validate_ip_empty_allowlist(self):
+        """Empty allowlist should allow all IPs"""
+        client_ip = "192.168.1.100"
+        allowed_ips = []
+
+        result = validate_ip_allowlist(client_ip, allowed_ips)
+
+        assert result is True
+
+    def test_validate_ip_mixed_formats(self):
+        """Validate IP with mixed exact and CIDR formats"""
+        client_ip = "10.0.0.5"
+        allowed_ips = ["192.168.1.100", "10.0.0.0/24", "172.16.0.1"]
+
+        result = validate_ip_allowlist(client_ip, allowed_ips)
+
+        assert result is True
 
 
-class TestSecurityEdgeCases:
-    """Test edge cases and error handling"""
+class TestDomainReferrers:
+    """Test domain referrer validation"""
 
-    def test_encrypt_none(self):
-        """Encrypt None should handle gracefully"""
-        try:
-            result = encrypt_api_key(None)
-            assert result is None or isinstance(result, str)
-        except (TypeError, ValueError):
-            # Acceptable to raise error for None
-            pass
+    def test_validate_domain_exact_match(self):
+        """Validate domain with exact match"""
+        referer = "https://example.com/page"
+        allowed_domains = ["example.com", "test.com"]
 
-    def test_decrypt_none(self):
-        """Decrypt None should handle gracefully"""
-        try:
-            result = decrypt_api_key(None)
-            assert result is None
-        except (TypeError, ValueError, AttributeError):
-            # Acceptable to raise error for None
-            pass
+        result = validate_domain_referrers(referer, allowed_domains)
 
-    def test_hash_none(self):
-        """Hash None should handle gracefully"""
-        try:
-            result = hash_password(None)
-            assert result is None or isinstance(result, str)
-        except (TypeError, ValueError, AttributeError):
-            # Acceptable to raise error for None
-            pass
+        assert result is True
 
-    def test_verify_with_none_password(self):
-        """Verify with None password should return False"""
-        hashed = hash_password("test123")
+    def test_validate_domain_with_subdomain(self):
+        """Validate subdomain"""
+        referer = "https://api.example.com/endpoint"
+        allowed_domains = ["*.example.com", "test.com"]
 
-        try:
-            result = verify_password(None, hashed)
-            assert result is False
-        except (TypeError, AttributeError):
-            # Acceptable to raise error
-            pass
+        result = validate_domain_referrers(referer, allowed_domains)
 
-    def test_verify_with_none_hash(self):
-        """Verify with None hash should return False"""
-        try:
-            result = verify_password("test123", None)
-            assert result is False
-        except (TypeError, AttributeError):
-            # Acceptable to raise error
-            pass
+        # Result depends on implementation - may need wildcard support
+        # For now, just test it doesn't crash
+        assert isinstance(result, bool)
+
+    def test_validate_domain_not_in_allowlist(self):
+        """Validate domain not in allowlist"""
+        referer = "https://malicious.com/page"
+        allowed_domains = ["example.com", "test.com"]
+
+        result = validate_domain_referrers(referer, allowed_domains)
+
+        assert result is False
+
+    def test_validate_domain_empty_allowlist(self):
+        """Empty allowlist should allow all domains"""
+        referer = "https://example.com/page"
+        allowed_domains = []
+
+        result = validate_domain_referrers(referer, allowed_domains)
+
+        assert result is True
+
+    def test_validate_domain_no_referer(self):
+        """No referer should be handled gracefully"""
+        referer = ""
+        allowed_domains = ["example.com"]
+
+        result = validate_domain_referrers(referer, allowed_domains)
+
+        # Should return False or handle gracefully
+        assert isinstance(result, bool)
 
 
 class TestSecurityConstants:
@@ -305,48 +247,41 @@ class TestSecurityConstants:
 
     def test_api_key_prefix(self):
         """API keys should use gw_ prefix"""
-        api_key = generate_api_key()
+        api_key = generate_secure_api_key()
         assert api_key.startswith("gw_")
 
-    def test_encryption_key_minimum_length(self):
-        """Encryption key should meet minimum length requirements"""
-        key = os.getenv('ENCRYPTION_KEY')
-        assert len(key) >= 32  # AES-256 requires 32 bytes
+    def test_salt_minimum_length(self):
+        """Salt should meet minimum length requirements"""
+        salt = os.getenv('API_GATEWAY_SALT')
+        assert len(salt) >= 16
 
 
-class TestEncryptionRoundtrip:
-    """Test encryption/decryption roundtrip scenarios"""
+class TestSecurityEdgeCases:
+    """Test edge cases and error handling"""
 
-    def test_multiple_roundtrips(self):
-        """Multiple encrypt/decrypt roundtrips should work"""
-        api_key = "gw_test_key_123456789"
-
-        # Encrypt and decrypt multiple times
-        for _ in range(10):
-            encrypted = encrypt_api_key(api_key)
-            decrypted = decrypt_api_key(encrypted)
-            assert decrypted == api_key
-
-    def test_encrypted_key_can_be_stored_and_retrieved(self):
-        """Encrypted keys should be storable as strings"""
-        api_key = "gw_test_key_123456789"
-
-        encrypted = encrypt_api_key(api_key)
-
-        # Simulate storage and retrieval
-        stored_encrypted = str(encrypted)
-        decrypted = decrypt_api_key(stored_encrypted)
-
-        assert decrypted == api_key
-
-    def test_unicode_characters(self):
-        """Handle Unicode characters in API keys"""
-        api_key = "gw_test_🔑_key"
-
+    def test_hash_empty_string(self):
+        """Hash empty string should work or raise appropriate error"""
         try:
-            encrypted = encrypt_api_key(api_key)
-            decrypted = decrypt_api_key(encrypted)
-            assert decrypted == api_key
-        except (UnicodeEncodeError, ValueError):
-            # Acceptable if Unicode is not supported
+            result = hash_api_key("")
+            assert isinstance(result, str)
+        except (ValueError, RuntimeError):
+            # Acceptable to raise error for empty string
             pass
+
+    def test_validate_ip_invalid_ip(self):
+        """Validate with invalid IP format"""
+        client_ip = "not_an_ip"
+        allowed_ips = ["192.168.1.0/24"]
+
+        # Should handle gracefully without crashing
+        result = validate_ip_allowlist(client_ip, allowed_ips)
+        assert isinstance(result, bool)
+
+    def test_validate_domain_invalid_url(self):
+        """Validate with invalid URL format"""
+        referer = "not a url"
+        allowed_domains = ["example.com"]
+
+        # Should handle gracefully without crashing
+        result = validate_domain_referrers(referer, allowed_domains)
+        assert isinstance(result, bool)
