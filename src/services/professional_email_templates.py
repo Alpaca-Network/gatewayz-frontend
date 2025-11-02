@@ -6,6 +6,8 @@ Professional Email Templates for AI Gateway
 import os
 from typing import Any
 
+from src.constants import APP_NAME, FRONTEND_BASE_URL, SUPPORT_EMAIL
+
 
 class ProfessionalEmailTemplates:
     """Professional email templates with modern design"""
@@ -973,7 +975,7 @@ The {self.app_name} Team
 
 # Global instance
 email_templates = ProfessionalEmailTemplates(
-    app_name=os.environ.get("APP_NAME", "Gatewayz"),
-    app_url=os.environ.get("APP_URL", "https://beta.gatewayz.ai"),
-    support_email=os.environ.get("SUPPORT_EMAIL", "support@gatewayz.ai"),
+    app_name=APP_NAME,
+    app_url=FRONTEND_BASE_URL,
+    support_email=SUPPORT_EMAIL,
 )

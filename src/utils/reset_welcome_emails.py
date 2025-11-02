@@ -81,8 +81,9 @@ def get_users_without_welcome_emails() -> list:
 
 
 if __name__ == "__main__":
-    # Example usage
-    print("Users without welcome emails:")
+    # Example usage - configure logging for CLI execution
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    logger.info("Users without welcome emails:")
     users = get_users_without_welcome_emails()
     for user in users:
-        print(f"ID: {user['id']}, Username: {user['username']}, Email: {user['email']}")
+        logger.info(f"ID: {user['id']}, Username: {user['username']}, Email: {user['email']}")

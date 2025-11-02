@@ -1,4 +1,4 @@
-import random
+import secrets
 import string
 from datetime import datetime
 
@@ -8,9 +8,9 @@ db = SQLAlchemy()
 
 
 def generate_referral_code():
-    """Generate a unique 8-character referral code"""
+    """Generate a cryptographically secure unique 8-character referral code"""
     characters = string.ascii_uppercase + string.digits
-    return "".join(random.choices(characters, k=8))
+    return "".join(secrets.choice(characters) for _ in range(8))
 
 
 class User(db.Model):

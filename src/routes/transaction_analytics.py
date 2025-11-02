@@ -39,12 +39,17 @@ async def get_transaction_analytics(
         # OpenRouter transaction analytics endpoint
         url = f"https://openrouter.ai/api/frontend/user/transaction-analytics?window={window}"
 
-        # Get cookie from environment variable with fallback to hardcoded value
+        # Get cookie from environment variable
         # NOTE: This cookie should be refreshed periodically as session cookies expire
-        # Add OPENROUTER_COOKIE to your .env file
-        default_cookie = "_ga=GA1.1.955610978.1758181216; __client_uat=1760013251; __client_uat_NO6jtgZM=1760013251; __refresh_NO6jtgZM=02VAx9G5rkw6h8UiRH4R; ph_phc_yQgAEdJJkVpI24NdSRID2mor1x1leRpDoC9yZ9mfXal_posthog=%7B%22distinct_id%22%3A%220199962a-6751-75ee-bafe-e01fe277629a%22%2C%22%24sesid%22%3A%5B1760032314911%2C%220199ca0f-9f93-7708-b994-6ec01291eeff%22%2C1760031645587%5D%2C%22%24initial_person_info%22%3A%7B%22r%22%3A%22https%3A%2F%2Fopenrouter.ai%2Fdocs%2Fquickstart%22%2C%22u%22%3A%22https%3A%2F%2Fopenrouter.ai%2Fdocs%2Ffeatures%2Fweb-search%22%7D%7D; clerk_active_context=sess_33pTw0lg7sfGaQiR5DWGcI7k5ls:org_30p9tVvCCD60jyYschdRPSIUzz0; __session=eyJhbGciOiJSUzI1NiIsImNhdCI6ImNsX0I3ZDRQRDExMUFBQSIsImtpZCI6Imluc18yUGlRcWt2UlFlZXB3R3ZrVjFZRDhBb3Q1elIiLCJ0eXAiOiJKV1QifQ.eyJhenAiOiJodHRwczovL29wZW5yb3V0ZXIuYWkiLCJleHAiOjE3NjAwMzI5NTIsImZ2YSI6WzMyNywtMV0sImlhdCI6MTc2MDAzMjg5MiwiaXNzIjoiaHR0cHM6Ly9jbGVyay5vcGVucm91dGVyLmFpIiwibmJmIjoxNzYwMDMyODgyLCJvcmdfaWQiOiJvcmdfMzBwOXRWdkNDRDYwanlZc2NoZFJQU0lVenowIiwib3JnX3Blcm1pc3Npb25zIjpbXSwib3JnX3JvbGUiOiJvcmc6bWVtYmVyIiwib3JnX3NsdWciOiJhbHBhY2EtbmV0d29yay0xNzU0MzEzODYxIiwic2lkIjoic2Vzc18zM3BUdzBsZzdzZkdhUWlSNURXR2NJN2s1bHMiLCJzdHMiOiJhY3RpdmUiLCJzdWIiOiJ1c2VyXzMzcFR3NFQ0UkxWRUZWZmxaWkszRm5YeDFTQiJ9.JkAYXyB4x0RUzWE5v5WnXwLMlAyOna8EufTynYFyHeV0krsqrAM4YkA3JVulcFs-B1GjpbF98bOYkyOBVGvdJ5btTFnc50MZ-wgqymJ7mK2ttn891a70xo3yo0sdJpA7bqIvGKBLdx87hzPkq6p_CJMbyHpnHQglMjcS76UFWPWCZWQevH3iTtQtgBYeFNZ_V1EiRVBn_AncnECGVztxbrIcEJgePy4gpDPgnu5uT33YRNr6VEgYcHKvm-SPYqjx9RC46trQk3qyEFGaZ6zEopfGIb7O5fQAYUN6bpkamHvu9JekvjcvzPwpLgMzgUF7AW8BHRggC2fsr3S28KIA7A; __session_NO6jtgZM=eyJhbGciOiJSUzI1NiIsImNhdCI6ImNsX0I3ZDRQRDExMUFBQSIsImtpZCI6Imluc18yUGlRcWt2UlFlZXB3R3ZrVjFZRDhBb3Q1elIiLCJ0eXAiOiJKV1QifQ.eyJhenAiOiJodHRwczovL29wZW5yb3V0ZXIuYWkiLCJleHAiOjE3NjAwMzI5NTIsImZ2YSI6WzMyNywtMV0sImlhdCI6MTc2MDAzMjg5MiwiaXNzIjoiaHR0cHM6Ly9jbGVyay5vcGVucm91dGVyLmFpIiwibmJmIjoxNzYwMDMyODgyLCJvcmdfaWQiOiJvcmdfMzBwOXRWdkNDRDYwanlZc2NoZFJQU0lVenowIiwib3JnX3Blcm1pc3Npb25zIjpbXSwib3JnX3JvbGUiOiJvcmc6bWVtYmVyIiwib3JnX3NsdWciOiJhbHBhY2EtbmV0d29yay0xNzU0MzEzODYxIiwic2lkIjoic2Vzc18zM3BUdzBsZzdzZkdhUWlSNURXR2NJN2s1bHMiLCJzdHMiOiJhY3RpdmUiLCJzdWIiOiJ1c2VyXzMzcFR3NFQ0UkxWRUZWZmxaWkszRm5YeDFTQiJ9.JkAYXyB4x0RUzWE5v5WnXwLMlAyOna8EufTynYFyHeV0krsqrAM4YkA3JVulcFs-B1GjpbF98bOYkyOBVGvdJ5btTFnc50MZ-wgqymJ7mK2ttn891a70xo3yo0sdJpA7bqIvGKBLdx87hzPkq6p_CJMbyHpnHQglMjcS76UFWPWCZWQevH3iTtQtgBYeFNZ_V1EiRVBn_AncnECGVztxbrIcEJgePy4gpDPgnu5uT33YRNr6VEgYcHKvm-SPYqjx9RC46trQk3qyEFGaZ6zEopfGIb7O5fQAYUN6bpkamHvu9JekvjcvzPwpLgMzgUF7AW8BHRggC2fsr3S28KIA7A; _ga_R8YZRJS2XN=GS2.1.s1760031469$o36$g1$t1760032906$j60$l0$h0"
+        # Set OPENROUTER_COOKIE in your .env file
+        cookie = Config.OPENROUTER_COOKIE
 
-        cookie = Config.OPENROUTER_COOKIE or default_cookie
+        if not cookie:
+            logger.error("OPENROUTER_COOKIE environment variable is not configured")
+            raise HTTPException(
+                status_code=503,
+                detail="Analytics service not configured. Please set OPENROUTER_COOKIE environment variable.",
+            )
 
         headers = {
             "Cookie": cookie,

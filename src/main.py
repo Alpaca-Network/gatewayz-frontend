@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from src.config import Config
+from src.constants import FRONTEND_BETA_URL, FRONTEND_STAGING_URL
 from src.services.startup import lifespan
 from src.utils.validators import ensure_api_key_like, ensure_non_empty_string
 
@@ -69,8 +70,8 @@ def create_app() -> FastAPI:
     # Environment-aware CORS origins
     # Always include beta.gatewayz.ai for frontend access
     base_origins = [
-        "https://beta.gatewayz.ai",
-        "https://staging.gatewayz.ai",
+        FRONTEND_BETA_URL,
+        FRONTEND_STAGING_URL,
         "https://api.gatewayz.ai",  # Added for chat API access from frontend
     ]
 
@@ -116,7 +117,6 @@ def create_app() -> FastAPI:
 
     # ==================== Load All Routes ====================
     logger.info("Loading application routes...")
-    print("Loading application routes...", flush=True)  # Force output for debugging
 
     # Write to file for debugging in CI
     try:
@@ -176,35 +176,29 @@ def create_app() -> FastAPI:
             # Log success
             success_msg = f"  [OK] {display_name} ({module_name})"
             logger.info(success_msg)
-            print(success_msg, flush=True)  # Force output for debugging
             loaded_count += 1
 
         except ImportError as e:
             error_msg = f"  [WARN] {display_name} ({module_name}) - Module not found: {e}"
             logger.error(error_msg)
-            print(error_msg, flush=True)  # Force output for debugging
             logger.error(f"       Full error details: {repr(e)}")
-            print(f"       Full error details: {repr(e)}", flush=True)
             import traceback
 
             tb = traceback.format_exc()
             logger.error(f"       Traceback:\n{tb}")
-            print(f"       Traceback:\n{tb}", flush=True)
             failed_count += 1
 
         except AttributeError as e:
             error_msg = f"  [ERROR] {display_name} ({module_name}) - No router found: {e}"
             logger.error(error_msg)
-            print(error_msg, flush=True)  # Force output for debugging
             failed_count += 1
 
         except Exception as e:
             error_msg = f"  [ERROR] {display_name} ({module_name}) - Error: {e}"
             logger.error(error_msg)
-            print(error_msg, flush=True)  # Force output for debugging
             import traceback
 
-            print(f"       Traceback:\n{traceback.format_exc()}", flush=True)
+            logger.error(f"       Traceback:\n{traceback.format_exc()}")
             failed_count += 1
 
     # Log summary

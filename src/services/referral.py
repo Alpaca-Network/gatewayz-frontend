@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from src.config.supabase_config import get_supabase_client
+from src.constants import SETTINGS_CREDITS_URL
 from src.db.credit_transactions import add_credits
 
 logger = logging.getLogger(__name__)
@@ -122,7 +123,7 @@ def send_referral_bonus_notification(
             <p>Keep sharing your referral code to earn more credits!</p>
 
             <div style="text-align: center; margin: 30px 0;">
-                <a href="https://gatewayz.ai/settings/credits" style="display: inline-block; background-color: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">View Your Balance</a>
+                <a href="{SETTINGS_CREDITS_URL}" style="display: inline-block; background-color: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">View Your Balance</a>
             </div>
         """
 
@@ -149,7 +150,7 @@ New Balance: ${referrer_new_balance:.2f}
 
 Keep sharing your referral code to earn more credits!
 
-View your balance: https://gatewayz.ai/settings/credits
+View your balance: {SETTINGS_CREDITS_URL}
 
 Best regards,
 The AI Gateway Team
@@ -187,7 +188,7 @@ The AI Gateway Team
             <p>This bonus was earned by using a referral code. Enjoy your credits!</p>
 
             <div style="text-align: center; margin: 30px 0;">
-                <a href="https://gatewayz.ai/settings/credits" style="display: inline-block; background-color: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">View Your Balance</a>
+                <a href="{SETTINGS_CREDITS_URL}" style="display: inline-block; background-color: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">View Your Balance</a>
             </div>
         """
 
@@ -212,7 +213,7 @@ New Balance: ${referee_new_balance:.2f}
 
 This bonus was earned by using a referral code. Enjoy your credits!
 
-View your balance: https://gatewayz.ai/settings/credits
+View your balance: {SETTINGS_CREDITS_URL}
 
 Best regards,
 The AI Gateway Team
