@@ -297,6 +297,14 @@ def get_model_id_mapping(provider: str) -> Dict[str, str]:
             # Google Vertex AI models - simple names
             # Full resource names are constructed by the client
             # Gemini 2.5 models (newest)
+            # Flash Lite (stable and preview)
+            "gemini-2.5-flash-lite": "gemini-2.5-flash-lite",
+            "google/gemini-2.5-flash-lite": "gemini-2.5-flash-lite",
+            "@google/models/gemini-2.5-flash-lite": "gemini-2.5-flash-lite",
+            "gemini-2.5-flash-lite-preview-09-2025": "gemini-2.5-flash-lite-preview-09-2025",
+            "google/gemini-2.5-flash-lite-preview-09-2025": "gemini-2.5-flash-lite-preview-09-2025",
+            "@google/models/gemini-2.5-flash-lite-preview-09-2025": "gemini-2.5-flash-lite-preview-09-2025",
+            # Flash (preview)
             "gemini-2.5-flash-preview-09-2025": GEMINI_2_5_FLASH_PREVIEW,
             "gemini-2.5-flash": GEMINI_2_5_FLASH_PREVIEW,
             "gemini-2.5-flash-preview": GEMINI_2_5_FLASH_PREVIEW,
