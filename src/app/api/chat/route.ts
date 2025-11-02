@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { handleApiError } from '@/app/api/middleware/error-handler';
+import { API_BASE_URL } from '@/lib/config';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
 
 export async function POST(request: NextRequest) {
   try {
@@ -58,10 +58,6 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ response: content });
   } catch (error) {
-    console.log('Chat API route - Error:', error);
-    return NextResponse.json(
-      { error: 'Failed to process chat request', details: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'Chat API');
   }
 }

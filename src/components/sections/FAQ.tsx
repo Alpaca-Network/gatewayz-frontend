@@ -58,40 +58,40 @@ export default function FAQ() {
   ];
 
   return (
-    <section id="faq" className="py-12 md:py-16 scroll-mt-16 bg-gradient-to-b from-white to-indigo-50/30">
+    <section id="faq" className="py-12 md:py-16 scroll-mt-16 bg-gradient-to-b from-background to-muted/30">
       <div className="container max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-8">
-          <h2 className="text-3xl md:text-4xl font-bold mb-3 text-gray-900">
+          <h2 className="text-3xl md:text-4xl font-bold mb-3 text-foreground">
             Frequently Asked Questions
           </h2>
-          <p className="text-base text-gray-600">
+          <p className="text-base text-muted-foreground">
             Everything you need to know about Gatewayz AI API
           </p>
         </div>
 
         <Accordion type="single" collapsible className="w-full space-y-4">
           {faqs.map((faq, index) => (
-            <AccordionItem 
-              key={index} 
+            <AccordionItem
+              key={index}
               value={`item-${index}`}
-              className="bg-white rounded-lg border border-gray-200 px-6"
+              className="bg-card rounded-lg border border-border px-6"
             >
               <AccordionTrigger className="text-left hover:no-underline py-5">
-                <span className="font-semibold text-gray-900">{faq.question}</span>
+                <span className="font-semibold text-foreground">{faq.question}</span>
               </AccordionTrigger>
-              <AccordionContent className="text-gray-600 pb-5">
+              <AccordionContent className="text-muted-foreground pb-5">
                 {faq.answer}
               </AccordionContent>
             </AccordionItem>
           ))}
         </Accordion>
 
-        <div className="mt-6 pt-6 border-t border-gray-200 text-center">
-          <p className="text-sm text-gray-600 mb-2">
+        <div className="mt-6 pt-6 border-t border-border text-center">
+          <p className="text-sm text-muted-foreground mb-2">
             Still have questions?{" "}
-            <a 
-              href="/contact" 
-              className="text-indigo-600 hover:text-indigo-700 font-semibold"
+            <a
+              href="/contact"
+              className="text-primary hover:text-primary/80 font-semibold"
             >
               Contact our team →
             </a>

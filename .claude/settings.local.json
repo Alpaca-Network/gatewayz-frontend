@@ -25,7 +25,13 @@
       "Bash(node:*)",
       "Bash(powershell -Command \"(Get-Content ''src\\lib\\models-data.ts'' | Select-String ''export const models'' -Context 0,5).Line\")",
       "Bash(git log -3 --format='%h %s')",
-      "Read(//Users/arminrad/Library/**)"
+      "Read(//Users/arminrad/Library/**)",
+      "Bash(find:*)",
+      "Bash(ls:*)",
+      "Bash(mkdir:*)",
+      "Bash(chmod:*)",
+      "Bash(./refactor-api-routes.sh)",
+      "Bash(npm run build)"
     ],
     "deny": [],
     "ask": []

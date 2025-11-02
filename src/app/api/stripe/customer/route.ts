@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { handleApiError } from '@/app/api/middleware/error-handler';
 import Stripe from 'stripe';
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
 
 export async function GET(req: NextRequest) {
   try {
@@ -75,10 +74,6 @@ export async function GET(req: NextRequest) {
       billingAddress,
     });
   } catch (error) {
-    console.log('Stripe customer fetch error:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch customer data' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'Stripe Customer API');
   }
 }
