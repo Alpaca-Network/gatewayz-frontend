@@ -32,6 +32,7 @@ from src.cache import (
     _vercel_ai_gateway_models_cache,
     is_cache_fresh,
     should_revalidate_in_background,
+    _FAL_CACHE_INIT_DEFERRED,
 )
 from fastapi import APIRouter
 from datetime import datetime, timezone
@@ -96,6 +97,16 @@ logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+# Initialize FAL models cache on module import for better performance
+# This ensures FAL models are available immediately without lazy loading
+try:
+    from src.cache import initialize_fal_cache_from_catalog
+    initialize_fal_cache_from_catalog()
+except ImportError:
+    # Initialization will be deferred to first request if import fails
+    logger.debug(f"{_FAL_CACHE_INIT_DEFERRED} on import")
 
 
 def load_featherless_catalog_export() -> list:
