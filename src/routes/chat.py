@@ -56,6 +56,7 @@ from src.services.provider_failover import build_provider_failover_chain, map_pr
 import src.services.rate_limiting as rate_limiting_service
 import src.services.trial_validation as trial_module
 from src.services.pricing import calculate_cost
+from src.utils.security_validators import sanitize_for_logging
 
 # Backwards compatibility wrappers for test patches
 def increment_api_key_usage(*args, **kwargs):
@@ -446,13 +447,13 @@ async def chat_completions(
                     # Prepend history to incoming messages
                     messages = history_messages + messages
 
-                    logger.info(f"Injected {len(history_messages)} messages from session {session_id}")
+                    logger.info("Injected %d messages from session %s", len(history_messages), sanitize_for_logging(str(session_id)))
                 else:
-                    logger.debug(f"No history found for session {session_id} or session doesn't exist")
+                    logger.debug("No history found for session %s or session doesn't exist", sanitize_for_logging(str(session_id)))
 
             except Exception as e:
                 # Don't fail the request if history fetch fails
-                logger.warning(f"Failed to fetch chat history for session {session_id}: {e}")
+                logger.warning("Failed to fetch chat history for session %s: %s", sanitize_for_logging(str(session_id)), sanitize_for_logging(str(e)))
 
         # Store original model for response
         original_model = req.model
@@ -491,7 +492,7 @@ async def chat_completions(
                 # Normalize provider aliases
                 if provider == "hug":
                     provider = "huggingface"
-                logger.info(f"Auto-detected provider '{provider}' for model {original_model}")
+                logger.info("Auto-detected provider '%s' for model %s", sanitize_for_logging(provider), sanitize_for_logging(original_model))
             else:
                 # Fallback to checking cached models
                 from src.services.models import get_cached_models
@@ -1058,9 +1059,9 @@ async def unified_responses(
                         for msg in session['messages']
                     ]
                     messages = history_messages + messages
-                    logger.info(f"Injected {len(history_messages)} messages from session {session_id}")
+                    logger.info("Injected %d messages from session %s", len(history_messages), sanitize_for_logging(str(session_id)))
             except Exception as e:
-                logger.warning(f"Failed to fetch chat history for session {session_id}: {e}")
+                logger.warning("Failed to fetch chat history for session %s: %s", sanitize_for_logging(str(session_id)), sanitize_for_logging(str(e)))
 
         # Store original model for response
         original_model = req.model
@@ -1106,7 +1107,7 @@ async def unified_responses(
             detected_provider = detect_provider_from_model_id(original_model)
             if detected_provider:
                 provider = detected_provider
-                logger.info(f"Auto-detected provider '{provider}' for model {original_model}")
+                logger.info("Auto-detected provider '%s' for model %s", sanitize_for_logging(provider), sanitize_for_logging(original_model))
             else:
                 # Fallback to checking cached models
                 from src.services.models import get_cached_models
@@ -1117,7 +1118,7 @@ async def unified_responses(
                     provider_models = get_cached_models(test_provider) or []
                     if any(m.get("id") == transformed for m in provider_models):
                         provider = test_provider
-                        logger.info(f"Auto-detected provider '{provider}' for model {original_model} (transformed to {transformed})")
+                        logger.info("Auto-detected provider '%s' for model %s (transformed to %s)", sanitize_for_logging(provider), sanitize_for_logging(original_model), sanitize_for_logging(transformed))
                         break
 
         provider_chain = build_provider_failover_chain(provider)

@@ -20,6 +20,7 @@ from src.db.payments import (
     get_user_payments,
     get_payment,
 )
+from src.utils.security_validators import sanitize_for_logging
 
 logger = logging.getLogger(__name__)
 
@@ -179,14 +180,14 @@ async def create_checkout_session(
     """
     try:
         user_id = current_user['id']
-        logger.info(f"Creating checkout session for user {user_id}, amount: {request.amount}, currency: {request.currency}")
+        logger.info("Creating checkout session for user %s, amount: %s, currency: %s", sanitize_for_logging(str(user_id)), sanitize_for_logging(str(request.amount)), sanitize_for_logging(request.currency))
 
         session = stripe_service.create_checkout_session(
             user_id=user_id,
             request=request
         )
 
-        logger.info(f"Checkout session created for user {user_id}: {session.session_id}")
+        logger.info("Checkout session created for user %s: %s", sanitize_for_logging(str(user_id)), sanitize_for_logging(session.session_id))
 
         return {
             "session_id": session.session_id,

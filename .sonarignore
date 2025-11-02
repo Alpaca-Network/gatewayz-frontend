@@ -1,0 +1,4 @@
+# Ignore manual integration test scripts
+# These are ad-hoc testing scripts, not part of the main codebase
+scripts/**
+scripts/integration-tests/**

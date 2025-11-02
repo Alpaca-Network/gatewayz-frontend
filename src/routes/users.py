@@ -12,6 +12,7 @@ from src.schemas import UserProfileResponse, DeleteAccountResponse, UserProfileU
 from src.security.deps import get_api_key
 from fastapi import APIRouter
 import src.services.trial_validation as trial_module
+from src.utils.security_validators import sanitize_for_logging
 
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
@@ -91,7 +92,7 @@ async def get_user_balance(api_key: str = Depends(get_api_key)):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error getting user balance: {e}")
+        logger.error("Error getting user balance: %s", sanitize_for_logging(str(e)))
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -133,7 +134,7 @@ async def user_monitor(api_key: str = Depends(get_api_key)):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error getting user monitor data: {e}")
+        logger.error("Error getting user monitor data: %s", sanitize_for_logging(str(e)))
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -193,7 +194,7 @@ async def user_get_rate_limits(api_key: str = Depends(get_api_key)):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error getting user rate limits: {e}")
+        logger.error("Error getting user rate limits: %s", sanitize_for_logging(str(e)))
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -201,21 +202,21 @@ async def user_get_rate_limits(api_key: str = Depends(get_api_key)):
 async def get_user_profile_endpoint(api_key: str = Depends(get_api_key)):
     """Get user profile information"""
     try:
-        logger.info(f"Getting user profile for API key: {api_key[:10]}...")
+        logger.info("Getting user profile for API key: %s", sanitize_for_logging(api_key[:10] + "..."))
 
         user = get_user(api_key)
         if not user:
-            logger.warning(f"User not found for API key: {api_key[:10]}...")
+            logger.warning("User not found for API key: %s", sanitize_for_logging(api_key[:10] + "..."))
             raise HTTPException(status_code=401, detail="Invalid API key")
 
-        logger.info(f"User found: {user.get('id')}, fetching profile...")
+        logger.info("User found: %s, fetching profile...", sanitize_for_logging(str(user.get('id'))))
 
         profile = get_user_profile(api_key)
         if not profile:
-            logger.error(f"Failed to get profile for user {user.get('id')}")
+            logger.error("Failed to get profile for user %s", sanitize_for_logging(str(user.get('id'))))
             raise HTTPException(status_code=500, detail="Failed to retrieve user profile")
 
-        logger.info(f"Profile retrieved successfully for user {user.get('id')}")
+        logger.info("Profile retrieved successfully for user %s", sanitize_for_logging(str(user.get('id'))))
 
         # Ensure credits is an integer for Pydantic validation
         if profile and 'credits' in profile:
@@ -226,7 +227,7 @@ async def get_user_profile_endpoint(api_key: str = Depends(get_api_key)):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error getting user profile: {e}", exc_info=True)
+        logger.error("Error getting user profile: %s", sanitize_for_logging(str(e)), exc_info=True)
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
@@ -263,7 +264,7 @@ async def update_user_profile_endpoint(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error updating user profile: {e}")
+        logger.error("Error updating user profile: %s", sanitize_for_logging(str(e)))
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -302,7 +303,7 @@ async def delete_user_account_endpoint(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error deleting user account: {e}")
+        logger.error("Error deleting user account: %s", sanitize_for_logging(str(e)))
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -375,5 +376,5 @@ async def get_credit_transactions_endpoint(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error getting credit transactions: {e}")
+        logger.error("Error getting credit transactions: %s", sanitize_for_logging(str(e)))
         raise HTTPException(status_code=500, detail="Internal server error")

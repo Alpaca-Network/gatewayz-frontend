@@ -21,6 +21,7 @@ from src.services.modelz_client import (
     fetch_modelz_tokens, get_modelz_model_ids, check_model_exists_on_modelz,
     get_modelz_model_details
 )
+from src.utils.security_validators import sanitize_for_logging
 
 
 # Initialize logging
@@ -43,6 +44,19 @@ DESC_GATEWAY_WITH_ALL = (
     "'huggingface' (or 'hug'), 'aimo', 'near', 'fal', or 'all'"
 )
 ERROR_MODELS_DATA_UNAVAILABLE = "Models data unavailable"
+ERROR_PROVIDER_DATA_UNAVAILABLE = "Provider data unavailable"
+
+# Query parameter description constants
+DESC_LIMIT_NUMBER_OF_RESULTS = "Limit number of results"
+DESC_OFFSET_FOR_PAGINATION = "Offset for pagination"
+DESC_TIME_RANGE_ALL = "Time range: '1h', '24h', '7d', '30d', 'all'"
+DESC_TIME_RANGE_NO_ALL = "Time range: '1h', '24h', '7d', '30d'"
+DESC_NUMBER_OF_MODELS_TO_RETURN = "Number of models to return"
+
+# Model filter description constants
+DESC_ALL_MODELS = "All models"
+DESC_GRADUATED_MODELS_ONLY = "Graduated models only"
+DESC_NON_GRADUATED_MODELS_ONLY = "Non-graduated models only"
 
 
 def normalize_developer_segment(value: Optional[str]) -> Optional[str]:
@@ -194,8 +208,8 @@ def merge_models_by_slug(*model_lists: List[dict]) -> List[dict]:
 @router.get("/v1/provider", tags=["providers"])
 async def get_providers(
     moderated_only: bool = Query(False, description="Filter for moderated providers only"),
-    limit: Optional[int] = Query(None, description="Limit number of results"),
-    offset: Optional[int] = Query(0, description="Offset for pagination"),
+    limit: Optional[int] = Query(None, description=DESC_LIMIT_NUMBER_OF_RESULTS),
+    offset: Optional[int] = Query(0, description=DESC_OFFSET_FOR_PAGINATION),
     gateway: Optional[str] = Query(
         "openrouter",
         description=DESC_GATEWAY_WITH_ALL,
@@ -215,7 +229,7 @@ async def get_providers(
         if gateway_value in ("openrouter", "all"):
             raw_providers = get_cached_providers()
             if not raw_providers and gateway_value == "openrouter":
-                raise HTTPException(status_code=503, detail="Provider data unavailable")
+                raise HTTPException(status_code=503, detail=ERROR_PROVIDER_DATA_UNAVAILABLE)
 
             enhanced_openrouter = annotate_provider_sources(
                 enhance_providers_with_logos_and_sites(raw_providers or []),
@@ -246,7 +260,7 @@ async def get_providers(
                     raise HTTPException(status_code=503, detail=f"{gw.capitalize()} models data unavailable")
 
         if not provider_groups:
-            raise HTTPException(status_code=503, detail="Provider data unavailable")
+            raise HTTPException(status_code=503, detail=ERROR_PROVIDER_DATA_UNAVAILABLE)
 
         combined_providers = merge_provider_lists(*provider_groups)
 
@@ -299,8 +313,8 @@ async def get_providers(
 
 async def get_models(
     provider: Optional[str] = Query(None, description="Filter models by provider"),
-    limit: Optional[int] = Query(None, description="Limit number of results"),
-    offset: Optional[int] = Query(0, description="Offset for pagination"),
+    limit: Optional[int] = Query(None, description=DESC_LIMIT_NUMBER_OF_RESULTS),
+    offset: Optional[int] = Query(0, description=DESC_OFFSET_FOR_PAGINATION),
     include_huggingface: bool = Query(
         True, description="Include Hugging Face metrics for models that have hugging_face_id"
     ),
@@ -491,7 +505,7 @@ async def get_models(
         if gateway_value in ("openrouter", "all"):
             providers = get_cached_providers()
             if not providers and gateway_value == "openrouter":
-                raise HTTPException(status_code=503, detail="Provider data unavailable")
+                raise HTTPException(status_code=503, detail=ERROR_PROVIDER_DATA_UNAVAILABLE)
             enhanced_providers = annotate_provider_sources(
                 enhance_providers_with_logos_and_sites(providers or []),
                 "openrouter",
@@ -788,14 +802,14 @@ async def get_specific_model(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to get specific model {provider_name}/{model_name}: {e}")
+        logger.error("Failed to get specific model %s/%s: %s", sanitize_for_logging(provider_name), sanitize_for_logging(model_name), sanitize_for_logging(str(e)))
         raise HTTPException(status_code=500, detail="Failed to get model data")
 
 
 async def get_developer_models(
     developer_name: str,
-    limit: Optional[int] = Query(None, description="Limit number of results"),
-    offset: Optional[int] = Query(0, description="Offset for pagination"),
+    limit: Optional[int] = Query(None, description=DESC_LIMIT_NUMBER_OF_RESULTS),
+    offset: Optional[int] = Query(0, description=DESC_OFFSET_FOR_PAGINATION),
     include_huggingface: bool = Query(True, description="Include Hugging Face metrics"),
     gateway: Optional[str] = Query("all", description="Gateway: 'openrouter', 'portkey', or 'all'"),
 ):
@@ -822,7 +836,7 @@ async def get_developer_models(
     """
     try:
         developer_name = normalize_developer_segment(developer_name) or developer_name
-        logger.info(f"Getting models for developer: {developer_name}")
+        logger.info("Getting models for developer: %s", sanitize_for_logging(developer_name))
 
         # Get models from specified gateway
         gateway_value = (gateway or "all").lower()
@@ -845,7 +859,7 @@ async def get_developer_models(
                 filtered_models.append(model)
 
         if not filtered_models:
-            logger.warning(f"No models found for developer: {developer_name}")
+            logger.warning("No models found for developer: %s", sanitize_for_logging(developer_name))
             return {
                 "developer": developer_name,
                 "models": [],
@@ -856,7 +870,7 @@ async def get_developer_models(
             }
 
         total_models = len(filtered_models)
-        logger.info(f"Found {total_models} models for developer '{developer_name}'")
+        logger.info("Found %d models for developer '%s'", total_models, sanitize_for_logging(developer_name))
 
         # Apply pagination
         if offset:
@@ -888,7 +902,7 @@ async def get_developer_models(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to get models for developer {developer_name}: {e}")
+        logger.error("Failed to get models for developer %s: %s", sanitize_for_logging(developer_name), sanitize_for_logging(str(e)))
         raise HTTPException(status_code=500, detail=f"Failed to get developer models: {str(e)}")
 
 
@@ -898,7 +912,7 @@ async def get_developer_models(
 async def get_provider_statistics(
     provider_name: str,
     gateway: Optional[str] = Query(None, description="Filter by specific gateway"),
-    time_range: str = Query("24h", description="Time range: '1h', '24h', '7d', '30d', 'all'")
+    time_range: str = Query("24h", description=DESC_TIME_RANGE_ALL)
 ):
     """
     Get comprehensive statistics for a specific provider
@@ -924,7 +938,8 @@ async def get_provider_statistics(
         GET /catalog/provider/anthropic/stats?gateway=portkey&time_range=7d
     """
     try:
-        logger.info(f"Fetching stats for provider: {provider_name}, gateway: {gateway}, time_range: {time_range}")
+        logger.info("Fetching stats for provider: %s, gateway: %s, time_range: %s", 
+                   sanitize_for_logging(provider_name), sanitize_for_logging(gateway), sanitize_for_logging(time_range))
         
         stats = get_provider_stats(
             provider_name=provider_name,
@@ -944,14 +959,14 @@ async def get_provider_statistics(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to get provider stats for {provider_name}: {e}")
+        logger.error("Failed to get provider stats for %s: %s", sanitize_for_logging(provider_name), sanitize_for_logging(str(e)))
         raise HTTPException(status_code=500, detail=f"Failed to get provider statistics: {str(e)}")
 
 
 @router.get("/v1/gateway/{gateway}/stats", tags=["statistics"])
 async def get_gateway_statistics(
     gateway: str,
-    time_range: str = Query("24h", description="Time range: '1h', '24h', '7d', '30d', 'all'")
+    time_range: str = Query("24h", description=DESC_TIME_RANGE_ALL)
 ):
     """
     Get comprehensive statistics for a specific gateway
@@ -976,7 +991,7 @@ async def get_gateway_statistics(
         GET /catalog/gateway/deepinfra/stats?time_range=7d
     """
     try:
-        logger.info(f"Fetching stats for gateway: {gateway}, time_range: {time_range}")
+        logger.info("Fetching stats for gateway: %s, time_range: %s", sanitize_for_logging(gateway), sanitize_for_logging(time_range))
         
         # Validate gateway
         valid_gateways = ["openrouter", "portkey", "featherless", "deepinfra", "chutes", "groq", "fireworks", "together"]
@@ -1003,14 +1018,14 @@ async def get_gateway_statistics(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to get gateway stats for {gateway}: {e}")
+        logger.error("Failed to get gateway stats for %s: %s", sanitize_for_logging(gateway), sanitize_for_logging(str(e)))
         raise HTTPException(status_code=500, detail=f"Failed to get gateway statistics: {str(e)}")
 
 
 async def get_trending_models_endpoint(
     gateway: Optional[str] = Query("all", description="Gateway filter or 'all'"),
-    time_range: str = Query("24h", description="Time range: '1h', '24h', '7d', '30d'"),
-    limit: int = Query(10, description="Number of models to return", ge=1, le=100),
+    time_range: str = Query("24h", description=DESC_TIME_RANGE_NO_ALL),
+    limit: int = Query(10, description=DESC_NUMBER_OF_MODELS_TO_RETURN, ge=1, le=100),
     sort_by: str = Query("requests", description="Sort by: 'requests', 'tokens', 'users'")
 ):
     """
@@ -1033,7 +1048,8 @@ async def get_trending_models_endpoint(
         GET /catalog/models/trending?gateway=deepinfra&sort_by=tokens
     """
     try:
-        logger.info(f"Fetching trending models: gateway={gateway}, time_range={time_range}, sort_by={sort_by}")
+        logger.info("Fetching trending models: gateway=%s, time_range=%s, sort_by=%s", 
+                   sanitize_for_logging(gateway), sanitize_for_logging(time_range), sanitize_for_logging(sort_by))
         
         # Validate sort_by
         valid_sort = ["requests", "tokens", "users"]
@@ -1069,7 +1085,7 @@ async def get_trending_models_endpoint(
 
 @router.get("/v1/gateways/summary", tags=["statistics"])
 async def get_all_gateways_summary_endpoint(
-    time_range: str = Query("24h", description="Time range: '1h', '24h', '7d', '30d', 'all'")
+    time_range: str = Query("24h", description=DESC_TIME_RANGE_ALL)
 ):
     """
     Get summary statistics for all gateways
@@ -1087,7 +1103,7 @@ async def get_all_gateways_summary_endpoint(
         GET /catalog/gateways/summary?time_range=24h
     """
     try:
-        logger.info(f"Fetching summary for all gateways: time_range={time_range}")
+        logger.info("Fetching summary for all gateways: time_range=%s", sanitize_for_logging(time_range))
         
         summary = get_all_gateways_summary(time_range=time_range)
         
@@ -1110,8 +1126,8 @@ async def get_all_gateways_summary_endpoint(
 @router.get("/v1/provider/{provider_name}/top-models", tags=["statistics"])
 async def get_provider_top_models_endpoint(
     provider_name: str,
-    limit: int = Query(5, description="Number of models to return", ge=1, le=20),
-    time_range: str = Query("24h", description="Time range: '1h', '24h', '7d', '30d', 'all'")
+    limit: int = Query(5, description=DESC_NUMBER_OF_MODELS_TO_RETURN, ge=1, le=20),
+    time_range: str = Query("24h", description=DESC_TIME_RANGE_ALL)
 ):
     """
     Get top models for a specific provider
@@ -1131,7 +1147,7 @@ async def get_provider_top_models_endpoint(
     """
     try:
         provider_name = normalize_developer_segment(provider_name) or provider_name
-        logger.info(f"Fetching top models for provider: {provider_name}")
+        logger.info("Fetching top models for provider: %s", sanitize_for_logging(provider_name))
         
         top_models = get_top_models_by_provider(
             provider_name=provider_name,
@@ -1151,7 +1167,7 @@ async def get_provider_top_models_endpoint(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to get top models for {provider_name}: {e}")
+        logger.error("Failed to get top models for %s: %s", sanitize_for_logging(provider_name), sanitize_for_logging(str(e)))
         raise HTTPException(status_code=500, detail=f"Failed to get top models: {str(e)}")
 
 
@@ -1186,7 +1202,7 @@ async def compare_model_across_gateways(
     try:
         provider_name = normalize_developer_segment(provider_name) or provider_name
         model_name = normalize_model_segment(model_name) or model_name
-        logger.info(f"Comparing model {provider_name}/{model_name} across gateways")
+        logger.info("Comparing model %s/%s across gateways", sanitize_for_logging(provider_name), sanitize_for_logging(model_name))
         
         # Parse gateways list
         if gateways and gateways.lower() != "all":
@@ -1238,7 +1254,7 @@ async def compare_model_across_gateways(
                     })
                     
             except Exception as e:
-                logger.warning(f"Failed to fetch model from {gateway}: {e}")
+                logger.warning("Failed to fetch model from %s: %s", sanitize_for_logging(gateway), sanitize_for_logging(str(e)))
                 comparisons.append({
                     "gateway": gateway,
                     "available": False,
@@ -1268,7 +1284,7 @@ async def compare_model_across_gateways(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to compare model {provider_name}/{model_name}: {e}")
+        logger.error("Failed to compare model %s/%s: %s", sanitize_for_logging(provider_name), sanitize_for_logging(model_name), sanitize_for_logging(str(e)))
         raise HTTPException(status_code=500, detail=f"Failed to compare model: {str(e)}")
 
 
@@ -1292,7 +1308,7 @@ async def batch_compare_models(
         POST /catalog/models/batch-compare?model_ids=openai/gpt-4&model_ids=anthropic/claude-3&criteria=price
     """
     try:
-        logger.info(f"Batch comparing {len(model_ids)} models by {criteria}")
+        logger.info("Batch comparing %d models by %s", len(model_ids), sanitize_for_logging(criteria))
         
         results = []
         
@@ -1346,7 +1362,7 @@ async def batch_compare_models(
                     })
                     
             except Exception as e:
-                logger.error(f"Error comparing {normalized_model_id}: {e}")
+                logger.error("Error comparing %s: %s", sanitize_for_logging(normalized_model_id), sanitize_for_logging(str(e)))
                 results.append({
                     "model_id": normalized_model_id,
                     "error": str(e)
@@ -1375,8 +1391,8 @@ async def batch_compare_models(
 @router.get("/v1/models", tags=["models"])
 async def get_all_models(
     provider: Optional[str] = Query(None, description="Filter models by provider"),
-    limit: Optional[int] = Query(50, description="Limit number of results (default: 50 for fast load)"),
-    offset: Optional[int] = Query(0, description="Offset for pagination"),
+    limit: Optional[int] = Query(50, description=f"{DESC_LIMIT_NUMBER_OF_RESULTS} (default: 50 for fast load)"),
+    offset: Optional[int] = Query(0, description=DESC_OFFSET_FOR_PAGINATION),
     include_huggingface: bool = Query(
         False, description="Include Hugging Face metrics for models that have hugging_face_id (slower, default: false)"
     ),
@@ -1397,8 +1413,8 @@ async def get_all_models(
 @router.get("/v1/models/trending", tags=["statistics"])
 async def get_trending_models_api(
     gateway: Optional[str] = Query("all", description="Gateway filter or 'all'"),
-    time_range: str = Query("24h", description="Time range: '1h', '24h', '7d', '30d'"),
-    limit: int = Query(10, description="Number of models to return", ge=1, le=100),
+    time_range: str = Query("24h", description=DESC_TIME_RANGE_NO_ALL),
+    limit: int = Query(10, description=DESC_NUMBER_OF_MODELS_TO_RETURN, ge=1, le=100),
     sort_by: str = Query("requests", description="Sort by: 'requests', 'tokens', 'users'"),
 ):
     return await get_trending_models_endpoint(
@@ -1470,8 +1486,8 @@ async def get_specific_model_api_legacy(
 @router.get("/v1/models/{developer_name}", tags=["models"])
 async def get_developer_models_api(
     developer_name: str,
-    limit: Optional[int] = Query(None, description="Limit number of results"),
-    offset: Optional[int] = Query(0, description="Offset for pagination"),
+    limit: Optional[int] = Query(None, description=DESC_LIMIT_NUMBER_OF_RESULTS),
+    offset: Optional[int] = Query(0, description=DESC_OFFSET_FOR_PAGINATION),
     include_huggingface: bool = Query(True, description="Include Hugging Face metrics"),
     gateway: Optional[str] = Query("all", description="Gateway: 'openrouter', 'portkey', or 'all'"),
 ):
@@ -1638,12 +1654,7 @@ async def search_models(
         
         # Sort
         reverse = (order.lower() == "desc")
-        if sort_by == "name":
-            # String sorting
-            filtered_models.sort(key=get_sort_key, reverse=reverse)
-        else:
-            # Numeric sorting
-            filtered_models.sort(key=get_sort_key, reverse=reverse)
+        filtered_models.sort(key=get_sort_key, reverse=reverse)
         
         # Apply pagination
         total_count = len(filtered_models)
@@ -1827,7 +1838,7 @@ async def get_modelz_models(
     - Includes model IDs, graduation status, and other metadata
     """
     try:
-        logger.info(f"Fetching Modelz models with is_graduated={is_graduated}")
+        logger.info("Fetching Modelz models with is_graduated=%s", is_graduated)
         
         # Fetch token data from Modelz API
         tokens = await fetch_modelz_tokens(is_graduated)
@@ -1862,9 +1873,9 @@ async def get_modelz_models(
             "filter": {
                 "is_graduated": is_graduated,
                 "description": (
-                    "All models" if is_graduated is None else
-                    "Graduated models only" if is_graduated else
-                    "Non-graduated models only"
+                    DESC_ALL_MODELS if is_graduated is None else
+                    DESC_GRADUATED_MODELS_ONLY if is_graduated else
+                    DESC_NON_GRADUATED_MODELS_ONLY
                 )
             },
             "source": "modelz",
@@ -1902,7 +1913,7 @@ async def get_modelz_model_ids_endpoint(
     - List of model IDs from Modelz
     """
     try:
-        logger.info(f"Fetching Modelz model IDs with is_graduated={is_graduated}")
+        logger.info("Fetching Modelz model IDs with is_graduated=%s", is_graduated)
         
         model_ids = await get_modelz_model_ids(is_graduated)
         
@@ -1912,9 +1923,9 @@ async def get_modelz_model_ids_endpoint(
             "filter": {
                 "is_graduated": is_graduated,
                 "description": (
-                    "All models" if is_graduated is None else
-                    "Graduated models only" if is_graduated else
-                    "Non-graduated models only"
+                    DESC_ALL_MODELS if is_graduated is None else
+                    DESC_GRADUATED_MODELS_ONLY if is_graduated else
+                    DESC_NON_GRADUATED_MODELS_ONLY
                 )
             },
             "source": "modelz"
@@ -1952,7 +1963,7 @@ async def check_model_on_modelz(
     - Additional model details if found
     """
     try:
-        logger.info(f"Checking if model '{model_id}' exists on Modelz with is_graduated={is_graduated}")
+        logger.info("Checking if model '%s' exists on Modelz with is_graduated=%s", sanitize_for_logging(model_id), is_graduated)
         
         exists = await check_model_exists_on_modelz(model_id, is_graduated)
         
@@ -1962,9 +1973,9 @@ async def check_model_on_modelz(
             "filter": {
                 "is_graduated": is_graduated,
                 "description": (
-                    "All models" if is_graduated is None else
-                    "Graduated models only" if is_graduated else
-                    "Non-graduated models only"
+                    DESC_ALL_MODELS if is_graduated is None else
+                    DESC_GRADUATED_MODELS_ONLY if is_graduated else
+                    DESC_NON_GRADUATED_MODELS_ONLY
                 )
             },
             "source": "modelz"

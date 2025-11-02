@@ -3,6 +3,7 @@ import sys
 import types
 import importlib
 from datetime import datetime, timedelta, timezone
+from unittest.mock import patch, MagicMock
 import pytest
 
 MODULE_PATH = "src.db.plans"  # change if your file lives elsewhere
@@ -329,7 +330,23 @@ def test_check_plan_entitlements_active_plan_allows_feature(mod, fake_supabase):
     assert out2["can_access_feature"] is False
 
 
-def test_get_user_usage_within_plan_limits_aggregates(mod, fake_supabase):
+def test_get_user_usage_within_plan_limits_aggregates(mod, fake_supabase, monkeypatch):
+    # Create a fixed "now" for testing (day 15 to avoid edge cases)
+    # This ensures the function's datetime.now() matches our test data
+    fixed_now = datetime(2025, 11, 15, 10, 30, 0, tzinfo=timezone.utc)
+
+    # Mock datetime.now() in the module to return a fixed value
+    # We need to patch the datetime object in the module's namespace
+    # (not the datetime class itself, which is immutable)
+    mock_datetime_class = MagicMock()
+    mock_datetime_class.now = MagicMock(return_value=fixed_now)
+    mock_datetime_class.fromisoformat = datetime.fromisoformat
+    mock_datetime_class.strptime = datetime.strptime
+    # Make the mock callable to create datetime instances
+    mock_datetime_class.side_effect = datetime
+
+    monkeypatch.setattr(mod, "datetime", mock_datetime_class)
+
     # Ensure database is clean (no leftover data from other tests)
     fake_supabase.clear_all()
 
@@ -340,48 +357,37 @@ def test_get_user_usage_within_plan_limits_aggregates(mod, fake_supabase):
         "daily_token_limit": 1000, "monthly_token_limit": 10000,
         "price_per_month": 19, "features": ["basic_models"]
     }).execute()
-
-    now = datetime.now(timezone.utc)
     fake_supabase.table("user_plans").insert({
         "id": 900, "user_id": 9, "plan_id": 9,
-        "started_at": (now - timedelta(days=1)).isoformat(),
-        "expires_at": (now + timedelta(days=5)).isoformat(),
+        "started_at": (fixed_now - timedelta(days=1)).isoformat(),
+        "expires_at": (fixed_now + timedelta(days=5)).isoformat(),
         "is_active": True
     }).execute()
 
-    # usage: today -> 3 records (100 + 200 + 50 tokens)
-    today = now.replace(hour=1, minute=0, second=0, microsecond=0)
+    # usage: today (day 15) -> 3 records (100 + 200 + 50 tokens)
+    today = fixed_now.replace(hour=1, minute=0, second=0, microsecond=0)
     fake_supabase.table("usage_records").insert([
         {"user_id": 9, "timestamp": today.isoformat(), "tokens_used": 100},
         {"user_id": 9, "timestamp": (today + timedelta(hours=1)).isoformat(), "tokens_used": 200},
         {"user_id": 9, "timestamp": (today + timedelta(hours=2)).isoformat(), "tokens_used": 50},
     ]).execute()
 
-    # earlier this month (should count toward monthly but not daily)
-    # Calculate a day that's earlier in the same month
-    if now.day > 5:
-        # Safe to use day 5
-        earlier = now.replace(day=5, hour=2, minute=0, second=0, microsecond=0)
-    elif now.day > 2:
-        # Use day 2 if we're after day 2
-        earlier = now.replace(day=2, hour=2, minute=0, second=0, microsecond=0)
-    else:
-        # We're on day 1 or 2, so skip the earlier record test
-        # Just add one more record for today instead
-        earlier = today.replace(hour=3, minute=0, second=0, microsecond=0)
-
+    # earlier this month (day 1) (should count toward monthly but not daily)
+    earlier = fixed_now.replace(day=1, hour=2, minute=0, second=0, microsecond=0)
     fake_supabase.table("usage_records").insert([
         {"user_id": 9, "timestamp": earlier.isoformat(), "tokens_used": 300},
     ]).execute()
 
     out = mod.get_user_usage_within_plan_limits(9)
-    # We should have at least 3 "today" records
-    assert out["usage"]["daily_requests"] >= 3
-    # And 4 total records
-    assert out["usage"]["daily_requests"] + (1 if earlier.date() < today.date() else 0) == out["usage"]["monthly_requests"]
-    # Token checks
-    assert out["usage"]["daily_tokens"] >= 350
-    assert out["usage"]["monthly_tokens"] >= 650
+    assert out["usage"]["daily_requests"] == 3
+    assert out["usage"]["daily_tokens"] == 350
+    assert out["usage"]["monthly_requests"] == 4
+    assert out["usage"]["monthly_tokens"] == 650
+    # remaining
+    assert out["remaining"]["daily_requests"] == 7
+    assert out["remaining"]["daily_tokens"] == 650
+    assert out["remaining"]["monthly_requests"] == 96
+    assert out["remaining"]["monthly_tokens"] == 9350
 
 
 def test_enforce_plan_limits_checks_and_env_multiplier(mod, fake_supabase):
@@ -447,7 +453,9 @@ def test_get_subscription_plans_active_only(mod, fake_supabase):
 
 def test_get_all_plans_error_returns_empty(monkeypatch):
     # Force get_supabase_client to raise
-    bad_supabase_mod = types.SimpleNamespace(get_supabase_client=lambda: (_ for _ in ()).throw(RuntimeError("boom")))
+    def raise_error():
+        raise RuntimeError("boom")
+    bad_supabase_mod = types.SimpleNamespace(get_supabase_client=raise_error)
     monkeypatch.setitem(sys.modules, "src.config.supabase_config", bad_supabase_mod)
 
     m = importlib.import_module(MODULE_PATH)

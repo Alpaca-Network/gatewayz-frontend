@@ -10,12 +10,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from src.services.models import get_cached_models
 from src.config import Config
+from utils import print_section
 
 def test_gateway(gateway_name: str):
     """Test model fetching for a specific gateway"""
-    print(f"\n{'='*60}")
-    print(f"Testing {gateway_name.upper()} gateway")
-    print(f"{'='*60}")
+    print_section(f"Testing {gateway_name.upper()} gateway", 60)
 
     # Check API key
     api_key_map = {
@@ -55,18 +54,14 @@ def test_gateway(gateway_name: str):
         traceback.print_exc()
 
 def main():
-    print("="*60)
-    print("Gateway Model Fetching Test")
-    print("="*60)
+    print_section("Gateway Model Fetching Test", 60)
 
     gateways = ['xai', 'near', 'google', 'cerebras', 'nebius', 'novita', 'huggingface']
 
     for gateway in gateways:
         test_gateway(gateway)
 
-    print(f"\n{'='*60}")
-    print("Test Complete")
-    print(f"{'='*60}\n")
+    print_section("Test Complete", 60)
 
 if __name__ == "__main__":
     main()

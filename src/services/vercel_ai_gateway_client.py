@@ -174,23 +174,6 @@ def get_provider_pricing_for_vercel_model(model_id: str):
         dict with 'prompt' and 'completion' pricing per 1M tokens
     """
     try:
-        # Extract provider from model ID if available
-        if "/" in model_id:
-            provider_prefix = model_id.split("/")[0].lower()
-        else:
-            # Try to infer from model name
-            model_name = model_id.lower()
-            if "gpt" in model_name or "dall-e" in model_name:
-                provider_prefix = "openai"
-            elif "claude" in model_name:
-                provider_prefix = "anthropic"
-            elif "gemini" in model_name:
-                provider_prefix = "google"
-            elif "llama" in model_name:
-                provider_prefix = "meta"
-            else:
-                return None
-
         # Cross-reference with known provider pricing from the system
         # This leverages the existing pricing infrastructure
         try:

@@ -34,6 +34,7 @@ from src.services.anthropic_transformer import (
     transform_openai_to_anthropic,
     extract_text_from_content
 )
+from src.utils.security_validators import sanitize_for_logging
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -258,9 +259,9 @@ async def anthropic_messages(
                         openai_messages = [openai_messages[0]] + history_messages + openai_messages[1:]
                     else:
                         openai_messages = history_messages + openai_messages
-                    logger.info(f"Injected {len(history_messages)} messages from session {session_id}")
+                    logger.info("Injected %d messages from session %s", len(history_messages), sanitize_for_logging(str(session_id)))
             except Exception as e:
-                logger.warning(f"Failed to fetch chat history for session {session_id}: {e}")
+                logger.warning("Failed to fetch chat history for session %s: %s", sanitize_for_logging(str(session_id)), sanitize_for_logging(str(e)))
 
         original_model = req.model
 
@@ -297,7 +298,7 @@ async def anthropic_messages(
                     # Normalize provider aliases
                     if provider == "hug":
                         provider = "huggingface"
-                    logger.info(f"Auto-detected provider '{provider}' for model {original_model}")
+                    logger.info("Auto-detected provider '%s' for model %s", sanitize_for_logging(provider), sanitize_for_logging(original_model))
                 else:
                     # Fallback to checking cached models
                     from src.services.models import get_cached_models
@@ -308,7 +309,7 @@ async def anthropic_messages(
                         provider_models = get_cached_models(test_provider) or []
                         if any(m.get("id") == transformed for m in provider_models):
                             provider = test_provider
-                            logger.info(f"Auto-detected provider '{provider}' for model {original_model} (transformed to {transformed})")
+                            logger.info("Auto-detected provider '%s' for model %s (transformed to %s)", sanitize_for_logging(provider), sanitize_for_logging(original_model), sanitize_for_logging(transformed))
                             break
                     # Otherwise default to openrouter (already set)
 
@@ -414,7 +415,7 @@ async def anthropic_messages(
                         "Upstream HTTP error (%s): %s", attempt_provider, exc.response.status_code
                     )
                 else:
-                    logger.error(f"Upstream error for model {request_model} on {attempt_provider}: {exc}")
+                    logger.error("Upstream error for model %s on %s: %s", sanitize_for_logging(request_model), sanitize_for_logging(attempt_provider), sanitize_for_logging(str(exc)))
                 http_exc = map_provider_error(attempt_provider, request_model, exc)
 
             if http_exc is None:

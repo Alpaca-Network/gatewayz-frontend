@@ -16,8 +16,17 @@ MODEL_PROVIDER_OVERRIDES = {
     "katanemo/arch-router-1.5b": "huggingface",
 }
 
-# Constants
-GOOGLE_MODELS_PREFIX = "@google/models/"
+# Gemini model name constants to reduce duplication
+GEMINI_2_5_FLASH_PREVIEW = "gemini-2.5-flash-preview-09-2025"
+GEMINI_2_5_PRO_PREVIEW = "gemini-2.5-pro-preview-09-2025"
+GEMINI_2_0_FLASH = "gemini-2.0-flash"
+GEMINI_2_0_PRO = "gemini-2.0-pro"
+GEMINI_1_5_PRO = "gemini-1.5-pro"
+GEMINI_1_5_FLASH = "gemini-1.5-flash"
+GEMINI_1_0_PRO = "gemini-1.0-pro"
+
+# Claude model name constants to reduce duplication
+CLAUDE_SONNET_4_5 = "anthropic/claude-sonnet-4.5"
 
 
 def transform_model_id(model_id: str, provider: str) -> str:
@@ -61,7 +70,7 @@ def transform_model_id(model_id: str, provider: str) -> str:
 
     # If already has Portkey @ prefix, return as-is (already lowercase)
     # EXCEPT for Google Vertex AI models which may use @google/models/ format
-    if model_id.startswith("@") and not model_id.startswith(GOOGLE_MODELS_PREFIX):
+    if model_id.startswith("@") and not model_id.startswith("@google/models/"):
         logger.debug(f"Model ID already in Portkey format: {model_id}")
         return model_id
 
@@ -183,11 +192,11 @@ def get_model_id_mapping(provider: str) -> Dict[str, str]:
             "anthropic/claude-3-sonnet": "anthropic/claude-3-sonnet-20240229",
             "anthropic/claude-3-haiku": "anthropic/claude-3-haiku-20240307",
             # Claude Sonnet 4.5 - support multiple input formats
-            "claude-sonnet-4-5-20250929": "anthropic/claude-sonnet-4.5",
-            "anthropic/claude-sonnet-4.5": "anthropic/claude-sonnet-4.5",
-            "anthropic/claude-4.5-sonnet": "anthropic/claude-sonnet-4.5",
-            "anthropic/claude-4.5-sonnet-20250929": "anthropic/claude-sonnet-4.5",
-            "claude-sonnet-4.5": "anthropic/claude-sonnet-4.5",
+            "claude-sonnet-4-5-20250929": CLAUDE_SONNET_4_5,
+            "anthropic/claude-sonnet-4.5": CLAUDE_SONNET_4_5,
+            "anthropic/claude-4.5-sonnet": CLAUDE_SONNET_4_5,
+            "anthropic/claude-4.5-sonnet-20250929": CLAUDE_SONNET_4_5,
+            "claude-sonnet-4.5": CLAUDE_SONNET_4_5,
             # Other models
             "meta-llama/llama-3.1-70b": "meta-llama/llama-3.1-70b-instruct",
             "deepseek-ai/deepseek-v3": "deepseek/deepseek-chat",
@@ -288,48 +297,48 @@ def get_model_id_mapping(provider: str) -> Dict[str, str]:
             # Google Vertex AI models - simple names
             # Full resource names are constructed by the client
             # Gemini 2.5 models (newest)
-            "gemini-2.5-flash-preview-09-2025": "gemini-2.5-flash-preview-09-2025",
-            "gemini-2.5-flash": "gemini-2.5-flash-preview-09-2025",
-            "gemini-2.5-flash-preview": "gemini-2.5-flash-preview-09-2025",
-            "google/gemini-2.5-flash-preview-09-2025": "gemini-2.5-flash-preview-09-2025",
-            "google/gemini-2.5-flash": "gemini-2.5-flash-preview-09-2025",
-            "@google/models/gemini-2.5-flash-preview-09-2025": "gemini-2.5-flash-preview-09-2025",
-            "@google/models/gemini-2.5-flash": "gemini-2.5-flash-preview-09-2025",
-            "gemini-2.5-pro-preview-09-2025": "gemini-2.5-pro-preview-09-2025",
-            "gemini-2.5-pro": "gemini-2.5-pro-preview-09-2025",
-            "google/gemini-2.5-pro": "gemini-2.5-pro-preview-09-2025",
-            "@google/models/gemini-2.5-pro": "gemini-2.5-pro-preview-09-2025",
+            "gemini-2.5-flash-preview-09-2025": GEMINI_2_5_FLASH_PREVIEW,
+            "gemini-2.5-flash": GEMINI_2_5_FLASH_PREVIEW,
+            "gemini-2.5-flash-preview": GEMINI_2_5_FLASH_PREVIEW,
+            "google/gemini-2.5-flash-preview-09-2025": GEMINI_2_5_FLASH_PREVIEW,
+            "google/gemini-2.5-flash": GEMINI_2_5_FLASH_PREVIEW,
+            "@google/models/gemini-2.5-flash-preview-09-2025": GEMINI_2_5_FLASH_PREVIEW,
+            "@google/models/gemini-2.5-flash": GEMINI_2_5_FLASH_PREVIEW,
+            "gemini-2.5-pro-preview-09-2025": GEMINI_2_5_PRO_PREVIEW,
+            "gemini-2.5-pro": GEMINI_2_5_PRO_PREVIEW,
+            "google/gemini-2.5-pro": GEMINI_2_5_PRO_PREVIEW,
+            "@google/models/gemini-2.5-pro": GEMINI_2_5_PRO_PREVIEW,
 
             # Gemini 2.0 models
-            "gemini-2.0-flash": "gemini-2.0-flash",
+            "gemini-2.0-flash": GEMINI_2_0_FLASH,
             "gemini-2.0-flash-thinking": "gemini-2.0-flash-thinking",
             "gemini-2.0-flash-001": "gemini-2.0-flash-001",
-            "google/gemini-2.0-flash": "gemini-2.0-flash",
-            "@google/models/gemini-2.0-flash": "gemini-2.0-flash",
-            "gemini-2.0-pro": "gemini-2.0-pro",
+            "google/gemini-2.0-flash": GEMINI_2_0_FLASH,
+            "@google/models/gemini-2.0-flash": GEMINI_2_0_FLASH,
+            "gemini-2.0-pro": GEMINI_2_0_PRO,
             "gemini-2.0-pro-001": "gemini-2.0-pro-001",
-            "google/gemini-2.0-pro": "gemini-2.0-pro",
-            "@google/models/gemini-2.0-pro": "gemini-2.0-pro",
+            "google/gemini-2.0-pro": GEMINI_2_0_PRO,
+            "@google/models/gemini-2.0-pro": GEMINI_2_0_PRO,
 
             # Gemini 1.5 models
-            "gemini-1.5-pro": "gemini-1.5-pro",
+            "gemini-1.5-pro": GEMINI_1_5_PRO,
             "gemini-1.5-pro-002": "gemini-1.5-pro-002",
-            "google/gemini-1.5-pro": "gemini-1.5-pro",
-            "@google/models/gemini-1.5-pro": "gemini-1.5-pro",
-            "gemini-1.5-flash": "gemini-1.5-flash",
+            "google/gemini-1.5-pro": GEMINI_1_5_PRO,
+            "@google/models/gemini-1.5-pro": GEMINI_1_5_PRO,
+            "gemini-1.5-flash": GEMINI_1_5_FLASH,
             "gemini-1.5-flash-002": "gemini-1.5-flash-002",
-            "google/gemini-1.5-flash": "gemini-1.5-flash",
-            "@google/models/gemini-1.5-flash": "gemini-1.5-flash",
+            "google/gemini-1.5-flash": GEMINI_1_5_FLASH,
+            "@google/models/gemini-1.5-flash": GEMINI_1_5_FLASH,
 
             # Gemini 1.0 models
-            "gemini-1.0-pro": "gemini-1.0-pro",
+            "gemini-1.0-pro": GEMINI_1_0_PRO,
             "gemini-1.0-pro-vision": "gemini-1.0-pro-vision",
-            "google/gemini-1.0-pro": "gemini-1.0-pro",
-            "@google/models/gemini-1.0-pro": "gemini-1.0-pro",
+            "google/gemini-1.0-pro": GEMINI_1_0_PRO,
+            "@google/models/gemini-1.0-pro": GEMINI_1_0_PRO,
 
             # Aliases for convenience
-            "gemini-2.0": "gemini-2.0-flash",
-            "gemini-1.5": "gemini-1.5-pro",
+            "gemini-2.0": GEMINI_2_0_FLASH,
+            "gemini-1.5": GEMINI_1_5_PRO,
         },
         "vercel-ai-gateway": {
             # Vercel AI Gateway uses standard model identifiers
@@ -444,7 +453,7 @@ def detect_provider_from_model_id(model_id: str) -> Optional[str]:
     # Check for Google Vertex AI models first (before Portkey check)
     if model_id.startswith("projects/") and "/models/" in model_id:
         return "google-vertex"
-    if model_id.startswith(GOOGLE_MODELS_PREFIX) and any(pattern in model_id.lower() for pattern in ["gemini-2.5", "gemini-2.0", "gemini-1.5", "gemini-1.0"]):
+    if model_id.startswith("@google/models/") and any(pattern in model_id.lower() for pattern in ["gemini-2.5", "gemini-2.0", "gemini-1.5", "gemini-1.0"]):
         # Patterns like "@google/models/gemini-2.5-flash"
         return "google-vertex"
     if any(pattern in model_id.lower() for pattern in ["gemini-2.5", "gemini-2.0", "gemini-1.5", "gemini-1.0"]) and "/" not in model_id:
@@ -457,7 +466,7 @@ def detect_provider_from_model_id(model_id: str) -> Optional[str]:
     # Portkey format is @org/model (must have / to be valid)
     if model_id.startswith("@") and "/" in model_id:
         # Only Portkey if not a Google format
-        if not model_id.startswith(GOOGLE_MODELS_PREFIX):
+        if not model_id.startswith("@google/models/"):
             return "portkey"
 
     # Check all mappings to see if this model exists

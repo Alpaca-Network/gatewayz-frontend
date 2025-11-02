@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from src.db.api_keys import create_api_key
 from src.config.supabase_config import get_supabase_client
 import secrets
+from src.utils.security_validators import sanitize_for_logging
 
 logger = logging.getLogger(__name__)
 
@@ -59,9 +60,9 @@ def create_enhanced_user(username: str, email: str, auth_method: str, credits: i
         }).eq('id', user_id).execute()
 
         if not update_result.data:
-            logger.warning(f"Failed to update users.api_key for user {user_id}, but primary key created successfully in api_keys_new")
+            logger.warning("Failed to update users.api_key for user %s, but primary key created successfully in api_keys_new", sanitize_for_logging(str(user_id)))
 
-        logger.info(f"User {user_id} created successfully with primary API key: {primary_key[:15]}...")
+        logger.info("User %s created successfully with primary API key: %s", sanitize_for_logging(str(user_id)), sanitize_for_logging(primary_key[:15] + "..."))
 
         # Return user info with primary key
         return {
@@ -73,7 +74,7 @@ def create_enhanced_user(username: str, email: str, auth_method: str, credits: i
         }
 
     except Exception as e:
-        logger.error(f"Failed to create enhanced user: {e}")
+        logger.error("Failed to create enhanced user: %s", sanitize_for_logging(str(e)))
         raise RuntimeError(f"Failed to create enhanced user: {e}")
 
 
@@ -105,13 +106,13 @@ def get_user(api_key: str) -> Optional[Dict[str, Any]]:
         # Fallback: Check if this is a legacy key (for backward compatibility during migration)
         legacy_result = client.table('users').select('*').eq('api_key', api_key).execute()
         if legacy_result.data:
-            logger.warning(f"Legacy API key {api_key} detected - should be migrated")
+            logger.warning("Legacy API key %s detected - should be migrated", sanitize_for_logging(api_key[:20] + "..."))
             return legacy_result.data[0]
 
         return None
 
     except Exception as e:
-        logger.error(f"Error getting user: {e}")
+        logger.error("Error getting user: %s", sanitize_for_logging(str(e)))
         return None
 
 
@@ -136,7 +137,7 @@ def get_user_by_id(user_id: int) -> Optional[Dict[str, Any]]:
         return None
 
     except Exception as e:
-        logger.error(f"Error getting user by ID {user_id}: {e}")
+        logger.error("Error getting user by ID %s: %s", sanitize_for_logging(str(user_id)), sanitize_for_logging(str(e)))
         return None
 
 
@@ -153,7 +154,7 @@ def get_user_by_privy_id(privy_user_id: str) -> Optional[Dict[str, Any]]:
         return None
 
     except Exception as e:
-        logger.error(f"Error getting user by Privy ID: {e}")
+        logger.error("Error getting user by Privy ID: %s", sanitize_for_logging(str(e)))
         return None
 
 
@@ -170,7 +171,7 @@ def get_user_by_username(username: str) -> Optional[Dict[str, Any]]:
         return None
 
     except Exception as e:
-        logger.error(f"Error getting user by username: {e}")
+        logger.error("Error getting user by username: %s", sanitize_for_logging(str(e)))
         return None
 
 
@@ -230,10 +231,10 @@ def add_credits_to_user(
             metadata=metadata
         )
 
-        logger.info(f"Added {credits} credits to user {user_id}. Balance: {balance_before} → {balance_after}")
+        logger.info("Added %s credits to user %s. Balance: %s → %s", sanitize_for_logging(str(credits)), sanitize_for_logging(str(user_id)), sanitize_for_logging(str(balance_before)), sanitize_for_logging(str(balance_after)))
 
     except Exception as e:
-        logger.error(f"Failed to add credits: {e}")
+        logger.error("Failed to add credits: %s", sanitize_for_logging(str(e)))
         raise RuntimeError(f"Failed to add credits: {e}")
 
 
@@ -262,7 +263,7 @@ def deduct_credits(api_key: str, tokens: float, description: str = "API usage", 
 
     # If tokens is 0 or very small (less than $0.000001), skip deduction but log usage
     if tokens < 0.000001:
-        logger.info(f"Skipping credit deduction for minimal amount: ${tokens:.10f}")
+        logger.info("Skipping credit deduction for minimal amount: $%s", sanitize_for_logging(f"{tokens:.10f}"))
         return
 
     try:
@@ -297,10 +298,10 @@ def deduct_credits(api_key: str, tokens: float, description: str = "API usage", 
             metadata=metadata
         )
 
-        logger.info(f"Deducted {tokens} credits from user {user_id}. Balance: {balance_before} → {balance_after}")
+        logger.info("Deducted %s credits from user %s. Balance: %s → %s", sanitize_for_logging(str(tokens)), sanitize_for_logging(str(user_id)), sanitize_for_logging(str(balance_before)), sanitize_for_logging(str(balance_after)))
 
     except Exception as e:
-        logger.error(f"Failed to deduct credits: {e}")
+        logger.error("Failed to deduct credits: %s", sanitize_for_logging(str(e)))
         raise RuntimeError(f"Failed to deduct credits: {e}")
 
 
@@ -311,7 +312,7 @@ def get_all_users() -> List[Dict[str, Any]]:
         return result.data
 
     except Exception as e:
-        logger.error(f"Error getting all users: {e}")
+        logger.error("Error getting all users: %s", sanitize_for_logging(str(e)))
         return []
 
 
@@ -324,7 +325,7 @@ def delete_user(api_key: str) -> None:
             raise ValueError(f"User with API key {api_key} not found")
 
     except Exception as e:
-        logger.error(f"Failed to delete user: {e}")
+        logger.error("Failed to delete user: %s", sanitize_for_logging(str(e)))
         raise RuntimeError(f"Failed to delete user: {e}")
 
 
@@ -335,7 +336,7 @@ def get_user_count() -> int:
         return result.count or 0
 
     except Exception as e:
-        logger.error(f"Error getting user count: {e}")
+        logger.error("Error getting user count: %s", sanitize_for_logging(str(e)))
         return 0
 
 
@@ -365,10 +366,10 @@ def record_usage(user_id: int, api_key: str, model: str, tokens_used: int, cost:
         result = client.table('usage_records').insert(usage_data).execute()
 
         logger.info(
-            f"Usage recorded successfully: user_id={user_id}, api_key={api_key[:20]}..., model={model}, tokens={tokens_used}, cost={cost}")
+            "Usage recorded successfully: user_id=%s, api_key=%s, model=%s, tokens=%s, cost=%s", sanitize_for_logging(str(user_id)), sanitize_for_logging(api_key[:20] + "..."), sanitize_for_logging(model), sanitize_for_logging(str(tokens_used)), sanitize_for_logging(str(cost)))
 
     except Exception as e:
-        logger.error(f"Failed to record usage: {e}")
+        logger.error("Failed to record usage: %s", sanitize_for_logging(str(e)))
         # Don't raise the exception to avoid breaking the main flow
 
 
@@ -440,7 +441,7 @@ def get_user_usage_metrics(api_key: str) -> Dict[str, Any]:
         }
 
     except Exception as e:
-        logger.error(f"Error getting user usage metrics: {e}")
+        logger.error("Error getting user usage metrics: %s", sanitize_for_logging(str(e)))
         return None
 
 
@@ -455,7 +456,7 @@ def get_admin_monitor_data() -> Dict[str, Any]:
             users_result = client.table('users').select('*').execute()
             users = users_result.data or []
         except Exception as e:
-            logger.error(f"Error retrieving users: {e}")
+            logger.error("Error retrieving users: %s", sanitize_for_logging(str(e)))
             users = []
 
         # Get usage records data with error handling
