@@ -16,6 +16,7 @@ from unittest.mock import Mock, patch
 from fastapi.testclient import TestClient
 
 from src.main import app
+from src.security.deps import get_current_user
 
 
 # ============================================================
@@ -25,7 +26,11 @@ from src.main import app
 @pytest.fixture
 def client():
     """FastAPI test client"""
-    return TestClient(app)
+    # Clear any existing dependency overrides
+    app.dependency_overrides = {}
+    yield TestClient(app)
+    # Cleanup after test
+    app.dependency_overrides = {}
 
 
 @pytest.fixture
@@ -55,16 +60,13 @@ def valid_event_data():
 # TEST CLASS: Single Event Logging
 # ============================================================
 
-@pytest.mark.xfail(reason="Authentication mocking issue - endpoint returns 403")
 class TestLogEvent:
     """Test single analytics event logging"""
 
     @patch('src.routes.analytics.statsig_service')
     @patch('src.routes.analytics.posthog_service')
-    @patch('src.routes.analytics.get_current_user')
     def test_log_event_authenticated_user(
         self,
-        mock_get_user,
         mock_posthog,
         mock_statsig,
         client,
@@ -72,8 +74,11 @@ class TestLogEvent:
         valid_event_data
     ):
         """Test logging event with authenticated user"""
-        mock_get_user.return_value = mock_current_user
+        # Override dependency
+        async def mock_get_current_user_dep():
+            return mock_current_user
 
+        app.dependency_overrides[get_current_user] = mock_get_current_user_dep
         response = client.post(
             '/v1/analytics/events',
             json=valid_event_data
@@ -101,18 +106,19 @@ class TestLogEvent:
 
     @patch('src.routes.analytics.statsig_service')
     @patch('src.routes.analytics.posthog_service')
-    @patch('src.routes.analytics.get_current_user')
     def test_log_event_anonymous_user(
         self,
-        mock_get_user,
         mock_posthog,
         mock_statsig,
         client,
         valid_event_data
     ):
         """Test logging event without authentication"""
-        mock_get_user.return_value = None
+        # Override dependency for anonymous user
+        async def mock_get_current_user_dep():
+            return None
 
+        app.dependency_overrides[get_current_user] = mock_get_current_user_dep
         response = client.post(
             '/v1/analytics/events',
             json=valid_event_data
@@ -129,23 +135,24 @@ class TestLogEvent:
 
     @patch('src.routes.analytics.statsig_service')
     @patch('src.routes.analytics.posthog_service')
-    @patch('src.routes.analytics.get_current_user')
     def test_log_event_with_provided_user_id(
         self,
-        mock_get_user,
         mock_posthog,
         mock_statsig,
         client
     ):
         """Test logging event with user_id in payload"""
-        mock_get_user.return_value = None
-
         event_data = {
             'event_name': 'page_view',
             'user_id': 'custom_user_456',
             'metadata': {'page': '/dashboard'}
         }
 
+        # Override dependency for anonymous user
+        async def mock_get_current_user_dep():
+            return None
+
+        app.dependency_overrides[get_current_user] = mock_get_current_user_dep
         response = client.post(
             '/v1/analytics/events',
             json=event_data
@@ -159,21 +166,22 @@ class TestLogEvent:
 
     @patch('src.routes.analytics.statsig_service')
     @patch('src.routes.analytics.posthog_service')
-    @patch('src.routes.analytics.get_current_user')
     def test_log_event_without_metadata(
         self,
-        mock_get_user,
         mock_posthog,
         mock_statsig,
         client
     ):
         """Test logging event without optional metadata"""
-        mock_get_user.return_value = None
-
         event_data = {
             'event_name': 'button_click'
         }
 
+        # Override dependency for anonymous user
+        async def mock_get_current_user_dep():
+            return None
+
+        app.dependency_overrides[get_current_user] = mock_get_current_user_dep
         response = client.post(
             '/v1/analytics/events',
             json=event_data
@@ -199,6 +207,11 @@ class TestLogEvent:
         """Test error handling when Statsig fails"""
         mock_statsig.log_event.side_effect = Exception("Statsig error")
 
+        # Override dependency for anonymous user
+        async def mock_get_current_user_dep():
+            return None
+
+        app.dependency_overrides[get_current_user] = mock_get_current_user_dep
         response = client.post(
             '/v1/analytics/events',
             json=valid_event_data
@@ -214,6 +227,11 @@ class TestLogEvent:
             # event_name is missing
         }
 
+        # Override dependency for anonymous user
+        async def mock_get_current_user_dep():
+            return None
+
+        app.dependency_overrides[get_current_user] = mock_get_current_user_dep
         response = client.post(
             '/v1/analytics/events',
             json=event_data
@@ -226,24 +244,24 @@ class TestLogEvent:
 # TEST CLASS: Batch Event Logging
 # ============================================================
 
-@pytest.mark.xfail(reason="Authentication mocking issue - endpoint returns 403")
 class TestLogBatchEvents:
     """Test batch analytics event logging"""
 
     @patch('src.routes.analytics.statsig_service')
     @patch('src.routes.analytics.posthog_service')
-    @patch('src.routes.analytics.get_current_user')
     def test_log_batch_events_authenticated_user(
         self,
-        mock_get_user,
         mock_posthog,
         mock_statsig,
         client,
         mock_current_user
     ):
         """Test logging multiple events for authenticated user"""
-        mock_get_user.return_value = mock_current_user
+        # Override dependency
+        async def mock_get_current_user_dep():
+            return mock_current_user
 
+        app.dependency_overrides[get_current_user] = mock_get_current_user_dep
         events_data = [
             {
                 'event_name': 'chat_message_sent',
@@ -275,18 +293,19 @@ class TestLogBatchEvents:
 
     @patch('src.routes.analytics.statsig_service')
     @patch('src.routes.analytics.posthog_service')
-    @patch('src.routes.analytics.get_current_user')
     def test_log_batch_events_mixed_user_ids(
         self,
-        mock_get_user,
         mock_posthog,
         mock_statsig,
         client,
         mock_current_user
     ):
         """Test batch events with different user IDs"""
-        mock_get_user.return_value = mock_current_user
+        # Override dependency
+        async def mock_get_current_user_dep():
+            return mock_current_user
 
+        app.dependency_overrides[get_current_user] = mock_get_current_user_dep
         events_data = [
             {
                 'event_name': 'event1',
@@ -317,17 +336,18 @@ class TestLogBatchEvents:
 
     @patch('src.routes.analytics.statsig_service')
     @patch('src.routes.analytics.posthog_service')
-    @patch('src.routes.analytics.get_current_user')
     def test_log_batch_events_empty_list(
         self,
-        mock_get_user,
         mock_posthog,
         mock_statsig,
         client
     ):
         """Test batch logging with empty events list"""
-        mock_get_user.return_value = None
+        # Override dependency for anonymous user
+        async def mock_get_current_user_dep():
+            return None
 
+        app.dependency_overrides[get_current_user] = mock_get_current_user_dep
         response = client.post(
             '/v1/analytics/batch',
             json=[]
@@ -343,17 +363,13 @@ class TestLogBatchEvents:
 
     @patch('src.routes.analytics.statsig_service')
     @patch('src.routes.analytics.posthog_service')
-    @patch('src.routes.analytics.get_current_user')
     def test_log_batch_events_large_batch(
         self,
-        mock_get_user,
         mock_posthog,
         mock_statsig,
         client
     ):
         """Test logging large batch of events"""
-        mock_get_user.return_value = None
-
         # Create 100 events
         events_data = [
             {
@@ -363,6 +379,11 @@ class TestLogBatchEvents:
             for i in range(100)
         ]
 
+        # Override dependency for anonymous user
+        async def mock_get_current_user_dep():
+            return None
+
+        app.dependency_overrides[get_current_user] = mock_get_current_user_dep
         response = client.post(
             '/v1/analytics/batch',
             json=events_data
@@ -389,6 +410,11 @@ class TestLogBatchEvents:
             {'event_name': 'event2'}
         ]
 
+        # Override dependency for anonymous user
+        async def mock_get_current_user_dep():
+            return None
+
+        app.dependency_overrides[get_current_user] = mock_get_current_user_dep
         response = client.post(
             '/v1/analytics/batch',
             json=events_data
@@ -402,23 +428,18 @@ class TestLogBatchEvents:
 # TEST CLASS: Event Metadata Handling
 # ============================================================
 
-@pytest.mark.xfail(reason="Authentication mocking issue - endpoint returns 403")
 class TestEventMetadataHandling:
     """Test metadata handling in analytics events"""
 
     @patch('src.routes.analytics.statsig_service')
     @patch('src.routes.analytics.posthog_service')
-    @patch('src.routes.analytics.get_current_user')
     def test_event_with_complex_metadata(
         self,
-        mock_get_user,
         mock_posthog,
         mock_statsig,
         client
     ):
         """Test event with complex nested metadata"""
-        mock_get_user.return_value = None
-
         event_data = {
             'event_name': 'api_call',
             'metadata': {
@@ -439,6 +460,11 @@ class TestEventMetadataHandling:
             }
         }
 
+        # Override dependency for anonymous user
+        async def mock_get_current_user_dep():
+            return None
+
+        app.dependency_overrides[get_current_user] = mock_get_current_user_dep
         response = client.post(
             '/v1/analytics/events',
             json=event_data
@@ -454,17 +480,13 @@ class TestEventMetadataHandling:
 
     @patch('src.routes.analytics.statsig_service')
     @patch('src.routes.analytics.posthog_service')
-    @patch('src.routes.analytics.get_current_user')
     def test_event_with_array_metadata(
         self,
-        mock_get_user,
         mock_posthog,
         mock_statsig,
         client
     ):
         """Test event with array in metadata"""
-        mock_get_user.return_value = None
-
         event_data = {
             'event_name': 'multi_model_request',
             'metadata': {
@@ -473,6 +495,11 @@ class TestEventMetadataHandling:
             }
         }
 
+        # Override dependency for anonymous user
+        async def mock_get_current_user_dep():
+            return None
+
+        app.dependency_overrides[get_current_user] = mock_get_current_user_dep
         response = client.post(
             '/v1/analytics/events',
             json=event_data
@@ -489,24 +516,24 @@ class TestEventMetadataHandling:
 # TEST CLASS: User ID Priority
 # ============================================================
 
-@pytest.mark.xfail(reason="Authentication mocking issue - endpoint returns 403")
 class TestUserIDPriority:
     """Test user ID determination priority"""
 
     @patch('src.routes.analytics.statsig_service')
     @patch('src.routes.analytics.posthog_service')
-    @patch('src.routes.analytics.get_current_user')
     def test_user_id_priority_authenticated_over_provided(
         self,
-        mock_get_user,
         mock_posthog,
         mock_statsig,
         client,
         mock_current_user
     ):
         """Test authenticated user ID takes priority over provided user_id"""
-        mock_get_user.return_value = mock_current_user
+        # Override dependency
+        async def mock_get_current_user_dep():
+            return mock_current_user
 
+        app.dependency_overrides[get_current_user] = mock_get_current_user_dep
         event_data = {
             'event_name': 'test_event',
             'user_id': 'should_be_ignored'
@@ -524,22 +551,23 @@ class TestUserIDPriority:
 
     @patch('src.routes.analytics.statsig_service')
     @patch('src.routes.analytics.posthog_service')
-    @patch('src.routes.analytics.get_current_user')
     def test_user_id_priority_provided_over_anonymous(
         self,
-        mock_get_user,
         mock_posthog,
         mock_statsig,
         client
     ):
         """Test provided user_id takes priority over anonymous"""
-        mock_get_user.return_value = None
-
         event_data = {
             'event_name': 'test_event',
             'user_id': 'custom_user'
         }
 
+        # Override dependency for anonymous user
+        async def mock_get_current_user_dep():
+            return None
+
+        app.dependency_overrides[get_current_user] = mock_get_current_user_dep
         response = client.post(
             '/v1/analytics/events',
             json=event_data
@@ -552,21 +580,22 @@ class TestUserIDPriority:
 
     @patch('src.routes.analytics.statsig_service')
     @patch('src.routes.analytics.posthog_service')
-    @patch('src.routes.analytics.get_current_user')
     def test_user_id_default_to_anonymous(
         self,
-        mock_get_user,
         mock_posthog,
         mock_statsig,
         client
     ):
         """Test default to anonymous when no user info available"""
-        mock_get_user.return_value = None
-
         event_data = {
             'event_name': 'test_event'
         }
 
+        # Override dependency for anonymous user
+        async def mock_get_current_user_dep():
+            return None
+
+        app.dependency_overrides[get_current_user] = mock_get_current_user_dep
         response = client.post(
             '/v1/analytics/events',
             json=event_data
@@ -582,22 +611,23 @@ class TestUserIDPriority:
 # TEST CLASS: Integration Tests
 # ============================================================
 
-@pytest.mark.xfail(reason="Authentication mocking issue - endpoint returns 403")
 class TestAnalyticsIntegration:
     """Test analytics integration scenarios"""
 
     @patch('src.routes.analytics.statsig_service')
     @patch('src.routes.analytics.posthog_service')
-    @patch('src.routes.analytics.get_current_user')
     def test_single_and_batch_consistency(
         self,
-        mock_get_user,
         mock_posthog,
         mock_statsig,
         client
     ):
         """Test that single and batch endpoints produce consistent results"""
-        mock_get_user.return_value = None
+        # Override dependency for anonymous user
+        async def mock_get_current_user_dep():
+            return None
+
+        app.dependency_overrides[get_current_user] = mock_get_current_user_dep
 
         event_data = {
             'event_name': 'test_event',
