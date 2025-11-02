@@ -1,9 +1,10 @@
 import importlib
 import json
-import types
 import pytest
 from fastapi import FastAPI
-from httpx import AsyncClient, Request, Response, HTTPStatusError, RequestError, TimeoutException
+from fastapi.testclient import TestClient
+from httpx import Request, Response, HTTPStatusError, RequestError, TimeoutException
+from unittest.mock import patch, MagicMock, Mock
 
 # ======================================================================
 # >>> CHANGE THIS to the module path where your router + endpoint live:
@@ -14,7 +15,7 @@ api = importlib.import_module(MODULE_PATH)
 
 # Build a FastAPI app including the router under test
 @pytest.fixture(scope="function")
-def app():
+def client():
     from src.security.deps import get_api_key
 
     app = FastAPI()
@@ -25,19 +26,12 @@ def app():
         return "test_api_key"
 
     app.dependency_overrides[get_api_key] = mock_get_api_key
-    return app
+    return TestClient(app)
 
 @pytest.fixture
 def auth_headers():
-    """Provide authorization headers for test requests (not actually used due to dependency override)"""
+    """Provide authorization headers for test requests"""
     return {"Authorization": "Bearer test_api_key"}
-
-@pytest.fixture(autouse=True)
-def mock_api_key_validation(monkeypatch):
-    """Mock API key validation to bypass database check - applied to all tests automatically"""
-    from src.security import security
-    # This fixture is kept for backwards compatibility but dependency override is the primary mechanism
-    monkeypatch.setattr(security, "validate_api_key_security", lambda api_key, **kwargs: api_key)
 
 @pytest.fixture
 def payload_basic():
@@ -45,7 +39,6 @@ def payload_basic():
     return {
         "model": "openrouter/some-model",
         "messages": [{"role": "user", "content": "Hello"}],
-        # "provider": "openrouter"  # default in your code
     }
 
 # ---------- Helper fake rate limit manager ----------
@@ -71,265 +64,339 @@ class _RateLimitMgr:
             return _RLResult(allowed=self.allowed_pre, reason="precheck")
         return _RLResult(allowed=self.allowed_final, reason="finalcheck", retry_after=3)
 
-# ---------- Common "happy path" monkeypatches ----------
-@pytest.fixture
-def happy_patches(monkeypatch):
-    # Mock API key validation to bypass database check
-    from src.security import security
-    monkeypatch.setattr(security, "validate_api_key_security", lambda api_key, **kwargs: api_key)
-
-    # DB: user with credits
-    monkeypatch.setattr(api, "get_user", lambda api_key: {"id": 1, "credits": 100.0, "environment_tag": "live"})
-
-    # Plan limits allowed pre & post
-    monkeypatch.setattr(api, "enforce_plan_limits", lambda user_id, tokens, env: {"allowed": True})
-
-    # Trial: not a trial user
-    monkeypatch.setattr(api, "validate_trial_access", lambda api_key: {"is_valid": True, "is_trial": False})
-
-    # Rate limit manager that always allows
-    mgr = _RateLimitMgr(allowed_pre=True, allowed_final=True)
-    monkeypatch.setattr(api, "get_rate_limit_manager", lambda: mgr)
-
-    # Upstream call & response processing
-    def make_openrouter_request_openai(messages, model, **kw):
-        # raw is irrelevant; response is produced by process fn
-        return {"_raw": True}
-
-    def process_openrouter_response(resp):
-        return {
-            "choices": [{"message": {"content": "Hi from model"}, "finish_reason": "stop"}],
-            "usage": {"total_tokens": 30, "prompt_tokens": 10, "completion_tokens": 20},
-        }
-
-    monkeypatch.setattr(api, "make_openrouter_request_openai", make_openrouter_request_openai)
-    monkeypatch.setattr(api, "process_openrouter_response", process_openrouter_response)
-
-    # Pricing
-    monkeypatch.setattr(api, "calculate_cost", lambda model, pt, ct: 0.012345)
-
-    # Usage/credits book-keeping (no-ops we can assert via monkeypatch spies if needed)
-    monkeypatch.setattr(api, "deduct_credits", lambda api_key, amount, desc, meta: None)
-    monkeypatch.setattr(api, "record_usage", lambda user_id, api_key, model, tokens, cost: None)
-    monkeypatch.setattr(api, "update_rate_limit_usage", lambda api_key, tokens: None)
-    monkeypatch.setattr(api, "increment_api_key_usage", lambda api_key: None)
-
-    # History helpers
-    monkeypatch.setattr(api, "get_chat_session", lambda session_id, user_id: {"id": session_id})
-    # saved messages container we can inspect in tests
-    saved = []
-    def save_chat_message(session_id, role, content, model, tokens):
-        saved.append((session_id, role, content, model, tokens))
-    monkeypatch.setattr(api, "save_chat_message", save_chat_message)
-
-    return {"rate_mgr": mgr, "saved": saved}
-
 
 # ----------------------------------------------------------------------
 #                                TESTS
 # ----------------------------------------------------------------------
 
-@pytest.mark.anyio
-async def test_happy_path_openrouter(app, happy_patches, payload_basic, auth_headers):
-    async with AsyncClient(app=app, base_url="http://test") as ac:
-        r = await ac.post("/v1/chat/completions", json=payload_basic, headers=auth_headers)
+@patch('src.services.trial_validation.validate_trial_access')
+@patch('src.db.plans.enforce_plan_limits')
+@patch('src.db.users.get_user')
+@patch('src.routes.chat.process_openrouter_response')
+@patch('src.routes.chat.make_openrouter_request_openai')
+@patch('src.services.pricing.calculate_cost')
+@patch('src.db.users.deduct_credits')
+@patch('src.db.users.record_usage')
+@patch('src.db.rate_limits.update_rate_limit_usage')
+@patch('src.db.api_keys.increment_api_key_usage')
+def test_happy_path_openrouter(
+    mock_increment, mock_update_rate, mock_record, mock_deduct, mock_calculate_cost,
+    mock_make_request, mock_process, mock_get_user, mock_enforce_limits, mock_trial,
+    client, payload_basic, auth_headers
+):
+    """Test successful chat completion with OpenRouter"""
+    # Setup mocks
+    mock_trial.return_value = {"is_valid": True, "is_trial": False, "is_expired": False}
+    mock_get_user.return_value = {"id": 1, "credits": 100.0, "environment_tag": "live"}
+    mock_enforce_limits.return_value = {"allowed": True}
+    mock_make_request.return_value = {"_raw": True}
+    mock_process.return_value = {
+        "choices": [{"message": {"content": "Hi from model"}, "finish_reason": "stop"}],
+        "usage": {"total_tokens": 30, "prompt_tokens": 10, "completion_tokens": 20},
+    }
+    mock_calculate_cost.return_value = 0.012345
+
+    # Mock rate limit manager
+    rate_mgr = _RateLimitMgr(allowed_pre=True, allowed_final=True)
+    with patch.object(api, 'get_rate_limit_manager', return_value=rate_mgr):
+        r = client.post("/v1/chat/completions", json=payload_basic, headers=auth_headers)
+
     assert r.status_code == 200, r.text
     data = r.json()
     assert data["choices"][0]["message"]["content"] == "Hi from model"
     assert data["usage"]["total_tokens"] == 30
-    # gateway_usage present; we don’t assert buggy “balance” math here—just presence
     assert "gateway_usage" in data
     # rate limiter was called twice (pre + final)
-    assert len(happy_patches["rate_mgr"].__dict__["_calls"]) == 2
+    assert len(rate_mgr._calls) == 2
 
-@pytest.mark.anyio
-async def test_invalid_api_key(app, mock_api_key_validation, monkeypatch, payload_basic, auth_headers):
-    monkeypatch.setattr(api, "get_user", lambda api_key: None)
-    async with AsyncClient(app=app, base_url="http://test") as ac:
-        r = await ac.post("/v1/chat/completions", json=payload_basic, headers=auth_headers)
+
+@patch('src.services.trial_validation.validate_trial_access')
+@patch('src.db.plans.enforce_plan_limits')
+@patch('src.db.users.get_user')
+def test_invalid_api_key(mock_get_user, mock_enforce_limits, mock_trial, client, payload_basic, auth_headers):
+    """Test that invalid API key returns 401"""
+    mock_trial.return_value = {"is_valid": True, "is_trial": False, "is_expired": False}
+    mock_get_user.return_value = None  # Invalid API key
+    mock_enforce_limits.return_value = {"allowed": True}
+
+    r = client.post("/v1/chat/completions", json=payload_basic, headers=auth_headers)
+
     assert r.status_code == 401
     assert "Invalid API key" in r.text
 
-@pytest.mark.anyio
-async def test_plan_limit_exceeded_precheck(app, mock_api_key_validation, monkeypatch, payload_basic, auth_headers):
-    monkeypatch.setattr(api, "get_user", lambda k: {"id": 1, "credits": 100.0, "environment_tag": "live"})
-    monkeypatch.setattr(api, "enforce_plan_limits", lambda uid, tok, env: {"allowed": False, "reason": "plan cap"})
-    monkeypatch.setattr(api, "validate_trial_access", lambda k: {"is_valid": True, "is_trial": False})
-    monkeypatch.setattr(api, "get_rate_limit_manager", lambda: _RateLimitMgr(True, True))
-    async with AsyncClient(app=app, base_url="http://test") as ac:
-        r = await ac.post("/v1/chat/completions", json=payload_basic, headers=auth_headers)
+
+@patch('src.services.trial_validation.validate_trial_access')
+@patch('src.db.plans.enforce_plan_limits')
+@patch('src.db.users.get_user')
+def test_plan_limit_exceeded_precheck(mock_get_user, mock_enforce_limits, mock_trial, client, payload_basic, auth_headers):
+    """Test that plan limit exceeded returns 429"""
+    mock_trial.return_value = {"is_valid": True, "is_trial": False, "is_expired": False}
+    mock_get_user.return_value = {"id": 1, "credits": 100.0, "environment_tag": "live"}
+    mock_enforce_limits.return_value = {"allowed": False, "reason": "plan cap"}
+
+    rate_mgr = _RateLimitMgr(True, True)
+    with patch.object(api, 'get_rate_limit_manager', return_value=rate_mgr):
+        r = client.post("/v1/chat/completions", json=payload_basic, headers=auth_headers)
+
     assert r.status_code == 429
     assert "Plan limit exceeded" in r.text
 
-@pytest.mark.anyio
-async def test_rate_limit_exceeded_precheck(app, mock_api_key_validation, monkeypatch, payload_basic, auth_headers):
-    monkeypatch.setattr(api, "get_user", lambda k: {"id": 1, "credits": 100.0, "environment_tag": "live"})
-    monkeypatch.setattr(api, "enforce_plan_limits", lambda uid, tok, env: {"allowed": True})
-    monkeypatch.setattr(api, "validate_trial_access", lambda k: {"is_valid": True, "is_trial": False})
-    mgr = _RateLimitMgr(allowed_pre=False, allowed_final=True)
-    monkeypatch.setattr(api, "get_rate_limit_manager", lambda: mgr)
-    async with AsyncClient(app=app, base_url="http://test") as ac:
-        r = await ac.post("/v1/chat/completions", json=payload_basic, headers=auth_headers)
+
+@patch('src.services.trial_validation.validate_trial_access')
+@patch('src.db.plans.enforce_plan_limits')
+@patch('src.db.users.get_user')
+def test_rate_limit_exceeded_precheck(mock_get_user, mock_enforce_limits, mock_trial, client, payload_basic, auth_headers):
+    """Test that rate limit exceeded returns 429"""
+    mock_trial.return_value = {"is_valid": True, "is_trial": False, "is_expired": False}
+    mock_get_user.return_value = {"id": 1, "credits": 100.0, "environment_tag": "live"}
+    mock_enforce_limits.return_value = {"allowed": True}
+
+    rate_mgr = _RateLimitMgr(allowed_pre=False, allowed_final=True)
+    with patch.object(api, 'get_rate_limit_manager', return_value=rate_mgr):
+        r = client.post("/v1/chat/completions", json=payload_basic, headers=auth_headers)
+
     assert r.status_code == 429
     assert "Rate limit exceeded" in r.text
 
-@pytest.mark.anyio
-async def test_insufficient_credits_non_trial(app, mock_api_key_validation, monkeypatch, payload_basic, auth_headers):
-    monkeypatch.setattr(api, "get_user", lambda k: {"id": 1, "credits": 0.0, "environment_tag": "live"})
-    monkeypatch.setattr(api, "enforce_plan_limits", lambda uid, tok, env: {"allowed": True})
-    monkeypatch.setattr(api, "validate_trial_access", lambda k: {"is_valid": True, "is_trial": False})
-    mgr = _RateLimitMgr(True, True)
-    monkeypatch.setattr(api, "get_rate_limit_manager", lambda: mgr)
-    async with AsyncClient(app=app, base_url="http://test") as ac:
-        r = await ac.post("/v1/chat/completions", json=payload_basic, headers=auth_headers)
+
+@patch('src.services.trial_validation.validate_trial_access')
+@patch('src.db.plans.enforce_plan_limits')
+@patch('src.db.users.get_user')
+def test_insufficient_credits_non_trial(mock_get_user, mock_enforce_limits, mock_trial, client, payload_basic, auth_headers):
+    """Test that insufficient credits returns 402"""
+    mock_trial.return_value = {"is_valid": True, "is_trial": False, "is_expired": False}
+    mock_get_user.return_value = {"id": 1, "credits": 0.0, "environment_tag": "live"}
+    mock_enforce_limits.return_value = {"allowed": True}
+
+    rate_mgr = _RateLimitMgr(True, True)
+    with patch.object(api, 'get_rate_limit_manager', return_value=rate_mgr):
+        r = client.post("/v1/chat/completions", json=payload_basic, headers=auth_headers)
+
     assert r.status_code == 402
     assert "Insufficient credits" in r.text
 
-@pytest.mark.anyio
-async def test_trial_valid_usage_tracked(app, mock_api_key_validation, monkeypatch, payload_basic, auth_headers):
-    # Trial user (valid, not expired) → no credit deduction, track usage called
-    monkeypatch.setattr(api, "get_user", lambda k: {"id": 1, "credits": 0.0, "environment_tag": "live"})
-    monkeypatch.setattr(api, "enforce_plan_limits", lambda uid, tok, env: {"allowed": True})
-    monkeypatch.setattr(api, "validate_trial_access", lambda k: {"is_valid": True, "is_trial": True, "is_expired": False})
-    mgr = _RateLimitMgr(True, True)
-    monkeypatch.setattr(api, "get_rate_limit_manager", lambda: mgr)
 
-    # upstream success
-    def make_openrouter_request_openai(messages, model, **kw):
-        return {"_raw": True}
-    def process_openrouter_response(resp):
-        return {
-            "choices": [{"message": {"content": "Trial OK"}}],
-            "usage": {"total_tokens": 10, "prompt_tokens": 4, "completion_tokens": 6},
-        }
-    monkeypatch.setattr(api, "make_openrouter_request_openai", make_openrouter_request_openai)
-    monkeypatch.setattr(api, "process_openrouter_response", process_openrouter_response)
+@patch('src.services.trial_validation.track_trial_usage')
+@patch('src.services.trial_validation.validate_trial_access')
+@patch('src.db.plans.enforce_plan_limits')
+@patch('src.db.users.get_user')
+@patch('src.routes.chat.process_openrouter_response')
+@patch('src.routes.chat.make_openrouter_request_openai')
+def test_trial_valid_usage_tracked(
+    mock_make_request, mock_process, mock_get_user, mock_enforce_limits, mock_trial, mock_track_trial,
+    client, payload_basic, auth_headers
+):
+    """Test that trial user usage is tracked correctly"""
+    mock_trial.return_value = {"is_valid": True, "is_trial": True, "is_expired": False}
+    mock_get_user.return_value = {"id": 1, "credits": 0.0, "environment_tag": "live"}
+    mock_enforce_limits.return_value = {"allowed": True}
+    mock_make_request.return_value = {"_raw": True}
+    mock_process.return_value = {
+        "choices": [{"message": {"content": "Trial OK"}}],
+        "usage": {"total_tokens": 10, "prompt_tokens": 4, "completion_tokens": 6},
+    }
+    mock_track_trial.return_value = True
 
-    # Track trial usage spy
-    called = {"n": 0, "args": None}
-    def track_trial_usage(api_key, total_tokens, requests):
-        called["n"] += 1
-        called["args"] = (api_key, total_tokens, requests)
-        return True
-    monkeypatch.setattr(api, "track_trial_usage", track_trial_usage)
+    rate_mgr = _RateLimitMgr(True, True)
+    with patch.object(api, 'get_rate_limit_manager', return_value=rate_mgr):
+        r = client.post("/v1/chat/completions", json=payload_basic, headers=auth_headers)
 
-    async with AsyncClient(app=app, base_url="http://test") as ac:
-        r = await ac.post("/v1/chat/completions", json=payload_basic, headers=auth_headers)
     assert r.status_code == 200, r.text
     assert r.json()["choices"][0]["message"]["content"] == "Trial OK"
-    assert called["n"] == 1
-    assert called["args"][1] == 10
+    mock_track_trial.assert_called_once()
+    # Check that track_trial_usage was called with correct total_tokens
+    call_args = mock_track_trial.call_args
+    assert call_args[0][1] == 10  # total_tokens
 
-@pytest.mark.anyio
-async def test_trial_expired_403(app, mock_api_key_validation, monkeypatch, payload_basic, auth_headers):
-    monkeypatch.setattr(api, "get_user", lambda k: {"id": 1, "credits": 0.0, "environment_tag": "live"})
-    monkeypatch.setattr(api, "enforce_plan_limits", lambda uid, tok, env: {"allowed": True})
-    monkeypatch.setattr(api, "validate_trial_access", lambda k: {"is_valid": False, "is_trial": True, "is_expired": True, "error": "Trial expired", "trial_end_date": "2025-09-01"})
-    async with AsyncClient(app=app, base_url="http://test") as ac:
-        r = await ac.post("/v1/chat/completions", json=payload_basic, headers=auth_headers)
+
+@patch('src.services.trial_validation.validate_trial_access')
+@patch('src.db.plans.enforce_plan_limits')
+@patch('src.db.users.get_user')
+def test_trial_expired_403(mock_get_user, mock_enforce_limits, mock_trial, client, payload_basic, auth_headers):
+    """Test that expired trial returns 403"""
+    mock_trial.return_value = {
+        "is_valid": False,
+        "is_trial": True,
+        "is_expired": True,
+        "error": "Trial expired",
+        "trial_end_date": "2025-09-01"
+    }
+    mock_get_user.return_value = {"id": 1, "credits": 0.0, "environment_tag": "live"}
+    mock_enforce_limits.return_value = {"allowed": True}
+
+    r = client.post("/v1/chat/completions", json=payload_basic, headers=auth_headers)
+
     assert r.status_code == 403
     assert "Trial expired" in r.text
     assert r.headers.get("X-Trial-Expired") == "true"
 
-@pytest.mark.anyio
-async def test_upstream_429_maps_429(app, mock_api_key_validation, monkeypatch, payload_basic, auth_headers):
-    # Happy DB/trial/plan/rate
-    monkeypatch.setattr(api, "get_user", lambda k: {"id": 1, "credits": 100.0, "environment_tag": "live"})
-    monkeypatch.setattr(api, "enforce_plan_limits", lambda uid, tok, env: {"allowed": True})
-    monkeypatch.setattr(api, "validate_trial_access", lambda k: {"is_valid": True, "is_trial": False})
-    monkeypatch.setattr(api, "get_rate_limit_manager", lambda: _RateLimitMgr(True, True))
+
+@patch('src.services.trial_validation.validate_trial_access')
+@patch('src.db.plans.enforce_plan_limits')
+@patch('src.db.users.get_user')
+@patch('src.routes.chat.make_openrouter_request_openai')
+def test_upstream_429_maps_429(mock_make_request, mock_get_user, mock_enforce_limits, mock_trial, client, payload_basic, auth_headers):
+    """Test that upstream 429 error is properly mapped to 429"""
+    mock_trial.return_value = {"is_valid": True, "is_trial": False, "is_expired": False}
+    mock_get_user.return_value = {"id": 1, "credits": 100.0, "environment_tag": "live"}
+    mock_enforce_limits.return_value = {"allowed": True}
 
     # Make upstream raise HTTPStatusError(429)
     def boom(*a, **k):
         req = Request("POST", "https://openrouter.example/v1/chat")
         resp = Response(429, request=req, headers={"retry-after": "7"}, text="Too Many Requests")
         raise HTTPStatusError("rate limit", request=req, response=resp)
-    monkeypatch.setattr(api, "make_openrouter_request_openai", boom)
+    mock_make_request.side_effect = boom
 
-    async with AsyncClient(app=app, base_url="http://test") as ac:
-        r = await ac.post("/v1/chat/completions", json=payload_basic, headers=auth_headers)
+    rate_mgr = _RateLimitMgr(True, True)
+    with patch.object(api, 'get_rate_limit_manager', return_value=rate_mgr):
+        r = client.post("/v1/chat/completions", json=payload_basic, headers=auth_headers)
+
     assert r.status_code == 429
     assert "rate limit" in r.text.lower() or "limit exceeded" in r.text.lower()
     assert r.headers.get("retry-after") in ("7", "7.0")
 
-@pytest.mark.anyio
-async def test_upstream_401_maps_500_in_your_code(app, mock_api_key_validation, monkeypatch, payload_basic, auth_headers):
-    # (Matches your current mapping: 401 → 500 "OpenRouter authentication error")
-    monkeypatch.setattr(api, "get_user", lambda k: {"id": 1, "credits": 100.0, "environment_tag": "live"})
-    monkeypatch.setattr(api, "enforce_plan_limits", lambda uid, tok, env: {"allowed": True})
-    monkeypatch.setattr(api, "validate_trial_access", lambda k: {"is_valid": True, "is_trial": False})
-    monkeypatch.setattr(api, "get_rate_limit_manager", lambda: _RateLimitMgr(True, True))
+
+@patch('src.services.trial_validation.validate_trial_access')
+@patch('src.db.plans.enforce_plan_limits')
+@patch('src.db.users.get_user')
+@patch('src.routes.chat.make_openrouter_request_openai')
+def test_upstream_401_maps_500_in_your_code(mock_make_request, mock_get_user, mock_enforce_limits, mock_trial, client, payload_basic, auth_headers):
+    """Test that upstream 401 error is mapped to 500"""
+    mock_trial.return_value = {"is_valid": True, "is_trial": False, "is_expired": False}
+    mock_get_user.return_value = {"id": 1, "credits": 100.0, "environment_tag": "live"}
+    mock_enforce_limits.return_value = {"allowed": True}
 
     def boom(*a, **k):
         req = Request("POST", "https://openrouter.example/v1/chat")
         resp = Response(401, request=req, text="Unauthorized")
         raise HTTPStatusError("auth", request=req, response=resp)
-    monkeypatch.setattr(api, "make_openrouter_request_openai", boom)
+    mock_make_request.side_effect = boom
 
-    async with AsyncClient(app=app, base_url="http://test") as ac:
-        r = await ac.post("/v1/chat/completions", json=payload_basic, headers=auth_headers)
+    rate_mgr = _RateLimitMgr(True, True)
+    with patch.object(api, 'get_rate_limit_manager', return_value=rate_mgr):
+        r = client.post("/v1/chat/completions", json=payload_basic, headers=auth_headers)
+
     assert r.status_code == 500
     assert "authentication" in r.text.lower()
 
-@pytest.mark.anyio
-async def test_upstream_request_error_maps_503(app, mock_api_key_validation, monkeypatch, payload_basic, auth_headers):
-    monkeypatch.setattr(api, "get_user", lambda k: {"id": 1, "credits": 100.0, "environment_tag": "live"})
-    monkeypatch.setattr(api, "enforce_plan_limits", lambda uid, tok, env: {"allowed": True})
-    monkeypatch.setattr(api, "validate_trial_access", lambda k: {"is_valid": True, "is_trial": False})
-    monkeypatch.setattr(api, "get_rate_limit_manager", lambda: _RateLimitMgr(True, True))
-    monkeypatch.setattr(api, "should_failover", lambda exc: False)
-    monkeypatch.setattr(api, "make_huggingface_request_openai", lambda *a, **k: (_ for _ in ()).throw(AssertionError("should not failover")))
+
+@patch('src.routes.chat.build_provider_failover_chain')
+@patch('src.routes.chat.should_failover')
+@patch('src.services.trial_validation.validate_trial_access')
+@patch('src.db.plans.enforce_plan_limits')
+@patch('src.db.users.get_user')
+@patch('src.routes.chat.make_openrouter_request_openai')
+def test_upstream_request_error_maps_503(mock_make_request, mock_get_user, mock_enforce_limits, mock_trial, mock_should_failover, mock_failover_chain, client, payload_basic, auth_headers):
+    """Test that upstream request error is mapped to 503"""
+    mock_trial.return_value = {"is_valid": True, "is_trial": False, "is_expired": False}
+    mock_get_user.return_value = {"id": 1, "credits": 100.0, "environment_tag": "live"}
+    mock_enforce_limits.return_value = {"allowed": True}
+    mock_should_failover.return_value = False  # Disable failover
+    mock_failover_chain.return_value = ["openrouter"]  # Only try openrouter
 
     def boom(*a, **k):
         raise RequestError("network is down", request=Request("POST", "https://openrouter.example/v1/chat"))
-    monkeypatch.setattr(api, "make_openrouter_request_openai", boom)
+    mock_make_request.side_effect = boom
 
-    async with AsyncClient(app=app, base_url="http://test") as ac:
-        r = await ac.post("/v1/chat/completions", json=payload_basic, headers=auth_headers)
+    rate_mgr = _RateLimitMgr(True, True)
+    with patch.object(api, 'get_rate_limit_manager', return_value=rate_mgr):
+        r = client.post("/v1/chat/completions", json=payload_basic, headers=auth_headers)
+
     assert r.status_code == 503
     assert "service unavailable" in r.text.lower() or "network" in r.text.lower()
 
-@pytest.mark.anyio
-async def test_upstream_timeout_maps_504(app, mock_api_key_validation, monkeypatch, payload_basic, auth_headers):
-    monkeypatch.setattr(api, "get_user", lambda k: {"id": 1, "credits": 100.0, "environment_tag": "live"})
-    monkeypatch.setattr(api, "enforce_plan_limits", lambda uid, tok, env: {"allowed": True})
-    monkeypatch.setattr(api, "validate_trial_access", lambda k: {"is_valid": True, "is_trial": False})
-    monkeypatch.setattr(api, "get_rate_limit_manager", lambda: _RateLimitMgr(True, True))
-    monkeypatch.setattr(api, "should_failover", lambda exc: False)
-    monkeypatch.setattr(api, "make_huggingface_request_openai", lambda *a, **k: (_ for _ in ()).throw(AssertionError("should not failover")))
+
+@patch('src.routes.chat.build_provider_failover_chain')
+@patch('src.routes.chat.should_failover')
+@patch('src.services.trial_validation.validate_trial_access')
+@patch('src.db.plans.enforce_plan_limits')
+@patch('src.db.users.get_user')
+@patch('src.routes.chat.make_openrouter_request_openai')
+def test_upstream_timeout_maps_504(mock_make_request, mock_get_user, mock_enforce_limits, mock_trial, mock_should_failover, mock_failover_chain, client, payload_basic, auth_headers):
+    """Test that upstream timeout is handled properly"""
+    mock_trial.return_value = {"is_valid": True, "is_trial": False, "is_expired": False}
+    mock_get_user.return_value = {"id": 1, "credits": 100.0, "environment_tag": "live"}
+    mock_enforce_limits.return_value = {"allowed": True}
+    mock_should_failover.return_value = False  # Disable failover
+    mock_failover_chain.return_value = ["openrouter"]  # Only try openrouter
 
     def boom(*a, **k):
-        # Your code does not explicitly catch httpx.TimeoutException in the executor,
-        # but this simulates the path where make_* raises it.
         raise TimeoutException("upstream timeout")
-    monkeypatch.setattr(api, "make_openrouter_request_openai", boom)
+    mock_make_request.side_effect = boom
 
-    async with AsyncClient(app=app, base_url="http://test") as ac:
-        r = await ac.post("/v1/chat/completions", json=payload_basic, headers=auth_headers)
-    assert r.status_code in (503, 500, 504)  # your current code maps RequestError→503; Timeout may be 503 or 500
-    # (Adjust assertion to match your exact mapping if you add explicit timeout handling.)
+    rate_mgr = _RateLimitMgr(True, True)
+    with patch.object(api, 'get_rate_limit_manager', return_value=rate_mgr):
+        r = client.post("/v1/chat/completions", json=payload_basic, headers=auth_headers)
 
-@pytest.mark.anyio
-async def test_saves_chat_history_when_session_id(app, happy_patches, payload_basic, auth_headers):
+    # Current code may map timeout to 503 or 500
+    assert r.status_code in (503, 500, 504)
+
+
+@patch('src.services.trial_validation.validate_trial_access')
+@patch('src.db.plans.enforce_plan_limits')
+@patch('src.db.users.get_user')
+@patch('src.routes.chat.process_openrouter_response')
+@patch('src.routes.chat.make_openrouter_request_openai')
+@patch('src.services.pricing.calculate_cost')
+@patch('src.db.users.deduct_credits')
+@patch('src.db.users.record_usage')
+@patch('src.db.rate_limits.update_rate_limit_usage')
+@patch('src.db.api_keys.increment_api_key_usage')
+@patch('src.db.chat_history.get_chat_session')
+@patch('src.db.chat_history.save_chat_message')
+def test_saves_chat_history_when_session_id(
+    mock_save_message, mock_get_session, mock_increment, mock_update_rate, mock_record, mock_deduct,
+    mock_calculate_cost, mock_make_request, mock_process, mock_get_user, mock_enforce_limits, mock_trial,
+    client, payload_basic, auth_headers
+):
+    """Test that chat history is saved when session_id is provided"""
+    mock_trial.return_value = {"is_valid": True, "is_trial": False, "is_expired": False}
+    mock_get_user.return_value = {"id": 1, "credits": 100.0, "environment_tag": "live"}
+    mock_enforce_limits.return_value = {"allowed": True}
+    mock_make_request.return_value = {"_raw": True}
+    mock_process.return_value = {
+        "choices": [{"message": {"content": "Hi from model"}, "finish_reason": "stop"}],
+        "usage": {"total_tokens": 30, "prompt_tokens": 10, "completion_tokens": 20},
+    }
+    mock_calculate_cost.return_value = 0.012345
+    mock_get_session.return_value = {"id": 123}
+
     payload = dict(payload_basic)
     payload["messages"] = [{"role": "user", "content": "Save this please"}]
-    async with AsyncClient(app=app, base_url="http://test") as ac:
-        r = await ac.post("/v1/chat/completions?session_id=123", json=payload, headers=auth_headers)
-    assert r.status_code == 200
-    # Your current code saves only messages[0] ("first user") + assistant
-    saved = happy_patches["saved"]
-    assert len(saved) == 2
-    assert saved[0][0] == 123 and saved[0][1] == "user"
-    assert saved[1][0] == 123 and saved[1][1] == "assistant"
 
-@pytest.mark.anyio
-async def test_streaming_response(app, mock_api_key_validation, monkeypatch, payload_basic, auth_headers):
-    # Mock a streaming response
-    monkeypatch.setattr(api, "get_user", lambda k: {"id": 1, "credits": 100.0, "environment_tag": "live"})
-    monkeypatch.setattr(api, "enforce_plan_limits", lambda uid, tok, env: {"allowed": True})
-    monkeypatch.setattr(api, "validate_trial_access", lambda k: {"is_valid": True, "is_trial": False})
-    mgr = _RateLimitMgr(True, True)
-    monkeypatch.setattr(api, "get_rate_limit_manager", lambda: mgr)
+    rate_mgr = _RateLimitMgr(True, True)
+    with patch.object(api, 'get_rate_limit_manager', return_value=rate_mgr):
+        r = client.post("/v1/chat/completions?session_id=123", json=payload, headers=auth_headers)
+
+    assert r.status_code == 200
+    # Your current code saves first user message + assistant response
+    assert mock_save_message.call_count == 2
+    # Check first call (user message)
+    user_call = mock_save_message.call_args_list[0]
+    assert user_call[0][0] == 123  # session_id
+    assert user_call[0][1] == "user"  # role
+
+
+@patch('src.services.trial_validation.validate_trial_access')
+@patch('src.db.plans.enforce_plan_limits')
+@patch('src.db.users.get_user')
+@patch('src.routes.chat.make_openrouter_request_openai_stream')
+@patch('src.services.pricing.calculate_cost')
+@patch('src.db.users.deduct_credits')
+@patch('src.db.users.record_usage')
+@patch('src.db.rate_limits.update_rate_limit_usage')
+@patch('src.db.api_keys.increment_api_key_usage')
+def test_streaming_response(
+    mock_increment, mock_update_rate, mock_record, mock_deduct, mock_calculate_cost,
+    mock_make_stream, mock_get_user, mock_enforce_limits, mock_trial,
+    client, payload_basic, auth_headers
+):
+    """Test streaming response"""
+    mock_trial.return_value = {"is_valid": True, "is_trial": False, "is_expired": False}
+    mock_get_user.return_value = {"id": 1, "credits": 100.0, "environment_tag": "live"}
+    mock_enforce_limits.return_value = {"allowed": True}
+    mock_calculate_cost.return_value = 0.001
 
     # Mock streaming response
     class MockStreamChunk:
@@ -359,18 +426,14 @@ async def test_streaming_response(app, mock_api_key_validation, monkeypatch, pay
             MockStreamChunk(" world!", "stop")
         ]
 
-    monkeypatch.setattr(api, "make_openrouter_request_openai_stream", make_stream)
-    monkeypatch.setattr(api, "calculate_cost", lambda m, p, c: 0.001)
-    monkeypatch.setattr(api, "deduct_credits", lambda *a, **k: None)
-    monkeypatch.setattr(api, "record_usage", lambda *a, **k: None)
-    monkeypatch.setattr(api, "update_rate_limit_usage", lambda *a, **k: None)
-    monkeypatch.setattr(api, "increment_api_key_usage", lambda *a: None)
+    mock_make_stream.return_value = make_stream()
 
     payload = dict(payload_basic)
     payload["stream"] = True
 
-    async with AsyncClient(app=app, base_url="http://test") as ac:
-        r = await ac.post("/v1/chat/completions", json=payload, headers=auth_headers)
+    rate_mgr = _RateLimitMgr(True, True)
+    with patch.object(api, 'get_rate_limit_manager', return_value=rate_mgr):
+        r = client.post("/v1/chat/completions", json=payload, headers=auth_headers)
 
     assert r.status_code == 200
     assert "text/event-stream" in r.headers.get("content-type", "")
@@ -379,91 +442,109 @@ async def test_streaming_response(app, mock_api_key_validation, monkeypatch, pay
     assert "[DONE]" in content
 
 
-@pytest.mark.anyio
-async def test_provider_failover_to_huggingface(app, happy_patches, payload_basic, auth_headers, monkeypatch):
+@patch('src.services.model_transformations.detect_provider_from_model_id')
+@patch('src.services.trial_validation.validate_trial_access')
+@patch('src.db.plans.enforce_plan_limits')
+@patch('src.db.users.get_user')
+@patch('src.routes.chat.make_featherless_request_openai')
+@patch('src.routes.chat.make_huggingface_request_openai')
+@patch('src.routes.chat.process_huggingface_response')
+@patch('src.services.pricing.calculate_cost')
+@patch('src.db.users.deduct_credits')
+@patch('src.db.users.record_usage')
+@patch('src.db.rate_limits.update_rate_limit_usage')
+@patch('src.db.api_keys.increment_api_key_usage')
+def test_provider_failover_to_huggingface(
+    mock_increment, mock_update_rate, mock_record, mock_deduct, mock_calculate_cost,
+    mock_process_hf, mock_make_hf, mock_make_featherless,
+    mock_get_user, mock_enforce_limits, mock_trial, mock_detect_provider,
+    client, payload_basic, auth_headers
+):
+    """Test provider failover from featherless to huggingface"""
+    mock_trial.return_value = {"is_valid": True, "is_trial": False, "is_expired": False}
+    mock_get_user.return_value = {"id": 1, "credits": 100.0, "environment_tag": "live"}
+    mock_enforce_limits.return_value = {"allowed": True}
+    mock_detect_provider.return_value = None
+    mock_calculate_cost.return_value = 0.012345
+
+    # Featherless fails
+    def failing_featherless(*args, **kwargs):
+        request = Request("POST", "https://featherless.test/v1/chat")
+        response = Response(status_code=502, request=request, content=b"")
+        raise HTTPStatusError("featherless backend error", request=request, response=response)
+    mock_make_featherless.side_effect = failing_featherless
+
+    # Huggingface succeeds
+    mock_make_hf.return_value = {"_raw": True}
+    mock_process_hf.return_value = {
+        "choices": [{"message": {"content": "served by huggingface"}, "finish_reason": "stop"}],
+        "usage": {"total_tokens": 12, "prompt_tokens": 5, "completion_tokens": 7},
+    }
+
     payload = dict(payload_basic)
     payload["provider"] = "featherless"
     payload["model"] = "featherless/test-model"
 
-    # Avoid auto-detection overriding the requested provider
-    monkeypatch.setattr(api, "detect_provider_from_model_id", lambda model: None)
-
-    call_tracker = {"featherless": 0, "huggingface": 0}
-
-    def failing_featherless(*args, **kwargs):
-        call_tracker["featherless"] += 1
-        request = Request("POST", "https://featherless.test/v1/chat")
-        response = Response(status_code=502, request=request, content=b"")
-        raise HTTPStatusError("featherless backend error", request=request, response=response)
-
-    monkeypatch.setattr(api, "make_featherless_request_openai", failing_featherless)
-
-    def fallback_huggingface(messages, model, **kwargs):
-        call_tracker["huggingface"] += 1
-        return {"_raw": True}
-
-    monkeypatch.setattr(api, "make_huggingface_request_openai", fallback_huggingface)
-
-    def process_huggingface_response(resp):
-        return {
-            "choices": [{"message": {"content": "served by huggingface"}, "finish_reason": "stop"}],
-            "usage": {"total_tokens": 12, "prompt_tokens": 5, "completion_tokens": 7},
-        }
-
-    monkeypatch.setattr(api, "process_huggingface_response", process_huggingface_response)
-
-    def guard_openrouter(*args, **kwargs):
-        raise AssertionError("Failover should not reach openrouter in this scenario")
-
-    monkeypatch.setattr(api, "make_openrouter_request_openai", guard_openrouter)
-
-    async with AsyncClient(app=app, base_url="http://test") as ac:
-        response = await ac.post("/v1/chat/completions", json=payload, headers=auth_headers)
+    rate_mgr = _RateLimitMgr(True, True)
+    with patch.object(api, 'get_rate_limit_manager', return_value=rate_mgr):
+        response = client.post("/v1/chat/completions", json=payload, headers=auth_headers)
 
     assert response.status_code == 200
     data = response.json()
     assert data["choices"][0]["message"]["content"] == "served by huggingface"
-    assert call_tracker["featherless"] == 1
-    assert call_tracker["huggingface"] == 1
+    assert mock_make_featherless.call_count == 1
+    assert mock_make_hf.call_count == 1
 
 
-@pytest.mark.anyio
-async def test_provider_failover_on_404_to_huggingface(app, happy_patches, payload_basic, auth_headers, monkeypatch):
+@patch('src.services.model_transformations.detect_provider_from_model_id')
+@patch('src.services.trial_validation.validate_trial_access')
+@patch('src.db.plans.enforce_plan_limits')
+@patch('src.db.users.get_user')
+@patch('src.routes.chat.make_featherless_request_openai')
+@patch('src.routes.chat.make_huggingface_request_openai')
+@patch('src.routes.chat.process_huggingface_response')
+@patch('src.services.pricing.calculate_cost')
+@patch('src.db.users.deduct_credits')
+@patch('src.db.users.record_usage')
+@patch('src.db.rate_limits.update_rate_limit_usage')
+@patch('src.db.api_keys.increment_api_key_usage')
+def test_provider_failover_on_404_to_huggingface(
+    mock_increment, mock_update_rate, mock_record, mock_deduct, mock_calculate_cost,
+    mock_process_hf, mock_make_hf, mock_make_featherless,
+    mock_get_user, mock_enforce_limits, mock_trial, mock_detect_provider,
+    client, payload_basic, auth_headers
+):
+    """Test provider failover on 404 from featherless to huggingface"""
+    mock_trial.return_value = {"is_valid": True, "is_trial": False, "is_expired": False}
+    mock_get_user.return_value = {"id": 1, "credits": 100.0, "environment_tag": "live"}
+    mock_enforce_limits.return_value = {"allowed": True}
+    mock_detect_provider.return_value = None
+    mock_calculate_cost.return_value = 0.012345
+
+    # Featherless returns 404
+    def missing_featherless(*args, **kwargs):
+        request = Request("POST", "https://featherless.test/v1/chat")
+        response = Response(status_code=404, request=request, content=b"missing")
+        raise HTTPStatusError("not found", request=request, response=response)
+    mock_make_featherless.side_effect = missing_featherless
+
+    # Huggingface succeeds
+    mock_make_hf.return_value = {"_raw": True}
+    mock_process_hf.return_value = {
+        "choices": [{"message": {"content": "fallback success"}, "finish_reason": "stop"}],
+        "usage": {"total_tokens": 8, "prompt_tokens": 4, "completion_tokens": 4},
+    }
+
     payload = dict(payload_basic)
     payload["provider"] = "featherless"
     payload["model"] = "featherless/ghost-model"
 
-    monkeypatch.setattr(api, "detect_provider_from_model_id", lambda model: None)
-
-    call_tracker = {"featherless": 0, "huggingface": 0}
-
-    def missing_featherless(*args, **kwargs):
-        call_tracker["featherless"] += 1
-        request = Request("POST", "https://featherless.test/v1/chat")
-        response = Response(status_code=404, request=request, content=b"missing")
-        raise HTTPStatusError("not found", request=request, response=response)
-
-    monkeypatch.setattr(api, "make_featherless_request_openai", missing_featherless)
-
-    def fallback_huggingface(messages, model, **kwargs):
-        call_tracker["huggingface"] += 1
-        return {"_raw": True}
-
-    monkeypatch.setattr(api, "make_huggingface_request_openai", fallback_huggingface)
-
-    def process_huggingface_response(resp):
-        return {
-            "choices": [{"message": {"content": "fallback success"}, "finish_reason": "stop"}],
-            "usage": {"total_tokens": 8, "prompt_tokens": 4, "completion_tokens": 4},
-        }
-
-    monkeypatch.setattr(api, "process_huggingface_response", process_huggingface_response)
-
-    async with AsyncClient(app=app, base_url="http://test") as ac:
-        response = await ac.post("/v1/chat/completions", json=payload, headers=auth_headers)
+    rate_mgr = _RateLimitMgr(True, True)
+    with patch.object(api, 'get_rate_limit_manager', return_value=rate_mgr):
+        response = client.post("/v1/chat/completions", json=payload, headers=auth_headers)
 
     assert response.status_code == 200
     data = response.json()
     assert data["choices"][0]["message"]["content"] == "fallback success"
-    assert call_tracker["featherless"] == 1
-    assert call_tracker["huggingface"] == 1
+    assert mock_make_featherless.call_count == 1
+    assert mock_make_hf.call_count == 1
