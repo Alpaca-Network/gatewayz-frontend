@@ -4,24 +4,21 @@ Test script to verify Claude Sonnet 4.5 integration
 Tests both the /v1/messages endpoint (Anthropic API) and /v1/chat/completions (OpenAI API)
 """
 import os
-import sys
+import pytest
 import json
 
+import sys
 sys.path.insert(0, 'src')
 
 try:
     from openai import OpenAI
 except ImportError:
-    print("ERROR: openai package not installed. Please install it:")
-    print("  pip install openai")
-    sys.exit(1)
+    pytest.skip("openai package not installed", allow_module_level=True)
 
 try:
     import httpx
 except ImportError:
-    print("ERROR: httpx package not installed. Please install it:")
-    print("  pip install httpx")
-    sys.exit(1)
+    pytest.skip("httpx package not installed", allow_module_level=True)
 
 # Configuration
 GATEWAY_API_KEY = os.getenv('GATEWAY_API_KEY')

@@ -8,11 +8,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-DEFAULT_SCOPE_PERMISSIONS = {
-    "read": ["*"],
-    "write": ["*"],
-    "admin": ["*"]
-}
+DEFAULT_SCOPE_PERMISSIONS = {"read": ["*"], "write": ["*"], "admin": ["*"]}
 
 
 def ensure_scope_permissions_table(table_name: str) -> int:
@@ -39,13 +35,17 @@ def ensure_scope_permissions_table(table_name: str) -> int:
 
             if missing:
                 try:
-                    client.table(table_name).update({
-                        "scope_permissions": DEFAULT_SCOPE_PERMISSIONS,
-                        "updated_at": datetime.utcnow().isoformat()
-                    }).eq("id", row["id"]).execute()
+                    client.table(table_name).update(
+                        {
+                            "scope_permissions": DEFAULT_SCOPE_PERMISSIONS,
+                            "updated_at": datetime.utcnow().isoformat(),
+                        }
+                    ).eq("id", row["id"]).execute()
                     updated += 1
                 except Exception as e:
-                    logger.warning(f"Failed to update scope_permissions for {table_name}.id={row.get('id')}: {e}")
+                    logger.warning(
+                        f"Failed to update scope_permissions for {table_name}.id={row.get('id')}: {e}"
+                    )
     except Exception as e:
         logger.error(f"Failed reading from {table_name}: {e}")
 
@@ -67,5 +67,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-

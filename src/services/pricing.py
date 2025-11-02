@@ -4,13 +4,13 @@ Handles model pricing calculations and credit cost computation
 """
 
 import logging
-from typing import Dict
+
 from src.services.models import get_cached_models
 
 logger = logging.getLogger(__name__)
 
 
-def get_model_pricing(model_id: str) -> Dict[str, float]:
+def get_model_pricing(model_id: str) -> dict[str, float]:
     """
     Get pricing information for a specific model
 
@@ -38,8 +38,10 @@ def get_model_pricing(model_id: str) -> Dict[str, float]:
         provider_suffixes = [":hf-inference", ":openai", ":anthropic"]
         for suffix in provider_suffixes:
             if normalized_model_id.endswith(suffix):
-                normalized_model_id = normalized_model_id[:-len(suffix)]
-                logger.debug(f"Normalized model ID from '{model_id}' to '{normalized_model_id}' for pricing lookup")
+                normalized_model_id = normalized_model_id[: -len(suffix)]
+                logger.debug(
+                    f"Normalized model ID from '{model_id}' to '{normalized_model_id}' for pricing lookup"
+                )
                 break
 
         # Find the specific model - try both original and normalized IDs
@@ -48,28 +50,30 @@ def get_model_pricing(model_id: str) -> Dict[str, float]:
             model_slug = model.get("slug")
 
             # Match against both original and normalized model IDs
-            if (model_catalog_id in (model_id, normalized_model_id) or
-                model_slug in (model_id, normalized_model_id)):
+            if model_catalog_id in (model_id, normalized_model_id) or model_slug in (
+                model_id,
+                normalized_model_id,
+            ):
                 pricing = model.get("pricing", {})
 
                 # Convert pricing strings to floats, handling None and empty strings
                 # Also ensure negative values (e.g., -1 for dynamic pricing) are treated as 0
                 prompt_price = float(pricing.get("prompt", "0") or "0")
                 prompt_price = max(0.0, prompt_price)  # Convert negative to 0
-                
+
                 completion_price = float(pricing.get("completion", "0") or "0")
                 completion_price = max(0.0, completion_price)  # Convert negative to 0
 
-                logger.info(f"Found pricing for {model_id} (normalized: {normalized_model_id}): prompt=${prompt_price}, completion=${completion_price}")
+                logger.info(
+                    f"Found pricing for {model_id} (normalized: {normalized_model_id}): prompt=${prompt_price}, completion=${completion_price}"
+                )
 
-                return {
-                    "prompt": prompt_price,
-                    "completion": completion_price,
-                    "found": True
-                }
+                return {"prompt": prompt_price, "completion": completion_price, "found": True}
 
         # Model not found, use default pricing
-        logger.warning(f"Model {model_id} (normalized: {normalized_model_id}) not found in catalog, using default pricing")
+        logger.warning(
+            f"Model {model_id} (normalized: {normalized_model_id}) not found in catalog, using default pricing"
+        )
         return {"prompt": 0.00002, "completion": 0.00002, "found": False}
 
     except Exception as e:
@@ -77,11 +81,7 @@ def get_model_pricing(model_id: str) -> Dict[str, float]:
         return {"prompt": 0.00002, "completion": 0.00002, "found": False}
 
 
-def calculate_cost(
-    model_id: str,
-    prompt_tokens: int,
-    completion_tokens: int
-) -> float:
+def calculate_cost(model_id: str, prompt_tokens: int, completion_tokens: int) -> float:
     """
     Calculate the total cost for a chat completion based on model pricing
 

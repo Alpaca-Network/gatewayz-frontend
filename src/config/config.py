@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 # Load environment variables from ..env file
 load_dotenv()
 
+
 class Config:
     """Configuration class for the application"""
 
@@ -13,7 +14,11 @@ class Config:
     IS_PRODUCTION = APP_ENV == "production"
     IS_STAGING = APP_ENV == "staging"
     IS_DEVELOPMENT = APP_ENV == "development"
-    IS_TESTING = APP_ENV in {"testing", "test"} or os.environ.get("TESTING", "").lower() in {"1", "true", "yes"}
+    IS_TESTING = APP_ENV in {"testing", "test"} or os.environ.get("TESTING", "").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
 
     # Supabase Configuration
     SUPABASE_URL = os.environ.get("SUPABASE_URL")
@@ -95,10 +100,7 @@ class Config:
         if not provider:
             return cls.PORTKEY_DEFAULT_VIRTUAL_KEY
 
-        normalized = "".join(
-            ch if ch.isalnum() else "_"
-            for ch in provider.upper()
-        )
+        normalized = "".join(ch if ch.isalnum() else "_" for ch in provider.upper())
         env_name = f"PORTKEY_VIRTUAL_KEY_{normalized}"
         provider_specific = os.environ.get(env_name)
         return provider_specific or cls.PORTKEY_DEFAULT_VIRTUAL_KEY
@@ -132,10 +134,10 @@ class Config:
                 "OPENROUTER_SITE_NAME=your_site_name (optional)\n"
                 "PORTKEY_API_KEY=your_portkey_api_key"
             )
-        
+
         return True
-    
+
     @classmethod
     def get_supabase_config(cls):
         """Get Supabase configuration as a tuple"""
-        return cls.SUPABASE_URL, cls.SUPABASE_KEY 
+        return cls.SUPABASE_URL, cls.SUPABASE_KEY

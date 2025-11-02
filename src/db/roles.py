@@ -4,8 +4,8 @@ Handles user roles and permissions
 """
 
 import logging
-from typing import Optional, Dict, Any, List
 from datetime import datetime
+from typing import Any
 
 from src.config.supabase_config import get_supabase_client
 
@@ -16,8 +16,10 @@ logger = logging.getLogger(__name__)
 # Role Constants
 # ============================================
 
+
 class UserRole:
     """User role constants"""
+
     USER = "user"
     DEVELOPER = "developer"
     ADMIN = "admin"
@@ -26,6 +28,7 @@ class UserRole:
 # ============================================
 # Permission Checking
 # ============================================
+
 
 def check_user_permission(user_id: int, resource: str, action: str) -> bool:
     """
@@ -43,11 +46,10 @@ def check_user_permission(user_id: int, resource: str, action: str) -> bool:
         client = get_supabase_client()
 
         # Call database function
-        result = client.rpc('user_has_permission', {
-            'p_user_id': user_id,
-            'p_resource': resource,
-            'p_action': action
-        }).execute()
+        result = client.rpc(
+            "user_has_permission",
+            {"p_user_id": user_id, "p_resource": resource, "p_action": action},
+        ).execute()
 
         if result.data and len(result.data) > 0:
             return result.data[0]
@@ -59,7 +61,7 @@ def check_user_permission(user_id: int, resource: str, action: str) -> bool:
         return False
 
 
-def get_user_permissions(user_id: int) -> List[Dict[str, Any]]:
+def get_user_permissions(user_id: int) -> list[dict[str, Any]]:
     """
     Get all permissions for a user
 
@@ -72,9 +74,7 @@ def get_user_permissions(user_id: int) -> List[Dict[str, Any]]:
     try:
         client = get_supabase_client()
 
-        result = client.rpc('get_user_permissions', {
-            'p_user_id': user_id
-        }).execute()
+        result = client.rpc("get_user_permissions", {"p_user_id": user_id}).execute()
 
         return result.data if result.data else []
 
@@ -83,7 +83,7 @@ def get_user_permissions(user_id: int) -> List[Dict[str, Any]]:
         return []
 
 
-def get_user_role(user_id: int) -> Optional[str]:
+def get_user_role(user_id: int) -> str | None:
     """
     Get user's role
 
@@ -96,10 +96,10 @@ def get_user_role(user_id: int) -> Optional[str]:
     try:
         client = get_supabase_client()
 
-        result = client.table('users').select('role').eq('id', user_id).execute()
+        result = client.table("users").select("role").eq("id", user_id).execute()
 
         if result.data and len(result.data) > 0:
-            return result.data[0]['role']
+            return result.data[0]["role"]
 
         return None
 
@@ -112,11 +112,9 @@ def get_user_role(user_id: int) -> Optional[str]:
 # Role Management (Admin Only)
 # ============================================
 
+
 def update_user_role(
-    user_id: int,
-    new_role: str,
-    changed_by: Optional[int] = None,
-    reason: Optional[str] = None
+    user_id: int, new_role: str, changed_by: int | None = None, reason: str | None = None
 ) -> bool:
     """
     Update a user's role
@@ -137,23 +135,27 @@ def update_user_role(
         client = get_supabase_client()
 
         # Update user role
-        result = client.table('users').update({
-            'role': new_role,
-            'updated_at': datetime.utcnow().isoformat()
-        }).eq('id', user_id).execute()
+        result = (
+            client.table("users")
+            .update({"role": new_role, "updated_at": datetime.utcnow().isoformat()})
+            .eq("id", user_id)
+            .execute()
+        )
 
         if not result.data:
             return False
 
         # Log the change (trigger will handle this, but we can add extra metadata)
         if changed_by and reason:
-            client.table('role_audit_log').insert({
-                'user_id': user_id,
-                'new_role': new_role,
-                'changed_by': changed_by,
-                'reason': reason,
-                'metadata': {'manual_update': True}
-            }).execute()
+            client.table("role_audit_log").insert(
+                {
+                    "user_id": user_id,
+                    "new_role": new_role,
+                    "changed_by": changed_by,
+                    "reason": reason,
+                    "metadata": {"manual_update": True},
+                }
+            ).execute()
 
         logger.info(f"User {user_id} role updated to {new_role} by {changed_by}")
         return True
@@ -163,7 +165,7 @@ def update_user_role(
         return False
 
 
-def get_role_audit_log(user_id: Optional[int] = None, limit: int = 50) -> List[Dict[str, Any]]:
+def get_role_audit_log(user_id: int | None = None, limit: int = 50) -> list[dict[str, Any]]:
     """
     Get role change audit log
 
@@ -177,12 +179,12 @@ def get_role_audit_log(user_id: Optional[int] = None, limit: int = 50) -> List[D
     try:
         client = get_supabase_client()
 
-        query = client.table('role_audit_log').select('*')
+        query = client.table("role_audit_log").select("*")
 
         if user_id:
-            query = query.eq('user_id', user_id)
+            query = query.eq("user_id", user_id)
 
-        result = query.order('created_at', desc=True).limit(limit).execute()
+        result = query.order("created_at", desc=True).limit(limit).execute()
 
         return result.data if result.data else []
 
@@ -191,7 +193,7 @@ def get_role_audit_log(user_id: Optional[int] = None, limit: int = 50) -> List[D
         return []
 
 
-def get_users_by_role(role: str, limit: int = 100) -> List[Dict[str, Any]]:
+def get_users_by_role(role: str, limit: int = 100) -> list[dict[str, Any]]:
     """
     Get all users with a specific role
 
@@ -205,9 +207,13 @@ def get_users_by_role(role: str, limit: int = 100) -> List[Dict[str, Any]]:
     try:
         client = get_supabase_client()
 
-        result = client.table('users').select(
-            'id, username, email, role, role_metadata, created_at'
-        ).eq('role', role).limit(limit).execute()
+        result = (
+            client.table("users")
+            .select("id, username, email, role, role_metadata, created_at")
+            .eq("role", role)
+            .limit(limit)
+            .execute()
+        )
 
         return result.data if result.data else []
 
@@ -220,7 +226,8 @@ def get_users_by_role(role: str, limit: int = 100) -> List[Dict[str, Any]]:
 # Role Permissions Management
 # ============================================
 
-def get_role_permissions(role: str) -> List[Dict[str, Any]]:
+
+def get_role_permissions(role: str) -> list[dict[str, Any]]:
     """
     Get all permissions for a role
 
@@ -233,7 +240,13 @@ def get_role_permissions(role: str) -> List[Dict[str, Any]]:
     try:
         client = get_supabase_client()
 
-        result = client.table('role_permissions').select('*').eq('role', role).eq('allowed', True).execute()
+        result = (
+            client.table("role_permissions")
+            .select("*")
+            .eq("role", role)
+            .eq("allowed", True)
+            .execute()
+        )
 
         return result.data if result.data else []
 
@@ -257,12 +270,11 @@ def add_role_permission(role: str, resource: str, action: str) -> bool:
     try:
         client = get_supabase_client()
 
-        result = client.table('role_permissions').insert({
-            'role': role,
-            'resource': resource,
-            'action': action,
-            'allowed': True
-        }).execute()
+        result = (
+            client.table("role_permissions")
+            .insert({"role": role, "resource": resource, "action": action, "allowed": True})
+            .execute()
+        )
 
         if result.data:
             logger.info(f"Permission added: {role} can {action} {resource}")
@@ -290,9 +302,14 @@ def remove_role_permission(role: str, resource: str, action: str) -> bool:
     try:
         client = get_supabase_client()
 
-        result = client.table('role_permissions').update({
-            'allowed': False
-        }).eq('role', role).eq('resource', resource).eq('action', action).execute()
+        result = (
+            client.table("role_permissions")
+            .update({"allowed": False})
+            .eq("role", role)
+            .eq("resource", resource)
+            .eq("action", action)
+            .execute()
+        )
 
         if result.data:
             logger.info(f"Permission removed: {role} cannot {action} {resource}")

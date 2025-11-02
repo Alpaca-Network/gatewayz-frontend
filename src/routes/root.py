@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 router = APIRouter()
 
+
 # Root endpoint
 @router.get("/", tags=["authentication"])
 async def root():
@@ -15,7 +16,7 @@ async def root():
                 "GET /health - Health check with system status",
                 "GET /models - Get available AI models from Gatewayz",
                 "GET /models/providers - Get provider statistics for available models",
-                "GET / - API information (this endpoint)"
+                "GET / - API information (this endpoint)",
             ],
             "admin": [
                 "POST /admin/add_credits - Add credits to existing user",
@@ -23,7 +24,7 @@ async def root():
                 "GET /admin/monitor - System-wide monitoring dashboard",
                 "POST /admin/limit - Set rate limits for users",
                 "POST /admin/refresh-models - Force refresh model cache",
-                "GET /admin/cache-status - Get cache status information"
+                "GET /admin/cache-status - Get cache status information",
             ],
             "protected": [
                 "GET /user/balance - Get current user balance",
@@ -38,8 +39,8 @@ async def root():
                 "DELETE /user/api-keys/{key_id} - Delete specific API key",
                 "GET /user/api-keys/usage - Get API key usage statistics with audit info",
                 "GET /user/api-keys/audit-logs - Get audit logs for security monitoring (Phase 4)",
-                "POST /v1/chat/completions - Chat completion with Gatewayz"
-            ]
+                "POST /v1/chat/completions - Chat completion with Gatewayz",
+            ],
         },
         "features": [
             "Multi-model AI access via Gatewayz",
@@ -51,7 +52,7 @@ async def root():
             "Real-time rate limiting",
             "Comprehensive monitoring and analytics",
             "Secure API key authentication",
-            "Production-ready error handling"
+            "Production-ready error handling",
         ],
         "model_endpoint_features": [
             "Pricing information (input/output costs)",
@@ -61,11 +62,11 @@ async def root():
             "Usage recommendations",
             "Filtering by category, provider, and features",
             "Caching for fast response times",
-            "Provider-specific pricing when available"
+            "Provider-specific pricing when available",
         ],
         "documentation": {
             "swagger_ui": "/docs",
             "redoc": "/redoc",
-            "openapi_spec": "/openapi.json"
-        }
+            "openapi_spec": "/openapi.json",
+        },
     }

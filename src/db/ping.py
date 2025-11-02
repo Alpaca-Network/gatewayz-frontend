@@ -5,7 +5,6 @@ Handles storage and retrieval of ping counts using Supabase
 """
 
 import logging
-from typing import Optional
 from datetime import datetime
 
 from src.config.supabase_config import get_supabase_client
@@ -13,7 +12,7 @@ from src.config.supabase_config import get_supabase_client
 logger = logging.getLogger(__name__)
 
 
-def increment_ping_count() -> Optional[int]:
+def increment_ping_count() -> int | None:
     """
     Increment the ping counter in Supabase database
 
@@ -24,19 +23,21 @@ def increment_ping_count() -> Optional[int]:
         client = get_supabase_client()
 
         # Get current count
-        result = client.table('ping_stats').select('count').eq('id', 1).execute()
+        result = client.table("ping_stats").select("count").eq("id", 1).execute()
 
         logger.debug(f"SELECT result: {result.data}")
 
         if result.data and len(result.data) > 0:
-            current_count = result.data[0]['count']
+            current_count = result.data[0]["count"]
             new_count = current_count + 1
 
             # Update count
-            update_result = client.table('ping_stats').update({
-                'count': new_count,
-                'last_ping_at': datetime.utcnow().isoformat()
-            }).eq('id', 1).execute()
+            update_result = (
+                client.table("ping_stats")
+                .update({"count": new_count, "last_ping_at": datetime.utcnow().isoformat()})
+                .eq("id", 1)
+                .execute()
+            )
 
             logger.debug(f"UPDATE result: {update_result.data}")
 
@@ -58,7 +59,7 @@ def increment_ping_count() -> Optional[int]:
         return None
 
 
-def get_ping_count() -> Optional[int]:
+def get_ping_count() -> int | None:
     """
     Get the current ping counter value from database
 
@@ -68,10 +69,10 @@ def get_ping_count() -> Optional[int]:
     try:
         client = get_supabase_client()
 
-        result = client.table('ping_stats').select('count').eq('id', 1).execute()
+        result = client.table("ping_stats").select("count").eq("id", 1).execute()
 
         if result.data and len(result.data) > 0:
-            return result.data[0]['count']
+            return result.data[0]["count"]
         else:
             logger.warning("No ping count found in database")
             return 0
@@ -81,7 +82,7 @@ def get_ping_count() -> Optional[int]:
         return None
 
 
-def get_ping_stats() -> Optional[dict]:
+def get_ping_stats() -> dict | None:
     """
     Get detailed ping statistics from database
 
@@ -91,15 +92,15 @@ def get_ping_stats() -> Optional[dict]:
     try:
         client = get_supabase_client()
 
-        result = client.table('ping_stats').select('*').eq('id', 1).execute()
+        result = client.table("ping_stats").select("*").eq("id", 1).execute()
 
         if result.data and len(result.data) > 0:
             stats = result.data[0]
             return {
-                "count": stats.get('count', 0),
-                "last_ping_at": stats.get('last_ping_at'),
-                "created_at": stats.get('created_at'),
-                "updated_at": stats.get('updated_at')
+                "count": stats.get("count", 0),
+                "last_ping_at": stats.get("last_ping_at"),
+                "created_at": stats.get("created_at"),
+                "updated_at": stats.get("updated_at"),
             }
         else:
             logger.warning("No ping stats found in database")
@@ -120,10 +121,12 @@ def reset_ping_count() -> bool:
     try:
         client = get_supabase_client()
 
-        result = client.table('ping_stats').update({
-            'count': 0,
-            'last_ping_at': datetime.utcnow().isoformat()
-        }).eq('id', 1).execute()
+        result = (
+            client.table("ping_stats")
+            .update({"count": 0, "last_ping_at": datetime.utcnow().isoformat()})
+            .eq("id", 1)
+            .execute()
+        )
 
         if result.data:
             logger.info("Ping count reset to 0")
@@ -146,17 +149,17 @@ def init_ping_stats_table() -> bool:
         client = get_supabase_client()
 
         # Check if row exists
-        result = client.table('ping_stats').select('id').eq('id', 1).execute()
+        result = client.table("ping_stats").select("id").eq("id", 1).execute()
 
         logger.debug(f"Init check result: {result.data}")
 
         if not result.data or len(result.data) == 0:
             # Insert initial row
-            insert_result = client.table('ping_stats').insert({
-                'id': 1,
-                'count': 0,
-                'last_ping_at': datetime.utcnow().isoformat()
-            }).execute()
+            insert_result = (
+                client.table("ping_stats")
+                .insert({"id": 1, "count": 0, "last_ping_at": datetime.utcnow().isoformat()})
+                .execute()
+            )
 
             logger.info(f"Ping stats initialized in Supabase. Result: {insert_result.data}")
             return True

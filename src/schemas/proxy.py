@@ -1,8 +1,7 @@
-from pydantic import BaseModel, EmailStr, field_validator
-from typing import List, Dict, Any, Optional, Union
-from datetime import datetime
 from enum import Enum
+from typing import Any
 
+from pydantic import BaseModel, field_validator
 
 ALLOWED_CHAT_ROLES = {"system", "user", "assistant"}
 
@@ -31,23 +30,23 @@ class Message(BaseModel):
 
 class ProxyRequest(BaseModel):
     model: str
-    messages: List[Message]
-    max_tokens: Optional[int] = 950
-    temperature: Optional[float] = 1.0
-    top_p: Optional[float] = 1.0
-    frequency_penalty: Optional[float] = 0.0
-    presence_penalty: Optional[float] = 0.0
-    stream: Optional[bool] = False
-    provider: Optional[str] = None  # Provider selection: "openrouter" or "portkey"
-    portkey_provider: Optional[str] = "openai"  # Sub-provider for Portkey
-    portkey_virtual_key: Optional[str] = None  # Virtual key for Portkey
+    messages: list[Message]
+    max_tokens: int | None = 950
+    temperature: float | None = 1.0
+    top_p: float | None = 1.0
+    frequency_penalty: float | None = 0.0
+    presence_penalty: float | None = 0.0
+    stream: bool | None = False
+    provider: str | None = None  # Provider selection: "openrouter" or "portkey"
+    portkey_provider: str | None = "openai"  # Sub-provider for Portkey
+    portkey_virtual_key: str | None = None  # Virtual key for Portkey
 
     class Config:
         extra = "allow"
 
     @field_validator("messages")
     @classmethod
-    def validate_messages(cls, messages: List[Message]) -> List[Message]:
+    def validate_messages(cls, messages: list[Message]) -> list[Message]:
         if not messages:
             raise ValueError("messages must contain at least one message.")
         return messages
@@ -61,7 +60,7 @@ class ResponseFormatType(str, Enum):
 
 class ResponseFormat(BaseModel):
     type: ResponseFormatType = ResponseFormatType.text
-    json_schema: Optional[Dict[str, Any]] = None
+    json_schema: dict[str, Any] | None = None
 
 
 class InputMessage(BaseModel):
@@ -69,8 +68,9 @@ class InputMessage(BaseModel):
     Unified input message for v1/responses endpoint.
     Supports multimodal input (text, images, etc.)
     """
+
     role: str
-    content: Union[str, List[Dict[str, Any]]]  # String or multimodal content array
+    content: str | list[dict[str, Any]]  # String or multimodal content array
 
 
 class ResponseRequest(BaseModel):
@@ -78,25 +78,26 @@ class ResponseRequest(BaseModel):
     Unified API request schema for v1/responses endpoint.
     This is the newer, more flexible alternative to v1/chat/completions.
     """
+
     model: str
-    input: List[InputMessage]  # Replaces 'messages' in chat/completions
-    max_tokens: Optional[int] = 950
-    temperature: Optional[float] = 1.0
-    top_p: Optional[float] = 1.0
-    frequency_penalty: Optional[float] = 0.0
-    presence_penalty: Optional[float] = 0.0
-    stream: Optional[bool] = False
-    response_format: Optional[ResponseFormat] = None
-    provider: Optional[str] = None
-    portkey_provider: Optional[str] = "openai"
-    portkey_virtual_key: Optional[str] = None
+    input: list[InputMessage]  # Replaces 'messages' in chat/completions
+    max_tokens: int | None = 950
+    temperature: float | None = 1.0
+    top_p: float | None = 1.0
+    frequency_penalty: float | None = 0.0
+    presence_penalty: float | None = 0.0
+    stream: bool | None = False
+    response_format: ResponseFormat | None = None
+    provider: str | None = None
+    portkey_provider: str | None = "openai"
+    portkey_virtual_key: str | None = None
 
     class Config:
         extra = "allow"
 
     @field_validator("input")
     @classmethod
-    def validate_input(cls, messages: List[InputMessage]) -> List[InputMessage]:
+    def validate_input(cls, messages: list[InputMessage]) -> list[InputMessage]:
         if not messages:
             raise ValueError("input must contain at least one message.")
         return messages
@@ -106,11 +107,13 @@ class ResponseRequest(BaseModel):
 # Anthropic Messages API Schemas
 # ============================================================================
 
+
 class ContentBlock(BaseModel):
     """Content block for Anthropic Messages API"""
+
     type: str  # "text", "image", etc.
-    text: Optional[str] = None
-    source: Optional[Dict[str, Any]] = None  # For image blocks
+    text: str | None = None
+    source: dict[str, Any] | None = None  # For image blocks
 
     class Config:
         extra = "allow"
@@ -118,8 +121,9 @@ class ContentBlock(BaseModel):
 
 class AnthropicMessage(BaseModel):
     """Message format for Anthropic Messages API"""
+
     role: str  # "user" or "assistant"
-    content: Union[str, List[ContentBlock]]  # String or content blocks
+    content: str | list[ContentBlock]  # String or content blocks
 
     @field_validator("role")
     @classmethod
@@ -134,7 +138,7 @@ class AnthropicMessage(BaseModel):
 
     @field_validator("content")
     @classmethod
-    def validate_content(cls, content: Union[str, List[ContentBlock]]) -> Union[str, List[ContentBlock]]:
+    def validate_content(cls, content: str | list[ContentBlock]) -> str | list[ContentBlock]:
         if isinstance(content, str):
             if not content.strip():
                 raise ValueError("Message content must be a non-empty string.")
@@ -157,28 +161,29 @@ class MessagesRequest(BaseModel):
     - Content can be string or array of content blocks
     - No frequency_penalty or presence_penalty
     """
+
     model: str  # e.g., "claude-sonnet-4-5-20250929"
-    messages: List[AnthropicMessage]
+    messages: list[AnthropicMessage]
     max_tokens: int  # REQUIRED for Anthropic API
-    system: Optional[str] = None  # System prompt (separate from messages)
-    temperature: Optional[float] = 1.0
-    top_p: Optional[float] = None
-    top_k: Optional[int] = None  # Anthropic-specific
-    stop_sequences: Optional[List[str]] = None
-    stream: Optional[bool] = False
-    metadata: Optional[Dict[str, Any]] = None
+    system: str | None = None  # System prompt (separate from messages)
+    temperature: float | None = 1.0
+    top_p: float | None = None
+    top_k: int | None = None  # Anthropic-specific
+    stop_sequences: list[str] | None = None
+    stream: bool | None = False
+    metadata: dict[str, Any] | None = None
 
     # Gateway-specific fields (not part of Anthropic API)
-    provider: Optional[str] = None
-    portkey_provider: Optional[str] = "openai"
-    portkey_virtual_key: Optional[str] = None
+    provider: str | None = None
+    portkey_provider: str | None = "openai"
+    portkey_virtual_key: str | None = None
 
     class Config:
         extra = "allow"
 
     @field_validator("messages")
     @classmethod
-    def validate_messages(cls, messages: List[AnthropicMessage]) -> List[AnthropicMessage]:
+    def validate_messages(cls, messages: list[AnthropicMessage]) -> list[AnthropicMessage]:
         if not messages:
             raise ValueError("messages must contain at least one message.")
         return messages

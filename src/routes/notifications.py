@@ -1,20 +1,22 @@
-import datetime
-import os
 import logging
-
-
-
-from src.db.users import  get_user
-from src.enhanced_notification_service import enhanced_notification_service
-from fastapi import APIRouter, Query
+import os
 from datetime import datetime, timezone
-from fastapi import Depends, HTTPException
-from src.security.deps import get_api_key, require_admin
-from src.schemas.notification import NotificationPreferences, UpdateNotificationPreferencesRequest, \
-    NotificationType, SendNotificationRequest, NotificationChannel, NotificationStats
-from src.services.notification import notification_service
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from src.config.supabase_config import get_supabase_client
+from src.db.users import get_user
+from src.enhanced_notification_service import enhanced_notification_service
+from src.schemas.notification import (
+    NotificationChannel,
+    NotificationPreferences,
+    NotificationStats,
+    NotificationType,
+    SendNotificationRequest,
+    UpdateNotificationPreferencesRequest,
+)
+from src.security.deps import get_api_key, require_admin
+from src.services.notification import notification_service
 
 logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
@@ -23,7 +25,12 @@ router = APIRouter()
 
 ## Notification Endpoints
 
-@router.get("/user/notifications/preferences", response_model=NotificationPreferences, tags=["notifications"])
+
+@router.get(
+    "/user/notifications/preferences",
+    response_model=NotificationPreferences,
+    tags=["notifications"],
+)
 async def get_notification_preferences(api_key: str = Depends(get_api_key)):
     """Get user notification preferences"""
     try:
@@ -31,21 +38,20 @@ async def get_notification_preferences(api_key: str = Depends(get_api_key)):
         if not user:
             raise HTTPException(status_code=401, detail="Invalid API key")
 
-        preferences = notification_service.get_user_preferences(user['id'])
+        preferences = notification_service.get_user_preferences(user["id"])
         if not preferences:
             # Create default preferences if they don't exist
-            preferences = notification_service.create_user_preferences(user['id'])
+            preferences = notification_service.create_user_preferences(user["id"])
 
         return preferences
     except Exception as e:
         logger.error(f"Error getting notification preferences: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.put("/user/notifications/preferences", tags=["notifications"])
 async def update_notification_preferences(
-        request: UpdateNotificationPreferencesRequest,
-        api_key: str = Depends(get_api_key)
+    request: UpdateNotificationPreferencesRequest, api_key: str = Depends(get_api_key)
 ):
     """Update user notification preferences"""
     try:
@@ -59,26 +65,23 @@ async def update_notification_preferences(
         if not updates:
             raise HTTPException(status_code=400, detail="No updates provided")
 
-        success = notification_service.update_user_preferences(user['id'], updates)
+        success = notification_service.update_user_preferences(user["id"], updates)
 
         if not success:
             raise HTTPException(status_code=500, detail="Failed to update preferences")
 
-        return {
-            "status": "success",
-            "message": "Notification preferences updated successfully"
-        }
+        return {"status": "success", "message": "Notification preferences updated successfully"}
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error updating notification preferences: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.post("/user/notifications/test", tags=["notifications"])
 async def test_notification(
-        notification_type: NotificationType = Query(..., description="Type of notification to test"),
-        api_key: str = Depends(get_api_key)
+    notification_type: NotificationType = Query(..., description="Type of notification to test"),
+    api_key: str = Depends(get_api_key),
 ):
     """Send test notification to a user"""
     try:
@@ -142,31 +145,35 @@ async def test_notification(
             """
 
         request = SendNotificationRequest(
-            user_id=user['id'],
+            user_id=user["id"],
             type=notification_type,
             channel=NotificationChannel.EMAIL,
             subject=subject,
             content=content,
-            metadata={'test': True}
+            metadata={"test": True},
         )
 
         success = notification_service.create_notification(request)
 
         return {
             "status": "success" if success else "failed",
-            "message": "Test notification sent successfully" if success else "Failed to send test notification"
+            "message": (
+                "Test notification sent successfully"
+                if success
+                else "Failed to send test notification"
+            ),
         }
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error sending test notification: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.post("/user/notifications/send-usage-report", tags=["notifications"])
 async def send_usage_report(
-        month: str = Query(..., description="Month to send report for (YYYY-MM)"),
-        api_key: str = Depends(get_api_key)
+    month: str = Query(..., description="Month to send report for (YYYY-MM)"),
+    api_key: str = Depends(get_api_key),
 ):
     """Send monthly usage report email"""
     try:
@@ -176,18 +183,18 @@ async def send_usage_report(
 
         # This is a simplified example - you'd need to implement actual usage tracking
         usage_stats = {
-            'total_requests': 1000,
-            'tokens_used': 50000,
-            'credits_spent': 5.00,
-            'remaining_credits': user.get('credits', 0)
+            "total_requests": 1000,
+            "tokens_used": 50000,
+            "credits_spent": 5.00,
+            "remaining_credits": user.get("credits", 0),
         }
 
         success = enhanced_notification_service.send_monthly_usage_report(
-            user_id=user['id'],
-            username=user['username'],
-            email=user['email'],
+            user_id=user["id"],
+            username=user["username"],
+            email=user["email"],
             month=month,
-            usage_stats=usage_stats
+            usage_stats=usage_stats,
         )
 
         if success:
@@ -199,7 +206,7 @@ async def send_usage_report(
         raise
     except Exception as e:
         logger.error(f"Error sending usage report: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.get("/admin/notifications/stats", response_model=NotificationStats, tags=["admin"])
@@ -212,7 +219,7 @@ async def get_notification_stats(admin_user: dict = Depends(require_admin)):
         try:
             # Get notification counts
             logger.info("Fetching notification counts...")
-            result = client.table('notifications').select('status').execute()
+            result = client.table("notifications").select("status").execute()
             notifications = result.data if result.data else []
         except Exception as table_error:
             if "Could not find the table" in str(table_error):
@@ -223,39 +230,48 @@ async def get_notification_stats(admin_user: dict = Depends(require_admin)):
                     failed_notifications=0,
                     pending_notifications=0,
                     delivery_rate=0.0,
-                    recent_notifications=[]
+                    recent_notifications=[],
                 )
             else:
-                raise table_error
+                raise table_error from table_error
 
         total_notifications = len(notifications)
-        sent_notifications = len([n for n in notifications if n['status'] == 'sent'])
-        failed_notifications = len([n for n in notifications if n['status'] == 'failed'])
-        pending_notifications = len([n for n in notifications if n['status'] == 'pending'])
+        sent_notifications = len([n for n in notifications if n["status"] == "sent"])
+        failed_notifications = len([n for n in notifications if n["status"] == "failed"])
+        pending_notifications = len([n for n in notifications if n["status"] == "pending"])
 
-        delivery_rate = (sent_notifications / total_notifications * 100) if total_notifications > 0 else 0
+        delivery_rate = (
+            (sent_notifications / total_notifications * 100) if total_notifications > 0 else 0
+        )
 
         # Get last 24-hour notifications - use a simpler approach
         logger.info("Fetching recent notifications...")
         try:
             yesterday = (datetime.now(timezone.utc) - datetime.timedelta(days=1)).isoformat()
-            recent_result = client.table('notifications').select('id').gte('created_at', yesterday).execute()
+            recent_result = (
+                client.table("notifications").select("id").gte("created_at", yesterday).execute()
+            )
             last_24h_notifications = len(recent_result.data) if recent_result.data else 0
         except Exception as recent_error:
             logger.warning(f"Error fetching recent notifications: {recent_error}")
             # Fallback: get all notifications and filter in Python
-            all_notifications = client.table('notifications').select('created_at').execute()
+            all_notifications = client.table("notifications").select("created_at").execute()
             if all_notifications.data:
                 yesterday_dt = datetime.now(timezone.utc) - datetime.timedelta(days=1)
-                last_24h_notifications = len([
-                    n for n in all_notifications.data
-                    if datetime.fromisoformat(n['created_at'].replace('Z', '+00:00')) >= yesterday_dt
-                ])
+                last_24h_notifications = len(
+                    [
+                        n
+                        for n in all_notifications.data
+                        if datetime.fromisoformat(n["created_at"].replace("Z", "+00:00"))
+                        >= yesterday_dt
+                    ]
+                )
             else:
                 last_24h_notifications = 0
 
         logger.info(
-            f"Notification stats calculated: total={total_notifications}, sent={sent_notifications}, failed={failed_notifications}, pending={pending_notifications}")
+            f"Notification stats calculated: total={total_notifications}, sent={sent_notifications}, failed={failed_notifications}, pending={pending_notifications}"
+        )
 
         return NotificationStats(
             total_notifications=total_notifications,
@@ -263,11 +279,11 @@ async def get_notification_stats(admin_user: dict = Depends(require_admin)):
             failed_notifications=failed_notifications,
             pending_notifications=pending_notifications,
             delivery_rate=round(delivery_rate, 2),
-            last_24h_notifications=last_24h_notifications
+            last_24h_notifications=last_24h_notifications,
         )
     except Exception as e:
         logger.error(f"Error getting notification stats: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}") from e
 
 
 @router.post("/admin/notifications/process", tags=["admin"])
@@ -279,8 +295,8 @@ async def process_notifications(admin_user: dict = Depends(require_admin)):
         return {
             "status": "success",
             "message": "Notifications processed successfully",
-            "stats": stats
+            "stats": stats,
         }
     except Exception as e:
         logger.error(f"Error processing notifications: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e

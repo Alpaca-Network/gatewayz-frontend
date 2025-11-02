@@ -1,11 +1,9 @@
 import logging
-from typing import Optional
 
 from fastapi import APIRouter
 from openai import OpenAI
 
 from src.config import Config
-
 
 logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
@@ -15,7 +13,7 @@ router = APIRouter()
 PORTKEY_BASE_URL = "https://api.portkey.ai/v1"
 
 
-def _resolve_portkey_slug(provider: Optional[str], override: Optional[str]) -> Optional[str]:
+def _resolve_portkey_slug(provider: str | None, override: str | None) -> str | None:
     slug = override or Config.get_portkey_virtual_key(provider)
     if slug:
         return slug.lstrip("@")
@@ -24,7 +22,7 @@ def _resolve_portkey_slug(provider: Optional[str], override: Optional[str]) -> O
     return None
 
 
-def _format_portkey_model(model: str, slug: Optional[str]) -> str:
+def _format_portkey_model(model: str, slug: str | None) -> str:
     if not model:
         raise ValueError("Model name is required for Portkey requests")
 
@@ -52,7 +50,7 @@ def _format_portkey_model(model: str, slug: Optional[str]) -> str:
     return trimmed
 
 
-def get_portkey_client(provider: Optional[str] = None, virtual_key: Optional[str] = None) -> OpenAI:
+def get_portkey_client(provider: str | None = None, virtual_key: str | None = None) -> OpenAI:
     if not Config.PORTKEY_API_KEY:
         raise ValueError("Portkey API key not configured")
 
@@ -74,7 +72,9 @@ def get_portkey_client(provider: Optional[str] = None, virtual_key: Optional[str
     )
 
 
-def make_portkey_request_openai(messages, model, provider: Optional[str] = None, virtual_key: Optional[str] = None, **kwargs):
+def make_portkey_request_openai(
+    messages, model, provider: str | None = None, virtual_key: str | None = None, **kwargs
+):
     try:
         resolved_slug = _resolve_portkey_slug(provider, virtual_key)
         formatted_model = _format_portkey_model(model, resolved_slug)
@@ -91,7 +91,9 @@ def make_portkey_request_openai(messages, model, provider: Optional[str] = None,
         raise
 
 
-def make_portkey_request_openai_stream(messages, model, provider: Optional[str] = None, virtual_key: Optional[str] = None, **kwargs):
+def make_portkey_request_openai_stream(
+    messages, model, provider: str | None = None, virtual_key: str | None = None, **kwargs
+):
     try:
         resolved_slug = _resolve_portkey_slug(provider, virtual_key)
         formatted_model = _format_portkey_model(model, resolved_slug)
@@ -127,13 +129,15 @@ def process_portkey_response(response):
                 }
                 for choice in response.choices
             ],
-            "usage": {
-                "prompt_tokens": response.usage.prompt_tokens,
-                "completion_tokens": response.usage.completion_tokens,
-                "total_tokens": response.usage.total_tokens,
-            }
-            if response.usage
-            else {},
+            "usage": (
+                {
+                    "prompt_tokens": response.usage.prompt_tokens,
+                    "completion_tokens": response.usage.completion_tokens,
+                    "total_tokens": response.usage.total_tokens,
+                }
+                if response.usage
+                else {}
+            ),
         }
     except Exception as exc:
         logger.error(f"Failed to process Portkey response: {exc}")

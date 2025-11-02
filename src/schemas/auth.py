@@ -1,60 +1,64 @@
-from pydantic import BaseModel, EmailStr
-from typing import List, Dict, Any, Optional
 from datetime import datetime
-from enum import Enum
 
-from src.schemas import AuthMethod
+from pydantic import BaseModel, EmailStr
+
+from src.schemas.common import AuthMethod
 
 
 class PrivyLinkedAccount(BaseModel):
     type: str
-    subject: Optional[str] = None
-    email: Optional[str] = None
-    name: Optional[str] = None
-    verified_at: Optional[int] = None
-    first_verified_at: Optional[int] = None
-    latest_verified_at: Optional[int] = None
+    subject: str | None = None
+    email: str | None = None
+    name: str | None = None
+    verified_at: int | None = None
+    first_verified_at: int | None = None
+    latest_verified_at: int | None = None
+
 
 class PrivyUserData(BaseModel):
     id: str
     created_at: int
-    linked_accounts: List[PrivyLinkedAccount] = []
-    mfa_methods: List[str] = []
+    linked_accounts: list[PrivyLinkedAccount] = []
+    mfa_methods: list[str] = []
     has_accepted_terms: bool = False
     is_guest: bool = False
+
 
 class PrivySignupRequest(BaseModel):
     privy_user_id: str
     auth_method: AuthMethod
-    email: Optional[EmailStr] = None
-    username: Optional[str] = None
-    display_name: Optional[str] = None
-    gmail_address: Optional[EmailStr] = None
-    github_username: Optional[str] = None
+    email: EmailStr | None = None
+    username: str | None = None
+    display_name: str | None = None
+    gmail_address: EmailStr | None = None
+    github_username: str | None = None
+
 
 class PrivySigninRequest(BaseModel):
     privy_user_id: str
     auth_method: AuthMethod
 
+
 class PrivyAuthRequest(BaseModel):
     user: PrivyUserData
     token: str
-    email: Optional[str] = None  # Optional top-level email field for frontend to send
-    privy_access_token: Optional[str] = None
-    refresh_token: Optional[str] = None
-    session_update_action: Optional[str] = None
-    is_new_user: Optional[bool] = None
-    referral_code: Optional[str] = None  # Referral code if user signed up with one
+    email: str | None = None  # Optional top-level email field for frontend to send
+    privy_access_token: str | None = None
+    refresh_token: str | None = None
+    session_update_action: str | None = None
+    is_new_user: bool | None = None
+    referral_code: str | None = None  # Referral code if user signed up with one
+
 
 class PrivyAuthResponse(BaseModel):
     success: bool
     message: str
-    user_id: Optional[int] = None
-    api_key: Optional[str] = None
-    auth_method: Optional[AuthMethod] = None
-    privy_user_id: Optional[str] = None
-    is_new_user: Optional[bool] = None
-    display_name: Optional[str] = None
-    email: Optional[str] = None
-    credits: Optional[float] = None
-    timestamp: Optional[datetime] = None
+    user_id: int | None = None
+    api_key: str | None = None
+    auth_method: AuthMethod | None = None
+    privy_user_id: str | None = None
+    is_new_user: bool | None = None
+    display_name: str | None = None
+    email: str | None = None
+    credits: float | None = None
+    timestamp: datetime | None = None

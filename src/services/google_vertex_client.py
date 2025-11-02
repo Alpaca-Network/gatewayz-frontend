@@ -4,16 +4,18 @@ This module provides integration with Google Vertex AI generative models
 using the official google-cloud-aiplatform SDK.
 """
 
+import json
 import logging
-from typing import Any, Iterator, Optional
+import time
+from collections.abc import Iterator
+from typing import Any
+
 import google.auth
 from google.auth.transport.requests import Request
-from google.oauth2.service_account import Credentials
 from google.cloud.aiplatform_v1.services.prediction_service import PredictionServiceClient
 from google.cloud.aiplatform_v1.types import PredictRequest
+from google.oauth2.service_account import Credentials
 from google.protobuf.json_format import MessageToDict
-import json
-import time
 
 # Import Struct with fallback for testing
 try:
@@ -21,6 +23,7 @@ try:
 except ImportError:
     # Fallback for testing environments
     from unittest.mock import MagicMock
+
     Struct = MagicMock()
 
 from src.config import Config
@@ -41,12 +44,16 @@ def get_google_vertex_credentials():
     """
     try:
         # First, try to get credentials from JSON environment variable (Vercel/serverless)
-        import os
         import base64
+        import os
+
         creds_json_env = os.environ.get("GOOGLE_VERTEX_CREDENTIALS_JSON")
         if creds_json_env:
-            logger.info("Loading Google Vertex credentials from GOOGLE_VERTEX_CREDENTIALS_JSON environment variable")
+            logger.info(
+                "Loading Google Vertex credentials from GOOGLE_VERTEX_CREDENTIALS_JSON environment variable"
+            )
             import json as json_module
+
             try:
                 # Try to parse as raw JSON first
                 creds_dict = json_module.loads(creds_json_env)
@@ -55,26 +62,34 @@ def get_google_vertex_credentials():
                 # If that fails, try base64 decoding
                 try:
                     logger.debug("Attempting to decode credentials as base64")
-                    decoded = base64.b64decode(creds_json_env).decode('utf-8')
+                    decoded = base64.b64decode(creds_json_env).decode("utf-8")
                     creds_dict = json_module.loads(decoded)
                     logger.debug("Credentials successfully decoded from base64 and parsed as JSON")
                 except Exception as base64_error:
                     logger.error(f"Failed to decode credentials as base64: {base64_error}")
-                    raise ValueError(f"GOOGLE_VERTEX_CREDENTIALS_JSON must be valid JSON or base64-encoded JSON")
+                    raise ValueError(
+                        "GOOGLE_VERTEX_CREDENTIALS_JSON must be valid JSON or base64-encoded JSON"
+                    ) from None
 
             try:
                 credentials = Credentials.from_service_account_info(creds_dict)
                 logger.debug("Created Credentials object from service account info")
                 credentials.refresh(Request())
-                logger.info("Successfully loaded and validated Google Vertex credentials from GOOGLE_VERTEX_CREDENTIALS_JSON")
+                logger.info(
+                    "Successfully loaded and validated Google Vertex credentials from GOOGLE_VERTEX_CREDENTIALS_JSON"
+                )
                 return credentials
             except Exception as e:
-                logger.error(f"Failed to create credentials from service account info: {e}", exc_info=True)
+                logger.error(
+                    f"Failed to create credentials from service account info: {e}", exc_info=True
+                )
                 raise
 
         # Second, try file-based credentials (development)
         if Config.GOOGLE_APPLICATION_CREDENTIALS:
-            logger.info(f"Loading Google Vertex credentials from file: {Config.GOOGLE_APPLICATION_CREDENTIALS}")
+            logger.info(
+                f"Loading Google Vertex credentials from file: {Config.GOOGLE_APPLICATION_CREDENTIALS}"
+            )
             try:
                 credentials = Credentials.from_service_account_file(
                     Config.GOOGLE_APPLICATION_CREDENTIALS
@@ -96,7 +111,9 @@ def get_google_vertex_credentials():
     except Exception as e:
         logger.error(f"Failed to get Google Cloud credentials: {e}", exc_info=True)
         logger.error("Please set one of:")
-        logger.error("  1. GOOGLE_VERTEX_CREDENTIALS_JSON (raw JSON or base64-encoded for serverless)")
+        logger.error(
+            "  1. GOOGLE_VERTEX_CREDENTIALS_JSON (raw JSON or base64-encoded for serverless)"
+        )
         logger.error("  2. GOOGLE_APPLICATION_CREDENTIALS (file path for development)")
         logger.error("  3. Configure Application Default Credentials via gcloud")
         raise
@@ -114,14 +131,11 @@ def get_google_vertex_client():
         logger.info("Successfully obtained credentials")
 
         # Construct endpoint URL
-        endpoint_url = (
-            f"https://{Config.GOOGLE_VERTEX_LOCATION}-aiplatform.googleapis.com"
-        )
+        endpoint_url = f"https://{Config.GOOGLE_VERTEX_LOCATION}-aiplatform.googleapis.com"
         logger.info(f"Creating PredictionServiceClient with endpoint: {endpoint_url}")
 
         client = PredictionServiceClient(
-            credentials=credentials,
-            client_options={"api_endpoint": endpoint_url}
+            credentials=credentials, client_options={"api_endpoint": endpoint_url}
         )
         return client
     except Exception as e:
@@ -156,10 +170,10 @@ def transform_google_vertex_model_id(model_id: str) -> str:
 def make_google_vertex_request_openai(
     messages: list,
     model: str,
-    max_tokens: Optional[int] = None,
-    temperature: Optional[float] = None,
-    top_p: Optional[float] = None,
-    **kwargs
+    max_tokens: int | None = None,
+    temperature: float | None = None,
+    top_p: float | None = None,
+    **kwargs,
 ) -> dict:
     """Make request to Google Vertex AI generative models
 
@@ -236,7 +250,8 @@ def make_google_vertex_request_openai(
 
             # Check if we're in a testing environment
             import sys
-            if 'pytest' in sys.modules or str(type(Struct)).find('Mock') != -1:
+
+            if "pytest" in sys.modules or str(type(Struct)).find("Mock") != -1:
                 # In testing environment, bypass protobuf validation by setting the field directly
                 try:
                     request.instances = [request_body]
@@ -247,6 +262,7 @@ def make_google_vertex_request_openai(
                     except Exception:
                         # Last resort - mock the entire request
                         from unittest.mock import MagicMock
+
                         request = MagicMock()
                         request.endpoint = model_resource
                         request.instances = [request_body]
@@ -257,7 +273,9 @@ def make_google_vertex_request_openai(
                     instance_struct.update(request_body)
                     request.instances.append(instance_struct)
                 except Exception as struct_error:
-                    logger.warning(f"Failed to use Struct for instances: {struct_error}, falling back to dict")
+                    logger.warning(
+                        f"Failed to use Struct for instances: {struct_error}, falling back to dict"
+                    )
                     # Fallback - this shouldn't happen in production
                     request.instances = [request_body]
 
@@ -270,7 +288,9 @@ def make_google_vertex_request_openai(
         try:
             logger.info(f"Calling Vertex AI predict API with model resource: {model_resource}")
             response = client.predict(request=request)
-            logger.info(f"Received response from Vertex AI (raw response type: {type(response).__name__})")
+            logger.info(
+                f"Received response from Vertex AI (raw response type: {type(response).__name__})"
+            )
         except Exception as predict_error:
             logger.error(f"Vertex AI predict call failed: {predict_error}", exc_info=True)
             raise
@@ -278,7 +298,7 @@ def make_google_vertex_request_openai(
         # Step 7: Process and normalize response
         try:
             processed_response = _process_google_vertex_response(response, model)
-            logger.info(f"Successfully processed Vertex AI response")
+            logger.info("Successfully processed Vertex AI response")
             return processed_response
         except Exception as process_error:
             logger.error(f"Failed to process Vertex AI response: {process_error}", exc_info=True)
@@ -292,10 +312,10 @@ def make_google_vertex_request_openai(
 def make_google_vertex_request_openai_stream(
     messages: list,
     model: str,
-    max_tokens: Optional[int] = None,
-    temperature: Optional[float] = None,
-    top_p: Optional[float] = None,
-    **kwargs
+    max_tokens: int | None = None,
+    temperature: float | None = None,
+    top_p: float | None = None,
+    **kwargs,
 ) -> Iterator[str]:
     """Make streaming request to Google Vertex AI
 
@@ -323,7 +343,7 @@ def make_google_vertex_request_openai_stream(
             max_tokens=max_tokens,
             temperature=temperature,
             top_p=top_p,
-            **kwargs
+            **kwargs,
         )
 
         logger.info(f"Received response: {json.dumps(response, indent=2, default=str)}")
@@ -349,13 +369,10 @@ def make_google_vertex_request_openai_stream(
             "choices": [
                 {
                     "index": 0,
-                    "delta": {
-                        "role": "assistant",
-                        "content": content
-                    },
-                    "finish_reason": None
+                    "delta": {"role": "assistant", "content": content},
+                    "finish_reason": None,
                 }
-            ]
+            ],
         }
 
         logger.debug(f"Yielding chunk: {json.dumps(chunk, indent=2, default=str)}")
@@ -367,13 +384,7 @@ def make_google_vertex_request_openai_stream(
             "object": "text_completion.chunk",
             "created": response.get("created"),
             "model": response.get("model"),
-            "choices": [
-                {
-                    "index": 0,
-                    "delta": {"content": None},
-                    "finish_reason": finish_reason
-                }
-            ]
+            "choices": [{"index": 0, "delta": {"content": None}, "finish_reason": finish_reason}],
         }
 
         logger.debug(f"Yielding finish chunk: {json.dumps(finish_chunk, indent=2, default=str)}")
@@ -416,17 +427,18 @@ def _build_vertex_content(messages: list) -> list:
                     image_url = item.get("image_url", {}).get("url", "")
                     if image_url.startswith("data:"):
                         # Base64 encoded image
-                        parts.append({"inline_data": {"mime_type": "image/jpeg", "data": image_url}})
+                        parts.append(
+                            {"inline_data": {"mime_type": "image/jpeg", "data": image_url}}
+                        )
                     else:
                         # URL reference
-                        parts.append({"file_data": {"mime_type": "image/jpeg", "file_uri": image_url}})
+                        parts.append(
+                            {"file_data": {"mime_type": "image/jpeg", "file_uri": image_url}}
+                        )
         else:
             parts = [{"text": str(content)}]
 
-        contents.append({
-            "role": vertex_role,
-            "parts": parts
-        })
+        contents.append({"role": vertex_role, "parts": parts})
 
     return contents
 
@@ -444,7 +456,9 @@ def _process_google_vertex_response(response: Any, model: str) -> dict:
     try:
         # Convert protobuf response to dictionary
         response_dict = MessageToDict(response)
-        logger.debug(f"Google Vertex response dict: {json.dumps(response_dict, indent=2, default=str)}")
+        logger.debug(
+            f"Google Vertex response dict: {json.dumps(response_dict, indent=2, default=str)}"
+        )
 
         # Extract predictions
         predictions = response_dict.get("predictions", [])
@@ -482,7 +496,9 @@ def _process_google_vertex_response(response: Any, model: str) -> dict:
 
         # Warn if content is empty - this might indicate an issue with the model or request
         if not text_content:
-            logger.warning(f"Received empty text content from Vertex AI for model {model}. Candidate: {json.dumps(candidate, default=str)}")
+            logger.warning(
+                f"Received empty text content from Vertex AI for model {model}. Candidate: {json.dumps(candidate, default=str)}"
+            )
 
         # Extract usage information
         usage_metadata = candidate.get("usageMetadata", {})
@@ -495,7 +511,7 @@ def _process_google_vertex_response(response: Any, model: str) -> dict:
             "MAX_TOKENS": "length",
             "SAFETY": "content_filter",
             "RECITATION": "stop",
-            "FINISH_REASON_UNSPECIFIED": "unknown"
+            "FINISH_REASON_UNSPECIFIED": "unknown",
         }
 
         return {
@@ -506,18 +522,15 @@ def _process_google_vertex_response(response: Any, model: str) -> dict:
             "choices": [
                 {
                     "index": 0,
-                    "message": {
-                        "role": "assistant",
-                        "content": text_content
-                    },
-                    "finish_reason": finish_reason_map.get(finish_reason, "stop")
+                    "message": {"role": "assistant", "content": text_content},
+                    "finish_reason": finish_reason_map.get(finish_reason, "stop"),
                 }
             ],
             "usage": {
                 "prompt_tokens": prompt_tokens,
                 "completion_tokens": completion_tokens,
-                "total_tokens": prompt_tokens + completion_tokens
-            }
+                "total_tokens": prompt_tokens + completion_tokens,
+            },
         }
 
     except Exception as e:

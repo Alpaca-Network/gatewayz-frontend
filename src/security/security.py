@@ -4,15 +4,16 @@ Advanced Security Module
 Implements secure key validation, hashing, IP/domain validation, and audit logging
 """
 
+import base64
 import hashlib
 import hmac
-import secrets
 import logging
 import os
-from typing import Optional, List, Dict, Any
+import secrets
 from datetime import datetime, timezone
+from typing import Any
+
 from cryptography.fernet import Fernet
-import base64
 
 from src.config import Config
 
@@ -20,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 # ==================== Key Generation & Hashing ====================
+
 
 def _generate_encryption_key() -> str:
     """Generate a new Fernet encryption key"""
@@ -55,7 +57,7 @@ def hash_api_key(api_key: str) -> str:
         raise
 
 
-def generate_secure_api_key(environment_tag: str = 'live', key_length: int = 32) -> str:
+def generate_secure_api_key(environment_tag: str = "live", key_length: int = 32) -> str:
     """
     Generate a cryptographically secure API key with environment prefix
 
@@ -70,13 +72,13 @@ def generate_secure_api_key(environment_tag: str = 'live', key_length: int = 32)
         random_part = secrets.token_urlsafe(key_length)
 
         prefix_map = {
-            'test': 'gw_test_',
-            'staging': 'gw_staging_',
-            'development': 'gw_dev_',
-            'live': 'gw_live_'
+            "test": "gw_test_",
+            "staging": "gw_staging_",
+            "development": "gw_dev_",
+            "live": "gw_live_",
         }
 
-        prefix = prefix_map.get(environment_tag, 'gw_live_')
+        prefix = prefix_map.get(environment_tag, "gw_live_")
         return prefix + random_part
 
     except Exception as e:
@@ -86,6 +88,7 @@ def generate_secure_api_key(environment_tag: str = 'live', key_length: int = 32)
 
 # ==================== IP & Domain Validation ====================
 
+
 def _ip_in_cidr(ip: str, cidr: str) -> bool:
     """
     Check if IP is in CIDR range
@@ -94,11 +97,12 @@ def _ip_in_cidr(ip: str, cidr: str) -> bool:
     For production, use the `ipaddress` module for proper CIDR checking.
     """
     try:
-        if '/' not in cidr:
+        if "/" not in cidr:
             return ip == cidr
 
         # For CIDR ranges, use ipaddress module
         import ipaddress
+
         ip_obj = ipaddress.ip_address(ip)
         network = ipaddress.ip_network(cidr, strict=False)
         return ip_obj in network
@@ -108,7 +112,7 @@ def _ip_in_cidr(ip: str, cidr: str) -> bool:
         return False
 
 
-def validate_ip_allowlist(client_ip: str, allowed_ips: List[str]) -> bool:
+def validate_ip_allowlist(client_ip: str, allowed_ips: list[str]) -> bool:
     """
     Validate if client IP is in the allowlist
 
@@ -129,7 +133,7 @@ def validate_ip_allowlist(client_ip: str, allowed_ips: List[str]) -> bool:
 
         # Check CIDR ranges
         for allowed_ip in allowed_ips:
-            if '/' in allowed_ip:
+            if "/" in allowed_ip:
                 if _ip_in_cidr(client_ip, allowed_ip):
                     return True
 
@@ -140,7 +144,7 @@ def validate_ip_allowlist(client_ip: str, allowed_ips: List[str]) -> bool:
         return False
 
 
-def validate_domain_referrers(referer: str, allowed_domains: List[str]) -> bool:
+def validate_domain_referrers(referer: str, allowed_domains: list[str]) -> bool:
     """
     Validate if referer domain is in the allowlist
 
@@ -159,6 +163,7 @@ def validate_domain_referrers(referer: str, allowed_domains: List[str]) -> bool:
 
     try:
         from urllib.parse import urlparse
+
         parsed_url = urlparse(referer)
         hostname = parsed_url.hostname
 
@@ -167,7 +172,7 @@ def validate_domain_referrers(referer: str, allowed_domains: List[str]) -> bool:
 
         # Check if hostname matches any allowed domain
         for allowed_domain in allowed_domains:
-            if hostname == allowed_domain or hostname.endswith('.' + allowed_domain):
+            if hostname == allowed_domain or hostname.endswith("." + allowed_domain):
                 return True
 
         return False
@@ -179,10 +184,9 @@ def validate_domain_referrers(referer: str, allowed_domains: List[str]) -> bool:
 
 # ==================== API Key Validation ====================
 
+
 def validate_api_key_security(
-        api_key: str,
-        client_ip: Optional[str] = None,
-        referer: Optional[str] = None
+    api_key: str, client_ip: str | None = None, referer: str | None = None
 ) -> str:
     """
     Validate API key with comprehensive security checks
@@ -215,14 +219,14 @@ def validate_api_key_security(
     client = get_supabase_client()
 
     # Check both new and legacy API key tables
-    tables_to_check = ['api_keys_new', 'api_keys']
+    tables_to_check = ["api_keys_new", "api_keys"]
 
     for table_name in tables_to_check:
         logger.debug(f"Checking {table_name} table for API key")
 
         try:
             # Query for the specific API key
-            result = client.table(table_name).select('*').eq('api_key', api_key).execute()
+            result = client.table(table_name).select("*").eq("api_key", api_key).execute()
 
             if not result.data:
                 continue
@@ -254,11 +258,11 @@ def validate_api_key_security(
 
 
 def _validate_key_constraints(
-        key_data: Dict[str, Any],
-        client_ip: Optional[str],
-        referer: Optional[str],
-        table_name: str,
-        client: Any
+    key_data: dict[str, Any],
+    client_ip: str | None,
+    referer: str | None,
+    table_name: str,
+    client: Any,
 ) -> None:
     """
     Validate API key constraints and security policies
@@ -280,22 +284,22 @@ def _validate_key_constraints(
     Raises:
         ValueError: With specific reason for rejection
     """
-    key_id = key_data['id']
+    key_id = key_data["id"]
 
     # 1. Check if key is active
-    if not key_data.get('is_active', True):
+    if not key_data.get("is_active", True):
         raise ValueError("API key is inactive")
 
     # 2. Check expiration date
-    if key_data.get('expiration_date'):
+    if key_data.get("expiration_date"):
         try:
-            expiration_str = key_data['expiration_date']
+            expiration_str = key_data["expiration_date"]
             if expiration_str:
                 # Normalize timezone
-                if 'Z' in expiration_str:
-                    expiration_str = expiration_str.replace('Z', '+00:00')
-                elif not expiration_str.endswith('+00:00'):
-                    expiration_str = expiration_str + '+00:00'
+                if "Z" in expiration_str:
+                    expiration_str = expiration_str.replace("Z", "+00:00")
+                elif not expiration_str.endswith("+00:00"):
+                    expiration_str = expiration_str + "+00:00"
 
                 expiration = datetime.fromisoformat(expiration_str)
                 now = datetime.now(timezone.utc).replace(tzinfo=expiration.tzinfo)
@@ -308,14 +312,14 @@ def _validate_key_constraints(
             logger.warning(f"Error checking expiration for key {key_id}: {e}")
 
     # 3. Check request limits
-    if key_data.get('max_requests') is not None:
-        requests_used = key_data.get('requests_used', 0)
-        if requests_used >= key_data['max_requests']:
+    if key_data.get("max_requests") is not None:
+        requests_used = key_data.get("requests_used", 0)
+        if requests_used >= key_data["max_requests"]:
             raise ValueError("API key request limit reached")
 
     # 4. IP allowlist enforcement
-    ip_allowlist = key_data.get('ip_allowlist') or []
-    if ip_allowlist and len(ip_allowlist) > 0 and ip_allowlist != ['']:
+    ip_allowlist = key_data.get("ip_allowlist") or []
+    if ip_allowlist and len(ip_allowlist) > 0 and ip_allowlist != [""]:
         if not client_ip:
             raise ValueError("Client IP required but not provided")
 
@@ -324,17 +328,17 @@ def _validate_key_constraints(
             raise ValueError("IP address not allowed for this API key")
 
     # 5. Domain referrer enforcement
-    domain_referrers = key_data.get('domain_referrers') or []
-    if domain_referrers and len(domain_referrers) > 0 and domain_referrers != ['']:
-        if not validate_domain_referrers(referer or '', domain_referrers):
+    domain_referrers = key_data.get("domain_referrers") or []
+    if domain_referrers and len(domain_referrers) > 0 and domain_referrers != [""]:
+        if not validate_domain_referrers(referer or "", domain_referrers):
             logger.warning(f"Domain {referer} not in allowlist {domain_referrers}")
             raise ValueError("Domain not allowed for this API key")
 
     # 6. Update last used timestamp
     try:
-        client.table(table_name).update({
-            'last_used_at': datetime.now(timezone.utc).isoformat()
-        }).eq('id', key_id).execute()
+        client.table(table_name).update({"last_used_at": datetime.now(timezone.utc).isoformat()}).eq(
+            "id", key_id
+        ).execute()
     except Exception as e:
         logger.warning(f"Failed to update last_used_at for key {key_id}: {e}")
 
@@ -343,10 +347,11 @@ def _validate_key_constraints(
 
 # ==================== Encryption & Security Manager ====================
 
+
 class SecurityManager:
     """Advanced security manager for API keys and encryption"""
 
-    def __init__(self, encryption_key: Optional[str] = None):
+    def __init__(self, encryption_key: str | None = None):
         """
         Initialize security manager
 
@@ -394,29 +399,28 @@ class SecurityManager:
 
 # ==================== Audit Logger ====================
 
+
 class AuditLogger:
     """Comprehensive audit logging system for security events"""
 
     def __init__(self):
-        self.logger = logging.getLogger('audit')
+        self.logger = logging.getLogger("audit")
 
         # Set up audit-specific logging with custom format
         if not self.logger.handlers:
             audit_handler = logging.StreamHandler()
-            audit_formatter = logging.Formatter(
-                '%(asctime)s - AUDIT - %(levelname)s - %(message)s'
-            )
+            audit_formatter = logging.Formatter("%(asctime)s - AUDIT - %(levelname)s - %(message)s")
             audit_handler.setFormatter(audit_formatter)
             self.logger.addHandler(audit_handler)
             self.logger.setLevel(logging.INFO)
 
     def log_api_key_creation(
-            self,
-            user_id: int,
-            key_id: int,
-            key_name: str,
-            environment_tag: str,
-            created_by: str = "system"
+        self,
+        user_id: int,
+        key_id: int,
+        key_name: str,
+        environment_tag: str,
+        created_by: str = "system",
     ):
         """Log API key creation event"""
         self.logger.info(
@@ -426,11 +430,7 @@ class AuditLogger:
         )
 
     def log_api_key_deletion(
-            self,
-            user_id: int,
-            key_id: int,
-            key_name: str,
-            deleted_by: str = "system"
+        self, user_id: int, key_id: int, key_name: str, deleted_by: str = "system"
     ):
         """Log API key deletion event"""
         self.logger.info(
@@ -439,12 +439,7 @@ class AuditLogger:
         )
 
     def log_api_key_usage(
-            self,
-            user_id: int,
-            key_id: int,
-            endpoint: str,
-            ip_address: str,
-            user_agent: str = None
+        self, user_id: int, key_id: int, endpoint: str, ip_address: str, user_agent: str = None
     ):
         """Log API key usage event"""
         self.logger.info(
@@ -453,12 +448,12 @@ class AuditLogger:
         )
 
     def log_security_violation(
-            self,
-            violation_type: str,
-            user_id: int = None,
-            key_id: int = None,
-            details: str = "",
-            ip_address: str = None
+        self,
+        violation_type: str,
+        user_id: int = None,
+        key_id: int = None,
+        details: str = "",
+        ip_address: str = None,
     ):
         """Log security violation event"""
         self.logger.warning(
@@ -467,25 +462,14 @@ class AuditLogger:
             f"Details: {details}, IP: {ip_address}"
         )
 
-    def log_plan_assignment(
-            self,
-            user_id: int,
-            plan_id: int,
-            assigned_by: str = "admin"
-    ):
+    def log_plan_assignment(self, user_id: int, plan_id: int, assigned_by: str = "admin"):
         """Log plan assignment event"""
         self.logger.info(
-            f"PLAN_ASSIGNED - User: {user_id}, PlanID: {plan_id}, "
-            f"AssignedBy: {assigned_by}"
+            f"PLAN_ASSIGNED - User: {user_id}, PlanID: {plan_id}, " f"AssignedBy: {assigned_by}"
         )
 
     def log_rate_limit_exceeded(
-            self,
-            user_id: int,
-            key_id: int,
-            limit_type: str,
-            current_usage: int,
-            limit: int
+        self, user_id: int, key_id: int, limit_type: str, current_usage: int, limit: int
     ):
         """Log rate limit violation"""
         self.logger.warning(
@@ -494,24 +478,15 @@ class AuditLogger:
         )
 
     def log_authentication_failure(
-            self,
-            reason: str,
-            ip_address: str = None,
-            api_key_prefix: str = None
+        self, reason: str, ip_address: str = None, api_key_prefix: str = None
     ):
         """Log authentication failure"""
         self.logger.warning(
-            f"AUTH_FAILED - Reason: {reason}, IP: {ip_address}, "
-            f"KeyPrefix: {api_key_prefix}"
+            f"AUTH_FAILED - Reason: {reason}, IP: {ip_address}, " f"KeyPrefix: {api_key_prefix}"
         )
 
     def log_payment_event(
-            self,
-            user_id: int,
-            payment_id: int,
-            amount: float,
-            currency: str,
-            status: str
+        self, user_id: int, payment_id: int, amount: float, currency: str, status: str
     ):
         """Log payment event"""
         self.logger.info(

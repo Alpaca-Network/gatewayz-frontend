@@ -12,7 +12,7 @@ from src.services.models import get_cached_models
 from src.config import Config
 from utils import print_section
 
-def test_gateway(gateway_name: str):
+def check_gateway(gateway_name: str):
     """Test model fetching for a specific gateway"""
     print_section(f"Testing {gateway_name.upper()} gateway", 60)
 
@@ -59,7 +59,7 @@ def main():
     gateways = ['xai', 'near', 'google', 'cerebras', 'nebius', 'novita', 'huggingface']
 
     for gateway in gateways:
-        test_gateway(gateway)
+        check_gateway(gateway)
 
     print_section("Test Complete", 60)
 

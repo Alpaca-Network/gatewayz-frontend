@@ -3,13 +3,19 @@
 Professional Email Templates for AI Gateway
 """
 
-from typing import Dict, Any
 import os
+from typing import Any
+
 
 class ProfessionalEmailTemplates:
     """Professional email templates with modern design"""
 
-    def __init__(self, app_name: str = "Gatewayz", app_url: str = "https://betagatewayz.ai", support_email: str = None):
+    def __init__(
+        self,
+        app_name: str = "Gatewayz",
+        app_url: str = "https://betagatewayz.ai",
+        support_email: str = None,
+    ):
         self.app_name = app_name
         self.app_url = app_url
         # Use provided support email or extract from URL
@@ -17,9 +23,9 @@ class ProfessionalEmailTemplates:
             self.support_email = support_email
         else:
             # Extract domain from URL and use support email
-            domain = app_url.split('//')[-1].replace('beta.', '').replace('www.', '')
+            domain = app_url.split("//")[-1].replace("beta.", "").replace("www.", "")
             self.support_email = f"support@{domain}"
-    
+
     def get_base_template(self) -> str:
         """Base HTML template with modern design"""
         return """
@@ -31,16 +37,16 @@ class ProfessionalEmailTemplates:
     <title>{subject}</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-        
+
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-        
+
         body {{
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             line-height: 1.6;
             color: #1f2937;
             background-color: #f9fafb;
         }}
-        
+
         .email-container {{
             max-width: 600px;
             margin: 0 auto;
@@ -49,7 +55,7 @@ class ProfessionalEmailTemplates:
             overflow: hidden;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
         }}
-        
+
         .header {{
             background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%);
             color: white;
@@ -74,35 +80,35 @@ class ProfessionalEmailTemplates:
             0%, 100% {{ transform: scale(1); opacity: 0.5; }}
             50% {{ transform: scale(1.1); opacity: 0.8; }}
         }}
-        
+
         .header h1 {{
             font-size: 28px;
             font-weight: 700;
             margin-bottom: 8px;
         }}
-        
+
         .header p {{
             font-size: 16px;
             opacity: 0.9;
         }}
-        
+
         .content {{
             padding: 40px 30px;
         }}
-        
+
         .content h2 {{
             font-size: 24px;
             font-weight: 600;
             color: #1f2937;
             margin-bottom: 16px;
         }}
-        
+
         .content p {{
             font-size: 16px;
             color: #4b5563;
             margin-bottom: 20px;
         }}
-        
+
         .highlight-box {{
             background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
             border: 1px solid #d1d5db;
@@ -110,14 +116,14 @@ class ProfessionalEmailTemplates:
             padding: 24px;
             margin: 24px 0;
         }}
-        
+
         .info-grid {{
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 16px;
             margin: 20px 0;
         }}
-        
+
         .info-item {{
             background: #f8fafc;
             border: 1px solid #e2e8f0;
@@ -125,20 +131,20 @@ class ProfessionalEmailTemplates:
             padding: 16px;
             text-align: center;
         }}
-        
+
         .info-item .label {{
             font-size: 14px;
             color: #64748b;
             font-weight: 500;
             margin-bottom: 4px;
         }}
-        
+
         .info-item .value {{
             font-size: 18px;
             font-weight: 600;
             color: #1e293b;
         }}
-        
+
         .cta-button {{
             display: inline-block;
             background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
@@ -160,43 +166,43 @@ class ProfessionalEmailTemplates:
             box-shadow: 0 8px 30px rgba(99, 102, 241, 0.5);
             background: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%);
         }}
-        
+
         .secondary-button {{
             background: #f8fafc;
             color: #374151;
             border: 1px solid #d1d5db;
         }}
-        
+
         .footer {{
             background: #f8fafc;
             padding: 30px;
             text-align: center;
             border-top: 1px solid #e5e7eb;
         }}
-        
+
         .footer p {{
             font-size: 14px;
             color: #6b7280;
             margin-bottom: 8px;
         }}
-        
+
         .social-links {{
             margin: 20px 0;
         }}
-        
+
         .social-links a {{
             display: inline-block;
             margin: 0 8px;
             color: #6b7280;
             text-decoration: none;
         }}
-        
+
         .divider {{
             height: 1px;
             background: #e5e7eb;
             margin: 24px 0;
         }}
-        
+
         .warning-box {{
             background: #fef3c7;
             border: 1px solid #f59e0b;
@@ -204,7 +210,7 @@ class ProfessionalEmailTemplates:
             padding: 20px;
             margin: 20px 0;
         }}
-        
+
         .success-box {{
             background: #d1fae5;
             border: 1px solid #10b981;
@@ -212,7 +218,7 @@ class ProfessionalEmailTemplates:
             padding: 20px;
             margin: 20px 0;
         }}
-        
+
         .api-key-box {{
             background: #1f2937;
             color: #f9fafb;
@@ -223,7 +229,7 @@ class ProfessionalEmailTemplates:
             font-size: 14px;
             word-break: break-all;
         }}
-        
+
         @media (max-width: 600px) {{
             .email-container {{ margin: 0; border-radius: 0; }}
             .content {{ padding: 30px 20px; }}
@@ -254,15 +260,15 @@ class ProfessionalEmailTemplates:
 </body>
 </html>
         """
-    
-    def welcome_email(self, username: str, email: str, credits: int) -> Dict[str, str]:
+
+    def welcome_email(self, username: str, email: str, credits: int) -> dict[str, str]:
         """Welcome to Gatewayz!"""
         # Use display name if it looks like a real name, otherwise use email prefix
         display_name = username
-        if username and not username.startswith(('google_', 'github_', 'privy_')):
+        if username and not username.startswith(("google_", "github_", "privy_")):
             display_name = username
         elif email:
-            display_name = email.split('@')[0].replace('.', ' ').title()
+            display_name = email.split("@")[0].replace(".", " ").title()
         else:
             display_name = "there"
 
@@ -354,7 +360,7 @@ class ProfessionalEmailTemplates:
                 </a>
             </div>
         """
-        
+
         return {
             "subject": f"🚀 Welcome to the Future of AI - ${credits} Free Credits Inside!",
             "html": self.get_base_template().format(
@@ -364,7 +370,7 @@ class ProfessionalEmailTemplates:
                 app_name=self.app_name,
                 app_url=self.app_url,
                 support_email=self.support_email,
-                email=email
+                email=email,
             ),
             "text": f"""Welcome to {self.app_name}!
 
@@ -390,41 +396,41 @@ Questions? Contact us: {self.support_email}
 
 Best regards,
 The {self.app_name} Team
-"""
+""",
         }
-    
-    def simple_welcome_email(self, username: str, email: str, credits: int) -> Dict[str, str]:
+
+    def simple_welcome_email(self, username: str, email: str, credits: int) -> dict[str, str]:
         """Simple, clean welcome email template"""
         # Use display name if it looks like a real name, otherwise use email prefix
         display_name = username
-        if username and not username.startswith(('google_', 'github_', 'privy_')):
+        if username and not username.startswith(("google_", "github_", "privy_")):
             display_name = username
         elif email:
-            display_name = email.split('@')[0].replace('.', ' ').title()
+            display_name = email.split("@")[0].replace(".", " ").title()
         else:
             display_name = "there"
-            
+
         content = f"""
             <h2>Welcome to {self.app_name}! 🎉</h2>
             <p>Hi <strong>{display_name}</strong>,</p>
             <p>Welcome to {self.app_name}! Your account is ready and you have <strong>${credits}</strong> in free credits to get started.</p>
-            
+
             <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 24px; margin: 24px 0; text-align: center;">
                 <h3 style="margin-bottom: 16px; color: #1e293b;">🔑 Get Your API Key</h3>
                 <p style="margin-bottom: 20px; color: #64748b;">Your API key is ready in your dashboard</p>
                 <a href="{self.app_url}/settings/credits" class="cta-button">View Dashboard</a>
             </div>
-            
+
             <div style="text-align: center; margin: 30px 0;">
                 <a href="{self.app_url}/docs" class="cta-button">📚 Documentation</a>
                 <a href="{self.app_url}/chat" class="cta-button secondary-button">🚀 Try chat</a>
             </div>
-            
+
             <p style="font-size: 14px; color: #6b7280; text-align: center; margin-top: 30px;">
                 Questions? Contact us at <a href="mailto:{self.support_email}" style="color: #3b82f6;">{self.support_email}</a>
             </p>
         """
-        
+
         return {
             "subject": f"Welcome to {self.app_name}! 🚀",
             "html": self.get_base_template().format(
@@ -434,7 +440,7 @@ The {self.app_name} Team
                 app_name=self.app_name,
                 app_url=self.app_url,
                 support_email=self.support_email,
-                email=email
+                email=email,
             ),
             "text": f"""Welcome to {self.app_name}!
 
@@ -450,17 +456,25 @@ Questions? Contact us: {self.support_email}
 
 Best regards,
 The {self.app_name} Team
-"""
+""",
         }
-    
-    def low_balance_alert(self, username: str, email: str, current_credits: float, threshold: float, is_trial: bool = False, plan_name: str = None) -> Dict[str, str]:
+
+    def low_balance_alert(
+        self,
+        username: str,
+        email: str,
+        current_credits: float,
+        threshold: float,
+        is_trial: bool = False,
+        plan_name: str = None,
+    ) -> dict[str, str]:
         """Low balance alert email"""
         if is_trial:
             content = f"""
                 <h2>⚠️ Trial Credits Running Low</h2>
                 <p>Hi <strong>{username}</strong>,</p>
                 <p>Your trial credits are running low! Don't worry, we've got you covered with upgrade options.</p>
-                
+
                 <div class="warning-box">
                     <h3 style="margin-bottom: 12px; color: #92400e;">Current Status</h3>
                     <div class="info-grid">
@@ -474,15 +488,15 @@ The {self.app_name} Team
                         </div>
                     </div>
                 </div>
-                
+
                 <p>To continue using our API after your trial ends, choose a plan that fits your needs:</p>
-                
+
                 <div style="text-align: center; margin: 30px 0;">
                     <a href="{self.app_url}/pricing" class="cta-button">💎 View Plans & Upgrade</a>
                 </div>
-                
+
                 <div class="divider"></div>
-                
+
                 <h3>🎯 Why Upgrade?</h3>
                 <ul style="margin-left: 20px; color: #4b5563;">
                     <li style="margin-bottom: 8px;">Higher rate limits and more credits</li>
@@ -497,7 +511,7 @@ The {self.app_name} Team
                 <h2>⚠️ Account Balance Low</h2>
                 <p>Hi <strong>{username}</strong>,</p>
                 <p>Your account balance is running low. Add credits to continue using our API without interruption.</p>
-                
+
                 <div class="warning-box">
                     <h3 style="margin-bottom: 12px; color: #92400e;">Current Status</h3>
                     <div class="info-grid">
@@ -515,19 +529,19 @@ The {self.app_name} Team
                         </div>
                     </div>
                 </div>
-                
+
                 <div style="text-align: center; margin: 30px 0;">
                     <a href="{self.app_url}/billing" class="cta-button">💳 Add Credits Now</a>
                     <a href="{self.app_url}/pricing" class="cta-button secondary-button">📊 View Plans</a>
                 </div>
-                
+
                 <div class="divider"></div>
-                
+
                 <h3>💡 Pro Tip</h3>
                 <p>Set up auto-recharge to never run out of credits again. You can configure this in your <a href="{self.app_url}/billing" style="color: #3b82f6;">billing settings</a>.</p>
             """
             subject = f"Account balance low - Add credits to continue using {self.app_name}"
-        
+
         return {
             "subject": subject,
             "html": self.get_base_template().format(
@@ -537,7 +551,7 @@ The {self.app_name} Team
                 app_name=self.app_name,
                 app_url=self.app_url,
                 support_email=self.support_email,
-                email=email
+                email=email,
             ),
             "text": f"""Low Balance Alert - {self.app_name}
 
@@ -556,16 +570,25 @@ Questions? Contact us: {self.support_email}
 
 Best regards,
 The {self.app_name} Team
-"""
+""",
         }
-    
-    def trial_expiry_alert(self, username: str, email: str, remaining_days: int, remaining_credits: float, remaining_tokens: int, remaining_requests: int, trial_end_date: str) -> Dict[str, str]:
+
+    def trial_expiry_alert(
+        self,
+        username: str,
+        email: str,
+        remaining_days: int,
+        remaining_credits: float,
+        remaining_tokens: int,
+        remaining_requests: int,
+        trial_end_date: str,
+    ) -> dict[str, str]:
         """Trial expiry alert email"""
         content = f"""
             <h2>⏰ Trial Expiring Soon</h2>
             <p>Hi <strong>{username}</strong>,</p>
             <p>Your free trial is expiring in <strong>{remaining_days} day(s)</strong>! Don't let your AI journey end here.</p>
-            
+
             <div class="warning-box">
                 <h3 style="margin-bottom: 12px; color: #92400e;">Trial Summary</h3>
                 <div class="info-grid">
@@ -587,14 +610,14 @@ The {self.app_name} Team
                     </div>
                 </div>
             </div>
-            
+
             <div style="text-align: center; margin: 30px 0;">
                 <a href="{self.app_url}/pricing" class="cta-button">🚀 Upgrade Now</a>
                 <a href="{self.app_url}/settings/activity" class="cta-button secondary-button">📊 View Usage</a>
             </div>
-            
+
             <div class="divider"></div>
-            
+
             <h3>🎯 Choose Your Plan</h3>
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; margin: 20px 0;">
                 <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; text-align: center;">
@@ -613,10 +636,10 @@ The {self.app_name} Team
                     <p style="font-size: 14px; color: #64748b;">Unlimited usage</p>
                 </div>
             </div>
-            
+
             <p>Questions about our plans? Contact our team at <a href="mailto:{self.support_email}" style="color: #3b82f6;">{self.support_email}</a> - we're here to help!</p>
         """
-        
+
         return {
             "subject": f"Trial expiring in {remaining_days} day(s) - Upgrade to continue using {self.app_name}",
             "html": self.get_base_template().format(
@@ -626,7 +649,7 @@ The {self.app_name} Team
                 app_name=self.app_name,
                 app_url=self.app_url,
                 support_email=self.support_email,
-                email=email
+                email=email,
             ),
             "text": f"""Trial Expiring Soon - {self.app_name}
 
@@ -646,16 +669,18 @@ Questions? Contact us: {self.support_email}
 
 Best regards,
 The {self.app_name} Team
-"""
+""",
         }
-    
-    def subscription_expiry_alert(self, username: str, email: str, plan_name: str, remaining_days: int, end_date: str) -> Dict[str, str]:
+
+    def subscription_expiry_alert(
+        self, username: str, email: str, plan_name: str, remaining_days: int, end_date: str
+    ) -> dict[str, str]:
         """Subscription expiry alert email"""
         content = f"""
             <h2>📅 Subscription Expiring Soon</h2>
             <p>Hi <strong>{username}</strong>,</p>
             <p>Your <strong>{plan_name}</strong> subscription is expiring in <strong>{remaining_days} day(s)</strong>. Renew now to avoid any service interruption.</p>
-            
+
             <div class="warning-box">
                 <h3 style="margin-bottom: 12px; color: #92400e;">Subscription Details</h3>
                 <div class="info-grid">
@@ -673,14 +698,14 @@ The {self.app_name} Team
                     </div>
                 </div>
             </div>
-            
+
             <div style="text-align: center; margin: 30px 0;">
                 <a href="{self.app_url}/billing" class="cta-button">🔄 Renew Subscription</a>
                 <a href="{self.app_url}/pricing" class="cta-button secondary-button">📊 View Plans</a>
             </div>
-            
+
             <div class="divider"></div>
-            
+
             <h3>💡 What happens if I don't renew?</h3>
             <ul style="margin-left: 20px; color: #4b5563;">
                 <li style="margin-bottom: 8px;">Your API access will be suspended</li>
@@ -688,10 +713,10 @@ The {self.app_name} Team
                 <li style="margin-bottom: 8px;">Your data and settings will be preserved for 30 days</li>
                 <li style="margin-bottom: 8px;">You can reactivate anytime by renewing your subscription</li>
             </ul>
-            
+
             <p>Need help choosing a plan? Our team is here to help at <a href="mailto:{self.support_email}" style="color: #3b82f6;">{self.support_email}</a>.</p>
         """
-        
+
         return {
             "subject": f"{plan_name} subscription expiring in {remaining_days} day(s) - Renew now",
             "html": self.get_base_template().format(
@@ -701,7 +726,7 @@ The {self.app_name} Team
                 app_name=self.app_name,
                 app_url=self.app_url,
                 support_email=self.support_email,
-                email=email
+                email=email,
             ),
             "text": f"""Subscription Expiring Soon - {self.app_name}
 
@@ -719,16 +744,18 @@ Questions? Contact us: {self.support_email}
 
 Best regards,
 The {self.app_name} Team
-"""
+""",
         }
-    
-    def credits_added_confirmation(self, username: str, email: str, credits_added: float, new_balance: float) -> Dict[str, str]:
+
+    def credits_added_confirmation(
+        self, username: str, email: str, credits_added: float, new_balance: float
+    ) -> dict[str, str]:
         """Credits added confirmation email"""
         content = f"""
             <h2>✅ Credits Added Successfully</h2>
             <p>Hi <strong>{username}</strong>,</p>
             <p>Great news! Your account has been topped up with fresh credits.</p>
-            
+
             <div class="success-box">
                 <h3 style="margin-bottom: 12px; color: #065f46;">💰 Payment Confirmed</h3>
                 <div class="info-grid">
@@ -742,27 +769,27 @@ The {self.app_name} Team
                     </div>
                 </div>
             </div>
-            
+
             <div style="text-align: center; margin: 30px 0;">
                 <a href="{self.app_url}/settings/credits" class="cta-button">📊 View Dashboard</a>
                 <a href="{self.app_url}/billing" class="cta-button secondary-button">💳 Billing History</a>
             </div>
-            
+
             <div class="divider"></div>
-            
+
             <h3>🚀 Ready to Build?</h3>
             <p>You're all set to continue building amazing AI applications! Here are some resources to help you get the most out of your credits:</p>
-            
+
             <ul style="margin-left: 20px; color: #4b5563;">
                 <li style="margin-bottom: 8px;"><a href="{self.app_url}/docs" style="color: #3b82f6;">API Documentation</a> - Complete reference guide</li>
                 <li style="margin-bottom: 8px;"><a href="{self.app_url}/examples" style="color: #3b82f6;">Code Examples</a> - Ready-to-use snippets</li>
                 <li style="margin-bottom: 8px;"><a href="{self.app_url}/chat" style="color: #3b82f6;">Interactive Chat</a> - Test ideas quickly</li>
                 <li style="margin-bottom: 8px;"><a href="{self.app_url}/community" style="color: #3b82f6;">Developer Community</a> - Connect with other builders</li>
             </ul>
-            
+
             <p>Thank you for choosing {self.app_name}! If you have any questions, our support team is here to help at <a href="mailto:{self.support_email}" style="color: #3b82f6;">{self.support_email}</a>.</p>
         """
-        
+
         return {
             "subject": f"Credits added successfully - ${credits_added:.2f} added to your account",
             "html": self.get_base_template().format(
@@ -772,7 +799,7 @@ The {self.app_name} Team
                 app_name=self.app_name,
                 app_url=self.app_url,
                 support_email=self.support_email,
-                email=email
+                email=email,
             ),
             "text": f"""Credits Added Successfully - {self.app_name}
 
@@ -796,18 +823,18 @@ Thank you for choosing {self.app_name}!
 
 Best regards,
 The {self.app_name} Team
-"""
+""",
         }
-    
-    def password_reset_email(self, username: str, email: str, reset_token: str) -> Dict[str, str]:
+
+    def password_reset_email(self, username: str, email: str, reset_token: str) -> dict[str, str]:
         """Password reset email"""
         reset_url = f"{self.app_url}/reset-password?token={reset_token}"
-        
+
         content = f"""
             <h2>🔐 Password Reset Request</h2>
             <p>Hi <strong>{username}</strong>,</p>
             <p>We received a request to reset your password for your {self.app_name} account.</p>
-            
+
             <div class="highlight-box">
                 <h3 style="margin-bottom: 12px;">Reset Your Password</h3>
                 <p style="margin-bottom: 16px;">Click the button below to create a new password:</p>
@@ -816,9 +843,9 @@ The {self.app_name} Team
                 </div>
                 <p style="font-size: 14px; color: #6b7280; margin-top: 16px;">This link will expire in 1 hour for security reasons.</p>
             </div>
-            
+
             <div class="divider"></div>
-            
+
             <h3>🔒 Security Information</h3>
             <ul style="margin-left: 20px; color: #4b5563;">
                 <li style="margin-bottom: 8px;">This link is valid for 1 hour only</li>
@@ -826,13 +853,13 @@ The {self.app_name} Team
                 <li style="margin-bottom: 8px;">If you didn't request this reset, please ignore this email</li>
                 <li style="margin-bottom: 8px;">Your account remains secure until you complete the reset</li>
             </ul>
-            
+
             <p>If the button doesn't work, copy and paste this link into your browser:</p>
             <div class="api-key-box" style="font-size: 12px; word-break: break-all;">{reset_url}</div>
-            
+
             <p>If you didn't request this password reset, please contact our support team immediately at <a href="mailto:{self.support_email}" style="color: #3b82f6;">{self.support_email}</a>.</p>
         """
-        
+
         return {
             "subject": f"Reset your {self.app_name} password",
             "html": self.get_base_template().format(
@@ -842,7 +869,7 @@ The {self.app_name} Team
                 app_name=self.app_name,
                 app_url=self.app_url,
                 support_email=self.support_email,
-                email=email
+                email=email,
             ),
             "text": f"""Password Reset Request - {self.app_name}
 
@@ -859,16 +886,18 @@ If you didn't request this password reset, please ignore this email or contact o
 
 Best regards,
 The {self.app_name} Team
-"""
+""",
         }
-    
-    def monthly_usage_report(self, username: str, email: str, month: str, usage_stats: Dict[str, Any]) -> Dict[str, str]:
+
+    def monthly_usage_report(
+        self, username: str, email: str, month: str, usage_stats: dict[str, Any]
+    ) -> dict[str, str]:
         """Monthly usage report email"""
         content = f"""
             <h2>📊 Monthly Usage Report - {month}</h2>
             <p>Hi <strong>{username}</strong>,</p>
             <p>Here's your monthly usage summary for {month}. Keep track of your API consumption and optimize your usage.</p>
-            
+
             <div class="highlight-box">
                 <h3 style="margin-bottom: 16px;">📈 Usage Summary</h3>
                 <div class="info-grid">
@@ -890,14 +919,14 @@ The {self.app_name} Team
                     </div>
                 </div>
             </div>
-            
+
             <div style="text-align: center; margin: 30px 0;">
                 <a href="{self.app_url}/settings/activity" class="cta-button">📊 View Detailed Analytics</a>
                 <a href="{self.app_url}/billing" class="cta-button secondary-button">💳 Manage Billing</a>
             </div>
-            
+
             <div class="divider"></div>
-            
+
             <h3>💡 Usage Tips</h3>
             <ul style="margin-left: 20px; color: #4b5563;">
                 <li style="margin-bottom: 8px;">Monitor your usage regularly to avoid unexpected charges</li>
@@ -905,10 +934,10 @@ The {self.app_name} Team
                 <li style="margin-bottom: 8px;">Consider upgrading your plan if you're consistently hitting limits</li>
                 <li style="margin-bottom: 8px;">Use our cost calculator to estimate future usage</li>
             </ul>
-            
+
             <p>Questions about your usage or need help optimizing? Contact our team at <a href="mailto:{self.support_email}" style="color: #3b82f6;">{self.support_email}</a>.</p>
         """
-        
+
         return {
             "subject": f"Monthly Usage Report - {month} | {self.app_name}",
             "html": self.get_base_template().format(
@@ -918,7 +947,7 @@ The {self.app_name} Team
                 app_name=self.app_name,
                 app_url=self.app_url,
                 support_email=self.support_email,
-                email=email
+                email=email,
             ),
             "text": f"""Monthly Usage Report - {self.app_name}
 
@@ -938,12 +967,13 @@ Questions? Contact us: {self.support_email}
 
 Best regards,
 The {self.app_name} Team
-"""
+""",
         }
+
 
 # Global instance
 email_templates = ProfessionalEmailTemplates(
     app_name=os.environ.get("APP_NAME", "Gatewayz"),
     app_url=os.environ.get("APP_URL", "https://beta.gatewayz.ai"),
-    support_email=os.environ.get("SUPPORT_EMAIL", "support@gatewayz.ai")
+    support_email=os.environ.get("SUPPORT_EMAIL", "support@gatewayz.ai"),
 )

@@ -5,8 +5,8 @@ Tracks all credit additions and deductions with full audit trail
 """
 
 import logging
-from typing import Optional, Dict, Any, List
 from datetime import datetime, timezone
+from typing import Any
 
 from src.config.supabase_config import get_supabase_client
 
@@ -16,27 +16,28 @@ logger = logging.getLogger(__name__)
 # Transaction Types
 class TransactionType:
     """Enum for transaction types"""
-    TRIAL = "trial"                    # Free trial credits
-    PURCHASE = "purchase"              # Stripe payment
-    ADMIN_CREDIT = "admin_credit"      # Admin manually added credits
-    ADMIN_DEBIT = "admin_debit"        # Admin manually removed credits
-    API_USAGE = "api_usage"            # Credits used for API calls
-    REFUND = "refund"                  # Refund from payment
-    BONUS = "bonus"                    # Promotional/bonus credits
-    TRANSFER = "transfer"              # Credits transferred between accounts
+
+    TRIAL = "trial"  # Free trial credits
+    PURCHASE = "purchase"  # Stripe payment
+    ADMIN_CREDIT = "admin_credit"  # Admin manually added credits
+    ADMIN_DEBIT = "admin_debit"  # Admin manually removed credits
+    API_USAGE = "api_usage"  # Credits used for API calls
+    REFUND = "refund"  # Refund from payment
+    BONUS = "bonus"  # Promotional/bonus credits
+    TRANSFER = "transfer"  # Credits transferred between accounts
 
 
 def log_credit_transaction(
-        user_id: int,
-        amount: float,
-        transaction_type: str,
-        description: str,
-        balance_before: float,
-        balance_after: float,
-        payment_id: Optional[int] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        created_by: Optional[str] = None
-) -> Optional[Dict[str, Any]]:
+    user_id: int,
+    amount: float,
+    transaction_type: str,
+    description: str,
+    balance_before: float,
+    balance_after: float,
+    payment_id: int | None = None,
+    metadata: dict[str, Any] | None = None,
+    created_by: str | None = None,
+) -> dict[str, Any] | None:
     """
     Log a credit transaction to the audit trail
 
@@ -58,19 +59,19 @@ def log_credit_transaction(
         client = get_supabase_client()
 
         transaction_data = {
-            'user_id': user_id,
-            'amount': amount,
-            'transaction_type': transaction_type,
-            'description': description,
-            'balance_before': balance_before,
-            'balance_after': balance_after,
-            'payment_id': payment_id,
-            'metadata': metadata or {},
-            'created_by': created_by,
-            'created_at': datetime.now(timezone.utc).isoformat()
+            "user_id": user_id,
+            "amount": amount,
+            "transaction_type": transaction_type,
+            "description": description,
+            "balance_before": balance_before,
+            "balance_after": balance_after,
+            "payment_id": payment_id,
+            "metadata": metadata or {},
+            "created_by": created_by,
+            "created_at": datetime.now(timezone.utc).isoformat(),
         }
 
-        result = client.table('credit_transactions').insert(transaction_data).execute()
+        result = client.table("credit_transactions").insert(transaction_data).execute()
 
         if not result.data:
             logger.error("Failed to log credit transaction - no data returned")
@@ -91,11 +92,8 @@ def log_credit_transaction(
 
 
 def get_user_transactions(
-        user_id: int,
-        limit: int = 50,
-        offset: int = 0,
-        transaction_type: Optional[str] = None
-) -> List[Dict[str, Any]]:
+    user_id: int, limit: int = 50, offset: int = 0, transaction_type: str | None = None
+) -> list[dict[str, Any]]:
     """
     Get credit transaction history for a user
 
@@ -111,12 +109,12 @@ def get_user_transactions(
     try:
         client = get_supabase_client()
 
-        query = client.table('credit_transactions').select('*').eq('user_id', user_id)
+        query = client.table("credit_transactions").select("*").eq("user_id", user_id)
 
         if transaction_type:
-            query = query.eq('transaction_type', transaction_type)
+            query = query.eq("transaction_type", transaction_type)
 
-        result = query.order('created_at', desc=True).range(offset, offset + limit - 1).execute()
+        result = query.order("created_at", desc=True).range(offset, offset + limit - 1).execute()
 
         return result.data or []
 
@@ -126,12 +124,12 @@ def get_user_transactions(
 
 
 def add_credits(
-        api_key: str,
-        amount: float,
-        description: str,
-        metadata: Optional[Dict[str, Any]] = None,
-        transaction_type: str = TransactionType.BONUS,
-        user_id: Optional[int] = None
+    api_key: str,
+    amount: float,
+    description: str,
+    metadata: dict[str, Any] | None = None,
+    transaction_type: str = TransactionType.BONUS,
+    user_id: int | None = None,
 ) -> bool:
     """
     Add credits to a user's account
@@ -156,23 +154,30 @@ def add_credits(
 
         # Get user by ID if provided, otherwise by API key
         if user_id:
-            user_result = client.table('users').select('id, credits').eq('id', user_id).execute()
+            user_result = client.table("users").select("id, credits").eq("id", user_id).execute()
         else:
-            user_result = client.table('users').select('id, credits').eq('api_key', api_key).execute()
+            user_result = (
+                client.table("users").select("id, credits").eq("api_key", api_key).execute()
+            )
 
         if not user_result.data:
-            logger.error(f"User not found for {'user_id: ' + str(user_id) if user_id else 'API key: ' + api_key[:15] + '...'}")
+            logger.error(
+                f"User not found for {'user_id: ' + str(user_id) if user_id else 'API key: ' + api_key[:15] + '...'}"
+            )
             return False
 
         user = user_result.data[0]
-        resolved_user_id = user['id']
-        balance_before = float(user.get('credits', 0) or 0)
+        resolved_user_id = user["id"]
+        balance_before = float(user.get("credits", 0) or 0)
         balance_after = balance_before + amount
 
         # Update user's credits (using same column as payment system)
-        update_result = client.table('users').update({
-            'credits': balance_after
-        }).eq('id', resolved_user_id).execute()
+        update_result = (
+            client.table("users")
+            .update({"credits": balance_after})
+            .eq("id", resolved_user_id)
+            .execute()
+        )
 
         if not update_result.data:
             logger.error(f"Failed to update balance for user {resolved_user_id}")
@@ -186,10 +191,12 @@ def add_credits(
             description=description,
             balance_before=balance_before,
             balance_after=balance_after,
-            metadata=metadata
+            metadata=metadata,
         )
 
-        logger.info(f"Added {amount} credits to user {resolved_user_id}. New balance: {balance_after}")
+        logger.info(
+            f"Added {amount} credits to user {resolved_user_id}. New balance: {balance_after}"
+        )
         return True
 
     except Exception as e:
@@ -197,7 +204,7 @@ def add_credits(
         return False
 
 
-def get_transaction_summary(user_id: int) -> Dict[str, Any]:
+def get_transaction_summary(user_id: int) -> dict[str, Any]:
     """
     Get summary of credit transactions for a user
 
@@ -210,45 +217,42 @@ def get_transaction_summary(user_id: int) -> Dict[str, Any]:
     try:
         client = get_supabase_client()
 
-        result = client.table('credit_transactions').select('*').eq('user_id', user_id).execute()
+        result = client.table("credit_transactions").select("*").eq("user_id", user_id).execute()
 
         transactions = result.data or []
 
         summary = {
-            'total_transactions': len(transactions),
-            'total_credits_added': 0,
-            'total_credits_used': 0,
-            'by_type': {}
+            "total_transactions": len(transactions),
+            "total_credits_added": 0,
+            "total_credits_used": 0,
+            "by_type": {},
         }
 
         for transaction in transactions:
-            amount = transaction['amount']
-            trans_type = transaction['transaction_type']
+            amount = transaction["amount"]
+            trans_type = transaction["transaction_type"]
 
             # Track totals
             if amount > 0:
-                summary['total_credits_added'] += amount
+                summary["total_credits_added"] += amount
             else:
-                summary['total_credits_used'] += abs(amount)
+                summary["total_credits_used"] += abs(amount)
 
             # Track by type
-            if trans_type not in summary['by_type']:
-                summary['by_type'][trans_type] = {
-                    'count': 0,
-                    'total_amount': 0
-                }
+            if trans_type not in summary["by_type"]:
+                summary["by_type"][trans_type] = {"count": 0, "total_amount": 0}
 
-            summary['by_type'][trans_type]['count'] += 1
-            summary['by_type'][trans_type]['total_amount'] += amount
+            summary["by_type"][trans_type]["count"] += 1
+            summary["by_type"][trans_type]["total_amount"] += amount
 
         return summary
 
     except Exception as e:
         logger.error(f"Error getting transaction summary for user {user_id}: {e}")
         return {
-            'total_transactions': 0,
-            'total_credits_added': 0,
-            'total_credits_used': 0,
-            'by_type': {},
-            'error': str(e)
+            "total_transactions": 0,
+            "total_credits_added": 0,
+            "total_credits_used": 0,
+            "by_type": {},
+            "error": str(e),
         }

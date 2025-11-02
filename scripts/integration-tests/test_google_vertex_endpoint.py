@@ -18,6 +18,7 @@ Usage:
 
 import os
 import json
+import pytest
 import requests
 import base64
 from pathlib import Path
@@ -27,7 +28,7 @@ GATEWAY_URL = os.getenv("GATEWAY_URL", "http://localhost:8000")
 API_KEY = os.getenv("GATEWAY_API_KEY")
 
 if not API_KEY:
-    raise ValueError("GATEWAY_API_KEY environment variable must be set")
+    pytest.skip("GATEWAY_API_KEY environment variable must be set", allow_module_level=True)
 
 
 def test_google_vertex_image_generation():

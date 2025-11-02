@@ -1,7 +1,5 @@
-import os
-import base64
 import hashlib
-from typing import Dict, Tuple
+import os
 
 try:
     from cryptography.fernet import Fernet, InvalidToken  # type: ignore
@@ -10,13 +8,13 @@ except Exception:
     InvalidToken = Exception  # type: ignore
 
 
-def _load_keyring_from_env() -> Tuple[int, Dict[int, "Fernet"]]:
+def _load_keyring_from_env() -> tuple[int, dict[int, "Fernet"]]:
     """Load keyring from env. Example:
     KEY_VERSION=1
     KEYRING_1=<base64_fernet_key>
     """
     current = int(os.getenv("KEY_VERSION", "1"))
-    keyring: Dict[int, "Fernet"] = {}
+    keyring: dict[int, Fernet] = {}
     # If cryptography is not available, fall back to no-op encryption
     if Fernet is None:
         return current, {}
@@ -39,7 +37,7 @@ def _load_keyring_from_env() -> Tuple[int, Dict[int, "Fernet"]]:
 _CURRENT_VERSION, _KEYRING = _load_keyring_from_env()
 
 
-def encrypt_api_key(plaintext: str) -> Tuple[str, int]:
+def encrypt_api_key(plaintext: str) -> tuple[str, int]:
     """Encrypt API key. Requires encryption to be properly configured.
 
     Raises RuntimeError if encryption keys are not configured, ensuring
@@ -62,7 +60,7 @@ def encrypt_api_key(plaintext: str) -> Tuple[str, int]:
         token = f.encrypt(plaintext.encode("utf-8"))
         return token.decode("utf-8"), _CURRENT_VERSION
     except Exception as e:
-        raise RuntimeError(f"Failed to encrypt API key: {str(e)}")
+        raise RuntimeError(f"Failed to encrypt API key: {str(e)}") from e
 
 
 def sha256_key_hash(plaintext: str) -> str:
@@ -85,5 +83,3 @@ def sha256_key_hash(plaintext: str) -> str:
 
 def last4(plaintext: str) -> str:
     return plaintext[-4:] if len(plaintext) >= 4 else plaintext
-
-
