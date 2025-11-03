@@ -51,6 +51,10 @@ import { ChatHistoryAPI, ChatSession as ApiChatSession, ChatMessage as ApiChatMe
 import { ChatStreamHandler } from '@/lib/chat-stream-handler';
 import { Copy, Share2, RotateCcw } from 'lucide-react';
 import { usePrivy } from '@privy-io/react-auth';
+import { streamChatResponse } from '@/lib/streaming';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { logAnalyticsEvent } from '@/lib/analytics';
 
 // Lazy load ModelSelect for better initial load performance
 // Reduces initial bundle by ~100KB and defers expensive model processing
@@ -124,8 +128,6 @@ const MarkdownRenderer = ({ children, className }: { children: string; className
         </ReactMarkdown>
     );
 };
-import { streamChatResponse } from '@/lib/streaming';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 // Lazy load ReasoningDisplay for better initial load performance
 // Only needed for models with reasoning capabilities (~10% of usage)
@@ -133,8 +135,6 @@ const ReasoningDisplay = dynamic(() => import('@/components/chat/reasoning-displ
     loading: () => <div className="animate-pulse bg-muted/30 h-12 rounded-md w-full"></div>,
     ssr: false
 });
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { logAnalyticsEvent } from '@/lib/analytics';
 
 const TEMP_API_KEY_PREFIX = 'gw_temp_';
 
@@ -2250,6 +2250,10 @@ function ChatPageContent() {
         setIsStreamingResponse(true); // Set streaming state immediately
         setLoading(false); // Don't show loading spinner
 
+        // Use ChatStreamHandler to manage streaming state and prevent scope issues
+        // Declare outside try-catch so it's accessible in both blocks
+        const streamHandler = new ChatStreamHandler();
+
         try {
             console.log('🚀 Starting handleSendMessage - Core auth check:', {
                 hasApiKey: !!apiKey,
@@ -2501,8 +2505,7 @@ function ChatPageContent() {
                     url: url
                 });
 
-                // Use ChatStreamHandler to manage streaming state and prevent scope issues
-                const streamHandler = new ChatStreamHandler();
+                // Initialize stream handler for this request
                 streamHandler.reset();
                 streamHandler.startStreaming();
 
