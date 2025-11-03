@@ -1,102 +1,91 @@
 // Type declarations for optional UI dependencies that may not be installed
 // These components are optional and may not be used in the current build
 
+type ComponentType = React.ComponentType<any>;
+type AnyExport = any;
+
 declare module 'vaul' {
-  export const Drawer: any;
-  export const DrawerContent: any;
-  export const DrawerTrigger: any;
-  export const DrawerHeader: any;
-  export const DrawerTitle: any;
-  export const DrawerDescription: any;
-  export const DrawerFooter: any;
+  export const Drawer: AnyExport;
+  export const DrawerContent: AnyExport;
+  export const DrawerTrigger: AnyExport;
+  export const DrawerHeader: AnyExport;
+  export const DrawerTitle: AnyExport;
+  export const DrawerDescription: AnyExport;
+  export const DrawerFooter: AnyExport;
 }
 
 declare module 'input-otp' {
-  export const OTPInput: any;
-  export const OTPInputContext: any;
+  export const OTPInput: AnyExport;
+  export const OTPInputContext: AnyExport;
 }
 
 declare module '@radix-ui/react-aspect-ratio' {
-  const AspectRatioPrimitive: {
-    Root: React.ComponentType<any>;
-  };
+  const AspectRatioPrimitive: { Root: ComponentType };
   export = AspectRatioPrimitive;
 }
 
 declare module '@radix-ui/react-context-menu' {
   const ContextMenuPrimitive: {
-    Root: React.ComponentType<any>;
-    Trigger: React.ComponentType<any>;
-    Group: React.ComponentType<any>;
-    Portal: React.ComponentType<any>;
-    Sub: React.ComponentType<any>;
-    RadioGroup: React.ComponentType<any>;
-    SubTrigger: React.ComponentType<any>;
-    SubContent: React.ComponentType<any>;
-    Content: React.ComponentType<any>;
-    Item: React.ComponentType<any>;
-    CheckboxItem: React.ComponentType<any>;
-    ItemIndicator: React.ComponentType<any>;
-    RadioItem: React.ComponentType<any>;
-    Label: React.ComponentType<any>;
-    Separator: React.ComponentType<any>;
+    Root: ComponentType;
+    Trigger: ComponentType;
+    Group: ComponentType;
+    Portal: ComponentType;
+    Sub: ComponentType;
+    RadioGroup: ComponentType;
+    SubTrigger: ComponentType;
+    SubContent: ComponentType;
+    Content: ComponentType;
+    Item: ComponentType;
+    CheckboxItem: ComponentType;
+    ItemIndicator: ComponentType;
+    RadioItem: ComponentType;
+    Label: ComponentType;
+    Separator: ComponentType;
   };
   export = ContextMenuPrimitive;
 }
 
 declare module '@radix-ui/react-hover-card' {
-  const HoverCardPrimitive: {
-    Root: React.ComponentType<any>;
-    Trigger: React.ComponentType<any>;
-    Content: React.ComponentType<any>;
-  };
+  const HoverCardPrimitive: { Root: ComponentType; Trigger: ComponentType; Content: ComponentType };
   export = HoverCardPrimitive;
 }
 
 declare module '@radix-ui/react-navigation-menu' {
   const NavigationMenuPrimitive: {
-    Root: React.ComponentType<any>;
-    List: React.ComponentType<any>;
-    Item: React.ComponentType<any>;
-    Trigger: React.ComponentType<any>;
-    Content: React.ComponentType<any>;
-    Indicator: React.ComponentType<any>;
-    Viewport: React.ComponentType<any>;
-    Link: React.ComponentType<any>;
+    Root: ComponentType;
+    List: ComponentType;
+    Item: ComponentType;
+    Trigger: ComponentType;
+    Content: ComponentType;
+    Indicator: ComponentType;
+    Viewport: ComponentType;
+    Link: ComponentType;
   };
   export = NavigationMenuPrimitive;
 }
 
 declare module '@radix-ui/react-toggle-group' {
-  const ToggleGroupPrimitive: {
-    Root: React.ComponentType<any>;
-    Item: React.ComponentType<any>;
-  };
+  const ToggleGroupPrimitive: { Root: ComponentType; Item: ComponentType };
   export = ToggleGroupPrimitive;
 }
 
 declare module '@radix-ui/react-toggle' {
-  namespace TogglePrimitive {
-    const Root: React.ComponentType<any>;
-  }
-  const TogglePrimitive: {
-    Root: React.ComponentType<any>;
-  };
+  const TogglePrimitive: { Root: ComponentType };
   export = TogglePrimitive;
 }
 
 declare module 'react-resizable-panels' {
-  export const Panel: any;
-  export const PanelGroup: any;
-  export const PanelResizeHandle: any;
+  export const Panel: AnyExport;
+  export const PanelGroup: AnyExport;
+  export const PanelResizeHandle: AnyExport;
 }
 
 declare module 'next-themes' {
-  export const ThemeProvider: any;
-  export const useTheme: any;
+  export const ThemeProvider: AnyExport;
+  export const useTheme: AnyExport;
 }
 
 declare module 'sonner' {
-  export const toast: any;
-  export const Toaster: any;
+  export const toast: AnyExport;
+  export const Toaster: AnyExport;
 }
