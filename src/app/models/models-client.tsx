@@ -234,6 +234,20 @@ export default function ModelsClient({
     console.log(`Models for deduplication: ${models.length}`);
     const seen = new Set<string>();
     const deduplicated = models.filter(model => {
+      // Filter out malformed models from backend (e.g., Cerebras parsing errors)
+      // These have names like "('Data', [Data(Id=..." or "('Object', 'List')"
+      const isMalformed = model.name && (
+        model.name.startsWith("('Data',") ||
+        model.name.startsWith("('Object',") ||
+        model.name.includes("Data(Id=") ||
+        model.name.includes("Data(id=")
+      );
+
+      if (isMalformed) {
+        console.warn(`Filtering out malformed model: ${model.name} (ID: ${model.id})`);
+        return false;
+      }
+
       if (seen.has(model.id)) {
         console.warn(`Duplicate model ID found: ${model.id}`);
         return false;
@@ -241,7 +255,7 @@ export default function ModelsClient({
       seen.add(model.id);
       return true;
     });
-    console.log(`After client-side deduplication: ${deduplicated.length} unique models`);
+    console.log(`After client-side deduplication and validation: ${deduplicated.length} unique models`);
     return deduplicated;
   }, [models]);
 
@@ -908,6 +922,26 @@ export default function ModelsClient({
               <ModelCard key={key} model={model} />
             ))}
           </div>
+
+          {/* No results message */}
+          {filteredModels.length === 0 && !isLoadingModels && !isLoadingMore && (
+            <div className="flex flex-col items-center justify-center py-16 px-4">
+              <div className="text-center max-w-md">
+                <h3 className="text-lg font-semibold mb-2">No models found</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  {selectedGateways.includes('cerebras') ? (
+                    <>
+                      The Cerebras gateway is experiencing data issues. Please try selecting a different gateway or <button onClick={resetFilters} className="text-primary hover:underline">clear all filters</button>.
+                    </>
+                  ) : (
+                    <>
+                      Try adjusting your filters or <button onClick={resetFilters} className="text-primary hover:underline">clearing all filters</button> to see more models.
+                    </>
+                  )}
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Infinite Scroll Trigger */}
           {hasMore && (

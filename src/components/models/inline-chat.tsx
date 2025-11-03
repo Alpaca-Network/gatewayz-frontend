@@ -79,6 +79,7 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
     setMessages(prev => [...prev, { role: 'assistant', content: '', thinking: '', isStreaming: true }]);
 
     // Initialize accumulated content outside try block to ensure it's always in scope
+    // This prevents ReferenceError when accessing these variables in catch handler
     let accumulatedContent = '';
     let accumulatedThinking = '';
     let inThinking = false;
@@ -103,7 +104,6 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
         temperature: 0.7,
         max_tokens: 8000  // Increased for reasoning models like DeepSeek
       };
-
       // Use the streaming utility with proper error handling and retries
       for await (const chunk of streamChatResponse(url, apiKey, requestBody)) {
         // Enhanced logging to see what data we're receiving
@@ -232,8 +232,11 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
 
       // Add helpful context if no response was received
       if (accumulatedContent.length === 0) {
-        errorMessage = errorMessage || 'No response from model. ';
-        errorMessage += 'This could mean: the model is unavailable, your API key is invalid, or the model provider is having issues. Try again or select a different model.';
+        // If the error message doesn't already explain the issue, add context
+        if (!errorMessage.includes('not properly configured') && !errorMessage.includes('not support')) {
+          errorMessage = errorMessage || 'No response from model. ';
+          errorMessage += ' This could mean: the model is unavailable, your API key is invalid, or the model provider is having issues. Try again or select a different model.';
+        }
       }
 
       setError(errorMessage);

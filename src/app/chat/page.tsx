@@ -1462,6 +1462,14 @@ function ChatPageContent() {
 
                     setSessions(sessionsData);
 
+                    // Check if there's a message parameter in the URL - if so, create a new chat
+                    const messageParam = searchParams?.get('message');
+                    if (messageParam) {
+                        console.log('[loadSessions] Message parameter detected, creating new chat instead of loading recent session');
+                        createNewChat();
+                        return;
+                    }
+
                     // Select the most recent session by default (most likely to have messages)
                     // Sort by updatedAt descending to get the most recently active session
                     const mostRecentSession = [...sessionsData].sort((a, b) =>
@@ -2505,9 +2513,9 @@ function ChatPageContent() {
                     url: url
                 });
 
-                // Initialize stream handler for this request
+                // Use ChatStreamHandler to properly manage streaming state and avoid ReferenceErrors
+                const streamHandler = new ChatStreamHandler();
                 streamHandler.reset();
-                streamHandler.startStreaming();
 
                 console.log('🌊 Starting to stream response...');
 
@@ -2536,8 +2544,8 @@ function ChatPageContent() {
                             const lastMessage = messages[messages.length - 1];
 
                             if (lastMessage && lastMessage.role === 'assistant') {
-                                lastMessage.content = streamHandler.getContent();
-                                lastMessage.reasoning = streamHandler.getReasoning();
+                                lastMessage.content = streamHandler.state.accumulatedContent;
+                                lastMessage.reasoning = streamHandler.state.accumulatedReasoning;
                                 lastMessage.isStreaming = true;
                             }
 
@@ -2580,40 +2588,9 @@ function ChatPageContent() {
                             devLog('[THINKING DEBUG]', { content, inThinking: streamHandler.state.inThinking, length: content.length });
                         }
 
-                    // Process content character by character to handle thinking tags correctly
-                        let normalizedContent = String(content);
-                        normalizedContent = normalizedContent
-                            .replace(/\[THINKING\]/gi, '<thinking>')
-                            .replace(/\[\/THINKING\]/gi, '</thinking>')
-                            .replace(/<think>/gi, '<thinking>')
-                            .replace(/<\/redacted_reasoning>/gi, '</thinking>')
-                            .replace(/<\/think>/gi, '</thinking>')
-                            .replace(/<\|startofthinking\|>/gi, '<thinking>')
-                            .replace(/<\|endofthinking\|>/gi, '</thinking>');
-
-                        let i = 0;
-                        while (i < normalizedContent.length) {
-                            const remaining = normalizedContent.slice(i);
-                            const openMatch = remaining.match(/^<\|?(?:thinking|think)>/i);
-                            if (openMatch) {
-                                streamHandler.setThinkingMode(true);
-                                i += openMatch[0].length;
-                                devLog('[THINKING DEBUG] Opened thinking tag');
-                                continue;
-                            }
-
-                            const closeMatch = remaining.match(/^<\|?\/(?:thinking|think)>/i);
-                            if (closeMatch) {
-                                streamHandler.setThinkingMode(false);
-                                i += closeMatch[0].length;
-                                devLog('[THINKING DEBUG] Closed thinking tag');
-                                continue;
-                            }
-
-                            const char = normalizedContent[i];
-                            streamHandler.addCharacter(char);
-                            i++;
-                        }
+                        // Use handler to process content with thinking tags
+                        streamHandler.processContentWithThinking(content);
+                        streamHandler.incrementChunkCount();
                     }
 
                     // Also accumulate any reasoning sent explicitly from the API
@@ -2654,22 +2631,24 @@ function ChatPageContent() {
                     } else if (!pendingUpdate) {
                         // Schedule an update for later
                         pendingUpdate = true;
-                        setTimeout(() => {
+                        const timeoutId = setTimeout(() => {
                             if (pendingUpdate) {
                                 performUIUpdate();
                                 lastUpdateTime = Date.now();
                             }
                         }, UPDATE_INTERVAL_MS - timeSinceLastUpdate);
+                        // Register timeout so it can be cleaned up if error occurs
+                        streamHandler.registerTimeout(timeoutId);
                     }
                 }
 
-                // Use the accumulated content instead of reading from stale state
+                // Mark streaming as complete and get final content
+                streamHandler.complete();
                 setIsStreamingResponse(false);
-                streamHandler.stopStreaming();
 
-                const finalContent = streamHandler.getContent();
-                const finalReasoning = streamHandler.getReasoning();
-                devLog({finalContent, finalReasoning, diagnostics: streamHandler.getDiagnostics()});
+                const finalContent = streamHandler.getFinalContent();
+                const finalReasoning = streamHandler.getFinalReasoning();
+                devLog({finalContent, finalReasoning, chunkCount: streamHandler.state.chunkCount});
 
                 // OPTIMIZATION: Save the assistant's response to the backend asynchronously
                 // This allows the UI to be responsive immediately after streaming completes
@@ -2761,6 +2740,10 @@ function ChatPageContent() {
                 }
 
             } catch (streamError) {
+                // Clean up any pending timeouts to prevent ReferenceErrors
+                streamHandler?.cleanup();
+                streamHandler?.complete();
+
                 setIsStreamingResponse(false);
                 streamHandler.stopStreaming();
                 streamHandler.addError(streamError instanceof Error ? streamError : new Error(String(streamError)));
@@ -2779,6 +2762,15 @@ function ChatPageContent() {
                 const errorMessage = streamError instanceof Error ? streamError.message : 'Failed to get response';
                 console.error('Error message for analysis:', errorMessage);
                 console.error('Stream state at error:', streamHandler.getDiagnostics());
+
+                // Log error context with accumulated content
+                if (streamHandler) {
+                    streamHandler.addError(streamError instanceof Error ? streamError : new Error(errorMessage), {
+                        model: selectedModel?.value,
+                        gateway: selectedModel?.sourceGateway
+                    });
+                    console.error('Stream handler error summary:', streamHandler.getErrorSummary());
+                }
 
                 // Log analytics event for streaming error
                 logAnalyticsEvent('chat_message_failed', {

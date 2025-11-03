@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { handleApiError } from "@/app/api/middleware/error-handler";
 import { API_BASE_URL } from "@/lib/config";
+import { proxyFetch } from "@/lib/proxy-fetch";
 
 /**
  * POST /api/auth
@@ -13,7 +14,7 @@ export async function POST(request: NextRequest) {
 
     console.log("[API /api/auth] Proxying authentication request to backend");
 
-    const response = await fetch(`${API_BASE_URL}/auth`, {
+    const response = await proxyFetch(`${API_BASE_URL}/auth`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
