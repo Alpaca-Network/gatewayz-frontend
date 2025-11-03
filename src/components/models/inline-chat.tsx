@@ -78,6 +78,11 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
     const streamingMessageIndex = messages.length + 1;
     setMessages(prev => [...prev, { role: 'assistant', content: '', thinking: '', isStreaming: true }]);
 
+    // Initialize accumulated content outside try block to ensure it's always in scope
+    let accumulatedContent = '';
+    let accumulatedThinking = '';
+    let inThinking = false;
+
     try {
       // Call the backend API directly to avoid Vercel's 60-second timeout
       // CORS headers are configured in vercel.json to allow beta.gatewayz.ai
@@ -98,10 +103,6 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
         temperature: 0.7,
         max_tokens: 8000  // Increased for reasoning models like DeepSeek
       };
-
-      let accumulatedContent = '';
-      let accumulatedThinking = '';
-      let inThinking = false;
 
       // Use the streaming utility with proper error handling and retries
       for await (const chunk of streamChatResponse(url, apiKey, requestBody)) {

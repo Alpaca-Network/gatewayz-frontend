@@ -14,12 +14,17 @@ export function CreditsDisplay() {
   useEffect(() => {
     const updateCredits = () => {
       const userData = getUserData();
-      console.log('[CreditsDisplay] Loading credits from userData:', { userData, credits: userData?.credits, tier: userData?.tier });
+      // Reduced logging - only log in development mode
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[CreditsDisplay] Loading credits from userData:', { userData, credits: userData?.credits, tier: userData?.tier });
+      }
 
       // Accept 0 as a valid credit value
       if (userData?.credits !== undefined && userData?.credits !== null) {
         const creditValue = Math.floor(userData.credits);
-        console.log('[CreditsDisplay] Setting credits to:', creditValue);
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[CreditsDisplay] Setting credits to:', creditValue);
+        }
 
         // Only update state if the value has actually changed
         setCredits(prevCredits => {
@@ -31,7 +36,9 @@ export function CreditsDisplay() {
 
         // Normalize tier to lowercase to handle case sensitivity
         const normalizedTier = userData.tier?.toLowerCase() as UserTier | undefined;
-        console.log('[CreditsDisplay] Normalized tier:', { original: userData.tier, normalized: normalizedTier, isPro: normalizedTier === 'pro', isMax: normalizedTier === 'max' });
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[CreditsDisplay] Normalized tier:', { original: userData.tier, normalized: normalizedTier, isPro: normalizedTier === 'pro', isMax: normalizedTier === 'max' });
+        }
 
         // Only update tier if it has changed
         setTier(prevTier => {
@@ -41,7 +48,9 @@ export function CreditsDisplay() {
           return prevTier;
         });
       } else {
-        console.log('[CreditsDisplay] No credits found in userData');
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[CreditsDisplay] No credits found in userData');
+        }
       }
     };
 
@@ -62,7 +71,9 @@ export function CreditsDisplay() {
 
   // Show 0 credits instead of hiding the component
   if (credits === null) {
-    console.log('[CreditsDisplay] Credits is null, not rendering');
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[CreditsDisplay] Credits is null, not rendering');
+    }
     return null;
   }
 
@@ -70,7 +81,7 @@ export function CreditsDisplay() {
   const showPlanName = tier === 'pro' || tier === 'max';
   const planName = tier === 'pro' ? 'PRO' : tier === 'max' ? 'MAX' : '';
 
-  console.log('[CreditsDisplay] Rendering:', { credits, tier, showPlanName, planName });
+  // Remove excessive render logging - this was causing console spam
 
   return (
     <Link href="/settings/credits">
