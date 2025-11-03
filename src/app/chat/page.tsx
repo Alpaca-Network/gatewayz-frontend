@@ -2586,6 +2586,7 @@ function ChatPageContent() {
                             .replace(/\[THINKING\]/gi, '<thinking>')
                             .replace(/\[\/THINKING\]/gi, '</thinking>')
                             .replace(/<think>/gi, '<thinking>')
+                            .replace(/<\/redacted_reasoning>/gi, '</thinking>')
                             .replace(/<\/think>/gi, '</thinking>')
                             .replace(/<\|startofthinking\|>/gi, '<thinking>')
                             .replace(/<\|endofthinking\|>/gi, '</thinking>');
