@@ -36,7 +36,9 @@ const InputOTPSlot = React.forwardRef<
   if (!inputOTPContext) {
     throw new Error('InputOTPSlot must be used within InputOTP')
   }
-  const { char, hasFakeCaret, isActive } = inputOTPContext.slots[index]
+  // Type assertion since input-otp package types may not be available
+  const context = inputOTPContext as any;
+  const { char, hasFakeCaret, isActive } = context.slots[index]
 
   return (
     <div
