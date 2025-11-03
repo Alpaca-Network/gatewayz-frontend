@@ -138,7 +138,7 @@ const ReasoningDisplay = dynamic(() => import('@/components/chat/reasoning-displ
 
 const TEMP_API_KEY_PREFIX = 'gw_temp_';
 
-type Message = {
+export type Message = {
     role: 'user' | 'assistant';
     content: string;
     reasoning?: string;
