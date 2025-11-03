@@ -6,13 +6,10 @@
  * error handlers but not properly initialized or scoped.
  */
 
-export interface StreamChunk {
-  content?: string;
-  reasoning?: string;
-  error?: {
-    message: string;
-    code?: string;
-  };
+export interface StreamError {
+  message: string;
+  timestamp: Date;
+  partialContent?: string;
 }
 
 export interface StreamState {
@@ -20,12 +17,20 @@ export interface StreamState {
   accumulatedContent: string;
   accumulatedReasoning: string;
   chunkCount: number;
-  errors: Array<{
-    message: string;
-    timestamp: Date;
-    partialContent?: string;
-  }>;
+  errors: StreamError[];
   inThinking: boolean;
+}
+
+export interface StreamDiagnostics {
+  isStreaming: boolean;
+  contentLength: number;
+  reasoningLength: number;
+  chunkCount: number;
+  errorCount: number;
+  inThinking: boolean;
+  hasContent: boolean;
+  hasReasoning: boolean;
+  lastError: StreamError | null;
 }
 
 export class ChatStreamHandler {
@@ -75,18 +80,13 @@ export class ChatStreamHandler {
 
   /**
    * Process a character, handling thinking tags
-   * Returns true if thinking state changed
    */
-  addCharacter(char: string): boolean {
-    const wasInThinking = this.state.inThinking;
-
+  addCharacter(char: string): void {
     if (this.state.inThinking) {
       this.state.accumulatedReasoning += char;
     } else {
       this.state.accumulatedContent += char;
     }
-
-    return wasInThinking !== this.state.inThinking;
   }
 
   /**
@@ -145,7 +145,7 @@ export class ChatStreamHandler {
   /**
    * Get diagnostic information about the current stream state
    */
-  getDiagnostics() {
+  getDiagnostics(): StreamDiagnostics {
     return {
       isStreaming: this.state.isStreaming,
       contentLength: this.state.accumulatedContent.length,
