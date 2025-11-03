@@ -20,7 +20,7 @@ declare module '@radix-ui/react-aspect-ratio' {
   const AspectRatioPrimitive: {
     Root: React.ComponentType<any>;
   };
-  export default AspectRatioPrimitive;
+  export = AspectRatioPrimitive;
 }
 
 declare module '@radix-ui/react-context-menu' {
@@ -41,7 +41,7 @@ declare module '@radix-ui/react-context-menu' {
     Label: React.ComponentType<any>;
     Separator: React.ComponentType<any>;
   };
-  export default ContextMenuPrimitive;
+  export = ContextMenuPrimitive;
 }
 
 declare module '@radix-ui/react-hover-card' {
@@ -50,7 +50,7 @@ declare module '@radix-ui/react-hover-card' {
     Trigger: React.ComponentType<any>;
     Content: React.ComponentType<any>;
   };
-  export default HoverCardPrimitive;
+  export = HoverCardPrimitive;
 }
 
 declare module '@radix-ui/react-navigation-menu' {
@@ -64,7 +64,7 @@ declare module '@radix-ui/react-navigation-menu' {
     Viewport: React.ComponentType<any>;
     Link: React.ComponentType<any>;
   };
-  export default NavigationMenuPrimitive;
+  export = NavigationMenuPrimitive;
 }
 
 declare module '@radix-ui/react-toggle-group' {
@@ -72,14 +72,17 @@ declare module '@radix-ui/react-toggle-group' {
     Root: React.ComponentType<any>;
     Item: React.ComponentType<any>;
   };
-  export default ToggleGroupPrimitive;
+  export = ToggleGroupPrimitive;
 }
 
 declare module '@radix-ui/react-toggle' {
+  namespace TogglePrimitive {
+    const Root: React.ComponentType<any>;
+  }
   const TogglePrimitive: {
     Root: React.ComponentType<any>;
   };
-  export default TogglePrimitive;
+  export = TogglePrimitive;
 }
 
 declare module 'react-resizable-panels' {
