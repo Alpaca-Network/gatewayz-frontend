@@ -55,7 +55,10 @@ async function getPriorityModels(): Promise<Model[]> {
 
     const results = await Promise.all(promises);
 
-    const allModels = results.flatMap(result => result.data || []);
+    const allModels = results.flatMap((result: unknown) => {
+      const typedResult = result as { data?: Model[] };
+      return typedResult.data || [];
+    });
 
     // Deduplicate intelligently by normalized name + provider slug
     const modelMap = new Map<string, Model>();

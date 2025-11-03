@@ -86,7 +86,7 @@ const nextConfig: NextConfig = {
       config.plugins.push(
         new (require('webpack')).NormalModuleReplacementPlugin(
           /^node:/,
-          (resource) => {
+          (resource: any) => {
             resource.request = resource.request.replace(/^node:/, '');
           }
         )

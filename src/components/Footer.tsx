@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import Link from "next/link";
 
 export function Footer() {
   return (
@@ -22,7 +22,7 @@ export function Footer() {
                 </a>
               </li>
               <li>
-                <Link to="/docs" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">
+                <Link href="/docs" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">
                   Documentation
                 </Link>
               </li>
@@ -49,12 +49,12 @@ export function Footer() {
             <h3 className="font-semibold mb-4 text-gray-900">Company</h3>
             <ul className="space-y-2">
               <li>
-                <Link to="/about" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">
+                <Link href="/about" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">
                   About
                 </Link>
               </li>
               <li>
-                <Link to="/contact" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">
+                <Link href="/contact" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">
                   Contact
                 </Link>
               </li>

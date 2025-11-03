@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
 import { useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+// import { supabase } from "@/integrations/supabase/client";
 import SuccessPopup from "./SuccessPopup";
 
 const schema = z.object({
@@ -48,11 +48,14 @@ export default function WaitlistForm({ compact = false }: WaitlistFormProps) {
         pageUrl: typeof window !== "undefined" ? window.location.href : "",
         userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
       };
-      const { data: fnData, error } = await supabase.functions.invoke("send-waitlist-email", {
-        body: payload,
-      });
+      // TODO: Re-enable when supabase integration is configured
+      // const { data: fnData, error } = await supabase.functions.invoke("send-waitlist-email", {
+      //   body: payload,
+      // });
+      const fnData = null;
+      const error = null; // Placeholder until supabase is configured
       if (error) {
-        if (import.meta.env.DEV) {
+        if (process.env.NODE_ENV === 'development') {
           console.error("send-waitlist-email error:", error);
         }
         toast({
@@ -62,7 +65,7 @@ export default function WaitlistForm({ compact = false }: WaitlistFormProps) {
         });
         return;
       }
-      if (import.meta.env.DEV) {
+      if (process.env.NODE_ENV === 'development') {
         console.log("Waitlist signup:", payload, fnData);
       }
       setSubmitted(true);
@@ -70,7 +73,7 @@ export default function WaitlistForm({ compact = false }: WaitlistFormProps) {
       reset();
       setShowSuccessPopup(true);
     } catch (err: any) {
-      if (import.meta.env.DEV) {
+      if (process.env.NODE_ENV === 'development') {
         console.error("Waitlist submit failed:", err);
       }
       toast({
@@ -117,12 +120,12 @@ export default function WaitlistForm({ compact = false }: WaitlistFormProps) {
           )}
 
           {compact ? (
-            <Button type="submit" variant="hero" size="lg" disabled={isSubmitting} className="w-full text-base font-semibold">
+            <Button type="submit" variant="default" size="lg" disabled={isSubmitting} className="w-full text-base font-semibold">
               {submitted ? "Joined!" : "Get Free Credits"}
             </Button>
           ) : (
             <div className="flex flex-col sm:flex-row gap-3">
-              <Button type="submit" variant="hero" disabled={isSubmitting} className="w-full">
+              <Button type="submit" variant="default" disabled={isSubmitting} className="w-full">
                 {submitted ? "Joined!" : "Launch Today With Free Credits"}
               </Button>
               <Button type="button" variant="outline" asChild className="w-full sm:w-auto whitespace-nowrap">
