@@ -43,6 +43,26 @@ export function ReasoningDisplay({
   const hasStructuredSteps = Boolean(steps && steps.length > 0);
   const [isExpanded, setIsExpanded] = useState(true);
 
+  // All hooks must be declared before any conditional returns
+  const structuredSteps = useMemo(() => {
+    if (!hasStructuredSteps || !steps) return null;
+
+    return steps.map((step, index) => (
+      <ChainOfThoughtStep
+        key={step.id ?? `step-${index}`}
+        icon={step.status === "completed" ? Check : Sparkles}
+        status={step.status === "completed" ? "complete" : "active"}
+        label={step.title || `Step ${index + 1}`}
+      >
+        {step.content && (
+          <p className="whitespace-pre-wrap text-sm leading-6 text-amber-900 dark:text-amber-50">
+            {step.content}
+          </p>
+        )}
+      </ChainOfThoughtStep>
+    ));
+  }, [hasStructuredSteps, steps]);
+
   useEffect(() => {
     if (isStreaming) {
       setIsExpanded(true);
@@ -105,25 +125,6 @@ export function ReasoningDisplay({
         {sourceBadge}
       </span>
     ) : undefined;
-
-  const structuredSteps = useMemo(() => {
-    if (!hasStructuredSteps || !steps) return null;
-
-    return steps.map((step, index) => (
-      <ChainOfThoughtStep
-        key={step.id ?? `step-${index}`}
-        icon={step.status === "completed" ? Check : Sparkles}
-        status={step.status === "completed" ? "complete" : "active"}
-        label={step.title || `Step ${index + 1}`}
-      >
-        {step.content && (
-          <p className="whitespace-pre-wrap text-sm leading-6 text-amber-900 dark:text-amber-50">
-            {step.content}
-          </p>
-        )}
-      </ChainOfThoughtStep>
-    ));
-  }, [hasStructuredSteps, steps]);
 
   return (
     <div

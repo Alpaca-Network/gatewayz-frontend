@@ -1101,10 +1101,7 @@ function ChatPageContent() {
     const searchParams = useSearchParams();
     const { login, authenticated, ready } = usePrivy();
     
-    // Handle case where searchParams might be null during SSR
-    if (!searchParams) {
-        return <div className="flex h-[calc(100dvh-130px)] items-center justify-center">Loading...</div>;
-    }
+    // All hooks must be declared before any conditional returns
     const [hasApiKey, setHasApiKey] = useState(false);
     const [message, setMessage] = useState('');
     const [userHasTyped, setUserHasTyped] = useState(false);
@@ -1237,13 +1234,77 @@ function ChatPageContent() {
         }
     };
 
-    // Handle model and message from URL parameters
+    // Upgrade temp API key if needed (must be before early return)
+    const upgradeTempKeyIfNeeded = useCallback(
+        async (currentKey: string, currentUserData: UserData | null): Promise<string> => {
+            if (
+                !currentKey ||
+                !currentUserData ||
+                !currentKey.startsWith(TEMP_API_KEY_PREFIX) ||
+                Math.floor(currentUserData.credits ?? 0) <= 10
+            ) {
+                return currentKey;
+            }
+
+            try {
+                const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
+                const response = await fetch(`${apiBaseUrl}/user/api-keys`, {
+                    method: 'GET',
+                    headers: {
+                        Authorization: `Bearer ${currentKey}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (!response.ok) {
+                    console.log('[Auth] Unable to upgrade API key during send:', response.status);
+                    return currentKey;
+                }
+
+                const data = await response.json();
+                const keys: Array<{ api_key?: string; is_primary?: boolean; environment_tag?: string }> =
+                    Array.isArray(data?.keys) ? data.keys : [];
+
+                const upgraded =
+                    keys.find(
+                        (key) =>
+                            key?.api_key &&
+                            !key.api_key.startsWith(TEMP_API_KEY_PREFIX) &&
+                            key.environment_tag === 'live' &&
+                            key.is_primary
+                    ) ||
+                    keys.find(
+                        (key) =>
+                            key?.api_key &&
+                            !key.api_key.startsWith(TEMP_API_KEY_PREFIX) &&
+                            key.environment_tag === 'live'
+                    ) ||
+                    keys.find((key) => key?.api_key && !key.api_key.startsWith(TEMP_API_KEY_PREFIX));
+
+                if (upgraded?.api_key && upgraded.api_key !== currentKey) {
+                    console.log('[Auth] Upgraded API key obtained during message send');
+                    saveApiKey(upgraded.api_key);
+                    saveUserData({
+                        ...currentUserData,
+                        api_key: upgraded.api_key
+                    });
+                    setHasApiKey(true);
+                    return upgraded.api_key;
+                }
+            } catch (error) {
+                console.log('[Auth] Failed upgrading API key during send:', error);
+            }
+
+            return currentKey;
+        },
+        [setHasApiKey]
+    );
+
+    // Handle model and message from URL parameters (guard against null searchParams)
     useEffect(() => {
+        if (!searchParams) return;
+        
         console.log('[URL Params] useEffect triggered, searchParams:', searchParams);
-        if (!searchParams) {
-            console.log('[URL Params] searchParams is null/undefined, skipping');
-            return;
-        }
 
         const modelParam = searchParams.get('model');
         const messageParam = searchParams.get('message');
@@ -1318,7 +1379,7 @@ function ChatPageContent() {
         }
     }, [searchParams]);
 
-     const activeSession = useMemo(() => {
+    const activeSession = useMemo(() => {
         return sessions.find(s => s.id === activeSessionId) || null;
     }, [sessions, activeSessionId]);
 
@@ -1580,7 +1641,8 @@ function ChatPageContent() {
     //     }
     // }, [sessions]);
 
-     useEffect(() => {
+    // Scroll to bottom when messages change
+    useEffect(() => {
         if (chatContainerRef.current) {
             chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
         }
@@ -2029,71 +2091,6 @@ function ChatPageContent() {
             }
         }
     };
-
-    const upgradeTempKeyIfNeeded = useCallback(
-        async (currentKey: string, currentUserData: UserData | null): Promise<string> => {
-            if (
-                !currentKey ||
-                !currentUserData ||
-                !currentKey.startsWith(TEMP_API_KEY_PREFIX) ||
-                Math.floor(currentUserData.credits ?? 0) <= 10
-            ) {
-                return currentKey;
-            }
-
-            try {
-                const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
-                const response = await fetch(`${apiBaseUrl}/user/api-keys`, {
-                    method: 'GET',
-                    headers: {
-                        Authorization: `Bearer ${currentKey}`,
-                        'Content-Type': 'application/json'
-                    }
-                });
-
-                if (!response.ok) {
-                    console.log('[Auth] Unable to upgrade API key during send:', response.status);
-                    return currentKey;
-                }
-
-                const data = await response.json();
-                const keys: Array<{ api_key?: string; is_primary?: boolean; environment_tag?: string }> =
-                    Array.isArray(data?.keys) ? data.keys : [];
-
-                const upgraded =
-                    keys.find(
-                        (key) =>
-                            key?.api_key &&
-                            !key.api_key.startsWith(TEMP_API_KEY_PREFIX) &&
-                            key.environment_tag === 'live' &&
-                            key.is_primary
-                    ) ||
-                    keys.find(
-                        (key) =>
-                            key?.api_key &&
-                            !key.api_key.startsWith(TEMP_API_KEY_PREFIX) &&
-                            key.environment_tag === 'live'
-                    ) ||
-                    keys.find((key) => key?.api_key && !key.api_key.startsWith(TEMP_API_KEY_PREFIX));
-
-                if (upgraded?.api_key && upgraded.api_key !== currentKey) {
-                    console.log('[Auth] Upgraded API key obtained during message send');
-                    saveApiKey(upgraded.api_key);
-                    saveUserData({
-                        ...currentUserData,
-                        api_key: upgraded.api_key
-                    });
-                    setHasApiKey(true);
-                    return upgraded.api_key;
-                }
-            } catch (error) {
-                console.log('[Auth] Failed upgrading API key during send:', error);
-            }
-
-            return currentKey;
-        },
-        [setHasApiKey]
-    );
 
     const handleSendMessage = async () => {
         // Prevent sending if user hasn't actually typed anything
@@ -2741,12 +2738,15 @@ function ChatPageContent() {
 
             } catch (streamError) {
                 // Clean up any pending timeouts to prevent ReferenceErrors
-                streamHandler?.cleanup();
-                streamHandler?.complete();
+                if (streamHandler) {
+                    streamHandler.cleanup();
+                    streamHandler.complete(); // Complete stops streaming
+                }
 
                 setIsStreamingResponse(false);
-                streamHandler.stopStreaming();
-                streamHandler.addError(streamError instanceof Error ? streamError : new Error(String(streamError)));
+                if (streamHandler) {
+                    streamHandler.addError(streamError instanceof Error ? streamError : new Error(String(streamError)));
+                }
 
                 console.error('❌ Streaming error occurred:', streamError);
                 console.error('Full error object:', {
@@ -2755,20 +2755,18 @@ function ChatPageContent() {
                     stack: streamError instanceof Error ? streamError.stack : undefined,
                     type: typeof streamError,
                     keys: Object.keys(streamError instanceof Error ? streamError : {}),
-                    partialContent: streamHandler.getContent(), // ✅ Always accessible via streamHandler
-                    diagnostics: streamHandler.getDiagnostics()
+                    partialContent: streamHandler.getFinalContent(), // ✅ Always accessible via streamHandler
+                    chunkCount: streamHandler.state.chunkCount
                 });
 
                 const errorMessage = streamError instanceof Error ? streamError.message : 'Failed to get response';
                 console.error('Error message for analysis:', errorMessage);
-                console.error('Stream state at error:', streamHandler.getDiagnostics());
+                console.error('Stream state at error:', streamHandler.getErrorSummary());
 
-                // Log error context with accumulated content
+                // Log error context with accumulated content (already added above, this is redundant but kept for context)
                 if (streamHandler) {
-                    streamHandler.addError(streamError instanceof Error ? streamError : new Error(errorMessage), {
-                        model: selectedModel?.value,
-                        gateway: selectedModel?.sourceGateway
-                    });
+                    const errorSummary = streamHandler.getErrorSummary();
+                    console.error('Error summary:', errorSummary);
                     console.error('Stream handler error summary:', streamHandler.getErrorSummary());
                 }
 
