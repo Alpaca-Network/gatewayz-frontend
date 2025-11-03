@@ -34,11 +34,25 @@ declare module '@radix-ui/react-hover-card' {
 }
 
 declare module '@radix-ui/react-navigation-menu' {
-  export const NavigationMenu: any;
-  export const NavigationMenuList: any;
-  export const NavigationMenuItem: any;
-  export const NavigationMenuTrigger: any;
-  export const NavigationMenuContent: any;
+  export const Root: React.ComponentType<any>;
+  export const List: React.ComponentType<any>;
+  export const Item: React.ComponentType<any>;
+  export const Trigger: React.ComponentType<any>;
+  export const Content: React.ComponentType<any>;
+  export const Indicator: React.ComponentType<any>;
+  export const Viewport: React.ComponentType<any>;
+  export const Link: React.ComponentType<any>;
+  const NavigationMenuPrimitive: {
+    Root: React.ComponentType<any>;
+    List: React.ComponentType<any>;
+    Item: React.ComponentType<any>;
+    Trigger: React.ComponentType<any>;
+    Content: React.ComponentType<any>;
+    Indicator: React.ComponentType<any>;
+    Viewport: React.ComponentType<any>;
+    Link: React.ComponentType<any>;
+  };
+  export default NavigationMenuPrimitive;
 }
 
 declare module '@radix-ui/react-toggle-group' {
