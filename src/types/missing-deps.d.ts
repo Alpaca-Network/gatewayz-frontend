@@ -17,31 +17,43 @@ declare module 'input-otp' {
 }
 
 declare module '@radix-ui/react-aspect-ratio' {
-  export const AspectRatio: any;
+  const AspectRatioPrimitive: {
+    Root: React.ComponentType<any>;
+  };
+  export default AspectRatioPrimitive;
 }
 
 declare module '@radix-ui/react-context-menu' {
-  export const ContextMenu: any;
-  export const ContextMenuTrigger: any;
-  export const ContextMenuContent: any;
-  export const ContextMenuItem: any;
+  const ContextMenuPrimitive: {
+    Root: React.ComponentType<any>;
+    Trigger: React.ComponentType<any>;
+    Group: React.ComponentType<any>;
+    Portal: React.ComponentType<any>;
+    Sub: React.ComponentType<any>;
+    RadioGroup: React.ComponentType<any>;
+    SubTrigger: React.ComponentType<any>;
+    SubContent: React.ComponentType<any>;
+    Content: React.ComponentType<any>;
+    Item: React.ComponentType<any>;
+    CheckboxItem: React.ComponentType<any>;
+    ItemIndicator: React.ComponentType<any>;
+    RadioItem: React.ComponentType<any>;
+    Label: React.ComponentType<any>;
+    Separator: React.ComponentType<any>;
+  };
+  export default ContextMenuPrimitive;
 }
 
 declare module '@radix-ui/react-hover-card' {
-  export const HoverCard: any;
-  export const HoverCardTrigger: any;
-  export const HoverCardContent: any;
+  const HoverCardPrimitive: {
+    Root: React.ComponentType<any>;
+    Trigger: React.ComponentType<any>;
+    Content: React.ComponentType<any>;
+  };
+  export default HoverCardPrimitive;
 }
 
 declare module '@radix-ui/react-navigation-menu' {
-  export const Root: React.ComponentType<any>;
-  export const List: React.ComponentType<any>;
-  export const Item: React.ComponentType<any>;
-  export const Trigger: React.ComponentType<any>;
-  export const Content: React.ComponentType<any>;
-  export const Indicator: React.ComponentType<any>;
-  export const Viewport: React.ComponentType<any>;
-  export const Link: React.ComponentType<any>;
   const NavigationMenuPrimitive: {
     Root: React.ComponentType<any>;
     List: React.ComponentType<any>;
@@ -56,16 +68,18 @@ declare module '@radix-ui/react-navigation-menu' {
 }
 
 declare module '@radix-ui/react-toggle-group' {
-  export const Root: any;
-  export const Item: any;
-  const ToggleGroup: any;
-  export default { Root, Item };
+  const ToggleGroupPrimitive: {
+    Root: React.ComponentType<any>;
+    Item: React.ComponentType<any>;
+  };
+  export default ToggleGroupPrimitive;
 }
 
 declare module '@radix-ui/react-toggle' {
-  export const Root: any;
-  const Toggle: any;
-  export default { Root };
+  const TogglePrimitive: {
+    Root: React.ComponentType<any>;
+  };
+  export default TogglePrimitive;
 }
 
 declare module 'react-resizable-panels' {
@@ -83,4 +97,3 @@ declare module 'sonner' {
   export const toast: any;
   export const Toaster: any;
 }
-
