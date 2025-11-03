@@ -83,6 +83,10 @@ def deduct_credits(*args, **kwargs):
     return users_module.deduct_credits(*args, **kwargs)
 
 
+def log_api_usage_transaction(*args, **kwargs):
+    return users_module.log_api_usage_transaction(*args, **kwargs)
+
+
 def record_usage(*args, **kwargs):
     return users_module.record_usage(*args, **kwargs)
 
@@ -244,9 +248,24 @@ async def stream_generator(stream, user, api_key, model, trial, environment_tag,
             except Exception as e:
                 logger.warning("Failed to track trial usage: %s", e)
 
-        if not trial.get("is_trial", False):
-            cost = calculate_cost(model, prompt_tokens, completion_tokens)
+        cost = calculate_cost(model, prompt_tokens, completion_tokens)
+        is_trial = trial.get("is_trial", False)
 
+        if is_trial:
+            # Log transaction for trial users (with $0 cost)
+            try:
+                await _to_thread(log_api_usage_transaction, api_key, 0.0, f"API usage - {model} (Trial)", {
+                    "model": model,
+                    "total_tokens": total_tokens,
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "cost_usd": 0.0,
+                    "is_trial": True,
+                }, True)
+            except Exception as e:
+                logger.error(f"Failed to log trial API usage transaction: {e}", exc_info=True)
+        else:
+            # For non-trial users, deduct credits
             try:
                 await _to_thread(deduct_credits, api_key, cost, f"API usage - {model}", {
                     "model": model,
@@ -797,9 +816,23 @@ async def chat_completions(
                 )
 
         cost = calculate_cost(model, prompt_tokens, completion_tokens)
+        is_trial = trial.get("is_trial", False)
 
-        if not trial.get("is_trial", False):
-            # Ideally: wrap deduct+record+balance fetch in a DB transaction
+        if is_trial:
+            # Log transaction for trial users (with $0 cost)
+            try:
+                await _to_thread(log_api_usage_transaction, api_key, 0.0, f"API usage - {model} (Trial)", {
+                    "model": model,
+                    "total_tokens": total_tokens,
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "cost_usd": 0.0,
+                    "is_trial": True,
+                }, True)
+            except Exception as e:
+                logger.error(f"Failed to log trial API usage transaction: {e}", exc_info=True)
+        else:
+            # For non-trial users, deduct credits
             try:
                 await _to_thread(deduct_credits, api_key, cost, f"API usage - {model}", {
                     "model": model,
@@ -1394,8 +1427,23 @@ async def unified_responses(
                 )
 
         cost = calculate_cost(model, prompt_tokens, completion_tokens)
+        is_trial = trial.get("is_trial", False)
 
-        if not trial.get("is_trial", False):
+        if is_trial:
+            # Log transaction for trial users (with $0 cost)
+            try:
+                await _to_thread(log_api_usage_transaction, api_key, 0.0, f"API usage - {model} (Trial)", {
+                    "model": model,
+                    "total_tokens": total_tokens,
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "cost_usd": 0.0,
+                    "is_trial": True,
+                }, True)
+            except Exception as e:
+                logger.error(f"Failed to log trial API usage transaction: {e}", exc_info=True)
+        else:
+            # For non-trial users, deduct credits
             try:
                 await _to_thread(deduct_credits, api_key, cost, f"API usage - {model}", {
                     "model": model,

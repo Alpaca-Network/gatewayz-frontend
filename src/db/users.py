@@ -247,6 +247,59 @@ def add_credits(api_key: str, credits: int) -> None:
     add_credits_to_user(user['id'], credits)
 
 
+def log_api_usage_transaction(api_key: str, cost: float, description: str = "API usage", metadata: Optional[dict] = None, is_trial: bool = False) -> None:
+    """
+    Log API usage transaction (for both trial and non-trial users)
+    For trial users, logs with $0 cost. For non-trial users, deducts credits and logs transaction.
+
+    Args:
+        api_key: User's API key
+        cost: Cost of the API call (will be 0 for trial users)
+        description: Description of the usage
+        metadata: Optional metadata (model used, tokens, etc.)
+        is_trial: Whether user is on trial (if True, cost should be 0 and no credits deducted)
+    """
+    try:
+        from src.db.credit_transactions import log_credit_transaction, TransactionType
+
+        user = get_user(api_key)
+        if not user:
+            logger.warning(f"User with API key {api_key[:20]}... not found for transaction logging")
+            return
+
+        user_id = user['id']
+        balance_before = user.get('credits', 0.0) or 0.0
+        balance_after = balance_before - cost if not is_trial else balance_before
+
+        # Log the transaction (negative amount for usage)
+        transaction_result = log_credit_transaction(
+            user_id=user_id,
+            amount=-cost,  # Negative for API usage
+            transaction_type=TransactionType.API_USAGE,
+            description=description,
+            balance_before=balance_before,
+            balance_after=balance_after,
+            metadata={
+                **(metadata or {}),
+                "is_trial": is_trial,
+            }
+        )
+
+        if not transaction_result:
+            logger.error(
+                f"Failed to log API usage transaction for user {user_id}. "
+                f"Cost: ${cost}, Is Trial: {is_trial}"
+            )
+        else:
+            logger.info(
+                f"Logged API usage transaction for user {user_id}. "
+                f"Cost: ${cost}, Is Trial: {is_trial}, Transaction ID: {transaction_result.get('id', 'unknown')}"
+            )
+
+    except Exception as e:
+        logger.error(f"Failed to log API usage transaction: {e}", exc_info=True)
+
+
 def deduct_credits(api_key: str, tokens: float, description: str = "API usage", metadata: Optional[dict] = None) -> None:
     """
     Deduct credits from user account by API key and log the transaction
@@ -287,8 +340,11 @@ def deduct_credits(api_key: str, tokens: float, description: str = "API usage", 
             'updated_at': datetime.now(timezone.utc).isoformat()
         }).eq('id', user_id).execute()
 
+        if not result.data:
+            raise ValueError(f"Failed to update user balance for user {user_id}")
+
         # Log the transaction (negative amount for deduction)
-        log_credit_transaction(
+        transaction_result = log_credit_transaction(
             user_id=user_id,
             amount=-tokens,  # Negative for deduction
             transaction_type=TransactionType.API_USAGE,
@@ -298,11 +354,26 @@ def deduct_credits(api_key: str, tokens: float, description: str = "API usage", 
             metadata=metadata
         )
 
-        logger.info("Deducted %s credits from user %s. Balance: %s → %s", sanitize_for_logging(str(tokens)), sanitize_for_logging(str(user_id)), sanitize_for_logging(str(balance_before)), sanitize_for_logging(str(balance_after)))
+        if not transaction_result:
+            logger.error(
+                f"Failed to log credit transaction for user {user_id}. "
+                f"Credits were deducted but transaction not logged. "
+                f"Amount: -{tokens}, Balance: {balance_before} → {balance_after}"
+            )
+            # Don't raise here - credits were already deducted, just log the error
+        else:
+            logger.info(
+                "Deducted %s credits from user %s. Balance: %s → %s. Transaction logged: %s",
+                sanitize_for_logging(str(tokens)),
+                sanitize_for_logging(str(user_id)),
+                sanitize_for_logging(str(balance_before)),
+                sanitize_for_logging(str(balance_after)),
+                transaction_result.get('id', 'unknown')
+            )
 
     except Exception as e:
-        logger.error("Failed to deduct credits: %s", sanitize_for_logging(str(e)))
-        raise RuntimeError(f"Failed to deduct credits: {e}")
+        logger.error("Failed to deduct credits: %s", sanitize_for_logging(str(e)), exc_info=True)
+        raise
 
 
 def get_all_users() -> List[Dict[str, Any]]:
