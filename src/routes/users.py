@@ -309,22 +309,13 @@ async def delete_user_account_endpoint(
 
 @router.get("/user/credit-transactions", tags=["authentication"])
 async def get_credit_transactions_endpoint(
-        limit: int = Query(50, ge=1, le=500, description="Maximum number of transactions to return"),
-        offset: int = Query(0, ge=0, description="Number of transactions to skip"),
-        transaction_type: str = Query(None, description="Filter by transaction type (trial, purchase, api_usage, admin_credit, admin_debit, refund, bonus, transfer)"),
-        from_date: str = Query(None, description="Start date filter (YYYY-MM-DD or ISO format)"),
-        to_date: str = Query(None, description="End date filter (YYYY-MM-DD or ISO format)"),
-        min_amount: float = Query(None, description="Minimum transaction amount (absolute value)"),
-        max_amount: float = Query(None, description="Maximum transaction amount (absolute value)"),
-        direction: str = Query(None, description="Filter by direction: 'credit' (positive amounts) or 'charge' (negative amounts)"),
-        payment_id: int = Query(None, description="Filter by payment ID"),
-        sort_by: str = Query("created_at", description="Sort field: 'created_at', 'amount', or 'transaction_type'"),
-        sort_order: str = Query("desc", description="Sort order: 'asc' or 'desc'"),
-        include_summary: bool = Query(True, description="Include summary analytics in response"),
+        limit: int = 50,
+        offset: int = 0,
+        transaction_type: str = None,
         api_key: str = Depends(get_api_key)
 ):
     """
-    Get credit transaction history for the authenticated user with advanced filtering and analytics
+    Get credit transaction history for the authenticated user
 
     Shows all credit additions and deductions including:
     - Trial credits
@@ -333,26 +324,15 @@ async def get_credit_transactions_endpoint(
     - Admin adjustments
     - Refunds
     - Bonuses
-    - Transfers
 
-    **Filters:**
-    - `transaction_type`: Filter by type (trial, purchase, api_usage, etc.)
-    - `from_date` / `to_date`: Date range filtering (YYYY-MM-DD format)
-    - `min_amount` / `max_amount`: Amount range filtering
-    - `direction`: 'credit' (additions) or 'charge' (deductions)
-    - `payment_id`: Filter by specific payment
-    - `sort_by`: Sort by date, amount, or type
-    - `sort_order`: 'asc' or 'desc'
+    Args:
+        limit: Maximum number of transactions to return (default: 50)
+        offset: Number of transactions to skip (default: 0)
+        transaction_type: Optional filter by type (trial, purchase, api_usage, etc.)
+        api_key: Authenticated user's API key
 
-    **Response includes:**
-    - Filtered transactions list
-    - Summary analytics (if include_summary=true):
-      - Total credits added/used
-      - Net change
-      - Breakdown by transaction type
-      - Daily breakdown
-      - Largest credit/charge
-      - Average transaction amount
+    Returns:
+        List of credit transactions with running balance
     """
     try:
         user = get_user(api_key)
@@ -361,95 +341,40 @@ async def get_credit_transactions_endpoint(
 
         user_id = user['id']
 
-        # Validate direction filter
-        if direction and direction.lower() not in ("credit", "charge"):
-            raise HTTPException(
-                status_code=400,
-                detail="direction must be 'credit' or 'charge'"
-            )
-
-        # Validate sort_by
-        if sort_by not in ("created_at", "amount", "transaction_type"):
-            raise HTTPException(
-                status_code=400,
-                detail="sort_by must be 'created_at', 'amount', or 'transaction_type'"
-            )
-
-        # Validate sort_order
-        if sort_order.lower() not in ("asc", "desc"):
-            raise HTTPException(
-                status_code=400,
-                detail="sort_order must be 'asc' or 'desc'"
-            )
-
-        # Get transactions with all filters
+        # Get transactions
         transactions = get_user_transactions(
             user_id=user_id,
             limit=limit,
             offset=offset,
-            transaction_type=transaction_type,
-            from_date=from_date,
-            to_date=to_date,
-            min_amount=min_amount,
-            max_amount=max_amount,
-            direction=direction,
-            payment_id=payment_id,
-            sort_by=sort_by,
-            sort_order=sort_order,
+            transaction_type=transaction_type
         )
 
-        # Format transactions
-        formatted_transactions = [
-            {
-                "id": txn['id'],
-                "amount": float(txn['amount']),
-                "transaction_type": txn['transaction_type'],
-                "description": txn.get('description', ''),
-                "balance_before": float(txn['balance_before']),
-                "balance_after": float(txn['balance_after']),
-                "created_at": txn['created_at'],
-                "payment_id": txn.get('payment_id'),
-                "metadata": txn.get('metadata', {}),
-                "created_by": txn.get('created_by'),
-            }
-            for txn in transactions
-        ]
+        # Get summary
+        summary = get_transaction_summary(user_id)
 
-        # Build response
-        response = {
-            "transactions": formatted_transactions,
-            "pagination": {
-                "total": len(formatted_transactions),
-                "limit": limit,
-                "offset": offset,
-                "has_more": len(formatted_transactions) == limit,  # Best guess
-            },
-            "filters_applied": {
-                "transaction_type": transaction_type,
-                "from_date": from_date,
-                "to_date": to_date,
-                "min_amount": min_amount,
-                "max_amount": max_amount,
-                "direction": direction,
-                "payment_id": payment_id,
-                "sort_by": sort_by,
-                "sort_order": sort_order,
-            },
+        return {
+            "transactions": [
+                {
+                    "id": txn['id'],
+                    "amount": float(txn['amount']),
+                    "transaction_type": txn['transaction_type'],
+                    "description": txn.get('description', ''),
+                    "balance_before": float(txn['balance_before']),
+                    "balance_after": float(txn['balance_after']),
+                    "created_at": txn['created_at'],
+                    "payment_id": txn.get('payment_id'),
+                    "metadata": txn.get('metadata', {})
+                }
+                for txn in transactions
+            ],
+            "summary": summary,
+            "total": len(transactions),
+            "limit": limit,
+            "offset": offset
         }
-
-        # Include summary if requested
-        if include_summary:
-            summary = get_transaction_summary(
-                user_id=user_id,
-                from_date=from_date,
-                to_date=to_date,
-            )
-            response["summary"] = summary
-
-        return response
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("Error getting credit transactions: %s", sanitize_for_logging(str(e)), exc_info=True)
+        logger.error("Error getting credit transactions: %s", sanitize_for_logging(str(e)))
         raise HTTPException(status_code=500, detail="Internal server error")
