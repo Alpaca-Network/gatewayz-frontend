@@ -3,7 +3,7 @@ import datetime
 
 from datetime import datetime, timedelta, timezone
 
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Query
 
 import src.db.rate_limits as rate_limits_module
 import src.db.users as users_module
