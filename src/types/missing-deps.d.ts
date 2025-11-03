@@ -42,12 +42,16 @@ declare module '@radix-ui/react-navigation-menu' {
 }
 
 declare module '@radix-ui/react-toggle-group' {
-  export const ToggleGroup: any;
-  export const ToggleGroupItem: any;
+  export const Root: any;
+  export const Item: any;
+  const ToggleGroup: any;
+  export default { Root, Item };
 }
 
 declare module '@radix-ui/react-toggle' {
-  export const Toggle: any;
+  export const Root: any;
+  const Toggle: any;
+  export default { Root };
 }
 
 declare module 'react-resizable-panels' {
