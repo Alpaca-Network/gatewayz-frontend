@@ -1440,6 +1440,14 @@ function ChatPageContent() {
 
                     setSessions(sessionsData);
 
+                    // Check if there's a message parameter in the URL - if so, create a new chat
+                    const messageParam = searchParams?.get('message');
+                    if (messageParam) {
+                        console.log('[loadSessions] Message parameter detected, creating new chat instead of loading recent session');
+                        createNewChat();
+                        return;
+                    }
+
                     // Select the most recent session by default (most likely to have messages)
                     // Sort by updatedAt descending to get the most recently active session
                     const mostRecentSession = [...sessionsData].sort((a, b) =>
