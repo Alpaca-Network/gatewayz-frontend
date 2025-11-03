@@ -262,6 +262,7 @@ async def save_message(
             content=request.content,
             model=request.model,
             tokens=request.tokens,
+            user_id=user["id"],
         )
 
         logger.info(f"Saved message {message['id']} to session {session_id}")

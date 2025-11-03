@@ -537,14 +537,14 @@ async def anthropic_messages(
 
                     if last_user:
                         user_content = extract_text_from_content(last_user.get("content", ""))
-                        await _to_thread(save_chat_message, session_id, "user", user_content, model, 0)
+                        await _to_thread(save_chat_message, session_id, "user", user_content, model, 0, user["id"])
 
                     # Save assistant response
                     assistant_content = processed.get("choices", [{}])[0].get("message", {}).get("content", "")
                     if assistant_content:
-                        await _to_thread(save_chat_message, session_id, "assistant", assistant_content, model, total_tokens)
+                        await _to_thread(save_chat_message, session_id, "assistant", assistant_content, model, total_tokens, user["id"])
             except Exception as e:
-                logger.warning("Failed to save chat history: %s", e)
+                logger.error(f"Failed to save chat history for session {session_id}, user {user['id']}: {e}", exc_info=True)
 
         # === 6) Transform response to Anthropic format ===
         anthropic_response = transform_openai_to_anthropic(processed, model)

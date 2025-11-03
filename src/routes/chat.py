@@ -320,12 +320,12 @@ async def stream_generator(stream, user, api_key, model, trial, environment_tag,
                                     text_parts.append(item.get("text", ""))
                             user_content = " ".join(text_parts) if text_parts else "[multimodal content]"
 
-                        await _to_thread(save_chat_message, session_id, "user", user_content, model, 0)
+                        await _to_thread(save_chat_message, session_id, "user", user_content, model, 0, user["id"])
 
                     if accumulated_content:
-                        await _to_thread(save_chat_message, session_id, "assistant", accumulated_content, model, total_tokens)
+                        await _to_thread(save_chat_message, session_id, "assistant", accumulated_content, model, total_tokens, user["id"])
             except Exception as e:
-                logger.warning("Failed to save chat history: %s", e)
+                logger.error(f"Failed to save chat history for session {session_id}, user {user['id']}: {e}", exc_info=True)
 
         # Send final done message
         yield "data: [DONE]\n\n"
@@ -856,15 +856,15 @@ async def chat_completions(
                             last_user = m
                             break
                     if last_user:
-                        await _to_thread(save_chat_message, session_id, "user", last_user.get("content",""), model, 0)
+                        await _to_thread(save_chat_message, session_id, "user", last_user.get("content",""), model, 0, user["id"])
 
                     assistant_content = processed.get("choices", [{}])[0].get("message", {}).get("content", "")
                     if assistant_content:
-                        await _to_thread(save_chat_message, session_id, "assistant", assistant_content, model, total_tokens)
+                        await _to_thread(save_chat_message, session_id, "assistant", assistant_content, model, total_tokens, user["id"])
                 else:
                     logger.warning("Session %s not found for user %s", session_id, user["id"])
             except Exception as e:
-                logger.warning("Failed to save chat history: %s", e)
+                logger.error(f"Failed to save chat history for session {session_id}, user {user['id']}: {e}", exc_info=True)
 
         # === 6) Attach gateway usage (non-sensitive) ===
         processed.setdefault("gateway_usage", {})
@@ -1460,13 +1460,13 @@ async def unified_responses(
                                     text_parts.append(item.get("text", ""))
                             user_content = " ".join(text_parts) if text_parts else "[multimodal content]"
 
-                        await _to_thread(save_chat_message, session_id, "user", user_content, model, 0)
+                        await _to_thread(save_chat_message, session_id, "user", user_content, model, 0, user["id"])
 
                     assistant_content = processed.get("choices", [{}])[0].get("message", {}).get("content", "")
                     if assistant_content:
-                        await _to_thread(save_chat_message, session_id, "assistant", assistant_content, model, total_tokens)
+                        await _to_thread(save_chat_message, session_id, "assistant", assistant_content, model, total_tokens, user["id"])
             except Exception as e:
-                logger.warning("Failed to save chat history: %s", e)
+                logger.error(f"Failed to save chat history for session {session_id}, user {user['id']}: {e}", exc_info=True)
 
         # === 6) Transform response format: choices -> output ===
         output = []

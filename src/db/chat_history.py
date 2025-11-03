@@ -40,9 +40,9 @@ def create_chat_session(user_id: int, title: str = None, model: str = None) -> d
 
 
 def save_chat_message(
-    session_id: int, role: str, content: str, model: str = None, tokens: int = 0
+    session_id: int, role: str, content: str, model: str = None, tokens: int = 0, user_id: int = None
 ) -> dict[str, Any]:
-    """Save a chat message to a session"""
+    """Save a chat message to a session and update session's updated_at timestamp"""
     try:
         client = get_supabase_client()
 
@@ -61,7 +61,31 @@ def save_chat_message(
             raise ValueError("Failed to save chat message")
 
         message = result.data[0]
-        logger.info(f"Saved message {message['id']} to session {session_id}")
+        
+        # Update session's updated_at timestamp to reflect latest activity
+        update_time = datetime.now(timezone.utc).isoformat()
+        update_data = {"updated_at": update_time}
+        
+        # If model is provided, also update session model
+        if model:
+            update_data["model"] = model
+            
+        session_update_query = (
+            client.table("chat_sessions")
+            .update(update_data)
+            .eq("id", session_id)
+        )
+        
+        # Add user_id check if provided for additional security
+        if user_id is not None:
+            session_update_query = session_update_query.eq("user_id", user_id)
+            
+        session_update_result = session_update_query.execute()
+        
+        if not session_update_result.data:
+            logger.warning(f"Failed to update session {session_id} timestamp after saving message")
+
+        logger.info(f"Saved message {message['id']} to session {session_id} and updated session timestamp")
         return message
 
     except Exception as e:
