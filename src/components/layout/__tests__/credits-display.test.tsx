@@ -1,4 +1,5 @@
 import { render, screen, waitFor, act } from '@testing-library/react';
+import '@testing-library/jest-dom';
 import { CreditsDisplay } from '../credits-display';
 import { getUserData } from '@/lib/api';
 import type { UserData } from '@/lib/api';

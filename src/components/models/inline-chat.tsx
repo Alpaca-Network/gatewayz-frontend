@@ -292,7 +292,7 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
                           ul: ({node, ...props}) => <ul className="list-disc list-inside mb-2" {...props} />,
                           ol: ({node, ...props}) => <ol className="list-decimal list-inside mb-2" {...props} />,
                           li: ({node, ...props}) => <li className="mb-1" {...props} />,
-                          code: ({node, inline, ...props}) =>
+                          code: ({node, inline, ...props}: any) =>
                             inline ? (
                               <code className="bg-black/20 dark:bg-white/20 px-1.5 py-0.5 rounded text-xs font-mono" {...props} />
                             ) : (
