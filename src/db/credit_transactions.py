@@ -201,6 +201,120 @@ def get_user_transactions(
         return []
 
 
+def get_all_transactions(
+    limit: int = 50,
+    offset: int = 0,
+    user_id: int | None = None,
+    transaction_type: str | None = None,
+    from_date: str | None = None,
+    to_date: str | None = None,
+    min_amount: float | None = None,
+    max_amount: float | None = None,
+    direction: str | None = None,  # 'credit' or 'charge'
+    payment_id: int | None = None,
+    sort_by: str = "created_at",  # 'created_at', 'amount', 'transaction_type'
+    sort_order: str = "desc",  # 'asc' or 'desc'
+) -> list[dict[str, Any]]:
+    """
+    Get all credit transactions across all users (admin only) with advanced filtering
+
+    Args:
+        limit: Maximum number of records to return
+        offset: Number of records to skip
+        user_id: Optional filter by specific user ID
+        transaction_type: Optional filter by transaction type
+        from_date: Start date (YYYY-MM-DD or ISO format)
+        to_date: End date (YYYY-MM-DD or ISO format)
+        min_amount: Minimum transaction amount (absolute value)
+        max_amount: Maximum transaction amount (absolute value)
+        direction: Filter by direction - 'credit' (positive amounts) or 'charge' (negative amounts)
+        payment_id: Filter by payment ID
+        sort_by: Field to sort by ('created_at', 'amount', 'transaction_type')
+        sort_order: Sort order ('asc' or 'desc')
+
+    Returns:
+        List of transaction records
+    """
+    try:
+        client = get_supabase_client()
+
+        query = client.table("credit_transactions").select("*")
+
+        # Filter by user_id if provided
+        if user_id is not None:
+            query = query.eq("user_id", user_id)
+
+        # Filter by transaction type
+        if transaction_type:
+            query = query.eq("transaction_type", transaction_type)
+
+        # Filter by date range
+        if from_date:
+            try:
+                if "T" not in from_date:
+                    from_date = f"{from_date}T00:00:00Z"
+                query = query.gte("created_at", from_date)
+            except Exception as e:
+                logger.warning(f"Invalid from_date format: {from_date}, error: {e}")
+
+        if to_date:
+            try:
+                if "T" not in to_date:
+                    to_date = f"{to_date}T23:59:59Z"
+                query = query.lte("created_at", to_date)
+            except Exception as e:
+                logger.warning(f"Invalid to_date format: {to_date}, error: {e}")
+
+        # Filter by direction (credit = positive, charge = negative)
+        if direction:
+            if direction.lower() == "credit":
+                query = query.gt("amount", 0)
+            elif direction.lower() == "charge":
+                query = query.lt("amount", 0)
+
+        # Filter by payment_id
+        if payment_id is not None:
+            query = query.eq("payment_id", payment_id)
+
+        # Sorting
+        desc_order = sort_order.lower() == "desc"
+        if sort_by == "amount":
+            query = query.order("amount", desc=desc_order)
+        elif sort_by == "transaction_type":
+            query = query.order("transaction_type", desc=desc_order)
+        else:  # default to created_at
+            query = query.order("created_at", desc=desc_order)
+
+        # Execute query
+        result = query.execute()
+        transactions = result.data or []
+
+        # Post-process: Apply amount range filtering (for absolute value matching)
+        if min_amount is not None or max_amount is not None:
+            filtered_transactions = []
+            for txn in transactions:
+                amount = abs(float(txn.get("amount", 0)))
+                include = True
+                
+                if min_amount is not None and amount < min_amount:
+                    include = False
+                if max_amount is not None and amount > max_amount:
+                    include = False
+                
+                if include:
+                    filtered_transactions.append(txn)
+            transactions = filtered_transactions
+
+        # Apply pagination after filtering
+        paginated_transactions = transactions[offset : offset + limit]
+
+        return paginated_transactions
+
+    except Exception as e:
+        logger.error(f"Error getting all transactions: {e}", exc_info=True)
+        return []
+
+
 def add_credits(
     api_key: str,
     amount: float,
