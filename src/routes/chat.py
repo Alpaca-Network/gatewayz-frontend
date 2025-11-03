@@ -297,7 +297,7 @@ async def stream_generator(stream, user, api_key, model, trial, environment_tag,
                 }
             )
         except Exception as e:
-            logger.warning(f"Failed to log activity: {e}")
+            logger.error(f"Failed to log activity for user {user['id']}, model {model}: {e}", exc_info=True)
 
         # Save chat history
         if session_id:
@@ -842,7 +842,7 @@ async def chat_completions(
                 }
             )
         except Exception as e:
-            logger.warning(f"Failed to log activity: {e}")
+            logger.error(f"Failed to log activity for user {user['id']}, model {model}: {e}", exc_info=True)
 
         # === 5) History (use the last user message in this request only) ===
         if session_id:
@@ -1437,7 +1437,7 @@ async def unified_responses(
                 }
             )
         except Exception as e:
-            logger.warning(f"Failed to log activity: {e}")
+            logger.error(f"Failed to log activity for user {user['id']}, model {model}: {e}", exc_info=True)
 
         # === 5) History ===
         if session_id:

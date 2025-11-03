@@ -61,8 +61,10 @@ def _log_auth_activity_background(
 ):
     """Log authentication activity in background"""
     try:
+        # Convert user_id to int if it's a string
+        user_id_int = int(user_id) if isinstance(user_id, str) else user_id
         log_activity(
-            user_id=user_id,
+            user_id=user_id_int,
             model="auth",
             provider="Privy",
             tokens=0,
@@ -80,14 +82,16 @@ def _log_auth_activity_background(
             },
         )
     except Exception as e:
-        logger.warning(f"Background task: Failed to log auth activity: {e}")
+        logger.error(f"Background task: Failed to log auth activity for user {user_id}: {e}", exc_info=True)
 
 
 def _log_registration_activity_background(user_id: str, metadata: dict):
     """Log registration activity in background"""
     try:
+        # Convert user_id to int if it's a string
+        user_id_int = int(user_id) if isinstance(user_id, str) else user_id
         log_activity(
-            user_id=user_id,
+            user_id=user_id_int,
             model="auth",
             provider="Privy",
             tokens=0,
@@ -98,7 +102,7 @@ def _log_registration_activity_background(user_id: str, metadata: dict):
             metadata=metadata,
         )
     except Exception as e:
-        logger.warning(f"Background task: Failed to log registration activity: {e}")
+        logger.error(f"Background task: Failed to log registration activity for user {user_id}: {e}", exc_info=True)
 
 
 @router.post("/auth", response_model=PrivyAuthResponse, tags=["authentication"])

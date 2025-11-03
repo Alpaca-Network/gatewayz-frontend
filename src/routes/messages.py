@@ -521,7 +521,7 @@ async def anthropic_messages(
                 }
             )
         except Exception as e:
-            logger.warning(f"Failed to log activity: {e}")
+            logger.error(f"Failed to log activity for user {user['id']}, model {model}: {e}", exc_info=True)
 
         # === 5) Save chat history ===
         if session_id:
