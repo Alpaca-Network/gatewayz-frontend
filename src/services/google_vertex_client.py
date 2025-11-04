@@ -26,6 +26,12 @@ from src.config import Config
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Vertex AI OAuth scopes required for authentication
+VERTEX_AI_SCOPES = [
+    "https://www.googleapis.com/auth/cloud-platform",
+    "https://www.googleapis.com/auth/aiplatform",
+]
+
 
 def get_google_vertex_credentials():
     """Get Google Cloud credentials for Vertex AI
@@ -70,8 +76,10 @@ def get_google_vertex_credentials():
 
             if creds_dict:
                 try:
-                    credentials = Credentials.from_service_account_info(creds_dict)
-                    logger.debug("Created Credentials object from service account info")
+                    credentials = Credentials.from_service_account_info(
+                        creds_dict, scopes=VERTEX_AI_SCOPES
+                    )
+                    logger.debug("Created Credentials object from service account info with Vertex AI scopes")
                     credentials.refresh(Request())
                     logger.info(
                         "Successfully loaded and validated Google Vertex credentials from GOOGLE_VERTEX_CREDENTIALS_JSON"
@@ -92,7 +100,7 @@ def get_google_vertex_credentials():
             )
             try:
                 credentials = Credentials.from_service_account_file(
-                    Config.GOOGLE_APPLICATION_CREDENTIALS
+                    Config.GOOGLE_APPLICATION_CREDENTIALS, scopes=VERTEX_AI_SCOPES
                 )
                 credentials.refresh(Request())
                 logger.info("Successfully loaded Google Vertex credentials from file")
@@ -107,7 +115,7 @@ def get_google_vertex_credentials():
 
         # Third, try Application Default Credentials (ADC)
         logger.info("Attempting to use Application Default Credentials (ADC)")
-        credentials, _ = google.auth.default()
+        credentials, _ = google.auth.default(scopes=VERTEX_AI_SCOPES)
         if not credentials.valid:
             credentials.refresh(Request())
         logger.info("Successfully loaded Application Default Credentials")
@@ -433,6 +441,73 @@ def _build_vertex_content(messages: list) -> list:
     return contents
 
 
+def _normalize_vertex_candidate_to_openai(candidate: dict, model: str) -> dict:
+    """Convert a Vertex AI candidate to OpenAI-compatible format
+    
+    This shared helper function normalizes response data from both protobuf 
+    and REST API formats to avoid code duplication.
+    
+    Args:
+        candidate: Candidate object from Vertex AI response
+        model: Model name used
+        
+    Returns:
+        OpenAI-compatible response dictionary
+    """
+    logger.debug(f"Normalizing candidate: {json.dumps(candidate, indent=2, default=str)}")
+    
+    # Extract content from candidate
+    content_parts = candidate.get("content", {}).get("parts", [])
+    logger.debug(f"Content parts count: {len(content_parts)}")
+    
+    # Extract text from parts
+    text_content = ""
+    for part in content_parts:
+        if "text" in part:
+            text_content += part["text"]
+    
+    logger.info(f"Extracted text content length: {len(text_content)} characters")
+    
+    # Warn if content is empty
+    if not text_content:
+        logger.warning(
+            f"Received empty text content from Vertex AI for model {model}. Candidate: {json.dumps(candidate, default=str)}"
+        )
+    
+    # Extract usage information
+    usage_metadata = candidate.get("usageMetadata", {})
+    prompt_tokens = int(usage_metadata.get("promptTokenCount", 0))
+    completion_tokens = int(usage_metadata.get("candidatesTokenCount", 0))
+    
+    finish_reason = candidate.get("finishReason", "STOP")
+    finish_reason_map = {
+        "STOP": "stop",
+        "MAX_TOKENS": "length",
+        "SAFETY": "content_filter",
+        "RECITATION": "stop",
+        "FINISH_REASON_UNSPECIFIED": "unknown",
+    }
+    
+    return {
+        "id": f"vertex-{int(time.time() * 1000)}",
+        "object": "text_completion",
+        "created": int(time.time()),
+        "model": model,
+        "choices": [
+            {
+                "index": 0,
+                "message": {"role": "assistant", "content": text_content},
+                "finish_reason": finish_reason_map.get(finish_reason, "stop"),
+            }
+        ],
+        "usage": {
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": prompt_tokens + completion_tokens,
+        },
+    }
+
+
 def _process_google_vertex_response(response: Any, model: str) -> dict:
     """Process Google Vertex AI response to OpenAI-compatible format
 
@@ -471,57 +546,9 @@ def _process_google_vertex_response(response: Any, model: str) -> dict:
             raise ValueError("No candidates in Vertex AI prediction")
 
         candidate = candidates[0]
-        logger.debug(f"First candidate: {json.dumps(candidate, indent=2, default=str)}")
-
-        content_parts = candidate.get("content", {}).get("parts", [])
-        logger.debug(f"Content parts count: {len(content_parts)}")
-
-        # Extract text from parts
-        text_content = ""
-        for part in content_parts:
-            if "text" in part:
-                text_content += part["text"]
-
-        logger.info(f"Extracted text content length: {len(text_content)} characters")
-
-        # Warn if content is empty - this might indicate an issue with the model or request
-        if not text_content:
-            logger.warning(
-                f"Received empty text content from Vertex AI for model {model}. Candidate: {json.dumps(candidate, default=str)}"
-            )
-
-        # Extract usage information
-        usage_metadata = candidate.get("usageMetadata", {})
-        prompt_tokens = int(usage_metadata.get("promptTokenCount", 0))
-        completion_tokens = int(usage_metadata.get("candidatesTokenCount", 0))
-
-        finish_reason = candidate.get("finishReason", "STOP")
-        finish_reason_map = {
-            "STOP": "stop",
-            "MAX_TOKENS": "length",
-            "SAFETY": "content_filter",
-            "RECITATION": "stop",
-            "FINISH_REASON_UNSPECIFIED": "unknown",
-        }
-
-        return {
-            "id": f"vertex-{int(time.time() * 1000)}",
-            "object": "text_completion",
-            "created": int(time.time()),
-            "model": model,
-            "choices": [
-                {
-                    "index": 0,
-                    "message": {"role": "assistant", "content": text_content},
-                    "finish_reason": finish_reason_map.get(finish_reason, "stop"),
-                }
-            ],
-            "usage": {
-                "prompt_tokens": prompt_tokens,
-                "completion_tokens": completion_tokens,
-                "total_tokens": prompt_tokens + completion_tokens,
-            },
-        }
+        
+        # Use shared normalization function
+        return _normalize_vertex_candidate_to_openai(candidate, model)
 
     except Exception as e:
         logger.error(f"Failed to process Google Vertex AI response: {e}", exc_info=True)
@@ -572,58 +599,13 @@ def _process_google_vertex_rest_response(response_data: dict, model: str) -> dic
 
         # Get the first candidate
         candidate = candidates[0]
-        logger.debug(f"First candidate: {json.dumps(candidate, indent=2, default=str)}")
-
-        # Extract content from candidate
-        content_parts = candidate.get("content", {}).get("parts", [])
-        logger.debug(f"Content parts count: {len(content_parts)}")
-
-        # Extract text from parts
-        text_content = ""
-        for part in content_parts:
-            if "text" in part:
-                text_content += part["text"]
-
-        logger.info(f"Extracted text content length: {len(text_content)} characters")
-
-        # Warn if content is empty - this might indicate an issue with the model or request
-        if not text_content:
-            logger.warning(
-                f"Received empty text content from Vertex AI for model {model}. Candidate: {json.dumps(candidate, default=str)}"
-            )
-
-        # Extract usage information
-        usage_metadata = response_data.get("usageMetadata", {})
-        prompt_tokens = int(usage_metadata.get("promptTokenCount", 0))
-        completion_tokens = int(usage_metadata.get("candidatesTokenCount", 0))
-
-        finish_reason = candidate.get("finishReason", "STOP")
-        finish_reason_map = {
-            "STOP": "stop",
-            "MAX_TOKENS": "length",
-            "SAFETY": "content_filter",
-            "RECITATION": "stop",
-            "FINISH_REASON_UNSPECIFIED": "unknown",
-        }
-
-        return {
-            "id": f"vertex-{int(time.time() * 1000)}",
-            "object": "text_completion",
-            "created": int(time.time()),
-            "model": model,
-            "choices": [
-                {
-                    "index": 0,
-                    "message": {"role": "assistant", "content": text_content},
-                    "finish_reason": finish_reason_map.get(finish_reason, "stop"),
-                }
-            ],
-            "usage": {
-                "prompt_tokens": prompt_tokens,
-                "completion_tokens": completion_tokens,
-                "total_tokens": prompt_tokens + completion_tokens,
-            },
-        }
+        
+        # Merge top-level usage metadata into candidate for consistency with shared function
+        if "usageMetadata" in response_data and "usageMetadata" not in candidate:
+            candidate["usageMetadata"] = response_data["usageMetadata"]
+        
+        # Use shared normalization function
+        return _normalize_vertex_candidate_to_openai(candidate, model)
 
     except Exception as e:
         logger.error(f"Failed to process Google Vertex AI REST response: {e}", exc_info=True)

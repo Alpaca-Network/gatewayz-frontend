@@ -133,7 +133,8 @@ def fetch_models_from_huggingface_api(
 
             for attempt in range(max_retries):
                 try:
-                    response = httpx.get(url, params=params, headers=headers, timeout=request_timeout)
+                    # Use shorter timeout to avoid test timeouts (10s connect, 15s read)
+                    response = httpx.get(url, params=params, headers=headers, timeout=httpx.Timeout(10.0, read=15.0))
                     response.raise_for_status()
                     break  # Success, exit retry loop
                 except httpx.HTTPStatusError as e:
@@ -145,6 +146,16 @@ def fetch_models_from_huggingface_api(
                             time.sleep(retry_delay)
                             retry_delay *= 2  # Exponential backoff
                             continue
+                    raise
+                except (httpx.TimeoutException, httpx.ReadTimeout, httpx.ConnectTimeout) as timeout_error:
+                    if attempt < max_retries - 1:
+                        logger.warning(
+                            f"Timeout fetching with sort={sort_method}, attempt {attempt + 1}/{max_retries}: {timeout_error}. Retrying..."
+                        )
+                        time.sleep(retry_delay)
+                        retry_delay *= 2
+                        continue
+                    logger.error(f"Timeout after {max_retries} attempts for sort={sort_method}")
                     raise
                 except Exception as e:
                     if attempt < max_retries - 1:
