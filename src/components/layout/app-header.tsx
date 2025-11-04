@@ -149,7 +149,7 @@ export function AppHeader() {
           </div>
 
           {/* Desktop: Theme toggle and auth */}
-          <div className="hidden md:flex items-center gap-2">
+          <div className="hidden lg:flex items-center gap-2">
             {user ? (
               <>
                 <CreditsDisplay />
@@ -161,8 +161,8 @@ export function AppHeader() {
             <ThemeToggle />
           </div>
 
-          {/* Mobile: Credits, Profile, and Menu */}
-          <div className="md:hidden flex items-center gap-1.5 sm:gap-2">
+          {/* Tablet & Mobile: Credits, Profile, and Menu */}
+          <div className="lg:hidden flex items-center gap-1.5 sm:gap-2">
             {user && (
               <>
                 <CreditsDisplay />
@@ -173,7 +173,7 @@ export function AppHeader() {
               <Button variant="outline" size="sm" onClick={() => login()}>Sign In</Button>
             )}
           </div>
-          <div className="md:hidden shrink-0">
+          <div className="lg:hidden shrink-0">
             <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
               <SheetTrigger asChild>
                 <Button variant="ghost" size="icon" className="h-9 w-9 sm:h-10 sm:w-10">
