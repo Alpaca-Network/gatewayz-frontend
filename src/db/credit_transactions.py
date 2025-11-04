@@ -171,12 +171,16 @@ def get_user_transactions(
         else:  # default to created_at
             query = query.order("created_at", desc=desc_order)
 
-        # Execute query
-        result = query.execute()
-        transactions = result.data or []
+        # If min_amount/max_amount filtering is needed, we must fetch all and filter client-side
+        # Otherwise, use database-side pagination for efficiency
+        needs_client_side_filtering = min_amount is not None or max_amount is not None
 
-        # Post-process: Apply amount range filtering (for absolute value matching)
-        if min_amount is not None or max_amount is not None:
+        if needs_client_side_filtering:
+            # Fetch all results, filter by absolute amount, then paginate
+            result = query.execute()
+            transactions = result.data or []
+
+            # Post-process: Apply amount range filtering (for absolute value matching)
             filtered_transactions = []
             for txn in transactions:
                 amount = abs(float(txn.get("amount", 0)))
@@ -191,10 +195,13 @@ def get_user_transactions(
                     filtered_transactions.append(txn)
             transactions = filtered_transactions
 
-        # Apply pagination after filtering
-        paginated_transactions = transactions[offset : offset + limit]
-
-        return paginated_transactions
+            # Apply pagination after filtering
+            paginated_transactions = transactions[offset : offset + limit]
+            return paginated_transactions
+        else:
+            # Use database-side pagination for efficiency
+            result = query.range(offset, offset + limit - 1).execute()
+            return result.data or []
 
     except Exception as e:
         logger.error(f"Error getting transactions for user {user_id}: {e}", exc_info=True)
@@ -285,12 +292,16 @@ def get_all_transactions(
         else:  # default to created_at
             query = query.order("created_at", desc=desc_order)
 
-        # Execute query
-        result = query.execute()
-        transactions = result.data or []
+        # If min_amount/max_amount filtering is needed, we must fetch all and filter client-side
+        # Otherwise, use database-side pagination for efficiency
+        needs_client_side_filtering = min_amount is not None or max_amount is not None
 
-        # Post-process: Apply amount range filtering (for absolute value matching)
-        if min_amount is not None or max_amount is not None:
+        if needs_client_side_filtering:
+            # Fetch all results, filter by absolute amount, then paginate
+            result = query.execute()
+            transactions = result.data or []
+
+            # Post-process: Apply amount range filtering (for absolute value matching)
             filtered_transactions = []
             for txn in transactions:
                 amount = abs(float(txn.get("amount", 0)))
@@ -305,10 +316,13 @@ def get_all_transactions(
                     filtered_transactions.append(txn)
             transactions = filtered_transactions
 
-        # Apply pagination after filtering
-        paginated_transactions = transactions[offset : offset + limit]
-
-        return paginated_transactions
+            # Apply pagination after filtering
+            paginated_transactions = transactions[offset : offset + limit]
+            return paginated_transactions
+        else:
+            # Use database-side pagination for efficiency
+            result = query.range(offset, offset + limit - 1).execute()
+            return result.data or []
 
     except Exception as e:
         logger.error(f"Error getting all transactions: {e}", exc_info=True)

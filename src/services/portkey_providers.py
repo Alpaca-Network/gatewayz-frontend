@@ -31,6 +31,7 @@ HISTORICAL NOTE:
 
 import logging
 from datetime import datetime, timezone
+from typing import Any
 
 from src.cache import (
     _cerebras_models_cache,
@@ -44,6 +45,240 @@ from src.cache import (
 from src.services.pricing_lookup import enrich_model_with_pricing
 
 logger = logging.getLogger(__name__)
+
+
+# xAI fallback models - used when SDK/API is unavailable
+XAI_FALLBACK_MODELS = [
+    # Grok 4 Models (2025)
+    {"id": "grok-4", "owned_by": "xAI"},
+    {"id": "grok-4-latest", "owned_by": "xAI"},
+    {"id": "grok-4-fast-reasoning", "owned_by": "xAI"},
+    {"id": "grok-4-fast-non-reasoning", "owned_by": "xAI"},
+    # Grok 3 Models
+    {"id": "grok-3", "owned_by": "xAI"},
+    {"id": "grok-3-latest", "owned_by": "xAI"},
+    {"id": "grok-3-mini", "owned_by": "xAI"},
+    # Grok 2 Models
+    {"id": "grok-2", "owned_by": "xAI"},
+    {"id": "grok-2-latest", "owned_by": "xAI"},
+    {"id": "grok-2-mini", "owned_by": "xAI"},
+    {"id": "grok-2-image-1212", "owned_by": "xAI"},
+    # Legacy Beta Models
+    {"id": "grok-beta", "owned_by": "xAI"},
+    {"id": "grok-vision-beta", "owned_by": "xAI"},
+]
+
+
+def _check_api_key(api_key: str | None, provider_name: str) -> bool:
+    """Check if API key is configured - returns False and logs warning if not
+    
+    Args:
+        api_key: API key to check
+        provider_name: Provider name for logging
+        
+    Returns:
+        True if API key exists, False otherwise
+    """
+    if not api_key:
+        logger.warning(f"{provider_name} API key not configured")
+        return False
+    return True
+
+
+def _handle_http_error(error: Exception, provider_name: str) -> None:
+    """Handle HTTP errors with consistent logging
+    
+    Args:
+        error: The HTTP error exception
+        provider_name: Provider name for logging
+    """
+    import httpx
+    
+    if isinstance(error, httpx.HTTPStatusError):
+        logger.error(
+            f"{provider_name} API HTTP error {error.response.status_code}: {error.response.text[:200]}"
+        )
+    else:
+        logger.error(f"{provider_name} HTTP API error: {error}")
+
+
+def _unwrap_sdk_response(models_response: Any) -> list:
+    """Unwrap SDK response to extract raw models list - handles various response formats
+    
+    Args:
+        models_response: SDK response (object with data attr, list, iterator, etc.)
+        
+    Returns:
+        List of raw model objects
+    """
+    # Check if it has a 'data' attribute first (common API response pattern)
+    if hasattr(models_response, "data"):
+        raw_models = models_response.data
+        logger.debug(f"Extracted from .data attribute, type: {type(raw_models)}")
+    # Check if it's already a list
+    elif isinstance(models_response, list):
+        raw_models = models_response
+        logger.debug("Response is already a list")
+    # Convert to list if it's an iterator/generator (but not dict-like)
+    elif hasattr(models_response, "__iter__") and not hasattr(models_response, "items"):
+        raw_models = list(models_response)
+        logger.debug(f"Converted iterator to list, length: {len(raw_models)}")
+    else:
+        # Last resort: try to extract as single item
+        raw_models = [models_response]
+        logger.debug("Wrapped response in list")
+
+    # Additional unwrapping if the data is nested in a dict
+    if isinstance(raw_models, dict) and "data" in raw_models:
+        raw_models = raw_models["data"]
+        logger.debug("Unwrapped data from dict")
+    elif raw_models and len(raw_models) > 0:
+        # Check if first element is a tuple (e.g., from .items() conversion)
+        if (
+            isinstance(raw_models[0], tuple)
+            and len(raw_models[0]) == 2
+            and raw_models[0][0] == "data"
+        ):
+            # Extract the data list from the tuple ('data', [model_list])
+            raw_models = raw_models[0][1]
+            logger.debug("Unwrapped data from tuple format")
+        elif isinstance(raw_models[0], dict) and "data" in raw_models[0]:
+            raw_models = raw_models[0]["data"]
+            logger.debug("Unwrapped data from first element")
+    
+    return raw_models if isinstance(raw_models, list) else []
+
+
+def _extract_models_from_response(payload: dict | list, key: str = "data") -> list:
+    """Extract models list from API response - handles dict or list formats
+    
+    Args:
+        payload: API response (dict with models key or list)
+        key: Key to look for in dict (default: "data", can be "models")
+        
+    Returns:
+        List of models, or empty list if extraction fails
+    """
+    if isinstance(payload, dict) and key in payload:
+        return payload.get(key, [])
+    elif isinstance(payload, list):
+        return payload
+    else:
+        return []
+
+
+def _convert_model_to_dict(model: Any) -> dict | None:
+    """Convert SDK model object to dict - shared helper to reduce duplication
+    
+    Handles Pydantic v1/v2 models, regular objects, and dicts.
+    
+    Args:
+        model: Model object from SDK (Pydantic, dict, or other)
+        
+    Returns:
+        Dictionary representation of the model, or None if conversion fails
+    """
+    if hasattr(model, "model_dump"):
+        # Pydantic v2 model
+        return model.model_dump()
+    elif hasattr(model, "dict"):
+        # Legacy Pydantic v1 model
+        return model.dict()
+    elif hasattr(model, "__dict__"):
+        # Regular object
+        return vars(model)
+    elif isinstance(model, dict):
+        # Already a dict
+        return model
+    else:
+        # Fallback: convert to string id
+        return {"id": str(model)}
+
+
+def _normalize_models_list(models_list: list, provider: str) -> list:
+    """Normalize a list of raw models with error handling
+    
+    Args:
+        models_list: Raw models from provider API
+        provider: Provider name for logging
+        
+    Returns:
+        List of successfully normalized models
+    """
+    normalized_models = []
+    for model in models_list:
+        if not model:
+            continue
+        try:
+            normalized = normalize_portkey_provider_model(model, provider)
+            if normalized:
+                normalized_models.append(normalized)
+        except Exception as normalization_error:
+            logger.warning(f"Failed to normalize {provider} model: {normalization_error}")
+            continue
+    return normalized_models
+
+
+def _cache_normalized_models(models_list: list, provider: str, cache_dict: dict) -> list:
+    """Normalize models and cache them - shared helper to reduce duplication
+    
+    Args:
+        models_list: Raw models from provider API
+        provider: Provider name (e.g., "nebius", "novita")
+        cache_dict: Cache dictionary to store results
+        
+    Returns:
+        List of normalized and cached models
+    """
+    normalized_models = _normalize_models_list(models_list, provider)
+    
+    cache_dict["data"] = normalized_models
+    cache_dict["timestamp"] = datetime.now(timezone.utc)
+    
+    logger.info(f"Cached {len(normalized_models)} {provider} models")
+    return cache_dict["data"]
+
+
+def _fetch_openai_compatible_models(
+    provider_name: str,
+    base_url: str,
+    api_key: str,
+    cache_dict: dict
+) -> list | None:
+    """Fetch models from OpenAI-compatible API - shared helper for Nebius and Novita
+    
+    Args:
+        provider_name: Display name (e.g., "Nebius", "Novita")
+        base_url: API base URL
+        api_key: API key for authentication
+        cache_dict: Cache dictionary to store results
+        
+    Returns:
+        List of normalized models or None if failed
+    """
+    try:
+        from openai import OpenAI
+        
+        if not _check_api_key(api_key, provider_name):
+            return None
+        
+        client = OpenAI(base_url=base_url, api_key=api_key)
+        models_response = client.models.list()
+        
+        # Convert model objects to dicts
+        models_list = [_convert_model_to_dict(model) for model in models_response.data]
+        
+        if not models_list:
+            logger.warning(f"No models returned from {provider_name} API")
+            return None
+        
+        logger.info(f"Fetched {len(models_list)} models from {provider_name} API")
+        
+        return _cache_normalized_models(models_list, provider_name.lower(), cache_dict)
+        
+    except Exception as e:
+        logger.error(f"Failed to fetch models from {provider_name}: {e}", exc_info=True)
+        return None
 
 
 def _filter_portkey_models_by_patterns(patterns: list, provider_name: str):
@@ -123,8 +358,7 @@ def fetch_models_from_google():
 
         from src.config import Config
 
-        if not Config.GOOGLE_API_KEY:
-            logger.warning("Google API key not configured")
+        if not _check_api_key(Config.GOOGLE_API_KEY, "Google"):
             return None
 
         # Google Generative AI API endpoint
@@ -139,15 +373,7 @@ def fetch_models_from_google():
             response.raise_for_status()
 
             payload = response.json()
-
-            # Handle response format
-            if isinstance(payload, dict) and "models" in payload:
-                models_list = payload.get("models", [])
-            elif isinstance(payload, list):
-                models_list = payload
-            else:
-                logger.warning(f"Unexpected Google API response format: {type(payload)}")
-                models_list = []
+            models_list = _extract_models_from_response(payload, key="models")
 
             if not models_list:
                 logger.warning("No models returned from Google API")
@@ -155,13 +381,8 @@ def fetch_models_from_google():
 
             logger.info(f"Fetched {len(models_list)} models from Google Generative AI API")
 
-        except httpx.HTTPStatusError as http_error:
-            logger.error(
-                f"Google API HTTP error {http_error.response.status_code}: {http_error.response.text[:200]}"
-            )
-            return None
         except Exception as http_error:
-            logger.error(f"Google HTTP API error: {http_error}")
+            _handle_http_error(http_error, "Google")
             return None
 
         # Normalize the models
@@ -169,27 +390,7 @@ def fetch_models_from_google():
             logger.warning("No models available from Google")
             return None
 
-        normalized_models = []
-        for model in models_list:
-            if not model:
-                continue
-            try:
-                normalized = normalize_portkey_provider_model(model, "google")
-                if normalized:
-                    normalized_models.append(normalized)
-            except Exception as normalization_error:
-                logger.warning(f"Failed to normalize Google model: {normalization_error}")
-                continue
-
-        if not normalized_models:
-            logger.warning("No models were successfully normalized from Google")
-            return None
-
-        _google_models_cache["data"] = normalized_models
-        _google_models_cache["timestamp"] = datetime.now(timezone.utc)
-
-        logger.info(f"Cached {len(normalized_models)} Google models")
-        return _google_models_cache["data"]
+        return _cache_normalized_models(models_list, "google", _google_models_cache)
 
     except Exception as e:
         logger.error(f"Failed to fetch models from Google: {e}", exc_info=True)
@@ -206,8 +407,7 @@ def fetch_models_from_cerebras():
     try:
         from src.config import Config
 
-        if not Config.CEREBRAS_API_KEY:
-            logger.warning("Cerebras API key not configured")
+        if not _check_api_key(Config.CEREBRAS_API_KEY, "Cerebras"):
             return None
 
         models_list = None
@@ -220,79 +420,20 @@ def fetch_models_from_cerebras():
 
             # The SDK's models.list() returns a list of model objects
             models_response = client.models.list()
-
-            # Handle different response formats from the SDK
             logger.debug(f"Cerebras SDK response type: {type(models_response)}")
-
-            # Check if it has a 'data' attribute first (common API response pattern)
-            if hasattr(models_response, "data"):
-                raw_models = models_response.data
-                logger.debug(f"Extracted from .data attribute, type: {type(raw_models)}")
-            # Check if it's already a list
-            elif isinstance(models_response, list):
-                raw_models = models_response
-                logger.debug("Response is already a list")
-            # Convert to list if it's an iterator/generator (but not dict-like)
-            elif hasattr(models_response, "__iter__") and not hasattr(models_response, "items"):
-                raw_models = list(models_response)
-                logger.debug(f"Converted iterator to list, length: {len(raw_models)}")
-            else:
-                # Last resort: try to extract as single item
-                raw_models = [models_response]
-                logger.debug("Wrapped response in list")
-
-            # Additional unwrapping if the data is nested in a dict
-            if isinstance(raw_models, dict) and "data" in raw_models:
-                raw_models = raw_models["data"]
-                logger.debug("Unwrapped data from dict")
-            elif raw_models and len(raw_models) > 0:
-                # Check if first element is a tuple (e.g., from .items() conversion)
-                if (
-                    isinstance(raw_models[0], tuple)
-                    and len(raw_models[0]) == 2
-                    and raw_models[0][0] == "data"
-                ):
-                    # Extract the data list from the tuple ('data', [model_list])
-                    raw_models = raw_models[0][1]
-                    logger.debug("Unwrapped data from tuple format")
-                elif isinstance(raw_models[0], dict) and "data" in raw_models[0]:
-                    raw_models = raw_models[0]["data"]
-                    logger.debug("Unwrapped data from first element")
-
-            logger.info(
-                f"Processing {len(raw_models) if isinstance(raw_models, list) else 'unknown'} raw models from Cerebras SDK"
-            )
+            
+            raw_models = _unwrap_sdk_response(models_response)
+            logger.info(f"Processing {len(raw_models)} raw models from Cerebras SDK")
 
             # Convert SDK model objects to dicts if needed
             models_list = []
             for idx, model in enumerate(raw_models):
                 try:
-                    # Log the type of each model object
                     if idx == 0:
-                        logger.debug(
-                            f"First model type: {type(model)}, has model_dump: {hasattr(model, 'model_dump')}, has dict: {hasattr(model, 'dict')}"
-                        )
-
-                    converted_model = None
-                    if hasattr(model, "model_dump"):
-                        # Pydantic v2 model
-                        converted_model = model.model_dump()
-                    elif hasattr(model, "dict"):
-                        # Legacy Pydantic v1 model
-                        converted_model = model.dict()
-                    elif hasattr(model, "__dict__"):
-                        # Regular object
-                        converted_model = vars(model)
-                    elif isinstance(model, dict):
-                        # Already a dict
-                        converted_model = model
-                    else:
-                        # Skip unsupported model objects
-                        logger.warning(
-                            f"Skipping unsupported Cerebras model object of type {type(model)}"
-                        )
-                        continue
-
+                        logger.debug(f"First model type: {type(model)}")
+                    
+                    converted_model = _convert_model_to_dict(model)
+                    
                     # Validate that we got a proper dict with an id
                     if converted_model and isinstance(converted_model, dict):
                         if "id" in converted_model:
@@ -340,15 +481,7 @@ def fetch_models_from_cerebras():
                 response.raise_for_status()
 
                 payload = response.json()
-
-                # Handle different response formats
-                if isinstance(payload, dict) and "data" in payload:
-                    models_list = payload.get("data", [])
-                elif isinstance(payload, list):
-                    models_list = payload
-                else:
-                    logger.warning(f"Unexpected Cerebras API response format: {type(payload)}")
-                    models_list = []
+                models_list = _extract_models_from_response(payload, key="data")
 
                 if not models_list:
                     logger.warning("No models returned from Cerebras API")
@@ -356,13 +489,8 @@ def fetch_models_from_cerebras():
 
                 logger.info(f"Fetched {len(models_list)} models from Cerebras HTTP API")
 
-            except httpx.HTTPStatusError as http_error:
-                logger.error(
-                    f"Cerebras API HTTP error {http_error.response.status_code}: {http_error.response.text[:200]}"
-                )
-                return None
             except Exception as http_error:
-                logger.error(f"Cerebras HTTP API error: {http_error}")
+                _handle_http_error(http_error, "Cerebras")
                 return None
 
         # Normalize the models
@@ -370,27 +498,13 @@ def fetch_models_from_cerebras():
             logger.warning("No models available from Cerebras")
             return None
 
-        normalized_models = []
-        for model in models_list:
-            if not model:
-                continue
-            try:
-                normalized = normalize_portkey_provider_model(model, "cerebras")
-                if normalized:
-                    normalized_models.append(normalized)
-            except Exception as normalization_error:
-                logger.warning(f"Failed to normalize Cerebras model: {normalization_error}")
-                continue
-
+        normalized_models = _normalize_models_list(models_list, "cerebras")
+        
         if not normalized_models:
             logger.warning("No models were successfully normalized from Cerebras")
             return None
 
-        _cerebras_models_cache["data"] = normalized_models
-        _cerebras_models_cache["timestamp"] = datetime.now(timezone.utc)
-
-        logger.info(f"Cached {len(normalized_models)} Cerebras models")
-        return _cerebras_models_cache["data"]
+        return _cache_normalized_models(normalized_models, "cerebras", _cerebras_models_cache)
 
     except Exception as e:
         logger.error(f"Failed to fetch models from Cerebras: {e}", exc_info=True)
@@ -404,48 +518,14 @@ def fetch_models_from_nebius():
     Nebius AI Studio provides an OpenAI-compatible API at https://api.studio.nebius.ai/v1/
     Uses the OpenAI Python SDK with a custom base URL.
     """
-    try:
-        from openai import OpenAI
-
-        from src.config import Config
-
-        if not Config.NEBIUS_API_KEY:
-            logger.warning("Nebius API key not configured")
-            return None
-
-        # Use OpenAI SDK with Nebius base URL
-        client = OpenAI(
-            base_url="https://api.studio.nebius.ai/v1/",
-            api_key=Config.NEBIUS_API_KEY,
-        )
-
-        models_response = client.models.list()
-
-        # Convert model objects to dicts
-        models_list = [
-            model.model_dump() if hasattr(model, "model_dump") else model.dict()
-            for model in models_response.data
-        ]
-
-        if not models_list:
-            logger.warning("No models returned from Nebius API")
-            return None
-
-        logger.info(f"Fetched {len(models_list)} models from Nebius API")
-
-        normalized_models = [
-            normalize_portkey_provider_model(model, "nebius") for model in models_list if model
-        ]
-
-        _nebius_models_cache["data"] = normalized_models
-        _nebius_models_cache["timestamp"] = datetime.now(timezone.utc)
-
-        logger.info(f"Cached {len(normalized_models)} Nebius models")
-        return _nebius_models_cache["data"]
-
-    except Exception as e:
-        logger.error(f"Failed to fetch models from Nebius: {e}", exc_info=True)
-        return None
+    from src.config import Config
+    
+    return _fetch_openai_compatible_models(
+        provider_name="Nebius",
+        base_url="https://api.studio.nebius.ai/v1/",
+        api_key=Config.NEBIUS_API_KEY,
+        cache_dict=_nebius_models_cache
+    )
 
 
 def fetch_models_from_xai():
@@ -459,8 +539,7 @@ def fetch_models_from_xai():
     try:
         from src.config import Config
 
-        if not Config.XAI_API_KEY:
-            logger.warning("xAI API key not configured")
+        if not _check_api_key(Config.XAI_API_KEY, "xAI"):
             return None
 
         # Try using the official xAI SDK first
@@ -469,6 +548,11 @@ def fetch_models_from_xai():
 
             client = Client(api_key=Config.XAI_API_KEY)
 
+            # Check if the SDK has models.list() method, otherwise fallback immediately
+            # The xAI SDK Client doesn't have these methods, so we'll fallback to OpenAI SDK
+            if not (hasattr(client, "models") and hasattr(client.models, "list")) and not hasattr(client, "list_models"):
+                raise AttributeError("xAI SDK Client doesn't support model listing")
+            
             # The SDK's list_models() or models.list() returns a list of model objects
             try:
                 models_response = client.models.list()
@@ -490,18 +574,7 @@ def fetch_models_from_xai():
                 raw_models = raw_models[0].get("data", [])
 
             # Convert SDK model objects to dicts if needed
-            models_list = []
-            for model in raw_models:
-                if hasattr(model, "model_dump"):
-                    models_list.append(model.model_dump())
-                elif hasattr(model, "dict"):
-                    models_list.append(model.dict())
-                elif hasattr(model, "__dict__"):
-                    models_list.append(vars(model))
-                elif isinstance(model, dict):
-                    models_list.append(model)
-                else:
-                    models_list.append({"id": str(model)})
+            models_list = [_convert_model_to_dict(model) for model in raw_models]
 
             if models_list:
                 logger.info(f"Fetched {len(models_list)} models from xAI SDK")
@@ -509,7 +582,7 @@ def fetch_models_from_xai():
                 logger.warning("xAI SDK returned empty model list, using fallback")
                 raise ValueError("Empty model list from SDK")
 
-        except (ImportError, ValueError):
+        except (ImportError, ValueError, AttributeError):
             # Fallback to OpenAI SDK with xAI base URL
             try:
                 logger.info(
@@ -523,10 +596,7 @@ def fetch_models_from_xai():
                 )
 
                 models_response = client.models.list()
-                models_list = [
-                    model.model_dump() if hasattr(model, "model_dump") else model.dict()
-                    for model in models_response.data
-                ]
+                models_list = [_convert_model_to_dict(model) for model in models_response.data]
 
                 if not models_list:
                     logger.warning("No models returned from xAI API, using fallback models")
@@ -535,65 +605,15 @@ def fetch_models_from_xai():
             except Exception as openai_error:
                 # Fallback to known xAI models
                 logger.warning(f"xAI API failed: {openai_error}. Using fallback xAI model list.")
-                models_list = [
-                    # Grok 4 Models (2025)
-                    {"id": "grok-4", "owned_by": "xAI"},
-                    {"id": "grok-4-latest", "owned_by": "xAI"},
-                    {"id": "grok-4-fast-reasoning", "owned_by": "xAI"},
-                    {"id": "grok-4-fast-non-reasoning", "owned_by": "xAI"},
-                    # Grok 3 Models
-                    {"id": "grok-3", "owned_by": "xAI"},
-                    {"id": "grok-3-latest", "owned_by": "xAI"},
-                    {"id": "grok-3-mini", "owned_by": "xAI"},
-                    # Grok 2 Models
-                    {"id": "grok-2", "owned_by": "xAI"},
-                    {"id": "grok-2-latest", "owned_by": "xAI"},
-                    {"id": "grok-2-mini", "owned_by": "xAI"},
-                    {"id": "grok-2-image-1212", "owned_by": "xAI"},
-                    # Legacy Beta Models
-                    {"id": "grok-beta", "owned_by": "xAI"},
-                    {"id": "grok-vision-beta", "owned_by": "xAI"},
-                ]
+                models_list = XAI_FALLBACK_MODELS
 
-        normalized_models = [
-            normalize_portkey_provider_model(model, "xai") for model in models_list if model
-        ]
-
-        _xai_models_cache["data"] = normalized_models
-        _xai_models_cache["timestamp"] = datetime.now(timezone.utc)
-
-        logger.info(f"Cached {len(normalized_models)} xAI models")
-        return _xai_models_cache["data"]
+        return _cache_normalized_models(models_list, "xai", _xai_models_cache)
 
     except Exception as e:
         logger.error(f"Failed to fetch models from xAI: {e}", exc_info=True)
         # Return fallback models even on complete failure
-        fallback_models = [
-            # Grok 4 Models (2025)
-            {"id": "grok-4", "owned_by": "xAI"},
-            {"id": "grok-4-latest", "owned_by": "xAI"},
-            {"id": "grok-4-fast-reasoning", "owned_by": "xAI"},
-            {"id": "grok-4-fast-non-reasoning", "owned_by": "xAI"},
-            # Grok 3 Models
-            {"id": "grok-3", "owned_by": "xAI"},
-            {"id": "grok-3-latest", "owned_by": "xAI"},
-            {"id": "grok-3-mini", "owned_by": "xAI"},
-            # Grok 2 Models
-            {"id": "grok-2", "owned_by": "xAI"},
-            {"id": "grok-2-latest", "owned_by": "xAI"},
-            {"id": "grok-2-mini", "owned_by": "xAI"},
-            {"id": "grok-2-image-1212", "owned_by": "xAI"},
-            # Legacy Beta Models
-            {"id": "grok-beta", "owned_by": "xAI"},
-            {"id": "grok-vision-beta", "owned_by": "xAI"},
-        ]
-        normalized_models = [
-            normalize_portkey_provider_model(model, "xai") for model in fallback_models
-        ]
-        _xai_models_cache["data"] = normalized_models
-        _xai_models_cache["timestamp"] = datetime.now(timezone.utc)
-        logger.info(f"Using {len(normalized_models)} fallback xAI models due to error")
-        return _xai_models_cache["data"]
+        logger.info("Using fallback xAI models due to error")
+        return _cache_normalized_models(XAI_FALLBACK_MODELS, "xai", _xai_models_cache)
 
 
 def fetch_models_from_novita():
@@ -603,51 +623,17 @@ def fetch_models_from_novita():
     Novita AI provides an OpenAI-compatible API at https://api.novita.ai/v3/openai
     Uses the OpenAI Python SDK with a custom base URL.
     """
-    try:
-        from openai import OpenAI
-
-        from src.config import Config
-
-        if not Config.NOVITA_API_KEY:
-            logger.warning("Novita API key not configured")
-            return None
-
-        # Use OpenAI SDK with Novita base URL
-        client = OpenAI(
-            base_url="https://api.novita.ai/v3/openai",
-            api_key=Config.NOVITA_API_KEY,
-        )
-
-        models_response = client.models.list()
-
-        # Convert model objects to dicts
-        models_list = [
-            model.model_dump() if hasattr(model, "model_dump") else model.dict()
-            for model in models_response.data
-        ]
-
-        if not models_list:
-            logger.warning("No models returned from Novita API")
-            return None
-
-        logger.info(f"Fetched {len(models_list)} models from Novita API")
-
-        normalized_models = [
-            normalize_portkey_provider_model(model, "novita") for model in models_list if model
-        ]
-
-        _novita_models_cache["data"] = normalized_models
-        _novita_models_cache["timestamp"] = datetime.now(timezone.utc)
-
-        logger.info(f"Cached {len(normalized_models)} Novita models")
-        return _novita_models_cache["data"]
-
-    except Exception as e:
-        logger.error(f"Failed to fetch models from Novita: {e}", exc_info=True)
-        return None
+    from src.config import Config
+    
+    return _fetch_openai_compatible_models(
+        provider_name="Novita",
+        base_url="https://api.novita.ai/v3/openai",
+        api_key=Config.NOVITA_API_KEY,
+        cache_dict=_novita_models_cache
+    )
 
 
-def fetch_models_from_hug():
+def fetch_models_from_hug_via_portkey():
     """Fetch models from Hugging Face by filtering Portkey unified catalog"""
     try:
         # Hugging Face models include "llava-hf" and similar patterns
@@ -657,15 +643,7 @@ def fetch_models_from_hug():
             logger.warning("No Hugging Face models found in Portkey catalog")
             return None
 
-        normalized_models = [
-            normalize_portkey_provider_model(model, "hug") for model in filtered_models if model
-        ]
-
-        _huggingface_models_cache["data"] = normalized_models
-        _huggingface_models_cache["timestamp"] = datetime.now(timezone.utc)
-
-        logger.info(f"Cached {len(normalized_models)} Hugging Face models from Portkey catalog")
-        return _huggingface_models_cache["data"]
+        return _cache_normalized_models(filtered_models, "hug", _huggingface_models_cache)
 
     except Exception as e:
         logger.error(f"Failed to fetch models from Hugging Face: {e}", exc_info=True)
@@ -749,6 +727,10 @@ def normalize_portkey_provider_model(model: dict, provider: str) -> dict:
         return {"source_gateway": provider, f"raw_{provider}": model}
 
 
+# Common generation methods for Gemini models
+_GEMINI_GENERATION_METHODS = ["generateContent", "streamGenerateContent"]
+
+
 def fetch_models_from_google_vertex():
     """
     Fetch available models from Google Vertex AI using the official SDK.
@@ -798,7 +780,7 @@ def fetch_models_from_google_vertex():
                 "max_input_tokens": 1000000,
                 "max_output_tokens": 8192,
                 "modalities": ["text", "image", "audio", "video"],
-                "supported_generation_methods": ["generateContent", "streamGenerateContent"]
+                "supported_generation_methods": _GEMINI_GENERATION_METHODS
             },
             {
                 "id": "gemini-2.5-flash-lite-preview-09-2025",
@@ -807,7 +789,7 @@ def fetch_models_from_google_vertex():
                 "max_input_tokens": 1000000,
                 "max_output_tokens": 8192,
                 "modalities": ["text", "image", "audio", "video"],
-                "supported_generation_methods": ["generateContent", "streamGenerateContent"]
+                "supported_generation_methods": _GEMINI_GENERATION_METHODS
             },
             {
                 "id": "gemini-2.0-flash",
@@ -816,7 +798,7 @@ def fetch_models_from_google_vertex():
                 "max_input_tokens": 1000000,
                 "max_output_tokens": 100000,
                 "modalities": ["text", "image", "audio", "video"],
-                "supported_generation_methods": ["generateContent", "streamGenerateContent"],
+                "supported_generation_methods": _GEMINI_GENERATION_METHODS,
             },
             {
                 "id": "gemini-2.0-flash-thinking",
@@ -825,7 +807,7 @@ def fetch_models_from_google_vertex():
                 "max_input_tokens": 1000000,
                 "max_output_tokens": 100000,
                 "modalities": ["text"],
-                "supported_generation_methods": ["generateContent", "streamGenerateContent"],
+                "supported_generation_methods": _GEMINI_GENERATION_METHODS,
             },
             {
                 "id": "gemini-2.0-pro",
@@ -834,7 +816,7 @@ def fetch_models_from_google_vertex():
                 "max_input_tokens": 1000000,
                 "max_output_tokens": 4096,
                 "modalities": ["text", "image", "audio", "video"],
-                "supported_generation_methods": ["generateContent", "streamGenerateContent"],
+                "supported_generation_methods": _GEMINI_GENERATION_METHODS,
             },
             {
                 "id": "gemini-1.5-pro",
@@ -843,7 +825,7 @@ def fetch_models_from_google_vertex():
                 "max_input_tokens": 1000000,
                 "max_output_tokens": 8192,
                 "modalities": ["text", "image", "audio", "video"],
-                "supported_generation_methods": ["generateContent", "streamGenerateContent"],
+                "supported_generation_methods": _GEMINI_GENERATION_METHODS,
             },
             {
                 "id": "gemini-1.5-flash",
@@ -852,7 +834,7 @@ def fetch_models_from_google_vertex():
                 "max_input_tokens": 1000000,
                 "max_output_tokens": 8192,
                 "modalities": ["text", "image", "audio", "video"],
-                "supported_generation_methods": ["generateContent", "streamGenerateContent"],
+                "supported_generation_methods": _GEMINI_GENERATION_METHODS,
             },
             {
                 "id": "gemini-1.0-pro",
@@ -861,13 +843,13 @@ def fetch_models_from_google_vertex():
                 "max_input_tokens": 32000,
                 "max_output_tokens": 8192,
                 "modalities": ["text"],
-                "supported_generation_methods": ["generateContent", "streamGenerateContent"],
+                "supported_generation_methods": _GEMINI_GENERATION_METHODS,
             },
         ]
 
         logger.info(f"Loaded {len(vertex_models)} Google Vertex AI models")
 
-        # Normalize the models
+        # Normalize the models - use custom normalization for Vertex-specific fields
         normalized_models = []
         for model in vertex_models:
             try:
@@ -912,11 +894,7 @@ def fetch_models_from_google_vertex():
             logger.warning("No models were successfully normalized from Google Vertex AI")
             return None
 
-        _google_vertex_models_cache["data"] = normalized_models
-        _google_vertex_models_cache["timestamp"] = datetime.now(timezone.utc)
-
-        logger.info(f"✅ Cached {len(normalized_models)} Google Vertex AI models")
-        return _google_vertex_models_cache["data"]
+        return _cache_normalized_models(normalized_models, "google-vertex", _google_vertex_models_cache)
 
     except Exception as e:
         logger.error(f"Failed to fetch models from Google Vertex AI: {e}", exc_info=True)

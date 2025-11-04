@@ -332,8 +332,8 @@ def test_get_update_rate_limit_config_and_list(sb, user_api_key):
     out_default = rl_mod.get_rate_limit_config(user_api_key)
     assert out_default["requests_per_minute"] == 60
 
-    # Create an api_keys row and update config
-    sb.table("api_keys").insert({"api_key": user_api_key, "user_id": 42, "key_name": "k1", "environment_tag": "live"}).execute()
+    # Create an api_keys_new row and update config
+    sb.table("api_keys_new").insert({"api_key": user_api_key, "user_id": 42, "key_name": "k1", "environment_tag": "live"}).execute()
     ok = rl_mod.update_rate_limit_config(user_api_key, {"requests_per_minute": 7})
     assert ok is True
 
@@ -347,13 +347,13 @@ def test_get_update_rate_limit_config_and_list(sb, user_api_key):
     assert lst[0]["key_name"] == "k1"
 
 def test_bulk_update_rate_limit_configs(sb):
-    sb.table("api_keys").insert([
+    sb.table("api_keys_new").insert([
         {"api_key": "k1", "user_id": 99, "key_name": "a", "environment_tag": "live"},
         {"api_key": "k2", "user_id": 99, "key_name": "b", "environment_tag": "test"},
     ]).execute()
     count = rl_mod.bulk_update_rate_limit_configs(99, {"requests_per_minute": 11})
     assert count == 2
-    rows = sb.table("api_keys").select("*").eq("user_id", 99).execute().data
+    rows = sb.table("api_keys_new").select("*").eq("user_id", 99).execute().data
     assert all(r.get("rate_limit_config", {}).get("requests_per_minute") == 11 for r in rows)
 
 

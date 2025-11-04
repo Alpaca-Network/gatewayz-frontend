@@ -344,9 +344,9 @@ def get_rate_limit_config(api_key: str) -> dict[str, Any] | None:
     try:
         client = get_supabase_client()
 
-        # Get rate limit config from api_keys table
+        # Get rate limit config from api_keys_new table
         result = (
-            client.table("api_keys").select("rate_limit_config").eq("api_key", api_key).execute()
+            client.table("api_keys_new").select("rate_limit_config").eq("api_key", api_key).execute()
         )
 
         if result.data and result.data[0].get("rate_limit_config"):
@@ -376,7 +376,7 @@ def update_rate_limit_config(api_key: str, config: dict[str, Any]) -> bool:
         client = get_supabase_client()
 
         result = (
-            client.table("api_keys")
+            client.table("api_keys_new")
             .update({"rate_limit_config": config, "updated_at": datetime.now(timezone.utc).isoformat()})
             .eq("api_key", api_key)
             .execute()
@@ -395,7 +395,7 @@ def get_user_rate_limit_configs(user_id: int) -> list[dict[str, Any]]:
         client = get_supabase_client()
 
         result = (
-            client.table("api_keys")
+            client.table("api_keys_new")
             .select("api_key, key_name, rate_limit_config, environment_tag")
             .eq("user_id", user_id)
             .execute()
@@ -426,7 +426,7 @@ def bulk_update_rate_limit_configs(user_id: int, config: dict[str, Any]) -> int:
         client = get_supabase_client()
 
         result = (
-            client.table("api_keys")
+            client.table("api_keys_new")
             .update({"rate_limit_config": config, "updated_at": datetime.now(timezone.utc).isoformat()})
             .eq("user_id", user_id)
             .execute()
