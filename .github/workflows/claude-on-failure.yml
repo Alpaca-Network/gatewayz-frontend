@@ -13,29 +13,18 @@ jobs:
           github.event.workflow_run.head_repository.full_name == github.repository }}
     runs-on: ubuntu-latest
 
-    steps:
-      - name: Find associated PR number
-        id: find_pr
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b  # v7.1.0
-        with:
-          script: |
-            const { owner, repo } = context.repo;
-            const sha = context.payload.workflow_run.head_sha;
-            const prs = await github.rest.repos.listPullRequestsAssociatedWithCommit({
-              owner, repo, commit_sha: sha
-            });
-            if (prs.data.length === 0) {
-              core.warning("No PR found for this commit. Skipping Claude run.");
-              return;
-            }
-            core.setOutput("pr", prs.data[0].number.toString());
+    # Required permissions for Claude Code action
+    permissions:
+      id-token: write      # Required for OIDC token
+      contents: write      # Required to push commits
+      pull-requests: write # Required to comment on PRs
+      actions: read        # Required to read workflow run data
 
-      - name: Run Claude Code (failure diagnostics)
-        if: ${{ steps.find_pr.outputs.pr }}
+    steps:
+      - name: Run Claude Code (fix CI failures and push)
         uses: anthropics/claude-code-action@8a1c4371755898f67cd97006ba7c97702d5fc4bf  # v1.0.16
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          pr_number: ${{ steps.find_pr.outputs.pr }}
           use_commit_signing: true
           claude_args: "--max-turns 15"
           prompt: |
