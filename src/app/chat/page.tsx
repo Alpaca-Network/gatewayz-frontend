@@ -1194,6 +1194,9 @@ function ChatPageContent() {
     // Track if we're currently creating a session to prevent race conditions
     const creatingSessionRef = useRef(false);
 
+    // Track if auto-send has already been triggered to prevent duplicate sends
+    const autoSendTriggeredRef = useRef(false);
+
     // Trigger for forcing session reload after API key becomes available
     const [authReady, setAuthReady] = useState(false);
 
@@ -1384,15 +1387,20 @@ function ChatPageContent() {
     }, [sessions, activeSessionId]);
 
     // Filter and deduplicate messages to prevent unsent messages from appearing in history
-    // Messages are deduplicated by checking for consecutive duplicates (same role + content)
-    const messages = ((activeSession?.messages || []).filter(msg => msg && msg.role) as Message[]).reduce((acc, msg, idx, arr) => {
-        // Skip if this is a duplicate of the previous message (same role and content)
-        if (idx > 0) {
-            const prevMsg = arr[idx - 1];
-            if (prevMsg && prevMsg.role === msg.role && prevMsg.content === msg.content) {
-                console.warn('[MessageDedup] Skipping duplicate message:', { role: msg.role, contentLength: msg.content.length });
-                return acc;
-            }
+    // Messages are deduplicated by checking for any duplicate (same role + content anywhere in history)
+    const messages = ((activeSession?.messages || []).filter(msg => msg && msg.role) as Message[]).reduce((acc, msg) => {
+        // Skip if this message already exists in accumulated messages
+        const isDuplicate = acc.some(m =>
+            m.role === msg.role &&
+            m.content === msg.content &&
+            m.image === msg.image &&
+            m.video === msg.video &&
+            m.audio === msg.audio
+        );
+
+        if (isDuplicate) {
+            console.warn('[MessageDedup] Skipping duplicate message:', { role: msg.role, contentLength: msg.content.length });
+            return acc;
         }
         return [...acc, msg];
     }, [] as Message[]);
@@ -1409,7 +1417,8 @@ function ChatPageContent() {
             loading,
             creatingSession: creatingSessionRef.current,
             isStreamingResponse,
-            hasPendingMessage: !!pendingMessage
+            hasPendingMessage: !!pendingMessage,
+            autoSendTriggered: autoSendTriggeredRef.current
         });
 
         if (pendingMessage) {
@@ -1424,10 +1433,12 @@ function ChatPageContent() {
             selectedModel &&
             !loading &&
             !creatingSessionRef.current &&
-            !isStreamingResponse
+            !isStreamingResponse &&
+            !autoSendTriggeredRef.current
         ) {
             console.log('[AutoSend] All conditions met! Sending message now...');
-            setShouldAutoSend(false); // Reset flag to prevent re-sending
+            autoSendTriggeredRef.current = true; // Mark as triggered to prevent re-sending
+            setShouldAutoSend(false); // Reset flag
             handleSendMessage();
         }
     }, [shouldAutoSend, activeSessionId, message, selectedModel, loading, isStreamingResponse, pendingMessage]);
@@ -1671,6 +1682,9 @@ function ChatPageContent() {
             message_count: session.messages.length
         });
 
+        // Reset auto-send flag when switching sessions
+        autoSendTriggeredRef.current = false;
+
         // Set active session immediately for UI responsiveness
         setActiveSessionId(sessionId);
 
@@ -1719,6 +1733,7 @@ function ChatPageContent() {
 
         if (existingNewChat) {
             // If there's already a new chat, just switch to it
+            autoSendTriggeredRef.current = false; // Reset auto-send flag for new chat
             switchToSession(existingNewChat.id);
             return existingNewChat;
         }
@@ -1739,6 +1754,9 @@ function ChatPageContent() {
 
             // Then update the sessions list
             setSessions(prev => [newSession, ...prev]);
+
+            // Reset auto-send flag for new chat
+            autoSendTriggeredRef.current = false;
 
             return newSession;
         } catch (error) {
@@ -2184,14 +2202,14 @@ function ChatPageContent() {
         const userVideo = selectedVideo;
         const userAudio = selectedAudio;
 
-        // Check if the last message is identical to prevent duplicate user messages from being added
-        const lastMessage = messages[messages.length - 1];
-        const isDuplicateMessage = lastMessage &&
-            lastMessage.role === 'user' &&
-            lastMessage.content === userMessage &&
-            lastMessage.image === (userImage || undefined) &&
-            lastMessage.video === (userVideo || undefined) &&
-            lastMessage.audio === (userAudio || undefined);
+        // Check if this exact message already exists in history to prevent duplicate user messages
+        const isDuplicateMessage = messages.some(msg =>
+            msg.role === 'user' &&
+            msg.content === userMessage &&
+            msg.image === (userImage || undefined) &&
+            msg.video === (userVideo || undefined) &&
+            msg.audio === (userAudio || undefined)
+        );
 
         if (isDuplicateMessage) {
             console.warn('[MessageDedup] Attempted to add duplicate message, aborting send:', { content: userMessage.substring(0, 50) });
