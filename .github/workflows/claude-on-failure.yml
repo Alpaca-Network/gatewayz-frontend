@@ -21,6 +21,87 @@ jobs:
       actions: read        # Required to read workflow run data
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - name: Download workflow run logs
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea  # v7.0.1
+        with:
+          script: |
+            const fs = require('fs');
+
+            // Get the workflow run that triggered this
+            const runId = context.payload.workflow_run.id;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            console.log(`Fetching logs for workflow run ${runId}...`);
+
+            try {
+              // Get workflow run jobs
+              const jobs = await github.rest.actions.listJobsForWorkflowRun({
+                owner,
+                repo,
+                run_id: runId,
+              });
+
+              let failureSummary = `# CI Pipeline Failure Summary\n\n`;
+              failureSummary += `**Workflow:** ${context.payload.workflow_run.name}\n`;
+              failureSummary += `**Run ID:** ${runId}\n`;
+              failureSummary += `**Branch:** ${context.payload.workflow_run.head_branch}\n`;
+              failureSummary += `**Commit:** ${context.payload.workflow_run.head_sha}\n\n`;
+
+              // Process each failed job
+              for (const job of jobs.data.jobs) {
+                if (job.conclusion === 'failure') {
+                  failureSummary += `## Failed Job: ${job.name}\n\n`;
+                  failureSummary += `**Status:** ${job.status}\n`;
+                  failureSummary += `**Conclusion:** ${job.conclusion}\n`;
+                  failureSummary += `**Started:** ${job.started_at}\n`;
+                  failureSummary += `**Completed:** ${job.completed_at}\n\n`;
+
+                  // Get job logs
+                  try {
+                    const logs = await github.rest.actions.downloadJobLogsForWorkflowRun({
+                      owner,
+                      repo,
+                      job_id: job.id,
+                    });
+
+                    failureSummary += `### Log Output:\n\`\`\`\n`;
+                    failureSummary += logs.data;
+                    failureSummary += `\n\`\`\`\n\n`;
+                  } catch (logError) {
+                    console.error(`Failed to download logs for job ${job.id}:`, logError);
+                    failureSummary += `*Log download failed for this job*\n\n`;
+                  }
+
+                  // Add failed steps details
+                  failureSummary += `### Failed Steps:\n`;
+                  for (const step of job.steps || []) {
+                    if (step.conclusion === 'failure') {
+                      failureSummary += `- **${step.name}**: ${step.conclusion}\n`;
+                    }
+                  }
+                  failureSummary += `\n`;
+                }
+              }
+
+              // Write to file for Claude to read
+              fs.writeFileSync('failure-logs.md', failureSummary);
+              console.log('Failure logs written to failure-logs.md');
+              core.summary.addRaw(failureSummary);
+              await core.summary.write();
+
+            } catch (error) {
+              console.error('Error fetching workflow logs:', error);
+              const errorMsg = `Failed to fetch workflow logs: ${error.message}`;
+              fs.writeFileSync('failure-logs.md', errorMsg);
+            }
+
       - name: Run Claude Code (fix CI failures and push)
         uses: anthropics/claude-code-action@8a1c4371755898f67cd97006ba7c97702d5fc4bf  # v1.0.16
         with:
@@ -30,9 +111,27 @@ jobs:
           prompt: |
             The CI pipeline has failed on this PR. Your task is to:
 
-            1. Analyze the CI failure logs to identify the root cause
-            2. Implement the necessary code fixes to resolve the failures
-            3. Commit and push your changes to this PR branch
+            1. **Read the failure logs** - Check the 'failure-logs.md' file which contains:
+               - Complete CI failure logs from the failed workflow run
+               - Failed job names and their output
+               - Failed step details
+               - Error messages and stack traces
+
+            2. **Analyze the root cause** - Identify what specifically failed:
+               - Which tests are failing and why
+               - What linting/type errors exist
+               - Any build or import errors
+               - Security or coverage issues
+
+            3. **Implement fixes** - Make the necessary code changes to resolve the failures:
+               - Fix failing tests
+               - Resolve linting/type errors
+               - Address import or dependency issues
+               - Fix any other errors preventing CI from passing
+
+            4. **Commit and push** - Once fixed:
+               - Use clear commit messages explaining what was fixed
+               - Push changes to this PR branch
 
             Common failure patterns in this Gatewayz backend codebase:
             - Test failures: pytest assertion errors, timeout issues, mock configuration
@@ -43,7 +142,39 @@ jobs:
             - Integration test failures: endpoint tests, auth, payments, database
             - Build/startup errors: FastAPI app initialization, missing env vars
 
-            After identifying the issue, make the minimal code changes needed to fix it.
-            Test your changes if possible, then commit and push to the PR.
+            **IMPORTANT**: Start by reading 'failure-logs.md' to see exactly what failed!
 
-            Use clear commit messages that explain what was fixed and why.
+      - name: Report completion
+        if: always()
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea  # v7.0.1
+        with:
+          script: |
+            const fs = require('fs');
+
+            // Create a summary of what happened
+            let summary = '## 🤖 Claude Code Auto-Fix Attempt\n\n';
+
+            // Check if Claude made any commits
+            const { execSync } = require('child_process');
+            try {
+              const newCommits = execSync('git log --oneline ${{ github.event.workflow_run.head_sha }}..HEAD').toString();
+
+              if (newCommits.trim()) {
+                summary += '✅ Claude Code attempted to fix the CI failures.\n\n';
+                summary += '**New commits:**\n```\n' + newCommits + '```\n\n';
+                summary += 'The CI pipeline will run again to verify the fixes.\n';
+              } else {
+                summary += '⚠️ Claude Code ran but did not make any commits.\n\n';
+                summary += 'This might mean:\n';
+                summary += '- The failures require manual intervention\n';
+                summary += '- Claude could not determine a safe fix\n';
+                summary += '- There was an issue accessing the failure logs\n\n';
+                summary += 'Please check the workflow logs for details.\n';
+              }
+            } catch (error) {
+              summary += '❌ Error checking for new commits: ' + error.message + '\n';
+            }
+
+            core.summary.addRaw(summary);
+            await core.summary.write();
+            console.log(summary);
