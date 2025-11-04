@@ -49,7 +49,7 @@ class TestTransformGoogleVertexModelId:
             "gemini-1.5-pro",
             "gemini-1.5-flash",
             "gemini-1.0-pro",
-            "gemini-2.5-flash-lite",
+            "gemini-2.5-flash-lite-preview-09-2025",
         ]
         for model in models:
             result = transform_google_vertex_model_id(model)
@@ -167,7 +167,7 @@ class TestProcessGoogleVertexResponse:
         assert result["choices"][0]["message"]["content"] == "Part 1 Part 2"
 
     def test_process_gemini_flash_lite_response(self):
-        """Test processing response from gemini-2.5-flash-lite"""
+        """Test processing response from gemini-2.5-flash-lite-preview-09-2025"""
         response_data = {
             "candidates": [
                 {
@@ -185,9 +185,9 @@ class TestProcessGoogleVertexResponse:
             }
         }
 
-        result = _process_google_vertex_rest_response(response_data, "gemini-2.5-flash-lite")
+        result = _process_google_vertex_rest_response(response_data, "gemini-2.5-flash-lite-preview-09-2025")
 
-        assert result["model"] == "gemini-2.5-flash-lite"
+        assert result["model"] == "gemini-2.5-flash-lite-preview-09-2025"
         assert result["choices"][0]["message"]["content"] == "Flash Lite response"
         assert result["usage"]["total_tokens"] == 8
 
@@ -303,7 +303,7 @@ class TestMakeGoogleVertexRequest:
     @patch("src.services.google_vertex_client.httpx.Client")
     @patch("src.services.google_vertex_client.get_google_vertex_access_token")
     def test_make_request_gemini_flash_lite(self, mock_get_token, mock_httpx_client):
-        """Test making a request to gemini-2.5-flash-lite"""
+        """Test making a request to gemini-2.5-flash-lite (maps to preview version)"""
         # Mock access token
         mock_get_token.return_value = "test-access-token"
 
@@ -338,15 +338,15 @@ class TestMakeGoogleVertexRequest:
 
         result = make_google_vertex_request_openai(
             messages=messages,
-            model="gemini-2.5-flash-lite"
+            model="gemini-2.5-flash-lite-preview-09-2025"
         )
 
-        assert result["model"] == "gemini-2.5-flash-lite"
+        assert result["model"] == "gemini-2.5-flash-lite-preview-09-2025"
         assert result["choices"][0]["message"]["content"] == "Flash Lite works!"
 
-        # Verify the correct model endpoint was called
+        # Verify the correct model endpoint was called (should use preview version)
         call_args = mock_client_instance.post.call_args
-        assert "gemini-2.5-flash-lite:generateContent" in call_args[0][0]
+        assert "gemini-2.5-flash-lite-preview-09-2025:generateContent" in call_args[0][0]
 
 
 @pytest.mark.skipif(not GOOGLE_VERTEX_AVAILABLE, reason="Google Vertex AI SDK not available")

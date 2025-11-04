@@ -17,6 +17,7 @@ MODEL_PROVIDER_OVERRIDES = {
 }
 
 # Gemini model name constants to reduce duplication
+GEMINI_2_5_FLASH_LITE_PREVIEW = "gemini-2.5-flash-lite-preview-09-2025"
 GEMINI_2_5_FLASH_PREVIEW = "gemini-2.5-flash-preview-09-2025"
 GEMINI_2_5_PRO_PREVIEW = "gemini-2.5-pro-preview-09-2025"
 GEMINI_2_0_FLASH = "gemini-2.0-flash"
@@ -298,12 +299,13 @@ def get_model_id_mapping(provider: str) -> Dict[str, str]:
             # Full resource names are constructed by the client
             # Gemini 2.5 models (newest)
             # Flash Lite (stable and preview)
-            "gemini-2.5-flash-lite": "gemini-2.5-flash-lite",
-            "google/gemini-2.5-flash-lite": "gemini-2.5-flash-lite",
-            "@google/models/gemini-2.5-flash-lite": "gemini-2.5-flash-lite",
-            "gemini-2.5-flash-lite-preview-09-2025": "gemini-2.5-flash-lite-preview-09-2025",
-            "google/gemini-2.5-flash-lite-preview-09-2025": "gemini-2.5-flash-lite-preview-09-2025",
-            "@google/models/gemini-2.5-flash-lite-preview-09-2025": "gemini-2.5-flash-lite-preview-09-2025",
+            # NOTE: Using preview version for now as stable version may not be available yet
+            "gemini-2.5-flash-lite": GEMINI_2_5_FLASH_LITE_PREVIEW,
+            "google/gemini-2.5-flash-lite": GEMINI_2_5_FLASH_LITE_PREVIEW,
+            "@google/models/gemini-2.5-flash-lite": GEMINI_2_5_FLASH_LITE_PREVIEW,
+            "gemini-2.5-flash-lite-preview-09-2025": GEMINI_2_5_FLASH_LITE_PREVIEW,
+            "google/gemini-2.5-flash-lite-preview-09-2025": GEMINI_2_5_FLASH_LITE_PREVIEW,
+            "@google/models/gemini-2.5-flash-lite-preview-09-2025": GEMINI_2_5_FLASH_LITE_PREVIEW,
             # Flash (preview)
             "gemini-2.5-flash-preview-09-2025": GEMINI_2_5_FLASH_PREVIEW,
             "gemini-2.5-flash": GEMINI_2_5_FLASH_PREVIEW,
