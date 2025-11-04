@@ -45,6 +45,7 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
+    console.error("[API /api/user/api-keys GET] Unexpected error:", error);
     return handleApiError(error, "API /api/user/api-keys GET");
   }
 }
@@ -59,9 +60,26 @@ export async function POST(request: NextRequest) {
     const { key: apiKey, error } = await validateApiKey(request);
     if (error) return error;
 
-    const body = await request.json();
+    // Safely parse request body
+    let body;
+    try {
+      const contentType = request.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        return NextResponse.json(
+          { error: "Content-Type must be application/json" },
+          { status: 400 }
+        );
+      }
+      body = await request.json();
+    } catch (parseError) {
+      console.error("[API /api/user/api-keys POST] Failed to parse request body:", parseError);
+      return NextResponse.json(
+        { error: "Invalid JSON in request body", details: parseError instanceof Error ? parseError.message : String(parseError) },
+        { status: 400 }
+      );
+    }
 
-    console.log("[API /api/user/api-keys POST] Proxying create API key request to backend");
+    console.log("[API /api/user/api-keys POST] Proxying create API key request to backend", { body });
 
     const response = await proxyFetch(`${API_BASE_URL}/user/api-keys`, {
       method: "POST",
@@ -93,6 +111,7 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
+    console.error("[API /api/user/api-keys POST] Unexpected error:", error);
     return handleApiError(error, "API /api/user/api-keys POST");
   }
 }
