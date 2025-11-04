@@ -126,9 +126,14 @@ def fetch_models_from_huggingface_api(
             max_retries = 3
             retry_delay = 1.0  # Start with 1 second delay
 
+            # Use shorter timeout in test mode to prevent test timeouts
+            # Test mode: 8s * 3 attempts + 1s + 2s delays = ~27s total (within 30s test timeout)
+            # Production: 30s timeout for better reliability with slow networks
+            request_timeout = 8.0 if Config.IS_TESTING else 30.0
+
             for attempt in range(max_retries):
                 try:
-                    response = httpx.get(url, params=params, headers=headers, timeout=30.0)
+                    response = httpx.get(url, params=params, headers=headers, timeout=request_timeout)
                     response.raise_for_status()
                     break  # Success, exit retry loop
                 except httpx.HTTPStatusError as e:
@@ -427,8 +432,11 @@ def search_huggingface_models(query: str, limit: int = 50) -> list:
         if Config.HUG_API_KEY:
             headers["Authorization"] = f"Bearer {Config.HUG_API_KEY}"
 
+        # Use shorter timeout in test mode to prevent test timeouts
+        request_timeout = 8.0 if Config.IS_TESTING else 30.0
+
         url = "https://huggingface.co/api/models"
-        response = httpx.get(url, params=params, headers=headers, timeout=30.0)
+        response = httpx.get(url, params=params, headers=headers, timeout=request_timeout)
         response.raise_for_status()
 
         models = response.json()
@@ -461,8 +469,11 @@ def get_huggingface_model_info(model_id: str) -> dict:
         if Config.HUG_API_KEY:
             headers["Authorization"] = f"Bearer {Config.HUG_API_KEY}"
 
+        # Use shorter timeout in test mode to prevent test timeouts
+        request_timeout = 5.0 if Config.IS_TESTING else 10.0
+
         url = f"https://huggingface.co/api/models/{model_id}"
-        response = httpx.get(url, headers=headers, timeout=10.0)
+        response = httpx.get(url, headers=headers, timeout=request_timeout)
         response.raise_for_status()
 
         model_data = response.json()
