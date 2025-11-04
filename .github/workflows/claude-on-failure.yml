@@ -36,17 +36,25 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           pr_number: ${{ steps.find_pr.outputs.pr }}
-          mode: "review"
-          system_prompt: |
-            You are a CI triage assistant for the Gatewayz backend API. Summarize why the workflow failed,
-            identify the likely source of the error, and suggest minimal code changes to fix it.
-            Focus on immediate blockers.
+          use_commit_signing: true
+          claude_args: "--max-turns 15"
+          prompt: |
+            The CI pipeline has failed on this PR. Your task is to:
 
-            Common failure patterns to check:
-            - Test failures (pytest assertion errors, timeout issues)
-            - Linting errors (ruff, black, isort, mypy)
-            - Security scan failures (bandit, safety)
-            - Import/dependency errors
-            - Coverage drops below 25% threshold
-            - Integration test failures (endpoint tests, auth, payments)
-            - Build/startup errors
+            1. Analyze the CI failure logs to identify the root cause
+            2. Implement the necessary code fixes to resolve the failures
+            3. Commit and push your changes to this PR branch
+
+            Common failure patterns in this Gatewayz backend codebase:
+            - Test failures: pytest assertion errors, timeout issues, mock configuration
+            - Linting errors: ruff, black, isort, mypy type errors
+            - Security scans: bandit warnings, safety vulnerability checks
+            - Import/dependency errors: missing packages, circular imports
+            - Coverage drops: ensure coverage stays above 25% threshold
+            - Integration test failures: endpoint tests, auth, payments, database
+            - Build/startup errors: FastAPI app initialization, missing env vars
+
+            After identifying the issue, make the minimal code changes needed to fix it.
+            Test your changes if possible, then commit and push to the PR.
+
+            Use clear commit messages that explain what was fixed and why.
