@@ -710,7 +710,13 @@ export default function ModelProfilePage() {
                             <InlineChat
                                 modelId={model.id}
                                 modelName={model.name}
-                                gateway={modelProviders.length > 0 ? modelProviders[0] : undefined}
+                                gateway={
+                                    modelProviders.length > 0
+                                        ? modelProviders[0]
+                                        : model.id.includes('/')
+                                            ? model.id.split('/')[0]
+                                            : undefined
+                                }
                             />
                         </Card>
                     </div>

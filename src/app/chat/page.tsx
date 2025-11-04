@@ -1333,32 +1333,44 @@ function ChatPageContent() {
                         } else {
                             console.warn('Model not found in cache:', modelParam);
                             // Fallback: create basic model option from parameter
+                            // Extract gateway from model ID (e.g., 'google/gemini-pro' -> 'google')
+                            const extractedGateway = modelParam.includes('/')
+                                ? modelParam.split('/')[0]
+                                : (modelParam.includes('openrouter') ? 'openrouter' : 'unknown');
                             setSelectedModel({
                                 value: modelParam,
                                 label: modelParam.split('/').pop() || modelParam,
                                 category: 'Unknown',
-                                sourceGateway: modelParam.includes('openrouter') ? 'openrouter' : 'unknown'
+                                sourceGateway: extractedGateway
                             });
                         }
                     }
                 } catch (e) {
                     console.error('Failed to parse model cache:', e);
                     // Fallback: create basic model option
+                    // Extract gateway from model ID (e.g., 'google/gemini-pro' -> 'google')
+                    const extractedGateway = modelParam.includes('/')
+                        ? modelParam.split('/')[0]
+                        : 'unknown';
                     setSelectedModel({
                         value: modelParam,
                         label: modelParam.split('/').pop() || modelParam,
                         category: 'Unknown',
-                        sourceGateway: 'unknown'
+                        sourceGateway: extractedGateway
                     });
                 }
             } else {
                 // No cache available, create basic model option and let ModelSelect load in background
                 console.log('No cache available, using fallback model option');
+                // Extract gateway from model ID (e.g., 'google/gemini-pro' -> 'google')
+                const extractedGateway = modelParam.includes('/')
+                    ? modelParam.split('/')[0]
+                    : 'unknown';
                 setSelectedModel({
                     value: modelParam,
                     label: modelParam.split('/').pop() || modelParam,
                     category: 'Unknown',
-                    sourceGateway: 'unknown'
+                    sourceGateway: extractedGateway
                 });
             }
         }
