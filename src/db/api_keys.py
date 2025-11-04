@@ -1,11 +1,11 @@
 import logging
-from typing import Any
-from datetime import datetime, timedelta, timezone
-
-from src.db.plans import check_plan_entitlements
-from src.config.supabase_config import get_supabase_client
 import secrets
-from src.utils.crypto import encrypt_api_key, sha256_key_hash, last4
+from datetime import datetime, timedelta, timezone
+from typing import Any
+
+from src.config.supabase_config import get_supabase_client
+from src.db.plans import check_plan_entitlements
+from src.utils.crypto import encrypt_api_key, last4, sha256_key_hash
 from src.utils.security_validators import sanitize_for_logging
 
 logger = logging.getLogger(__name__)
@@ -95,7 +95,9 @@ def create_api_key(
         # Calculate expiration date if specified
         expiration_date = None
         if expiration_days:
-            expiration_date = (datetime.now(timezone.utc) + timedelta(days=expiration_days)).isoformat()
+            expiration_date = (
+                datetime.now(timezone.utc) + timedelta(days=expiration_days)
+            ).isoformat()
 
         # Set default permissions if none provided
         if scope_permissions is None:
