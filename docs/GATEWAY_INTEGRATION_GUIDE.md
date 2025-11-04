@@ -1,658 +1,698 @@
-# Gateway Integration Guide
+# AI Gateway Integration Guide
 
-This guide explains how to add a new AI gateway/provider to the Gatewayz platform. Follow these steps to ensure complete integration across the entire codebase.
+This guide provides comprehensive instructions for integrating new AI Gateway providers into the system. Follow these steps to ensure complete and consistent integration across all backend systems and frontend UI.
 
 ## Overview
 
-Adding a new gateway requires changes to several files across the backend to ensure the gateway is properly supported in:
-- Model caching
-- API endpoints
-- Catalog retrieval
-- Provider statistics
-- Frontend display
-
-## Integration Checklist
-
-Use this checklist when adding a new gateway to ensure nothing is missed:
-
-- [ ] Add cache configuration
-- [ ] Create model fetching function
-- [ ] Create model normalization function
-- [ ] Register gateway in cache getter
-- [ ] Add to parallel/sequential fetchers
-- [ ] Add to gateway health dashboard
-- [ ] Update catalog endpoints
-- [ ] Update API documentation
-- [ ] Add tests
-- [ ] Update this guide with gateway-specific notes
-
-## Step-by-Step Integration
-
-### 1. Add Cache Configuration (`src/cache.py`)
-
-Add a new cache dictionary for your gateway:
-
-```python
-_your_gateway_models_cache = {
-    "data": None,
-    "timestamp": None,
-    "ttl": 3600,  # 1 hour TTL (adjust based on gateway update frequency)
-    "stale_ttl": 7200  # 2 hours stale-while-revalidate
-}
-```
-
-**Important:** Update the cache mapping functions:
-
-```python
-def get_models_cache(gateway: str):
-    """Get cache for a specific gateway"""
-    cache_map = {
-        # ... existing gateways ...
-        "your_gateway": _your_gateway_models_cache,  # ADD THIS LINE
-    }
-    return cache_map.get(gateway.lower())
-```
-
-```python
-def clear_models_cache(gateway: str):
-    """Clear cache for a specific gateway"""
-    cache_map = {
-        # ... existing gateways ...
-        "your_gateway": _your_gateway_models_cache,  # ADD THIS LINE
-    }
-    cache = cache_map.get(gateway.lower())
-    if cache:
-        cache["data"] = None
-        cache["timestamp"] = None
-```
-
-### 2. Import Cache in Models Module (`src/services/models.py`)
-
-Add your cache import:
-
-```python
-from src.cache import (
-    _huggingface_cache,
-    _models_cache,
-    # ... other caches ...
-    _your_gateway_models_cache,  # ADD THIS LINE
-    is_cache_fresh,
-    should_revalidate_in_background,
-)
-```
-
-### 3. Create Model Fetching Function (`src/services/models.py`)
-
-Create a function to fetch models from your gateway:
-
-```python
-def fetch_models_from_your_gateway():
-    """Fetch models from Your Gateway API
-
-    Description of what makes this gateway unique, its features, etc.
-    """
-    try:
-        # Method 1: Fetch from API
-        if not Config.YOUR_GATEWAY_API_KEY:
-            logger.error("Your Gateway API key not configured")
-            return []
-
-        headers = {
-            "Authorization": f"Bearer {Config.YOUR_GATEWAY_API_KEY}",
-            "Content-Type": "application/json",
-        }
-
-        response = httpx.get(
-            "https://api.your-gateway.com/v1/models",
-            headers=headers,
-            timeout=20.0,
-        )
-        response.raise_for_status()
-
-        payload = response.json()
-        raw_models = payload.get("data", []) or payload.get("models", [])
-
-        # Method 2: Load from static catalog file (like Fal.ai)
-        # from src.services.your_gateway_client import get_your_gateway_models
-        # raw_models = get_your_gateway_models()
-
-        if not raw_models:
-            logger.warning("No models found from Your Gateway")
-            return []
-
-        # Normalize models to standard format
-        normalized_models = [
-            normalize_your_gateway_model(model) for model in raw_models if model
-        ]
-
-        # Update cache
-        _your_gateway_models_cache["data"] = normalized_models
-        _your_gateway_models_cache["timestamp"] = datetime.now(timezone.utc)
-
-        logger.info(f"Fetched {len(normalized_models)} models from Your Gateway")
-        return _your_gateway_models_cache["data"]
-
-    except httpx.HTTPStatusError as e:
-        logger.error(f"HTTP error fetching from Your Gateway: {e.response.status_code}")
-        return []
-    except Exception as e:
-        logger.error(f"Failed to fetch models from Your Gateway: {e}")
-        return []
-```
-
-### 4. Create Model Normalization Function (`src/services/models.py`)
-
-Normalize your gateway's model format to match the OpenRouter schema:
-
-```python
-def normalize_your_gateway_model(gateway_model: dict) -> dict:
-    """Normalize Your Gateway model entries to resemble OpenRouter model shape
-
-    Your Gateway features:
-    - Feature 1
-    - Feature 2
-    - Feature 3
-    """
-    model_id = gateway_model.get("id") or gateway_model.get("model_id")
-    if not model_id:
-        logger.warning(f"Your Gateway model missing 'id' field: {gateway_model}")
-        return None
-
-    # Extract provider from model ID (e.g., "provider/model-name")
-    provider_slug = model_id.split("/")[0] if "/" in model_id else "your-gateway"
-
-    # Use name or derive from ID
-    display_name = gateway_model.get("name") or model_id.split("/")[-1]
-
-    # Get description
-    description = gateway_model.get("description", f"Your Gateway {display_name} model")
-
-    # Determine modality (text, image, video, audio, etc.)
-    modality = gateway_model.get("modality", "text->text")
-
-    # Parse input/output modalities
-    if "->" in modality:
-        input_mod, output_mod = modality.split("->")
-    else:
-        input_mod, output_mod = "text", "text"
-
-    # Build architecture object
-    architecture = {
-        "modality": modality,
-        "input_modalities": [input_mod],
-        "output_modalities": [output_mod],
-        "tokenizer": gateway_model.get("tokenizer"),
-        "instruct_type": gateway_model.get("instruct_type"),
-    }
-
-    # Get context length
-    context_length = gateway_model.get("context_length") or gateway_model.get("max_tokens", 4096)
-
-    # Parse pricing (adjust field names based on your gateway's API)
-    pricing = {
-        "prompt": None,
-        "completion": None,
-        "request": None,
-        "image": None,
-    }
-
-    if "pricing" in gateway_model:
-        pricing_data = gateway_model["pricing"]
-        pricing["prompt"] = str(pricing_data.get("input")) if pricing_data.get("input") is not None else None
-        pricing["completion"] = str(pricing_data.get("output")) if pricing_data.get("output") is not None else None
-
-    # Build normalized model object
-    normalized = {
-        "id": model_id,
-        "slug": model_id,
-        "canonical_slug": model_id,
-        "hugging_face_id": gateway_model.get("huggingface_repo"),
-        "name": display_name,
-        "created": gateway_model.get("created"),
-        "description": description,
-        "context_length": context_length,
-        "architecture": architecture,
-        "pricing": pricing,
-        "top_provider": None,
-        "per_request_limits": None,
-        "supported_parameters": gateway_model.get("supported_parameters", []),
-        "default_parameters": gateway_model.get("default_parameters", {}),
-        "provider_slug": provider_slug,
-        "provider_site_url": "https://your-gateway.com",
-        "model_logo_url": gateway_model.get("logo_url"),
-        "source_gateway": "your_gateway",
-        "raw_your_gateway": gateway_model,  # Keep original data for debugging
-    }
-
-    return enrich_model_with_pricing(normalized, "your_gateway")
-```
-
-### 5. Register Gateway in Cache Getter (`src/services/models.py`)
-
-Add your gateway to the `get_cached_models()` function:
-
-```python
-def get_cached_models(gateway: str = "openrouter"):
-    """Get cached models or fetch from the requested gateway if cache is expired"""
-    try:
-        gateway = (gateway or "openrouter").lower()
-
-        # ... existing gateway checks ...
-
-        if gateway == "your_gateway":
-            cache = _your_gateway_models_cache
-            if cache["data"] and cache["timestamp"]:
-                cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
-                if cache_age < cache["ttl"]:
-                    return cache["data"]
-            return fetch_models_from_your_gateway()
-
-        if gateway == "all":
-            # Fetch all gateways in parallel for improved performance
-            return get_all_models_parallel()
-```
-
-### 6. Add to Parallel/Sequential Fetchers (`src/services/models.py`)
-
-**Update `get_all_models_parallel()`:**
-
-```python
-def get_all_models_parallel():
-    """Fetch models from all gateways in parallel for improved performance"""
-    try:
-        gateways = [
-            "openrouter", "portkey", "featherless", "deepinfra",
-            "google", "cerebras", "nebius", "xai", "novita",
-            "hug", "chutes", "groq", "fireworks", "together",
-            "aimo", "near", "fal",
-            "your_gateway"  # ADD THIS LINE
-        ]
-```
-
-**Update `get_all_models_sequential()`:**
-
-```python
-def get_all_models_sequential():
-    """Fallback sequential fetching (original implementation)"""
-    openrouter_models = get_cached_models("openrouter") or []
-    # ... other gateways ...
-    fal_models = get_cached_models("fal") or []
-    your_gateway_models = get_cached_models("your_gateway") or []  # ADD THIS LINE
-
-    return openrouter_models + portkey_models + ... + fal_models + your_gateway_models  # ADD YOUR GATEWAY
-```
-
-### 7. Add to Gateway Health Dashboard (`check_and_fix_gateway_models.py`)
-
-The gateway health dashboard at `/health/gateways/dashboard` monitors all gateways. Add your gateway to the configuration:
-
-**a. Import the cache:**
-
-```python
-from src.cache import (
-    _models_cache,
-    # ... other caches ...
-    _your_gateway_models_cache,  # ADD THIS LINE
-)
-```
-
-**b. Add to GATEWAY_CONFIG:**
-
-```python
-GATEWAY_CONFIG = {
-    # ... existing gateways ...
-    'your_gateway': {
-        'name': 'Your Gateway',
-        'url': 'https://api.your-gateway.com/v1/models',  # Or None for static catalogs
-        'api_key_env': 'YOUR_GATEWAY_API_KEY',
-        'api_key': Config.YOUR_GATEWAY_API_KEY,
-        'cache': _your_gateway_models_cache,
-        'min_expected_models': 10,  # Minimum expected model count
-        'header_type': 'bearer'  # or 'portkey', 'google', etc.
-    },
-}
-```
-
-**Notes:**
-- If your gateway uses a static catalog (no live API), set `url` to `None`
-- For static catalogs, you can use a dummy API key like `'static_catalog'`
-- The dashboard will show cache status even without a live API endpoint
-
-### 8. Update System Routes Dashboard (`src/routes/system.py`)
-
-The system routes also include a simpler health check dashboard. Update the gateway lists:
-
-```python
-# In get_cache_status() function
-gateways = ["openrouter", "portkey", ..., "fal", "your_gateway"]  # ADD YOUR GATEWAY
-
-# In refresh_gateway_cache() function
-valid_gateways = ["openrouter", "portkey", ..., "fal", "your_gateway"]  # ADD YOUR GATEWAY
-
-# In clear_all_caches() function
-gateways = ["openrouter", "portkey", ..., "fal", "your_gateway"]  # ADD YOUR GATEWAY
-
-# In check_all_gateways() function, add your gateway configuration
-gateway_endpoints = {
-    # ... existing gateways ...
-    "your_gateway": {
-        "url": "https://api.your-gateway.com/v1/models",
-        "api_key": Config.YOUR_GATEWAY_API_KEY,
-        "headers": {"Authorization": f"Bearer {Config.YOUR_GATEWAY_API_KEY}"} if Config.YOUR_GATEWAY_API_KEY else {}
-    }
-}
-```
-
-### 9. Update Catalog Endpoints (`src/routes/catalog.py`)
-
-#### a. Update Gateway Parameter Descriptions
-
-Find all occurrences of the `gateway` Query parameter and add your gateway:
-
-```python
-gateway: Optional[str] = Query(
-    "openrouter",
-    description="Gateway to use: 'openrouter', 'portkey', ..., 'fal', 'your_gateway', or 'all'",
-),
-```
-
-**Tip:** Use replace_all if there are multiple occurrences.
-
-#### b. Add Model Variable in `get_models()` Function
-
-```python
-async def get_models(
-    # ... parameters ...
-):
-    # ... existing code ...
-
-    fal_models: List[dict] = []
-    your_gateway_models: List[dict] = []  # ADD THIS LINE
-```
-
-#### c. Add Fetching Logic
-
-```python
-    if gateway_value in ("your_gateway", "all"):
-        your_gateway_models = get_cached_models("your_gateway") or []
-        if gateway_value == "your_gateway" and not your_gateway_models:
-            logger.error("No Your Gateway models data available from cache")
-            raise HTTPException(status_code=503, detail="Models data unavailable")
-```
-
-#### d. Add to Gateway Selection Chain
-
-```python
-    elif gateway_value == "fal":
-        models = fal_models
-    elif gateway_value == "your_gateway":  # ADD THIS BLOCK
-        models = your_gateway_models
-    else:
-        # For "all" gateway, merge all models
-        models = merge_models_by_slug(
-            openrouter_models, portkey_models, ..., fal_models, your_gateway_models  # ADD YOUR GATEWAY
-        )
-```
-
-#### e. Add to Response Notes
-
-```python
-    note = {
-        "openrouter": "OpenRouter catalog",
-        # ... other gateways ...
-        "fal": "Fal.ai catalog",
-        "your_gateway": "Your Gateway catalog",  # ADD THIS LINE
-        "all": "Combined OpenRouter, ..., Fal.ai, and Your Gateway catalogs",  # UPDATE THIS
-    }.get(gateway_value, "OpenRouter catalog")
-```
-
-#### f. Update Provider Endpoints
-
-In the `get_providers()` function:
-
-```python
-    # Add support for other gateways
-    other_gateways = ["featherless", "deepinfra", "chutes", "groq", "fireworks", "together", "fal", "your_gateway"]  # ADD YOUR GATEWAY
-```
-
-### 8. Update API Configuration (if needed)
-
-If your gateway requires API keys or configuration, add to `src/config/config.py`:
-
-```python
-class Config:
-    # ... existing config ...
-
-    # Your Gateway Configuration
-    YOUR_GATEWAY_API_KEY = os.getenv("YOUR_GATEWAY_API_KEY")
-    YOUR_GATEWAY_BASE_URL = os.getenv("YOUR_GATEWAY_BASE_URL", "https://api.your-gateway.com")
-```
-
-And update `.env.example`:
-
-```bash
-# Your Gateway
-YOUR_GATEWAY_API_KEY=your_api_key_here
-```
-
-### 10. Add Tests
-
-Create a test file `tests/services/test_your_gateway_client.py`:
-
-```python
-import pytest
-from src.services.models import fetch_models_from_your_gateway, normalize_your_gateway_model
-
-
-class TestYourGatewayIntegration:
-    """Tests for Your Gateway models catalog functionality"""
-
-    def test_fetch_models_from_your_gateway(self):
-        """Test fetching models from Your Gateway"""
-        models = fetch_models_from_your_gateway()
-
-        assert models is not None
-        assert isinstance(models, list)
-
-        if models:
-            # Check first model has required fields
-            model = models[0]
-            assert "id" in model
-            assert "name" in model
-            assert "source_gateway" in model
-            assert model["source_gateway"] == "your_gateway"
-
-    def test_normalize_your_gateway_model(self):
-        """Test normalization of Your Gateway model data"""
-        raw_model = {
-            "id": "provider/model-name",
-            "name": "Test Model",
-            "description": "A test model",
-            "context_length": 8192,
-        }
-
-        normalized = normalize_your_gateway_model(raw_model)
-
-        assert normalized is not None
-        assert normalized["id"] == "provider/model-name"
-        assert normalized["name"] == "Test Model"
-        assert normalized["source_gateway"] == "your_gateway"
-        assert normalized["context_length"] == 8192
-```
-
-### 11. Update Documentation
-
-Add gateway-specific information to:
-- `README.md` - Add to list of supported gateways
-- `docs/API.md` - Document gateway-specific endpoints
-- This file - Add to "Gateway-Specific Notes" section below
-
-## Common Patterns
-
-### Static Catalog vs API Fetching
-
-**API Fetching (Most Gateways):**
-```python
-def fetch_models_from_gateway():
-    response = httpx.get("https://api.gateway.com/models", headers=headers)
-    raw_models = response.json()["data"]
-    # normalize and return
-```
-
-**Static Catalog (like Fal.ai):**
-```python
-def fetch_models_from_gateway():
-    from src.services.gateway_client import get_gateway_models
-    raw_models = get_gateway_models()  # Loads from JSON file
-    # normalize and return
-```
-
-### Pricing Field Mapping
-
-Different gateways use different field names for pricing:
-
-| Gateway | Input Price Field | Output Price Field |
-|---------|------------------|-------------------|
-| OpenRouter | `pricing.prompt` | `pricing.completion` |
-| Portkey | `pricing.input` | `pricing.output` |
-| DeepInfra | `input_cost` | `output_cost` |
-| Your Gateway | ??? | ??? |
-
-Map accordingly in your normalization function.
-
-### Modality Mapping
-
-For image/video/audio gateways, set the modality correctly:
-
-```python
-modality_map = {
-    "text-to-image": "text->image",
-    "text-to-video": "text->video",
-    "image-to-image": "image->image",
-    "image-to-video": "image->video",
-    "video-to-video": "video->video",
-    "text-to-audio": "text->audio",
-    "text-to-speech": "text->audio",
-    "audio-to-audio": "audio->audio",
-    "image-to-3d": "image->3d",
-    "vision": "image->text",
-}
-```
-
-## Verification Checklist
-
-After completing all steps, verify:
-
-1. **Compilation:** `python3 -m py_compile src/cache.py src/services/models.py src/routes/catalog.py check_and_fix_gateway_models.py`
-2. **Tests Pass:** `pytest tests/services/test_your_gateway_client.py`
-3. **API Endpoint Works:**
-   - `curl http://localhost:8000/catalog/v1/models?gateway=your_gateway`
-   - `curl http://localhost:8000/catalog/v1/models?gateway=all`
-4. **Dashboard Shows Gateway:** Visit `https://api.gatewayz.ai/health/gateways/dashboard` and verify your gateway appears
-5. **No 0 Models Warning:** Check frontend console for "⚠️ Gateways with 0 models"
-6. **Frontend Display:** Models appear in the frontend catalog
-
-## Gateway-Specific Notes
-
-### Fal.ai
-- Uses static catalog from `src/data/fal_catalog.json`
-- 69 curated models from 839+ available on fal.ai
-- Supports image, video, audio, and 3D generation models
-- No pricing exposed in catalog (set to null)
-- Modality mapped from `type` field
-- **Dashboard Configuration:**
-  - URL set to `None` (no live API endpoint)
-  - Uses dummy API key `'static_catalog'` to mark as configured
-  - Min expected models: 50
-  - Dashboard shows cache status only (no endpoint test)
-
-### Near AI
-- Decentralized AI infrastructure with private, verifiable services
-- Uses OpenAI-compatible /models endpoint
-- Falls back to known models if API doesn't return results
-- Includes security features metadata
-
-### AIMO
-- AI model marketplace with token-based economics
-- Fetches from OpenAI-compatible endpoint
-- Includes governance and staking metadata
-
-### [Your Gateway]
-- [Add notes about your gateway implementation here]
-- [Special considerations, API quirks, etc.]
-
-## Troubleshooting
-
-### Gateway Shows 0 Models
-
-**Symptoms:** Frontend logs show `⚠️ Gateways with 0 models: ['your_gateway']`
-
-**Causes & Solutions:**
-
-1. **Not added to parallel/sequential fetchers**
-   - Check `get_all_models_parallel()` includes your gateway
-   - Check `get_all_models_sequential()` includes your gateway
-
-2. **Fetch function returns empty array**
-   - Check API key is configured
-   - Check API endpoint is accessible
-   - Add logging to fetch function
-
-3. **Cache not registered**
-   - Check `get_models_cache()` includes mapping
-   - Check cache was imported in models.py
-
-4. **Normalization function returns None**
-   - Check model data has required fields
-   - Add logging to normalization function
-
-### Models Not Appearing in "All" Gateway
-
-Check the `merge_models_by_slug()` call includes your gateway models.
-
-### API Returns 503 Error
-
-Check the conditional block for your gateway doesn't raise an exception when models are empty.
-
-## Examples
-
-### Example 1: OpenRouter (API-based)
-- File: `src/services/models.py` (lines 425-456)
-- Uses direct API calls
-- Comprehensive pricing and metadata
-
-### Example 2: Fal.ai (Catalog-based)
-- File: `src/services/models.py` (lines 1523-1636)
-- Loads from static JSON catalog
-- Supports multiple modalities
-
-### Example 3: Near AI (Hybrid with Fallback)
-- File: `src/services/models.py` (lines 1372-1520)
-- Tries API first, falls back to known models
-- Includes custom metadata
-
-## Reference Files
-
-Key files to review when adding a gateway:
-
-1. `src/cache.py` - Cache configuration
-2. `src/services/models.py` - Model fetching and normalization
-3. `src/routes/catalog.py` - Catalog API endpoints
-4. `src/routes/system.py` - System health and cache endpoints
-5. `check_and_fix_gateway_models.py` - Gateway health dashboard
-6. `src/config/config.py` - Configuration
-7. `tests/services/test_*_client.py` - Tests
-
-## Questions?
-
-If you encounter issues not covered in this guide:
-1. Check existing gateway implementations for reference
-2. Search codebase for gateway name (e.g., `grep -r "fal" --include="*.py"`)
-3. Ask in team chat or create a GitHub issue
-4. Update this guide with your findings!
+The system supports multiple AI gateway providers (OpenRouter, Portkey, Featherless, Vercel AI Gateway, etc.). Each provider requires implementation in several areas:
+
+1. **Backend API Client** - Handle requests/responses with the provider's API
+2. **Chat Routes** - Integrate into streaming and non-streaming chat endpoints
+3. **Model Catalog** - Expose available models to the frontend
+4. **Provider Metadata** - Display branding and provider information
+5. **Failover Chain** - Position provider in fallback priority order
+6. **Testing** - Comprehensive test coverage with mocks
 
 ---
 
-**Last Updated:** 2025-10-31
-**Maintainer:** Terragon Labs
-**Version:** 1.0
+## Step 1: Create Provider Client Module
+
+**Location**: `src/services/{provider}_client.py`
+
+**Purpose**: Implement all API communication with the gateway
+
+### Key Components:
+
+#### 1.1 Initialize Client Function
+
+```python
+def get_{provider}_client():
+    """Initialize and return authenticated client for {provider}"""
+    api_key = Config.{PROVIDER}_API_KEY
+    if not api_key:
+        # Provide placeholder for testing
+        api_key = "placeholder-key"
+        logger.warning("{Provider} API key not configured, using placeholder")
+
+    # Use OpenAI SDK for OpenAI-compatible APIs
+    return OpenAI(
+        base_url="https://{api_endpoint}",
+        api_key=api_key
+    )
+```
+
+#### 1.2 Non-Streaming Request Handler
+
+```python
+def make_{provider}_request_openai(messages, model, **kwargs):
+    """Make non-streaming chat completion request"""
+    client = get_{provider}_client()
+    response = client.chat.completions.create(
+        model=model,
+        messages=messages,
+        **kwargs
+    )
+    return response
+```
+
+#### 1.3 Streaming Request Handler
+
+```python
+def make_{provider}_request_openai_stream(messages, model, **kwargs):
+    """Make streaming chat completion request"""
+    client = get_{provider}_client()
+    stream = client.chat.completions.create(
+        model=model,
+        messages=messages,
+        stream=True,
+        **kwargs
+    )
+    return stream
+```
+
+#### 1.4 Response Processor
+
+```python
+def process_{provider}_response(response):
+    """Convert provider response object to dict format"""
+    return {
+        "id": response.id,
+        "object": response.object,
+        "created": response.created,
+        "model": response.model,
+        "choices": [
+            {
+                "index": choice.index,
+                "message": {
+                    "role": choice.message.role,
+                    "content": choice.message.content
+                },
+                "finish_reason": choice.finish_reason
+            }
+            for choice in response.choices
+        ],
+        "usage": {
+            "prompt_tokens": response.usage.prompt_tokens,
+            "completion_tokens": response.usage.completion_tokens,
+            "total_tokens": response.usage.total_tokens
+        }
+    }
+```
+
+---
+
+## Step 2: Add Configuration
+
+**Location**: `src/config/config.py`
+
+Add environment variable for provider API key:
+
+```python
+{PROVIDER}_API_KEY = os.environ.get("{PROVIDER}_API_KEY")
+```
+
+---
+
+## Step 3: Integrate into Chat Routes
+
+**Location**: `src/routes/chat.py`
+
+### 3.1 Add Imports
+
+```python
+from src.services.{provider}_client import (
+    make_{provider}_request_openai,
+    process_{provider}_response,
+    make_{provider}_request_openai_stream
+)
+```
+
+### 3.2 Add Streaming Handler (around line 560)
+
+```python
+elif attempt_provider == "{provider}":
+    stream = await _to_thread(
+        make_{provider}_request_openai_stream, messages, request_model, **optional
+    )
+```
+
+### 3.3 Add Non-Streaming Handler (around line 703)
+
+```python
+elif attempt_provider == "{provider}":
+    resp_raw = await asyncio.wait_for(
+        _to_thread(make_{provider}_request_openai, messages, request_model, **optional),
+        timeout=request_timeout,
+    )
+    processed = await _to_thread(process_{provider}_response, resp_raw)
+```
+
+---
+
+## Step 4: Add Model Transformations
+
+**Location**: `src/services/model_transformations.py`
+
+### 4.1 Add to Provider List
+
+Add provider to the `detect_provider_from_model_id()` detection loop.
+
+### 4.2 Add Model Mappings
+
+```python
+"{provider}": {
+    # If provider has specific model ID mappings, add them here
+    # Format: "provider_model_id": "normalized_model_id"
+
+    # If provider uses pass-through model IDs (any model is supported),
+    # leave empty or add comments explaining this
+}
+```
+
+**Important**: Use minimal or empty mappings if the provider supports pass-through model IDs. This prevents auto-detection conflicts where one provider's models are incorrectly routed to another.
+
+---
+
+## Step 5: Add to Provider Failover Chain
+
+**Location**: `src/services/provider_failover.py`
+
+Update `FALLBACK_PROVIDER_PRIORITY` tuple:
+
+```python
+FALLBACK_PROVIDER_PRIORITY: tuple[str, ...] = (
+    "primary_provider_1",
+    "primary_provider_2",
+    "{provider}",  # Add here with appropriate priority
+    "fallback_provider_1",
+    "fallback_provider_2",
+)
+```
+
+**Priority Guidelines**:
+- Position 1-2: Most reliable/full-featured providers
+- Position 3-5: Reliable backup providers
+- Position 6+: Last-resort fallbacks
+
+---
+
+## Step 6: Add Provider Metadata
+
+**Location**: `src/services/providers.py`
+
+Add provider to `MANUAL_LOGO_DB`:
+
+```python
+MANUAL_LOGO_DB = {
+    # ... existing entries ...
+    '{provider_slug}': '{logo_url}',
+}
+```
+
+Use SVG URLs for best quality:
+- Simple Icons: `https://cdn.jsdelivr.net/gh/simple-icons/simple-icons@develop/icons/{slug}.svg`
+- Company favicons: `https://www.google.com/s2/favicons?domain={domain}&sz=128`
+
+---
+
+## Step 7: Expose Models in Catalog
+
+**Location**: `src/cache.py`, `src/services/models.py`
+
+### 7.1 Add Cache Definition
+
+In `src/cache.py`:
+
+```python
+_{provider}_models_cache = {
+    "data": None,
+    "timestamp": None,
+    "ttl": 3600,  # 1 hour TTL
+    "stale_ttl": 7200  # 2 hour stale-while-revalidate window
+}
+```
+
+### 7.2 Register Cache in Lookup Functions
+
+In `src/cache.py` in `get_models_cache()` and `clear_models_cache()`:
+
+```python
+"{provider}": _{provider}_models_cache,
+```
+
+### 7.3 Add to Imports
+
+In `src/services/models.py`:
+
+```python
+from src.cache import (
+    # ... existing imports ...
+    _{provider}_models_cache,
+)
+```
+
+### 7.4 Implement Fetch Function
+
+In `src/services/models.py`:
+
+```python
+def fetch_models_from_{provider}():
+    """Fetch models from {Provider} API"""
+    try:
+        from src.services.{provider}_client import get_{provider}_client
+
+        client = get_{provider}_client()
+        response = client.models.list()
+
+        if not response or not hasattr(response, 'data'):
+            logger.warning("No models returned from {Provider}")
+            return []
+
+        # Normalize models to catalog schema
+        normalized_models = [
+            normalize_{provider}_model(model) for model in response.data if model
+        ]
+
+        _{provider}_models_cache["data"] = normalized_models
+        _{provider}_models_cache["timestamp"] = datetime.now(timezone.utc)
+
+        logger.info(f"Fetched {len(normalized_models)} models from {Provider}")
+        return _{provider}_models_cache["data"]
+    except Exception as e:
+        logger.error(f"Failed to fetch models from {Provider}: {e}")
+        return []
+```
+
+### 7.5 Implement Normalization Function
+
+```python
+def normalize_{provider}_model(model) -> dict:
+    """Normalize {Provider} model to catalog schema"""
+    model_id = getattr(model, 'id', None)
+    if not model_id:
+        logger.warning(f"{Provider} model missing 'id': {model}")
+        return None
+
+    # Fetch pricing (if available from provider API)
+    pricing = get_{provider}_model_pricing(model_id)
+
+    normalized = {
+        "id": model_id,
+        "slug": f"{provider}/{model_id}",
+        "canonical_slug": f"{provider}/{model_id}",
+        "hugging_face_id": None,
+        "name": getattr(model, 'name', model_id),
+        "created": getattr(model, 'created_at', None),
+        "description": getattr(model, 'description', f"Model from {Provider}"),
+        "context_length": getattr(model, 'context_length', 4096),
+        "architecture": {
+            "modality": "text->text",
+            "input_modalities": ["text"],
+            "output_modalities": ["text"],
+            "instruct_type": "chat"
+        },
+        "pricing": pricing,  # Now dynamically fetched
+        "top_provider": None,
+        "per_request_limits": None,
+        "supported_parameters": [],
+        "default_parameters": {},
+        "provider_slug": "provider",
+        "provider_site_url": "https://provider.com",
+        "model_logo_url": "https://cdn.jsdelivr.net/gh/simple-icons/simple-icons@develop/icons/provider.svg",
+        "source_gateway": "{provider}",
+    }
+
+    return normalized
+
+def get_{provider}_model_pricing(model_id: str) -> dict:
+    """Fetch pricing for {Provider} model
+
+    This function should:
+    1. Try to fetch from provider API pricing endpoint (if available)
+    2. Fall back to manual pricing data (if maintained)
+    3. Return default zero pricing if unavailable
+
+    Returns:
+        dict with 'prompt', 'completion', 'request', 'image' fields
+    """
+    try:
+        from src.services.{provider}_client import fetch_model_pricing_{provider}
+
+        pricing_data = fetch_model_pricing_{provider}(model_id)
+        if pricing_data:
+            return {
+                "prompt": str(pricing_data.get("prompt", "0")),
+                "completion": str(pricing_data.get("completion", "0")),
+                "request": str(pricing_data.get("request", "0")),
+                "image": str(pricing_data.get("image", "0")),
+            }
+    except Exception as e:
+        logger.debug(f"Failed to fetch pricing for {model_id}: {e}")
+
+    # Fallback: default zero pricing
+    return {
+        "prompt": "0",
+        "completion": "0",
+        "request": "0",
+        "image": "0",
+    }
+```
+
+### 7.6 Register in get_cached_models()
+
+In `src/services/models.py` in `get_cached_models()`:
+
+```python
+if gateway == "{provider}":
+    cache = _{provider}_models_cache
+    if cache["data"] and cache["timestamp"]:
+        cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
+        if cache_age < cache["ttl"]:
+            return cache["data"]
+    return fetch_models_from_{provider}()
+```
+
+---
+
+## Step 8: Create Comprehensive Tests
+
+**Location**: `tests/routes/test_chat_comprehensive.py`
+
+### 8.1 Add Provider Mocks
+
+```python
+def mock_{provider}_request(messages, model, **kwargs):
+    """Mock {Provider} non-streaming request"""
+    usage_obj = MagicMock()
+    usage_obj.prompt_tokens = 10
+    usage_obj.completion_tokens = 15
+    usage_obj.total_tokens = 25
+
+    return MagicMock(
+        id="chatcmpl-{provider}123",
+        object="chat.completion",
+        created=1234567890,
+        model=model,
+        choices=[
+            MagicMock(
+                index=0,
+                message=MagicMock(role="assistant", content="Test response from {Provider}."),
+                finish_reason="stop"
+            )
+        ],
+        usage=usage_obj
+    )
+
+def mock_{provider}_stream(messages, model, **kwargs):
+    """Mock {Provider} streaming request"""
+    chunk = MagicMock()
+    chunk.choices = [MagicMock(delta=MagicMock(content="Test"))]
+
+    return iter([chunk])
+
+def mock_process_{provider}_response(response):
+    """Mock {Provider} response processor"""
+    return {
+        "id": response.id,
+        "object": response.object,
+        "created": response.created,
+        "model": response.model,
+        "choices": [{
+            "index": 0,
+            "message": {"role": "assistant", "content": response.choices[0].message.content},
+            "finish_reason": "stop"
+        }],
+        "usage": {
+            "prompt_tokens": response.usage.prompt_tokens,
+            "completion_tokens": response.usage.completion_tokens,
+            "total_tokens": response.usage.total_tokens
+        }
+    }
+```
+
+### 8.2 Register Mocks in Test Fixture
+
+```python
+# In test fixture or conftest.py
+monkeypatch.setattr(chat_module, "make_{provider}_request_openai", mock_{provider}_request)
+monkeypatch.setattr(chat_module, "process_{provider}_response", mock_process_{provider}_response)
+monkeypatch.setattr(chat_module, "make_{provider}_request_openai_stream", mock_{provider}_stream)
+```
+
+### 8.3 Create Integration Tests
+
+```python
+def test_{provider}_integration():
+    """Test {Provider} integration in catalog"""
+    models = get_cached_models("{provider}")
+    assert models is not None
+    assert len(models) > 0
+    assert all(m.get("source_gateway") == "{provider}" for m in models)
+```
+
+---
+
+## Step 9: Documentation
+
+### 9.1 Update Provider List
+
+Add to any provider documentation or README files:
+- Provider name and logo
+- Key features
+- Link to official documentation
+
+### 9.2 Model Catalog Notes
+
+If provider uses pass-through model IDs, document:
+- Why minimal model mappings are used
+- How to add custom model mappings if needed
+- Pricing information (if provider doesn't expose it)
+
+---
+
+## Pricing Implementation Strategies
+
+When integrating a new provider, you need to decide how to handle pricing data:
+
+### Strategy 1: Provider API Exposes Pricing
+**Best for**: Providers like OpenRouter that include pricing in their models API
+
+```python
+def fetch_model_pricing_provider(model_id: str):
+    """Fetch pricing from provider API models endpoint"""
+    # Pricing already included in model data from fetch_models_from_provider()
+    # Just extract and normalize
+    return {
+        "prompt": model_data.get("pricing", {}).get("prompt", "0"),
+        "completion": model_data.get("pricing", {}).get("completion", "0"),
+    }
+```
+
+### Strategy 2: Cross-Reference with System Pricing
+**Best for**: Providers like Vercel that route to other providers
+
+```python
+def fetch_model_pricing_provider(model_id: str):
+    """Cross-reference with other providers' pricing"""
+    # Vercel routes to OpenAI, Google, Anthropic, etc.
+    # Extract provider prefix and look up in system pricing
+    provider_prefix = model_id.split("/")[0]
+
+    from src.services.pricing import get_model_pricing
+    pricing = get_model_pricing(model_id)
+
+    if pricing and pricing.get("found"):
+        return pricing
+    return None
+```
+
+### Strategy 3: Manual Pricing JSON
+**Best for**: Providers that don't expose pricing via API (Groq, Fireworks, etc.)
+
+```python
+def fetch_model_pricing_provider(model_id: str):
+    """Fetch from manual_pricing.json"""
+    from src.services.pricing_lookup import get_model_pricing
+
+    pricing = get_model_pricing("provider", model_id)
+    return pricing
+```
+
+### Strategy 4: Hybrid Approach
+**Best for**: Providers with partial API pricing + manual overrides
+
+```python
+def fetch_model_pricing_provider(model_id: str):
+    """Try API pricing, fall back to manual"""
+    # 1. Try API pricing first
+    api_pricing = get_pricing_from_api(model_id)
+    if api_pricing:
+        return api_pricing
+
+    # 2. Fall back to manual pricing
+    from src.services.pricing_lookup import get_model_pricing
+    return get_model_pricing("provider", model_id)
+```
+
+### Pricing Data Structure
+All pricing should be normalized to this structure:
+
+```python
+{
+    "prompt": "0.000005",        # Per token (string format)
+    "completion": "0.000015",    # Per token (string format)
+    "request": "0",               # Per request (if applicable)
+    "image": "0",                 # Per image (if applicable)
+}
+```
+
+**Important Notes**:
+- All values stored as strings (JSON compatibility)
+- Units: per 1 million tokens (unless specified)
+- Currency: USD
+- Default to "0" if pricing unavailable
+- Handle negative values gracefully (some providers use -1 for dynamic pricing)
+
+---
+
+## Common Patterns
+
+### OpenAI-Compatible Providers
+
+For providers with OpenAI SDK compatibility:
+
+```python
+# In client module
+from openai import OpenAI
+
+def get_provider_client():
+    return OpenAI(
+        base_url="https://api.provider.com/v1",
+        api_key=Config.PROVIDER_API_KEY
+    )
+```
+
+### REST API Providers
+
+For providers with custom REST APIs:
+
+```python
+import httpx
+
+def fetch_models_from_provider():
+    headers = {"Authorization": f"Bearer {api_key}"}
+    response = httpx.get("https://api.provider.com/models", headers=headers)
+    models = response.json()["data"]
+    return normalize_models(models)
+```
+
+### CSV/Static Data Providers
+
+For providers with static model lists:
+
+```python
+def load_provider_catalog_export():
+    csv_path = Path(__file__).parent / "provider_models.csv"
+    with open(csv_path) as f:
+        reader = csv.DictReader(f)
+        models = [normalize_csv_model(row) for row in reader]
+    return models
+```
+
+---
+
+## Troubleshooting
+
+### Issue: Tests Failing with 400 Bad Request
+
+**Cause**: Chat routes importing provider functions but tests not mocking them
+
+**Solution**: Add all provider function mocks to test fixture before running tests
+
+### Issue: Wrong Provider Selected for Model
+
+**Cause**: Explicit model mappings causing auto-detection conflicts
+
+**Solution**: Use minimal or empty model mappings. Provider should still work in failover chain.
+
+### Issue: Empty Response Dictionary
+
+**Cause**: Missing pricing mock in chat_module
+
+**Solution**: Add `monkeypatch.setattr(chat_module, "calculate_cost", mock_calculate_cost)` to test
+
+### Issue: Models Not Appearing in Frontend
+
+**Cause**: Provider not registered in `get_models_cache()` or `clear_models_cache()`
+
+**Solution**: Verify all three cache registration steps completed:
+1. Cache definition in `cache.py`
+2. Entry in `get_models_cache()` lookup
+3. Entry in `clear_models_cache()` lookup
+
+---
+
+## Verification Checklist
+
+- [ ] Client module created and tested
+- [ ] Configuration variable added
+- [ ] Chat routes updated (both streaming and non-streaming)
+- [ ] Model transformations added
+- [ ] Failover chain updated
+- [ ] Provider metadata added
+- [ ] Cache definition created
+- [ ] Cache registered in lookup functions
+- [ ] Fetch function implemented
+- [ ] Normalization function implemented
+- [ ] Model function registered in `get_cached_models()`
+- [ ] Comprehensive tests created and passing
+- [ ] All GitHub CI checks passing
+- [ ] Documentation updated
+
+---
+
+## Real-World Example: Vercel AI Gateway
+
+This guide was created while integrating Vercel AI Gateway. Here's how it maps:
+
+| Step | File | Change |
+|------|------|--------|
+| 1 | `src/services/vercel_ai_gateway_client.py` | Created client with OpenAI SDK + pricing functions |
+| 2 | `src/config/config.py` | Added `VERCEL_AI_GATEWAY_API_KEY` |
+| 3 | `src/routes/chat.py` | Added streaming and non-streaming handlers |
+| 4 | `src/services/model_transformations.py` | Added empty model mappings (pass-through) |
+| 5 | `src/services/provider_failover.py` | Added at priority 3 |
+| 6 | `src/services/providers.py` | Added Vercel logo URL |
+| 7a | `src/cache.py` | Added `_vercel_ai_gateway_models_cache` |
+| 7b-f | `src/services/models.py` | Added fetch, normalize, and pricing functions; registered in `get_cached_models()` |
+| 8 | `tests/routes/test_chat_comprehensive.py` | Added comprehensive mocks |
+| 9 | This file | Created integration guide for future reference |
+
+### Vercel Pricing Implementation Details
+
+Vercel AI Gateway uses **Strategy 2: Cross-Reference with System Pricing**
+
+Because Vercel routes requests to underlying providers (OpenAI, Google, Anthropic, etc.), we determine pricing by:
+
+1. **Extract Provider Prefix**: From model ID like `openai/gpt-4` → `openai`
+2. **API Endpoint Check**: Attempt to fetch from `https://ai-gateway.vercel.sh/v1/pricing` (if available)
+3. **Cross-Reference**: Look up the underlying provider's pricing in system cache
+4. **Fallback**: Return zero pricing if unavailable
+
+**Implementation**:
+- `fetch_model_pricing_from_vercel()` - Attempts Vercel API and cross-references
+- `get_provider_pricing_for_vercel_model()` - Cross-references with system pricing
+- `get_vercel_model_pricing()` - Normalizes and applies fallback
+- `normalize_vercel_model()` - Calls pricing function during model normalization
+
+**Result**: Frontend sees actual provider pricing for Vercel-routed models (e.g., OpenAI's GPT-4 pricing when routed through Vercel)
+
+---
+
+## Support
+
+For questions about integrating a new provider:
+1. Review this guide step-by-step
+2. Compare with existing provider implementations
+3. Use Vercel AI Gateway as a reference implementation
+4. Check GitHub checks for test failures and error messages

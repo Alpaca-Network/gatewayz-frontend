@@ -9,7 +9,7 @@
 ## Quick Links
 
 - **Full Exploration Report**: [CODEBASE_EXPLORATION_REPORT.md](./CODEBASE_EXPLORATION_REPORT.md) (1,072 lines)
-- **Main Documentation**: [README.md](../README.md)
+- **Main Documentation**: [README.md](README.md)
 - **Setup Guide**: [setup.md](./setup.md)
 - **Environment Configuration**: [ENVIRONMENT_SETUP.md](./ENVIRONMENT_SETUP.md)
 - **Deployment Guide**: [DEPLOYMENT.md](./DEPLOYMENT.md)

@@ -32,7 +32,7 @@ __pycache__
 # md files
 *.md
 !docs/**/*.md
-!README.md
+!docs/README.md
 
 # Temp and output files
 temp*.json

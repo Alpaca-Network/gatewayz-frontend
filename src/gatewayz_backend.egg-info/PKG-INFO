@@ -1,0 +1,48 @@
+Metadata-Version: 2.4
+Name: gatewayz-backend
+Version: 2.0.3
+Summary: Gatewayz Universal Inference API
+Requires-Python: >=3.12
+Requires-Dist: fastapi==0.104.1
+Requires-Dist: uvicorn==0.24.0
+Requires-Dist: httpx==0.27.0
+Requires-Dist: pydantic[email]==2.12.2
+Requires-Dist: python-multipart==0.0.6
+Requires-Dist: anyio<4.0.0,>=3.7.1
+Requires-Dist: supabase==2.12.0
+Requires-Dist: redis==5.0.1
+Requires-Dist: python-dotenv==1.0.0
+Requires-Dist: cryptography==41.0.7
+Requires-Dist: email-validator==2.1.0
+Requires-Dist: requests==2.31.0
+Requires-Dist: openai==1.44.0
+Requires-Dist: resend==0.8.0
+Requires-Dist: stripe==13.0.1
+Requires-Dist: portkey-ai>=2.0.0
+Requires-Dist: cerebras-cloud-sdk>=1.0.0
+Requires-Dist: xai-sdk>=0.1.0
+Requires-Dist: statsig-python-core==0.10.2
+Requires-Dist: posthog==6.7.8
+Provides-Extra: observability
+Requires-Dist: braintrust; extra == "observability"
+Requires-Dist: opentelemetry-api>=1.28.0; extra == "observability"
+Requires-Dist: opentelemetry-sdk>=1.28.0; extra == "observability"
+Requires-Dist: opentelemetry-instrumentation>=0.49b0; extra == "observability"
+Requires-Dist: opentelemetry-instrumentation-fastapi>=0.49b0; extra == "observability"
+Requires-Dist: opentelemetry-instrumentation-httpx>=0.49b0; extra == "observability"
+Requires-Dist: opentelemetry-instrumentation-requests>=0.49b0; extra == "observability"
+Requires-Dist: opentelemetry-exporter-otlp>=1.28.0; extra == "observability"
+Provides-Extra: google
+Requires-Dist: google-cloud-aiplatform>=1.38.0; extra == "google"
+Requires-Dist: google-auth>=2.0.0; extra == "google"
+Provides-Extra: test
+Requires-Dist: pytest==7.4.3; extra == "test"
+Requires-Dist: pytest-cov==4.1.0; extra == "test"
+Requires-Dist: pytest-asyncio==0.21.1; extra == "test"
+Requires-Dist: pytest-xdist>=3.5.0; extra == "test"
+Requires-Dist: pytest-split>=0.9.0; extra == "test"
+Requires-Dist: pytest-timeout>=2.2.0; extra == "test"
+Requires-Dist: pytest-mock>=3.12.0; extra == "test"
+Requires-Dist: flask-sqlalchemy; extra == "test"
+Provides-Extra: full
+Requires-Dist: gatewayz-backend[google,observability]; extra == "full"

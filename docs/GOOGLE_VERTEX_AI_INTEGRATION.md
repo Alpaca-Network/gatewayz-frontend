@@ -503,7 +503,7 @@ pytest tests/services/test_google_vertex_client.py -v -k "integration"
 
 - [Google Vertex AI Documentation](https://cloud.google.com/vertex-ai/docs)
 - [Gemini API Documentation](https://cloud.google.com/vertex-ai/docs/generative-ai/gemini/overview)
-- [AI Gateway Documentation](../README.md)
+- [AI Gateway Documentation](README.md)
 
 ## Contributing
 

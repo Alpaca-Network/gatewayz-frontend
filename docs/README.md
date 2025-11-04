@@ -1,69 +1,46 @@
-# AI Gateway Documentation
+# AI Gateway - Universal Inference API
 
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.104.1-009688?logo=fastapi)](https://fastapi.tiangolo.com/)
 [![Python](https://img.shields.io/badge/Python-3.8+-3776AB?logo=python)](https://www.python.org/)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/Version-2.0.1-blue)](https://github.com/your-org/api-gateway-vercel)
 
-Welcome to the AI Gateway documentation! This guide walks through setting up, deploying, and operating the AI Gateway API.
-
-The AI Gateway is a production-ready, enterprise-grade FastAPI application that provides a unified interface for accessing multiple AI models through various providers (OpenRouter, Portkey, Featherless, Chutes), with comprehensive credit management, rate limiting, and security features.
+A production-ready, enterprise-grade FastAPI application that provides a unified interface for accessing multiple AI models through various providers (OpenRouter, Portkey, Featherless, Chutes), with comprehensive credit management, rate limiting, and security features.
 
 ## 🎯 Overview
 
-**AI Gateway (Gatewayz)** is a powerful API gateway that simplifies AI model access across multiple providers. It provides OpenAI-compatible endpoints, smart credit management, enterprise security, and advanced features for production use.
+**AI Gateway (Gatewayz)** is a powerful API gateway that simplifies AI model access across multiple providers. It provides:
 
-## 📚 Documentation Overview
+- **Universal API**: OpenAI-compatible endpoints for seamless integration
+- **Multi-Provider Support**: Access 100+ AI models from OpenRouter, Portkey, Featherless, and Chutes
+- **Smart Credit Management**: Token-based billing with automatic credit deduction and tracking
+- **Enterprise Security**: Encrypted API keys, IP allowlists, domain restrictions, and comprehensive audit logging
+- **Advanced Features**: Rate limiting, free trials, subscription plans, chat history, image generation, and more
 
-### Getting Started
-- **[What is AI Gateway?](introduction/what-is-gateway.md)** - Introduction to the platform
-- **[Key Features](introduction/key-features.md)** - Comprehensive feature list
-- **[Use Cases](introduction/use-cases.md)** - Real-world applications
-- **[Setup Guide](setup.md)** - Complete setup instructions for local development
-- **[Environment Setup](ENVIRONMENT_SETUP.md)** - Environment variables and configuration
+## ✨ Key Features
 
-### Architecture & Design
-- **[Architecture](architecture.md)** - System architecture and design principles
-- **[Project Structure](project-structure.md)** - Detailed project organization
-- **[Source Structure Report](src-structure-report.md)** - Source code organization
+### Core Capabilities
+- 🤖 **Multi-Provider Support** - Access models from OpenRouter, Portkey, Featherless, and Chutes
+- 🔌 **OpenAI-Compatible API** - Drop-in replacement for OpenAI API with extended functionality
+- 💳 **Credit Management** - Flexible token-based billing with automatic deduction
+- 🛡️ **Enterprise Security** - Encrypted API key storage, IP allowlists, domain restrictions
+- 📊 **Rate Limiting** - Per-user and per-key rate limiting with Redis support
+- 🎁 **Free Trials** - 3-day free trials with $10 credits for new users
+- 💰 **Subscription Plans** - Flexible subscription management with Stripe integration
+- 💬 **Chat History** - Persistent chat session management with automatic history injection
+- 🎨 **Image Generation** - AI-powered image generation capabilities
+- 📈 **Model Ranking** - Dynamic model ranking and discovery system
 
-### API Documentation
-- **[API Reference](api.md)** - Complete API endpoint documentation
-- **[Privy Authentication](privy-authentication.md)** - Privy authentication integration
-- **[Chat Completions](CHAT_HISTORY_INTEGRATION.md)** - Chat completions with history management
-- **[Responses API](RESPONSES_API.md)** - Unified response API documentation
-- **[Chat History](AUTOMATIC_HISTORY_INJECTION.md)** - Automatic history injection
-
-### Feature Guides
-- **[Referral System](REFERRAL_SYSTEM.md)** - Referral tracking and rewards
-  - [Referral Invite Links](REFERRAL_INVITE_LINKS.md)
-  - [Referral cURL Commands](REFERRAL_CURL_COMMANDS.md)
-- **[Coupon System](api.md#coupons)** - Discount codes and promotions
-- **[Email Features](email-features.md)** - Email notifications and templates
-- **[Stripe Integration](STRIPE.md)** - Payment processing and subscriptions
-- **[Activity Logging](ACTIVITY_LOGGING.md)** - Activity tracking and analytics
-  - [Activity Logging Summary](ACTIVITY_LOGGING_SUMMARY.md)
-
-### Provider Integration
-- **[Chutes Integration](CHUTES_INTEGRATION.md)** - Chutes provider setup
-- **[Featherless Integration](FEATHERLESS_INTEGRATION.md)** - Featherless provider setup
-  - [Featherless Fix](FEATHERLESS_FIX.md)
-- **[Portkey Testing](PORTKEY_TESTING_GUIDE.md)** - Portkey provider testing
-  - [DeepInfra Portkey Fix](DEEPINFRA_PORTKEY_FIX.md)
-- **[Provider Models API](provider-models-api.md)** - Provider model management
-- **[Provider Assets Solution](provider-assets-solution.md)** - Provider asset management
-
-### Operations & Deployment
-- **[Operations Guide](operations.md)** - Monitoring, logging, and maintenance
-- **[Deployment Guide](DEPLOYMENT.md)** - Production deployment instructions
-- **[Vercel Deployment](VERCEL_DEPLOYMENT.md)** - Vercel-specific deployment
-- **[Deploy Migrations](DEPLOY_MIGRATIONS.md)** - Database migration deployment
-- **[Running the Application](running.md)** - How to run the application
-- **[Troubleshooting](troubleshooting.md)** - Common issues and solutions
-
-### Development
-- **[Contributing](contributing.md)** - How to contribute to the project
-- **[GitHub Secrets Setup](GITHUB_SECRETS_SETUP.md)** - Setting up GitHub secrets
-- **[Claude Documentation](CLAUDE.md)** - Claude-specific documentation
+### Advanced Features
+- 📝 **Audit Logging** - Comprehensive security event tracking and compliance
+- 📊 **Analytics Dashboard** - Real-time usage analytics and monitoring
+- 🎫 **Coupon System** - Discount codes and promotion management
+- 🤝 **Referral System** - User referral tracking and rewards
+- 👥 **Role-Based Access** - Admin, user, and custom role management
+- 📧 **Email Notifications** - Professional email templates and automated delivery
+- 🔗 **Webhook Support** - Stripe webhook integration for payment processing
+- 🔑 **API Key Management** - Create, update, rotate, and manage multiple API keys
+- ⏱️ **Trial Management** - Free trial tracking, usage monitoring, and conversion
 
 ## 🚀 Quick Start
 
@@ -138,32 +115,100 @@ open http://localhost:8000/docs
 curl http://localhost:8000/models
 ```
 
-## ✨ Features
+## 📚 Documentation
 
-### Core Features
-- **Multi-Provider Support**: Access 100+ models from OpenRouter, Portkey, Featherless, and Chutes
-- **OpenAI-Compatible API**: Drop-in replacement for OpenAI API with extended functionality
-- **Credit Management**: Token-based billing with automatic credit deduction
-- **Rate Limiting**: Per-user and per-key rate limiting with Redis support
-- **Enterprise Security**: Encrypted API key storage, IP allowlists, domain restrictions
-- **Free Trials**: 3-day free trials with $10 credits for new users
-- **Subscription Plans**: Flexible subscription management with Stripe integration
-- **Chat History**: Persistent chat session management with automatic history injection
-- **Image Generation**: AI-powered image generation capabilities
-- **Model Ranking**: Dynamic model ranking and discovery system
+Comprehensive documentation is available in the `docs/` directory:
 
-### Advanced Features
-- **Audit Logging**: Comprehensive security event tracking and compliance
-- **Analytics Dashboard**: Real-time usage analytics and monitoring
-- **Coupon System**: Discount codes and promotion management
-- **Referral System**: User referral tracking and rewards
-- **Role-Based Access**: Admin, user, and custom role management
-- **Email Notifications**: Professional email templates and automated delivery
-- **Webhook Support**: Stripe webhook integration for payment processing
-- **API Key Management**: Create, update, rotate, and manage multiple API keys
-- **Trial Management**: Free trial tracking, usage monitoring, and conversion
+### Getting Started
+- **[Setup Guide](setup.md)** - Complete setup instructions for local development
+- **[Architecture](architecture.md)** - System architecture and design principles
+- **[Project Structure](project-structure.md)** - Detailed project organization
+- **[Environment Configuration](environment.md)** - Environment variables and configuration
 
-## 📋 API Endpoints
+### API Documentation
+- **[API Reference](api.md)** - Complete API endpoint documentation
+- **[Authentication](privy-authentication.md)** - API key authentication and Privy integration
+- **[Chat Completions](CHAT_HISTORY_INTEGRATION.md)** - Chat completions with history management
+- **[Responses API](RESPONSES_API.md)** - Unified response API documentation
+- **[Image Generation](api.md#image-generation)** - AI image generation endpoints
+
+### Feature Guides
+- **[Referral System](REFERRAL_SYSTEM.md)** - Referral tracking and rewards
+- **[Coupon System](api.md#coupons)** - Discount codes and promotions
+- **[Email Features](email-features.md)** - Email notifications and templates
+- **[Stripe Integration](STRIPE.md)** - Payment processing and subscriptions
+- **[Activity Logging](ACTIVITY_LOGGING.md)** - Activity tracking and analytics
+
+### Provider Integration
+- **[Chutes Integration](CHUTES_INTEGRATION.md)** - Chutes provider setup
+- **[Featherless Integration](FEATHERLESS_INTEGRATION.md)** - Featherless provider setup
+- **[Portkey Testing](PORTKEY_TESTING_GUIDE.md)** - Portkey provider testing
+
+### Operations
+- **[Deployment Guide](DEPLOYMENT.md)** - Production deployment instructions
+- **[Operations Guide](operations.md)** - Monitoring, logging, and maintenance
+- **[Troubleshooting](troubleshooting.md)** - Common issues and solutions
+- **[Contributing](contributing.md)** - How to contribute to the project
+
+## 🏗️ Architecture
+
+The application follows a modular, production-ready architecture:
+
+```
+gateway/
+├── src/
+│   ├── main.py                 # FastAPI application entry point
+│   ├── config.py               # Configuration management
+│   ├── db/                     # Database layer
+│   │   ├── users.py            # User management
+│   │   ├── api_keys.py         # API key management
+│   │   ├── plans.py            # Subscription plans
+│   │   ├── payments.py         # Payment processing
+│   │   ├── chat_history.py     # Chat sessions
+│   │   ├── coupons.py          # Coupon system
+│   │   ├── referral.py         # Referral system
+│   │   └── ...                 # Other database modules
+│   ├── routes/                 # API endpoints
+│   │   ├── chat.py             # Chat completions
+│   │   ├── auth.py             # Authentication
+│   │   ├── users.py            # User management
+│   │   ├── admin.py            # Admin operations
+│   │   ├── payments.py         # Payment processing
+│   │   └── ...                 # Other routes
+│   ├── schemas/                # Pydantic models
+│   │   ├── auth.py             # Authentication schemas
+│   │   ├── chat.py             # Chat schemas
+│   │   ├── payments.py         # Payment schemas
+│   │   └── ...                 # Other schemas
+│   ├── security/               # Security utilities
+│   │   ├── security.py         # Encryption and hashing
+│   │   └── deps.py             # Security dependencies
+│   ├── services/               # Business logic
+│   │   ├── openrouter_client.py  # OpenRouter integration
+│   │   ├── portkey_client.py     # Portkey integration
+│   │   ├── featherless_client.py # Featherless integration
+│   │   ├── payments.py           # Payment service
+│   │   ├── pricing.py            # Pricing calculations
+│   │   └── ...                   # Other services
+│   └── utils/                  # Utility functions
+├── tests/                      # Test suite
+├── docs/                       # Documentation
+├── supabase/                   # Supabase migrations
+├── requirements.txt            # Python dependencies
+└── vercel.json                 # Vercel configuration
+```
+
+### Technology Stack
+- **Backend**: FastAPI 0.104.1 (modern, fast web framework)
+- **Database**: Supabase (PostgreSQL with real-time features)
+- **Validation**: Pydantic 2.5.0 (data validation and serialization)
+- **Caching**: Redis 5.0.1 (optional, for rate limiting)
+- **Payments**: Stripe 13.0.1 (payment processing)
+- **Email**: Resend 0.8.0 (email delivery service)
+- **Authentication**: Privy & custom API key system
+- **Security**: Cryptography 41.0.7 (Fernet encryption, HMAC hashing)
+
+## 🔌 API Endpoints
 
 ### Public Endpoints
 ```
@@ -220,75 +265,66 @@ POST /admin/rate-limits         # Set rate limits
 GET  /admin/audit-logs          # Audit logs
 ```
 
-### Referral Endpoints
-```
-GET  /referrals/code            # Get user's referral code
-POST /referrals/apply           # Apply referral code
-GET  /referrals/stats           # Get referral statistics
-GET  /referrals/history         # Get referral history
-```
+See the [API Reference](api.md) for complete documentation.
 
-### Coupon Endpoints
-```
-POST /coupons                   # Create coupon (admin)
-GET  /coupons                   # List coupons (admin)
-POST /coupons/apply             # Apply coupon
-GET  /coupons/{code}            # Get coupon details
-```
+## 💡 Usage Examples
 
-See [API Reference](api.md) for complete documentation.
+### Chat Completion
 
-## 🏗️ Architecture
+```python
+import requests
 
-The application follows a modular, production-ready architecture:
+response = requests.post(
+    "https://your-gateway.vercel.app/v1/chat/completions",
+    headers={
+        "Authorization": "Bearer gw_live_your_api_key_here",
+        "Content-Type": "application/json"
+    },
+    json={
+        "model": "openai/gpt-4",
+        "messages": [
+            {"role": "user", "content": "Hello, how are you?"}
+        ]
+    }
+)
 
-```
-src/
-├── main.py                 # FastAPI application entry point
-├── config.py               # Configuration management
-├── db/                     # Database layer
-│   ├── users.py            # User management
-│   ├── api_keys.py         # API key management
-│   ├── plans.py            # Subscription plans
-│   ├── payments.py         # Payment processing
-│   ├── chat_history.py     # Chat sessions
-│   ├── coupons.py          # Coupon system
-│   ├── referral.py         # Referral system
-│   └── ...                 # Other database modules
-├── routes/                 # API endpoints
-│   ├── chat.py             # Chat completions
-│   ├── auth.py             # Authentication
-│   ├── users.py            # User management
-│   ├── admin.py            # Admin operations
-│   ├── payments.py         # Payment processing
-│   └── ...                 # Other routes
-├── schemas/                # Pydantic models
-│   ├── auth.py             # Authentication schemas
-│   ├── chat.py             # Chat schemas
-│   ├── payments.py         # Payment schemas
-│   └── ...                 # Other schemas
-├── security/               # Security utilities
-│   ├── security.py         # Encryption and hashing
-│   └── deps.py             # Security dependencies
-├── services/               # Business logic
-│   ├── openrouter_client.py  # OpenRouter integration
-│   ├── portkey_client.py     # Portkey integration
-│   ├── featherless_client.py # Featherless integration
-│   └── ...                   # Other services
-└── utils/                  # Utility functions
+print(response.json())
 ```
 
-### Technology Stack
-- **Backend**: FastAPI 0.104.1 (modern, fast web framework)
-- **Database**: Supabase (PostgreSQL with real-time features)
-- **Validation**: Pydantic 2.5.0 (data validation and serialization)
-- **Caching**: Redis 5.0.1 (optional, for rate limiting and caching)
-- **Payments**: Stripe 13.0.1 (payment processing)
-- **Email**: Resend 0.8.0 (email delivery service)
-- **Authentication**: Privy & custom API key system
-- **Security**: Cryptography 41.0.7 (Fernet encryption, HMAC hashing)
+### Image Generation
 
-See [Architecture](architecture.md) for detailed information.
+```python
+import requests
+
+response = requests.post(
+    "https://your-gateway.vercel.app/images/generate",
+    headers={
+        "Authorization": "Bearer gw_live_your_api_key_here",
+        "Content-Type": "application/json"
+    },
+    json={
+        "prompt": "A beautiful sunset over mountains",
+        "model": "dall-e-3"
+    }
+)
+
+print(response.json())
+```
+
+### Check Balance
+
+```python
+import requests
+
+response = requests.get(
+    "https://your-gateway.vercel.app/user/balance",
+    headers={
+        "Authorization": "Bearer gw_live_your_api_key_here"
+    }
+)
+
+print(f"Balance: ${response.json()['credits']}")
+```
 
 ## 🔒 Security
 
@@ -315,31 +351,10 @@ See [Architecture](architecture.md) for detailed information.
 - **Performance Metrics**: Response time and error tracking
 - **Alert System**: Automated security alerts
 
-## 📊 Monitoring
-
-### Health Checks
-```bash
-# Basic health check
-curl https://your-gateway.vercel.app/health
-
-# Detailed ping with statistics
-curl https://your-gateway.vercel.app/ping
-
-# Admin monitoring (requires admin key)
-curl -H "Authorization: Bearer admin_key" \
-     https://your-gateway.vercel.app/admin/monitor
-```
-
-### Metrics
-- ⏱️ Request/response times
-- 📊 Error rates and types
-- 💰 Usage statistics and costs
-- 🔒 Security events
-- 📈 Model usage patterns
-
 ## 🚀 Deployment
 
 ### Vercel (Recommended)
+
 ```bash
 # Install Vercel CLI
 npm i -g vercel
@@ -348,14 +363,14 @@ npm i -g vercel
 vercel --prod
 ```
 
-See [Vercel Deployment Guide](VERCEL_DEPLOYMENT.md) for detailed instructions.
-
 ### Railway
+
 1. Connect your GitHub repository
 2. Add environment variables in Railway dashboard
 3. Deploy automatically on push to main
 
 ### Docker
+
 ```bash
 # Build image
 docker build -t ai-gateway .
@@ -364,8 +379,9 @@ docker build -t ai-gateway .
 docker run -p 8000:8000 --env-file .env ai-gateway
 ```
 
-### Kubernetes
-See [Deployment Guide](DEPLOYMENT.md) for Kubernetes configuration.
+### Environment Variables
+
+See [Environment Setup Guide](ENVIRONMENT_SETUP.md) for complete configuration.
 
 ## 🧪 Testing
 
@@ -394,6 +410,29 @@ pytest tests/test_chat.py::test_chat_completion
 
 Current coverage: **85%+**
 
+## 📊 Monitoring
+
+### Health Checks
+
+```bash
+# Basic health check
+curl https://your-gateway.vercel.app/health
+
+# Detailed ping with statistics
+curl https://your-gateway.vercel.app/ping
+
+# Admin monitoring (requires admin key)
+curl -H "Authorization: Bearer admin_key" \
+     https://your-gateway.vercel.app/admin/monitor
+```
+
+### Metrics
+- ⏱️ Request/response times
+- 📊 Error rates and types
+- 💰 Usage statistics and costs
+- 🔒 Security events
+- 📈 Model usage patterns
+
 ## 🤝 Contributing
 
 We welcome contributions! Please see our [Contributing Guide](contributing.md) for details.
@@ -416,9 +455,38 @@ We welcome contributions! Please see our [Contributing Guide](contributing.md) f
 - ✅ Test coverage > 80%
 - ✅ No linter errors
 
+## 📈 Roadmap
+
+### ✅ Phase 1 (Completed)
+- ✅ Multi-provider support (OpenRouter, Portkey, Featherless, Chutes)
+- ✅ Credit management system
+- ✅ Rate limiting with Redis
+- ✅ Security features (encryption, audit logging)
+- ✅ Free trials and subscription plans
+- ✅ Chat history management
+- ✅ Image generation
+- ✅ Referral system
+- ✅ Coupon system
+- ✅ Role-based access control
+
+### 🔄 Phase 2 (In Progress)
+- 🔄 Advanced analytics dashboard
+- 🔄 Custom model fine-tuning support
+- 🔄 Batch processing API
+- 🔄 WebSocket support for streaming
+- 🔄 GraphQL API endpoint
+- 🔄 Enhanced caching strategies
+
+### ⏳ Phase 3 (Planned)
+- ⏳ Multi-tenant support
+- ⏳ Advanced load balancing
+- ⏳ Model performance benchmarking
+- ⏳ Mobile SDKs (iOS, Android)
+- ⏳ Desktop SDKs (Electron, Tauri)
+- ⏳ Marketplace for custom models
+
 ## 📊 Statistics
 
-- **Version**: 2.0.1
 - **API Endpoints**: 50+
 - **Supported Providers**: 4 (OpenRouter, Portkey, Featherless, Chutes)
 - **Available Models**: 100+
@@ -462,8 +530,13 @@ This project is built with amazing open-source technologies:
 - [Pydantic](https://pydantic-docs.helpmanual.io/) - Data validation using Python type hints
 - [PostgreSQL](https://www.postgresql.org/) - Advanced open source database
 
+## 🌟 Star History
+
+If you find this project useful, please consider giving it a star! ⭐
+
 ---
 
 **Built with ❤️ by the AI Gateway team**
 
 *Making AI accessible, secure, and affordable for everyone.*
+
