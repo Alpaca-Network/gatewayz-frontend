@@ -3,7 +3,6 @@
 Professional Email Templates for AI Gateway
 """
 
-import os
 from typing import Any
 
 from src.constants import APP_NAME, FRONTEND_BASE_URL, SUPPORT_EMAIL

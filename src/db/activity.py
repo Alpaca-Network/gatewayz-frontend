@@ -42,7 +42,7 @@ def log_activity(
     """
     try:
         client = get_supabase_client()
-        
+
         # Ensure user_id is an integer
         user_id_int = int(user_id) if not isinstance(user_id, int) else user_id
 
@@ -65,11 +65,15 @@ def log_activity(
             logger.info(f"Activity logged for user {user_id_int}: {model} ({tokens} tokens)")
             return result.data[0]
         else:
-            logger.error(f"Failed to log activity: insert returned no data. User: {user_id_int}, Model: {model}, Result: {result}")
+            logger.error(
+                f"Failed to log activity: insert returned no data. User: {user_id_int}, Model: {model}, Result: {result}"
+            )
             return None
 
     except Exception as e:
-        logger.error(f"Failed to log activity for user {user_id_int}, model {model}: {e}", exc_info=True)
+        logger.error(
+            f"Failed to log activity for user {user_id_int}, model {model}: {e}", exc_info=True
+        )
         # Don't raise - activity logging should not break the main flow
         return None
 

@@ -185,12 +185,12 @@ def get_user_transactions(
             for txn in transactions:
                 amount = abs(float(txn.get("amount", 0)))
                 include = True
-                
+
                 if min_amount is not None and amount < min_amount:
                     include = False
                 if max_amount is not None and amount > max_amount:
                     include = False
-                
+
                 if include:
                     filtered_transactions.append(txn)
             transactions = filtered_transactions
@@ -306,12 +306,12 @@ def get_all_transactions(
             for txn in transactions:
                 amount = abs(float(txn.get("amount", 0)))
                 include = True
-                
+
                 if min_amount is not None and amount < min_amount:
                     include = False
                 if max_amount is not None and amount > max_amount:
                     include = False
-                
+
                 if include:
                     filtered_transactions.append(txn)
             transactions = filtered_transactions
@@ -504,9 +504,8 @@ def get_transaction_summary(
                 summary["total_credits_used"] += abs(amount)
                 summary["transaction_count_by_direction"]["charges"] += 1
                 # Track largest charge
-                if (
-                    summary["largest_charge"] is None
-                    or abs(amount) > abs(summary["largest_charge"]["amount"])
+                if summary["largest_charge"] is None or abs(amount) > abs(
+                    summary["largest_charge"]["amount"]
                 ):
                     summary["largest_charge"] = {
                         "id": transaction.get("id"),
@@ -561,13 +560,15 @@ def get_transaction_summary(
         # Sort daily breakdown by date (most recent first) and convert to list format
         daily_list = []
         for date, day_stats in sorted(summary["daily_breakdown"].items(), reverse=True):
-            daily_list.append({
-                "date": date,
-                "credits_added": day_stats["credits_added"],
-                "credits_used": day_stats["credits_used"],
-                "count": day_stats["count"],
-            })
-        
+            daily_list.append(
+                {
+                    "date": date,
+                    "credits_added": day_stats["credits_added"],
+                    "credits_used": day_stats["credits_used"],
+                    "count": day_stats["count"],
+                }
+            )
+
         summary["daily_breakdown"] = daily_list
 
         return summary

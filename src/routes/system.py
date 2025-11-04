@@ -1133,8 +1133,9 @@ async def refresh_gateway_cache(
 
 @router.post("/cache/clear", tags=["cache"])
 async def clear_all_caches(
-    gateway: str
-    | None = Query(None, description="Specific gateway to clear, or all if not specified")
+    gateway: str | None = Query(
+        None, description="Specific gateway to clear, or all if not specified"
+    )
 ):
     """
     Clear cache for all gateways or a specific gateway.

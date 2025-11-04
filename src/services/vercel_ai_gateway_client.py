@@ -19,12 +19,11 @@ def get_vercel_ai_gateway_client():
     try:
         api_key = Config.VERCEL_AI_GATEWAY_API_KEY
         if not api_key:
-            raise ValueError("Vercel AI Gateway API key not configured. Please set VERCEL_AI_GATEWAY_API_KEY environment variable.")
+            raise ValueError(
+                "Vercel AI Gateway API key not configured. Please set VERCEL_AI_GATEWAY_API_KEY environment variable."
+            )
 
-        return OpenAI(
-            base_url="https://ai-gateway.vercel.sh/v1",
-            api_key=api_key
-        )
+        return OpenAI(base_url="https://ai-gateway.vercel.sh/v1", api_key=api_key)
     except Exception as e:
         logger.error(f"Failed to initialize Vercel AI Gateway client: {e}")
         raise
@@ -40,11 +39,7 @@ def make_vercel_ai_gateway_request_openai(messages, model, **kwargs):
     """
     try:
         client = get_vercel_ai_gateway_client()
-        response = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            **kwargs
-        )
+        response = client.chat.completions.create(model=model, messages=messages, **kwargs)
         return response
     except Exception as e:
         logger.error(f"Vercel AI Gateway request failed: {e}")
@@ -62,10 +57,7 @@ def make_vercel_ai_gateway_request_openai_stream(messages, model, **kwargs):
     try:
         client = get_vercel_ai_gateway_client()
         stream = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            stream=True,
-            **kwargs
+            model=model, messages=messages, stream=True, **kwargs
         )
         return stream
     except Exception as e:
@@ -84,19 +76,20 @@ def process_vercel_ai_gateway_response(response):
             "choices": [
                 {
                     "index": choice.index,
-                    "message": {
-                        "role": choice.message.role,
-                        "content": choice.message.content
-                    },
-                    "finish_reason": choice.finish_reason
+                    "message": {"role": choice.message.role, "content": choice.message.content},
+                    "finish_reason": choice.finish_reason,
                 }
                 for choice in response.choices
             ],
-            "usage": {
-                "prompt_tokens": response.usage.prompt_tokens,
-                "completion_tokens": response.usage.completion_tokens,
-                "total_tokens": response.usage.total_tokens
-            } if response.usage else {}
+            "usage": (
+                {
+                    "prompt_tokens": response.usage.prompt_tokens,
+                    "completion_tokens": response.usage.completion_tokens,
+                    "total_tokens": response.usage.total_tokens,
+                }
+                if response.usage
+                else {}
+            ),
         }
     except Exception as e:
         logger.error(f"Failed to process Vercel AI Gateway response: {e}")
@@ -128,16 +121,11 @@ def fetch_model_pricing_from_vercel(model_id: str):
             return None
 
         # Attempt to fetch from Vercel pricing endpoint (if it exists)
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        }
+        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
 
         try:
             response = httpx.get(
-                "https://ai-gateway.vercel.sh/v1/pricing",
-                headers=headers,
-                timeout=5.0
+                "https://ai-gateway.vercel.sh/v1/pricing", headers=headers, timeout=5.0
             )
 
             if response.status_code == 200:
@@ -184,7 +172,7 @@ def get_provider_pricing_for_vercel_model(model_id: str):
             if pricing and pricing.get("found"):
                 return {
                     "prompt": pricing.get("prompt", "0"),
-                    "completion": pricing.get("completion", "0")
+                    "completion": pricing.get("completion", "0"),
                 }
 
             # Try without the provider prefix
@@ -193,7 +181,7 @@ def get_provider_pricing_for_vercel_model(model_id: str):
             if pricing and pricing.get("found"):
                 return {
                     "prompt": pricing.get("prompt", "0"),
-                    "completion": pricing.get("completion", "0")
+                    "completion": pricing.get("completion", "0"),
                 }
         except ImportError:
             logger.debug("pricing module not available for cross-reference")
