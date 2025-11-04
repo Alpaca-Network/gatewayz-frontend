@@ -29,7 +29,10 @@ def test_vercel_config():
     if has_api_key_attr:
         api_key = Config.VERCEL_AI_GATEWAY_API_KEY
         if api_key:
-            print(f"✓ API key configured: {api_key[:10]}..." if len(api_key) > 10 else f"✓ API key configured (empty or test key)")
+            if len(api_key) > 10:
+                print(f"✓ API key configured: {api_key[:10]}...")
+            else:
+                print("✓ API key configured (empty or test key)")
         else:
             print("⚠ API key not set in environment (expected for tests)")
 
@@ -106,7 +109,6 @@ def test_vercel_provider_detection():
         ("gemini-2.0-flash", "google-vertex"),  # This might be detected as google-vertex
     ]
 
-    all_pass = True
     for model_id, expected_provider in test_cases:
         detected = detect_provider_from_model_id(model_id)
         if detected == expected_provider:
@@ -148,8 +150,6 @@ def test_chat_route_integration():
 
     try:
         from src.routes import chat
-        # Check if the import is in the chat module
-        module_source = str(chat)
 
         # Check for Vercel imports
         if hasattr(chat, 'make_vercel_ai_gateway_request_openai'):

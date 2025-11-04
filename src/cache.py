@@ -1,69 +1,64 @@
 """Cache module for storing model and provider data"""
-import threading
+import logging
 from datetime import datetime, timezone
+
+logger = logging.getLogger(__name__)
+
+# FAL cache initialization messages
+_FAL_CACHE_INIT_DEFERRED = "FAL cache initialization deferred"
 
 # Cache dictionaries for models and providers
 _models_cache = {
     "data": None,
     "timestamp": None,
     "ttl": 3600,  # 1 hour TTL
-    "stale_ttl": 7200  # 2 hours stale-while-revalidate
+    "stale_ttl": 7200,  # 2 hours stale-while-revalidate
 }
 
 _portkey_models_cache = {
     "data": None,
     "timestamp": None,
     "ttl": 1800,  # 30 minute TTL for Portkey catalog
-    "stale_ttl": 3600
+    "stale_ttl": 3600,
 }
 
 _featherless_models_cache = {
     "data": None,
     "timestamp": None,
     "ttl": 3600,  # 1 hour TTL for Featherless catalog
-    "stale_ttl": 7200
+    "stale_ttl": 7200,
 }
 
-_huggingface_cache = {
-    "data": {},
-    "timestamp": None,
-    "ttl": 3600,  # 1 hour TTL
-    "stale_ttl": 7200
-}
+_huggingface_cache = {"data": {}, "timestamp": None, "ttl": 3600, "stale_ttl": 7200}  # 1 hour TTL
 
-_provider_cache = {
-    "data": None,
-    "timestamp": None,
-    "ttl": 3600,  # 1 hour TTL
-    "stale_ttl": 7200
-}
+_provider_cache = {"data": None, "timestamp": None, "ttl": 3600, "stale_ttl": 7200}  # 1 hour TTL
 
 _chutes_models_cache = {
     "data": None,
     "timestamp": None,
     "ttl": 3600,  # 1 hour TTL for Chutes catalog
-    "stale_ttl": 7200
+    "stale_ttl": 7200,
 }
 
 _groq_models_cache = {
     "data": None,
     "timestamp": None,
     "ttl": 1800,  # 30 minute TTL for Groq catalog
-    "stale_ttl": 3600
+    "stale_ttl": 3600,
 }
 
 _fireworks_models_cache = {
     "data": None,
     "timestamp": None,
     "ttl": 1800,  # 30 minute TTL for Fireworks catalog
-    "stale_ttl": 3600
+    "stale_ttl": 3600,
 }
 
 _together_models_cache = {
     "data": None,
     "timestamp": None,
     "ttl": 1800,  # 30 minute TTL for Together catalog
-    "stale_ttl": 3600
+    "stale_ttl": 3600,
 }
 
 # Modelz cache (for token data)
@@ -71,7 +66,7 @@ _modelz_cache = {
     "data": None,
     "timestamp": None,
     "ttl": 1800,  # 30 minute TTL for Modelz token data
-    "stale_ttl": 3600
+    "stale_ttl": 3600,
 }
 
 
@@ -80,7 +75,7 @@ _deepinfra_models_cache = {
     "data": None,
     "timestamp": None,
     "ttl": 3600,  # 1 hour TTL
-    "stale_ttl": 7200
+    "stale_ttl": 7200,
 }
 
 # Portkey-based individual provider caches
@@ -88,77 +83,72 @@ _google_models_cache = {
     "data": None,
     "timestamp": None,
     "ttl": 3600,  # 1 hour TTL
-    "stale_ttl": 7200
+    "stale_ttl": 7200,
 }
 
 _cerebras_models_cache = {
     "data": None,
     "timestamp": None,
     "ttl": 3600,  # 1 hour TTL
-    "stale_ttl": 7200
+    "stale_ttl": 7200,
 }
 
 _nebius_models_cache = {
     "data": None,
     "timestamp": None,
     "ttl": 3600,  # 1 hour TTL
-    "stale_ttl": 7200
+    "stale_ttl": 7200,
 }
 
-_xai_models_cache = {
-    "data": None,
-    "timestamp": None,
-    "ttl": 3600,  # 1 hour TTL
-    "stale_ttl": 7200
-}
+_xai_models_cache = {"data": None, "timestamp": None, "ttl": 3600, "stale_ttl": 7200}  # 1 hour TTL
 
 _novita_models_cache = {
     "data": None,
     "timestamp": None,
     "ttl": 3600,  # 1 hour TTL
-    "stale_ttl": 7200
+    "stale_ttl": 7200,
 }
 
 _huggingface_models_cache = {
     "data": None,
     "timestamp": None,
     "ttl": 3600,  # 1 hour TTL
-    "stale_ttl": 7200
+    "stale_ttl": 7200,
 }
 
 _aimo_models_cache = {
     "data": None,
     "timestamp": None,
     "ttl": 3600,  # 1 hour TTL for AIMO catalog
-    "stale_ttl": 7200
+    "stale_ttl": 7200,
 }
 
 _near_models_cache = {
     "data": None,
     "timestamp": None,
     "ttl": 3600,  # 1 hour TTL for Near AI catalog
-    "stale_ttl": 7200
+    "stale_ttl": 7200,
 }
 
 _fal_models_cache = {
     "data": None,
     "timestamp": None,
     "ttl": 3600,  # 1 hour TTL for Fal.ai catalog
-    "stale_ttl": 7200
+    "stale_ttl": 7200,
 }
 
 _google_vertex_models_cache = {
     "data": None,
     "timestamp": None,
     "ttl": 3600,  # 1 hour TTL for Google Vertex AI models
-    "stale_ttl": 7200
+    "stale_ttl": 7200,
 }
 
 _vercel_ai_gateway_models_cache = {
     "data": None,
     "timestamp": None,
     "ttl": 3600,  # 1 hour TTL for Vercel AI Gateway catalog
-    "stale_ttl": 7200
+    "stale_ttl": 7200,
 }
 
 # BACKWARD COMPATIBILITY: Alias for old cache name
@@ -190,7 +180,7 @@ def get_models_cache(gateway: str):
         "near": _near_models_cache,
         "fal": _fal_models_cache,
         "vercel-ai-gateway": _vercel_ai_gateway_models_cache,
-        "modelz": _modelz_cache
+        "modelz": _modelz_cache,
     }
     return cache_map.get(gateway.lower())
 
@@ -223,7 +213,7 @@ def clear_models_cache(gateway: str):
         "near": _near_models_cache,
         "fal": _fal_models_cache,
         "vercel-ai-gateway": _vercel_ai_gateway_models_cache,
-        "modelz": _modelz_cache
+        "modelz": _modelz_cache,
     }
     cache = cache_map.get(gateway.lower())
     if cache:
@@ -269,3 +259,30 @@ def is_cache_stale_but_usable(cache: dict) -> bool:
 def should_revalidate_in_background(cache: dict) -> bool:
     """Check if cache should trigger background revalidation"""
     return not is_cache_fresh(cache) and is_cache_stale_but_usable(cache)
+
+
+def initialize_fal_cache_from_catalog():
+    """Load and initialize FAL models cache directly from static catalog
+
+    Avoids circular imports by loading catalog directly without normalizer.
+    Raw models are stored in cache; normalization happens on first access.
+    """
+    try:
+        from src.services.fal_image_client import load_fal_models_catalog
+
+        # Load raw models from catalog
+        raw_models = load_fal_models_catalog()
+
+        if not raw_models:
+            logger.debug("No FAL models found in catalog")
+            return
+
+        # Store raw models temporarily - will be normalized on first access
+        # This avoids circular import with models.py
+        _fal_models_cache["data"] = raw_models
+        _fal_models_cache["timestamp"] = datetime.now(timezone.utc)
+        logger.debug(f"Preloaded {len(raw_models)} FAL models from catalog")
+
+    except (ImportError, OSError) as error:
+        # Log failure but continue - models will be loaded on first request
+        logger.debug(f"{_FAL_CACHE_INIT_DEFERRED}: {type(error).__name__}")

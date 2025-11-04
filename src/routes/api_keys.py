@@ -16,6 +16,7 @@ from src.schemas import CreateApiKeyRequest, UpdateApiKeyRequest, UpdateApiKeyRe
 from src.security.deps import get_api_key
 
 from src.config.supabase_config import get_supabase_client
+from src.utils.security_validators import sanitize_for_logging
 
 # Initialize logging
 logging.basicConfig(level=logging.ERROR)
@@ -58,7 +59,7 @@ async def create_user_api_key(
             # Create a new API key with Phase 4 security features (using an existing working system)
             try:
                 # Use the existing create_api_key function for now (it works)
-                new_api_key = create_api_key(
+                new_api_key, key_id = create_api_key(
                     user_id=user["id"],
                     key_name=request.key_name,
                     environment_tag=request.environment_tag,
@@ -74,26 +75,21 @@ async def create_user_api_key(
                     from src.security.security import get_audit_logger
                     audit_logger = get_audit_logger()
 
-                    # Get the created key ID for audit logging
-                    client = get_supabase_client()
-                    key_result = client.table('api_keys_new').select('*').eq('api_key', new_api_key).execute()
-
-                    if key_result.data:
-                        key_id = key_result.data[0]['id']
-                        audit_logger.log_api_key_creation(
-                            user["id"],
-                            key_id,
-                            request.key_name,
-                            request.environment_tag,
-                            "user"
-                        )
+                    # Log the API key creation using the key_id from the create operation
+                    audit_logger.log_api_key_creation(
+                        user["id"],
+                        key_id,
+                        request.key_name,
+                        request.environment_tag,
+                        "user"
+                    )
                 except Exception as audit_error:
                     # Don't fail the whole request if audit logging fails
-                    logger.warning(f"Audit logging failed for API key creation: {audit_error}")
+                    logger.warning("Audit logging failed for API key creation: %s", sanitize_for_logging(str(audit_error)))
 
                 # Log the key creation for audit purposes (Phase 4 feature)
                 logger.info(
-                    f"API key created with Phase 4 security features for user {user['id']}: {request.key_name} ({request.environment_tag})")
+                    "API key created with Phase 4 security features for user %s: %s (%s)", sanitize_for_logging(str(user['id'])), sanitize_for_logging(request.key_name), sanitize_for_logging(request.environment_tag))
             except ValueError as ve:
                 # Handle specific validation errors
                 error_message = str(ve)
@@ -126,8 +122,8 @@ async def create_user_api_key(
         raise
     except Exception as e:
         import traceback
-        logger.error(f"Error creating/changing API key: {e}")
-        logger.error(f"Traceback: {traceback.format_exc()}")
+        logger.error("Error creating/changing API key: %s", sanitize_for_logging(str(e)))
+        logger.error("Traceback: %s", sanitize_for_logging(traceback.format_exc()))
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
@@ -175,7 +171,7 @@ async def update_user_api_key_endpoint(
             updates = {'api_key': new_api_key}
 
             # Log rotation for audit purposes
-            logger.info(f"API key rotated for user {user['id']}: {key_to_update['key_name']} -> new key generated")
+            logger.info("API key rotated for user %s: %s -> new key generated", sanitize_for_logging(str(user['id'])), sanitize_for_logging(key_to_update['key_name']))
 
         elif request.action == 'bulk_rotate':
             # Handle bulk rotation for all user keys
@@ -196,7 +192,7 @@ async def update_user_api_key_endpoint(
                     "timestamp": datetime.now(timezone.utc).isoformat()
                 }
             except Exception as e:
-                logger.error(f"Bulk rotation failed: {e}")
+                logger.error("Bulk rotation failed: %s", sanitize_for_logging(str(e)))
                 raise HTTPException(status_code=500, detail=f"Bulk rotation failed: {str(e)}")
 
         else:
@@ -258,7 +254,7 @@ async def update_user_api_key_endpoint(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error updating API key: {e}")
+        logger.error("Error updating API key: %s", sanitize_for_logging(str(e)))
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -304,7 +300,7 @@ async def list_user_api_keys(api_key: str = Depends(get_api_key)):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error listing API keys: {e}")
+        logger.error("Error listing API keys: %s", sanitize_for_logging(str(e)))
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -352,7 +348,7 @@ async def delete_user_api_key(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error deleting API key: {e}")
+        logger.error("Error deleting API key: %s", sanitize_for_logging(str(e)))
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -384,5 +380,5 @@ async def get_user_api_key_usage(api_key: str = Depends(get_api_key)):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error getting API key usage: {e}")
+        logger.error("Error getting API key usage: %s", sanitize_for_logging(str(e)))
         raise HTTPException(status_code=500, detail="Internal server error")

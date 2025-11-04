@@ -56,6 +56,7 @@ from src.services.provider_failover import build_provider_failover_chain, map_pr
 import src.services.rate_limiting as rate_limiting_service
 import src.services.trial_validation as trial_module
 from src.services.pricing import calculate_cost
+from src.utils.security_validators import sanitize_for_logging
 
 # Backwards compatibility wrappers for test patches
 def increment_api_key_usage(*args, **kwargs):
@@ -80,6 +81,10 @@ def get_user(*args, **kwargs):
 
 def deduct_credits(*args, **kwargs):
     return users_module.deduct_credits(*args, **kwargs)
+
+
+def log_api_usage_transaction(*args, **kwargs):
+    return users_module.log_api_usage_transaction(*args, **kwargs)
 
 
 def record_usage(*args, **kwargs):
@@ -243,9 +248,24 @@ async def stream_generator(stream, user, api_key, model, trial, environment_tag,
             except Exception as e:
                 logger.warning("Failed to track trial usage: %s", e)
 
-        if not trial.get("is_trial", False):
-            cost = calculate_cost(model, prompt_tokens, completion_tokens)
+        cost = calculate_cost(model, prompt_tokens, completion_tokens)
+        is_trial = trial.get("is_trial", False)
 
+        if is_trial:
+            # Log transaction for trial users (with $0 cost)
+            try:
+                await _to_thread(log_api_usage_transaction, api_key, 0.0, f"API usage - {model} (Trial)", {
+                    "model": model,
+                    "total_tokens": total_tokens,
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "cost_usd": 0.0,
+                    "is_trial": True,
+                }, True)
+            except Exception as e:
+                logger.error(f"Failed to log trial API usage transaction: {e}", exc_info=True)
+        else:
+            # For non-trial users, deduct credits
             try:
                 await _to_thread(deduct_credits, api_key, cost, f"API usage - {model}", {
                     "model": model,
@@ -296,7 +316,7 @@ async def stream_generator(stream, user, api_key, model, trial, environment_tag,
                 }
             )
         except Exception as e:
-            logger.warning(f"Failed to log activity: {e}")
+            logger.error(f"Failed to log activity for user {user['id']}, model {model}: {e}", exc_info=True)
 
         # Save chat history
         if session_id:
@@ -319,12 +339,12 @@ async def stream_generator(stream, user, api_key, model, trial, environment_tag,
                                     text_parts.append(item.get("text", ""))
                             user_content = " ".join(text_parts) if text_parts else "[multimodal content]"
 
-                        await _to_thread(save_chat_message, session_id, "user", user_content, model, 0)
+                        await _to_thread(save_chat_message, session_id, "user", user_content, model, 0, user["id"])
 
                     if accumulated_content:
-                        await _to_thread(save_chat_message, session_id, "assistant", accumulated_content, model, total_tokens)
+                        await _to_thread(save_chat_message, session_id, "assistant", accumulated_content, model, total_tokens, user["id"])
             except Exception as e:
-                logger.warning("Failed to save chat history: %s", e)
+                logger.error(f"Failed to save chat history for session {session_id}, user {user['id']}: {e}", exc_info=True)
 
         # Send final done message
         yield "data: [DONE]\n\n"
@@ -446,13 +466,13 @@ async def chat_completions(
                     # Prepend history to incoming messages
                     messages = history_messages + messages
 
-                    logger.info(f"Injected {len(history_messages)} messages from session {session_id}")
+                    logger.info("Injected %d messages from session %s", len(history_messages), sanitize_for_logging(str(session_id)))
                 else:
-                    logger.debug(f"No history found for session {session_id} or session doesn't exist")
+                    logger.debug("No history found for session %s or session doesn't exist", sanitize_for_logging(str(session_id)))
 
             except Exception as e:
                 # Don't fail the request if history fetch fails
-                logger.warning(f"Failed to fetch chat history for session {session_id}: {e}")
+                logger.warning("Failed to fetch chat history for session %s: %s", sanitize_for_logging(str(session_id)), sanitize_for_logging(str(e)))
 
         # Store original model for response
         original_model = req.model
@@ -491,7 +511,7 @@ async def chat_completions(
                 # Normalize provider aliases
                 if provider == "hug":
                     provider = "huggingface"
-                logger.info(f"Auto-detected provider '{provider}' for model {original_model}")
+                logger.info("Auto-detected provider '%s' for model %s", sanitize_for_logging(provider), sanitize_for_logging(original_model))
             else:
                 # Fallback to checking cached models
                 from src.services.models import get_cached_models
@@ -796,9 +816,23 @@ async def chat_completions(
                 )
 
         cost = calculate_cost(model, prompt_tokens, completion_tokens)
+        is_trial = trial.get("is_trial", False)
 
-        if not trial.get("is_trial", False):
-            # Ideally: wrap deduct+record+balance fetch in a DB transaction
+        if is_trial:
+            # Log transaction for trial users (with $0 cost)
+            try:
+                await _to_thread(log_api_usage_transaction, api_key, 0.0, f"API usage - {model} (Trial)", {
+                    "model": model,
+                    "total_tokens": total_tokens,
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "cost_usd": 0.0,
+                    "is_trial": True,
+                }, True)
+            except Exception as e:
+                logger.error(f"Failed to log trial API usage transaction: {e}", exc_info=True)
+        else:
+            # For non-trial users, deduct credits
             try:
                 await _to_thread(deduct_credits, api_key, cost, f"API usage - {model}", {
                     "model": model,
@@ -841,7 +875,7 @@ async def chat_completions(
                 }
             )
         except Exception as e:
-            logger.warning(f"Failed to log activity: {e}")
+            logger.error(f"Failed to log activity for user {user['id']}, model {model}: {e}", exc_info=True)
 
         # === 5) History (use the last user message in this request only) ===
         if session_id:
@@ -855,15 +889,15 @@ async def chat_completions(
                             last_user = m
                             break
                     if last_user:
-                        await _to_thread(save_chat_message, session_id, "user", last_user.get("content",""), model, 0)
+                        await _to_thread(save_chat_message, session_id, "user", last_user.get("content",""), model, 0, user["id"])
 
                     assistant_content = processed.get("choices", [{}])[0].get("message", {}).get("content", "")
                     if assistant_content:
-                        await _to_thread(save_chat_message, session_id, "assistant", assistant_content, model, total_tokens)
+                        await _to_thread(save_chat_message, session_id, "assistant", assistant_content, model, total_tokens, user["id"])
                 else:
                     logger.warning("Session %s not found for user %s", session_id, user["id"])
             except Exception as e:
-                logger.warning("Failed to save chat history: %s", e)
+                logger.error(f"Failed to save chat history for session {session_id}, user {user['id']}: {e}", exc_info=True)
 
         # === 6) Attach gateway usage (non-sensitive) ===
         processed.setdefault("gateway_usage", {})
@@ -1058,9 +1092,9 @@ async def unified_responses(
                         for msg in session['messages']
                     ]
                     messages = history_messages + messages
-                    logger.info(f"Injected {len(history_messages)} messages from session {session_id}")
+                    logger.info("Injected %d messages from session %s", len(history_messages), sanitize_for_logging(str(session_id)))
             except Exception as e:
-                logger.warning(f"Failed to fetch chat history for session {session_id}: {e}")
+                logger.warning("Failed to fetch chat history for session %s: %s", sanitize_for_logging(str(session_id)), sanitize_for_logging(str(e)))
 
         # Store original model for response
         original_model = req.model
@@ -1106,7 +1140,7 @@ async def unified_responses(
             detected_provider = detect_provider_from_model_id(original_model)
             if detected_provider:
                 provider = detected_provider
-                logger.info(f"Auto-detected provider '{provider}' for model {original_model}")
+                logger.info("Auto-detected provider '%s' for model %s", sanitize_for_logging(provider), sanitize_for_logging(original_model))
             else:
                 # Fallback to checking cached models
                 from src.services.models import get_cached_models
@@ -1117,7 +1151,7 @@ async def unified_responses(
                     provider_models = get_cached_models(test_provider) or []
                     if any(m.get("id") == transformed for m in provider_models):
                         provider = test_provider
-                        logger.info(f"Auto-detected provider '{provider}' for model {original_model} (transformed to {transformed})")
+                        logger.info("Auto-detected provider '%s' for model %s (transformed to %s)", sanitize_for_logging(provider), sanitize_for_logging(original_model), sanitize_for_logging(transformed))
                         break
 
         provider_chain = build_provider_failover_chain(provider)
@@ -1393,8 +1427,23 @@ async def unified_responses(
                 )
 
         cost = calculate_cost(model, prompt_tokens, completion_tokens)
+        is_trial = trial.get("is_trial", False)
 
-        if not trial.get("is_trial", False):
+        if is_trial:
+            # Log transaction for trial users (with $0 cost)
+            try:
+                await _to_thread(log_api_usage_transaction, api_key, 0.0, f"API usage - {model} (Trial)", {
+                    "model": model,
+                    "total_tokens": total_tokens,
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "cost_usd": 0.0,
+                    "is_trial": True,
+                }, True)
+            except Exception as e:
+                logger.error(f"Failed to log trial API usage transaction: {e}", exc_info=True)
+        else:
+            # For non-trial users, deduct credits
             try:
                 await _to_thread(deduct_credits, api_key, cost, f"API usage - {model}", {
                     "model": model,
@@ -1436,7 +1485,7 @@ async def unified_responses(
                 }
             )
         except Exception as e:
-            logger.warning(f"Failed to log activity: {e}")
+            logger.error(f"Failed to log activity for user {user['id']}, model {model}: {e}", exc_info=True)
 
         # === 5) History ===
         if session_id:
@@ -1459,13 +1508,13 @@ async def unified_responses(
                                     text_parts.append(item.get("text", ""))
                             user_content = " ".join(text_parts) if text_parts else "[multimodal content]"
 
-                        await _to_thread(save_chat_message, session_id, "user", user_content, model, 0)
+                        await _to_thread(save_chat_message, session_id, "user", user_content, model, 0, user["id"])
 
                     assistant_content = processed.get("choices", [{}])[0].get("message", {}).get("content", "")
                     if assistant_content:
-                        await _to_thread(save_chat_message, session_id, "assistant", assistant_content, model, total_tokens)
+                        await _to_thread(save_chat_message, session_id, "assistant", assistant_content, model, total_tokens, user["id"])
             except Exception as e:
-                logger.warning("Failed to save chat history: %s", e)
+                logger.error(f"Failed to save chat history for session {session_id}, user {user['id']}: {e}", exc_info=True)
 
         # === 6) Transform response format: choices -> output ===
         output = []

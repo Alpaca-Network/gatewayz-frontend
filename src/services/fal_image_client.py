@@ -1,9 +1,10 @@
-import logging
-import httpx
-import time
 import json
+import logging
+import time
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Any
+
+import httpx
 
 from src.config import Config
 
@@ -12,10 +13,10 @@ logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 
 # Cache for Fal.ai models catalog
-_fal_models_cache: Optional[List[Dict[str, Any]]] = None
+_fal_models_cache: list[dict[str, Any]] | None = None
 
 
-def load_fal_models_catalog() -> List[Dict[str, Any]]:
+def load_fal_models_catalog() -> list[dict[str, Any]]:
     """Load Fal.ai models catalog from the static JSON file
 
     Returns:
@@ -31,13 +32,15 @@ def load_fal_models_catalog() -> List[Dict[str, Any]]:
 
         if catalog_path.exists():
             logger.info(f"Loading Fal.ai models from catalog: {catalog_path}")
-            with open(catalog_path, 'r') as f:
+            with open(catalog_path) as f:
                 raw_data = json.load(f)
-            
+
             # Filter out metadata objects and only keep actual model objects
             # Model objects must have an "id" field
-            _fal_models_cache = [item for item in raw_data if isinstance(item, dict) and "id" in item]
-            
+            _fal_models_cache = [
+                item for item in raw_data if isinstance(item, dict) and "id" in item
+            ]
+
             logger.info(f"Loaded {len(_fal_models_cache)} Fal.ai models from catalog")
             return _fal_models_cache
         else:
@@ -48,7 +51,7 @@ def load_fal_models_catalog() -> List[Dict[str, Any]]:
         return []
 
 
-def get_fal_models() -> List[Dict[str, Any]]:
+def get_fal_models() -> list[dict[str, Any]]:
     """Get list of all available Fal.ai models
 
     Returns:
@@ -57,7 +60,7 @@ def get_fal_models() -> List[Dict[str, Any]]:
     return load_fal_models_catalog()
 
 
-def get_fal_models_by_type(model_type: str) -> List[Dict[str, Any]]:
+def get_fal_models_by_type(model_type: str) -> list[dict[str, Any]]:
     """Get Fal.ai models filtered by type
 
     Args:
@@ -88,8 +91,8 @@ def make_fal_image_request(
     model: str = "fal-ai/stable-diffusion-v15",
     size: str = "1024x1024",
     n: int = 1,
-    **kwargs
-) -> Dict[str, Any]:
+    **kwargs,
+) -> dict[str, Any]:
     """Make image generation request to Fal.ai
 
     This endpoint supports ALL 839+ models available on Fal.ai!
@@ -146,19 +149,18 @@ def make_fal_image_request(
     """
     try:
         if not Config.FAL_API_KEY:
-            raise ValueError("Fal.ai API key not configured. Please set FAL_API_KEY environment variable")
+            raise ValueError(
+                "Fal.ai API key not configured. Please set FAL_API_KEY environment variable"
+            )
 
         # Fal.ai API endpoint - using subscribe endpoint for synchronous requests
         url = f"https://fal.run/{model}"
 
-        headers = {
-            "Authorization": f"Key {Config.FAL_API_KEY}",
-            "Content-Type": "application/json"
-        }
+        headers = {"Authorization": f"Key {Config.FAL_API_KEY}", "Content-Type": "application/json"}
 
         # Parse size to width and height for Fal.ai
         try:
-            width, height = map(int, size.split('x'))
+            width, height = map(int, size.split("x"))
         except (ValueError, AttributeError):
             width, height = 1024, 1024  # Default size
 
@@ -169,23 +171,17 @@ def make_fal_image_request(
             "768x1024": "portrait_4_3",
             "576x1024": "portrait_16_9",
             "1024x768": "landscape_4_3",
-            "1024x576": "landscape_16_9"
+            "1024x576": "landscape_16_9",
         }
 
         # Build Fal.ai request payload
-        payload = {
-            "prompt": prompt,
-            "num_images": n
-        }
+        payload = {"prompt": prompt, "num_images": n}
 
         # Add image size - use mapping or custom dimensions
         if size in size_mapping:
             payload["image_size"] = size_mapping[size]
         else:
-            payload["image_size"] = {
-                "width": width,
-                "height": height
-            }
+            payload["image_size"] = {"width": width, "height": height}
 
         # Add optional Fal.ai-specific parameters from kwargs
         fal_params = [
@@ -196,7 +192,7 @@ def make_fal_image_request(
             "sync_mode",
             "enable_safety_checker",
             "expand_prompt",
-            "format"
+            "format",
         ]
 
         for param in fal_params:
@@ -215,20 +211,16 @@ def make_fal_image_request(
         data = []
         if "images" in fal_response:
             for img in fal_response["images"]:
-                data.append({
-                    "url": img.get("url"),
-                    "b64_json": None  # Fal.ai returns URLs by default
-                })
+                data.append(
+                    {"url": img.get("url"), "b64_json": None}  # Fal.ai returns URLs by default
+                )
 
-        return {
-            "created": int(time.time()),
-            "data": data,
-            "provider": "fal",
-            "model": model
-        }
+        return {"created": int(time.time()), "data": data, "provider": "fal", "model": model}
 
     except httpx.HTTPStatusError as e:
-        logger.error(f"Fal.ai image generation HTTP error: {e.response.status_code} - {e.response.text}")
+        logger.error(
+            f"Fal.ai image generation HTTP error: {e.response.status_code} - {e.response.text}"
+        )
         raise
     except Exception as e:
         logger.error(f"Fal.ai image generation request failed: {e}")

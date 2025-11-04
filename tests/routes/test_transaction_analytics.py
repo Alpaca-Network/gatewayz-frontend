@@ -23,6 +23,13 @@ from src.main import app
 # FIXTURES
 # ============================================================
 
+@pytest.fixture(autouse=True)
+def mock_config_cookie():
+    """Mock OPENROUTER_COOKIE for all tests"""
+    with patch('src.config.Config.OPENROUTER_COOKIE', 'test_cookie_value'):
+        yield
+
+
 @pytest.fixture
 def client():
     """FastAPI test client"""
@@ -154,6 +161,19 @@ class TestGetTransactionAnalytics:
 
         # Default should be '1d'
         assert data['window'] == '1d'
+
+    @pytest.mark.asyncio
+    @patch('src.config.Config.OPENROUTER_COOKIE', None)
+    async def test_get_transaction_analytics_missing_cookie(
+        self,
+        client
+    ):
+        """Test that missing OPENROUTER_COOKIE returns 503"""
+        response = client.get('/analytics/transactions')
+
+        assert response.status_code == 503
+        assert 'not configured' in response.json()['detail']
+        assert 'OPENROUTER_COOKIE' in response.json()['detail']
 
     @pytest.mark.asyncio
     @patch('httpx.AsyncClient')

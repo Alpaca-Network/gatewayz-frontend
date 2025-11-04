@@ -33,13 +33,13 @@ import logging
 from datetime import datetime, timezone
 
 from src.cache import (
+    _cerebras_models_cache,
     _google_models_cache,
     _google_vertex_models_cache,
-    _cerebras_models_cache,
-    _nebius_models_cache,
-    _xai_models_cache,
-    _novita_models_cache,
     _huggingface_models_cache,
+    _nebius_models_cache,
+    _novita_models_cache,
+    _xai_models_cache,
 )
 from src.services.pricing_lookup import enrich_model_with_pricing
 
@@ -60,7 +60,9 @@ def _filter_portkey_models_by_patterns(patterns: list, provider_name: str):
     try:
         from src.services.models import fetch_models_from_portkey
 
-        logger.info(f"Fetching {provider_name} models from Portkey unified catalog (filtering by patterns: {patterns})")
+        logger.info(
+            f"Fetching {provider_name} models from Portkey unified catalog (filtering by patterns: {patterns})"
+        )
 
         # Get all Portkey models
         all_portkey_models = fetch_models_from_portkey()
@@ -69,7 +71,9 @@ def _filter_portkey_models_by_patterns(patterns: list, provider_name: str):
             logger.warning(f"No Portkey models returned for {provider_name}")
             return None
 
-        logger.info(f"Portkey returned {len(all_portkey_models)} total models to filter for {provider_name}")
+        logger.info(
+            f"Portkey returned {len(all_portkey_models)} total models to filter for {provider_name}"
+        )
 
         # Filter by matching any of the patterns
         filtered_models = []
@@ -89,9 +93,13 @@ def _filter_portkey_models_by_patterns(patterns: list, provider_name: str):
                     break
 
         if filtered_models:
-            logger.info(f"✅ Filtered {len(filtered_models)} {provider_name} models from Portkey catalog")
+            logger.info(
+                f"✅ Filtered {len(filtered_models)} {provider_name} models from Portkey catalog"
+            )
         else:
-            logger.warning(f"⚠️  No {provider_name} models matched patterns {patterns} in Portkey catalog of {len(all_portkey_models)} models")
+            logger.warning(
+                f"⚠️  No {provider_name} models matched patterns {patterns} in Portkey catalog of {len(all_portkey_models)} models"
+            )
             # Log sample model IDs to help debug pattern matching
             if all_portkey_models:
                 sample_ids = [m.get("id", "unknown") for m in all_portkey_models[:5]]
@@ -111,8 +119,9 @@ def fetch_models_from_google():
     Uses the Google Generative AI API to list available models (Gemini, etc.)
     """
     try:
-        from src.config import Config
         import httpx
+
+        from src.config import Config
 
         if not Config.GOOGLE_API_KEY:
             logger.warning("Google API key not configured")
@@ -132,7 +141,7 @@ def fetch_models_from_google():
             payload = response.json()
 
             # Handle response format
-            if isinstance(payload, dict) and 'models' in payload:
+            if isinstance(payload, dict) and "models" in payload:
                 models_list = payload.get("models", [])
             elif isinstance(payload, list):
                 models_list = payload
@@ -147,7 +156,9 @@ def fetch_models_from_google():
             logger.info(f"Fetched {len(models_list)} models from Google Generative AI API")
 
         except httpx.HTTPStatusError as http_error:
-            logger.error(f"Google API HTTP error {http_error.response.status_code}: {http_error.response.text[:200]}")
+            logger.error(
+                f"Google API HTTP error {http_error.response.status_code}: {http_error.response.text[:200]}"
+            )
             return None
         except Exception as http_error:
             logger.error(f"Google HTTP API error: {http_error}")
@@ -214,7 +225,7 @@ def fetch_models_from_cerebras():
             logger.debug(f"Cerebras SDK response type: {type(models_response)}")
 
             # Check if it has a 'data' attribute first (common API response pattern)
-            if hasattr(models_response, 'data'):
+            if hasattr(models_response, "data"):
                 raw_models = models_response.data
                 logger.debug(f"Extracted from .data attribute, type: {type(raw_models)}")
             # Check if it's already a list
@@ -222,7 +233,7 @@ def fetch_models_from_cerebras():
                 raw_models = models_response
                 logger.debug("Response is already a list")
             # Convert to list if it's an iterator/generator (but not dict-like)
-            elif hasattr(models_response, '__iter__') and not hasattr(models_response, 'items'):
+            elif hasattr(models_response, "__iter__") and not hasattr(models_response, "items"):
                 raw_models = list(models_response)
                 logger.debug(f"Converted iterator to list, length: {len(raw_models)}")
             else:
@@ -231,20 +242,26 @@ def fetch_models_from_cerebras():
                 logger.debug("Wrapped response in list")
 
             # Additional unwrapping if the data is nested in a dict
-            if isinstance(raw_models, dict) and 'data' in raw_models:
-                raw_models = raw_models['data']
+            if isinstance(raw_models, dict) and "data" in raw_models:
+                raw_models = raw_models["data"]
                 logger.debug("Unwrapped data from dict")
             elif raw_models and len(raw_models) > 0:
                 # Check if first element is a tuple (e.g., from .items() conversion)
-                if isinstance(raw_models[0], tuple) and len(raw_models[0]) == 2 and raw_models[0][0] == 'data':
+                if (
+                    isinstance(raw_models[0], tuple)
+                    and len(raw_models[0]) == 2
+                    and raw_models[0][0] == "data"
+                ):
                     # Extract the data list from the tuple ('data', [model_list])
                     raw_models = raw_models[0][1]
                     logger.debug("Unwrapped data from tuple format")
-                elif isinstance(raw_models[0], dict) and 'data' in raw_models[0]:
-                    raw_models = raw_models[0]['data']
+                elif isinstance(raw_models[0], dict) and "data" in raw_models[0]:
+                    raw_models = raw_models[0]["data"]
                     logger.debug("Unwrapped data from first element")
 
-            logger.info(f"Processing {len(raw_models) if isinstance(raw_models, list) else 'unknown'} raw models from Cerebras SDK")
+            logger.info(
+                f"Processing {len(raw_models) if isinstance(raw_models, list) else 'unknown'} raw models from Cerebras SDK"
+            )
 
             # Convert SDK model objects to dicts if needed
             models_list = []
@@ -252,16 +269,18 @@ def fetch_models_from_cerebras():
                 try:
                     # Log the type of each model object
                     if idx == 0:
-                        logger.debug(f"First model type: {type(model)}, has model_dump: {hasattr(model, 'model_dump')}, has dict: {hasattr(model, 'dict')}")
+                        logger.debug(
+                            f"First model type: {type(model)}, has model_dump: {hasattr(model, 'model_dump')}, has dict: {hasattr(model, 'dict')}"
+                        )
 
                     converted_model = None
-                    if hasattr(model, 'model_dump'):
+                    if hasattr(model, "model_dump"):
                         # Pydantic v2 model
                         converted_model = model.model_dump()
-                    elif hasattr(model, 'dict'):
+                    elif hasattr(model, "dict"):
                         # Legacy Pydantic v1 model
                         converted_model = model.dict()
-                    elif hasattr(model, '__dict__'):
+                    elif hasattr(model, "__dict__"):
                         # Regular object
                         converted_model = vars(model)
                     elif isinstance(model, dict):
@@ -269,15 +288,19 @@ def fetch_models_from_cerebras():
                         converted_model = model
                     else:
                         # Skip unsupported model objects
-                        logger.warning(f"Skipping unsupported Cerebras model object of type {type(model)}")
+                        logger.warning(
+                            f"Skipping unsupported Cerebras model object of type {type(model)}"
+                        )
                         continue
 
                     # Validate that we got a proper dict with an id
                     if converted_model and isinstance(converted_model, dict):
-                        if 'id' in converted_model:
+                        if "id" in converted_model:
                             models_list.append(converted_model)
                         else:
-                            logger.warning(f"Model dict missing 'id' field: {list(converted_model.keys())[:5]}")
+                            logger.warning(
+                                f"Model dict missing 'id' field: {list(converted_model.keys())[:5]}"
+                            )
                     else:
                         logger.warning(f"Failed to convert model to dict: {type(converted_model)}")
                 except Exception as conversion_error:
@@ -319,7 +342,7 @@ def fetch_models_from_cerebras():
                 payload = response.json()
 
                 # Handle different response formats
-                if isinstance(payload, dict) and 'data' in payload:
+                if isinstance(payload, dict) and "data" in payload:
                     models_list = payload.get("data", [])
                 elif isinstance(payload, list):
                     models_list = payload
@@ -334,7 +357,9 @@ def fetch_models_from_cerebras():
                 logger.info(f"Fetched {len(models_list)} models from Cerebras HTTP API")
 
             except httpx.HTTPStatusError as http_error:
-                logger.error(f"Cerebras API HTTP error {http_error.response.status_code}: {http_error.response.text[:200]}")
+                logger.error(
+                    f"Cerebras API HTTP error {http_error.response.status_code}: {http_error.response.text[:200]}"
+                )
                 return None
             except Exception as http_error:
                 logger.error(f"Cerebras HTTP API error: {http_error}")
@@ -380,8 +405,9 @@ def fetch_models_from_nebius():
     Uses the OpenAI Python SDK with a custom base URL.
     """
     try:
-        from src.config import Config
         from openai import OpenAI
+
+        from src.config import Config
 
         if not Config.NEBIUS_API_KEY:
             logger.warning("Nebius API key not configured")
@@ -396,7 +422,10 @@ def fetch_models_from_nebius():
         models_response = client.models.list()
 
         # Convert model objects to dicts
-        models_list = [model.model_dump() if hasattr(model, 'model_dump') else model.dict() for model in models_response.data]
+        models_list = [
+            model.model_dump() if hasattr(model, "model_dump") else model.dict()
+            for model in models_response.data
+        ]
 
         if not models_list:
             logger.warning("No models returned from Nebius API")
@@ -404,7 +433,9 @@ def fetch_models_from_nebius():
 
         logger.info(f"Fetched {len(models_list)} models from Nebius API")
 
-        normalized_models = [normalize_portkey_provider_model(model, "nebius") for model in models_list if model]
+        normalized_models = [
+            normalize_portkey_provider_model(model, "nebius") for model in models_list if model
+        ]
 
         _nebius_models_cache["data"] = normalized_models
         _nebius_models_cache["timestamp"] = datetime.now(timezone.utc)
@@ -445,28 +476,32 @@ def fetch_models_from_xai():
                 models_response = client.list_models()
 
             # Convert to list if it's an iterator/generator
-            if hasattr(models_response, '__iter__') and not isinstance(models_response, (list, dict)):
+            if hasattr(models_response, "__iter__") and not isinstance(
+                models_response, list | dict
+            ):
                 raw_models = list(models_response)
             else:
-                raw_models = models_response if isinstance(models_response, list) else [models_response]
+                raw_models = (
+                    models_response if isinstance(models_response, list) else [models_response]
+                )
 
             # Extract data array if response is wrapped
-            if raw_models and isinstance(raw_models[0], dict) and 'data' in raw_models[0]:
-                raw_models = raw_models[0].get('data', [])
+            if raw_models and isinstance(raw_models[0], dict) and "data" in raw_models[0]:
+                raw_models = raw_models[0].get("data", [])
 
             # Convert SDK model objects to dicts if needed
             models_list = []
             for model in raw_models:
-                if hasattr(model, 'model_dump'):
+                if hasattr(model, "model_dump"):
                     models_list.append(model.model_dump())
-                elif hasattr(model, 'dict'):
+                elif hasattr(model, "dict"):
                     models_list.append(model.dict())
-                elif hasattr(model, '__dict__'):
+                elif hasattr(model, "__dict__"):
                     models_list.append(vars(model))
                 elif isinstance(model, dict):
                     models_list.append(model)
                 else:
-                    models_list.append({'id': str(model)})
+                    models_list.append({"id": str(model)})
 
             if models_list:
                 logger.info(f"Fetched {len(models_list)} models from xAI SDK")
@@ -477,7 +512,9 @@ def fetch_models_from_xai():
         except (ImportError, ValueError):
             # Fallback to OpenAI SDK with xAI base URL
             try:
-                logger.info("xAI SDK not available or returned no models, using OpenAI SDK with xAI base URL")
+                logger.info(
+                    "xAI SDK not available or returned no models, using OpenAI SDK with xAI base URL"
+                )
                 from openai import OpenAI
 
                 client = OpenAI(
@@ -486,7 +523,10 @@ def fetch_models_from_xai():
                 )
 
                 models_response = client.models.list()
-                models_list = [model.model_dump() if hasattr(model, 'model_dump') else model.dict() for model in models_response.data]
+                models_list = [
+                    model.model_dump() if hasattr(model, "model_dump") else model.dict()
+                    for model in models_response.data
+                ]
 
                 if not models_list:
                     logger.warning("No models returned from xAI API, using fallback models")
@@ -515,7 +555,9 @@ def fetch_models_from_xai():
                     {"id": "grok-vision-beta", "owned_by": "xAI"},
                 ]
 
-        normalized_models = [normalize_portkey_provider_model(model, "xai") for model in models_list if model]
+        normalized_models = [
+            normalize_portkey_provider_model(model, "xai") for model in models_list if model
+        ]
 
         _xai_models_cache["data"] = normalized_models
         _xai_models_cache["timestamp"] = datetime.now(timezone.utc)
@@ -545,7 +587,9 @@ def fetch_models_from_xai():
             {"id": "grok-beta", "owned_by": "xAI"},
             {"id": "grok-vision-beta", "owned_by": "xAI"},
         ]
-        normalized_models = [normalize_portkey_provider_model(model, "xai") for model in fallback_models]
+        normalized_models = [
+            normalize_portkey_provider_model(model, "xai") for model in fallback_models
+        ]
         _xai_models_cache["data"] = normalized_models
         _xai_models_cache["timestamp"] = datetime.now(timezone.utc)
         logger.info(f"Using {len(normalized_models)} fallback xAI models due to error")
@@ -560,8 +604,9 @@ def fetch_models_from_novita():
     Uses the OpenAI Python SDK with a custom base URL.
     """
     try:
-        from src.config import Config
         from openai import OpenAI
+
+        from src.config import Config
 
         if not Config.NOVITA_API_KEY:
             logger.warning("Novita API key not configured")
@@ -576,7 +621,10 @@ def fetch_models_from_novita():
         models_response = client.models.list()
 
         # Convert model objects to dicts
-        models_list = [model.model_dump() if hasattr(model, 'model_dump') else model.dict() for model in models_response.data]
+        models_list = [
+            model.model_dump() if hasattr(model, "model_dump") else model.dict()
+            for model in models_response.data
+        ]
 
         if not models_list:
             logger.warning("No models returned from Novita API")
@@ -584,7 +632,9 @@ def fetch_models_from_novita():
 
         logger.info(f"Fetched {len(models_list)} models from Novita API")
 
-        normalized_models = [normalize_portkey_provider_model(model, "novita") for model in models_list if model]
+        normalized_models = [
+            normalize_portkey_provider_model(model, "novita") for model in models_list if model
+        ]
 
         _novita_models_cache["data"] = normalized_models
         _novita_models_cache["timestamp"] = datetime.now(timezone.utc)
@@ -607,7 +657,9 @@ def fetch_models_from_hug():
             logger.warning("No Hugging Face models found in Portkey catalog")
             return None
 
-        normalized_models = [normalize_portkey_provider_model(model, "hug") for model in filtered_models if model]
+        normalized_models = [
+            normalize_portkey_provider_model(model, "hug") for model in filtered_models if model
+        ]
 
         _huggingface_models_cache["data"] = normalized_models
         _huggingface_models_cache["timestamp"] = datetime.now(timezone.utc)
@@ -638,7 +690,9 @@ def normalize_portkey_provider_model(model: dict, provider: str) -> dict:
             slug = model_id
         else:
             slug = f"@{provider}/{model_id}"
-        display_name = model.get("display_name") or model_id.replace("-", " ").replace("_", " ").title()
+        display_name = (
+            model.get("display_name") or model_id.replace("-", " ").replace("_", " ").title()
+        )
         description = model.get("description") or f"{provider.title()} hosted model: {model_id}"
         context_length = model.get("context_length") or 0
 
@@ -685,7 +739,7 @@ def normalize_portkey_provider_model(model: dict, provider: str) -> dict:
             "provider_site_url": None,
             "model_logo_url": None,
             "source_gateway": provider,
-            f"raw_{provider}": model
+            f"raw_{provider}": model,
         }
 
         return enrich_model_with_pricing(normalized, provider)
@@ -707,11 +761,12 @@ def fetch_models_from_google_vertex():
         List of normalized model dictionaries, or None if fetch fails
     """
     try:
-        from src.config import Config
-        from google.cloud import aiplatform
-        from google.auth.transport.requests import Request
-        from google.oauth2.service_account import Credentials
         import google.auth
+        from google.auth.transport.requests import Request
+        from google.cloud import aiplatform
+        from google.oauth2.service_account import Credentials
+
+        from src.config import Config
 
         logger.info("Fetching models from Google Vertex AI Model Registry")
 
@@ -730,12 +785,30 @@ def fetch_models_from_google_vertex():
         aiplatform.init(
             project=Config.GOOGLE_PROJECT_ID,
             location=Config.GOOGLE_VERTEX_LOCATION,
-            credentials=credentials
+            credentials=credentials,
         )
 
         # Common Google Vertex AI models
         # These are the officially supported models available in Vertex AI
         vertex_models = [
+            {
+                "id": "gemini-2.5-flash-lite",
+                "display_name": "Gemini 2.5 Flash Lite (GA)",
+                "description": "Lightweight, cost-effective model for high-throughput applications (stable version)",
+                "max_input_tokens": 1000000,
+                "max_output_tokens": 8192,
+                "modalities": ["text", "image", "audio", "video"],
+                "supported_generation_methods": ["generateContent", "streamGenerateContent"]
+            },
+            {
+                "id": "gemini-2.5-flash-lite-preview-09-2025",
+                "display_name": "Gemini 2.5 Flash Lite Preview (Sep 2025)",
+                "description": "Preview version with improved performance (887 tokens/sec) and enhanced reasoning capabilities",
+                "max_input_tokens": 1000000,
+                "max_output_tokens": 8192,
+                "modalities": ["text", "image", "audio", "video"],
+                "supported_generation_methods": ["generateContent", "streamGenerateContent"]
+            },
             {
                 "id": "gemini-2.0-flash",
                 "display_name": "Gemini 2.0 Flash",
@@ -743,7 +816,7 @@ def fetch_models_from_google_vertex():
                 "max_input_tokens": 1000000,
                 "max_output_tokens": 100000,
                 "modalities": ["text", "image", "audio", "video"],
-                "supported_generation_methods": ["generateContent", "streamGenerateContent"]
+                "supported_generation_methods": ["generateContent", "streamGenerateContent"],
             },
             {
                 "id": "gemini-2.0-flash-thinking",
@@ -752,7 +825,7 @@ def fetch_models_from_google_vertex():
                 "max_input_tokens": 1000000,
                 "max_output_tokens": 100000,
                 "modalities": ["text"],
-                "supported_generation_methods": ["generateContent", "streamGenerateContent"]
+                "supported_generation_methods": ["generateContent", "streamGenerateContent"],
             },
             {
                 "id": "gemini-2.0-pro",
@@ -761,7 +834,7 @@ def fetch_models_from_google_vertex():
                 "max_input_tokens": 1000000,
                 "max_output_tokens": 4096,
                 "modalities": ["text", "image", "audio", "video"],
-                "supported_generation_methods": ["generateContent", "streamGenerateContent"]
+                "supported_generation_methods": ["generateContent", "streamGenerateContent"],
             },
             {
                 "id": "gemini-1.5-pro",
@@ -770,7 +843,7 @@ def fetch_models_from_google_vertex():
                 "max_input_tokens": 1000000,
                 "max_output_tokens": 8192,
                 "modalities": ["text", "image", "audio", "video"],
-                "supported_generation_methods": ["generateContent", "streamGenerateContent"]
+                "supported_generation_methods": ["generateContent", "streamGenerateContent"],
             },
             {
                 "id": "gemini-1.5-flash",
@@ -779,7 +852,7 @@ def fetch_models_from_google_vertex():
                 "max_input_tokens": 1000000,
                 "max_output_tokens": 8192,
                 "modalities": ["text", "image", "audio", "video"],
-                "supported_generation_methods": ["generateContent", "streamGenerateContent"]
+                "supported_generation_methods": ["generateContent", "streamGenerateContent"],
             },
             {
                 "id": "gemini-1.0-pro",
@@ -788,7 +861,7 @@ def fetch_models_from_google_vertex():
                 "max_input_tokens": 32000,
                 "max_output_tokens": 8192,
                 "modalities": ["text"],
-                "supported_generation_methods": ["generateContent", "streamGenerateContent"]
+                "supported_generation_methods": ["generateContent", "streamGenerateContent"],
             },
         ]
 
@@ -804,15 +877,17 @@ def fetch_models_from_google_vertex():
                     "display_name": model.get("display_name", model.get("id")),
                     "description": model.get("description", ""),
                     "architecture": {
-                        "modality": "multimodal" if len(model.get("modalities", [])) > 1 else "text",
+                        "modality": (
+                            "multimodal" if len(model.get("modalities", [])) > 1 else "text"
+                        ),
                         "tokenizer": "unknown",
-                        "instruct_type": "chat"
+                        "instruct_type": "chat",
                     },
                     "pricing": {
                         "prompt": 0.00,  # Pricing varies by model and region
                         "completion": 0.00,
                         "request": 0.00,
-                        "image": None
+                        "image": None,
                     },
                     "top_provider": "Google",
                     "max_context_length": model.get("max_input_tokens", 1000000),
@@ -821,14 +896,16 @@ def fetch_models_from_google_vertex():
                     "modality": model.get("modalities", ["text"]),
                     "provider_slug": "google-vertex",
                     "source_gateway": "google-vertex",
-                    "raw_google_vertex": model
+                    "raw_google_vertex": model,
                 }
 
                 enriched = enrich_model_with_pricing(normalized, "google-vertex")
                 normalized_models.append(enriched)
 
             except Exception as model_error:
-                logger.warning(f"Failed to normalize Google Vertex model {model.get('id')}: {model_error}")
+                logger.warning(
+                    f"Failed to normalize Google Vertex model {model.get('id')}: {model_error}"
+                )
                 continue
 
         if not normalized_models:

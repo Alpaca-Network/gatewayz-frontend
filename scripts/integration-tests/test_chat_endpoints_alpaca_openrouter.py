@@ -26,7 +26,7 @@ TEST_MESSAGE = "What is 2+2? Answer briefly."
 MAX_TOKENS = 50
 
 
-class TestResult:
+class Result:
     """Store test results"""
     def __init__(self, name: str, success: bool, message: str, response: Any = None):
         self.name = name
@@ -53,12 +53,12 @@ def print_section(title: str):
     print("-" * 80)
 
 
-def test_openrouter_auto_direct() -> TestResult:
+def test_openrouter_auto_direct() -> Result:
     """Test OpenRouter/auto directly via OpenRouter API"""
     print_section("Test 1: OpenRouter/auto - Direct API")
 
     if not OPENROUTER_API_KEY:
-        return TestResult(
+        return Result(
             "OpenRouter/auto Direct",
             False,
             "OPENROUTER_API_KEY not set in environment"
@@ -90,7 +90,7 @@ def test_openrouter_auto_direct() -> TestResult:
         print(f"  → Model used: {model_used}")
         print(f"  → Response: {content[:100]}...")
 
-        return TestResult(
+        return Result(
             "OpenRouter/auto Direct",
             True,
             f"Successfully called openrouter/auto (routed to {model_used})",
@@ -100,19 +100,19 @@ def test_openrouter_auto_direct() -> TestResult:
     except Exception as e:
         error_msg = f"{type(e).__name__}: {str(e)}"
         print(f"  ✗ Failed: {error_msg}")
-        return TestResult(
+        return Result(
             "OpenRouter/auto Direct",
             False,
             error_msg
         )
 
 
-def test_alpaca_router_hf_direct() -> TestResult:
+def test_alpaca_router_hf_direct() -> Result:
     """Test Alpaca Router (Arch-Router) directly via HuggingFace"""
     print_section("Test 2: Alpaca Router - HuggingFace Direct")
 
     if not HF_API_KEY:
-        return TestResult(
+        return Result(
             "Alpaca Router HF Direct",
             False,
             "HUG_API_KEY not set in environment"
@@ -142,7 +142,7 @@ def test_alpaca_router_hf_direct() -> TestResult:
         print(f"  → Model used: {model_used}")
         print(f"  → Response: {content[:100]}...")
 
-        return TestResult(
+        return Result(
             "Alpaca Router HF Direct",
             True,
             f"Successfully called Arch-Router via HuggingFace",
@@ -152,19 +152,19 @@ def test_alpaca_router_hf_direct() -> TestResult:
     except Exception as e:
         error_msg = f"{type(e).__name__}: {str(e)}"
         print(f"  ✗ Failed: {error_msg}")
-        return TestResult(
+        return Result(
             "Alpaca Router HF Direct",
             False,
             error_msg
         )
 
 
-def test_alpaca_router_openrouter() -> TestResult:
+def test_alpaca_router_openrouter() -> Result:
     """Test Alpaca Router via OpenRouter"""
     print_section("Test 3: Alpaca Router - OpenRouter API")
 
     if not OPENROUTER_API_KEY:
-        return TestResult(
+        return Result(
             "Alpaca Router OpenRouter",
             False,
             "OPENROUTER_API_KEY not set in environment"
@@ -197,7 +197,7 @@ def test_alpaca_router_openrouter() -> TestResult:
         print(f"  → Model used: {model_used}")
         print(f"  → Response: {content[:100]}...")
 
-        return TestResult(
+        return Result(
             "Alpaca Router OpenRouter",
             True,
             f"Successfully called Arch-Router via OpenRouter",
@@ -207,19 +207,19 @@ def test_alpaca_router_openrouter() -> TestResult:
     except Exception as e:
         error_msg = f"{type(e).__name__}: {str(e)}"
         print(f"  ✗ Failed: {error_msg}")
-        return TestResult(
+        return Result(
             "Alpaca Router OpenRouter",
             False,
             error_msg
         )
 
 
-def test_gateway_openrouter_auto() -> TestResult:
+def test_gateway_openrouter_auto() -> Result:
     """Test OpenRouter/auto through Terragon Gateway"""
     print_section("Test 4: OpenRouter/auto - Terragon Gateway")
 
     if not GATEWAY_API_KEY:
-        return TestResult(
+        return Result(
             "Gateway OpenRouter/auto",
             False,
             "GATEWAY_API_KEY not set in environment (skipped)"
@@ -248,7 +248,7 @@ def test_gateway_openrouter_auto() -> TestResult:
         print(f"  → Model used: {model_used}")
         print(f"  → Response: {content[:100]}...")
 
-        return TestResult(
+        return Result(
             "Gateway OpenRouter/auto",
             True,
             f"Successfully called via Gateway (routed to {model_used})",
@@ -258,19 +258,19 @@ def test_gateway_openrouter_auto() -> TestResult:
     except Exception as e:
         error_msg = f"{type(e).__name__}: {str(e)}"
         print(f"  ✗ Failed: {error_msg}")
-        return TestResult(
+        return Result(
             "Gateway OpenRouter/auto",
             False,
             error_msg
         )
 
 
-def test_gateway_alpaca_router() -> TestResult:
+def test_gateway_alpaca_router() -> Result:
     """Test Alpaca Router through Terragon Gateway"""
     print_section("Test 5: Alpaca Router - Terragon Gateway")
 
     if not GATEWAY_API_KEY:
-        return TestResult(
+        return Result(
             "Gateway Alpaca Router",
             False,
             "GATEWAY_API_KEY not set in environment (skipped)"
@@ -302,7 +302,7 @@ def test_gateway_alpaca_router() -> TestResult:
         print(f"  → Model used: {model_used}")
         print(f"  → Response: {content[:100]}...")
 
-        return TestResult(
+        return Result(
             "Gateway Alpaca Router",
             True,
             f"Successfully called via Gateway",
@@ -312,19 +312,19 @@ def test_gateway_alpaca_router() -> TestResult:
     except Exception as e:
         error_msg = f"{type(e).__name__}: {str(e)}"
         print(f"  ✗ Failed: {error_msg}")
-        return TestResult(
+        return Result(
             "Gateway Alpaca Router",
             False,
             error_msg
         )
 
 
-def test_streaming_openrouter_auto() -> TestResult:
+def test_streaming_openrouter_auto() -> Result:
     """Test OpenRouter/auto with streaming"""
     print_section("Test 6: OpenRouter/auto - Streaming")
 
     if not OPENROUTER_API_KEY:
-        return TestResult(
+        return Result(
             "OpenRouter/auto Streaming",
             False,
             "OPENROUTER_API_KEY not set in environment"
@@ -363,14 +363,14 @@ def test_streaming_openrouter_auto() -> TestResult:
 
         if full_response:
             print(f"  ✓ Success!")
-            return TestResult(
+            return Result(
                 "OpenRouter/auto Streaming",
                 True,
                 f"Successfully streamed response ({len(chunks)} chunks)",
                 full_response
             )
         else:
-            return TestResult(
+            return Result(
                 "OpenRouter/auto Streaming",
                 False,
                 "No content received in stream"
@@ -379,7 +379,7 @@ def test_streaming_openrouter_auto() -> TestResult:
     except Exception as e:
         error_msg = f"{type(e).__name__}: {str(e)}"
         print(f"  ✗ Failed: {error_msg}")
-        return TestResult(
+        return Result(
             "OpenRouter/auto Streaming",
             False,
             error_msg

@@ -687,11 +687,7 @@ class TestAPIKeyEndpoints:
     ):
         """Regression: POST /user/api-keys must exist"""
         mock_get_user.return_value = mock_user
-        mock_create.return_value = {
-            'api_key': 'new_key',
-            'name': 'Test Key',
-            'environment': 'test'
-        }
+        mock_create.return_value = ('new_key', 1)
 
         response = client.post(
             "/user/api-keys",

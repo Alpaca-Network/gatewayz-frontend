@@ -1,12 +1,13 @@
 import logging
 import datetime
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 from datetime import datetime, timedelta, timezone
 
 from src.db.plans import check_plan_entitlements
 from src.config.supabase_config import get_supabase_client
 import secrets
 from src.utils.crypto import encrypt_api_key, sha256_key_hash, last4
+from src.utils.security_validators import sanitize_for_logging
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +36,7 @@ def check_key_name_uniqueness(user_id: int, key_name: str, exclude_key_id: Optio
         return len(result.data) == 0
 
     except Exception as e:
-        logger.error(f"Error checking key name uniqueness: {e}")
+        logger.error("Error checking key name uniqueness: %s", sanitize_for_logging(str(e)))
         # In case of error, assume name is not unique to be safe
         return False
 
@@ -43,7 +44,7 @@ def check_key_name_uniqueness(user_id: int, key_name: str, exclude_key_id: Optio
 def create_api_key(user_id: int, key_name: str, environment_tag: str = 'live',
                    scope_permissions: Optional[Dict[str, Any]] = None, expiration_days: Optional[int] = None,
                    max_requests: Optional[int] = None, ip_allowlist: Optional[List[str]] = None,
-                   domain_referrers: Optional[List[str]] = None, is_primary: bool = False) -> str:
+                   domain_referrers: Optional[List[str]] = None, is_primary: bool = False) -> Tuple[str, int]:
     """Create a new API key for a user"""
     try:
         client = get_supabase_client()
@@ -113,7 +114,7 @@ def create_api_key(user_id: int, key_name: str, environment_tag: str = 'live',
             api_key_hash = sha256_key_hash(api_key)
             api_key_last4 = last4(api_key)
         except Exception as enc_e:
-            logger.warning(f"Encryption unavailable or failed; proceeding without encrypted fields: {enc_e}")
+            logger.warning("Encryption unavailable or failed; proceeding without encrypted fields: %s", sanitize_for_logging(str(enc_e)))
             encrypted_token, key_version, api_key_hash, api_key_last4 = None, None, None, (api_key[-4:] if api_key else None)
 
         # Combine base data with trial data
@@ -162,7 +163,7 @@ def create_api_key(user_id: int, key_name: str, environment_tag: str = 'live',
             client.table('rate_limit_configs').insert(rate_limit_config).execute()
 
         except Exception as rate_limit_error:
-            logger.warning(f"Failed to create rate limit config for API key {api_key}: {rate_limit_error}")
+            logger.warning("Failed to create rate limit config for API key %s: %s", sanitize_for_logging(api_key[:20] + "..."), sanitize_for_logging(str(rate_limit_error)))
 
         # Create audit log entry
         try:
@@ -181,12 +182,12 @@ def create_api_key(user_id: int, key_name: str, environment_tag: str = 'live',
                 'timestamp': datetime.now(timezone.utc).isoformat()
             }).execute()
         except Exception as audit_error:
-            logger.warning(f"Failed to create audit log for API key {api_key}: {audit_error}")
+            logger.warning("Failed to create audit log for API key %s: %s", sanitize_for_logging(api_key[:20] + "..."), sanitize_for_logging(str(audit_error)))
 
-        return api_key
+        return api_key, result.data[0]['id']
 
     except Exception as e:
-        logger.error(f"Failed to create API key: {e}")
+        logger.error("Failed to create API key: %s", sanitize_for_logging(str(e)))
         raise RuntimeError(f"Failed to create API key: {e}")
 
 
@@ -262,13 +263,13 @@ def get_user_api_keys(user_id: int) -> List[Dict[str, Any]]:
                 keys.append(key_data)
 
             except Exception as e:
-                logger.error(f"Error processing API key {key.get('id', 'unknown')}: {e}")
+                logger.error("Error processing API key %s: %s", sanitize_for_logging(str(key.get('id', 'unknown'))), sanitize_for_logging(str(e)))
                 continue
 
         return keys
 
     except Exception as e:
-        logger.error(f"Error getting user API keys: {e}")
+        logger.error("Error getting user API keys: %s", sanitize_for_logging(str(e)))
         return []
 
 
@@ -289,7 +290,7 @@ def delete_api_key(api_key: str, user_id: int) -> bool:
                 try:
                     client.table('rate_limit_configs').delete().eq('api_key_id', result.data[0]['id']).execute()
                 except Exception as e:
-                    logger.warning(f"Failed to delete rate limit configs for key {api_key}: {e}")
+                    logger.warning("Failed to delete rate limit configs for key %s: %s", sanitize_for_logging(api_key[:20] + "..."), sanitize_for_logging(str(e)))
 
                 # Create audit log entry
                 try:
@@ -305,7 +306,7 @@ def delete_api_key(api_key: str, user_id: int) -> bool:
                         'timestamp': datetime.now(timezone.utc).isoformat()
                     }).execute()
                 except Exception as e:
-                    logger.warning(f"Failed to create audit log for key deletion: {e}")
+                    logger.warning("Failed to create audit log for key deletion: %s", sanitize_for_logging(str(e)))
 
                 return True
             else:
@@ -316,7 +317,7 @@ def delete_api_key(api_key: str, user_id: int) -> bool:
             return bool(result.data)
 
     except Exception as e:
-        logger.error(f"Failed to delete API key: {e}")
+        logger.error("Failed to delete API key: %s", sanitize_for_logging(str(e)))
         return False
 
 
@@ -338,7 +339,7 @@ def validate_api_key(api_key: str) -> Optional[Dict[str, Any]]:
 
                 # Check if key is active
                 if not key_data.get('is_active', True):
-                    logger.warning(f"API key {api_key} is inactive")
+                    logger.warning("API key %s is inactive", sanitize_for_logging(api_key[:20] + "..."))
                     return None
 
                 # Check expiration date
@@ -355,15 +356,15 @@ def validate_api_key(api_key: str) -> Optional[Dict[str, Any]]:
                             now = datetime.now(timezone.utc).replace(tzinfo=expiration.tzinfo)
 
                             if expiration < now:
-                                logger.warning(f"API key {api_key} has expired")
+                                logger.warning("API key %s has expired", sanitize_for_logging(api_key[:20] + "..."))
                                 return None
                     except Exception as date_error:
-                        logger.warning(f"Error checking expiration for key {api_key}: {date_error}")
+                        logger.warning("Error checking expiration for key %s: %s", sanitize_for_logging(api_key[:20] + "..."), sanitize_for_logging(str(date_error)))
 
                 # Check request limits
                 if key_data.get('max_requests'):
                     if key_data['requests_used'] >= key_data['max_requests']:
-                        logger.warning(f"API key {api_key} has reached request limit")
+                        logger.warning("API key %s has reached request limit", sanitize_for_logging(api_key[:20] + "..."))
                         return None
 
                 # Get user info
@@ -381,7 +382,7 @@ def validate_api_key(api_key: str) -> Optional[Dict[str, Any]]:
                     }
 
         except Exception as e:
-            logger.warning(f"New API key validation failed, falling back to old system: {e}")
+            logger.warning("New API key validation failed, falling back to old system: %s", sanitize_for_logging(str(e)))
 
         # Fallback: Check if key exists in the old users table (for backward compatibility)
         user = get_user(api_key)
@@ -403,7 +404,7 @@ def validate_api_key(api_key: str) -> Optional[Dict[str, Any]]:
                         'requests_used': 0
                     }).execute()
 
-                    logger.info(f"Created legacy key entry for user {user['id']}")
+                    logger.info("Created legacy key entry for user %s", sanitize_for_logging(str(user['id'])))
 
                 # Return legacy key info
                 return {
@@ -418,7 +419,7 @@ def validate_api_key(api_key: str) -> Optional[Dict[str, Any]]:
                 }
 
             except Exception as e:
-                logger.error(f"Failed to create legacy key entry: {e}")
+                logger.error("Failed to create legacy key entry: %s", sanitize_for_logging(str(e)))
                 # Still return user info even if we can't create the entry
                 return {
                     'user_id': user['id'],
@@ -434,7 +435,7 @@ def validate_api_key(api_key: str) -> Optional[Dict[str, Any]]:
         return None
 
     except Exception as e:
-        logger.error(f"Failed to validate API key: {e}")
+        logger.error("Failed to validate API key: %s", sanitize_for_logging(str(e)))
         return None
 
 
@@ -462,7 +463,7 @@ def increment_api_key_usage(api_key: str) -> None:
                 return
 
         except Exception as e:
-            logger.warning(f"Failed to update usage in api_keys_new table: {e}")
+            logger.warning("Failed to update usage in api_keys_new table: %s", sanitize_for_logging(str(e)))
 
         # Fallback to old system (api_keys table)
         try:
@@ -491,10 +492,10 @@ def increment_api_key_usage(api_key: str) -> None:
                     }).execute()
 
         except Exception as e:
-            logger.error(f"Failed to update usage in api_keys table: {e}")
+            logger.error("Failed to update usage in api_keys table: %s", sanitize_for_logging(str(e)))
 
     except Exception as e:
-        logger.error(f"Failed to increment API key usage: {e}")
+        logger.error("Failed to increment API key usage: %s", sanitize_for_logging(str(e)))
 
 
 def get_api_key_usage_stats(api_key: str) -> Dict[str, Any]:
@@ -510,7 +511,7 @@ def get_api_key_usage_stats(api_key: str) -> Dict[str, Any]:
             key_result = client.table('api_keys_new').select('*').eq('api_key', api_key).execute()
 
             if not key_result.data:
-                logger.warning(f"API key not found in api_keys_new table: {api_key[:20]}...")
+                logger.warning("API key not found in api_keys_new table: %s", sanitize_for_logging(api_key[:20] + "..."))
                 return {
                     'api_key': api_key,
                     'key_name': 'Unknown',
@@ -588,7 +589,7 @@ def get_api_key_usage_stats(api_key: str) -> Dict[str, Any]:
             }
 
     except Exception as e:
-        logger.error(f"Error getting API key usage stats for {api_key[:20]}...: {e}")
+        logger.error("Error getting API key usage stats for %s: %s", sanitize_for_logging(api_key[:20] + "..."), sanitize_for_logging(str(e)))
         return {
             'api_key': api_key,
             'key_name': 'Error',
@@ -661,7 +662,7 @@ def update_api_key(api_key: str, user_id: int, updates: Dict[str, Any]) -> bool:
                     'updated_at': datetime.now(timezone.utc).isoformat()
                 }).eq('api_key_id', key_id).execute()
             except Exception as e:
-                logger.warning(f"Failed to update rate limit config: {e}")
+                logger.warning("Failed to update rate limit config: %s", sanitize_for_logging(str(e)))
 
         # Create audit log entry
         try:
@@ -678,23 +679,23 @@ def update_api_key(api_key: str, user_id: int, updates: Dict[str, Any]) -> bool:
                 'timestamp': datetime.now(timezone.utc).isoformat()
             }).execute()
         except Exception as e:
-            logger.warning(f"Failed to create audit log for key update: {e}")
+            logger.warning("Failed to create audit log for key update: %s", sanitize_for_logging(str(e)))
 
         return True
 
     except Exception as e:
-        logger.error(f"Failed to update API key: {e}")
+        logger.error("Failed to update API key: %s", sanitize_for_logging(str(e)))
         raise RuntimeError(f"Failed to update API key: {e}")
 
 
 def validate_api_key_permissions(api_key: str, required_permission: str, resource: str) -> bool:
     """Validate if an API key has the required permission for a resource"""
     try:
-        logger.info(f"Validating permissions for API key {api_key[:15]}... - Required: {required_permission} on {resource}")
+        logger.info("Validating permissions for API key %s - Required: %s on %s", sanitize_for_logging(api_key[:15] + "..."), sanitize_for_logging(required_permission), sanitize_for_logging(resource))
 
         # Temporary session keys (gw_temp_*) have full permissions
         if api_key.startswith('gw_temp_'):
-            logger.info(f"Granting full permissions to session key: {api_key[:15]}...")
+            logger.info("Granting full permissions to session key: %s", sanitize_for_logging(api_key[:15] + "..."))
             return True
 
         client = get_supabase_client()
@@ -705,37 +706,37 @@ def validate_api_key_permissions(api_key: str, required_permission: str, resourc
 
         if not key_result.data:
             # Fallback to legacy key check
-            logger.info(f"API key {api_key[:15]}... not found in api_keys_new, checking legacy table")
+            logger.info("API key %s not found in api_keys_new, checking legacy table", sanitize_for_logging(api_key[:15] + "..."))
             legacy_result = client.table('api_keys').select('scope_permissions, is_active').eq('api_key',
                                                                                                api_key).execute()
             if not legacy_result.data:
-                logger.warning(f"API key not found in any table: {api_key[:10]}...")
+                logger.warning("API key not found in any table: %s", sanitize_for_logging(api_key[:10] + "..."))
                 return False
             key_data = legacy_result.data[0]
-            logger.info(f"Found in legacy table - is_active: {key_data.get('is_active')}, has is_primary: False (legacy)")
+            logger.info("Found in legacy table - is_active: %s, has is_primary: False (legacy)", key_data.get('is_active'))
         else:
             key_data = key_result.data[0]
-            logger.info(f"Found in api_keys_new - is_active: {key_data.get('is_active')}, is_primary: {key_data.get('is_primary', False)}")
+            logger.info("Found in api_keys_new - is_active: %s, is_primary: %s", key_data.get('is_active'), key_data.get('is_primary', False))
 
         # Check if key is active
         if not key_data.get('is_active', True):
-            logger.warning(f"API key is inactive: {api_key[:10]}...")
+            logger.warning("API key is inactive: %s", sanitize_for_logging(api_key[:10] + "..."))
             return False
 
         # Primary keys (auto-generated for new users) have full permissions
         # This is the most important check - primary keys should ALWAYS have full access
         if key_data.get('is_primary', False):
-            logger.info(f"Granting full permissions to primary key: {api_key[:15]}...")
+            logger.info("Granting full permissions to primary key: %s", sanitize_for_logging(api_key[:15] + "..."))
             return True
         else:
-            logger.info(f"Not a primary key, checking scope_permissions: {key_data.get('scope_permissions', {})}")
+            logger.info("Not a primary key, checking scope_permissions: %s", sanitize_for_logging(str(key_data.get('scope_permissions', {}))))
 
         # Get scope permissions
         scope_permissions = key_data.get('scope_permissions', {})
 
         # If no permissions set, grant default access (for backward compatibility)
         if not scope_permissions or scope_permissions == {}:
-            logger.info(f"No scope permissions set, granting default access for {api_key[:15]}...")
+            logger.info("No scope permissions set, granting default access for %s", sanitize_for_logging(api_key[:15] + "..."))
             return True
 
         # Check if the required permission exists
@@ -745,19 +746,19 @@ def validate_api_key_permissions(api_key: str, required_permission: str, resourc
             if isinstance(allowed_resources, list):
                 # Check if resource is in the allowed list or if wildcard (*) is allowed
                 has_permission = '*' in allowed_resources or resource in allowed_resources
-                logger.info(f"Permission check result for {api_key[:15]}...: {has_permission}")
+                logger.info("Permission check result for %s: %s", sanitize_for_logging(api_key[:15] + "..."), has_permission)
                 return has_permission
             elif isinstance(allowed_resources, str):
                 # Single resource or wildcard
                 has_permission = allowed_resources == '*' or allowed_resources == resource
-                logger.info(f"Permission check result for {api_key[:15]}...: {has_permission}")
+                logger.info("Permission check result for %s: %s", sanitize_for_logging(api_key[:15] + "..."), has_permission)
                 return has_permission
 
-        logger.warning(f"Permission denied for {api_key[:15]}... - required: {required_permission} on {resource}, available: {scope_permissions}")
+        logger.warning("Permission denied for %s - required: %s on %s, available: %s", sanitize_for_logging(api_key[:15] + "..."), sanitize_for_logging(required_permission), sanitize_for_logging(resource), sanitize_for_logging(str(scope_permissions)))
         return False
 
     except Exception as e:
-        logger.error(f"Error validating API key permissions: {e}")
+        logger.error("Error validating API key permissions: %s", sanitize_for_logging(str(e)))
         return False
 
 
@@ -792,7 +793,7 @@ def get_api_key_by_id(key_id: int, user_id: int) -> Optional[Dict[str, Any]]:
                     now = datetime.now(timezone.utc).replace(tzinfo=expiration.tzinfo)
                     days_remaining = max(0, (expiration - now).days)
             except Exception as date_error:
-                logger.warning(f"Error calculating days remaining for key {key_id}: {date_error}")
+                logger.warning("Error calculating days remaining for key %s: %s", sanitize_for_logging(str(key_id)), sanitize_for_logging(str(date_error)))
                 days_remaining = None
 
         # Calculate requests remaining
@@ -827,7 +828,7 @@ def get_api_key_by_id(key_id: int, user_id: int) -> Optional[Dict[str, Any]]:
         }
 
     except Exception as e:
-        logger.error(f"Error getting API key by ID: {e}")
+        logger.error("Error getting API key by ID: %s", sanitize_for_logging(str(e)))
         return None
 
 
@@ -879,5 +880,5 @@ def get_user_all_api_keys_usage(user_id: int) -> Dict[str, Any]:
         }
 
     except Exception as e:
-        logger.error(f"Error getting all API keys usage for user {user_id}: {e}")
+        logger.error("Error getting all API keys usage for user %s: %s", sanitize_for_logging(str(user_id)), sanitize_for_logging(str(e)))
         return None

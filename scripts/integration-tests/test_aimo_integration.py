@@ -4,55 +4,43 @@ Test script for AIMO Network integration
 """
 import os
 import sys
+import pytest
+from utils import load_env_file, get_env_or_exit, print_section
 
-# Manually load .env file if dotenv not available
-if os.path.exists('.env'):
-    with open('.env', 'r') as f:
-        for line in f:
-            line = line.strip()
-            if line and not line.startswith('#') and '=' in line:
-                key, value = line.split('=', 1)
-                os.environ[key] = value
+load_env_file()
+
+# Check if AIMO_API_KEY is set - if not, skip the whole module
+api_key = os.environ.get("AIMO_API_KEY")
+pytestmark = pytest.mark.skipif(
+    not api_key,
+    reason="AIMO_API_KEY environment variable not set"
+)
 
 # Test 1: Check API key is loaded
-print("=" * 60)
-print("Test 1: API Key Configuration")
-print("=" * 60)
-api_key = os.environ.get("AIMO_API_KEY")
-if api_key:
-    masked_key = f"...{api_key[-20:]}" if len(api_key) >= 20 else "****"
-    print(f"✓ AIMO_API_KEY is set: {masked_key}")
-else:
-    print("✗ AIMO_API_KEY is not set")
-    sys.exit(1)
+print_section("Test 1: API Key Configuration", 60)
+api_key = get_env_or_exit("AIMO_API_KEY", "API key for AIMO Network")
+masked_key = f"...{api_key[-20:]}" if len(api_key) >= 20 else "****"
+print(f"✓ AIMO_API_KEY is set: {masked_key}")
 
 # Test 2: Import AIMO client
-print("\n" + "=" * 60)
-print("Test 2: AIMO Client Import")
-print("=" * 60)
+print_section("Test 2: AIMO Client Import", 60)
 try:
     from src.services.aimo_client import get_aimo_client, make_aimo_request_openai
     print("✓ Successfully imported AIMO client functions")
 except ImportError as e:
     print(f"✗ Failed to import AIMO client: {e}")
-    sys.exit(1)
 
 # Test 3: Initialize AIMO client
-print("\n" + "=" * 60)
-print("Test 3: AIMO Client Initialization")
-print("=" * 60)
+print_section("Test 3: AIMO Client Initialization", 60)
 try:
     client = get_aimo_client()
     print(f"✓ Successfully initialized AIMO client")
     print(f"  Base URL: {client.base_url}")
 except Exception as e:
     print(f"✗ Failed to initialize AIMO client: {e}")
-    sys.exit(1)
 
 # Test 4: Fetch available models
-print("\n" + "=" * 60)
-print("Test 4: Fetch AIMO Models")
-print("=" * 60)
+print_section("Test 4: Fetch AIMO Models", 60)
 try:
     from src.services.models import fetch_models_from_aimo
     models = fetch_models_from_aimo()
@@ -72,12 +60,9 @@ except Exception as e:
     print(f"✗ Failed to fetch models: {e}")
     import traceback
     traceback.print_exc()
-    sys.exit(1)
 
 # Test 5: Test model caching
-print("\n" + "=" * 60)
-print("Test 5: Model Caching")
-print("=" * 60)
+print_section("Test 5: Model Caching", 60)
 try:
     from src.services.models import get_cached_models
     cached_models = get_cached_models("aimo")
@@ -89,9 +74,7 @@ except Exception as e:
     print(f"✗ Failed to retrieve cached models: {e}")
 
 # Test 6: Simple chat completion test
-print("\n" + "=" * 60)
-print("Test 6: Simple Chat Completion")
-print("=" * 60)
+print_section("Test 6: Simple Chat Completion", 60)
 
 # First, let's get a model ID to use
 if models and len(models) > 0:
@@ -124,6 +107,4 @@ if models and len(models) > 0:
 else:
     print("⚠ Skipping chat test - no models available")
 
-print("\n" + "=" * 60)
-print("AIMO Integration Test Complete")
-print("=" * 60)
+print_section("AIMO Integration Test Complete", 60)

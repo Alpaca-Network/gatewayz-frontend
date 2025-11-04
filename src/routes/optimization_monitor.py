@@ -5,19 +5,20 @@ This module provides endpoints to monitor connection pools, caching, and request
 """
 
 import logging
+from typing import Any
+
 from fastapi import APIRouter, HTTPException
-from typing import Dict, Any
 
 from src.services.connection_pool import get_pool_stats
-from src.services.response_cache import get_cache_stats
 from src.services.request_prioritization import get_priority_stats
+from src.services.response_cache import get_cache_stats
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
 @router.get("/health/optimizations")
-async def get_optimization_health() -> Dict[str, Any]:
+async def get_optimization_health() -> dict[str, Any]:
     """
     Get health and statistics for all optimization systems.
 
@@ -33,11 +34,11 @@ async def get_optimization_health() -> Dict[str, Any]:
         }
     except Exception as e:
         logger.error(f"Failed to get optimization health: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.get("/health/optimizations/connection-pools")
-async def get_connection_pool_stats() -> Dict[str, Any]:
+async def get_connection_pool_stats() -> dict[str, Any]:
     """
     Get detailed connection pool statistics.
 
@@ -48,11 +49,11 @@ async def get_connection_pool_stats() -> Dict[str, Any]:
         return get_pool_stats()
     except Exception as e:
         logger.error(f"Failed to get connection pool stats: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.get("/health/optimizations/cache")
-async def get_cache_health() -> Dict[str, Any]:
+async def get_cache_health() -> dict[str, Any]:
     """
     Get response cache statistics.
 
@@ -63,11 +64,11 @@ async def get_cache_health() -> Dict[str, Any]:
         return get_cache_stats()
     except Exception as e:
         logger.error(f"Failed to get cache stats: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.get("/health/optimizations/prioritization")
-async def get_prioritization_stats() -> Dict[str, Any]:
+async def get_prioritization_stats() -> dict[str, Any]:
     """
     Get request prioritization statistics.
 
@@ -78,11 +79,11 @@ async def get_prioritization_stats() -> Dict[str, Any]:
         return get_priority_stats()
     except Exception as e:
         logger.error(f"Failed to get prioritization stats: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/health/optimizations/cache/clear")
-async def clear_cache() -> Dict[str, str]:
+async def clear_cache() -> dict[str, str]:
     """
     Clear the response cache.
 
@@ -91,9 +92,10 @@ async def clear_cache() -> Dict[str, str]:
     """
     try:
         from src.services.response_cache import clear_response_cache
+
         clear_response_cache()
         logger.info("Response cache cleared via API")
         return {"status": "success", "message": "Cache cleared"}
     except Exception as e:
         logger.error(f"Failed to clear cache: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e

@@ -1,7 +1,8 @@
 import json
 import logging
+from collections.abc import Generator
 from types import SimpleNamespace
-from typing import Any, Dict, Generator, List, Union
+from typing import Any
 
 import httpx
 
@@ -26,19 +27,17 @@ ALLOWED_PARAMS = {
 class HFStreamChoice:
     """Lightweight structure that mimics OpenAI stream choice objects."""
 
-    def __init__(self, data: Dict[str, Any]):
+    def __init__(self, data: dict[str, Any]):
         self.index = data.get("index", 0)
         self.delta = SimpleNamespace(**(data.get("delta") or {}))
-        self.message = (
-            SimpleNamespace(**data["message"]) if data.get("message") else None
-        )
+        self.message = SimpleNamespace(**data["message"]) if data.get("message") else None
         self.finish_reason = data.get("finish_reason")
 
 
 class HFStreamChunk:
     """Stream chunk compatible with OpenAI client chunks."""
 
-    def __init__(self, payload: Dict[str, Any]):
+    def __init__(self, payload: dict[str, Any]):
         self.id = payload.get("id")
         self.object = payload.get("object")
         self.created = payload.get("created")
@@ -56,7 +55,7 @@ class HFStreamChunk:
             self.usage = None
 
 
-def _build_timeout_config(timeout: Union[float, httpx.Timeout, None]) -> httpx.Timeout:
+def _build_timeout_config(timeout: float | httpx.Timeout | None) -> httpx.Timeout:
     if isinstance(timeout, httpx.Timeout):
         return timeout
 
@@ -70,7 +69,7 @@ def _build_timeout_config(timeout: Union[float, httpx.Timeout, None]) -> httpx.T
     )
 
 
-def get_huggingface_client(timeout: Union[float, httpx.Timeout, None] = None) -> httpx.Client:
+def get_huggingface_client(timeout: float | httpx.Timeout | None = None) -> httpx.Client:
     """Create an HTTPX client for the Hugging Face Router API."""
     if not Config.HUG_API_KEY:
         raise ValueError("Hugging Face API key (HUG_API_KEY) not configured")
@@ -91,7 +90,7 @@ def _prepare_model(model: str) -> str:
     return f"{model}:hf-inference"
 
 
-def _build_payload(messages: List[Dict[str, Any]], model: str, **kwargs) -> Dict[str, Any]:
+def _build_payload(messages: list[dict[str, Any]], model: str, **kwargs) -> dict[str, Any]:
     payload = {
         "messages": messages,
         "model": _prepare_model(model),
@@ -164,9 +163,7 @@ def make_huggingface_request_openai_stream(
                         logger.warning("Failed to decode Hugging Face stream chunk: %s", err)
                         continue
     except Exception as e:
-        logger.error(
-            "Hugging Face streaming request failed for model '%s': %s", model, e
-        )
+        logger.error("Hugging Face streaming request failed for model '%s': %s", model, e)
         raise
     finally:
         client.close()

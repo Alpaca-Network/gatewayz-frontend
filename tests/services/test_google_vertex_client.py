@@ -2,7 +2,7 @@
 
 import pytest
 import sys
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, Mock
 
 # Mock Google Cloud dependencies before importing our module
 # This allows tests to run even if google-cloud-aiplatform isn't installed
@@ -12,15 +12,6 @@ sys.modules['google.auth.transport'] = MagicMock()
 sys.modules['google.auth.transport.requests'] = MagicMock()
 sys.modules['google.oauth2'] = MagicMock()
 sys.modules['google.oauth2.service_account'] = MagicMock()
-sys.modules['google.cloud'] = MagicMock()
-sys.modules['google.cloud.aiplatform'] = MagicMock()
-sys.modules['google.cloud.aiplatform_v1'] = MagicMock()
-sys.modules['google.cloud.aiplatform_v1.services'] = MagicMock()
-sys.modules['google.cloud.aiplatform_v1.services.prediction_service'] = MagicMock()
-sys.modules['google.cloud.aiplatform_v1.types'] = MagicMock()
-sys.modules['google.protobuf'] = MagicMock()
-sys.modules['google.protobuf.json_format'] = MagicMock()
-sys.modules['google.protobuf.struct_pb2'] = MagicMock()
 
 # Now import our module (which will use the mocked dependencies)
 try:
@@ -29,7 +20,7 @@ try:
         make_google_vertex_request_openai_stream,
         transform_google_vertex_model_id,
         _build_vertex_content,
-        _process_google_vertex_response,
+        _process_google_vertex_rest_response,
     )
     GOOGLE_VERTEX_AVAILABLE = True
 except ImportError:
@@ -41,17 +32,15 @@ class TestTransformGoogleVertexModelId:
     """Tests for model ID transformation"""
 
     def test_transform_simple_model_id(self):
-        """Test transforming a simple model ID"""
+        """Test transforming a simple model ID returns the model name"""
         result = transform_google_vertex_model_id("gemini-2.0-flash")
-        assert "gemini-2.0-flash" in result
-        assert "projects/" in result
-        assert "/models/" in result
+        assert result == "gemini-2.0-flash"
 
     def test_transform_full_resource_name(self):
-        """Test that full resource names are returned as-is"""
+        """Test that full resource names are extracted to simple model name"""
         model_id = "projects/my-project/locations/us-central1/publishers/google/models/gemini-2.0-flash"
         result = transform_google_vertex_model_id(model_id)
-        assert result == model_id
+        assert result == "gemini-2.0-flash"
 
     def test_transform_various_models(self):
         """Test transforming various model IDs"""
@@ -60,11 +49,11 @@ class TestTransformGoogleVertexModelId:
             "gemini-1.5-pro",
             "gemini-1.5-flash",
             "gemini-1.0-pro",
+            "gemini-2.5-flash-lite",
         ]
         for model in models:
             result = transform_google_vertex_model_id(model)
-            assert model in result
-            assert "projects/" in result
+            assert result == model
 
 
 @pytest.mark.skipif(not GOOGLE_VERTEX_AVAILABLE, reason="Google Vertex AI SDK not available")
@@ -123,33 +112,27 @@ class TestBuildVertexContent:
 class TestProcessGoogleVertexResponse:
     """Tests for response processing"""
 
-    @patch("src.services.google_vertex_client.MessageToDict")
-    def test_process_successful_response(self, mock_message_to_dict):
-        """Test processing a successful response"""
-        # Mock the MessageToDict conversion
-        mock_message_to_dict.return_value = {
-            "predictions": [
+    def test_process_successful_rest_response(self):
+        """Test processing a successful REST API response"""
+        # Mock REST API response format (not protobuf)
+        response_data = {
+            "candidates": [
                 {
-                    "candidates": [
-                        {
-                            "content": {
-                                "parts": [
-                                    {"text": "This is a response"}
-                                ]
-                            },
-                            "usageMetadata": {
-                                "promptTokenCount": 10,
-                                "candidatesTokenCount": 5,
-                            },
-                            "finishReason": "STOP",
-                        }
-                    ]
+                    "content": {
+                        "parts": [
+                            {"text": "This is a response"}
+                        ]
+                    },
+                    "finishReason": "STOP",
                 }
-            ]
+            ],
+            "usageMetadata": {
+                "promptTokenCount": 10,
+                "candidatesTokenCount": 5,
+            }
         }
 
-        mock_response = MagicMock()
-        result = _process_google_vertex_response(mock_response, "gemini-2.0-flash")
+        result = _process_google_vertex_rest_response(response_data, "gemini-2.0-flash")
 
         assert result["model"] == "gemini-2.0-flash"
         assert result["choices"][0]["message"]["content"] == "This is a response"
@@ -158,77 +141,92 @@ class TestProcessGoogleVertexResponse:
         assert result["usage"]["completion_tokens"] == 5
         assert result["usage"]["total_tokens"] == 15
 
-    @patch("src.services.google_vertex_client.MessageToDict")
-    def test_process_multiple_content_parts(self, mock_message_to_dict):
+    def test_process_multiple_content_parts(self):
         """Test processing response with multiple content parts"""
-        # Mock the MessageToDict conversion
-        mock_message_to_dict.return_value = {
-            "predictions": [
+        # Mock REST API response with multiple parts
+        response_data = {
+            "candidates": [
                 {
-                    "candidates": [
-                        {
-                            "content": {
-                                "parts": [
-                                    {"text": "Part 1 "},
-                                    {"text": "Part 2"}
-                                ]
-                            },
-                            "usageMetadata": {
-                                "promptTokenCount": 10,
-                                "candidatesTokenCount": 5,
-                            },
-                            "finishReason": "STOP",
-                        }
-                    ]
+                    "content": {
+                        "parts": [
+                            {"text": "Part 1 "},
+                            {"text": "Part 2"}
+                        ]
+                    },
+                    "finishReason": "STOP",
                 }
-            ]
+            ],
+            "usageMetadata": {
+                "promptTokenCount": 10,
+                "candidatesTokenCount": 5,
+            }
         }
 
-        mock_response = MagicMock()
-        result = _process_google_vertex_response(mock_response, "gemini-1.5-pro")
+        result = _process_google_vertex_rest_response(response_data, "gemini-1.5-pro")
 
         assert result["choices"][0]["message"]["content"] == "Part 1 Part 2"
+
+    def test_process_gemini_flash_lite_response(self):
+        """Test processing response from gemini-2.5-flash-lite"""
+        response_data = {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {"text": "Flash Lite response"}
+                        ]
+                    },
+                    "finishReason": "STOP",
+                }
+            ],
+            "usageMetadata": {
+                "promptTokenCount": 5,
+                "candidatesTokenCount": 3,
+            }
+        }
+
+        result = _process_google_vertex_rest_response(response_data, "gemini-2.5-flash-lite")
+
+        assert result["model"] == "gemini-2.5-flash-lite"
+        assert result["choices"][0]["message"]["content"] == "Flash Lite response"
+        assert result["usage"]["total_tokens"] == 8
 
 
 @pytest.mark.skipif(not GOOGLE_VERTEX_AVAILABLE, reason="Google Vertex AI SDK not available")
 class TestMakeGoogleVertexRequest:
     """Tests for making requests to Google Vertex"""
 
-    @patch("src.services.google_vertex_client.PredictRequest")
-    @patch("src.services.google_vertex_client.MessageToDict")
-    @patch("src.services.google_vertex_client.get_google_vertex_client")
-    def test_make_request_with_parameters(self, mock_get_client, mock_message_to_dict, mock_predict_request):
+    @patch("src.services.google_vertex_client.httpx.Client")
+    @patch("src.services.google_vertex_client.get_google_vertex_access_token")
+    def test_make_request_with_parameters(self, mock_get_token, mock_httpx_client):
         """Test making a request with various parameters"""
-        # Mock the MessageToDict conversion
-        mock_message_to_dict.return_value = {
-            "predictions": [
+        # Mock access token
+        mock_get_token.return_value = "test-access-token"
+
+        # Mock HTTP response
+        mock_response = Mock()
+        mock_response.json.return_value = {
+            "candidates": [
                 {
-                    "candidates": [
-                        {
-                            "content": {
-                                "parts": [
-                                    {"text": "Response"}
-                                ]
-                            },
-                            "usageMetadata": {
-                                "promptTokenCount": 5,
-                                "candidatesTokenCount": 10,
-                            },
-                            "finishReason": "STOP",
-                        }
-                    ]
+                    "content": {
+                        "parts": [
+                            {"text": "Response"}
+                        ]
+                    },
+                    "finishReason": "STOP",
                 }
-            ]
+            ],
+            "usageMetadata": {
+                "promptTokenCount": 5,
+                "candidatesTokenCount": 10,
+            }
         }
+        mock_response.raise_for_status = Mock()
 
-        # Mock the client
-        mock_client = MagicMock()
-        mock_response = MagicMock()
-        mock_client.predict = MagicMock(return_value=mock_response)
-        mock_get_client.return_value = mock_client
-
-        # Mock PredictRequest constructor to accept any arguments
-        mock_predict_request.return_value = MagicMock()
+        # Mock httpx.Client context manager
+        mock_client_instance = Mock()
+        mock_client_instance.post.return_value = mock_response
+        mock_httpx_client.return_value.__enter__.return_value = mock_client_instance
 
         messages = [
             {"role": "user", "content": "Hello"}
@@ -245,42 +243,44 @@ class TestMakeGoogleVertexRequest:
         assert "choices" in result
         assert result["model"] == "gemini-2.0-flash"
         assert "usage" in result
+        assert result["choices"][0]["message"]["content"] == "Response"
 
-    @patch("src.services.google_vertex_client.PredictRequest")
-    @patch("src.services.google_vertex_client.MessageToDict")
-    @patch("src.services.google_vertex_client.get_google_vertex_client")
-    def test_make_streaming_request(self, mock_get_client, mock_message_to_dict, mock_predict_request):
+        # Verify the HTTP request was made correctly
+        mock_client_instance.post.assert_called_once()
+        call_args = mock_client_instance.post.call_args
+        assert "gemini-2.0-flash:generateContent" in call_args[0][0]
+
+    @patch("src.services.google_vertex_client.httpx.Client")
+    @patch("src.services.google_vertex_client.get_google_vertex_access_token")
+    def test_make_streaming_request(self, mock_get_token, mock_httpx_client):
         """Test making a streaming request"""
-        # Mock the MessageToDict conversion
-        mock_message_to_dict.return_value = {
-            "predictions": [
+        # Mock access token
+        mock_get_token.return_value = "test-access-token"
+
+        # Mock HTTP response
+        mock_response = Mock()
+        mock_response.json.return_value = {
+            "candidates": [
                 {
-                    "candidates": [
-                        {
-                            "content": {
-                                "parts": [
-                                    {"text": "Streaming response"}
-                                ]
-                            },
-                            "usageMetadata": {
-                                "promptTokenCount": 5,
-                                "candidatesTokenCount": 10,
-                            },
-                            "finishReason": "STOP",
-                        }
-                    ]
+                    "content": {
+                        "parts": [
+                            {"text": "Streaming response"}
+                        ]
+                    },
+                    "finishReason": "STOP",
                 }
-            ]
+            ],
+            "usageMetadata": {
+                "promptTokenCount": 5,
+                "candidatesTokenCount": 10,
+            }
         }
+        mock_response.raise_for_status = Mock()
 
-        # Mock the client
-        mock_client = MagicMock()
-        mock_response = MagicMock()
-        mock_client.predict = MagicMock(return_value=mock_response)
-        mock_get_client.return_value = mock_client
-
-        # Mock PredictRequest constructor to accept any arguments
-        mock_predict_request.return_value = MagicMock()
+        # Mock httpx.Client context manager
+        mock_client_instance = Mock()
+        mock_client_instance.post.return_value = mock_response
+        mock_httpx_client.return_value.__enter__.return_value = mock_client_instance
 
         messages = [
             {"role": "user", "content": "Hello"}
@@ -299,6 +299,54 @@ class TestMakeGoogleVertexRequest:
         assert len(chunks) >= 2  # At least a content chunk and a DONE chunk
         assert any("Streaming response" in chunk for chunk in chunks)
         assert any("[DONE]" in chunk for chunk in chunks)
+
+    @patch("src.services.google_vertex_client.httpx.Client")
+    @patch("src.services.google_vertex_client.get_google_vertex_access_token")
+    def test_make_request_gemini_flash_lite(self, mock_get_token, mock_httpx_client):
+        """Test making a request to gemini-2.5-flash-lite"""
+        # Mock access token
+        mock_get_token.return_value = "test-access-token"
+
+        # Mock HTTP response
+        mock_response = Mock()
+        mock_response.json.return_value = {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {"text": "Flash Lite works!"}
+                        ]
+                    },
+                    "finishReason": "STOP",
+                }
+            ],
+            "usageMetadata": {
+                "promptTokenCount": 3,
+                "candidatesTokenCount": 4,
+            }
+        }
+        mock_response.raise_for_status = Mock()
+
+        # Mock httpx.Client context manager
+        mock_client_instance = Mock()
+        mock_client_instance.post.return_value = mock_response
+        mock_httpx_client.return_value.__enter__.return_value = mock_client_instance
+
+        messages = [
+            {"role": "user", "content": "Test"}
+        ]
+
+        result = make_google_vertex_request_openai(
+            messages=messages,
+            model="gemini-2.5-flash-lite"
+        )
+
+        assert result["model"] == "gemini-2.5-flash-lite"
+        assert result["choices"][0]["message"]["content"] == "Flash Lite works!"
+
+        # Verify the correct model endpoint was called
+        call_args = mock_client_instance.post.call_args
+        assert "gemini-2.5-flash-lite:generateContent" in call_args[0][0]
 
 
 @pytest.mark.skipif(not GOOGLE_VERTEX_AVAILABLE, reason="Google Vertex AI SDK not available")

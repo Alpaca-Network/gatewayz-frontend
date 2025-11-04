@@ -32,6 +32,7 @@ from src.cache import (
     _vercel_ai_gateway_models_cache,
     is_cache_fresh,
     should_revalidate_in_background,
+    _FAL_CACHE_INIT_DEFERRED,
 )
 from fastapi import APIRouter
 from datetime import datetime, timezone
@@ -46,8 +47,16 @@ from src.services.portkey_providers import (
 )
 from src.services.huggingface_models import fetch_models_from_hug, get_huggingface_model_info
 from src.services.model_transformations import detect_provider_from_model_id
+from src.utils.security_validators import sanitize_for_logging
 
 import httpx
+
+logger = logging.getLogger(__name__)
+
+# Modality constants to reduce duplication
+MODALITY_TEXT_TO_TEXT = "text->text"
+MODALITY_TEXT_TO_IMAGE = "text->image"
+MODALITY_TEXT_TO_AUDIO = "text->audio"
 
 
 def sanitize_pricing(pricing: dict) -> dict:
@@ -76,7 +85,7 @@ def sanitize_pricing(pricing: dict) -> dict:
                     float_value = float(value)
                     if float_value < 0:
                         sanitized[key] = "0"
-                        logger.debug(f"Converted negative pricing {key}={value} to 0")
+                        logger.debug("Converted negative pricing %s=%s to 0", sanitize_for_logging(key), sanitize_for_logging(str(value)))
             except (ValueError, TypeError):
                 # Keep the original value if conversion fails
                 pass
@@ -88,6 +97,16 @@ logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+# Initialize FAL models cache on module import for better performance
+# This ensures FAL models are available immediately without lazy loading
+try:
+    from src.cache import initialize_fal_cache_from_catalog
+    initialize_fal_cache_from_catalog()
+except ImportError:
+    # Initialization will be deferred to first request if import fails
+    logger.debug(f"{_FAL_CACHE_INIT_DEFERRED} on import")
 
 
 def load_featherless_catalog_export() -> list:
@@ -148,7 +167,7 @@ def load_featherless_catalog_export() -> list:
                         "description": row.get("description") or f"Featherless catalog entry for {model_id}.",
                         "context_length": context_length,
                         "architecture": {
-                            "modality": row.get("modality") or "text->text",
+                            "modality": row.get("modality") or MODALITY_TEXT_TO_TEXT,
                             "input_modalities": ["text"],
                             "output_modalities": ["text"],
                             "tokenizer": None,
@@ -178,7 +197,7 @@ def load_featherless_catalog_export() -> list:
             return normalized
         return None
     except Exception as exc:
-        logger.error(f"Failed to load Featherless catalog export: {exc}", exc_info=True)
+        logger.error("Failed to load Featherless catalog export: %s", sanitize_for_logging(str(exc)), exc_info=True)
         return None
 
 
@@ -190,11 +209,11 @@ def revalidate_cache_in_background(gateway: str, fetch_function):
     """Trigger background revalidation of cache"""
     def _revalidate():
         try:
-            logger.info(f"Background revalidation started for {gateway}")
+            logger.info("Background revalidation started for %s", sanitize_for_logging(gateway))
             fetch_function()
-            logger.info(f"Background revalidation completed for {gateway}")
+            logger.info("Background revalidation completed for %s", sanitize_for_logging(gateway))
         except Exception as e:
-            logger.warning(f"Background revalidation failed for {gateway}: {e}")
+            logger.warning("Background revalidation failed for %s: %s", sanitize_for_logging(gateway), sanitize_for_logging(str(e)))
 
     _revalidation_executor.submit(_revalidate)
 
@@ -222,11 +241,11 @@ def get_all_models_parallel():
                         all_models.extend(models)
                 except Exception as e:
                     gateway_name = futures[future]
-                    logger.warning(f"Failed to fetch models from {gateway_name}: {e}")
+                    logger.warning("Failed to fetch models from %s: %s", sanitize_for_logging(gateway_name), sanitize_for_logging(str(e)))
 
             return all_models
     except Exception as e:
-        logger.error(f"Error in parallel model fetching: {e}")
+        logger.error("Error in parallel model fetching: %s", sanitize_for_logging(str(e)))
         # Fallback to sequential fetching
         return get_all_models_sequential()
 
@@ -447,7 +466,7 @@ def get_cached_models(gateway: str = "openrouter"):
         # Cache expired or empty, fetch fresh data synchronously
         return fetch_models_from_openrouter()
     except Exception as e:
-        logger.error(f"Error getting cached models for gateway '{gateway}': {e}")
+        logger.error("Error getting cached models for gateway '%s': %s", sanitize_for_logging(gateway), sanitize_for_logging(str(e)))
         return None
 
 
@@ -478,7 +497,7 @@ def fetch_models_from_openrouter():
 
         return _models_cache["data"]
     except Exception as e:
-        logger.error(f"Failed to fetch models from OpenRouter: {e}")
+        logger.error("Failed to fetch models from OpenRouter: %s", sanitize_for_logging(str(e)))
         return None
 
 
@@ -497,7 +516,7 @@ def fetch_models_from_portkey():
 
         # Portkey API returns all models in a single request (no pagination support)
         url = "https://api.portkey.ai/v1/models"
-        logger.info(f"Fetching Portkey models from {url}")
+        logger.info("Fetching Portkey models from %s", sanitize_for_logging(str(url)))
 
         response = httpx.get(url, headers=headers, timeout=20.0)
         response.raise_for_status()
@@ -519,10 +538,10 @@ def fetch_models_from_portkey():
         logger.info(f"Cached {len(normalized_models)} Portkey models with pricing cross-reference")
         return _portkey_models_cache["data"]
     except httpx.HTTPStatusError as e:
-        logger.error(f"Portkey HTTP error: {e.response.status_code} - {e.response.text}")
+        logger.error("Portkey HTTP error: %s - %s", e.response.status_code, sanitize_for_logging(e.response.text))
         return None
     except Exception as e:
-        logger.error(f"Failed to fetch models from Portkey: {e}", exc_info=True)
+        logger.error("Failed to fetch models from Portkey: %s", sanitize_for_logging(str(e)), exc_info=True)
         return None
 
 
@@ -544,7 +563,7 @@ def fetch_models_from_deepinfra():
 
         # DeepInfra API - use /models/list endpoint which has better model data
         url = "https://api.deepinfra.com/models/list"
-        logger.info(f"Fetching DeepInfra models from {url}")
+        logger.info("Fetching DeepInfra models from %s", sanitize_for_logging(str(url)))
 
         response = httpx.get(url, headers=headers, timeout=20.0)
 
@@ -569,10 +588,10 @@ def fetch_models_from_deepinfra():
         logger.info(f"Successfully cached {len(normalized_models)} DeepInfra models")
         return _deepinfra_models_cache["data"]
     except httpx.HTTPStatusError as e:
-        logger.error(f"DeepInfra HTTP error: {e.response.status_code} - {e.response.text}")
+        logger.error("DeepInfra HTTP error: %s - %s", e.response.status_code, sanitize_for_logging(e.response.text))
         return None
     except Exception as e:
-        logger.error(f"Failed to fetch models from DeepInfra: {e}", exc_info=True)
+        logger.error("Failed to fetch models from DeepInfra: %s", sanitize_for_logging(str(e)), exc_info=True)
         return None
 
 
@@ -634,7 +653,7 @@ def normalize_portkey_model(portkey_model: dict, openrouter_models: list = None)
     description = f"Portkey catalog entry for {slug}. {description_suffix}"
 
     architecture = {
-        "modality": "text->text",
+        "modality": MODALITY_TEXT_TO_TEXT,
         "input_modalities": ["text"],
         "output_modalities": ["text"],
         "tokenizer": None,
@@ -714,10 +733,10 @@ def fetch_models_from_featherless():
         logger.info(f"Normalized and cached {len(normalized_models)} Featherless models")
         return _featherless_models_cache["data"]
     except httpx.HTTPStatusError as e:
-        logger.error(f"Featherless HTTP error: {e.response.status_code} - {e.response.text}")
+        logger.error("Featherless HTTP error: %s - %s", e.response.status_code, sanitize_for_logging(e.response.text))
         return None
     except Exception as e:
-        logger.error(f"Failed to fetch models from Featherless: {e}")
+        logger.error("Failed to fetch models from Featherless: %s", sanitize_for_logging(str(e)))
         return None
 
 
@@ -747,7 +766,7 @@ def normalize_featherless_model(featherless_model: dict) -> dict:
     }
 
     architecture = {
-        "modality": "text->text",
+        "modality": MODALITY_TEXT_TO_TEXT,
         "input_modalities": ["text"],
         "output_modalities": ["text"],
         "tokenizer": None,
@@ -808,7 +827,7 @@ def fetch_models_from_chutes():
         return None
 
     except Exception as e:
-        logger.error(f"Failed to fetch models from Chutes: {e}")
+        logger.error("Failed to fetch models from Chutes: %s", sanitize_for_logging(str(e)))
         return None
 
 
@@ -825,7 +844,7 @@ def fetch_models_from_chutes_api():
         return None
 
     except Exception as e:
-        logger.error(f"Failed to fetch models from Chutes API: {e}")
+        logger.error("Failed to fetch models from Chutes API: %s", sanitize_for_logging(str(e)))
         return None
 
 
@@ -858,10 +877,10 @@ def fetch_models_from_groq():
         logger.info(f"Fetched {len(normalized_models)} Groq models")
         return _groq_models_cache["data"]
     except httpx.HTTPStatusError as e:
-        logger.error(f"Groq HTTP error: {e.response.status_code} - {e.response.text}")
+        logger.error("Groq HTTP error: %s - %s", e.response.status_code, sanitize_for_logging(e.response.text))
         return None
     except Exception as e:
-        logger.error(f"Failed to fetch models from Groq: {e}")
+        logger.error("Failed to fetch models from Groq: %s", sanitize_for_logging(str(e)))
         return None
 
 
@@ -885,18 +904,18 @@ def normalize_chutes_model(chutes_model: dict) -> dict:
 
     # Determine modality based on type
     modality_map = {
-        "LLM": "text->text",
-        "Image Generation": "text->image",
-        "Text to Speech": "text->audio",
+        "LLM": MODALITY_TEXT_TO_TEXT,
+        "Image Generation": MODALITY_TEXT_TO_IMAGE,
+        "Text to Speech": MODALITY_TEXT_TO_AUDIO,
         "Speech to Text": "audio->text",
         "Video": "text->video",
-        "Music Generation": "text->audio",
+        "Music Generation": MODALITY_TEXT_TO_AUDIO,
         "Embeddings": "text->embedding",
-        "Content Moderation": "text->text",
+        "Content Moderation": MODALITY_TEXT_TO_TEXT,
         "Other": "multimodal"
     }
 
-    modality = modality_map.get(model_type, "text->text")
+    modality = modality_map.get(model_type, MODALITY_TEXT_TO_TEXT)
 
     pricing = {
         "prompt": prompt_price,
@@ -978,7 +997,7 @@ def normalize_groq_model(groq_model: dict) -> dict:
     }
 
     architecture = {
-        "modality": metadata.get("modality", "text->text"),
+        "modality": metadata.get("modality", MODALITY_TEXT_TO_TEXT),
         "input_modalities": metadata.get("input_modalities") or ["text"],
         "output_modalities": metadata.get("output_modalities") or ["text"],
         "tokenizer": metadata.get("tokenizer"),
@@ -1039,10 +1058,10 @@ def fetch_models_from_fireworks():
         logger.info(f"Fetched {len(normalized_models)} Fireworks models")
         return _fireworks_models_cache["data"]
     except httpx.HTTPStatusError as e:
-        logger.error(f"Fireworks HTTP error: {e.response.status_code} - {e.response.text}")
+        logger.error("Fireworks HTTP error: %s - %s", e.response.status_code, sanitize_for_logging(e.response.text))
         return None
     except Exception as e:
-        logger.error(f"Failed to fetch models from Fireworks: {e}")
+        logger.error("Failed to fetch models from Fireworks: %s", sanitize_for_logging(str(e)))
         return None
 
 
@@ -1078,7 +1097,7 @@ def normalize_fireworks_model(fireworks_model: dict) -> dict:
     }
 
     architecture = {
-        "modality": metadata.get("modality", "text->text"),
+        "modality": metadata.get("modality", MODALITY_TEXT_TO_TEXT),
         "input_modalities": metadata.get("input_modalities") or ["text"],
         "output_modalities": metadata.get("output_modalities") or ["text"],
         "tokenizer": metadata.get("tokenizer"),
@@ -1131,10 +1150,10 @@ def fetch_specific_model_from_openrouter(provider_name: str, model_name: str):
                 if model.get("id", "").lower() == model_id_lower:
                     return model
 
-        logger.warning(f"Model {model_id} not found in OpenRouter catalog")
+        logger.warning("Model %s not found in OpenRouter catalog", sanitize_for_logging(model_id))
         return None
     except Exception as e:
-        logger.error(f"Failed to fetch specific model {provider_name}/{model_name} from OpenRouter: {e}")
+        logger.error("Failed to fetch specific model %s/%s from OpenRouter: %s", sanitize_for_logging(provider_name), sanitize_for_logging(model_name), sanitize_for_logging(str(e)))
         return None
 
 
@@ -1169,10 +1188,10 @@ def fetch_models_from_together():
         logger.info(f"Fetched {len(normalized_models)} Together models")
         return _together_models_cache["data"]
     except httpx.HTTPStatusError as e:
-        logger.error(f"Together HTTP error: {e.response.status_code} - {e.response.text}")
+        logger.error("Together HTTP error: %s - %s", e.response.status_code, sanitize_for_logging(e.response.text))
         return None
     except Exception as e:
-        logger.error(f"Failed to fetch models from Together: {e}")
+        logger.error("Failed to fetch models from Together: %s", sanitize_for_logging(str(e)))
         return None
 
 
@@ -1211,7 +1230,7 @@ def normalize_together_model(together_model: dict) -> dict:
         pricing["completion"] = pricing_info.get("output")
 
     architecture = {
-        "modality": "text->text",
+        "modality": MODALITY_TEXT_TO_TEXT,
         "input_modalities": ["text"],
         "output_modalities": ["text"],
         "tokenizer": together_model.get("config", {}).get("tokenizer"),
@@ -1287,10 +1306,10 @@ def fetch_models_from_aimo():
         logger.info(f"Fetched {len(normalized_models)} AIMO models")
         return _aimo_models_cache["data"]
     except httpx.HTTPStatusError as e:
-        logger.error(f"AIMO HTTP error: {e.response.status_code} - {e.response.text}")
+        logger.error("AIMO HTTP error: %s - %s", e.response.status_code, sanitize_for_logging(e.response.text))
         return []
     except Exception as e:
-        logger.error(f"Failed to fetch models from AIMO: {e}")
+        logger.error("Failed to fetch models from AIMO: %s", sanitize_for_logging(str(e)))
         return []
 
 
@@ -1305,13 +1324,13 @@ def normalize_aimo_model(aimo_model: dict) -> dict:
     """
     model_name = aimo_model.get("name")
     if not model_name:
-        logger.warning(f"AIMO model missing 'name' field: {aimo_model}")
+        logger.warning("AIMO model missing 'name' field: %s", sanitize_for_logging(str(aimo_model)))
         return None
 
     # Get provider information (use first provider if multiple)
     providers = aimo_model.get("providers", [])
     if not providers:
-        logger.warning(f"AIMO model '{model_name}' has no providers")
+        logger.warning("AIMO model '%s' has no providers", sanitize_for_logging(model_name))
         return None
 
     # For now, use the first provider
@@ -1360,7 +1379,7 @@ def normalize_aimo_model(aimo_model: dict) -> dict:
 
     # Determine modality string
     if input_modalities == ["text"] and output_modalities == ["text"]:
-        modality = "text->text"
+        modality = MODALITY_TEXT_TO_TEXT
     else:
         modality = "multimodal"
 
@@ -1439,7 +1458,7 @@ def fetch_models_from_near():
                 logger.info(f"Fetched {len(normalized_models)} Near AI models from API")
                 return _near_models_cache["data"]
         except (httpx.HTTPStatusError, httpx.RequestError) as e:
-            logger.warning(f"Near AI API request failed: {e}. Using fallback model list.")
+            logger.warning("Near AI API request failed: %s. Using fallback model list.", sanitize_for_logging(str(e)))
 
         # Fallback to known Near AI models if API doesn't return results
         logger.info("Using fallback Near AI model list")
@@ -1475,7 +1494,7 @@ def normalize_near_model(near_model: dict) -> dict:
     """
     model_id = near_model.get("id")
     if not model_id:
-        logger.warning(f"Near AI model missing 'id' field: {near_model}")
+        logger.warning("Near AI model missing 'id' field: %s", sanitize_for_logging(str(near_model)))
         return None
 
     slug = f"near/{model_id}"
@@ -1508,7 +1527,7 @@ def normalize_near_model(near_model: dict) -> dict:
         pricing["completion"] = str(pricing_info.get("completion")) if pricing_info.get("completion") is not None else None
 
     architecture = {
-        "modality": metadata.get("modality", "text->text"),
+        "modality": metadata.get("modality", MODALITY_TEXT_TO_TEXT),
         "input_modalities": metadata.get("input_modalities") or ["text"],
         "output_modalities": metadata.get("output_modalities") or ["text"],
         "tokenizer": metadata.get("tokenizer"),
@@ -1579,7 +1598,7 @@ def fetch_models_from_fal():
         return []
 
 
-def normalize_fal_model(fal_model: dict) -> dict:
+def normalize_fal_model(fal_model: dict) -> Optional[dict]:
     """Normalize Fal.ai catalog entries to resemble OpenRouter model shape
 
     Fal.ai features:
@@ -1589,7 +1608,7 @@ def normalize_fal_model(fal_model: dict) -> dict:
     """
     model_id = fal_model.get("id")
     if not model_id:
-        logger.warning(f"Fal.ai model missing 'id' field: {fal_model}")
+        logger.warning("Fal.ai model missing 'id' field: %s", sanitize_for_logging(str(fal_model)))
         return None
 
     # Extract provider from model ID (e.g., "fal-ai/flux-pro" -> "fal-ai")
@@ -1604,18 +1623,18 @@ def normalize_fal_model(fal_model: dict) -> dict:
     # Determine modality based on type
     model_type = fal_model.get("type", "text-to-image")
     modality_map = {
-        "text-to-image": "text->image",
+        "text-to-image": MODALITY_TEXT_TO_IMAGE,
         "text-to-video": "text->video",
         "image-to-image": "image->image",
         "image-to-video": "image->video",
         "video-to-video": "video->video",
-        "text-to-audio": "text->audio",
-        "text-to-speech": "text->audio",
+        "text-to-audio": MODALITY_TEXT_TO_AUDIO,
+        "text-to-speech": MODALITY_TEXT_TO_AUDIO,
         "audio-to-audio": "audio->audio",
         "image-to-3d": "image->3d",
         "vision": "image->text",
     }
-    modality = modality_map.get(model_type, "text->image")
+    modality = modality_map.get(model_type, MODALITY_TEXT_TO_IMAGE)
 
     # Parse input/output modalities
     input_mod, output_mod = modality.split("->") if "->" in modality else ("text", "image")
@@ -1691,11 +1710,11 @@ def fetch_models_from_vercel_ai_gateway():
         logger.info(f"Fetched {len(normalized_models)} models from Vercel AI Gateway")
         return _vercel_ai_gateway_models_cache["data"]
     except Exception as e:
-        logger.error(f"Failed to fetch models from Vercel AI Gateway: {e}")
+        logger.error("Failed to fetch models from Vercel AI Gateway: %s", sanitize_for_logging(str(e)))
         return []
 
 
-def normalize_vercel_model(model) -> dict:
+def normalize_vercel_model(model) -> Optional[dict]:
     """Normalize Vercel AI Gateway model to catalog schema
 
     Vercel models can originate from various providers (OpenAI, Google, Anthropic, etc.)
@@ -1705,7 +1724,7 @@ def normalize_vercel_model(model) -> dict:
     # Extract model ID
     model_id = getattr(model, 'id', None)
     if not model_id:
-        logger.warning(f"Vercel model missing 'id' field: {model}")
+        logger.warning("Vercel model missing 'id' field: %s", sanitize_for_logging(str(model)))
         return None
 
     # Determine provider from model ID
@@ -1718,7 +1737,7 @@ def normalize_vercel_model(model) -> dict:
         display_name = model_id
 
     # Get description - Vercel doesn't provide this, so we create one
-    description = getattr(model, 'description', None) or f"Model available through Vercel AI Gateway"
+    description = getattr(model, 'description', None) or "Model available through Vercel AI Gateway"
 
     # Get context length if available
     context_length = getattr(model, 'context_length', 4096)
@@ -1739,7 +1758,7 @@ def normalize_vercel_model(model) -> dict:
         "description": description,
         "context_length": context_length,
         "architecture": {
-            "modality": "text->text",
+            "modality": MODALITY_TEXT_TO_TEXT,
             "input_modalities": ["text"],
             "output_modalities": ["text"],
             "instruct_type": "chat"
@@ -1785,7 +1804,7 @@ def get_vercel_model_pricing(model_id: str) -> dict:
                 "image": str(pricing_data.get("image", "0")),
             }
     except Exception as e:
-        logger.debug(f"Failed to fetch Vercel pricing for {model_id}: {e}")
+        logger.debug("Failed to fetch Vercel pricing for %s: %s", sanitize_for_logging(model_id), sanitize_for_logging(str(e)))
 
     # Fallback: return default zero pricing
     return {
@@ -1813,10 +1832,10 @@ def fetch_specific_model_from_together(provider_name: str, model_name: str):
                 if model.get("id", "").lower() == model_id.lower():
                     return model
 
-        logger.warning(f"Model {model_id} not found in Together catalog")
+        logger.warning("Model %s not found in Together catalog", sanitize_for_logging(model_id))
         return None
     except Exception as e:
-        logger.error(f"Failed to fetch specific model {provider_name}/{model_name} from Together: {e}")
+        logger.error("Failed to fetch specific model %s/%s from Together: %s", sanitize_for_logging(provider_name), sanitize_for_logging(model_name), sanitize_for_logging(str(e)))
         return None
 def fetch_specific_model_from_portkey(provider_name: str, model_name: str):
     """Fetch specific model data from Portkey by searching cached models"""
@@ -1838,10 +1857,10 @@ def fetch_specific_model_from_portkey(provider_name: str, model_name: str):
                 if model.get("id", "").lower() == model_id.lower():
                     return model
 
-        logger.warning(f"Model {model_id} not found in Portkey catalog")
+        logger.warning("Model %s not found in Portkey catalog", sanitize_for_logging(model_id))
         return None
     except Exception as e:
-        logger.error(f"Failed to fetch specific model {provider_name}/{model_name} from Portkey: {e}")
+        logger.error("Failed to fetch specific model %s/%s from Portkey: %s", sanitize_for_logging(provider_name), sanitize_for_logging(model_name), sanitize_for_logging(str(e)))
         return None
 
 
@@ -1865,10 +1884,10 @@ def fetch_specific_model_from_featherless(provider_name: str, model_name: str):
                 if model.get("id", "").lower() == model_id.lower():
                     return model
 
-        logger.warning(f"Model {model_id} not found in Featherless catalog")
+        logger.warning("Model %s not found in Featherless catalog", sanitize_for_logging(model_id))
         return None
     except Exception as e:
-        logger.error(f"Failed to fetch specific model {provider_name}/{model_name} from Featherless: {e}")
+        logger.error("Failed to fetch specific model %s/%s from Featherless: %s", sanitize_for_logging(provider_name), sanitize_for_logging(model_name), sanitize_for_logging(str(e)))
         return None
 
 
@@ -1900,10 +1919,10 @@ def fetch_specific_model_from_deepinfra(provider_name: str, model_name: str):
                 # Normalize to our schema
                 return normalize_deepinfra_model(model)
 
-        logger.warning(f"Model {model_id} not found in DeepInfra catalog")
+        logger.warning("Model %s not found in DeepInfra catalog", sanitize_for_logging(model_id))
         return None
     except Exception as e:
-        logger.error(f"Failed to fetch specific model {provider_name}/{model_name} from DeepInfra: {e}")
+        logger.error("Failed to fetch specific model %s/%s from DeepInfra: %s", sanitize_for_logging(provider_name), sanitize_for_logging(model_name), sanitize_for_logging(str(e)))
         return None
 
 
@@ -1948,16 +1967,16 @@ def normalize_deepinfra_model(deepinfra_model: dict) -> dict:
         pricing["image"] = str(cents_per_sec * 5 / 100) if cents_per_sec else None
 
     # Determine modality based on model type
-    modality = "text->text"
+    modality = MODALITY_TEXT_TO_TEXT
     input_modalities = ["text"]
     output_modalities = ["text"]
 
     if model_type in ("text-to-image", "image"):
-        modality = "text->image"
+        modality = MODALITY_TEXT_TO_IMAGE
         input_modalities = ["text"]
         output_modalities = ["image"]
     elif model_type in ("text-to-speech", "tts"):
-        modality = "text->audio"
+        modality = MODALITY_TEXT_TO_AUDIO
         input_modalities = ["text"]
         output_modalities = ["audio"]
     elif model_type in ("speech-to-text", "stt"):
@@ -2023,10 +2042,10 @@ def fetch_specific_model_from_chutes(provider_name: str, model_name: str):
                 if model.get("id", "").lower() == model_id.lower():
                     return model
 
-        logger.warning(f"Model {model_id} not found in Chutes catalog")
+        logger.warning("Model %s not found in Chutes catalog", sanitize_for_logging(model_id))
         return None
     except Exception as e:
-        logger.error(f"Failed to fetch specific model {provider_name}/{model_name} from Chutes: {e}")
+        logger.error("Failed to fetch specific model %s/%s from Chutes: %s", sanitize_for_logging(provider_name), sanitize_for_logging(model_name), sanitize_for_logging(str(e)))
         return None
 
 
@@ -2047,10 +2066,10 @@ def fetch_specific_model_from_groq(provider_name: str, model_name: str):
                 if model.get("id", "").lower() == model_id.lower():
                     return model
 
-        logger.warning(f"Model {model_id} not found in Groq catalog")
+        logger.warning("Model %s not found in Groq catalog", sanitize_for_logging(model_id))
         return None
     except Exception as e:
-        logger.error(f"Failed to fetch specific model {provider_name}/{model_name} from Groq: {e}")
+        logger.error("Failed to fetch specific model %s/%s from Groq: %s", sanitize_for_logging(provider_name), sanitize_for_logging(model_name), sanitize_for_logging(str(e)))
         return None
 
 
@@ -2071,10 +2090,10 @@ def fetch_specific_model_from_fireworks(provider_name: str, model_name: str):
                 if model.get("id", "").lower() == model_id.lower():
                     return model
 
-        logger.warning(f"Model {model_id} not found in Fireworks catalog")
+        logger.warning("Model %s not found in Fireworks catalog", sanitize_for_logging(model_id))
         return None
     except Exception as e:
-        logger.error(f"Failed to fetch specific model {provider_name}/{model_name} from Fireworks: {e}")
+        logger.error("Failed to fetch specific model %s/%s from Fireworks: %s", sanitize_for_logging(provider_name), sanitize_for_logging(model_name), sanitize_for_logging(str(e)))
         return None
 
 
@@ -2097,10 +2116,10 @@ def fetch_specific_model_from_huggingface(provider_name: str, model_name: str):
                 if model.get("id", "").lower() == model_id_lower:
                     return model
 
-        logger.warning(f"Model {model_id} not found in Hugging Face catalog")
+        logger.warning("Model %s not found in Hugging Face catalog", sanitize_for_logging(model_id))
         return None
     except Exception as e:
-        logger.error(f"Failed to fetch specific model {provider_name}/{model_name} from Hugging Face: {e}")
+        logger.error("Failed to fetch specific model %s/%s from Hugging Face: %s", sanitize_for_logging(provider_name), sanitize_for_logging(model_name), sanitize_for_logging(str(e)))
         return None
 
 
@@ -2117,10 +2136,10 @@ def fetch_specific_model_from_fal(provider_name: str, model_name: str):
                 if model.get("id", "").lower() == model_id_lower:
                     return model
 
-        logger.warning(f"Model {model_id} not found in Fal.ai catalog")
+        logger.warning("Model %s not found in Fal.ai catalog", sanitize_for_logging(model_id))
         return None
     except Exception as e:
-        logger.error(f"Failed to fetch specific model {provider_name}/{model_name} from Fal.ai: {e}")
+        logger.error("Failed to fetch specific model %s/%s from Fal.ai: %s", sanitize_for_logging(provider_name), sanitize_for_logging(model_name), sanitize_for_logging(str(e)))
         return None
 
 
@@ -2240,10 +2259,10 @@ def fetch_specific_model(provider_name: str, model_name: str, gateway: str = Non
                     model_data.setdefault("source_gateway", "hug")
                 return model_data
 
-        logger.warning(f"Model {model_id} not found after checking gateways: {candidate_gateways}")
+        logger.warning("Model %s not found after checking gateways: %s", sanitize_for_logging(model_id), sanitize_for_logging(str(candidate_gateways)))
         return None
     except Exception as e:
-        logger.error(f"Failed to fetch specific model {provider_name}/{model_name} (gateways tried: {gateway}): {e}")
+        logger.error("Failed to fetch specific model %s/%s (gateways tried: %s): %s", sanitize_for_logging(provider_name), sanitize_for_logging(model_name), sanitize_for_logging(str(gateway)), sanitize_for_logging(str(e)))
         return None
 
 

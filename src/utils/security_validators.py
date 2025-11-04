@@ -69,14 +69,9 @@ def validate_webhook_url(url: str, allowed_domains: Optional[list] = None) -> bo
             return False
 
         # Try to resolve and check if it's a private IP
-        try:
-            ip_obj = ipaddress.ip_address(hostname)
-            if is_private_ip(hostname):
-                logger.warning(f"Webhook URL points to private IP: {url}")
-                return False
-        except ValueError:
-            # Not an IP address, this is fine (it's a domain)
-            pass
+        if is_private_ip(hostname):
+            logger.warning(f"Webhook URL points to private IP: {url}")
+            return False
 
         # If domain whitelist is provided, check against it
         if allowed_domains:
@@ -201,6 +196,26 @@ def verify_webhook_signature(
     except Exception as e:
         logger.error(f"Error verifying webhook signature: {e}")
         return False
+
+
+def sanitize_for_logging(value: str) -> str:
+    """Sanitize user-controlled strings for safe logging.
+    
+    Prevents log injection attacks by removing newlines and other control characters
+    that could be used to forge log entries.
+    
+    Args:
+        value: String value to sanitize (can be None)
+        
+    Returns:
+        Sanitized string with newlines replaced by spaces
+    """
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        value = str(value)
+    # Replace newlines and carriage returns with spaces to prevent log injection
+    return value.replace("\n", " ").replace("\r", " ").replace("\x00", "")
 
 
 def sanitize_pii_for_logging(data: dict, pii_fields: Optional[list] = None) -> dict:

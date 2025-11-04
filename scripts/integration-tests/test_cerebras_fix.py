@@ -10,10 +10,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # Import after path is set
 from src.cache import _cerebras_models_cache
+from utils import print_section
 
 def test_cerebras_models():
     """Test that Cerebras models are properly formatted"""
-    print("Testing Cerebras models fetch...")
+    print_section("Testing Cerebras Models", 60)
 
     # Clear cache to force fresh fetch
     _cerebras_models_cache["data"] = None

@@ -7,7 +7,6 @@ Learn more at https://www.braintrust.dev/docs
 
 from braintrust import current_span, init_logger, start_span, traced
 
-
 # Initialize logger with your project name
 logger = init_logger(project="Gatewayz Backend")
 
@@ -49,11 +48,11 @@ def invoke_custom_llm(llm_input: str, params: dict):
     current_span().log(
         input=[{"role": "user", "content": llm_input}],
         output=content,
-        metrics=dict(
-            prompt_tokens=result["metrics"]["prompt_tokens"],
-            completion_tokens=result["metrics"]["completion_tokens"],
-            tokens=result["metrics"]["prompt_tokens"] + result["metrics"]["completion_tokens"],
-        ),
+        metrics={
+            "prompt_tokens": result["metrics"]["prompt_tokens"],
+            "completion_tokens": result["metrics"]["completion_tokens"],
+            "tokens": result["metrics"]["prompt_tokens"] + result["metrics"]["completion_tokens"],
+        },
         metadata=params,
     )
 
@@ -76,7 +75,7 @@ def my_route_handler(req):
     with start_span() as span:
         result = invoke_custom_llm(
             llm_input=req.body,
-            params=dict(temperature=0.1),
+            params={"temperature": 0.1},
         )
 
         # Log the overall request/response

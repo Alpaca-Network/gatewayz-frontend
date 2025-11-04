@@ -10,7 +10,7 @@ Documentation: https://docs.statsig.com/server/pythonSDK
 
 import logging
 import os
-from typing import Optional, Dict, Any
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -30,12 +30,16 @@ class StatsigService:
         self.statsig = None
         self._initialized = False
         self.enabled = False
-        self.server_secret_key = os.environ.get('STATSIG_SERVER_SECRET_KEY')
+        self.server_secret_key = os.environ.get("STATSIG_SERVER_SECRET_KEY")
 
         if not self.server_secret_key:
-            logger.warning("⚠️  STATSIG_SERVER_SECRET_KEY not set - Statsig analytics disabled (using fallback)")
+            logger.warning(
+                "⚠️  STATSIG_SERVER_SECRET_KEY not set - Statsig analytics disabled (using fallback)"
+            )
             logger.info("   To enable: Set STATSIG_SERVER_SECRET_KEY in your .env file")
-            logger.info("   Get key from: https://console.statsig.com -> Project Settings -> API Keys -> Server Secret Key")
+            logger.info(
+                "   Get key from: https://console.statsig.com -> Project Settings -> API Keys -> Server Secret Key"
+            )
 
     async def initialize(self):
         """
@@ -58,7 +62,7 @@ class StatsigService:
         try:
             # Import Statsig Python Core SDK
             # Note: Package is statsig-python-core, but import uses underscores
-            from statsig_python_core import Statsig, StatsigUser, StatsigOptions
+            from statsig_python_core import Statsig, StatsigOptions, StatsigUser
 
             # Store reference to SDK classes
             self._Statsig = Statsig
@@ -69,13 +73,13 @@ class StatsigService:
             options = StatsigOptions()
 
             # Set environment tier
-            app_env = os.environ.get('APP_ENV', 'development')
-            if app_env == 'production':
-                options.environment = 'production'
-            elif app_env == 'staging':
-                options.environment = 'staging'
+            app_env = os.environ.get("APP_ENV", "development")
+            if app_env == "production":
+                options.environment = "production"
+            elif app_env == "staging":
+                options.environment = "staging"
             else:
-                options.environment = 'development'
+                options.environment = "development"
 
             # Initialize Statsig with server secret key
             self.statsig = Statsig(self.server_secret_key, options)
@@ -93,7 +97,9 @@ class StatsigService:
         except ImportError as e:
             logger.error(f"❌ Statsig SDK not installed: {e}")
             logger.error("   Install with: pip install statsig-python-core")
-            logger.error("   Note: Package name is 'statsig-python-core' but import uses 'statsig_python_core'")
+            logger.error(
+                "   Note: Package name is 'statsig-python-core' but import uses 'statsig_python_core'"
+            )
             logger.warning("   Falling back to logging-only mode")
             self._initialized = True
 
@@ -101,6 +107,7 @@ class StatsigService:
             logger.error(f"❌ Failed to initialize Statsig: {e}")
             logger.warning("   Falling back to logging-only mode")
             import traceback
+
             logger.error(f"   Traceback:\n{traceback.format_exc()}")
             self._initialized = True
 
@@ -108,8 +115,8 @@ class StatsigService:
         self,
         user_id: str,
         event_name: str,
-        value: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None
+        value: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> bool:
         """
         Log an event to Statsig.
@@ -138,10 +145,7 @@ class StatsigService:
 
                 # Log event to Statsig
                 self.statsig.log_event(
-                    user=user,
-                    event_name=event_name,
-                    value=value,
-                    metadata=metadata
+                    user=user, event_name=event_name, value=value, metadata=metadata
                 )
 
                 logger.debug(f"📊 Statsig event logged: {event_name} (user: {user_id})")
@@ -158,15 +162,11 @@ class StatsigService:
         except Exception as e:
             logger.error(f"❌ Failed to log Statsig event '{event_name}': {e}")
             import traceback
+
             logger.error(f"   Traceback:\n{traceback.format_exc()}")
             return False
 
-    def get_feature_flag(
-        self,
-        flag_name: str,
-        user_id: str,
-        default_value: bool = False
-    ) -> bool:
+    def get_feature_flag(self, flag_name: str, user_id: str, default_value: bool = False) -> bool:
         """
         Get a feature flag value for a user.
 

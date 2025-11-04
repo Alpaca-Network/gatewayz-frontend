@@ -4,15 +4,14 @@ Database Configuration
 PostgreSQL connection management for Docker-based database
 """
 
-import os
 import logging
-from typing import Optional, TYPE_CHECKING
+import os
 from contextlib import contextmanager
 
 # Conditional imports
 try:
     import psycopg2
-    from psycopg2 import pool, extras
+    from psycopg2 import extras, pool
 
     PSYCOPG2_AVAILABLE = True
 except ImportError:
@@ -59,11 +58,11 @@ class DatabaseConfig:
     def get_connection_dict(self) -> dict:
         """Get connection parameters as dictionary"""
         return {
-            'host': self.db_host,
-            'port': self.db_port,
-            'database': self.db_name,
-            'user': self.db_user,
-            'password': self.db_password
+            "host": self.db_host,
+            "port": self.db_port,
+            "database": self.db_name,
+            "user": self.db_user,
+            "password": self.db_password,
         }
 
     def get_connection_pool(self):
@@ -92,7 +91,7 @@ class DatabaseConfig:
                     password=self.db_password,
                     # Connection options
                     connect_timeout=10,
-                    options='-c timezone=UTC'
+                    options="-c timezone=UTC",
                 )
                 logger.info(
                     f"Database connection pool created: "
@@ -101,7 +100,7 @@ class DatabaseConfig:
                 )
             except Exception as e:
                 logger.error(f"Failed to create database connection pool: {e}")
-                raise RuntimeError(f"Database connection pool creation failed: {e}")
+                raise RuntimeError(f"Database connection pool creation failed: {e}") from e
 
         return self._connection_pool
 
@@ -213,9 +212,11 @@ class DatabaseConfig:
                 current_user = cursor.fetchone()[0]
 
                 # Get database size
-                cursor.execute("""
+                cursor.execute(
+                    """
                     SELECT pg_size_pretty(pg_database_size(current_database()));
-                """)
+                """
+                )
                 db_size = cursor.fetchone()[0]
 
                 cursor.close()
@@ -226,7 +227,7 @@ class DatabaseConfig:
                     "user": current_user,
                     "size": db_size,
                     "host": self.db_host,
-                    "port": self.db_port
+                    "port": self.db_port,
                 }
 
         except Exception as e:
@@ -304,7 +305,7 @@ class DatabaseConfig:
 
 
 # Global database configuration instance
-_db_config: Optional[DatabaseConfig] = None
+_db_config: DatabaseConfig | None = None
 
 
 def get_db_config() -> DatabaseConfig:

@@ -4,18 +4,18 @@ Converts between Anthropic Messages API format and OpenAI Chat Completions forma
 """
 
 import time
-from typing import List, Dict, Any, Optional, Union
+from typing import Any
 
 
 def transform_anthropic_to_openai(
-    messages: List[Dict[str, Any]],
-    system: Optional[str] = None,
+    messages: list[dict[str, Any]],
+    system: str | None = None,
     max_tokens: int = 950,
-    temperature: Optional[float] = None,
-    top_p: Optional[float] = None,
-    top_k: Optional[int] = None,
-    stop_sequences: Optional[List[str]] = None,
-) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    temperature: float | None = None,
+    top_p: float | None = None,
+    top_k: int | None = None,
+    stop_sequences: list[str] | None = None,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """
     Transform Anthropic Messages API request to OpenAI Chat Completions format.
 
@@ -35,10 +35,7 @@ def transform_anthropic_to_openai(
 
     # Add system message if provided (Anthropic separates this)
     if system:
-        openai_messages.append({
-            "role": "system",
-            "content": system
-        })
+        openai_messages.append({"role": "system", "content": system})
 
     # Transform messages
     for msg in messages:
@@ -58,27 +55,23 @@ def transform_anthropic_to_openai(
                     block_type = block.get("type")
 
                     if block_type == "text":
-                        content_parts.append({
-                            "type": "text",
-                            "text": block.get("text", "")
-                        })
+                        content_parts.append({"type": "text", "text": block.get("text", "")})
                     elif block_type == "image":
                         # Transform image block
                         source = block.get("source", {})
                         if source.get("type") == "base64":
-                            content_parts.append({
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:{source.get('media_type', 'image/jpeg')};base64,{source.get('data', '')}"
+                            content_parts.append(
+                                {
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": f"data:{source.get('media_type', 'image/jpeg')};base64,{source.get('data', '')}"
+                                    },
                                 }
-                            })
+                            )
                         elif source.get("type") == "url":
-                            content_parts.append({
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": source.get("url", "")
-                                }
-                            })
+                            content_parts.append(
+                                {"type": "image_url", "image_url": {"url": source.get("url", "")}}
+                            )
                     else:
                         # Pass through unknown types
                         content_parts.append(block)
@@ -100,9 +93,7 @@ def transform_anthropic_to_openai(
         openai_messages.append(openai_msg)
 
     # Build optional parameters
-    openai_params = {
-        "max_tokens": max_tokens
-    }
+    openai_params = {"max_tokens": max_tokens}
 
     if temperature is not None:
         openai_params["temperature"] = temperature
@@ -115,6 +106,7 @@ def transform_anthropic_to_openai(
     # We log it but don't pass it through
     if top_k is not None:
         import logging
+
         logger = logging.getLogger(__name__)
         logger.debug(f"top_k parameter ({top_k}) is Anthropic-specific and will be ignored")
 
@@ -122,9 +114,9 @@ def transform_anthropic_to_openai(
 
 
 def transform_openai_to_anthropic(
-    openai_response: Dict[str, Any],
+    openai_response: dict[str, Any],
     model: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Transform OpenAI Chat Completions response to Anthropic Messages API format.
 
@@ -151,7 +143,7 @@ def transform_openai_to_anthropic(
         "length": "max_tokens",
         "content_filter": "stop_sequence",  # Map content filter to stop_sequence
         "tool_calls": "tool_use",
-        "function_call": "tool_use"
+        "function_call": "tool_use",
     }
     stop_reason = stop_reason_map.get(finish_reason, "end_turn")
 
@@ -160,19 +152,11 @@ def transform_openai_to_anthropic(
         "id": openai_response.get("id", f"msg-{int(time.time())}"),
         "type": "message",
         "role": "assistant",
-        "content": [
-            {
-                "type": "text",
-                "text": content
-            }
-        ],
+        "content": [{"type": "text", "text": content}],
         "model": openai_response.get("model", model),
         "stop_reason": stop_reason,
         "stop_sequence": None,  # Would be populated if stopped by stop sequence
-        "usage": {
-            "input_tokens": prompt_tokens,
-            "output_tokens": completion_tokens
-        }
+        "usage": {"input_tokens": prompt_tokens, "output_tokens": completion_tokens},
     }
 
     # Preserve gateway usage if present
@@ -182,7 +166,7 @@ def transform_openai_to_anthropic(
     return anthropic_response
 
 
-def extract_text_from_content(content: Union[str, List[Dict[str, Any]]]) -> str:
+def extract_text_from_content(content: str | list[dict[str, Any]]) -> str:
     """
     Extract plain text from Anthropic content (string or content blocks).
 

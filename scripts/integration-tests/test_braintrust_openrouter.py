@@ -14,6 +14,7 @@ Usage:
 
 import os
 import time
+import pytest
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -24,22 +25,14 @@ try:
     from braintrust import current_span, init_logger, start_span, traced
     print("✓ Braintrust imported successfully")
 except ImportError as e:
-    print(f"✗ Failed to import Braintrust: {e}")
-    print("\nPlease install Braintrust:")
-    print("  pip install braintrust")
-    print("  OR")
-    print("  pip install -r requirements.txt")
-    exit(1)
+    pytest.skip(f"Braintrust not installed: {e}", allow_module_level=True)
 
 # Import OpenAI SDK (OpenRouter is OpenAI-compatible)
 try:
     from openai import OpenAI
     print("✓ OpenAI SDK imported successfully")
 except ImportError as e:
-    print(f"✗ Failed to import OpenAI: {e}")
-    print("\nPlease install openai:")
-    print("  pip install openai")
-    exit(1)
+    pytest.skip(f"OpenAI SDK not installed: {e}", allow_module_level=True)
 
 
 def verify_environment():

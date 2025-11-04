@@ -1,5 +1,7 @@
 import logging
+
 from openai import OpenAI
+
 from src.config import Config
 
 # Initialize logging
@@ -8,16 +10,15 @@ logger = logging.getLogger(__name__)
 
 def get_fireworks_client():
     """Get Fireworks.ai client using OpenAI-compatible interface
-    
+
     Fireworks.ai provides OpenAI-compatible API endpoints for various models
     """
     try:
         if not Config.FIREWORKS_API_KEY:
             raise ValueError("Fireworks API key not configured")
-        
+
         return OpenAI(
-            base_url="https://api.fireworks.ai/inference/v1",
-            api_key=Config.FIREWORKS_API_KEY
+            base_url="https://api.fireworks.ai/inference/v1", api_key=Config.FIREWORKS_API_KEY
         )
     except Exception as e:
         logger.error(f"Failed to initialize Fireworks client: {e}")
@@ -38,11 +39,7 @@ def make_fireworks_request_openai(messages, model, **kwargs):
         logger.debug(f"Request params: message_count={len(messages)}, kwargs={list(kwargs.keys())}")
 
         client = get_fireworks_client()
-        response = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            **kwargs
-        )
+        response = client.chat.completions.create(model=model, messages=messages, **kwargs)
 
         logger.info(f"Fireworks request successful for model: {model}")
         return response
@@ -50,12 +47,12 @@ def make_fireworks_request_openai(messages, model, **kwargs):
         try:
             logger.error(f"Fireworks request failed for model '{model}': {e}")
             logger.error(f"Error type: {type(e).__name__}")
-            if hasattr(e, 'response'):
+            if hasattr(e, "response"):
                 logger.error(f"Response status: {getattr(e.response, 'status_code', 'N/A')}")
                 # Don't log response body as it might contain problematic characters
         except UnicodeEncodeError:
             # Fallback if logging fails due to encoding issues
-            logger.error(f"Fireworks request failed (encoding error in logging)")
+            logger.error("Fireworks request failed (encoding error in logging)")
         raise
 
 
@@ -74,10 +71,7 @@ def make_fireworks_request_openai_stream(messages, model, **kwargs):
 
         client = get_fireworks_client()
         stream = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            stream=True,
-            **kwargs
+            model=model, messages=messages, stream=True, **kwargs
         )
 
         logger.info(f"Fireworks streaming request initiated for model: {model}")
@@ -86,12 +80,12 @@ def make_fireworks_request_openai_stream(messages, model, **kwargs):
         try:
             logger.error(f"Fireworks streaming request failed for model '{model}': {e}")
             logger.error(f"Error type: {type(e).__name__}")
-            if hasattr(e, 'response'):
+            if hasattr(e, "response"):
                 logger.error(f"Response status: {getattr(e.response, 'status_code', 'N/A')}")
                 # Don't log response body as it might contain problematic characters
         except UnicodeEncodeError:
             # Fallback if logging fails due to encoding issues
-            logger.error(f"Fireworks streaming request failed (encoding error in logging)")
+            logger.error("Fireworks streaming request failed (encoding error in logging)")
         raise
 
 
@@ -106,19 +100,20 @@ def process_fireworks_response(response):
             "choices": [
                 {
                     "index": choice.index,
-                    "message": {
-                        "role": choice.message.role,
-                        "content": choice.message.content
-                    },
-                    "finish_reason": choice.finish_reason
+                    "message": {"role": choice.message.role, "content": choice.message.content},
+                    "finish_reason": choice.finish_reason,
                 }
                 for choice in response.choices
             ],
-            "usage": {
-                "prompt_tokens": response.usage.prompt_tokens,
-                "completion_tokens": response.usage.completion_tokens,
-                "total_tokens": response.usage.total_tokens
-            } if response.usage else {}
+            "usage": (
+                {
+                    "prompt_tokens": response.usage.prompt_tokens,
+                    "completion_tokens": response.usage.completion_tokens,
+                    "total_tokens": response.usage.total_tokens,
+                }
+                if response.usage
+                else {}
+            ),
         }
     except Exception as e:
         logger.error(f"Failed to process Fireworks response: {e}")

@@ -346,11 +346,7 @@ class TestAPIKeyEndpoints:
     def test_create_api_key_endpoint(self, mock_create, mock_get_user, client, mock_user):
         """Test POST /api-keys endpoint exists"""
         mock_get_user.return_value = mock_user
-        mock_create.return_value = {
-            'api_key': 'new_key',
-            'name': 'Test Key',
-            'environment': 'test'
-        }
+        mock_create.return_value = ('new_key', 1)
 
         response = client.post(
             "/api-keys",

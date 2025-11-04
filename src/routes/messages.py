@@ -34,6 +34,7 @@ from src.services.anthropic_transformer import (
     transform_openai_to_anthropic,
     extract_text_from_content
 )
+from src.utils.security_validators import sanitize_for_logging
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -61,6 +62,10 @@ def get_user(*args, **kwargs):
 
 def deduct_credits(*args, **kwargs):
     return users_module.deduct_credits(*args, **kwargs)
+
+
+def log_api_usage_transaction(*args, **kwargs):
+    return users_module.log_api_usage_transaction(*args, **kwargs)
 
 
 def record_usage(*args, **kwargs):
@@ -258,9 +263,9 @@ async def anthropic_messages(
                         openai_messages = [openai_messages[0]] + history_messages + openai_messages[1:]
                     else:
                         openai_messages = history_messages + openai_messages
-                    logger.info(f"Injected {len(history_messages)} messages from session {session_id}")
+                    logger.info("Injected %d messages from session %s", len(history_messages), sanitize_for_logging(str(session_id)))
             except Exception as e:
-                logger.warning(f"Failed to fetch chat history for session {session_id}: {e}")
+                logger.warning("Failed to fetch chat history for session %s: %s", sanitize_for_logging(str(session_id)), sanitize_for_logging(str(e)))
 
         original_model = req.model
 
@@ -297,7 +302,7 @@ async def anthropic_messages(
                     # Normalize provider aliases
                     if provider == "hug":
                         provider = "huggingface"
-                    logger.info(f"Auto-detected provider '{provider}' for model {original_model}")
+                    logger.info("Auto-detected provider '%s' for model %s", sanitize_for_logging(provider), sanitize_for_logging(original_model))
                 else:
                     # Fallback to checking cached models
                     from src.services.models import get_cached_models
@@ -308,7 +313,7 @@ async def anthropic_messages(
                         provider_models = get_cached_models(test_provider) or []
                         if any(m.get("id") == transformed for m in provider_models):
                             provider = test_provider
-                            logger.info(f"Auto-detected provider '{provider}' for model {original_model} (transformed to {transformed})")
+                            logger.info("Auto-detected provider '%s' for model %s (transformed to %s)", sanitize_for_logging(provider), sanitize_for_logging(original_model), sanitize_for_logging(transformed))
                             break
                     # Otherwise default to openrouter (already set)
 
@@ -414,7 +419,7 @@ async def anthropic_messages(
                         "Upstream HTTP error (%s): %s", attempt_provider, exc.response.status_code
                     )
                 else:
-                    logger.error(f"Upstream error for model {request_model} on {attempt_provider}: {exc}")
+                    logger.error("Upstream error for model %s on %s: %s", sanitize_for_logging(request_model), sanitize_for_logging(attempt_provider), sanitize_for_logging(str(exc)))
                 http_exc = map_provider_error(attempt_provider, request_model, exc)
 
             if http_exc is None:
@@ -477,8 +482,23 @@ async def anthropic_messages(
                 logger.debug("Failed to release concurrency for %s: %s", mask_key(api_key), exc)
 
         cost = calculate_cost(model, prompt_tokens, completion_tokens)
+        is_trial = trial.get("is_trial", False)
 
-        if not trial.get("is_trial", False):
+        if is_trial:
+            # Log transaction for trial users (with $0 cost)
+            try:
+                await _to_thread(log_api_usage_transaction, api_key, 0.0, f"API usage - {model} (Trial)", {
+                    "model": model,
+                    "total_tokens": total_tokens,
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "cost_usd": 0.0,
+                    "is_trial": True,
+                }, True)
+            except Exception as e:
+                logger.error(f"Failed to log trial API usage transaction: {e}", exc_info=True)
+        else:
+            # For non-trial users, deduct credits
             try:
                 await _to_thread(deduct_credits, api_key, cost, f"API usage - {model}", {
                     "model": model,
@@ -520,7 +540,7 @@ async def anthropic_messages(
                 }
             )
         except Exception as e:
-            logger.warning(f"Failed to log activity: {e}")
+            logger.error(f"Failed to log activity for user {user['id']}, model {model}: {e}", exc_info=True)
 
         # === 5) Save chat history ===
         if session_id:
@@ -536,14 +556,14 @@ async def anthropic_messages(
 
                     if last_user:
                         user_content = extract_text_from_content(last_user.get("content", ""))
-                        await _to_thread(save_chat_message, session_id, "user", user_content, model, 0)
+                        await _to_thread(save_chat_message, session_id, "user", user_content, model, 0, user["id"])
 
                     # Save assistant response
                     assistant_content = processed.get("choices", [{}])[0].get("message", {}).get("content", "")
                     if assistant_content:
-                        await _to_thread(save_chat_message, session_id, "assistant", assistant_content, model, total_tokens)
+                        await _to_thread(save_chat_message, session_id, "assistant", assistant_content, model, total_tokens, user["id"])
             except Exception as e:
-                logger.warning("Failed to save chat history: %s", e)
+                logger.error(f"Failed to save chat history for session {session_id}, user {user['id']}: {e}", exc_info=True)
 
         # === 6) Transform response to Anthropic format ===
         anthropic_response = transform_openai_to_anthropic(processed, model)

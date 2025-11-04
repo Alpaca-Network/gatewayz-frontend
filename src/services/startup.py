@@ -2,16 +2,16 @@
 Startup service for initializing health monitoring, availability services, and connection pools
 """
 
-import asyncio
 import logging
 from contextlib import asynccontextmanager
 
-from src.services.model_health_monitor import health_monitor
-from src.services.model_availability import availability_service
 from src.services.connection_pool import clear_connection_pools, get_pool_stats
+from src.services.model_availability import availability_service
+from src.services.model_health_monitor import health_monitor
 from src.services.response_cache import get_cache
 
 logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app):
@@ -35,7 +35,7 @@ async def lifespan(app):
         logger.info(f"Connection pool manager ready: {pool_stats}")
 
         # Initialize response cache
-        cache = get_cache()
+        get_cache()
         logger.info("Response cache initialized")
 
         logger.info("All monitoring services started successfully")
@@ -67,24 +67,26 @@ async def lifespan(app):
     except Exception as e:
         logger.error(f"Error stopping monitoring services: {e}")
 
+
 async def initialize_services():
     """
     Initialize all monitoring services
     """
     try:
         logger.info("Initializing monitoring services...")
-        
+
         # Start health monitoring
         await health_monitor.start_monitoring()
-        
+
         # Start availability monitoring
         await availability_service.start_monitoring()
-        
+
         logger.info("All services initialized successfully")
-        
+
     except Exception as e:
         logger.error(f"Failed to initialize services: {e}")
         raise
+
 
 async def shutdown_services():
     """
@@ -92,14 +94,14 @@ async def shutdown_services():
     """
     try:
         logger.info("Shutting down services...")
-        
+
         # Stop availability monitoring
         await availability_service.stop_monitoring()
-        
+
         # Stop health monitoring
         await health_monitor.stop_monitoring()
-        
+
         logger.info("All services shut down successfully")
-        
+
     except Exception as e:
         logger.error(f"Error shutting down services: {e}")
