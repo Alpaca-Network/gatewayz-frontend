@@ -373,7 +373,10 @@ def deduct_credits(api_key: str, tokens: float, description: str = "API usage", 
 
     except Exception as e:
         logger.error("Failed to deduct credits: %s", sanitize_for_logging(str(e)), exc_info=True)
-        raise
+        # Wrap exceptions in RuntimeError for consistency with test expectations
+        if isinstance(e, RuntimeError):
+            raise
+        raise RuntimeError(f"Failed to deduct credits: {e}") from e
 
 
 def get_all_users() -> List[Dict[str, Any]]:

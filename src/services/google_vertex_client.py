@@ -60,24 +60,30 @@ def get_google_vertex_credentials():
                     creds_dict = json_module.loads(decoded)
                     logger.debug("Credentials successfully decoded from base64 and parsed as JSON")
                 except Exception as base64_error:
-                    logger.error(f"Failed to decode credentials as base64: {base64_error}")
-                    raise ValueError(
-                        "GOOGLE_VERTEX_CREDENTIALS_JSON must be valid JSON or base64-encoded JSON"
-                    ) from None
+                    logger.warning(
+                        f"Failed to decode credentials as base64: {base64_error}. "
+                        "Falling back to next credential method.",
+                        exc_info=True
+                    )
+                    # Don't raise - allow fallback to next credential method
+                    creds_dict = None
 
-            try:
-                credentials = Credentials.from_service_account_info(creds_dict)
-                logger.debug("Created Credentials object from service account info")
-                credentials.refresh(Request())
-                logger.info(
-                    "Successfully loaded and validated Google Vertex credentials from GOOGLE_VERTEX_CREDENTIALS_JSON"
-                )
-                return credentials
-            except Exception as e:
-                logger.error(
-                    f"Failed to create credentials from service account info: {e}", exc_info=True
-                )
-                raise
+            if creds_dict:
+                try:
+                    credentials = Credentials.from_service_account_info(creds_dict)
+                    logger.debug("Created Credentials object from service account info")
+                    credentials.refresh(Request())
+                    logger.info(
+                        "Successfully loaded and validated Google Vertex credentials from GOOGLE_VERTEX_CREDENTIALS_JSON"
+                    )
+                    return credentials
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to create/refresh credentials from GOOGLE_VERTEX_CREDENTIALS_JSON: {e}. "
+                        "Falling back to next credential method.",
+                        exc_info=True
+                    )
+                    # Don't raise - allow fallback to next credential method
 
         # Second, try file-based credentials (development)
         if Config.GOOGLE_APPLICATION_CREDENTIALS:
@@ -92,8 +98,12 @@ def get_google_vertex_credentials():
                 logger.info("Successfully loaded Google Vertex credentials from file")
                 return credentials
             except Exception as e:
-                logger.error(f"Failed to load credentials from file: {e}", exc_info=True)
-                raise
+                logger.warning(
+                    f"Failed to load/refresh credentials from file: {e}. "
+                    "Falling back to next credential method.",
+                    exc_info=True
+                )
+                # Don't raise - allow fallback to next credential method
 
         # Third, try Application Default Credentials (ADC)
         logger.info("Attempting to use Application Default Credentials (ADC)")

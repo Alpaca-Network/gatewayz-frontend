@@ -293,15 +293,13 @@ class TestGetUserTransactions:
         select_mock = Mock()
         eq_mock = Mock()
         order_mock = Mock()
-        range_mock = Mock()
         result_mock = Mock()
         result_mock.data = transactions
 
         table_mock.select.return_value = select_mock
         select_mock.eq.return_value = eq_mock
         eq_mock.order.return_value = order_mock
-        order_mock.range.return_value = range_mock
-        range_mock.execute.return_value = result_mock
+        order_mock.execute.return_value = result_mock
 
         # Execute
         result = get_user_transactions(user_id=1)
@@ -315,7 +313,7 @@ class TestGetUserTransactions:
         table_mock.select.assert_called_once_with('*')
         select_mock.eq.assert_called_once_with('user_id', 1)
         eq_mock.order.assert_called_once_with('created_at', desc=True)
-        order_mock.range.assert_called_once_with(0, 49)  # Default limit 50
+        order_mock.execute.assert_called_once()
 
     @patch('src.db.credit_transactions.get_supabase_client')
     def test_get_transactions_with_pagination(self, mock_get_client, mock_supabase_client):
@@ -323,26 +321,27 @@ class TestGetUserTransactions:
         client, table_mock = mock_supabase_client
         mock_get_client.return_value = client
 
-        # Setup mocks
+        # Setup mocks - provide enough data for pagination
         select_mock = Mock()
         eq_mock = Mock()
         order_mock = Mock()
-        range_mock = Mock()
         result_mock = Mock()
-        result_mock.data = [{'id': i} for i in range(11, 21)]  # Page 2
+        # Provide 20 items total, so offset 10 + limit 10 gives us items 10-19
+        result_mock.data = [{'id': i} for i in range(1, 21)]
 
         table_mock.select.return_value = select_mock
         select_mock.eq.return_value = eq_mock
         eq_mock.order.return_value = order_mock
-        order_mock.range.return_value = range_mock
-        range_mock.execute.return_value = result_mock
+        order_mock.execute.return_value = result_mock
 
         # Execute with pagination
         result = get_user_transactions(user_id=1, limit=10, offset=10)
 
-        # Verify
+        # Verify - should get items 10-19 (indices 10-19 in the list)
         assert len(result) == 10
-        order_mock.range.assert_called_once_with(10, 19)  # offset 10, limit 10
+        assert result[0]['id'] == 11  # First item after offset 10
+        assert result[9]['id'] == 20  # Last item
+        order_mock.execute.assert_called_once()
 
     @patch('src.db.credit_transactions.get_supabase_client')
     def test_get_transactions_with_type_filter(self, mock_get_client, mock_supabase_client):
@@ -355,7 +354,6 @@ class TestGetUserTransactions:
         eq_user_mock = Mock()
         eq_type_mock = Mock()
         order_mock = Mock()
-        range_mock = Mock()
         result_mock = Mock()
         result_mock.data = [
             {'id': 1, 'transaction_type': TransactionType.PURCHASE},
@@ -366,8 +364,7 @@ class TestGetUserTransactions:
         select_mock.eq.return_value = eq_user_mock
         eq_user_mock.eq.return_value = eq_type_mock
         eq_type_mock.order.return_value = order_mock
-        order_mock.range.return_value = range_mock
-        range_mock.execute.return_value = result_mock
+        order_mock.execute.return_value = result_mock
 
         # Execute with type filter
         result = get_user_transactions(
@@ -377,6 +374,7 @@ class TestGetUserTransactions:
 
         # Verify
         assert len(result) == 2
+        order_mock.execute.assert_called_once()
         assert all(t['transaction_type'] == TransactionType.PURCHASE for t in result)
 
         # Verify eq was called twice (user_id and transaction_type)
