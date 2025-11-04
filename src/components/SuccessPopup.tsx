@@ -4,7 +4,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { CheckCircle, Calendar } from "lucide-react";
 import { useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+// import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 
 interface SuccessPopupProps {
@@ -31,15 +31,17 @@ const SuccessPopup = ({ open, onOpenChange, userEmail }: SuccessPopupProps) => {
     setIsSubmitting(true);
     try {
       // Update the user's record with referral source
-      const { error } = await supabase.functions.invoke('update-referral-source', {
-        body: {
-          email: userEmail,
-          referralSource: referralSource,
-        }
-      });
+      // TODO: Re-enable when supabase integration is configured
+      // const { error } = await supabase.functions.invoke('update-referral-source', {
+      //   body: {
+      //     email: userEmail,
+      //     referralSource: referralSource,
+      //   }
+      // });
+      const error = null; // Placeholder until supabase is configured
 
       if (error) {
-        if (import.meta.env.DEV) {
+        if (process.env.NODE_ENV === 'development') {
           console.error("Error updating referral source:", error);
         }
         toast({
@@ -51,7 +53,7 @@ const SuccessPopup = ({ open, onOpenChange, userEmail }: SuccessPopupProps) => {
 
       setShowThankYou(true);
     } catch (error) {
-      if (import.meta.env.DEV) {
+      if (process.env.NODE_ENV === 'development') {
         console.error("Unexpected error:", error);
       }
       toast({

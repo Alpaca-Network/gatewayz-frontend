@@ -581,7 +581,7 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className="w-[250px] justify-between bg-muted/30 hover:bg-muted/50"
+          className="w-full sm:w-[250px] justify-between bg-muted/30 hover:bg-muted/50 touch-manipulation"
           disabled={loading}
           onMouseEnter={handlePrefetchModels}
         >
@@ -591,14 +591,14 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
               <span className="truncate">Loading...</span>
             </>
           ) : selectedModel ? (
-            <span className="truncate">{selectedModel.label}</span>
+            <span className="truncate text-sm sm:text-base">{selectedModel.label}</span>
           ) : (
-            <span className="truncate">Select model...</span>
+            <span className="truncate text-sm sm:text-base">Select model...</span>
           )}
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[400px] p-0">
+      <PopoverContent className="w-[95vw] sm:w-[400px] max-w-[400px] p-0">
         <Command shouldFilter={false}>
           <CommandInput
             placeholder="Search model..."

@@ -78,9 +78,11 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
     const streamingMessageIndex = messages.length + 1;
     setMessages(prev => [...prev, { role: 'assistant', content: '', thinking: '', isStreaming: true }]);
 
-    // Declare these outside try block so they're accessible in catch block
+    // Initialize accumulated content outside try block to ensure it's always in scope
+    // This prevents ReferenceError when accessing these variables in catch handler
     let accumulatedContent = '';
     let accumulatedThinking = '';
+    let inThinking = false;
 
     try {
       // Call the backend API directly to avoid Vercel's 60-second timeout
@@ -102,9 +104,6 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
         temperature: 0.7,
         max_tokens: 8000  // Increased for reasoning models like DeepSeek
       };
-
-      let inThinking = false;
-
       // Use the streaming utility with proper error handling and retries
       for await (const chunk of streamChatResponse(url, apiKey, requestBody)) {
         // Enhanced logging to see what data we're receiving
@@ -293,7 +292,7 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
                           ul: ({node, ...props}) => <ul className="list-disc list-inside mb-2" {...props} />,
                           ol: ({node, ...props}) => <ol className="list-decimal list-inside mb-2" {...props} />,
                           li: ({node, ...props}) => <li className="mb-1" {...props} />,
-                          code: ({node, inline, ...props}) =>
+                          code: ({node, inline, ...props}: any) =>
                             inline ? (
                               <code className="bg-black/20 dark:bg-white/20 px-1.5 py-0.5 rounded text-xs font-mono" {...props} />
                             ) : (

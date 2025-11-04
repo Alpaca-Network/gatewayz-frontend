@@ -1,4 +1,5 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, act } from '@testing-library/react';
+import '@testing-library/jest-dom';
 import { CreditsDisplay } from '../credits-display';
 import { getUserData } from '@/lib/api';
 import type { UserData } from '@/lib/api';
@@ -252,8 +253,10 @@ describe('CreditsDisplay', () => {
 
       (getUserData as jest.Mock).mockReturnValue(upgradedUserData);
 
-      // Trigger storage event
-      window.dispatchEvent(new Event('storage'));
+      // Trigger storage event wrapped in act()
+      await act(async () => {
+        window.dispatchEvent(new Event('storage'));
+      });
 
       // Wait for update
       await waitFor(() => {

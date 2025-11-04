@@ -54,7 +54,7 @@ export function AISDKChatExample() {
 
   // Check if selected model supports thinking
   const supportsThinking = gatewayRouter.supportsThinking(selectedModel);
-  const gatewayType = gatewayRouter.getGatewayType(selectedModel);
+  const gatewayType = gatewayRouter.getGatewayFor(selectedModel).type;
 
   const handleSendMessage = async () => {
     if (!input.trim() || loading) return;

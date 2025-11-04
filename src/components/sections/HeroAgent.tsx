@@ -1,4 +1,3 @@
-import heroBg from "@/assets/gatewayz-hero.jpg";
 import WaitlistForm from "@/components/WaitlistForm";
 import SocialProof from "@/components/sections/SocialProof";
 import Typewriter from "@/components/Typewriter";

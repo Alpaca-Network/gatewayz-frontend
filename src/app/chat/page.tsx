@@ -10,7 +10,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
@@ -48,8 +48,13 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { format, isToday, isYesterday, formatDistanceToNow } from 'date-fns';
 import { getApiKey, getUserData, saveApiKey, saveUserData, type UserData } from '@/lib/api';
 import { ChatHistoryAPI, ChatSession as ApiChatSession, ChatMessage as ApiChatMessage, handleApiError } from '@/lib/chat-history';
+import { ChatStreamHandler } from '@/lib/chat-stream-handler';
 import { Copy, Share2, RotateCcw } from 'lucide-react';
 import { usePrivy } from '@privy-io/react-auth';
+import { streamChatResponse } from '@/lib/streaming';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { logAnalyticsEvent } from '@/lib/analytics';
 
 // Lazy load ModelSelect for better initial load performance
 // Reduces initial bundle by ~100KB and defers expensive model processing
@@ -123,9 +128,6 @@ const MarkdownRenderer = ({ children, className }: { children: string; className
         </ReactMarkdown>
     );
 };
-import { streamChatResponse } from '@/lib/streaming';
-import { ChatStreamHandler } from '@/lib/chat-stream-handler';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 // Lazy load ReasoningDisplay for better initial load performance
 // Only needed for models with reasoning capabilities (~10% of usage)
@@ -133,12 +135,10 @@ const ReasoningDisplay = dynamic(() => import('@/components/chat/reasoning-displ
     loading: () => <div className="animate-pulse bg-muted/30 h-12 rounded-md w-full"></div>,
     ssr: false
 });
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { logAnalyticsEvent } from '@/lib/analytics';
 
 const TEMP_API_KEY_PREFIX = 'gw_temp_';
 
-type Message = {
+export type Message = {
     role: 'user' | 'assistant';
     content: string;
     reasoning?: string;
@@ -544,10 +544,10 @@ const SessionListItem = ({
         <>
         <li key={session.id} className="group relative min-w-0 w-full">
             <div
-                className={`flex items-start justify-between gap-2 w-full px-2 py-1.5 rounded-lg transition-colors ${
+                className={`flex items-start justify-between gap-2 w-full px-2 py-2 sm:py-1.5 rounded-lg transition-colors touch-manipulation ${
                     activeSessionId === session.id 
                         ? 'bg-secondary' 
-                        : 'hover:bg-accent'
+                        : 'hover:bg-accent active:bg-accent/80'
                 }`}
                 onContextMenu={(e) => {
                     e.preventDefault();
@@ -555,7 +555,7 @@ const SessionListItem = ({
                 }}
                 >
                    <button
-                        className="flex-1 min-w-0 justify-start items-start text-left flex flex-col h-auto"
+                        className="flex-1 min-w-0 justify-start items-start text-left flex flex-col h-auto touch-manipulation"
                         onClick={() => switchToSession(session.id)}
                     >
                         <span className="font-medium text-sm leading-tight block truncate w-full">
@@ -566,13 +566,13 @@ const SessionListItem = ({
                         </span>
                     </button>
 
-                    {/* Three dots menu stays visible and aligned */}
+                    {/* Three dots menu - Always visible on mobile for better UX */}
                     <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
                         <DropdownMenuTrigger asChild>
                             <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-7 w-7 hover:bg-muted rounded-md shrink-0 self-start opacity-0 group-hover:opacity-100 transition-opacity"
+                                className="h-8 w-8 sm:h-7 sm:w-7 hover:bg-muted active:bg-muted rounded-md shrink-0 self-start opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity touch-manipulation"
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     setMenuOpen(true);
@@ -582,13 +582,13 @@ const SessionListItem = ({
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-48">
-                            <DropdownMenuItem onClick={handleRenameClick}>
+                            <DropdownMenuItem onClick={handleRenameClick} className="touch-manipulation">
                                 <Pencil className="h-4 w-4 mr-2" />
                                 Rename
                             </DropdownMenuItem>
                             <DropdownMenuItem
                                 onClick={handleDeleteClick}
-                                className="text-destructive focus:text-destructive"
+                                className="text-destructive focus:text-destructive touch-manipulation"
                             >
                                 <Trash2 className="h-4 w-4 mr-2" />
                                 Delete
@@ -776,13 +776,14 @@ const VirtualSessionList = ({
     );
 };
 
-const ChatSidebar = ({ sessions, activeSessionId, switchToSession, createNewChat, onDeleteSession, onRenameSession }: {
+const ChatSidebar = ({ sessions, activeSessionId, switchToSession, createNewChat, onDeleteSession, onRenameSession, onClose }: {
     sessions: ChatSession[],
     activeSessionId: string | null,
     switchToSession: (id: string) => void,
     createNewChat: () => void,
     onDeleteSession: (sessionId: string) => void,
-    onRenameSession: (sessionId: string, newTitle: string) => void
+    onRenameSession: (sessionId: string, newTitle: string) => void,
+    onClose?: () => void
 }) => {
 
     // Memoize the grouped sessions to avoid expensive O(n) computation on every render
@@ -807,30 +808,44 @@ const ChatSidebar = ({ sessions, activeSessionId, switchToSession, createNewChat
         }, {} as Record<string, ChatSession[]>);
     }, [sessions]); // Only recompute when sessions array changes
 
+    // Create wrapped functions that also close the mobile sidebar
+    const wrappedSwitchToSession = (sessionId: string) => {
+        switchToSession(sessionId);
+        onClose?.();
+    };
+
+    const wrappedCreateNewChat = () => {
+        createNewChat();
+        onClose?.();
+    };
+
     return (
-    <aside className="flex flex-col gap-4 p-4 pb-0 h-full w-full overflow-hidden">
+    <aside className="flex flex-col gap-3 sm:gap-4 p-3 sm:p-4 pb-0 h-full w-full overflow-hidden bg-background">
         <div className="flex items-center gap-2">
-            <h2 className="text-2xl font-bold">Chat</h2>
+            <h2 className="text-xl sm:text-2xl font-bold">Chat</h2>
         </div>
 
         <Button
-            onClick={createNewChat}
-            className="w-full bg-foreground text-background hover:bg-foreground/90 h-10 font-medium flex justify-between items-center gap-2 text-left text-sm"
+            onClick={wrappedCreateNewChat}
+            className="w-full bg-foreground text-background hover:bg-foreground/90 h-10 sm:h-9 font-medium flex justify-between items-center gap-2 text-left text-sm touch-manipulation"
         >
             <span>New Chat</span>
-            <img src="/uil_plus.svg" alt="Plus" width={20} height={20} />
+            <img src="/uil_plus.svg" alt="Plus" width={18} height={18} className="sm:w-5 sm:h-5" />
         </Button>
 
         <div className="relative">
-            <Input placeholder="Search Chats" className="pl-3 rounded-lg h-9 text-sm" />
-            <img src="/material-symbols_search.svg" alt="Search" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" style={{ width: "20px", height: "20px" }} />
-
+            <Input placeholder="Search Chats" className="pl-3 rounded-lg h-9 sm:h-8 text-sm" />
+            <img 
+                src="/material-symbols_search.svg" 
+                alt="Search" 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4 sm:w-5 sm:h-5" 
+            />
         </div>
 
         <VirtualSessionList
             groupedSessions={groupedSessions}
             activeSessionId={activeSessionId}
-            switchToSession={switchToSession}
+            switchToSession={wrappedSwitchToSession}
             onRenameSession={onRenameSession}
             onDeleteSession={onDeleteSession}
         />
@@ -1085,6 +1100,8 @@ const devWarn = (...args: any[]) => {
 function ChatPageContent() {
     const searchParams = useSearchParams();
     const { login, authenticated, ready } = usePrivy();
+    
+    // All hooks must be declared before any conditional returns
     const [hasApiKey, setHasApiKey] = useState(false);
     const [message, setMessage] = useState('');
     const [userHasTyped, setUserHasTyped] = useState(false);
@@ -1110,6 +1127,7 @@ function ChatPageContent() {
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
     const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
     const [selectedAudio, setSelectedAudio] = useState<string | null>(null);
+    const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
     const { toast } = useToast();
     const chatContainerRef = useRef<HTMLDivElement>(null);
     const messageInputRef = useRef<HTMLInputElement>(null);
@@ -1216,13 +1234,77 @@ function ChatPageContent() {
         }
     };
 
-    // Handle model and message from URL parameters
+    // Upgrade temp API key if needed (must be before early return)
+    const upgradeTempKeyIfNeeded = useCallback(
+        async (currentKey: string, currentUserData: UserData | null): Promise<string> => {
+            if (
+                !currentKey ||
+                !currentUserData ||
+                !currentKey.startsWith(TEMP_API_KEY_PREFIX) ||
+                Math.floor(currentUserData.credits ?? 0) <= 10
+            ) {
+                return currentKey;
+            }
+
+            try {
+                const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
+                const response = await fetch(`${apiBaseUrl}/user/api-keys`, {
+                    method: 'GET',
+                    headers: {
+                        Authorization: `Bearer ${currentKey}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (!response.ok) {
+                    console.log('[Auth] Unable to upgrade API key during send:', response.status);
+                    return currentKey;
+                }
+
+                const data = await response.json();
+                const keys: Array<{ api_key?: string; is_primary?: boolean; environment_tag?: string }> =
+                    Array.isArray(data?.keys) ? data.keys : [];
+
+                const upgraded =
+                    keys.find(
+                        (key) =>
+                            key?.api_key &&
+                            !key.api_key.startsWith(TEMP_API_KEY_PREFIX) &&
+                            key.environment_tag === 'live' &&
+                            key.is_primary
+                    ) ||
+                    keys.find(
+                        (key) =>
+                            key?.api_key &&
+                            !key.api_key.startsWith(TEMP_API_KEY_PREFIX) &&
+                            key.environment_tag === 'live'
+                    ) ||
+                    keys.find((key) => key?.api_key && !key.api_key.startsWith(TEMP_API_KEY_PREFIX));
+
+                if (upgraded?.api_key && upgraded.api_key !== currentKey) {
+                    console.log('[Auth] Upgraded API key obtained during message send');
+                    saveApiKey(upgraded.api_key);
+                    saveUserData({
+                        ...currentUserData,
+                        api_key: upgraded.api_key
+                    });
+                    setHasApiKey(true);
+                    return upgraded.api_key;
+                }
+            } catch (error) {
+                console.log('[Auth] Failed upgrading API key during send:', error);
+            }
+
+            return currentKey;
+        },
+        [setHasApiKey]
+    );
+
+    // Handle model and message from URL parameters (guard against null searchParams)
     useEffect(() => {
+        if (!searchParams) return;
+        
         console.log('[URL Params] useEffect triggered, searchParams:', searchParams);
-        if (!searchParams) {
-            console.log('[URL Params] searchParams is null/undefined, skipping');
-            return;
-        }
 
         const modelParam = searchParams.get('model');
         const messageParam = searchParams.get('message');
@@ -1297,7 +1379,7 @@ function ChatPageContent() {
         }
     }, [searchParams]);
 
-     const activeSession = useMemo(() => {
+    const activeSession = useMemo(() => {
         return sessions.find(s => s.id === activeSessionId) || null;
     }, [sessions, activeSessionId]);
 
@@ -1359,7 +1441,7 @@ function ChatPageContent() {
 
     // Check for referral bonus notification flag
     useEffect(() => {
-        if (!ready || !(authenticated || hasApiKey)) return;
+        if (!ready || !(authenticated || hasApiKey) || typeof window === 'undefined') return;
 
         // Check if we should show referral bonus notification
         const showReferralBonus = localStorage.getItem('gatewayz_show_referral_bonus');
@@ -1559,7 +1641,8 @@ function ChatPageContent() {
     //     }
     // }, [sessions]);
 
-     useEffect(() => {
+    // Scroll to bottom when messages change
+    useEffect(() => {
         if (chatContainerRef.current) {
             chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
         }
@@ -2009,71 +2092,6 @@ function ChatPageContent() {
         }
     };
 
-    const upgradeTempKeyIfNeeded = useCallback(
-        async (currentKey: string, currentUserData: UserData | null): Promise<string> => {
-            if (
-                !currentKey ||
-                !currentUserData ||
-                !currentKey.startsWith(TEMP_API_KEY_PREFIX) ||
-                Math.floor(currentUserData.credits ?? 0) <= 10
-            ) {
-                return currentKey;
-            }
-
-            try {
-                const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
-                const response = await fetch(`${apiBaseUrl}/user/api-keys`, {
-                    method: 'GET',
-                    headers: {
-                        Authorization: `Bearer ${currentKey}`,
-                        'Content-Type': 'application/json'
-                    }
-                });
-
-                if (!response.ok) {
-                    console.log('[Auth] Unable to upgrade API key during send:', response.status);
-                    return currentKey;
-                }
-
-                const data = await response.json();
-                const keys: Array<{ api_key?: string; is_primary?: boolean; environment_tag?: string }> =
-                    Array.isArray(data?.keys) ? data.keys : [];
-
-                const upgraded =
-                    keys.find(
-                        (key) =>
-                            key?.api_key &&
-                            !key.api_key.startsWith(TEMP_API_KEY_PREFIX) &&
-                            key.environment_tag === 'live' &&
-                            key.is_primary
-                    ) ||
-                    keys.find(
-                        (key) =>
-                            key?.api_key &&
-                            !key.api_key.startsWith(TEMP_API_KEY_PREFIX) &&
-                            key.environment_tag === 'live'
-                    ) ||
-                    keys.find((key) => key?.api_key && !key.api_key.startsWith(TEMP_API_KEY_PREFIX));
-
-                if (upgraded?.api_key && upgraded.api_key !== currentKey) {
-                    console.log('[Auth] Upgraded API key obtained during message send');
-                    saveApiKey(upgraded.api_key);
-                    saveUserData({
-                        ...currentUserData,
-                        api_key: upgraded.api_key
-                    });
-                    setHasApiKey(true);
-                    return upgraded.api_key;
-                }
-            } catch (error) {
-                console.log('[Auth] Failed upgrading API key during send:', error);
-            }
-
-            return currentKey;
-        },
-        [setHasApiKey]
-    );
-
     const handleSendMessage = async () => {
         // Prevent sending if user hasn't actually typed anything
         if (!userHasTyped) {
@@ -2236,6 +2254,10 @@ function ChatPageContent() {
         }
         setIsStreamingResponse(true); // Set streaming state immediately
         setLoading(false); // Don't show loading spinner
+
+        // Use ChatStreamHandler to manage streaming state and prevent scope issues
+        // Declare outside try-catch so it's accessible in both blocks
+        const streamHandler = new ChatStreamHandler();
 
         try {
             console.log('🚀 Starting handleSendMessage - Core auth check:', {
@@ -2698,6 +2720,7 @@ function ChatPageContent() {
 
                     // Mark chat task as complete in onboarding
                     try {
+                        if (typeof window !== 'undefined') {
                         const savedTasks = localStorage.getItem('gatewayz_onboarding_tasks');
                         if (savedTasks) {
                             const taskState = JSON.parse(savedTasks);
@@ -2705,6 +2728,7 @@ function ChatPageContent() {
                                 taskState.chat = true;
                                 localStorage.setItem('gatewayz_onboarding_tasks', JSON.stringify(taskState));
                                 console.log('Onboarding - Chat task marked as complete');
+                                }
                             }
                         }
                     } catch (error) {
@@ -2714,28 +2738,35 @@ function ChatPageContent() {
 
             } catch (streamError) {
                 // Clean up any pending timeouts to prevent ReferenceErrors
-                streamHandler?.cleanup();
-                streamHandler?.complete();
+                if (streamHandler) {
+                    streamHandler.cleanup();
+                    streamHandler.complete(); // Complete stops streaming
+                }
 
                 setIsStreamingResponse(false);
+                if (streamHandler) {
+                    streamHandler.addError(streamError instanceof Error ? streamError : new Error(String(streamError)));
+                }
+
                 console.error('❌ Streaming error occurred:', streamError);
                 console.error('Full error object:', {
                     name: streamError instanceof Error ? streamError.name : 'unknown',
                     message: streamError instanceof Error ? streamError.message : String(streamError),
                     stack: streamError instanceof Error ? streamError.stack : undefined,
                     type: typeof streamError,
-                    keys: Object.keys(streamError instanceof Error ? streamError : {})
+                    keys: Object.keys(streamError instanceof Error ? streamError : {}),
+                    partialContent: streamHandler.getFinalContent(), // ✅ Always accessible via streamHandler
+                    chunkCount: streamHandler.state.chunkCount
                 });
 
                 const errorMessage = streamError instanceof Error ? streamError.message : 'Failed to get response';
                 console.error('Error message for analysis:', errorMessage);
+                console.error('Stream state at error:', streamHandler.getErrorSummary());
 
-                // Log error context with accumulated content
+                // Log error context with accumulated content (already added above, this is redundant but kept for context)
                 if (streamHandler) {
-                    streamHandler.addError(streamError instanceof Error ? streamError : new Error(errorMessage), {
-                        model: selectedModel?.value,
-                        gateway: selectedModel?.sourceGateway
-                    });
+                    const errorSummary = streamHandler.getErrorSummary();
+                    console.error('Error summary:', errorSummary);
                     console.error('Stream handler error summary:', streamHandler.getErrorSummary());
                 }
 
@@ -2927,8 +2958,8 @@ function ChatPageContent() {
     <>
       <FreeModelsBanner />
       <div className="flex h-screen max-h-[calc(100dvh-200px)] has-onboarding-banner:max-h-[calc(100dvh-280px)] bg-background overflow-hidden">
-        {/* Left Sidebar */}
-          <div className="hidden lg:flex w-56 xl:w-72 border-r flex-shrink-0 overflow-hidden">
+        {/* Left Sidebar - Desktop Only */}
+        <div className="hidden lg:flex w-56 xl:w-72 border-r flex-shrink-0 overflow-hidden">
           <ChatSidebar
             sessions={sessions}
             activeSessionId={activeSessionId}
@@ -2941,23 +2972,46 @@ function ChatPageContent() {
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col relative overflow-hidden min-w-0">
+        {/* Background Logo - Hidden on mobile for better performance */}
       <img
         src="/logo_transparent.svg"
-        alt="Stats"
+          alt="Background"
         className="absolute top-8 left-1/2 transform -translate-x-1/2 w-[75vh] h-[75vh] pointer-events-none opacity-50 hidden lg:block dark:hidden"
       />
       <img
         src="/logo_black.svg"
-        alt="Stats"
+          alt="Background"
         className="absolute top-8 left-1/2 transform -translate-x-1/2 w-[75vh] h-[75vh] pointer-events-none opacity-50 hidden dark:lg:block"
       />
 
-       
-        
-        {/* Header with title and model selector */}
-        <header className="relative z-10 w-full p-4 lg:p-6 max-w-7xl mx-auto overflow-hidden">
-          {/* Desktop Layout - Side by side */}
-          <div className="hidden lg:flex items-center justify-between gap-4">
+        {/* Mobile Header - Compact and Touch-Friendly */}
+        <header className="relative z-10 w-full bg-background/95 backdrop-blur-sm border-b border-border/50 lg:border-none lg:bg-transparent">
+          {/* Mobile Layout - Optimized for Touch */}
+          <div className="flex lg:hidden flex-col gap-2 p-3">
+            {/* Top Row: Menu + Title + Actions */}
+            <div className="flex items-center gap-2 w-full">
+              <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
+                <SheetTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-9 w-9 flex-shrink-0">
+                    <Menu className="h-5 w-5" />
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="left" className="w-[280px] sm:w-[320px] p-0 pt-12 overflow-hidden">
+                  <SheetHeader className="sr-only">
+                    <SheetTitle>Chat Sidebar</SheetTitle>
+                  </SheetHeader>
+                  <ChatSidebar
+                    sessions={sessions}
+                    activeSessionId={activeSessionId}
+                    switchToSession={switchToSession}
+                    createNewChat={createNewChat}
+                    onDeleteSession={handleDeleteSession}
+                    onRenameSession={handleRenameSession}
+                    onClose={() => setMobileSidebarOpen(false)}
+                  />
+                </SheetContent>
+              </Sheet>
+              
             <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
               {isEditingTitle ? (
                 <Input
@@ -2981,15 +3035,19 @@ function ChatPageContent() {
                     }
                   }}
                   autoFocus
-                  className="text-2xl font-semibold h-auto px-2 py-1 min-w-0 flex-1"
+                    className="text-base font-semibold h-auto px-2 py-1 min-w-0 flex-1"
                 />
               ) : (
-                <>
-                  <h1 className="text-2xl font-semibold truncate min-w-0 flex-1 max-w-full">{activeSession?.title || 'Untitled Chat'}</h1>
+                  <h1 className="text-base font-semibold truncate min-w-0 flex-1">{activeSession?.title || 'Untitled Chat'}</h1>
+                )}
+              </div>
+
+              {/* Edit Title Button - Only show when not editing */}
+              {!isEditingTitle && (
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-6 w-6 flex-shrink-0"
+                  className="h-8 w-8 flex-shrink-0"
                     onClick={() => {
                       setEditedTitle(activeSession?.title || '');
                       setIsEditingTitle(true);
@@ -2997,34 +3055,17 @@ function ChatPageContent() {
                   >
                     <Pencil className="h-4 w-4" />
                   </Button>
-                </>
               )}
             </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
+
+            {/* Model Selector Row */}
+            <div className="w-full">
               <ModelSelect selectedModel={selectedModel} onSelectModel={handleModelSelect} />
             </div>
           </div>
 
-          {/* Mobile Layout - TitleSection above, Model below */}
-          <div className="flex lg:hidden flex-col gap-3">
-            <div className="flex items-center gap-2 w-full">
-              <div className="flex-shrink-0">
-                <Sheet>
-                  <SheetTrigger asChild>
-                    <Button variant="ghost" size="icon"><Menu/></Button>
-                  </SheetTrigger>
-                  <SheetContent side="left" className="w-[300px] p-0">
-                    <ChatSidebar
-                      sessions={sessions}
-                      activeSessionId={activeSessionId}
-                      switchToSession={switchToSession}
-                      createNewChat={createNewChat}
-                      onDeleteSession={handleDeleteSession}
-                      onRenameSession={handleRenameSession}
-                    />
-                  </SheetContent>
-                </Sheet>
-              </div>
+          {/* Desktop Layout - Side by side */}
+          <div className="hidden lg:flex items-center justify-between gap-4 p-6 max-w-7xl mx-auto">
               <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
                 {isEditingTitle ? (
                   <Input
@@ -3048,14 +3089,26 @@ function ChatPageContent() {
                       }
                     }}
                     autoFocus
-                    className="text-lg font-semibold h-auto px-2 py-1 min-w-0 flex-1"
+                  className="text-2xl font-semibold h-auto px-2 py-1 min-w-0 flex-1"
                   />
                 ) : (
-                  <h1 className="text-lg font-semibold truncate min-w-0 flex-1">{activeSession?.title || 'Untitled Chat'}</h1>
+                <>
+                  <h1 className="text-2xl font-semibold truncate min-w-0 flex-1 max-w-full">{activeSession?.title || 'Untitled Chat'}</h1>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 flex-shrink-0"
+                    onClick={() => {
+                      setEditedTitle(activeSession?.title || '');
+                      setIsEditingTitle(true);
+                    }}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                </>
                 )}
               </div>
-            </div>
-            <div className="w-full">
+            <div className="flex items-center gap-2 flex-shrink-0">
               <ModelSelect selectedModel={selectedModel} onSelectModel={handleModelSelect} />
             </div>
           </div>
@@ -3073,7 +3126,7 @@ function ChatPageContent() {
             </div>
           )}
           {messages.length > 0 && (
-            <div ref={chatContainerRef} className="flex-1 flex flex-col gap-4 lg:gap-6 overflow-y-auto p-4 lg:p-6 max-w-4xl mx-auto w-full">
+            <div ref={chatContainerRef} className="flex-1 flex flex-col gap-3 sm:gap-4 lg:gap-6 overflow-y-auto p-3 sm:p-4 lg:p-6 max-w-4xl mx-auto w-full">
               {messages.filter(msg => msg && msg.role).map((msg, index) => {
                 const isAssistant = msg.role === 'assistant';
                 const hasAssistantContent = Boolean(isAssistant && msg.content && msg.content.trim().length > 0);
@@ -3081,8 +3134,8 @@ function ChatPageContent() {
                 const reasoningSource = getReasoningSource(msg.model);
 
                 return (
-                  <div key={index} className={`flex items-start gap-3 ${msg.role === 'user' ? 'justify-end' : ''}`}>
-                    <div className={`flex flex-col gap-2 ${msg.role === 'user' ? 'items-end' : 'items-start'} w-full`}>
+                  <div key={index} className={`flex items-start gap-2 sm:gap-3 ${msg.role === 'user' ? 'justify-end' : ''}`}>
+                    <div className={`flex flex-col gap-1 sm:gap-2 ${msg.role === 'user' ? 'items-end' : 'items-start'} w-full max-w-[95%] sm:max-w-full`}>
                       {isAssistant && msg.reasoning && msg.reasoning.trim().length > 0 && (
                         <ReasoningDisplay
                           reasoning={msg.reasoning}
@@ -3093,19 +3146,19 @@ function ChatPageContent() {
                       )}
 
                       {msg.role === 'user' ? (
-                        <div className="rounded-lg p-3 bg-blue-600 dark:bg-blue-600 text-white max-w-2xl">
+                        <div className="rounded-lg p-2.5 sm:p-3 bg-blue-600 dark:bg-blue-600 text-white max-w-full">
                           {msg.image && (
                             <img
                               src={msg.image}
                               alt="Uploaded image"
-                              className="max-w-[280px] lg:max-w-md max-h-48 lg:max-h-64 rounded-lg mb-2 object-contain border border-white/20"
+                              className="max-w-[150px] sm:max-w-[200px] lg:max-w-xs rounded-lg mb-2"
                             />
                           )}
                           {msg.video && (
                             <video
                               src={msg.video}
                               controls
-                              className="max-w-[280px] lg:max-w-md max-h-48 lg:max-h-64 rounded-lg mb-2 object-contain border border-white/20"
+                              className="max-w-[150px] sm:max-w-[200px] lg:max-w-xs rounded-lg mb-2"
                               title="Uploaded video"
                             />
                           )}
@@ -3113,18 +3166,18 @@ function ChatPageContent() {
                             <audio
                               src={msg.audio}
                               controls
-                              className="max-w-[280px] lg:max-w-md mb-2 border-0"
+                              className="max-w-[150px] sm:max-w-[200px] lg:max-w-xs mb-2 border-0"
                               title="Uploaded audio"
                             />
                           )}
-                          <div className="text-sm whitespace-pre-wrap text-white">{msg.content}</div>
+                          <div className="text-sm whitespace-pre-wrap text-white break-words">{msg.content}</div>
                         </div>
                       ) : showThinkingLoader ? (
                         <ThinkingLoader modelName={getModelDisplayName(msg.model)} />
                       ) : (
-                        <div className="rounded-lg p-3 bg-muted/30 dark:bg-muted/20 border border-border max-w-2xl w-full">
+                        <div className="rounded-lg p-2.5 sm:p-3 bg-muted/30 dark:bg-muted/20 border border-border max-w-full w-full">
                           <div className="flex items-center justify-between mb-2">
-                            <p className="text-xs font-semibold text-muted-foreground">{getModelDisplayName(msg.model)}</p>
+                            <p className="text-xs font-semibold text-muted-foreground truncate">{getModelDisplayName(msg.model)}</p>
                             {msg.isStreaming && (
                               <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                                 <div className="flex gap-1">
@@ -3136,19 +3189,37 @@ function ChatPageContent() {
                               </div>
                             )}
                           </div>
-                          <div className="text-sm prose prose-sm max-w-none dark:prose-invert">
+                          <div className="text-sm prose prose-sm max-w-none dark:prose-invert break-words">
                             <MarkdownRenderer>{fixLatexSyntax(msg.content)}</MarkdownRenderer>
                           </div>
-                          {/* Action Buttons - always visible in bottom right */}
+                          {/* Action Buttons - Touch-friendly on mobile */}
                           <div className="flex items-center justify-end gap-1 mt-3 pt-2 border-t border-border">
-                            <Button variant="ghost" size="sm" onClick={() => navigator.clipboard.writeText(msg.content)} className="h-8 w-8 p-0 hover:bg-muted" title="Copy response">
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => navigator.clipboard.writeText(msg.content)} 
+                              className="h-8 w-8 sm:h-7 sm:w-7 p-0 hover:bg-muted touch-manipulation" 
+                              title="Copy response"
+                            >
                               <Copy className="h-4 w-4" />
                             </Button>
-                            <Button variant="ghost" size="sm" onClick={() => navigator.share({ text: msg.content })} className="h-8 w-8 p-0 hover:bg-muted" title="Share response">
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => navigator.share({ text: msg.content })} 
+                              className="h-8 w-8 sm:h-7 sm:w-7 p-0 hover:bg-muted touch-manipulation" 
+                              title="Share response"
+                            >
                               <Share2 className="h-4 w-4" />
                             </Button>
                             {handleRegenerate && (
-                              <Button variant="ghost" size="sm" onClick={handleRegenerate} className="h-8 w-8 p-0 hover:bg-muted" title="Regenerate response">
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                onClick={handleRegenerate} 
+                                className="h-8 w-8 sm:h-7 sm:w-7 p-0 hover:bg-muted touch-manipulation" 
+                                title="Regenerate response"
+                              >
                                 <RotateCcw className="h-4 w-4" />
                               </Button>
                             )}
@@ -3165,12 +3236,12 @@ function ChatPageContent() {
 
           {/* Welcome screen when no messages */}
           {messages.length === 0 && !loading && (
-            <div className="flex-1 flex flex-col items-center justify-start text-center p-4 lg:p-6 w-full overflow-y-auto">
+            <div className="flex-1 flex flex-col items-center justify-start text-center p-3 sm:p-4 lg:p-6 w-full overflow-y-auto">
               <div className="flex-1 flex flex-col items-center justify-center w-full min-h-0">
-                <h1 className="text-2xl lg:text-4xl font-bold mb-6 lg:mb-8">What's On Your Mind?</h1>
+                <h1 className="text-xl sm:text-2xl lg:text-4xl font-bold mb-4 sm:mb-6 lg:mb-8 px-4">What's On Your Mind?</h1>
 
-                {/* Suggested prompts */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8 w-full max-w-4xl">
+                {/* Suggested prompts - Optimized for mobile */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-6 sm:mb-8 w-full max-w-4xl px-4">
                   <ExamplePrompt
                     title="What model is better for coding?"
                     subtitle="Compare different AI models for programming tasks"
@@ -3196,25 +3267,22 @@ function ChatPageContent() {
             </div>
           )}
 
-          {/* Message input area - fixed at bottom */}
-          <div className="w-full p-4 lg:p-6 max-w-4xl mx-auto flex-shrink-0">
+          {/* Message input area - Mobile optimized */}
+          <div className="w-full p-3 sm:p-4 lg:p-6 max-w-4xl mx-auto flex-shrink-0 bg-background/95 backdrop-blur-sm border-t border-border/50 lg:border-none lg:bg-transparent">
             <div className="w-full">
               <div className="relative">
-                {/* Image preview */}
+                {/* Image preview - Mobile responsive */}
                 {selectedImage && (
-                  <div className="mb-3 relative inline-block">
-                    <div className="relative group">
-                      <img
-                        src={selectedImage}
-                        alt="Selected image"
-                        className="max-w-[280px] lg:max-w-md max-h-32 lg:max-h-48 rounded-lg border-2 border-border shadow-md object-contain"
-                      />
-                      <div className="absolute inset-0 bg-black/5 dark:bg-white/5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </div>
+                  <div className="mb-2 relative inline-block">
+                    <img
+                      src={selectedImage}
+                      alt="Selected image"
+                      className="max-w-[150px] sm:max-w-[200px] lg:max-w-xs max-h-20 sm:max-h-24 lg:max-h-32 rounded-lg border"
+                    />
                     <Button
                       variant="destructive"
                       size="icon"
-                      className="absolute -top-2 -right-2 h-7 w-7 rounded-full shadow-lg"
+                      className="absolute -top-2 -right-2 h-6 w-6 rounded-full touch-manipulation"
                       onClick={handleRemoveImage}
                       title="Remove image"
                     >
@@ -3265,12 +3333,13 @@ function ChatPageContent() {
                   </div>
                 )}
                 {rateLimitCountdown > 0 && (
-                  <div className="mb-2 px-4 py-2 bg-yellow-500/10 border border-yellow-500/20 rounded-lg text-center">
-                    <p className="text-sm text-yellow-600 dark:text-yellow-400">
+                  <div className="mb-2 px-3 py-2 bg-yellow-500/10 border border-yellow-500/20 rounded-lg text-center">
+                    <p className="text-xs sm:text-sm text-yellow-600 dark:text-yellow-400">
                       Rate limit reached. Retrying in <span className="font-bold">{rateLimitCountdown}</span> second{rateLimitCountdown !== 1 ? 's' : ''}...
                     </p>
                   </div>
                 )}
+                {/* Input container - Touch-friendly */}
                 <div className="flex items-center gap-1 px-2 py-2 bg-muted/20 dark:bg-muted/40 rounded-lg border border-border">
                   <input
                     ref={fileInputRef}
@@ -3298,7 +3367,7 @@ function ChatPageContent() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-8 w-8 rounded-lg"
+                      className="h-8 w-8 rounded-lg touch-manipulation"
                       onClick={() => fileInputRef.current?.click()}
                       disabled={!ready || (!authenticated && !hasApiKey)}
                       title="Upload an image"
@@ -3360,17 +3429,17 @@ function ChatPageContent() {
                     }}
                     disabled={!ready || (!authenticated && !hasApiKey)}
                     autoComplete="off"
-                    className="border-0 bg-transparent focus-visible:ring-0 text-base text-foreground flex-1"
+                    className="border-0 bg-transparent focus-visible:ring-0 text-sm sm:text-base text-foreground flex-1 min-w-0"
                   />
                   {(!ready || (!authenticated && !hasApiKey) || isStreamingResponse) && (
-                    <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
+                    <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground flex-shrink-0" />
                   )}
                   <Button
                     size="icon"
                     variant="ghost"
                     onClick={handleSendMessage}
                     disabled={loading || isStreamingResponse || !message.trim() || !ready || (!authenticated && !hasApiKey)}
-                    className="h-8 w-8 bg-primary hover:bg-primary/90 text-primary-foreground"
+                    className="h-8 w-8 sm:h-7 sm:w-7 bg-primary hover:bg-primary/90 text-primary-foreground touch-manipulation flex-shrink-0"
                     title={!ready
                       ? "Waiting for authentication..."
                       : (!authenticated && !hasApiKey)
@@ -3379,7 +3448,7 @@ function ChatPageContent() {
                           ? "Please wait for the current response to finish"
                           : "Send message"}
                   >
-                     <Send className="h-5 w-5" />
+                     <Send className="h-4 w-4 sm:h-5 sm:w-5" />
                   </Button>
                 </div>
               </div>
