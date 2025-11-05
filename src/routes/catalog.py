@@ -638,6 +638,12 @@ async def get_models(
             annotated_aimo = annotate_provider_sources(aimo_providers, "aimo")
             provider_groups.append(annotated_aimo)
 
+        if gateway_value in ("anannas", "all"):
+            models_for_providers = anannas_models if gateway_value == "all" else models
+            anannas_providers = derive_providers_from_models(models_for_providers, "anannas")
+            annotated_anannas = annotate_provider_sources(anannas_providers, "anannas")
+            provider_groups.append(annotated_anannas)
+
         enhanced_providers = merge_provider_lists(*provider_groups)
         logger.info(f"Retrieved {len(enhanced_providers)} enhanced providers from cache")
 
