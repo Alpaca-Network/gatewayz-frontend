@@ -24,7 +24,6 @@ _portkey_models_cache = {
 }
 
 _featherless_models_cache = {
-    "data": None,
     "timestamp": None,
     "ttl": 3600,  # 1 hour TTL for Featherless catalog
     "stale_ttl": 7200,
