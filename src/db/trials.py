@@ -141,7 +141,7 @@ def get_trial_analytics() -> dict[str, Any]:
 
                     # Ensure both datetimes have timezone info for comparison
                     if end_date.tzinfo is None:
-                        # If end_date is naive, assume it's UTC
+                        # If end_date is naive, assume it's timezone.utc
                         end_date = end_date.replace(tzinfo=timezone.utc)
 
                     if end_date > current_time:
