@@ -104,14 +104,20 @@ def check_rate_limit(api_key: str, tokens_used: int = 0) -> dict[str, Any]:
         if not rate_limits:
             return {"allowed": True, "reason": "No rate limits configured"}
 
-        now = datetime.now(timezone.utc)
-        minute_start = now.replace(second=0, microsecond=0)
-        hour_start = now.replace(minute=0, second=0, microsecond=0)
-        day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        # Check if rate_limit_usage table exists
+        try:
+            now = datetime.now(timezone.utc)
+            minute_start = now.replace(second=0, microsecond=0)
+            hour_start = now.replace(minute=0, second=0, microsecond=0)
+            day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
-        # Get current usage for all windows
-        usage_result = client.table("rate_limit_usage").select("*").eq("api_key", api_key).execute()
-        usage_records = usage_result.data
+            # Get current usage for all windows
+            usage_result = client.table("rate_limit_usage").select("*").eq("api_key", api_key).execute()
+            usage_records = usage_result.data
+        except Exception as table_error:
+            # If table doesn't exist, allow the request but log the issue
+            logger.warning(f"rate_limit_usage table not accessible during rate limit check: {table_error}")
+            return {"allowed": True, "reason": "Rate limit check unavailable - table migration pending"}
 
         # Find current window records
         minute_usage = next(
@@ -253,37 +259,48 @@ def update_rate_limit_usage(api_key: str, tokens_used: int) -> None:
         }
 
         # Try to update existing records, insert if they don't exist
-        for window_data in [minute_data, hour_data, day_data]:
-            try:
-                # Check if record exists
-                existing = (
-                    client.table("rate_limit_usage")
-                    .select("*")
-                    .eq("api_key", api_key)
-                    .eq("window_type", window_data["window_type"])
-                    .eq("window_start", window_data["window_start"])
-                    .execute()
-                )
+        # First check if the table exists by attempting a simple query
+        table_exists = True
+        try:
+            client.table("rate_limit_usage").select("id").limit(1).execute()
+        except Exception as e:
+            logger.warning(f"rate_limit_usage table does not exist or is not accessible: {e}")
+            table_exists = False
 
-                if existing.data:
-                    # Update existing record
-                    current = existing.data[0]
-                    updated_data = {
-                        "requests_count": current["requests_count"] + 1,
-                        "tokens_count": current["tokens_count"] + tokens_used,
-                        "updated_at": timestamp,
-                    }
-                    client.table("rate_limit_usage").update(updated_data).eq(
-                        "id", current["id"]
-                    ).execute()
-                else:
-                    # Insert new record
-                    client.table("rate_limit_usage").insert(window_data).execute()
+        if table_exists:
+            for window_data in [minute_data, hour_data, day_data]:
+                try:
+                    # Check if record exists
+                    existing = (
+                        client.table("rate_limit_usage")
+                        .select("*")
+                        .eq("api_key", api_key)
+                        .eq("window_type", window_data["window_type"])
+                        .eq("window_start", window_data["window_start"])
+                        .execute()
+                    )
 
-            except Exception as e:
-                logger.error(
-                    f"Failed to update rate limit usage for {window_data['window_type']}: {e}"
-                )
+                    if existing.data:
+                        # Update existing record
+                        current = existing.data[0]
+                        updated_data = {
+                            "requests_count": current["requests_count"] + 1,
+                            "tokens_count": current["tokens_count"] + tokens_used,
+                            "updated_at": timestamp,
+                        }
+                        client.table("rate_limit_usage").update(updated_data).eq(
+                            "id", current["id"]
+                        ).execute()
+                    else:
+                        # Insert new record
+                        client.table("rate_limit_usage").insert(window_data).execute()
+
+                except Exception as e:
+                    logger.error(
+                        f"Failed to update rate limit usage for {window_data['window_type']}: {e}"
+                    )
+        else:
+            logger.info("Skipping rate limit usage update - table not available. Migration may be pending.")
 
         # If this is a new key, also update the api_keys_new table
         if is_new_key:
@@ -344,16 +361,46 @@ def get_rate_limit_config(api_key: str) -> dict[str, Any] | None:
     try:
         client = get_supabase_client()
 
-        # Get rate limit config from api_keys_new table
-        result = (
-            client.table("api_keys_new")
-            .select("rate_limit_config")
-            .eq("api_key", api_key)
-            .execute()
-        )
+        # Try to get rate limit config from api_keys_new table
+        try:
+            result = (
+                client.table("api_keys_new")
+                .select("rate_limit_config")
+                .eq("api_key", api_key)
+                .execute()
+            )
 
-        if result.data and result.data[0].get("rate_limit_config"):
-            return result.data[0]["rate_limit_config"]
+            if result.data and result.data[0].get("rate_limit_config"):
+                return result.data[0]["rate_limit_config"]
+        except Exception as e:
+            # Column might not exist yet, log and continue
+            logger.debug(f"rate_limit_config column not available: {e}")
+
+        # Try to get from rate_limit_configs table if it exists
+        try:
+            key_result = client.table("api_keys_new").select("id").eq("api_key", api_key).execute()
+            if key_result.data:
+                config_result = (
+                    client.table("rate_limit_configs")
+                    .select("*")
+                    .eq("api_key_id", key_result.data[0]["id"])
+                    .execute()
+                )
+                if config_result.data:
+                    config = config_result.data[0]
+                    return {
+                        "requests_per_minute": config.get("max_requests", 1000) // 60,
+                        "requests_per_hour": config.get("max_requests", 1000),
+                        "requests_per_day": config.get("max_requests", 1000) * 24,
+                        "tokens_per_minute": config.get("max_tokens", 1000000) // 60,
+                        "tokens_per_hour": config.get("max_tokens", 1000000),
+                        "tokens_per_day": config.get("max_tokens", 1000000) * 24,
+                        "burst_limit": config.get("burst_limit", 10),
+                        "concurrency_limit": config.get("concurrency_limit", 50),
+                        "window_size_seconds": config.get("window_size", 60),
+                    }
+        except Exception as e:
+            logger.debug(f"rate_limit_configs table not available: {e}")
 
         # Fallback to default config
         return {
@@ -378,19 +425,66 @@ def update_rate_limit_config(api_key: str, config: dict[str, Any]) -> bool:
     try:
         client = get_supabase_client()
 
-        result = (
-            client.table("api_keys_new")
-            .update(
-                {
-                    "rate_limit_config": config,
-                    "updated_at": datetime.now(timezone.utc).isoformat(),
-                }
+        # Try to update in api_keys_new table
+        try:
+            result = (
+                client.table("api_keys_new")
+                .update(
+                    {
+                        "rate_limit_config": config,
+                        "updated_at": datetime.now(timezone.utc).isoformat(),
+                    }
+                )
+                .eq("api_key", api_key)
+                .execute()
             )
-            .eq("api_key", api_key)
-            .execute()
-        )
 
-        return len(result.data) > 0
+            if len(result.data) > 0:
+                return True
+        except Exception as e:
+            logger.debug(f"Could not update rate_limit_config in api_keys_new: {e}")
+
+        # Try to update in rate_limit_configs table if it exists
+        try:
+            key_result = client.table("api_keys_new").select("id").eq("api_key", api_key).execute()
+            if key_result.data:
+                api_key_id = key_result.data[0]["id"]
+
+                # Try to update existing config
+                existing = (
+                    client.table("rate_limit_configs")
+                    .select("id")
+                    .eq("api_key_id", api_key_id)
+                    .execute()
+                )
+
+                if existing.data:
+                    client.table("rate_limit_configs").update(
+                        {
+                            "max_requests": config.get("requests_per_hour", 1000),
+                            "max_tokens": config.get("tokens_per_hour", 1000000),
+                            "burst_limit": config.get("burst_limit", 10),
+                            "concurrency_limit": config.get("concurrency_limit", 50),
+                            "window_size": config.get("window_size_seconds", 60),
+                            "updated_at": datetime.now(timezone.utc).isoformat(),
+                        }
+                    ).eq("api_key_id", api_key_id).execute()
+                else:
+                    client.table("rate_limit_configs").insert(
+                        {
+                            "api_key_id": api_key_id,
+                            "max_requests": config.get("requests_per_hour", 1000),
+                            "max_tokens": config.get("tokens_per_hour", 1000000),
+                            "burst_limit": config.get("burst_limit", 10),
+                            "concurrency_limit": config.get("concurrency_limit", 50),
+                            "window_size": config.get("window_size_seconds", 60),
+                        }
+                    ).execute()
+                return True
+        except Exception as e:
+            logger.debug(f"Could not update rate_limit_configs table: {e}")
+
+        return False
 
     except Exception as e:
         logger.error(f"Error updating rate limit config for key {api_key[:10]}...: {e}")
