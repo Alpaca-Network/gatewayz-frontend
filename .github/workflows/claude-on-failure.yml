@@ -29,6 +29,18 @@ jobs:
           ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
 
+      - name: Check for merge conflicts
+        id: check_conflicts
+        run: |
+          # Check if there are any merge conflict markers in the repository
+          if grep -r "<<<<<<< HEAD" --include="*.py" --include="*.js" --include="*.ts" --include="*.tsx" --include="*.json" --include="*.yaml" --include="*.yml" --include="*.md" . 2>/dev/null; then
+            echo "has_conflicts=true" >> $GITHUB_OUTPUT
+            echo "Merge conflicts detected in the codebase"
+          else
+            echo "has_conflicts=false" >> $GITHUB_OUTPUT
+            echo "No merge conflicts detected"
+          fi
+
       - name: Download workflow run logs
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea  # v7.0.1
         with:
@@ -54,7 +66,8 @@ jobs:
               failureSummary += `**Workflow:** ${context.payload.workflow_run.name}\n`;
               failureSummary += `**Run ID:** ${runId}\n`;
               failureSummary += `**Branch:** ${context.payload.workflow_run.head_branch}\n`;
-              failureSummary += `**Commit:** ${context.payload.workflow_run.head_sha}\n\n`;
+              failureSummary += `**Commit:** ${context.payload.workflow_run.head_sha}\n`;
+              failureSummary += `**Merge Conflicts Detected:** ${{ steps.check_conflicts.outputs.has_conflicts }}\n\n`;
 
               // Process each failed job
               for (const job of jobs.data.jobs) {
@@ -113,29 +126,38 @@ jobs:
           prompt: |
             The CI pipeline has failed on this PR. Your task is to:
 
-            1. **Read the failure logs** - Check the 'failure-logs.md' file which contains:
+            1. **Check for merge conflicts** - If there are any merge conflict markers (<<<<<<< HEAD, =======, >>>>>>>) in the codebase:
+               - Read each conflicted file
+               - Understand what changed in each branch
+               - Resolve conflicts by choosing the appropriate code or merging both changes intelligently
+               - Remove all conflict markers
+               - This is often the root cause of CI failures, so resolve this FIRST before analyzing other errors
+
+            2. **Read the failure logs** - Check the 'failure-logs.md' file which contains:
                - Complete CI failure logs from the failed workflow run
                - Failed job names and their output
                - Failed step details
                - Error messages and stack traces
 
-            2. **Analyze the root cause** - Identify what specifically failed:
+            3. **Analyze the root cause** - Identify what specifically failed:
                - Which tests are failing and why
-               - What linting/type errors exist
+               - What linting/type errors exist (these often arise from unresolved conflicts)
                - Any build or import errors
                - Security or coverage issues
 
-            3. **Implement fixes** - Make the necessary code changes to resolve the failures:
+            4. **Implement fixes** - Make the necessary code changes to resolve the failures:
                - Fix failing tests
                - Resolve linting/type errors
                - Address import or dependency issues
                - Fix any other errors preventing CI from passing
 
-            4. **Commit and push** - Once fixed:
+            5. **Commit and push** - Once fixed:
                - Use clear commit messages explaining what was fixed
+               - If you resolved merge conflicts, mention that in the commit message
                - Push changes to this PR branch
 
             Common failure patterns in this Gatewayz backend codebase:
+            - Merge conflicts: <<<<<<< HEAD markers, conflicting changes between branches
             - Test failures: pytest assertion errors, timeout issues, mock configuration
             - Linting errors: ruff, black, isort, mypy type errors
             - Security scans: bandit warnings, safety vulnerability checks
@@ -144,7 +166,7 @@ jobs:
             - Integration test failures: endpoint tests, auth, payments, database
             - Build/startup errors: FastAPI app initialization, missing env vars
 
-            **IMPORTANT**: Start by reading 'failure-logs.md' to see exactly what failed!
+            **IMPORTANT**: Check for merge conflicts first, then read 'failure-logs.md' to see exactly what failed!
 
       - name: Report completion
         if: always()
