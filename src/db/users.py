@@ -580,14 +580,77 @@ def get_admin_monitor_data() -> dict[str, Any]:
             logger.error("Error retrieving users: %s", sanitize_for_logging(str(e)))
             users = []
 
-        # Get usage records data with error handling
-        usage_records = []
+        # Get activity_log data (primary source - actively updated)
+        # This is the main source of truth for API usage tracking
+        activity_logs = []
+        try:
+            activity_result = client.table("activity_log").select("*").order("timestamp", desc=True).execute()
+            activity_logs = activity_result.data or []
+            logger.info(f"Retrieved {len(activity_logs)} activity log records")
+        except Exception as e:
+            logger.error(f"Error retrieving activity_log: {e}", exc_info=True)
+            activity_logs = []
+
+        # Get usage records data as fallback (legacy table, may not be updated)
+        usage_records_legacy = []
         try:
             usage_result = client.table("usage_records").select("*").execute()
-            usage_records = usage_result.data or []
+            usage_records_legacy = usage_result.data or []
+            logger.debug(f"Retrieved {len(usage_records_legacy)} legacy usage_records")
         except Exception as e:
-            logger.error(f"Error retrieving usage records: {e}")
-            usage_records = []
+            logger.warning(f"Error retrieving usage_records (legacy): {e}")
+            usage_records_legacy = []
+
+        # Create user_id -> api_key mapping for efficient lookup
+        user_id_to_api_key = {}
+        for user in users:
+            user_id = user.get("id")
+            api_key = user.get("api_key")
+            if user_id and api_key:
+                user_id_to_api_key[user_id] = api_key
+
+        # Also check api_keys_new table for users who might not have api_key in users table
+        try:
+            api_keys_result = client.table("api_keys_new").select("user_id, api_key, is_primary").execute()
+            if api_keys_result.data:
+                for key_data in api_keys_result.data:
+                    user_id = key_data.get("user_id")
+                    api_key = key_data.get("api_key")
+                    is_primary = key_data.get("is_primary", False)
+                    # Prefer primary keys, but update if user_id not in mapping
+                    if user_id and api_key:
+                        if user_id not in user_id_to_api_key or is_primary:
+                            user_id_to_api_key[user_id] = api_key
+        except Exception as e:
+            logger.warning(f"Error retrieving api_keys_new for user mapping: {e}")
+
+        # Convert activity_log to usage_records format for compatibility
+        # activity_log has: user_id, model, provider, tokens, cost, timestamp, metadata
+        # usage_records format: user_id, api_key, model, tokens_used, cost, timestamp
+        usage_records = []
+        for activity in activity_logs:
+            user_id = activity.get("user_id")
+            # Look up API key from mapping
+            api_key = user_id_to_api_key.get(user_id, "unknown")
+            
+            # Create a usage record-like entry from activity log
+            usage_record = {
+                "user_id": user_id,
+                "api_key": api_key,
+                "model": activity.get("model", "unknown"),
+                "tokens_used": activity.get("tokens", 0),
+                "cost": activity.get("cost", 0.0),
+                "timestamp": activity.get("timestamp", ""),
+            }
+            usage_records.append(usage_record)
+
+        # Add legacy usage_records that might not be in activity_log (for backward compatibility)
+        # Only add if timestamp is not already covered by activity_log
+        activity_timestamps = {r.get("timestamp", "") for r in usage_records}
+        for legacy_record in usage_records_legacy:
+            legacy_timestamp = legacy_record.get("timestamp", "")
+            if legacy_timestamp and legacy_timestamp not in activity_timestamps:
+                usage_records.append(legacy_record)
 
         # Calculate basic statistics
         total_users = len(users)
@@ -612,6 +675,26 @@ def get_admin_monitor_data() -> dict[str, Any]:
                     # Handle different timestamp formats
                     if "Z" in timestamp_str:
                         timestamp_str = timestamp_str.replace("Z", "+00:00")
+                    
+                    # Fix malformed timestamps with odd-numbered microseconds
+                    # e.g., "2025-10-14T15:24:27.81588+00:00" -> "2025-10-14T15:24:27.815880+00:00"
+                    if "." in timestamp_str and "+" in timestamp_str:
+                        parts = timestamp_str.split("+")
+                        if len(parts) == 2:
+                            time_part = parts[0]
+                            tz_part = "+" + parts[1]
+                            if "." in time_part:
+                                time_parts = time_part.split(".")
+                                if len(time_parts) == 2:
+                                    seconds_part = time_parts[0]
+                                    micros_part = time_parts[1]
+                                    # Pad or truncate microseconds to 6 digits
+                                    if len(micros_part) < 6:
+                                        micros_part = micros_part.ljust(6, "0")
+                                    elif len(micros_part) > 6:
+                                        micros_part = micros_part[:6]
+                                    timestamp_str = f"{seconds_part}.{micros_part}{tz_part}"
+                    
                     record_time = datetime.fromisoformat(timestamp_str)
 
                     if record_time > day_ago:
@@ -622,7 +705,7 @@ def get_admin_monitor_data() -> dict[str, Any]:
                         month_usage.append(record)
             except Exception as e:
                 logger.warning(
-                    f"Error parsing timestamp for record {record.get('id', 'unknown')}: {e}"
+                    f"Error parsing timestamp for record {record.get('id', 'unknown')}: {e}, timestamp: {record.get('timestamp', '')[:50]}"
                 )
                 continue
 
