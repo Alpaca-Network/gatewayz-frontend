@@ -276,7 +276,7 @@ jobs:
           echo ""
 
           # Link to Railway service
-          railway link --environmentName="$ENV"
+          railway link --environment="$ENV"
 
           # Deploy the application
           echo "⏳ Deploying application..."
