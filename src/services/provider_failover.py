@@ -28,6 +28,7 @@ FALLBACK_PROVIDER_PRIORITY: tuple[str, ...] = (
     "huggingface",
     "featherless",
     "vercel-ai-gateway",
+    "aihubmix",
     "fireworks",
     "together",
     "openrouter",
