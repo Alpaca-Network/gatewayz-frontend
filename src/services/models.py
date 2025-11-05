@@ -2703,17 +2703,17 @@ def fetch_models_from_aihubmix():
     """
     try:
         from src.cache import _aihubmix_models_cache
-        from src.services.aihubmix_client import fetch_models_from_aihubmix as aihubmix_fetch
+        from src.services.aihubmix_client import get_aihubmix_client
 
-        models = aihubmix_fetch()
+        client = get_aihubmix_client()
+        response = client.models.list()
 
-        if not models:
+        if not response or not hasattr(response, "data"):
             logger.warning("No models returned from AiHubMix")
             return []
 
         # Normalize models
-        normalized_models = [normalize_aihubmix_model(model) for model in models if model]
-        normalized_models = [m for m in normalized_models if m is not None]
+        normalized_models = [normalize_aihubmix_model(model) for model in response.data if model]
 
         _aihubmix_models_cache["data"] = normalized_models
         _aihubmix_models_cache["timestamp"] = datetime.now(timezone.utc)
@@ -2721,7 +2721,9 @@ def fetch_models_from_aihubmix():
         logger.info(f"Fetched {len(normalized_models)} models from AiHubMix")
         return _aihubmix_models_cache["data"]
     except Exception as e:
-        logger.error("Failed to fetch models from AiHubMix: %s", sanitize_for_logging(str(e)))
+        logger.error(
+            "Failed to fetch models from AiHubMix: %s", sanitize_for_logging(str(e))
+        )
         return []
 
 
@@ -2730,11 +2732,42 @@ def normalize_aihubmix_model(model) -> dict | None:
 
     AiHubMix models use OpenAI-compatible naming conventions.
     """
-    try:
-        from src.services.aihubmix_client import normalize_aihubmix_model as aihubmix_normalize
+    model_id = getattr(model, "id", None)
+    if not model_id:
+        logger.warning("AiHubMix model missing 'id': %s", sanitize_for_logging(str(model)))
+        return None
 
-        normalized = aihubmix_normalize(model)
-        return normalized
+    try:
+        return {
+            "id": model_id,
+            "slug": f"aihubmix/{model_id}",
+            "canonical_slug": f"aihubmix/{model_id}",
+            "hugging_face_id": None,
+            "name": getattr(model, "name", model_id),
+            "created": getattr(model, "created_at", None),
+            "description": getattr(model, "description", f"Model from AiHubMix"),
+            "context_length": getattr(model, "context_length", 4096),
+            "architecture": {
+                "modality": MODALITY_TEXT_TO_TEXT,
+                "input_modalities": ["text"],
+                "output_modalities": ["text"],
+                "instruct_type": "chat",
+            },
+            "pricing": {
+                "prompt": "0",
+                "completion": "0",
+                "request": "0",
+                "image": "0",
+            },
+            "top_provider": None,
+            "per_request_limits": None,
+            "supported_parameters": [],
+            "default_parameters": {},
+            "provider_slug": "aihubmix",
+            "provider_site_url": "https://aihubmix.com",
+            "model_logo_url": None,
+            "source_gateway": "aihubmix",
+        }
     except Exception as e:
         logger.error("Failed to normalize AiHubMix model: %s", sanitize_for_logging(str(e)))
         return None
