@@ -1185,7 +1185,11 @@ async def get_all_gateways_summary_endpoint(
         if "error" in summary:
             raise HTTPException(status_code=500, detail=summary["error"])
 
-        return {"success": True, "data": summary, "timestamp": datetime.now(timezone.utc).isoformat()}
+        return {
+            "success": True,
+            "data": summary,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
 
     except HTTPException:
         raise
