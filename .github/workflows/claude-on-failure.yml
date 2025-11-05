@@ -16,9 +16,11 @@ jobs:
     # Required permissions for Claude Code action
     permissions:
       id-token: write      # Required for OIDC token
-      contents: write      # Required to push commits
+      contents: write      # Required to push commits and edit files
       pull-requests: write # Required to comment on PRs
       actions: read        # Required to read workflow run data
+      checks: write        # Required to create/update check runs
+      statuses: write      # Required to create commit statuses
 
     steps:
       - name: Checkout repository
