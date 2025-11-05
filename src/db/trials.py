@@ -13,7 +13,7 @@ def start_trial_for_key(api_key: str, trial_days: int = 14) -> dict[str, Any]:
         client = get_supabase_client()
 
         # Get API key ID
-        key_result = client.table("api_keys").select("id").eq("key", api_key).execute()
+        key_result = client.table("api_keys_new").select("id").eq("api_key", api_key).execute()
         if not key_result.data:
             return {"success": False, "error": "API key not found"}
 
@@ -37,7 +37,7 @@ def get_trial_status_for_key(api_key: str) -> dict[str, Any]:
         client = get_supabase_client()
 
         # Get API key ID
-        key_result = client.table("api_keys").select("id").eq("key", api_key).execute()
+        key_result = client.table("api_keys_new").select("id").eq("api_key", api_key).execute()
         if not key_result.data:
             return {"success": False, "error": "API key not found"}
 
@@ -59,7 +59,7 @@ def convert_trial_to_paid_for_key(api_key: str, plan_name: str) -> dict[str, Any
         client = get_supabase_client()
 
         # Get API key ID
-        key_result = client.table("api_keys").select("id").eq("key", api_key).execute()
+        key_result = client.table("api_keys_new").select("id").eq("api_key", api_key).execute()
         if not key_result.data:
             return {"success": False, "error": "API key not found"}
 
@@ -85,7 +85,7 @@ def track_trial_usage_for_key(
         client = get_supabase_client()
 
         # Get API key ID
-        key_result = client.table("api_keys").select("id").eq("key", api_key).execute()
+        key_result = client.table("api_keys_new").select("id").eq("api_key", api_key).execute()
         if not key_result.data:
             return {"success": False, "error": "API key not found"}
 

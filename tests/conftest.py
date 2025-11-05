@@ -139,7 +139,6 @@ def clean_test_user(supabase_client, test_prefix):
     try:
         if created_keys:
             supabase_client.table("api_keys_new").delete().in_("id", created_keys).execute()
-            supabase_client.table("api_keys").delete().in_("user_id", created_users).execute()
 
         if created_users:
             supabase_client.table("users").delete().in_("id", created_users).execute()
@@ -156,7 +155,6 @@ def isolated_test_data(supabase_client, test_prefix):
     """
     cleanup_data = {
         'users': [],
-        'api_keys': [],
         'api_keys_new': [],
         'chat_sessions': [],
         'chat_messages': [],
@@ -183,9 +181,6 @@ def isolated_test_data(supabase_client, test_prefix):
         if cleanup_data['api_keys_new']:
             supabase_client.table("api_keys_new").delete().in_("id", cleanup_data['api_keys_new']).execute()
 
-        if cleanup_data['api_keys']:
-            supabase_client.table("api_keys").delete().in_("user_id", cleanup_data['api_keys']).execute()
-
         if cleanup_data['users']:
             supabase_client.table("users").delete().in_("id", cleanup_data['users']).execute()
 
@@ -196,8 +191,8 @@ def isolated_test_data(supabase_client, test_prefix):
 @pytest.fixture(autouse=True)
 def skip_if_no_database(request):
     """Skip tests that require database if credentials are not available"""
-    # Skip if test uses in-memory stub (sb fixture)
-    if 'sb' in request.fixturenames:
+    # Skip if test uses in-memory stub (sb fixture or fake_supabase fixture)
+    if 'sb' in request.fixturenames or 'fake_supabase' in request.fixturenames:
         return  # Don't skip tests that use the in-memory stub
 
     # Don't skip health check and ping tests - they don't require a database
