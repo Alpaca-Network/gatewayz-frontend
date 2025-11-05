@@ -28,6 +28,7 @@ from src.config import Config
 from src.services.huggingface_models import fetch_models_from_hug
 from src.services.models import (
     fetch_models_from_aihubmix,
+    fetch_models_from_anannas,
     fetch_models_from_chutes,
     fetch_models_from_featherless,
     fetch_models_from_fireworks,
@@ -916,6 +917,7 @@ async def get_cache_status():
             "fireworks",
             "together",
             "aihubmix",
+            "anannas",
         ]
 
         for gateway in gateways:
@@ -1040,6 +1042,7 @@ async def refresh_gateway_cache(
             "together",
             "huggingface",
             "aihubmix",
+            "anannas",
         ]
 
         if gateway not in valid_gateways:
@@ -1089,6 +1092,7 @@ async def refresh_gateway_cache(
             "together": fetch_models_from_together,
             "huggingface": fetch_models_from_hug,
             "aihubmix": fetch_models_from_aihubmix,
+            "anannas": fetch_models_from_anannas,
         }
 
         fetch_func = fetch_functions.get(gateway)
@@ -1172,6 +1176,7 @@ async def clear_all_caches(
                 "fireworks",
                 "together",
                 "aihubmix",
+                "anannas",
             ]
             for gw in gateways:
                 clear_models_cache(gw)
@@ -1286,6 +1291,15 @@ async def check_all_gateways():
                         "APP-Code": os.environ.get("AIHUBMIX_APP_CODE", ""),
                     }
                     if os.environ.get("AIHUBMIX_API_KEY")
+                    else {}
+                ),
+            },
+            "anannas": {
+                "url": "https://api.anannas.ai/v1/models",
+                "api_key": os.environ.get("ANANNAS_API_KEY"),
+                "headers": (
+                    {"Authorization": f"Bearer {os.environ.get('ANANNAS_API_KEY')}"}
+                    if os.environ.get("ANANNAS_API_KEY")
                     else {}
                 ),
             },

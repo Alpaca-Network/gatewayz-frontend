@@ -27,6 +27,7 @@ from src.cache import (
     _near_models_cache,
     _fal_models_cache,
     _vercel_ai_gateway_models_cache,
+    _anannas_models_cache,
     is_cache_fresh,
     should_revalidate_in_background,
     _FAL_CACHE_INIT_DEFERRED,
@@ -255,6 +256,7 @@ def get_all_models_parallel():
             "aimo",
             "near",
             "fal",
+            "anannas",
         ]
 
         # Use ThreadPoolExecutor to fetch all gateways in parallel
@@ -302,6 +304,7 @@ def get_all_models_sequential():
     aimo_models = get_cached_models("aimo") or []
     near_models = get_cached_models("near") or []
     fal_models = get_cached_models("fal") or []
+    anannas_models = get_cached_models("anannas") or []
     return (
         openrouter_models
         + portkey_models
@@ -320,6 +323,7 @@ def get_all_models_sequential():
         + aimo_models
         + near_models
         + fal_models
+        + anannas_models
     )
 
 
@@ -509,6 +513,14 @@ def get_cached_models(gateway: str = "openrouter"):
                 if cache_age < cache["ttl"]:
                     return cache["data"]
             return fetch_models_from_vercel_ai_gateway()
+
+        if gateway == "anannas":
+            cache = _anannas_models_cache
+            if cache["data"] and cache["timestamp"]:
+                cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
+                if cache_age < cache["ttl"]:
+                    return cache["data"]
+            return fetch_models_from_anannas()
 
         if gateway == "all":
             # Fetch all gateways in parallel for improved performance
@@ -2770,4 +2782,80 @@ def normalize_aihubmix_model(model) -> dict | None:
         }
     except Exception as e:
         logger.error("Failed to normalize AiHubMix model: %s", sanitize_for_logging(str(e)))
+        return None
+
+
+def fetch_models_from_anannas():
+    """Fetch models from Anannas via OpenAI-compatible API
+
+    Anannas provides access to various models through a unified OpenAI-compatible endpoint.
+    """
+    try:
+        from src.services.anannas_client import get_anannas_client
+
+        client = get_anannas_client()
+        response = client.models.list()
+
+        if not response or not hasattr(response, "data"):
+            logger.warning("No models returned from Anannas")
+            return []
+
+        # Normalize models
+        normalized_models = [normalize_anannas_model(model) for model in response.data if model]
+
+        _anannas_models_cache["data"] = normalized_models
+        _anannas_models_cache["timestamp"] = datetime.now(timezone.utc)
+
+        logger.info(f"Fetched {len(normalized_models)} models from Anannas")
+        return _anannas_models_cache["data"]
+    except Exception as e:
+        logger.error(
+            "Failed to fetch models from Anannas: %s", sanitize_for_logging(str(e))
+        )
+        return []
+
+
+def normalize_anannas_model(model) -> dict | None:
+    """Normalize Anannas model to catalog schema
+
+    Anannas models use OpenAI-compatible naming conventions.
+    """
+    model_id = getattr(model, "id", None)
+    if not model_id:
+        logger.warning("Anannas model missing 'id': %s", sanitize_for_logging(str(model)))
+        return None
+
+    try:
+        return {
+            "id": model_id,
+            "slug": f"anannas/{model_id}",
+            "canonical_slug": f"anannas/{model_id}",
+            "hugging_face_id": None,
+            "name": getattr(model, "name", model_id),
+            "created": getattr(model, "created_at", None),
+            "description": getattr(model, "description", f"Model from Anannas"),
+            "context_length": getattr(model, "context_length", 4096),
+            "architecture": {
+                "modality": MODALITY_TEXT_TO_TEXT,
+                "input_modalities": ["text"],
+                "output_modalities": ["text"],
+                "instruct_type": "chat",
+            },
+            "pricing": {
+                "prompt": "0",
+                "completion": "0",
+                "request": "0",
+                "image": "0",
+            },
+            "top_provider": None,
+            "per_request_limits": None,
+            "supported_parameters": [],
+            "default_parameters": {},
+            "provider_slug": "anannas",
+            "provider_site_url": "https://api.anannas.ai",
+            "model_logo_url": None,
+            "source_gateway": "anannas",
+        }
+    except Exception as e:
+        logger.error("Failed to normalize Anannas model: %s", sanitize_for_logging(str(e)))
         return None

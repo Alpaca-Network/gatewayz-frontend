@@ -44,6 +44,7 @@ from src.cache import (
     _near_models_cache,
     _fal_models_cache,
     _aihubmix_models_cache,
+    _anannas_models_cache,
 )
 
 # Gateway configuration with API endpoints
@@ -209,6 +210,15 @@ GATEWAY_CONFIG = {
         'cache': _aihubmix_models_cache,
         'min_expected_models': 5,
         'header_type': 'aihubmix'
+    },
+    'anannas': {
+        'name': 'Anannas',
+        'url': 'https://api.anannas.ai/v1/models',
+        'api_key_env': 'ANANNAS_API_KEY',
+        'api_key': Config.ANANNAS_API_KEY,
+        'cache': _anannas_models_cache,
+        'min_expected_models': 5,
+        'header_type': 'bearer'
     },
 }
 

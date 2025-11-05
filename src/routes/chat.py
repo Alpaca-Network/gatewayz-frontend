@@ -110,6 +110,11 @@ from src.services.aihubmix_client import (
     process_aihubmix_response,
     make_aihubmix_request_openai_stream,
 )
+from src.services.anannas_client import (
+    make_anannas_request_openai,
+    process_anannas_response,
+    make_anannas_request_openai_stream,
+)
 from src.services.model_transformations import detect_provider_from_model_id, transform_model_id
 from src.services.provider_failover import (
     build_provider_failover_chain,
@@ -793,6 +798,13 @@ async def chat_completions(
                             request_model,
                             **optional,
                         )
+                    elif attempt_provider == "anannas":
+                        stream = await _to_thread(
+                            make_anannas_request_openai_stream,
+                            messages,
+                            request_model,
+                            **optional,
+                        )
                     else:
                         stream = await _to_thread(
                             make_openrouter_request_openai_stream,
@@ -970,6 +982,17 @@ async def chat_completions(
                         timeout=request_timeout,
                     )
                     processed = await _to_thread(process_aihubmix_response, resp_raw)
+                elif attempt_provider == "anannas":
+                    resp_raw = await asyncio.wait_for(
+                        _to_thread(
+                            make_anannas_request_openai,
+                            messages,
+                            request_model,
+                            **optional,
+                        ),
+                        timeout=request_timeout,
+                    )
+                    processed = await _to_thread(process_anannas_response, resp_raw)
                 else:
                     resp_raw = await asyncio.wait_for(
                         _to_thread(

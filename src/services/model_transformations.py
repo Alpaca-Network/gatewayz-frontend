@@ -347,6 +347,11 @@ def get_model_id_mapping(provider: str) -> dict[str, str]:
             # Pass-through format - any model ID is supported
             # Minimal mappings to avoid conflicts with other providers during auto-detection
         },
+        "anannas": {
+            # Anannas uses OpenAI-compatible model identifiers
+            # Pass-through format - any model ID is supported
+            # Minimal mappings to avoid conflicts with other providers during auto-detection
+        },
     }
 
     return mappings.get(provider, {})
@@ -492,6 +497,7 @@ def detect_provider_from_model_id(model_id: str) -> str | None:
         "google-vertex",
         "vercel-ai-gateway",
         "aihubmix",
+        "anannas",
         "near",
         "fal",
     ]:
@@ -516,6 +522,10 @@ def detect_provider_from_model_id(model_id: str) -> str | None:
         # Near AI models (e.g., "near/deepseek-chat-v3-0324")
         if org == "near":
             return "near"
+
+        # Anannas models (e.g., "anannas/openai/gpt-4o")
+        if org == "anannas":
+            return "anannas"
 
         # OpenRouter models (e.g., "openrouter/auto")
         if org == "openrouter":
