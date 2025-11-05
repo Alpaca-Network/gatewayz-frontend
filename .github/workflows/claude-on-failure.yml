@@ -33,7 +33,8 @@ jobs:
         id: check_conflicts
         run: |
           # Check if there are any merge conflict markers in the repository
-          if grep -r "<<<<<<< HEAD" --include="*.py" --include="*.js" --include="*.ts" --include="*.tsx" --include="*.json" --include="*.yaml" --include="*.yml" --include="*.md" . 2>/dev/null; then
+          # Using generic pattern "<<<<<<< " to catch all conflict markers (HEAD, branch names, etc.)
+          if grep -r "<<<<<<< " --include="*.py" --include="*.js" --include="*.ts" --include="*.tsx" --include="*.json" --include="*.yaml" --include="*.yml" --include="*.md" . 2>/dev/null; then
             echo "has_conflicts=true" >> $GITHUB_OUTPUT
             echo "Merge conflicts detected in the codebase"
           else
@@ -126,7 +127,7 @@ jobs:
           prompt: |
             The CI pipeline has failed on this PR. Your task is to:
 
-            1. **Check for merge conflicts** - If there are any merge conflict markers (<<<<<<< HEAD, =======, >>>>>>>) in the codebase:
+            1. **Check for merge conflicts** - If there are any merge conflict markers (<<<<<<< <branch>, =======, >>>>>>>) in the codebase:
                - Read each conflicted file
                - Understand what changed in each branch
                - Resolve conflicts by choosing the appropriate code or merging both changes intelligently
@@ -157,7 +158,7 @@ jobs:
                - Push changes to this PR branch
 
             Common failure patterns in this Gatewayz backend codebase:
-            - Merge conflicts: <<<<<<< HEAD markers, conflicting changes between branches
+            - Merge conflicts: <<<<<<< markers (with branch/commit names), conflicting changes between branches
             - Test failures: pytest assertion errors, timeout issues, mock configuration
             - Linting errors: ruff, black, isort, mypy type errors
             - Security scans: bandit warnings, safety vulnerability checks
