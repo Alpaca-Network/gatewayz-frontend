@@ -1,5 +1,9 @@
 name: Claude on CI failure
 
+concurrency:
+  group: claude-failure-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
 on:
   workflow_run:
     workflows: ["CI Pipeline", "Run Tests"]  # Trigger on both CI workflows
@@ -118,11 +122,22 @@ jobs:
               fs.writeFileSync('failure-logs.md', errorMsg);
             }
 
+      - name: Validate configuration
+        run: |
+          if [ -z "${{ secrets.ANTHROPIC_API_KEY }}" ]; then
+            echo "❌ ERROR: ANTHROPIC_API_KEY secret is not configured"
+            echo "Please add ANTHROPIC_API_KEY to repository secrets"
+            exit 1
+          fi
+          echo "✅ ANTHROPIC_API_KEY is configured"
+          echo "✅ GitHub token is available"
+
       - name: Run Claude Code (fix CI failures and push)
+        timeout-minutes: 30
         uses: anthropics/claude-code-action@8a1c4371755898f67cd97006ba7c97702d5fc4bf  # v1.0.16
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          use_commit_signing: true
+          use_commit_signing: false
           claude_args: "--max-turns 15"
           prompt: |
             The CI pipeline has failed on this PR. Your task is to:
