@@ -352,6 +352,21 @@ def get_model_id_mapping(provider: str) -> dict[str, str]:
             # Pass-through format - any model ID is supported
             # Minimal mappings to avoid conflicts with other providers during auto-detection
         },
+        "near": {
+            # Near AI uses simple model names without org prefixes
+            # Maps org/model format to simple model names
+            "deepseek-ai/deepseek-v3": "deepseek-v3",
+            "meta-llama/llama-3-70b": "llama-3-70b",
+            "meta-llama/llama-3.1-70b": "llama-3.1-70b",
+            "qwen/qwen-2-72b": "qwen-2-72b",
+            "gpt-oss/gpt-oss-120b": "gpt-oss-120b",
+            # Also support without org prefix (pass-through)
+            "deepseek-v3": "deepseek-v3",
+            "llama-3-70b": "llama-3-70b",
+            "llama-3.1-70b": "llama-3.1-70b",
+            "qwen-2-72b": "qwen-2-72b",
+            "gpt-oss-120b": "gpt-oss-120b",
+        },
     }
 
     return mappings.get(provider, {})
