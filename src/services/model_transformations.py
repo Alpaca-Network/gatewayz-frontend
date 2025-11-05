@@ -303,6 +303,7 @@ def get_model_id_mapping(provider: str) -> dict[str, str]:
             "google/gemini-2.5-flash": GEMINI_2_5_FLASH_PREVIEW,
             "@google/models/gemini-2.5-flash-preview-09-2025": GEMINI_2_5_FLASH_PREVIEW,
             "@google/models/gemini-2.5-flash": GEMINI_2_5_FLASH_PREVIEW,
+            # Pro (preview)
             "gemini-2.5-pro-preview-09-2025": GEMINI_2_5_PRO_PREVIEW,
             "gemini-2.5-pro": GEMINI_2_5_PRO_PREVIEW,
             "google/gemini-2.5-pro": GEMINI_2_5_PRO_PREVIEW,

@@ -773,6 +773,15 @@ def fetch_models_from_google_vertex():
         # These are the officially supported models available in Vertex AI
         vertex_models = [
             {
+                "id": "gemini-2.5-flash",
+                "display_name": "Gemini 2.5 Flash",
+                "description": "Latest generation fast model with improved capabilities",
+                "max_input_tokens": 1000000,
+                "max_output_tokens": 100000,
+                "modalities": ["text", "image", "audio", "video"],
+                "supported_generation_methods": _GEMINI_GENERATION_METHODS,
+            },
+            {
                 "id": "gemini-2.5-flash-lite",
                 "display_name": "Gemini 2.5 Flash Lite (GA)",
                 "description": "Lightweight, cost-effective model for high-throughput applications (stable version)",
@@ -787,6 +796,15 @@ def fetch_models_from_google_vertex():
                 "description": "Preview version with improved performance (887 tokens/sec) and enhanced reasoning capabilities",
                 "max_input_tokens": 1000000,
                 "max_output_tokens": 8192,
+                "modalities": ["text", "image", "audio", "video"],
+                "supported_generation_methods": _GEMINI_GENERATION_METHODS,
+            },
+            {
+                "id": "gemini-2.5-pro",
+                "display_name": "Gemini 2.5 Pro",
+                "description": "Most advanced reasoning model with enhanced capabilities",
+                "max_input_tokens": 1000000,
+                "max_output_tokens": 100000,
                 "modalities": ["text", "image", "audio", "video"],
                 "supported_generation_methods": _GEMINI_GENERATION_METHODS,
             },
