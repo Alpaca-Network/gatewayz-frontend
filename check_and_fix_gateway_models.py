@@ -43,6 +43,7 @@ from src.cache import (
     _aimo_models_cache,
     _near_models_cache,
     _fal_models_cache,
+    _aihubmix_models_cache,
 )
 
 # Gateway configuration with API endpoints
@@ -200,6 +201,15 @@ GATEWAY_CONFIG = {
         'min_expected_models': 50,
         'header_type': 'bearer'
     },
+    'aihubmix': {
+        'name': 'AiHubMix',
+        'url': 'https://aihubmix.com/v1/models',
+        'api_key_env': 'AIHUBMIX_API_KEY',
+        'api_key': Config.AIHUBMIX_API_KEY,
+        'cache': _aihubmix_models_cache,
+        'min_expected_models': 5,
+        'header_type': 'aihubmix'
+    },
 }
 
 
@@ -218,6 +228,13 @@ def build_headers(gateway_config: dict) -> dict:
     elif header_type == 'google':
         # Google uses API key as query parameter, not header
         return {}
+    elif header_type == 'aihubmix':
+        # AiHubMix uses Authorization header and APP-Code for referral code
+        headers = {"Authorization": f"Bearer {api_key}"}
+        app_code = os.environ.get('AIHUBMIX_APP_CODE')
+        if app_code:
+            headers["APP-Code"] = app_code
+        return headers
     else:
         return {}
 

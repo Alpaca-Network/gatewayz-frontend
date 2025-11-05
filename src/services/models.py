@@ -2694,3 +2694,47 @@ def enhance_model_with_provider_info(openrouter_model: dict, providers_data: lis
     except Exception as e:
         logger.error(f"Error enhancing model with provider info: {e}")
         return openrouter_model
+
+
+def fetch_models_from_aihubmix():
+    """Fetch models from AiHubMix via OpenAI-compatible API
+
+    AiHubMix provides access to models through a unified OpenAI-compatible endpoint.
+    """
+    try:
+        from src.cache import _aihubmix_models_cache
+        from src.services.aihubmix_client import fetch_models_from_aihubmix as aihubmix_fetch
+
+        models = aihubmix_fetch()
+
+        if not models:
+            logger.warning("No models returned from AiHubMix")
+            return []
+
+        # Normalize models
+        normalized_models = [normalize_aihubmix_model(model) for model in models if model]
+        normalized_models = [m for m in normalized_models if m is not None]
+
+        _aihubmix_models_cache["data"] = normalized_models
+        _aihubmix_models_cache["timestamp"] = datetime.now(timezone.utc)
+
+        logger.info(f"Fetched {len(normalized_models)} models from AiHubMix")
+        return _aihubmix_models_cache["data"]
+    except Exception as e:
+        logger.error("Failed to fetch models from AiHubMix: %s", sanitize_for_logging(str(e)))
+        return []
+
+
+def normalize_aihubmix_model(model) -> dict | None:
+    """Normalize AiHubMix model to catalog schema
+
+    AiHubMix models use OpenAI-compatible naming conventions.
+    """
+    try:
+        from src.services.aihubmix_client import normalize_aihubmix_model as aihubmix_normalize
+
+        normalized = aihubmix_normalize(model)
+        return normalized
+    except Exception as e:
+        logger.error("Failed to normalize AiHubMix model: %s", sanitize_for_logging(str(e)))
+        return None

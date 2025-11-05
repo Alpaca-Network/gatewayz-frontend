@@ -341,6 +341,11 @@ def get_model_id_mapping(provider: str) -> dict[str, str]:
             # Using pass-through format - any model ID is supported
             # Minimal mappings to avoid conflicts with other providers during auto-detection
         },
+        "aihubmix": {
+            # AiHubMix uses OpenAI-compatible model identifiers
+            # Pass-through format - any model ID is supported
+            # Minimal mappings to avoid conflicts with other providers during auto-detection
+        },
     }
 
     return mappings.get(provider, {})
@@ -485,6 +490,7 @@ def detect_provider_from_model_id(model_id: str) -> str | None:
         "chutes",
         "google-vertex",
         "vercel-ai-gateway",
+        "aihubmix",
         "near",
         "fal",
     ]:
