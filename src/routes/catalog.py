@@ -638,6 +638,18 @@ async def get_models(
             annotated_aimo = annotate_provider_sources(aimo_providers, "aimo")
             provider_groups.append(annotated_aimo)
 
+        if gateway_value in ("near", "all"):
+            models_for_providers = near_models if gateway_value == "all" else models
+            near_providers = derive_providers_from_models(models_for_providers, "near")
+            annotated_near = annotate_provider_sources(near_providers, "near")
+            provider_groups.append(annotated_near)
+
+        if gateway_value in ("fal", "all"):
+            models_for_providers = fal_models if gateway_value == "all" else models
+            fal_providers = derive_providers_from_models(models_for_providers, "fal")
+            annotated_fal = annotate_provider_sources(fal_providers, "fal")
+            provider_groups.append(annotated_fal)
+
         if gateway_value in ("anannas", "all"):
             models_for_providers = anannas_models if gateway_value == "all" else models
             anannas_providers = derive_providers_from_models(models_for_providers, "anannas")
