@@ -218,7 +218,7 @@ def validate_api_key_security(
 
     client = get_supabase_client()
 
-    # Check the API keys table
+    # Check api_keys_new table (legacy keys fall back to user validation)
     tables_to_check = ["api_keys_new"]
 
     for table_name in tables_to_check:
