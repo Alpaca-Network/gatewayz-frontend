@@ -44,7 +44,6 @@ from src.services.models import (
     fetch_models_from_together,
 )
 from src.services.portkey_providers import (
-    fetch_models_from_google,
     fetch_models_from_cerebras,
     fetch_models_from_nebius,
     fetch_models_from_xai,
@@ -105,12 +104,6 @@ GATEWAY_INFO = {
         'make_request': make_together_request_openai,
         'make_stream': make_together_request_openai_stream,
         'needs_transform': False,
-    },
-    'google': {
-        'fetch_func': fetch_models_from_google,
-        'make_request': make_portkey_request_openai,  # Uses Portkey
-        'make_stream': make_portkey_request_openai_stream,
-        'needs_transform': True,
     },
     'cerebras': {
         'fetch_func': fetch_models_from_cerebras,
@@ -182,10 +175,9 @@ async def test_model_inference(
         }
 
         # For Portkey-based providers, format model ID
-        if gateway in ['google', 'cerebras', 'nebius', 'novita', 'hug']:
+        if gateway in ['cerebras', 'nebius', 'novita', 'hug']:
             # Extract provider from model and format for Portkey
             provider_map = {
-                'google': 'google',
                 'cerebras': 'cerebras',
                 'nebius': 'nebius',
                 'novita': 'novita',

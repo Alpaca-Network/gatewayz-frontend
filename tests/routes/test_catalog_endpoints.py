@@ -163,14 +163,6 @@ class TestGetProvidersEndpoint:
         assert response.status_code in [503, 500]
 
     @patch('src.routes.catalog.get_cached_models')
-    def test_get_providers_google(self, mock_models):
-        """Test Google gateway"""
-        mock_models.return_value = [{"id": "gemini-pro"}]
-
-        response = client.get("/v1/provider?gateway=google")
-        assert response.status_code in [200, 503, 500]
-
-    @patch('src.routes.catalog.get_cached_models')
     def test_get_providers_cerebras(self, mock_models):
         """Test Cerebras gateway"""
         mock_models.return_value = []

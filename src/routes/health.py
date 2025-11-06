@@ -606,3 +606,61 @@ async def stop_health_monitoring(api_key: str = Depends(get_api_key)):
     except Exception as e:
         logger.error(f"Failed to stop health monitoring: {e}")
         raise HTTPException(status_code=500, detail="Failed to stop health monitoring") from e
+
+
+@router.get("/health/google-vertex", tags=["health"])
+async def check_google_vertex_health():
+    """
+    Check Google Vertex AI provider health
+
+    Returns detailed diagnostics about Google Vertex AI configuration and credentials:
+    - Configuration (project ID, region)
+    - Credential loading status
+    - Access token generation status
+    - Overall health status
+
+    This endpoint does not require authentication and provides diagnostic information
+    that can help troubleshoot Google Vertex AI integration issues.
+
+    Example response:
+    ```json
+    {
+        "provider": "google-vertex",
+        "health_status": "healthy",
+        "status": "healthy",
+        "diagnosis": {
+            "credentials_available": true,
+            "credential_source": "env_json",
+            "project_id": "my-project",
+            "location": "us-central1",
+            "token_available": true,
+            "token_valid": true,
+            "error": null,
+            "steps": [...]
+        },
+        "timestamp": "2025-01-01T12:00:00Z"
+    }
+    ```
+    """
+    try:
+        from src.services.google_vertex_client import diagnose_google_vertex_credentials
+
+        diagnosis = diagnose_google_vertex_credentials()
+
+        return {
+            "provider": "google-vertex",
+            "health_status": diagnosis.get("health_status", "unhealthy"),
+            "status": diagnosis.get("health_status", "unhealthy"),
+            "diagnosis": diagnosis,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to check Google Vertex AI health: {e}", exc_info=True)
+        return {
+            "provider": "google-vertex",
+            "health_status": "unhealthy",
+            "status": "unhealthy",
+            "error": str(e),
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }

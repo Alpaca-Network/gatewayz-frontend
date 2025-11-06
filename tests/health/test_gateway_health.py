@@ -46,7 +46,7 @@ class TestGatewayHealthChecker:
         """Test that all expected gateways are in the configuration"""
         expected_gateways = [
             'openrouter', 'portkey', 'featherless', 'chutes', 'groq',
-            'fireworks', 'together', 'deepinfra', 'google', 'cerebras',
+            'fireworks', 'together', 'deepinfra', 'cerebras',
             'nebius', 'xai', 'novita', 'huggingface', 'aimo', 'near', 'fal'
         ]
 
