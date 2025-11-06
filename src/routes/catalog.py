@@ -738,7 +738,8 @@ async def get_models(
             "aimo": "AIMO Network catalog",
             "near": "Near AI catalog",
             "fal": "Fal.ai catalog",
-            "all": "Combined OpenRouter, Portkey, Featherless, DeepInfra, Chutes, Groq, Fireworks, Together, Google, Cerebras, Nebius, Xai, Novita, Hugging Face, AIMO, Near AI, and Fal.ai catalogs",
+            "anannas": "Anannas catalog",
+            "all": "Combined OpenRouter, Portkey, Featherless, DeepInfra, Chutes, Groq, Fireworks, Together, Google, Cerebras, Nebius, Xai, Novita, Hugging Face, AIMO, Near AI, Fal.ai, and Anannas catalogs",
         }.get(gateway_value, "OpenRouter catalog")
 
         result = {
@@ -853,6 +854,25 @@ async def get_specific_model(
             gateway_models = get_cached_models(detected_gateway)
             if gateway_models:
                 derived_providers = derive_portkey_providers(gateway_models)
+                annotated_providers = annotate_provider_sources(derived_providers, detected_gateway)
+                provider_groups.append(annotated_providers)
+        
+        # Handle gateways that use derive_providers_from_models
+        if detected_gateway in [
+            "google",
+            "cerebras",
+            "nebius",
+            "xai",
+            "novita",
+            "hug",
+            "aimo",
+            "near",
+            "fal",
+            "anannas",
+        ]:
+            gateway_models = get_cached_models(detected_gateway)
+            if gateway_models:
+                derived_providers = derive_providers_from_models(gateway_models, detected_gateway)
                 annotated_providers = annotate_provider_sources(derived_providers, detected_gateway)
                 provider_groups.append(annotated_providers)
 
