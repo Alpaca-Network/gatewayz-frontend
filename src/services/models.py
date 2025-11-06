@@ -241,7 +241,6 @@ def get_all_models_parallel():
             "portkey",
             "featherless",
             "deepinfra",
-            "google",
             "cerebras",
             "nebius",
             "xai",
@@ -289,7 +288,6 @@ def get_all_models_sequential():
     portkey_models = get_cached_models("portkey") or []
     featherless_models = get_cached_models("featherless") or []
     deepinfra_models = get_cached_models("deepinfra") or []
-    google_models = get_cached_models("google") or []
     cerebras_models = get_cached_models("cerebras") or []
     nebius_models = get_cached_models("nebius") or []
     xai_models = get_cached_models("xai") or []
@@ -308,7 +306,6 @@ def get_all_models_sequential():
         + portkey_models
         + featherless_models
         + deepinfra_models
-        + google_models
         + cerebras_models
         + nebius_models
         + xai_models
@@ -2346,7 +2343,6 @@ def detect_model_gateway(provider_name: str, model_name: str) -> str:
             "groq",
             "fireworks",
             "together",
-            "google",
             "cerebras",
             "nebius",
             "xai",
