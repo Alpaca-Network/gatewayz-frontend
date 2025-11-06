@@ -35,14 +35,12 @@ export function SessionInitializer() {
         // Trigger auth refresh to sync with context
         await refresh({ force: true });
 
-        // Redirect to return URL or dashboard
-        setTimeout(() => {
-          if (returnUrl) {
+        // Redirect to return URL if provided, otherwise stay on current page
+        if (returnUrl) {
+          setTimeout(() => {
             router.push(returnUrl);
-          } else {
-            router.push("/dashboard");
-          }
-        }, 100);
+          }, 100);
+        }
 
         return;
       }
