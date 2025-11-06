@@ -28,16 +28,7 @@ export function MiniChatWidget({ className = '' }: MiniChatWidgetProps) {
     }
   };
 
-  const placeholders = [
-    "Ask anything...",
-    "What can you help me with?",
-    "Try me with any question...",
-    "Start a conversation...",
-  ];
-
-  const [placeholder] = useState(
-    placeholders[Math.floor(Math.random() * placeholders.length)]
-  );
+  const [placeholder] = useState("What's on your mind?");
 
   return (
     <div className={`w-full max-w-3xl mx-auto px-2 sm:px-0 ${className}`}>
