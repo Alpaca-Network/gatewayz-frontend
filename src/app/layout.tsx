@@ -13,6 +13,7 @@ import { SpeedInsights } from '@vercel/speed-insights/next';
 import { Inter } from 'next/font/google';
 import { ReactScanProvider } from '@/components/providers/react-scan-provider';
 import { GoogleAnalytics } from '@/components/analytics/google-analytics';
+import { SessionInitializer } from '@/components/SessionInitializer';
 // import { GTMLoader } from '@/components/analytics/gtm-loader'; // Temporarily disabled due to layout router issues
 
 const inter = Inter({
@@ -82,6 +83,8 @@ export default function RootLayout({
         >
           <ReactScanProvider />
           <PrivyProviderWrapper className="flex flex-col min-h-screen">
+            {/* Session transfer from main domain - handles automatic authentication */}
+            <SessionInitializer />
             {/* <GTMLoader /> Temporarily disabled due to layout router issues */}
             <AppHeader />
             <OnboardingBanner />
