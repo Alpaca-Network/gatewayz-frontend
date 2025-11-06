@@ -3016,33 +3016,33 @@ function ChatPageContent() {
 
         {/* Mobile Header - Compact and Touch-Friendly */}
         <header className="relative z-10 w-full bg-background/95 backdrop-blur-sm border-b border-border/50 lg:border-none lg:bg-transparent">
-          {/* Mobile Layout - Optimized for Touch */}
-          <div className="flex lg:hidden flex-col gap-2 p-3">
-            {/* Top Row: Menu + Title + Actions */}
-            <div className="flex items-center gap-2 w-full">
-              <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
-                <SheetTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-9 w-9 flex-shrink-0">
-                    <Menu className="h-5 w-5" />
-                  </Button>
-                </SheetTrigger>
-                <SheetContent side="left" className="w-[280px] sm:w-[320px] p-0 pt-12 overflow-hidden">
-                  <SheetHeader className="sr-only">
-                    <SheetTitle>Chat Sidebar</SheetTitle>
-                  </SheetHeader>
-                  <ChatSidebar
-                    sessions={sessions}
-                    activeSessionId={activeSessionId}
-                    switchToSession={switchToSession}
-                    createNewChat={createNewChat}
-                    onDeleteSession={handleDeleteSession}
-                    onRenameSession={handleRenameSession}
-                    onClose={() => setMobileSidebarOpen(false)}
-                  />
-                </SheetContent>
-              </Sheet>
-              
-            <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
+          {/* Mobile Layout - Single Row on Mobile */}
+          <div className="flex lg:hidden items-center gap-2 p-3 w-full">
+            {/* Menu Button */}
+            <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
+              <SheetTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-9 w-9 flex-shrink-0">
+                  <Menu className="h-5 w-5" />
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="left" className="w-[280px] sm:w-[320px] p-0 pt-12 overflow-hidden">
+                <SheetHeader className="sr-only">
+                  <SheetTitle>Chat Sidebar</SheetTitle>
+                </SheetHeader>
+                <ChatSidebar
+                  sessions={sessions}
+                  activeSessionId={activeSessionId}
+                  switchToSession={switchToSession}
+                  createNewChat={createNewChat}
+                  onDeleteSession={handleDeleteSession}
+                  onRenameSession={handleRenameSession}
+                  onClose={() => setMobileSidebarOpen(false)}
+                />
+              </SheetContent>
+            </Sheet>
+
+            {/* Title - Hidden on very small screens, shown on sm and up */}
+            <div className="min-w-0 flex-1">
               {isEditingTitle ? (
                 <Input
                   type="text"
@@ -3065,31 +3065,30 @@ function ChatPageContent() {
                     }
                   }}
                   autoFocus
-                    className="text-base font-semibold h-auto px-2 py-1 min-w-0 flex-1"
+                  className="text-sm font-semibold h-auto px-2 py-1 min-w-0"
                 />
               ) : (
-                  <h1 className="text-base font-semibold truncate min-w-0 flex-1">{activeSession?.title || 'Untitled Chat'}</h1>
-                )}
-              </div>
-
-              {/* Edit Title Button - Only show when not editing */}
-              {!isEditingTitle && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                  className="h-8 w-8 flex-shrink-0"
-                    onClick={() => {
-                      setEditedTitle(activeSession?.title || '');
-                      setIsEditingTitle(true);
-                    }}
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </Button>
+                <h1 className="text-sm font-semibold truncate">{activeSession?.title || 'Untitled Chat'}</h1>
               )}
             </div>
 
-            {/* Model Selector Row */}
-            <div className="w-full">
+            {/* Edit Title Button */}
+            {!isEditingTitle && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 flex-shrink-0"
+                onClick={() => {
+                  setEditedTitle(activeSession?.title || '');
+                  setIsEditingTitle(true);
+                }}
+              >
+                <Pencil className="h-4 w-4" />
+              </Button>
+            )}
+
+            {/* Model Selector */}
+            <div className="flex-shrink-0">
               <ModelSelect selectedModel={selectedModel} onSelectModel={handleModelSelect} />
             </div>
           </div>
@@ -3461,25 +3460,27 @@ function ChatPageContent() {
                     autoComplete="off"
                     className="border-0 bg-transparent focus-visible:ring-0 text-sm sm:text-base text-foreground flex-1 min-w-0"
                   />
-                  {(!ready || (!authenticated && !hasApiKey) || isStreamingResponse) && (
-                    <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground flex-shrink-0" />
-                  )}
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={handleSendMessage}
-                    disabled={loading || isStreamingResponse || !message.trim() || !ready || (!authenticated && !hasApiKey)}
-                    className="h-8 w-8 sm:h-7 sm:w-7 bg-primary hover:bg-primary/90 text-primary-foreground touch-manipulation flex-shrink-0"
-                    title={!ready
-                      ? "Waiting for authentication..."
-                      : (!authenticated && !hasApiKey)
-                        ? "Please log in"
-                        : isStreamingResponse
-                          ? "Please wait for the current response to finish"
-                          : "Send message"}
-                  >
-                     <Send className="h-4 w-4 sm:h-5 sm:w-5" />
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    {(!ready || (!authenticated && !hasApiKey) || isStreamingResponse) && (
+                      <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground flex-shrink-0" />
+                    )}
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={handleSendMessage}
+                      disabled={loading || isStreamingResponse || !message.trim() || !ready || (!authenticated && !hasApiKey)}
+                      className="h-8 w-8 sm:h-7 sm:w-7 bg-primary hover:bg-primary/90 text-primary-foreground touch-manipulation flex-shrink-0"
+                      title={!ready
+                        ? "Waiting for authentication..."
+                        : (!authenticated && !hasApiKey)
+                          ? "Please log in"
+                          : isStreamingResponse
+                            ? "Please wait for the current response to finish"
+                            : "Send message"}
+                    >
+                       <Send className="h-4 w-4 sm:h-5 sm:w-5" />
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>
