@@ -425,12 +425,6 @@ async def get_models(
                 logger.error("No Together models data available from cache")
                 raise HTTPException(status_code=503, detail=ERROR_MODELS_DATA_UNAVAILABLE)
 
-        if gateway_value in ("google", "all"):
-            google_models = get_cached_models("google") or []
-            if gateway_value == "google" and not google_models:
-                logger.error("No Google models data available from cache")
-                raise HTTPException(status_code=503, detail=ERROR_MODELS_DATA_UNAVAILABLE)
-
         if gateway_value in ("cerebras", "all"):
             cerebras_models = get_cached_models("cerebras") or []
             if gateway_value == "cerebras" and not cerebras_models:
@@ -501,8 +495,6 @@ async def get_models(
             models = fireworks_models
         elif gateway_value == "together":
             models = together_models
-        elif gateway_value == "google":
-            models = google_models
         elif gateway_value == "cerebras":
             models = cerebras_models
         elif gateway_value == "nebius":
@@ -595,12 +587,6 @@ async def get_models(
             together_providers = derive_portkey_providers(models_for_providers)
             annotated_together = annotate_provider_sources(together_providers, "together")
             provider_groups.append(annotated_together)
-
-        if gateway_value in ("google", "all"):
-            models_for_providers = google_models if gateway_value == "all" else models
-            google_providers = derive_providers_from_models(models_for_providers, "google")
-            annotated_google = annotate_provider_sources(google_providers, "google")
-            provider_groups.append(annotated_google)
 
         if gateway_value in ("cerebras", "all"):
             models_for_providers = cerebras_models if gateway_value == "all" else models

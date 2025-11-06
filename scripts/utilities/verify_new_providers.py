@@ -22,7 +22,6 @@ logger = logging.getLogger(__name__)
 
 # Import the fetch functions
 from src.services.portkey_providers import (
-    fetch_models_from_google,
     fetch_models_from_cerebras,
     fetch_models_from_nebius,
     fetch_models_from_xai,
@@ -46,7 +45,6 @@ def verify_providers():
     """Verify model counts for all providers"""
 
     providers = {
-        "google": fetch_models_from_google,
         "cerebras": fetch_models_from_cerebras,
         "nebius": fetch_models_from_nebius,
         "xai": fetch_models_from_xai,

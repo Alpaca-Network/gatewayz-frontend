@@ -79,9 +79,6 @@ class Config:
     # Anannas Configuration
     ANANNAS_API_KEY = os.environ.get("ANANNAS_API_KEY")
 
-    # Google Generative AI Configuration (for language models)
-    GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
-
     # Google Vertex AI Configuration (for image generation)
     GOOGLE_PROJECT_ID = os.environ.get("GOOGLE_PROJECT_ID", "gatewayz-468519")
     GOOGLE_VERTEX_LOCATION = os.environ.get("GOOGLE_VERTEX_LOCATION", "us-central1")

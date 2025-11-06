@@ -16,7 +16,6 @@ from src.cache import (
     _fireworks_models_cache,
     _together_models_cache,
     _deepinfra_models_cache,
-    _google_models_cache,
     _google_vertex_models_cache,
     _cerebras_models_cache,
     _nebius_models_cache,
@@ -36,7 +35,6 @@ from fastapi import APIRouter
 from datetime import datetime, timezone
 from src.services.pricing_lookup import enrich_model_with_pricing
 from src.services.portkey_providers import (
-    fetch_models_from_google,
     fetch_models_from_google_vertex,
     fetch_models_from_cerebras,
     fetch_models_from_nebius,
@@ -387,14 +385,6 @@ def get_cached_models(gateway: str = "openrouter"):
                 if cache_age < cache["ttl"]:
                     return cache["data"]
             return fetch_models_from_deepinfra()
-
-        if gateway == "google":
-            cache = _google_models_cache
-            if cache["data"] and cache["timestamp"]:
-                cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
-                if cache_age < cache["ttl"]:
-                    return cache["data"]
-            return fetch_models_from_google()
 
         if gateway == "google-vertex":
             cache = _google_vertex_models_cache

@@ -14,7 +14,6 @@ PROVIDERS USING OPENAI SDK WITH CUSTOM BASE URL:
   - Novita: OpenAI SDK with base_url="https://api.novita.ai/v3/openai"
 
 PROVIDERS USING PORTKEY FILTERING:
-  - Google: Filters Portkey catalog by patterns "@google/", "google/", "gemini", "gemma"
   - Hugging Face: Filters Portkey catalog by patterns "llava-hf", "hugging", "hf/"
 
 IMPLEMENTATION STRATEGY:
@@ -35,7 +34,6 @@ from typing import Any
 
 from src.cache import (
     _cerebras_models_cache,
-    _google_models_cache,
     _google_vertex_models_cache,
     _huggingface_models_cache,
     _nebius_models_cache,
@@ -343,55 +341,6 @@ def _filter_portkey_models_by_patterns(patterns: list, provider_name: str):
         logger.error(f"Failed to filter {provider_name} models from Portkey: {e}", exc_info=True)
         return None
 
-
-def fetch_models_from_google():
-    """
-    Fetch models from Google using their Generative AI API.
-
-    Uses the Google Generative AI API to list available models (Gemini, etc.)
-    """
-    try:
-        import httpx
-
-        from src.config import Config
-
-        if not _check_api_key(Config.GOOGLE_API_KEY, "Google"):
-            return None
-
-        # Google Generative AI API endpoint
-        url = f"https://generativelanguage.googleapis.com/v1beta/models?key={Config.GOOGLE_API_KEY}"
-
-        headers = {
-            "Content-Type": "application/json",
-        }
-
-        try:
-            response = httpx.get(url, headers=headers, timeout=20.0)
-            response.raise_for_status()
-
-            payload = response.json()
-            models_list = _extract_models_from_response(payload, key="models")
-
-            if not models_list:
-                logger.warning("No models returned from Google API")
-                return None
-
-            logger.info(f"Fetched {len(models_list)} models from Google Generative AI API")
-
-        except Exception as http_error:
-            _handle_http_error(http_error, "Google")
-            return None
-
-        # Normalize the models
-        if not models_list:
-            logger.warning("No models available from Google")
-            return None
-
-        return _cache_normalized_models(models_list, "google", _google_models_cache)
-
-    except Exception as e:
-        logger.error(f"Failed to fetch models from Google: {e}", exc_info=True)
-        return None
 
 
 def fetch_models_from_cerebras():
