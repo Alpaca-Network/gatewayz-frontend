@@ -3460,25 +3460,27 @@ function ChatPageContent() {
                     autoComplete="off"
                     className="border-0 bg-transparent focus-visible:ring-0 text-sm sm:text-base text-foreground flex-1 min-w-0"
                   />
-                  {(!ready || (!authenticated && !hasApiKey) || isStreamingResponse) && (
-                    <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground flex-shrink-0" />
-                  )}
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={handleSendMessage}
-                    disabled={loading || isStreamingResponse || !message.trim() || !ready || (!authenticated && !hasApiKey)}
-                    className="h-8 w-8 sm:h-7 sm:w-7 bg-primary hover:bg-primary/90 text-primary-foreground touch-manipulation flex-shrink-0"
-                    title={!ready
-                      ? "Waiting for authentication..."
-                      : (!authenticated && !hasApiKey)
-                        ? "Please log in"
-                        : isStreamingResponse
-                          ? "Please wait for the current response to finish"
-                          : "Send message"}
-                  >
-                     <Send className="h-4 w-4 sm:h-5 sm:w-5" />
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    {(!ready || (!authenticated && !hasApiKey) || isStreamingResponse) && (
+                      <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground flex-shrink-0" />
+                    )}
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={handleSendMessage}
+                      disabled={loading || isStreamingResponse || !message.trim() || !ready || (!authenticated && !hasApiKey)}
+                      className="h-8 w-8 sm:h-7 sm:w-7 bg-primary hover:bg-primary/90 text-primary-foreground touch-manipulation flex-shrink-0"
+                      title={!ready
+                        ? "Waiting for authentication..."
+                        : (!authenticated && !hasApiKey)
+                          ? "Please log in"
+                          : isStreamingResponse
+                            ? "Please wait for the current response to finish"
+                            : "Send message"}
+                    >
+                       <Send className="h-4 w-4 sm:h-5 sm:w-5" />
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>
