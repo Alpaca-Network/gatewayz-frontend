@@ -47,7 +47,7 @@ export function MiniChatWidget({ className = '' }: MiniChatWidgetProps) {
 
         {/* Main chat input */}
         <div className="relative bg-card border-2 border-border rounded-xl sm:rounded-2xl shadow-lg overflow-hidden">
-          <div className="flex flex-col xs:flex-row items-stretch xs:items-center gap-2 p-2.5 xs:p-3 sm:p-4">
+          <div className="flex items-center gap-2 p-2.5 xs:p-3 sm:p-4">
             {/* Icon */}
             <div className="flex-shrink-0 w-9 h-9 xs:w-10 xs:h-10 sm:w-12 sm:h-12 rounded-full bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center shadow-md">
               <Sparkles className="w-4 h-4 xs:w-5 xs:h-5 sm:w-6 sm:h-6 text-white" />
