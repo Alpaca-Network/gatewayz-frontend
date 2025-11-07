@@ -30,6 +30,7 @@ def init_tempo_otlp():
     try:
         from opentelemetry import trace
         from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+        from opentelemetry.sdk.resources import Resource
         from opentelemetry.sdk.trace import TracerProvider
         from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
@@ -38,14 +39,20 @@ def init_tempo_otlp():
             endpoint=Config.TEMPO_OTLP_HTTP_ENDPOINT,
         )
 
-        # Create tracer provider
-        trace_provider = TracerProvider()
+        # Create resource with service name for Tempo filtering
+        resource = Resource.create({
+            "service.name": Config.OTEL_SERVICE_NAME,
+        })
+
+        # Create tracer provider with resource
+        trace_provider = TracerProvider(resource=resource)
         trace_provider.add_span_processor(BatchSpanProcessor(otlp_exporter))
 
         # Set as global tracer provider
         trace.set_tracer_provider(trace_provider)
 
         logger.info("OpenTelemetry/Tempo initialization completed")
+        logger.info(f"  Service name: {Config.OTEL_SERVICE_NAME}")
         logger.info(f"  Tempo endpoint: {Config.TEMPO_OTLP_HTTP_ENDPOINT}")
         logger.info("  Traces will be exported to Tempo")
 

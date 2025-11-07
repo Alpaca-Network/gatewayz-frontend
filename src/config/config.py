@@ -115,6 +115,7 @@ class Config:
         "true",
         "yes",
     }
+    OTEL_SERVICE_NAME = os.environ.get("OTEL_SERVICE_NAME", "gatewayz-api")
     TEMPO_OTLP_HTTP_ENDPOINT = os.environ.get(
         "TEMPO_OTLP_HTTP_ENDPOINT",
         "http://tempo:4318",
