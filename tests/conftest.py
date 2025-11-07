@@ -17,6 +17,7 @@ os.environ.setdefault('OPENROUTER_API_KEY', 'sk-or-v1-xxxxxxxxxxxxxxxxxxxxxxxxxx
 os.environ.setdefault('PORTKEY_API_KEY', 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
 os.environ.setdefault('ADMIN_API_KEY', 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
 os.environ.setdefault('ENCRYPTION_KEY', 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
+os.environ.setdefault('AI_SDK_API_KEY', 'sk-xxx-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
 os.environ.setdefault('STRIPE_SECRET_KEY', 'sk_test_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
 os.environ.setdefault('STRIPE_WEBHOOK_SECRET', 'whsec_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
 os.environ.setdefault('FRONTEND_URL', 'http://localhost:3000')

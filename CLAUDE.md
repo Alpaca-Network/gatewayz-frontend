@@ -24,7 +24,7 @@
 
 ```
 /root/repo/
-├── src/                           # Main application source (41,688 lines of Python)
+├── src/                           # Main application source (43,491 lines of Python)
 │   ├── main.py                   # FastAPI app factory and route initialization
 │   ├── config/                   # Configuration management (4 files)
 │   │   ├── config.py            # Environment-based configuration
@@ -49,7 +49,7 @@
 │   │   ├── gateway_analytics.py # Gateway usage analytics
 │   │   └── ping.py              # Ping statistics
 │   │
-│   ├── routes/                   # API Endpoint Handlers (28 modules)
+│   ├── routes/                   # API Endpoint Handlers (29 modules)
 │   │   ├── chat.py              # Chat completions (OpenAI-compatible)
 │   │   ├── messages.py          # Anthropic Messages API (Claude-compatible)
 │   │   ├── images.py            # Image generation endpoints
@@ -77,7 +77,7 @@
 │   │   ├── root.py              # Root/welcome endpoint
 │   │   └── transaction_analytics.py # Transaction analytics
 │   │
-│   ├── services/                 # Business Logic Layer (48 modules)
+│   ├── services/                 # Business Logic Layer (52 modules)
 │   │   # Provider Clients (17 modules)
 │   │   ├── openrouter_client.py  # OpenRouter API integration
 │   │   ├── portkey_client.py     # Portkey gateway integration
@@ -165,15 +165,15 @@
 │   ├── db_security.py           # Database security utilities
 │   └── enhanced_notification_service.py # Enhanced notification service
 │
-├── tests/                        # Test Suite (40+ test files)
+├── tests/                        # Test Suite (107 test files)
 │   ├── conftest.py             # Pytest configuration & fixtures
 │   ├── factories.py            # Test data factories
 │   ├── db/                     # Database tests (15 modules)
 │   ├── integration/            # Integration tests (25+ modules)
 │   ├── health/                 # Health check tests
-│   └── ...
+│   └── ... (additional test modules)
 │
-├── docs/                        # Documentation (100+ files)
+├── docs/                        # Documentation (115 files)
 │   ├── architecture.md         # System architecture
 │   ├── api.md                  # API reference
 │   ├── setup.md                # Setup instructions
@@ -185,7 +185,7 @@
 │
 ├── supabase/                    # Database Migrations
 │   ├── config.toml             # Supabase configuration
-│   └── migrations/             # SQL migrations (14 files)
+│   └── migrations/             # SQL migrations (13 files)
 │
 ├── scripts/                     # Utility Scripts
 │   ├── checks/                 # Pre-deployment checks
@@ -216,9 +216,11 @@
 - **FastAPI 0.104.1** - Modern, fast web framework with async support
 - **Uvicorn 0.24.0** - ASGI server for running FastAPI
 - **Python 3.10+** - Required Python version
+- **Prometheus Client 0.19.0** - Metrics exposure for observability
 
 ### Data Validation & Serialization
 - **Pydantic 2.12.2** with email validator - Type-safe data validation
+- **Python-multipart 0.0.6** - Multipart form data parsing
 
 ### Database & Data Storage
 - **Supabase 2.12.0** - PostgreSQL with real-time capabilities via PostgREST API
@@ -237,6 +239,7 @@
 - **XAI SDK 0.1.0+** - X.AI provider integration
 - **Google Cloud AIplatform 1.38.0+** - Google Vertex AI
 - **Google Auth 2.0.0+** - Google authentication
+- **PyJWT[crypto] 2.8.0** - JWT token handling
 
 ### Security & Cryptography
 - **Cryptography 41.0.7** - Fernet (AES-128) encryption and HMAC hashing
@@ -246,14 +249,16 @@
 ### Analytics & Monitoring
 - **Statsig Python Core 0.10.2** - Feature flags and A/B testing
 - **PostHog 6.7.8** - Product analytics
-- **Braintrust** - ML/AI evaluation and monitoring
-- **OpenTelemetry** - Observability (optional, 5 packages)
+- **Prometheus Client 0.19.0** - Prometheus metrics export
+- **Braintrust** (optional) - ML/AI evaluation and monitoring
+- **OpenTelemetry** (optional, 5 packages) - Observability and distributed tracing
 
 ### Testing
 - **Pytest 7.4.3** - Testing framework
 - **Pytest-cov 4.1.0** - Code coverage measurement
 - **Pytest-asyncio 0.21.1** - Async test support
 - **Pytest-xdist 3.5.0+** - Parallel test execution
+- **Pytest-split 0.9.0+** - Test split and distribution
 - **Pytest-timeout 2.2.0** - Test timeout handling
 - **Pytest-mock 3.12.0** - Mocking utilities
 - **Flask-SQLAlchemy** - Database testing utilities
@@ -647,14 +652,14 @@ pytest tests/integration/test_chat.py -v
 
 | Component | Location | Count |
 |-----------|----------|-------|
-| Routes | `src/routes/` | 28 |
-| Services | `src/services/` | 48 |
+| Routes | `src/routes/` | 29 |
+| Services | `src/services/` | 52 |
 | Database Modules | `src/db/` | 16 |
 | Schemas | `src/schemas/` | 13 |
-| Test Files | `tests/` | 40+ |
-| Migrations | `supabase/migrations/` | 14 |
-| Documentation | `docs/` | 100+ |
-| **Total Python Code** | `src/` | **41,688 LOC** |
+| Test Files | `tests/` | 107 |
+| Migrations | `supabase/migrations/` | 13 |
+| Documentation | `docs/` | 115 |
+| **Total Python Code** | `src/` | **43,491 LOC** |
 
 ---
 
@@ -687,5 +692,5 @@ This codebase is a sophisticated, production-grade AI gateway system. When worki
 
 ---
 
-**Last Updated**: 2025-11-05
+**Last Updated**: 2025-11-07
 **Version**: 2.0.3

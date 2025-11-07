@@ -286,12 +286,14 @@ def get_model_id_mapping(provider: str) -> dict[str, str]:
         "google-vertex": {
             # Google Vertex AI models - simple names
             # Full resource names are constructed by the client
-            # Gemini 2.5 models (preview)
-            "gemini-2.5-flash-lite": GEMINI_2_5_FLASH_LITE_PREVIEW,
+            # Gemini 2.5 models (newest)
+            # Flash Lite (stable GA version - use stable by default)
+            "gemini-2.5-flash-lite": "gemini-2.5-flash-lite",  # Use stable GA version
+            "google/gemini-2.5-flash-lite": "gemini-2.5-flash-lite",
+            "@google/models/gemini-2.5-flash-lite": "gemini-2.5-flash-lite",
+            # Preview version (only if explicitly requested)
             "gemini-2.5-flash-lite-preview-09-2025": GEMINI_2_5_FLASH_LITE_PREVIEW,
-            "google/gemini-2.5-flash-lite": GEMINI_2_5_FLASH_LITE_PREVIEW,
             "google/gemini-2.5-flash-lite-preview-09-2025": GEMINI_2_5_FLASH_LITE_PREVIEW,
-            "@google/models/gemini-2.5-flash-lite": GEMINI_2_5_FLASH_LITE_PREVIEW,
             "@google/models/gemini-2.5-flash-lite-preview-09-2025": GEMINI_2_5_FLASH_LITE_PREVIEW,
             # Gemini 2.5 flash models
             "gemini-2.5-flash": GEMINI_2_5_FLASH_PREVIEW,
@@ -301,11 +303,14 @@ def get_model_id_mapping(provider: str) -> dict[str, str]:
             "google/gemini-2.5-flash-preview-09-2025": GEMINI_2_5_FLASH_PREVIEW,
             "@google/models/gemini-2.5-flash": GEMINI_2_5_FLASH_PREVIEW,
             "@google/models/gemini-2.5-flash-preview-09-2025": GEMINI_2_5_FLASH_PREVIEW,
-            # Gemini 2.5 pro models
-            "gemini-2.5-pro": GEMINI_2_5_PRO_PREVIEW,
+            # Pro (use stable GA version by default)
+            "gemini-2.5-pro": "gemini-2.5-pro",  # Use stable GA version
+            "google/gemini-2.5-pro": "gemini-2.5-pro",
+            "@google/models/gemini-2.5-pro": "gemini-2.5-pro",
+            # Preview version (only if explicitly requested)
             "gemini-2.5-pro-preview-09-2025": GEMINI_2_5_PRO_PREVIEW,
-            "google/gemini-2.5-pro": GEMINI_2_5_PRO_PREVIEW,
-            "@google/models/gemini-2.5-pro": GEMINI_2_5_PRO_PREVIEW,
+            "google/gemini-2.5-pro-preview-09-2025": GEMINI_2_5_PRO_PREVIEW,
+            "@google/models/gemini-2.5-pro-preview-09-2025": GEMINI_2_5_PRO_PREVIEW,
             # Gemini 2.0 models (stable versions)
             "gemini-2.0-flash": GEMINI_2_0_FLASH,
             "gemini-2.0-flash-thinking": "gemini-2.0-flash-thinking",

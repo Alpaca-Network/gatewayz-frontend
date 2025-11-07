@@ -323,7 +323,19 @@ async def stream_generator(
         if total_tokens == 0:
             # Rough estimate: 1 token ≈ 4 characters
             completion_tokens = max(1, len(accumulated_content) // 4)
-            prompt_tokens = max(1, sum(len(m.get("content", "")) for m in messages) // 4)
+
+            # Calculate prompt tokens, handling both string and multimodal content
+            prompt_chars = 0
+            for m in messages:
+                content = m.get("content", "")
+                if isinstance(content, str):
+                    prompt_chars += len(content)
+                elif isinstance(content, list):
+                    # For multimodal content, extract text parts
+                    for item in content:
+                        if isinstance(item, dict) and item.get("type") == "text":
+                            prompt_chars += len(item.get("text", ""))
+            prompt_tokens = max(1, prompt_chars // 4)
             total_tokens = prompt_tokens + completion_tokens
 
         elapsed = max(0.001, time.monotonic() - start_time)
@@ -699,6 +711,7 @@ async def chat_completions(
                     "fireworks",
                     "together",
                     "portkey",
+                    "google-vertex",
                 ]:
                     transformed = transform_model_id(original_model, test_provider)
                     provider_models = get_cached_models(test_provider) or []
@@ -1517,6 +1530,7 @@ async def unified_responses(
                     "fireworks",
                     "together",
                     "portkey",
+                    "google-vertex",
                 ]:
                     transformed = transform_model_id(original_model, test_provider)
                     provider_models = get_cached_models(test_provider) or []

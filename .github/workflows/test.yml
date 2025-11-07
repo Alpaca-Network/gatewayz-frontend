@@ -46,6 +46,7 @@ jobs:
         echo "PORTKEY_API_KEY=${{ secrets.PORTKEY_API_KEY }}" >> $GITHUB_ENV
         echo "RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}" >> $GITHUB_ENV
         echo "ADMIN_API_KEY=${{ secrets.ADMIN_API_KEY }}" >> $GITHUB_ENV
+        echo "AI_SDK_API_KEY=${{ secrets.AI_SDK_API_KEY }}" >> $GITHUB_ENV
 
     - name: Run tests with pytest
       run: |
@@ -94,6 +95,7 @@ jobs:
         echo "PORTKEY_API_KEY=${{ secrets.PORTKEY_API_KEY }}" >> $GITHUB_ENV
         echo "RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}" >> $GITHUB_ENV
         echo "ADMIN_API_KEY=${{ secrets.ADMIN_API_KEY }}" >> $GITHUB_ENV
+        echo "AI_SDK_API_KEY=${{ secrets.AI_SDK_API_KEY }}" >> $GITHUB_ENV
 
     - name: Run critical tests only
       run: |

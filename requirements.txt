@@ -10,6 +10,7 @@ openai==1.44.0
 python-multipart==0.0.6
 email-validator==2.1.0
 cryptography==41.0.7
+PyJWT[crypto]==2.8.0
 resend==0.8.0
 redis==5.0.1
 anyio>=3.7.1,<4.0.0
