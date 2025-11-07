@@ -13,15 +13,15 @@ import { saveApiKey } from "@/lib/api";
 
 export function SessionInitializer() {
   const router = useRouter();
-  const { status, refresh } = useGatewayzAuth();
+  const { status, refresh, login } = useGatewayzAuth();
 
   useEffect(() => {
     async function initializeSession() {
       // Check for URL params from session transfer
-      const { token, userId, returnUrl } = getSessionTransferParams();
+      const { token, userId, returnUrl, action } = getSessionTransferParams();
 
       if (token && userId) {
-        console.log("[SessionInit] Session transfer params detected");
+        console.log("[SessionInit] Session transfer params detected", { action });
 
         // Store token for persistence
         storeSessionTransferToken(token, userId);
@@ -61,6 +61,19 @@ export function SessionInitializer() {
         return;
       }
 
+      // Check for action parameter (from main domain redirects: signin, freetrial)
+      if (status === "unauthenticated") {
+        if (action) {
+          console.log(
+            "[SessionInit] Action parameter detected, opening Privy popup",
+            { action }
+          );
+          cleanupSessionTransferParams();
+          await login();
+          return;
+        }
+      }
+
       // If already authenticated, continue normally
       if (status === "authenticated") {
         console.log("[SessionInit] Already authenticated");
@@ -71,7 +84,7 @@ export function SessionInitializer() {
     initializeSession().catch((error) => {
       console.error("[SessionInit] Error initializing session:", error);
     });
-  }, [refresh, router, status]);
+  }, [refresh, router, status, login]);
 
   return null;
 }

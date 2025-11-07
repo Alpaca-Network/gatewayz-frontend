@@ -44,15 +44,16 @@ export function redirectToBetaWithSession(
 /**
  * Extracts session transfer parameters from URL
  * Called on beta domain to retrieve transferred session
- * @returns Object with token, userId, and returnUrl if present
+ * @returns Object with token, userId, returnUrl, and action if present
  */
 export function getSessionTransferParams(): {
   token: string | null;
   userId: string | null;
   returnUrl: string | null;
+  action: string | null;
 } {
   if (typeof window === 'undefined') {
-    return { token: null, userId: null, returnUrl: null };
+    return { token: null, userId: null, returnUrl: null, action: null };
   }
 
   const params = new URLSearchParams(window.location.search);
@@ -61,6 +62,7 @@ export function getSessionTransferParams(): {
     token: params.get('token'),
     userId: params.get('userId'),
     returnUrl: params.get('returnUrl'),
+    action: params.get('action'),
   };
 }
 
