@@ -257,7 +257,7 @@ export function isAISDKModel(modelId: string): boolean {
  * Get AI SDK model metadata
  */
 export function getAISDKModelMetadata(modelId: string): AISDKModelConfig | null {
-  const modelConfigs: Record<string, AISDKModelConfig> = {
+  const baseConfigs: Record<string, AISDKModelConfig> = {
     'claude-3-5-sonnet': {
       name: 'Claude 3.5 Sonnet',
       provider: 'anthropic',
@@ -294,18 +294,20 @@ export function getAISDKModelMetadata(modelId: string): AISDKModelConfig | null 
       modelId: 'gemini-2.0-flash',
       supportsThinking: false,
     },
-    'gemini-2-0-flash': {
-      name: 'Gemini 2.0 Flash',
-      provider: 'google',
-      modelId: 'gemini-2.0-flash',
-      supportsThinking: false,
-    },
   };
 
+  // Map alternative naming conventions to base models
+  const alternativeNames: Record<string, string> = {
+    'gemini-2-0-flash': 'gemini-2.0-flash',
+  };
+
+  const normalizedId = alternativeNames[modelId] || modelId;
+  const modelConfigs: Record<string, AISDKModelConfig> = baseConfigs;
+
   return (
-    modelConfigs[modelId] ||
+    modelConfigs[normalizedId] ||
     Object.values(modelConfigs).find(config =>
-      config.modelId.toLowerCase() === modelId.toLowerCase()
+      config.modelId.toLowerCase() === normalizedId.toLowerCase()
     ) ||
     null
   );

@@ -89,7 +89,7 @@ export const models: Model[] = [
     series: 'Kimi',
     supportedParameters: ['temperature', 'top_p'],
   },
-   {
+  {
     name: 'Google: Gemini 2.0 Flash',
     isFree: false,
     tokens: '18.5B tokens',
