@@ -1,6 +1,6 @@
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -246,7 +246,7 @@ async def get_notification_stats(admin_user: dict = Depends(require_admin)):
         # Get last 24-hour notifications - use a simpler approach
         logger.info("Fetching recent notifications...")
         try:
-            yesterday = (datetime.now(timezone.utc) - datetime.timedelta(days=1)).isoformat()
+            yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
             recent_result = (
                 client.table("notifications").select("id").gte("created_at", yesterday).execute()
             )
@@ -256,7 +256,7 @@ async def get_notification_stats(admin_user: dict = Depends(require_admin)):
             # Fallback: get all notifications and filter in Python
             all_notifications = client.table("notifications").select("created_at").execute()
             if all_notifications.data:
-                yesterday_dt = datetime.now(timezone.utc) - datetime.timedelta(days=1)
+                yesterday_dt = datetime.now(timezone.utc) - timedelta(days=1)
                 last_24h_notifications = len(
                     [
                         n
