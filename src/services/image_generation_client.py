@@ -174,7 +174,7 @@ def make_google_vertex_image_request(
     try:
         # Import Google Cloud AI Platform SDK
         try:
-            from google.auth import default, impersonated_credentials
+            from google.auth import impersonated_credentials
             from google.cloud import aiplatform
         except ImportError:
             raise ImportError(
@@ -206,10 +206,12 @@ def make_google_vertex_image_request(
         # Try to get credentials with impersonation support
         credentials = None
         try:
-            # First, try to get default credentials
-            source_credentials, source_project = default(
-                scopes=["https://www.googleapis.com/auth/cloud-platform"]
-            )
+            # Use the same credential loading function as google_vertex_client
+            # This ensures consistent credential handling across all Google Vertex AI calls
+            from src.services.google_vertex_client import get_google_vertex_credentials
+            
+            # Get source credentials using the shared function
+            source_credentials = get_google_vertex_credentials()
 
             # If GOOGLE_VERTEX_SERVICE_ACCOUNT is set, use impersonation
             if os.getenv("GOOGLE_VERTEX_SERVICE_ACCOUNT"):
@@ -222,9 +224,9 @@ def make_google_vertex_image_request(
                 )
                 logger.info("✓ Successfully created impersonated credentials")
             else:
-                # Use default credentials (works if GOOGLE_APPLICATION_CREDENTIALS is set)
+                # Use credentials directly (already properly loaded as service account credentials)
                 credentials = source_credentials
-                logger.info("Using default credentials from environment")
+                logger.info("Using credentials from shared credential loader")
 
         except Exception as auth_error:
             logger.warning(f"Authentication setup: {auth_error}")

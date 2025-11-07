@@ -700,16 +700,15 @@ def fetch_models_from_google_vertex():
 
         logger.info("Fetching models from Google Vertex AI Model Registry")
 
-        # Get credentials
-        if Config.GOOGLE_APPLICATION_CREDENTIALS:
-            credentials = Credentials.from_service_account_file(
-                Config.GOOGLE_APPLICATION_CREDENTIALS
-            )
+        # Get credentials using the same method as google_vertex_client
+        # This ensures consistent credential handling across all Google Vertex AI calls
+        from src.services.google_vertex_client import get_google_vertex_credentials
+        
+        credentials = get_google_vertex_credentials()
+        
+        # Refresh credentials if needed to ensure they're valid
+        if not credentials.valid:
             credentials.refresh(Request())
-        else:
-            credentials, _ = google.auth.default()
-            if not credentials.valid:
-                credentials.refresh(Request())
 
         # Initialize Model Registry client
         aiplatform.init(
