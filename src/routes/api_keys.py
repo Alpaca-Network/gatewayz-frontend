@@ -29,7 +29,6 @@ from src.security.deps import get_api_key
 from src.utils.security_validators import sanitize_for_logging
 
 # Initialize logging
-logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 
 

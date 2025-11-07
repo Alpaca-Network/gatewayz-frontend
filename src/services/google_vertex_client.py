@@ -24,7 +24,6 @@ from google.oauth2.service_account import Credentials
 from src.config import Config
 
 # Initialize logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Vertex AI OAuth scopes required for authentication
@@ -182,32 +181,16 @@ def get_google_vertex_access_token():
         credentials = get_google_vertex_credentials()
         logger.info("Successfully obtained credentials")
 
-        # Ensure credentials are fresh
+        # Ensure credentials are fresh - refresh if not valid or expired
         if not credentials.valid or credentials.expired:
             logger.info("Refreshing expired or invalid credentials")
-            try:
-                credentials.refresh(Request())
-            except Exception as refresh_error:
-                error_str = str(refresh_error)
-                logger.warning(f"Credential refresh failed, attempting id_token extraction: {error_str}")
-
-                # Google's OAuth2 may return id_token instead of access_token
-                # Try to extract id_token from the error message
-                if "id_token" in error_str:
-                    import re
-                    id_token_match = re.search(r"'id_token': '([^']+)'", error_str)
-                    if id_token_match:
-                        id_token = id_token_match.group(1)
-                        logger.info(f"Extracted id_token from error response (length: {len(id_token)} chars)")
-                        logger.info("Using id_token as bearer token for Vertex AI API")
-                        return id_token
-
-                # If id_token extraction fails, re-raise the original error
-                raise
+            credentials.refresh(Request())
+            logger.debug("Credentials refreshed successfully")
 
         access_token = credentials.token
 
         if not access_token:
+            logger.error("No access token available after refresh attempt")
             raise ValueError("Failed to obtain access token from credentials")
 
         logger.info(f"Successfully obtained access token (length: {len(access_token)} chars)")

@@ -94,7 +94,6 @@ def sanitize_pricing(pricing: dict) -> dict:
 
 
 # Initialize logging
-logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 
 router = APIRouter()

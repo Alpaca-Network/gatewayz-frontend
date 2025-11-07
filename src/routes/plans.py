@@ -23,7 +23,6 @@ from src.schemas import (
 from src.security.deps import get_api_key, require_admin
 
 # Initialize logging
-logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 
 router = APIRouter()

@@ -8,7 +8,6 @@ import httpx
 from src.config import Config
 
 # Initialize logging
-logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 
 

@@ -7,7 +7,6 @@ from src.config import Config
 from src.services.anthropic_transformer import extract_message_with_tools
 
 # Initialize logging
-logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 
 router = APIRouter()

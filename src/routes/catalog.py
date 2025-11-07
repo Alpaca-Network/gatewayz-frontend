@@ -32,7 +32,6 @@ from src.utils.security_validators import sanitize_for_logging
 
 
 # Initialize logging
-logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 
 # Single router for all model catalog endpoints
@@ -349,12 +348,12 @@ async def get_models(
 
     try:
         provider = normalize_developer_segment(provider)
-        logger.error(f"/models endpoint called with gateway parameter: {repr(gateway)}")
+        logger.debug(f"/models endpoint called with gateway parameter: {repr(gateway)}")
         gateway_value = (gateway or "openrouter").lower()
         # Support both 'huggingface' and 'hug' as aliases
         if gateway_value == "huggingface":
             gateway_value = "hug"
-        logger.info(
+        logger.debug(
             f"Getting models with provider={provider}, limit={limit}, offset={offset}, gateway={gateway_value}"
         )
 
@@ -533,7 +532,7 @@ async def get_models(
             )
 
         if not models:
-            logger.error("No models data available after applying gateway selection")
+            logger.debug("No models data available after applying gateway selection")
             raise HTTPException(status_code=503, detail=ERROR_MODELS_DATA_UNAVAILABLE)
 
         provider_groups: list[list[dict]] = []
@@ -739,7 +738,7 @@ async def get_models(
             "note": note,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
-        logger.error(
+        logger.debug(
             f"Returning /models response with keys: {list(result.keys())}, gateway={gateway_value}, first_model={enhanced_models[0]['id'] if enhanced_models else 'none'}"
         )
 
@@ -1538,6 +1537,7 @@ async def batch_compare_models(
 # ============================================================================
 
 
+@router.get("/models", tags=["models"])
 @router.get("/v1/models", tags=["models"])
 async def get_all_models(
     provider: str | None = Query(None, description="Filter models by provider"),

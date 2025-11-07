@@ -32,7 +32,6 @@ from src.services.models import (
 from src.services.providers import fetch_providers_from_openrouter, get_cached_providers
 
 # Initialize logging
-logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 
 router = APIRouter()

@@ -19,7 +19,9 @@ except ImportError:
     psycopg2 = None
     pool = None
     extras = None
-    logging.warning("psycopg2 not installed. PostgreSQL features will be unavailable.")
+    # Note: This is expected in Supabase deployments where PostgreSQL client
+    # connections are handled via PostgREST API rather than direct psycopg2
+    logging.debug("psycopg2 not installed. Direct PostgreSQL features will use Supabase PostgREST API.")
 
 logger = logging.getLogger(__name__)
 

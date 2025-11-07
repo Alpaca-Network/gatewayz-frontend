@@ -9,7 +9,6 @@ from src.db_security import get_audit_logs
 from src.security.deps import get_api_key
 
 # Initialize logging
-logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 
 router = APIRouter()

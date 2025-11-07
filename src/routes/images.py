@@ -21,7 +21,6 @@ from src.services.image_generation_client import (
 )
 
 # Initialize logging
-logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 
 router = APIRouter()

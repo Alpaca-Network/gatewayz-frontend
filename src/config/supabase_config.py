@@ -3,7 +3,6 @@ import logging
 from src.config.config import Config
 from supabase import Client, create_client
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 _supabase_client: Client | None = None
