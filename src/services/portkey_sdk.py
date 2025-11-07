@@ -25,11 +25,7 @@ logger = logging.getLogger(__name__)
 
 # Provider configurations
 PROVIDERS = {
-    "google": {
-        "name": "Google",
-        "provider_slug": "google",
-        "description": "Google Generative AI models (direct API access)",
-    },
+
     "cerebras": {
         "name": "Cerebras",
         "provider_slug": "cerebras",
@@ -75,7 +71,7 @@ class PortkeySDKService:
         Get a Portkey client configured for a specific provider.
 
         Args:
-            provider: Provider name (e.g., 'google', 'cerebras', 'openrouter', 'deepinfra')
+            provider: Provider name (e.g., 'cerebras', 'openrouter', 'deepinfra')
 
         Returns:
             Configured Portkey client or None if provider config not found
@@ -83,7 +79,6 @@ class PortkeySDKService:
         try:
             # Map provider names to Portkey provider slugs
             provider_config = {
-                "google": "google",
                 "cerebras": "cerebras",
                 "nebius": "nebius",
                 "xai": "xai",

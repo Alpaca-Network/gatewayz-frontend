@@ -42,12 +42,12 @@ router = APIRouter()
 DESC_INCLUDE_HUGGINGFACE = "Include Hugging Face metrics if available"
 DESC_GATEWAY_AUTO_DETECT = (
     "Gateway to use: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', "
-    "'groq', 'fireworks', 'together', 'google', 'cerebras', 'nebius', 'xai', 'novita', "
+    "'groq', 'fireworks', 'together', 'cerebras', 'nebius', 'xai', 'novita', "
     "'huggingface' (or 'hug'), 'aimo', 'near', 'fal', 'aihubmix', 'anannas', or auto-detect if not specified"
 )
 DESC_GATEWAY_WITH_ALL = (
     "Gateway to use: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', "
-    "'groq', 'fireworks', 'together', 'google', 'cerebras', 'nebius', 'xai', 'novita', "
+    "'groq', 'fireworks', 'together', 'cerebras', 'nebius', 'xai', 'novita', "
     "'huggingface' (or 'hug'), 'aimo', 'near', 'fal', 'aihubmix', 'anannas', or 'all'"
 )
 ERROR_MODELS_DATA_UNAVAILABLE = "Models data unavailable"
@@ -366,7 +366,7 @@ async def get_models(
         groq_models: list[dict] = []
         fireworks_models: list[dict] = []
         together_models: list[dict] = []
-        google_models: list[dict] = []
+
         cerebras_models: list[dict] = []
         nebius_models: list[dict] = []
         xai_models: list[dict] = []
@@ -515,7 +515,7 @@ async def get_models(
             models = anannas_models
         else:
             # For "all" gateway, merge all models but avoid duplicates from Portkey-based providers
-            # Note: google, cerebras, nebius, xai, novita, hug are filtered FROM Portkey models,
+            # Note: cerebras, nebius, xai, novita, hug are filtered FROM Portkey models,
             # so we DON'T include them separately in the merge to avoid counting them twice
             models = merge_models_by_slug(
                 openrouter_models,
@@ -715,7 +715,7 @@ async def get_models(
             "groq": "Groq catalog",
             "fireworks": "Fireworks catalog",
             "together": "Together catalog",
-            "google": "Google catalog",
+
             "cerebras": "Cerebras catalog",
             "nebius": "Nebius catalog",
             "xai": "Xai catalog",
@@ -780,7 +780,7 @@ async def get_specific_model(
     - Chutes: Model catalog data from Chutes.ai
     - Fal.ai: Image/video/audio generation models (e.g., fal-ai/stable-diffusion-v15)
     - Hugging Face: Open-source models from Hugging Face Hub
-    - And other gateways: groq, fireworks, together, google, cerebras, nebius, xai, novita, aimo, near
+    - And other gateways: groq, fireworks, together, cerebras, nebius, xai, novita, aimo, near
 
     If gateway is not specified, it will automatically detect which gateway the model belongs to.
 
@@ -845,7 +845,6 @@ async def get_specific_model(
         
         # Handle gateways that use derive_providers_from_models
         if detected_gateway in [
-            "google",
             "cerebras",
             "nebius",
             "xai",
@@ -902,10 +901,10 @@ async def get_developer_models(
     gateway: str | None = Query("all", description="Gateway: 'openrouter', 'portkey', or 'all'"),
 ):
     """
-    Get all models from a specific developer/provider (e.g., anthropic, openai, google)
+    Get all models from a specific developer/provider (e.g., anthropic, openai, meta)
 
     Args:
-        developer_name: Provider/developer name (e.g., 'anthropic', 'openai', 'google', 'meta')
+        developer_name: Provider/developer name (e.g., 'anthropic', 'openai', 'meta')
         limit: Maximum number of models to return
         offset: Number of models to skip (for pagination)
         include_huggingface: Whether to include HuggingFace metrics
