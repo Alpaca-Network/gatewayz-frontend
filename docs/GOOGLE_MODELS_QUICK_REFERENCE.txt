@@ -1,0 +1,210 @@
+================================================================================
+GOOGLE VERTEX AI MODELS - QUICK REFERENCE
+================================================================================
+
+11 UNIQUE MODELS AVAILABLE
+40 INPUT FORMAT VARIATIONS SUPPORTED
+
+================================================================================
+LATEST RECOMMENDED (Use these first)
+================================================================================
+
+gemini-2.0-flash
+  ↳ Fast and capable, good for most use cases
+  ↳ Also: gemini-2.0, @google/models/gemini-2.0-flash, google/gemini-2.0-flash
+  ↳ Maps from: gemini-2.5-flash, gemini-2.5-flash-lite
+
+gemini-2.0-pro
+  ↳ Higher quality, better reasoning
+  ↳ Also: @google/models/gemini-2.0-pro, google/gemini-2.0-pro
+  ↳ Maps from: gemini-2.5-pro
+
+gemini-1.5-pro
+  ↳ Production-ready, proven stable
+  ↳ Also: gemini-1.5, @google/models/gemini-1.5-pro, google/gemini-1.5-pro
+
+================================================================================
+ALL 11 MODELS (Ordered by Version)
+================================================================================
+
+GEMINI 2.0 SERIES:
+  1. gemini-2.0-flash           (17 aliases)
+  2. gemini-2.0-flash-thinking  (1 alias)
+  3. gemini-2.0-flash-001       (1 alias)
+  4. gemini-2.0-pro             (7 aliases)
+  5. gemini-2.0-pro-001         (1 alias)
+
+GEMINI 1.5 SERIES:
+  6. gemini-1.5-pro             (4 aliases)
+  7. gemini-1.5-pro-002         (1 alias)
+  8. gemini-1.5-flash           (3 aliases)
+  9. gemini-1.5-flash-002       (1 alias)
+
+GEMINI 1.0 SERIES:
+  10. gemini-1.0-pro            (3 aliases)
+  11. gemini-1.0-pro-vision     (1 alias)
+
+================================================================================
+PREVIEW MODELS (Auto-Remapped)
+================================================================================
+
+These automatically map to stable versions - NO NEED TO CHANGE YOUR CODE!
+
+gemini-2.5-flash-lite          → gemini-2.0-flash
+gemini-2.5-flash               → gemini-2.0-flash
+gemini-2.5-flash-preview       → gemini-2.0-flash
+gemini-2.5-flash-preview-09-2025 → gemini-2.0-flash
+gemini-2.5-pro                 → gemini-2.0-pro
+gemini-2.5-pro-preview-09-2025 → gemini-2.0-pro
+
+================================================================================
+INPUT FORMATS
+================================================================================
+
+Simple Name (RECOMMENDED):
+  gemini-2.0-flash
+  gemini-1.5-pro
+  gemini-1.0-pro
+
+Portkey Format:
+  @google/models/gemini-2.0-flash
+  @google/models/gemini-1.5-pro
+  @google/models/gemini-1.0-pro
+
+Google Prefix:
+  google/gemini-2.0-flash
+  google/gemini-1.5-pro
+  google/gemini-1.0-pro
+
+Aliases:
+  gemini-2.0    → gemini-2.0-flash
+  gemini-1.5    → gemini-1.5-pro
+
+================================================================================
+QUICK COPY-PASTE COMMANDS
+================================================================================
+
+Test gemini-2.0-flash:
+curl -X POST http://localhost:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{"model":"gemini-2.0-flash","messages":[{"role":"user","content":"Hello"}]}'
+
+Test gemini-2.0-pro:
+curl -X POST http://localhost:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{"model":"gemini-2.0-pro","messages":[{"role":"user","content":"Hello"}]}'
+
+Test gemini-1.5-pro:
+curl -X POST http://localhost:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{"model":"gemini-1.5-pro","messages":[{"role":"user","content":"Hello"}]}'
+
+================================================================================
+PYTHON QUICK TEST
+================================================================================
+
+from openai import OpenAI
+
+client = OpenAI(
+    api_key="YOUR_API_KEY",
+    base_url="http://localhost:8000/v1"
+)
+
+# Test any model:
+response = client.chat.completions.create(
+    model="gemini-2.0-flash",  # Change model here
+    messages=[{"role": "user", "content": "Hello!"}],
+    max_tokens=100
+)
+
+print(response.choices[0].message.content)
+
+================================================================================
+MODEL SELECTION GUIDE
+================================================================================
+
+For SPEED:
+  Use: gemini-2.0-flash or gemini-1.5-flash
+
+For QUALITY:
+  Use: gemini-2.0-pro or gemini-2.0-flash-thinking
+
+For PRODUCTION:
+  Use: gemini-1.5-pro (proven stable)
+
+For REASONING:
+  Use: gemini-2.0-flash-thinking or gemini-2.0-pro
+
+For COST:
+  Use: gemini-2.0-flash or gemini-1.5-flash
+
+For VISION:
+  Use: gemini-1.0-pro-vision (only vision variant)
+
+================================================================================
+REQUIREMENTS
+================================================================================
+
+Environment Variables:
+  GOOGLE_PROJECT_ID=your-project-id
+  GOOGLE_VERTEX_LOCATION=us-central1 (or your region)
+  GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
+  (or GOOGLE_VERTEX_CREDENTIALS_JSON environment variable)
+
+GCP Setup:
+  1. Vertex AI API enabled
+  2. Service account with "Vertex AI User" role
+  3. Project ID and region configured
+
+================================================================================
+TESTING STATUS
+================================================================================
+
+✓ All 11 models configured
+✓ All 40 aliases validated
+✓ Format transformations working
+✓ Preview model remapping active
+✓ Ready for integration testing
+
+================================================================================
+FILES GENERATED
+================================================================================
+
+1. google_models_config.json
+   - Machine-readable configuration
+   - All 40 mappings included
+
+2. GOOGLE_MODELS_VALIDATION_REPORT.md
+   - Full documentation
+   - Configuration details
+
+3. GOOGLE_MODELS_TESTING_GUIDE.md
+   - Detailed testing examples
+   - Troubleshooting guide
+
+4. GOOGLE_MODELS_QUICK_REFERENCE.txt
+   - This file
+   - Quick lookups
+
+5. validate_google_models.py
+   - Configuration validation script
+
+6. test_google_models.py
+   - Full integration test script
+
+================================================================================
+MORE INFORMATION
+================================================================================
+
+See: GOOGLE_MODELS_VALIDATION_REPORT.md
+     GOOGLE_MODELS_TESTING_GUIDE.md
+     google_models_config.json
+
+For code details:
+  src/services/model_transformations.py    - Model mapping logic
+  src/services/google_vertex_client.py     - API client
+
+================================================================================
