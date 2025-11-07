@@ -51,6 +51,7 @@ jobs:
           fi
 
       - name: Download workflow run logs
+        if: github.event_name == 'workflow_run'
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea  # v7.0.1
         with:
           script: |
@@ -125,6 +126,23 @@ jobs:
               const errorMsg = `Failed to fetch workflow logs: ${error.message}`;
               fs.writeFileSync('failure-logs.md', errorMsg);
             }
+
+      - name: Create placeholder logs for manual dispatch
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          cat > failure-logs.md << 'EOF'
+          # Manually Triggered Claude On-Failure Workflow
+
+          This workflow was manually dispatched from the CI pipeline.
+
+          Please analyze the repository for:
+          - Test failures
+          - Linting errors (ruff, black, isort, mypy)
+          - Import/dependency issues
+          - Merge conflicts (<<<<<<< markers)
+          - Type checking errors
+          - Coverage issues
+          EOF
 
       - name: Validate configuration
         run: |
