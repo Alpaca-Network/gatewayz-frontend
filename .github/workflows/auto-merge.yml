@@ -1,0 +1,180 @@
+name: Auto-Merge on CI Success
+
+on:
+  workflow_run:
+    workflows: ["CI Pipeline"]
+    types: [completed]
+    branches: [main, staging, develop]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    name: Auto-Merge PR if CI Passes
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Get PR information
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: pullRequests } = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              head: context.payload.workflow_run.head_branch,
+              base: context.payload.workflow_run.head_repository.default_branch
+            });
+
+            if (pullRequests.length === 0) {
+              console.log('No open PR found for this branch');
+              return;
+            }
+
+            const pr = pullRequests[0];
+            console.log(`Found PR #${pr.number}`);
+            core.setOutput('pr_number', pr.number.toString());
+            core.setOutput('pr_head_sha', pr.head.sha);
+            core.setOutput('pr_base', pr.base.ref);
+
+      - name: Check if CI workflow passed
+        id: check_ci
+        uses: actions/github-script@v7
+        env:
+          WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
+        with:
+          script: |
+            const workflowRun = await github.rest.actions.getWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: process.env.WORKFLOW_RUN_ID
+            });
+
+            console.log(`Workflow status: ${workflowRun.data.status}`);
+            console.log(`Workflow conclusion: ${workflowRun.data.conclusion}`);
+
+            if (workflowRun.data.conclusion === 'success') {
+              core.setOutput('ci_passed', 'true');
+            } else {
+              core.setOutput('ci_passed', 'false');
+              core.notice(`⚠️ CI workflow did not pass. Conclusion: ${workflowRun.data.conclusion}`);
+            }
+
+      - name: Check required status checks
+        id: verify_checks
+        if: steps.check_ci.outputs.ci_passed == 'true' && steps.pr.outputs.pr_number
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = ${{ steps.pr.outputs.pr_number }};
+            const requiredChecks = ['Code Quality Checks', 'Security Scan', 'Run Tests (Shard 1)', 'Run Tests (Shard 2)', 'Run Tests (Shard 3)', 'Run Tests (Shard 4)', 'Coverage Report', 'Build Verification', 'Deployment Ready'];
+
+            const { data: checkRuns } = await github.rest.checks.listForRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: '${{ steps.pr.outputs.pr_head_sha }}'
+            });
+
+            const completedChecks = checkRuns.check_runs
+              .filter(check => check.status === 'completed')
+              .map(check => check.name);
+
+            console.log('Completed checks:', completedChecks);
+
+            const passedChecks = checkRuns.check_runs
+              .filter(check => check.conclusion === 'success')
+              .map(check => check.name);
+
+            console.log('Passed checks:', passedChecks);
+
+            const allRequiredPassed = requiredChecks.every(check =>
+              passedChecks.some(passed => passed.includes(check))
+            );
+
+            if (allRequiredPassed) {
+              core.setOutput('all_checks_passed', 'true');
+              core.notice('✅ All required status checks have passed!');
+            } else {
+              const missingChecks = requiredChecks.filter(check =>
+                !passedChecks.some(passed => passed.includes(check))
+              );
+              core.setOutput('all_checks_passed', 'false');
+              core.notice(`⚠️ Missing or failed checks: ${missingChecks.join(', ')}`);
+            }
+
+      - name: Enable auto-merge on PR
+        id: enable_automerge
+        if: steps.verify_checks.outputs.all_checks_passed == 'true'
+        uses: actions/github-script@v7
+        env:
+          PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
+        with:
+          script: |
+            const prNumber = parseInt(process.env.PR_NUMBER);
+
+            try {
+              // First, check if the PR can be merged
+              const { data: pr } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber
+              });
+
+              if (!pr.mergeable) {
+                core.warning(`⚠️ PR #${prNumber} has merge conflicts and cannot be auto-merged`);
+                return;
+              }
+
+              // Enable auto-merge
+              const { data: mergeData } = await github.rest.pulls.enableAutoMerge({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber,
+                merge_method: 'squash',
+                commit_title: `Merge PR #${prNumber}`,
+                commit_message: 'Auto-merged on CI success'
+              });
+
+              core.notice(`✅ Auto-merge enabled for PR #${prNumber}`);
+              console.log('Auto-merge result:', mergeData);
+            } catch (error) {
+              if (error.message.includes('Auto merge is disabled')) {
+                core.warning(`⚠️ Auto-merge is disabled on this repository. Enable it in Settings → Pull requests`);
+              } else if (error.message.includes('Head branch is behind')) {
+                core.notice(`ℹ️ PR #${prNumber} is behind main branch. Please sync before merging.`);
+              } else {
+                core.warning(`Could not enable auto-merge: ${error.message}`);
+              }
+            }
+
+      - name: Post comment if CI failed
+        if: steps.check_ci.outputs.ci_passed == 'false' && steps.pr.outputs.pr_number
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: ${{ steps.pr.outputs.pr_number }},
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '❌ CI pipeline failed. Auto-merge is disabled until all checks pass.'
+            })
+
+      - name: Post success comment
+        if: steps.enable_automerge.outcome == 'success'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: ${{ steps.pr.outputs.pr_number }},
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '✅ All CI checks passed! Auto-merge has been enabled. This PR will merge automatically once approved.'
+            })
