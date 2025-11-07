@@ -167,12 +167,12 @@ def get_google_vertex_credentials():
 def get_google_vertex_access_token():
     """Get Google Vertex AI access token for REST API calls
 
-    Returns an access token that can be used in Authorization headers
-    for REST API requests to the Vertex AI Gemini API.
+    Returns an access token (or id_token as fallback) that can be used in
+    Authorization headers for REST API requests to the Vertex AI Gemini API.
 
-    Uses google.auth.default() via get_google_vertex_credentials() which
-    properly handles the OAuth2 token exchange to return access_token
-    instead of id_token.
+    Note: Google's OAuth2 may return id_token instead of access_token for
+    service account credentials. When this happens, we use the id_token as
+    the bearer token, which works for Vertex AI API access.
     """
     try:
         logger.info("Getting Google Vertex AI access token")
@@ -185,7 +185,25 @@ def get_google_vertex_access_token():
         # Ensure credentials are fresh
         if not credentials.valid or credentials.expired:
             logger.info("Refreshing expired or invalid credentials")
-            credentials.refresh(Request())
+            try:
+                credentials.refresh(Request())
+            except Exception as refresh_error:
+                error_str = str(refresh_error)
+                logger.warning(f"Credential refresh failed, attempting id_token extraction: {error_str}")
+
+                # Google's OAuth2 may return id_token instead of access_token
+                # Try to extract id_token from the error message
+                if "id_token" in error_str:
+                    import re
+                    id_token_match = re.search(r"'id_token': '([^']+)'", error_str)
+                    if id_token_match:
+                        id_token = id_token_match.group(1)
+                        logger.info(f"Extracted id_token from error response (length: {len(id_token)} chars)")
+                        logger.info("Using id_token as bearer token for Vertex AI API")
+                        return id_token
+
+                # If id_token extraction fails, re-raise the original error
+                raise
 
         access_token = credentials.token
 
