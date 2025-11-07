@@ -92,7 +92,7 @@ const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
 
   // Generate clean URLs:
   // - For AIMO models (providerId:model-name), extract just the model name after the colon
-  // - For regular models with slashes (provider/model-name), keep the slash
+  // - For regular models with slashes (provider/model-name), encode the entire ID to preserve it correctly
   // - Otherwise, use the full ID
   let modelUrl: string;
   if (model.id.includes(':')) {
@@ -100,8 +100,8 @@ const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
     const modelName = model.id.split(':')[1] || model.id;
     modelUrl = `/models/${encodeURIComponent(modelName)}`;
   } else if (model.id.includes('/')) {
-    // Regular provider/model format - preserve the slash
-    modelUrl = `/models/${model.id}`;
+    // Regular provider/model format - encode the entire ID to handle special characters like parentheses
+    modelUrl = `/models/${encodeURIComponent(model.id)}`;
   } else {
     // Single-part ID - encode it
     modelUrl = `/models/${encodeURIComponent(model.id)}`;
@@ -759,16 +759,16 @@ export default function ModelsClient({
 
         <SidebarInset className="flex-1 overflow-x-hidden flex flex-col">
           <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8 pb-24 overflow-x-hidden">
-          <div className="sticky top-[65px] z-40 bg-background border-b flex flex-col gap-3 mb-6 w-full -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-4">
+          <div className="sticky top-[65px] has-onboarding-banner:top-[calc(65px+50px)] z-40 bg-background border-b flex flex-col gap-3 mb-6 w-full -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-4">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 w-full">
               <div className="flex items-center gap-3">
-                  <SidebarTrigger className="lg:hidden" />
-                  <h1 className="text-2xl font-bold">Models</h1>
-                  {isLoadingMore && (
-                    <Badge variant="secondary" className="text-xs animate-pulse">
-                      Loading more...
-                    </Badge>
-                  )}
+                <SidebarTrigger className="lg:hidden" />
+                <h1 className="text-2xl font-bold">Models</h1>
+                {isLoadingMore && (
+                  <Badge variant="secondary" className="text-xs animate-pulse">
+                    Loading more...
+                  </Badge>
+                )}
               </div>
               <div className="flex items-center gap-4">
                 <span className={`text-sm whitespace-nowrap ${isLoadingModels || isLoadingMore ? 'shimmer-text' : 'text-muted-foreground'}`}>

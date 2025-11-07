@@ -364,7 +364,7 @@ console.log(completion.choices[0].message);`,
       {/*</div>*/}
 
       <main className="w-full overflow-x-hidden">
-        <div className="max-w-7xl mx-auto px-2 sm:px-4 md:px-6 lg:px-8" style={{position: 'relative'}}>
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8" style={{position: 'relative'}}>
           {/* Hero Section */}
           <Image
             src="/logo_transparent.svg"
@@ -372,29 +372,29 @@ console.log(completion.choices[0].message);`,
             width={768}
             height={768}
             priority
-            className="absolute top-8 left-1/2 transform -translate-x-1/2 w-[200px] h-[200px] sm:w-[450px] sm:h-[450px] lg:w-[640px] lg:h-[640px] xl:w-[768px] xl:h-[768px] pointer-events-none opacity-30 sm:opacity-100"
+            className="absolute top-0 left-1/2 transform -translate-x-1/2 w-[180px] h-[180px] sm:w-[350px] sm:h-[350px] md:w-[450px] md:h-[450px] lg:w-[640px] lg:h-[640px] xl:w-[768px] xl:h-[768px] pointer-events-none opacity-20 sm:opacity-50 md:opacity-100"
             style={{ zIndex: 0 }}
           />
 
-          <section className="pt-12 sm:pt-20 md:pt-28 lg:pt-36 pb-8 md:pb-12 max-w-5xl mx-auto px-2 sm:px-4 relative min-h-[90vh] sm:min-h-[100vh]" style={{ zIndex: 1 }}>
+          <section className="pt-8 sm:pt-16 md:pt-24 lg:pt-32 pb-6 sm:pb-8 md:pb-12 max-w-5xl mx-auto px-2 sm:px-3 md:px-4 relative min-h-auto sm:min-h-[80vh]" style={{ zIndex: 1 }}>
             <TitleSection/>
 
             <PathChooserModal open={showPathChooser} onOpenChange={setShowPathChooser} />
 
             {/* Three Path Cards - Above the Fold */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6 mt-8 sm:mt-12 mb-8 sm:mb-12">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 xs:gap-4 sm:gap-5 md:gap-6 mt-6 xs:mt-8 sm:mt-10 md:mt-12 mb-6 xs:mb-8 sm:mb-10 md:mb-12">
             {/* API Path Card */}
             <Link href="/start/api" className="group">
-              <div className="bg-card border-2 border-border hover:border-blue-500 rounded-lg p-4 sm:p-6 shadow-sm hover:shadow-md transition-all h-full flex flex-col">
-                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center mb-3 sm:mb-4 group-hover:scale-110 transition-transform">
-                  <Code2 className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600 dark:text-blue-400" />
+              <div className="bg-card border-2 border-border hover:border-blue-500 rounded-lg p-3 xs:p-4 sm:p-5 md:p-6 shadow-sm hover:shadow-md transition-all h-full flex flex-col">
+                <div className="w-9 h-9 xs:w-10 xs:h-10 sm:w-12 sm:h-12 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center mb-2.5 xs:mb-3 sm:mb-4 group-hover:scale-110 transition-transform">
+                  <Code2 className="w-4 h-4 xs:w-5 xs:h-5 sm:w-6 sm:h-6 text-blue-600 dark:text-blue-400" />
                 </div>
-                <h3 className="text-lg sm:text-xl font-bold mb-2">Use the API</h3>
-                <p className="text-sm text-muted-foreground mb-4 flex-grow">
+                <h3 className="text-base xs:text-lg sm:text-xl font-bold mb-2">Use the API</h3>
+                <p className="text-xs xs:text-sm text-muted-foreground mb-3 xs:mb-4 flex-grow leading-relaxed">
                   Copy key → make your first API call in 30 seconds
                 </p>
                 <div className="mt-auto">
-                  <div className="text-sm font-medium text-blue-600 dark:text-blue-400 group-hover:underline">
+                  <div className="text-xs xs:text-sm font-medium text-blue-600 dark:text-blue-400 group-hover:underline">
                     Get Started →
                   </div>
                 </div>
@@ -403,16 +403,16 @@ console.log(completion.choices[0].message);`,
 
             {/* Claude Code Path Card */}
             <Link href="/start/claude-code" className="group">
-              <div className="bg-card border-2 border-border hover:border-purple-500 rounded-lg p-4 sm:p-6 shadow-sm hover:shadow-md transition-all h-full flex flex-col">
-                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center mb-3 sm:mb-4 group-hover:scale-110 transition-transform">
-                  <Terminal className="w-5 h-5 sm:w-6 sm:h-6 text-purple-600 dark:text-purple-400" />
+              <div className="bg-card border-2 border-border hover:border-purple-500 rounded-lg p-3 xs:p-4 sm:p-5 md:p-6 shadow-sm hover:shadow-md transition-all h-full flex flex-col">
+                <div className="w-9 h-9 xs:w-10 xs:h-10 sm:w-12 sm:h-12 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center mb-2.5 xs:mb-3 sm:mb-4 group-hover:scale-110 transition-transform">
+                  <Terminal className="w-4 h-4 xs:w-5 xs:h-5 sm:w-6 sm:h-6 text-purple-600 dark:text-purple-400" />
                 </div>
-                <h3 className="text-lg sm:text-xl font-bold mb-2">Install Claude Code</h3>
-                <p className="text-sm text-muted-foreground mb-4 flex-grow">
+                <h3 className="text-base xs:text-lg sm:text-xl font-bold mb-2">Install Claude Code</h3>
+                <p className="text-xs xs:text-sm text-muted-foreground mb-3 xs:mb-4 flex-grow leading-relaxed">
                   One command → AI-powered coding in minutes
                 </p>
                 <div className="mt-auto">
-                  <div className="text-sm font-medium text-purple-600 dark:text-purple-400 group-hover:underline">
+                  <div className="text-xs xs:text-sm font-medium text-purple-600 dark:text-purple-400 group-hover:underline">
                     Get Started →
                   </div>
                 </div>
@@ -421,16 +421,16 @@ console.log(completion.choices[0].message);`,
 
             {/* Chat Path Card */}
             <Link href="/start/chat" className="group sm:col-span-2 md:col-span-1">
-              <div className="bg-card border-2 border-border hover:border-green-500 rounded-lg p-4 sm:p-6 shadow-sm hover:shadow-md transition-all h-full flex flex-col">
-                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mb-3 sm:mb-4 group-hover:scale-110 transition-transform">
-                  <MessageSquare className="w-5 h-5 sm:w-6 sm:h-6 text-green-600 dark:text-green-400" />
+              <div className="bg-card border-2 border-border hover:border-green-500 rounded-lg p-3 xs:p-4 sm:p-5 md:p-6 shadow-sm hover:shadow-md transition-all h-full flex flex-col">
+                <div className="w-9 h-9 xs:w-10 xs:h-10 sm:w-12 sm:h-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mb-2.5 xs:mb-3 sm:mb-4 group-hover:scale-110 transition-transform">
+                  <MessageSquare className="w-4 h-4 xs:w-5 xs:h-5 sm:w-6 sm:h-6 text-green-600 dark:text-green-400" />
                 </div>
-                <h3 className="text-lg sm:text-xl font-bold mb-2">Open Chat</h3>
-                <p className="text-sm text-muted-foreground mb-4 flex-grow">
+                <h3 className="text-base xs:text-lg sm:text-xl font-bold mb-2">Open Chat</h3>
+                <p className="text-xs xs:text-sm text-muted-foreground mb-3 xs:mb-4 flex-grow leading-relaxed">
                   Start chatting → we pick the best model for you
                 </p>
                 <div className="mt-auto">
-                  <div className="text-sm font-medium text-green-600 dark:text-green-400 group-hover:underline">
+                  <div className="text-xs xs:text-sm font-medium text-green-600 dark:text-green-400 group-hover:underline">
                     Get Started →
                   </div>
                 </div>
