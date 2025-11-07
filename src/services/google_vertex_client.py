@@ -202,7 +202,24 @@ def get_google_vertex_access_token():
         
         raise ValueError("Failed to obtain access token from credentials after refresh")
 
-    except ValueError:
+        access_token = credentials.token
+
+        # CRITICAL FIX: Validate that token was actually obtained
+        if not access_token:
+            raise RuntimeError(
+                "Failed to obtain access token from credentials. Token is None. \n"
+                "This usually means:\n"
+                "  1. Service account credentials are invalid or expired\n"
+                "  2. Credentials lack required IAM permissions (need 'Vertex AI User' role)\n"
+                "  3. Vertex AI API is not enabled in your GCP project\n"
+                "  4. Scopes are not properly set during credential initialization\n"
+                "Please verify your GCP project configuration and service account permissions."
+            )
+
+        logger.info("Successfully obtained access token")
+        return access_token
+    except Exception as e:
+        logger.error(f"Failed to get Google Vertex access token: {e}")
         raise
     except Exception as e:
         logger.error(f"Failed to get Vertex AI access token: {e}", exc_info=True)
