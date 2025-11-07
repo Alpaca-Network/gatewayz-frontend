@@ -19,7 +19,6 @@ import src.services.trial_validation as trial_module
 from src.utils.security_validators import sanitize_for_logging
 
 # Initialize logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 router = APIRouter()

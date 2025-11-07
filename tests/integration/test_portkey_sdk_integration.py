@@ -27,7 +27,6 @@ def test_imports():
 
     try:
         from src.services.portkey_providers import (
-            fetch_models_from_google,
             fetch_models_from_cerebras,
             fetch_models_from_nebius,
             fetch_models_from_xai,
@@ -42,7 +41,6 @@ def test_imports():
 
     try:
         from src.cache import (
-            _google_models_cache,
             _cerebras_models_cache,
             _nebius_models_cache,
             _xai_models_cache,
@@ -86,14 +84,6 @@ def test_portkey_sdk_service():
         service = get_portkey_service()
         logger.info("✓ Portkey SDK service instantiated successfully")
 
-        # Test get_client
-        client = service.get_client("google")
-        if client:
-            logger.info("✓ Portkey client created for Google")
-        else:
-            logger.error("✗ Failed to create Portkey client for Google")
-            return False
-
         logger.info("✓ Portkey SDK service working!\n")
         return True
 
@@ -111,7 +101,7 @@ def test_cache_structure():
     try:
         from src.cache import get_models_cache
 
-        providers = ['google', 'cerebras', 'nebius', 'xai', 'novita', 'hug']
+        providers = ['cerebras', 'nebius', 'xai', 'novita', 'hug']
 
         for provider in providers:
             cache = get_models_cache(provider)
@@ -142,7 +132,7 @@ def test_model_routing():
     try:
         from src.services.models import get_cached_models
 
-        providers = ['google', 'cerebras', 'nebius', 'xai', 'novita', 'hug']
+        providers = ['cerebras', 'nebius', 'xai', 'novita', 'hug']
 
         for provider in providers:
             logger.info(f"Testing routing for {provider}...")
@@ -183,7 +173,7 @@ def test_normalization():
             "modality": "text->text"
         }
 
-        normalized = normalize_portkey_provider_model(sample_model, "google")
+        normalized = normalize_portkey_provider_model(sample_model, "cerebras")
 
         required_fields = [
             'id', 'name', 'description', 'source_gateway',
@@ -217,7 +207,6 @@ def test_fetch_functions():
 
     try:
         from src.services.portkey_providers import (
-            fetch_models_from_google,
             fetch_models_from_cerebras,
             fetch_models_from_nebius,
             fetch_models_from_xai,
@@ -226,7 +215,6 @@ def test_fetch_functions():
         )
 
         functions = {
-            'google': fetch_models_from_google,
             'cerebras': fetch_models_from_cerebras,
             'nebius': fetch_models_from_nebius,
             'xai': fetch_models_from_xai,
@@ -287,7 +275,7 @@ def test_cache_operations():
     try:
         from src.cache import get_models_cache, clear_models_cache
 
-        providers = ['google', 'cerebras', 'nebius', 'xai', 'novita', 'hug']
+        providers = ['cerebras', 'nebius', 'xai', 'novita', 'hug']
 
         # Test get operations
         for provider in providers:
@@ -335,7 +323,7 @@ def test_error_handling():
 
         # Try to fetch from existing but potentially unavailable provider
         logger.info("Testing provider with potential unavailability...")
-        result = get_cached_models("google")
+        result = get_cached_models("cerebras")
 
         if result is None or isinstance(result, list):
             logger.info("✓ Unavailable provider handled gracefully")

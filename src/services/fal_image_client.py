@@ -10,7 +10,6 @@ from src.config import Config
 
 from typing import Optional
 # Initialize logging
-logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 
 # Cache for Fal.ai models catalog

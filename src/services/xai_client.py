@@ -1,9 +1,9 @@
 import logging
 
 from src.config import Config
+from src.services.anthropic_transformer import extract_message_with_tools
 
 # Initialize logging
-logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 
 
@@ -73,19 +73,22 @@ def make_xai_request_openai_stream(messages, model, **kwargs):
 def process_xai_response(response):
     """Process xAI response to extract relevant data"""
     try:
+        choices = []
+        for choice in response.choices:
+            msg = extract_message_with_tools(choice.message)
+
+            choices.append({
+                "index": choice.index,
+                "message": msg,
+                "finish_reason": choice.finish_reason,
+            })
+
         return {
             "id": response.id,
             "object": response.object,
             "created": response.created,
             "model": response.model,
-            "choices": [
-                {
-                    "index": choice.index,
-                    "message": {"role": choice.message.role, "content": choice.message.content},
-                    "finish_reason": choice.finish_reason,
-                }
-                for choice in response.choices
-            ],
+            "choices": choices,
             "usage": (
                 {
                     "prompt_tokens": response.usage.prompt_tokens,

@@ -1,0 +1,209 @@
+{
+  "timestamp": "2025-11-07T11:53:58.875388",
+  "total_tests": 27,
+  "total_passed": 27,
+  "success_rate": "100%",
+  "transformations": [
+    {
+      "model_input": "gemini-2.0-flash",
+      "resolved_model": "gemini-2.0-flash",
+      "success": true,
+      "error": null
+    },
+    {
+      "model_input": "gemini-2.0-pro",
+      "resolved_model": "gemini-2.0-pro",
+      "success": true,
+      "error": null
+    },
+    {
+      "model_input": "gemini-2.0-flash-thinking",
+      "resolved_model": "gemini-2.0-flash-thinking",
+      "success": true,
+      "error": null
+    },
+    {
+      "model_input": "gemini-1.5-pro",
+      "resolved_model": "gemini-1.5-pro",
+      "success": true,
+      "error": null
+    },
+    {
+      "model_input": "gemini-1.5-flash",
+      "resolved_model": "gemini-1.5-flash",
+      "success": true,
+      "error": null
+    },
+    {
+      "model_input": "gemini-1.0-pro",
+      "resolved_model": "gemini-1.0-pro",
+      "success": true,
+      "error": null
+    },
+    {
+      "model_input": "gemini-2.5-flash",
+      "resolved_model": "gemini-2.0-flash",
+      "success": true,
+      "error": null
+    },
+    {
+      "model_input": "gemini-2.5-pro",
+      "resolved_model": "gemini-2.0-pro",
+      "success": true,
+      "error": null
+    }
+  ],
+  "prompts": [
+    {
+      "model": "gemini-2.0-flash",
+      "prompt_type": "basic",
+      "prompt": "Say 'Hello! I am gemini-2.0-flash and I'm working properly!' in exactly one sentence.",
+      "response": "[Fast model] Say 'Hello! I am gemini-2.0-flash and I'm working properly!' in exactly one sentence.\n\nAnswer: Quick and capable response.",
+      "success": true,
+      "content_length": 135
+    },
+    {
+      "model": "gemini-2.0-flash",
+      "prompt_type": "math",
+      "prompt": "What is 15 + 27? Give just the number.",
+      "response": "[Fast model] What is 15 + 27? Give just the number.\n\nAnswer: Quick and capable response.",
+      "success": true,
+      "content_length": 88
+    },
+    {
+      "model": "gemini-2.0-flash",
+      "prompt_type": "reasoning",
+      "prompt": "If a train travels at 60 mph for 2 hours, how far does it go? Answer in one sentence.",
+      "response": "[Fast model] If a train travels at 60 mph for 2 hours, how far does it go? Answer in one sentence.\n\nAnswer: Quick and capable response.",
+      "success": true,
+      "content_length": 135
+    },
+    {
+      "model": "gemini-2.0-pro",
+      "prompt_type": "basic",
+      "prompt": "Say 'Hello! I am gemini-2.0-pro and I'm working properly!' in exactly one sentence.",
+      "response": "[High quality model] Say 'Hello! I am gemini-2.0-pro and I'm working properly!' in exactly one sentence.\n\nAnswer: This is the high-quality variant.",
+      "success": true,
+      "content_length": 147
+    },
+    {
+      "model": "gemini-2.0-pro",
+      "prompt_type": "math",
+      "prompt": "What is 15 + 27? Give just the number.",
+      "response": "[High quality model] What is 15 + 27? Give just the number.\n\nAnswer: This is the high-quality variant.",
+      "success": true,
+      "content_length": 102
+    },
+    {
+      "model": "gemini-2.0-pro",
+      "prompt_type": "reasoning",
+      "prompt": "If a train travels at 60 mph for 2 hours, how far does it go? Answer in one sentence.",
+      "response": "[High quality model] If a train travels at 60 mph for 2 hours, how far does it go? Answer in one sentence.\n\nAnswer: This is the high-quality variant.",
+      "success": true,
+      "content_length": 149
+    },
+    {
+      "model": "gemini-2.0-flash-thinking",
+      "prompt_type": "basic",
+      "prompt": "Say 'Hello! I am gemini-2.0-flash-thinking and I'm working properly!' in exactly one sentence.",
+      "response": "[Extended thinking model] Say 'Hello! I am gemini-2.0-flash-thinking and I'm working properly!' in exactly one sentence.\n\nAnswer: This model excels at complex reasoning tasks.",
+      "success": true,
+      "content_length": 175
+    },
+    {
+      "model": "gemini-2.0-flash-thinking",
+      "prompt_type": "math",
+      "prompt": "What is 15 + 27? Give just the number.",
+      "response": "[Extended thinking model] What is 15 + 27? Give just the number.\n\nAnswer: This model excels at complex reasoning tasks.",
+      "success": true,
+      "content_length": 119
+    },
+    {
+      "model": "gemini-2.0-flash-thinking",
+      "prompt_type": "reasoning",
+      "prompt": "If a train travels at 60 mph for 2 hours, how far does it go? Answer in one sentence.",
+      "response": "[Extended thinking model] If a train travels at 60 mph for 2 hours, how far does it go? Answer in one sentence.\n\nAnswer: This model excels at complex reasoning tasks.",
+      "success": true,
+      "content_length": 166
+    },
+    {
+      "model": "gemini-1.5-pro",
+      "prompt_type": "basic",
+      "prompt": "Say 'Hello! I am gemini-1.5-pro and I'm working properly!' in exactly one sentence.",
+      "response": "[Production model] Say 'Hello! I am gemini-1.5-pro and I'm working properly!' in exactly one sentence.\n\nAnswer: This is the stable production model.",
+      "success": true,
+      "content_length": 148
+    },
+    {
+      "model": "gemini-1.5-pro",
+      "prompt_type": "math",
+      "prompt": "What is 15 + 27? Give just the number.",
+      "response": "[Production model] What is 15 + 27? Give just the number.\n\nAnswer: This is the stable production model.",
+      "success": true,
+      "content_length": 103
+    },
+    {
+      "model": "gemini-1.5-pro",
+      "prompt_type": "reasoning",
+      "prompt": "If a train travels at 60 mph for 2 hours, how far does it go? Answer in one sentence.",
+      "response": "[Production model] If a train travels at 60 mph for 2 hours, how far does it go? Answer in one sentence.\n\nAnswer: This is the stable production model.",
+      "success": true,
+      "content_length": 150
+    },
+    {
+      "model": "gemini-1.5-flash",
+      "prompt_type": "basic",
+      "prompt": "Say 'Hello! I am gemini-1.5-flash and I'm working properly!' in exactly one sentence.",
+      "response": "[Fast 1.5 model] Say 'Hello! I am gemini-1.5-flash and I'm working properly!' in exactly one sentence.\n\nAnswer: Quick response from 1.5 variant.",
+      "success": true,
+      "content_length": 144
+    },
+    {
+      "model": "gemini-1.5-flash",
+      "prompt_type": "math",
+      "prompt": "What is 15 + 27? Give just the number.",
+      "response": "[Fast 1.5 model] What is 15 + 27? Give just the number.\n\nAnswer: Quick response from 1.5 variant.",
+      "success": true,
+      "content_length": 97
+    },
+    {
+      "model": "gemini-1.5-flash",
+      "prompt_type": "reasoning",
+      "prompt": "If a train travels at 60 mph for 2 hours, how far does it go? Answer in one sentence.",
+      "response": "[Fast 1.5 model] If a train travels at 60 mph for 2 hours, how far does it go? Answer in one sentence.\n\nAnswer: Quick response from 1.5 variant.",
+      "success": true,
+      "content_length": 144
+    }
+  ],
+  "aliases": [
+    {
+      "input": "gemini-2.5-flash",
+      "resolved": "gemini-2.0-flash",
+      "expected": "gemini-2.0-flash",
+      "passed": true
+    },
+    {
+      "input": "gemini-2.5-pro",
+      "resolved": "gemini-2.0-pro",
+      "expected": "gemini-2.0-pro",
+      "passed": true
+    },
+    {
+      "input": "gemini-2.0",
+      "resolved": "gemini-2.0-flash",
+      "expected": "gemini-2.0-flash",
+      "passed": true
+    },
+    {
+      "input": "gemini-1.5",
+      "resolved": "gemini-1.5-pro",
+      "expected": "gemini-1.5-pro",
+      "passed": true
+    }
+  ],
+  "summary": {
+    "transformation_tests": "8/8",
+    "prompt_tests": "15/15",
+    "alias_tests": "4/4"
+  }
+}

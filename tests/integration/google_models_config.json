@@ -1,0 +1,108 @@
+{
+  "timestamp": "2025-11-07",
+  "total_inputs": 40,
+  "unique_models": 11,
+  "constants": {
+    "GEMINI_2_5_FLASH_LITE_PREVIEW": "gemini-2.5-flash-lite-preview-09-2025",
+    "GEMINI_2_5_FLASH_PREVIEW": "gemini-2.5-flash-preview-09-2025",
+    "GEMINI_2_5_PRO_PREVIEW": "gemini-2.5-pro-preview-09-2025",
+    "GEMINI_2_0_FLASH": "gemini-2.0-flash",
+    "GEMINI_2_0_PRO": "gemini-2.0-pro",
+    "GEMINI_1_5_PRO": "gemini-1.5-pro",
+    "GEMINI_1_5_FLASH": "gemini-1.5-flash",
+    "GEMINI_1_0_PRO": "gemini-1.0-pro"
+  },
+  "unique_models_list": [
+    "gemini-1.0-pro",
+    "gemini-1.0-pro-vision",
+    "gemini-1.5-flash",
+    "gemini-1.5-flash-002",
+    "gemini-1.5-pro",
+    "gemini-1.5-pro-002",
+    "gemini-2.0-flash",
+    "gemini-2.0-flash-001",
+    "gemini-2.0-flash-thinking",
+    "gemini-2.0-pro",
+    "gemini-2.0-pro-001"
+  ],
+  "all_mappings": {
+    "@google/models/gemini-1.0-pro": "gemini-1.0-pro",
+    "@google/models/gemini-1.5-flash": "gemini-1.5-flash",
+    "@google/models/gemini-1.5-pro": "gemini-1.5-pro",
+    "@google/models/gemini-2.0-flash": "gemini-2.0-flash",
+    "@google/models/gemini-2.0-pro": "gemini-2.0-pro",
+    "@google/models/gemini-2.5-flash": "gemini-2.0-flash",
+    "@google/models/gemini-2.5-flash-lite": "gemini-2.0-flash",
+    "@google/models/gemini-2.5-flash-lite-preview-09-2025": "gemini-2.0-flash",
+    "@google/models/gemini-2.5-flash-preview-09-2025": "gemini-2.0-flash",
+    "@google/models/gemini-2.5-pro": "gemini-2.0-pro",
+    "gemini-1.0-pro": "gemini-1.0-pro",
+    "gemini-1.0-pro-vision": "gemini-1.0-pro-vision",
+    "gemini-1.5": "gemini-1.5-pro",
+    "gemini-1.5-flash": "gemini-1.5-flash",
+    "gemini-1.5-flash-002": "gemini-1.5-flash-002",
+    "gemini-1.5-pro": "gemini-1.5-pro",
+    "gemini-1.5-pro-002": "gemini-1.5-pro-002",
+    "gemini-2.0": "gemini-2.0-flash",
+    "gemini-2.0-flash": "gemini-2.0-flash",
+    "gemini-2.0-flash-001": "gemini-2.0-flash-001",
+    "gemini-2.0-flash-thinking": "gemini-2.0-flash-thinking",
+    "gemini-2.0-pro": "gemini-2.0-pro",
+    "gemini-2.0-pro-001": "gemini-2.0-pro-001",
+    "gemini-2.5-flash": "gemini-2.0-flash",
+    "gemini-2.5-flash-lite": "gemini-2.0-flash",
+    "gemini-2.5-flash-lite-preview-09-2025": "gemini-2.0-flash",
+    "gemini-2.5-flash-preview": "gemini-2.0-flash",
+    "gemini-2.5-flash-preview-09-2025": "gemini-2.0-flash",
+    "gemini-2.5-pro": "gemini-2.0-pro",
+    "gemini-2.5-pro-preview-09-2025": "gemini-2.0-pro",
+    "google/gemini-1.0-pro": "gemini-1.0-pro",
+    "google/gemini-1.5-flash": "gemini-1.5-flash",
+    "google/gemini-1.5-pro": "gemini-1.5-pro",
+    "google/gemini-2.0-flash": "gemini-2.0-flash",
+    "google/gemini-2.0-pro": "gemini-2.0-pro",
+    "google/gemini-2.5-flash": "gemini-2.0-flash",
+    "google/gemini-2.5-flash-lite": "gemini-2.0-flash",
+    "google/gemini-2.5-flash-lite-preview-09-2025": "gemini-2.0-flash",
+    "google/gemini-2.5-flash-preview-09-2025": "gemini-2.0-flash",
+    "google/gemini-2.5-pro": "gemini-2.0-pro"
+  },
+  "test_models": [
+    {
+      "input": "gemini-2.5-flash-lite",
+      "resolves_to": "gemini-2.0-flash"
+    },
+    {
+      "input": "gemini-2.5-flash",
+      "resolves_to": "gemini-2.0-flash"
+    },
+    {
+      "input": "gemini-2.5-pro",
+      "resolves_to": "gemini-2.0-pro"
+    },
+    {
+      "input": "gemini-2.0-flash",
+      "resolves_to": "gemini-2.0-flash"
+    },
+    {
+      "input": "gemini-2.0-pro",
+      "resolves_to": "gemini-2.0-pro"
+    },
+    {
+      "input": "gemini-2.0-flash-thinking",
+      "resolves_to": "gemini-2.0-flash-thinking"
+    },
+    {
+      "input": "gemini-1.5-pro",
+      "resolves_to": "gemini-1.5-pro"
+    },
+    {
+      "input": "gemini-1.5-flash",
+      "resolves_to": "gemini-1.5-flash"
+    },
+    {
+      "input": "gemini-1.0-pro",
+      "resolves_to": "gemini-1.0-pro"
+    }
+  ]
+}

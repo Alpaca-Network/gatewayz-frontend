@@ -47,7 +47,6 @@ except Exception:  # pragma: no cover - optional dependency for dashboard
     run_comprehensive_check = None  # type: ignore
 
 # Initialize logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 router = APIRouter()

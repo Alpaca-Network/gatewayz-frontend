@@ -1,16 +1,24 @@
 name: Claude on CI failure
 
+concurrency:
+  group: claude-failure-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
 on:
   workflow_run:
     workflows: ["CI Pipeline", "Run Tests"]  # Trigger on both CI workflows
     types: [completed]
+  # Manual trigger for explicit dispatch from CI or manual testing
+  workflow_dispatch:
 
 jobs:
   run_claude_on_failure:
     # Security: Only run for failures from the same repository (not forks)
+    # Supports both workflow_run events and explicit workflow_dispatch calls
     if: >
-      ${{ github.event.workflow_run.conclusion == 'failure' &&
-          github.event.workflow_run.head_repository.full_name == github.repository }}
+      ${{ (github.event_name == 'workflow_dispatch') ||
+          (github.event.workflow_run.conclusion == 'failure' &&
+           github.event.workflow_run.head_repository.full_name == github.repository) }}
     runs-on: ubuntu-latest
 
     # Required permissions for Claude Code action
@@ -26,7 +34,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           fetch-depth: 0
 
       - name: Check for merge conflicts
@@ -43,6 +51,7 @@ jobs:
           fi
 
       - name: Download workflow run logs
+        if: github.event_name == 'workflow_run'
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea  # v7.0.1
         with:
           script: |
@@ -118,56 +127,81 @@ jobs:
               fs.writeFileSync('failure-logs.md', errorMsg);
             }
 
+      - name: Create placeholder logs for manual dispatch
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          cat > failure-logs.md << 'EOF'
+          # Manually Triggered Claude On-Failure Workflow
+
+          This workflow was manually dispatched from the CI pipeline.
+
+          Please analyze the repository for:
+          - Test failures
+          - Linting errors (ruff, black, isort, mypy)
+          - Import/dependency issues
+          - Merge conflicts (<<<<<<< markers)
+          - Type checking errors
+          - Coverage issues
+          EOF
+
+      - name: Validate configuration
+        run: |
+          if [ -z "${{ secrets.ANTHROPIC_API_KEY }}" ]; then
+            echo "❌ ERROR: ANTHROPIC_API_KEY secret is not configured"
+            echo "Please add ANTHROPIC_API_KEY to repository secrets"
+            exit 1
+          fi
+          echo "✅ ANTHROPIC_API_KEY is configured"
+          echo "✅ GitHub token is available"
+
       - name: Run Claude Code (fix CI failures and push)
+        timeout-minutes: 45
         uses: anthropics/claude-code-action@8a1c4371755898f67cd97006ba7c97702d5fc4bf  # v1.0.16
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          use_commit_signing: true
-          claude_args: "--max-turns 15"
+          use_commit_signing: false
+          claude_args: "--max-turns 10"
           prompt: |
-            The CI pipeline has failed on this PR. Your task is to:
+            The CI pipeline has failed. Your task is to diagnose and fix the failures:
 
-            1. **Check for merge conflicts** - If there are any merge conflict markers (<<<<<<< <branch>, =======, >>>>>>>) in the codebase:
-               - Read each conflicted file
-               - Understand what changed in each branch
-               - Resolve conflicts by choosing the appropriate code or merging both changes intelligently
+            1. **Check for merge conflicts FIRST** - Look for <<<<<<< <branch> markers in the code:
+               - If found, resolve them by understanding both branches and merging intelligently
                - Remove all conflict markers
-               - This is often the root cause of CI failures, so resolve this FIRST before analyzing other errors
+               - This is often the root cause, so fix this before anything else
 
-            2. **Read the failure logs** - Check the 'failure-logs.md' file which contains:
-               - Complete CI failure logs from the failed workflow run
-               - Failed job names and their output
-               - Failed step details
-               - Error messages and stack traces
+            2. **Read failure-logs.md** - This file contains the complete failure details:
+               - Failed test names and error messages
+               - Linting/type check errors
+               - Build or import errors
+               - Any other failure information
 
-            3. **Analyze the root cause** - Identify what specifically failed:
-               - Which tests are failing and why
-               - What linting/type errors exist (these often arise from unresolved conflicts)
-               - Any build or import errors
-               - Security or coverage issues
+            3. **Identify root causes** - Determine what specifically failed and why:
+               - Test assertion failures or timeouts?
+               - Linting errors (ruff, black, isort, mypy)?
+               - Import or dependency issues?
+               - Coverage below 25% threshold?
+               - Build/startup errors?
 
-            4. **Implement fixes** - Make the necessary code changes to resolve the failures:
-               - Fix failing tests
-               - Resolve linting/type errors
-               - Address import or dependency issues
-               - Fix any other errors preventing CI from passing
+            4. **Fix the issues** - Make targeted code changes to resolve failures:
+               - Fix failing tests or mock configuration
+               - Resolve linting/formatting issues
+               - Fix import/dependency problems
+               - Ensure coverage stays above 25%
 
-            5. **Commit and push** - Once fixed:
-               - Use clear commit messages explaining what was fixed
-               - If you resolved merge conflicts, mention that in the commit message
-               - Push changes to this PR branch
+            5. **Commit and push** - Once all fixes are complete:
+               - Create clear commit messages explaining what was fixed
+               - Push to this PR branch
 
-            Common failure patterns in this Gatewayz backend codebase:
-            - Merge conflicts: <<<<<<< markers (with branch/commit names), conflicting changes between branches
-            - Test failures: pytest assertion errors, timeout issues, mock configuration
-            - Linting errors: ruff, black, isort, mypy type errors
-            - Security scans: bandit warnings, safety vulnerability checks
-            - Import/dependency errors: missing packages, circular imports
-            - Coverage drops: ensure coverage stays above 25% threshold
-            - Integration test failures: endpoint tests, auth, payments, database
-            - Build/startup errors: FastAPI app initialization, missing env vars
+            Common issues in this codebase:
+            - Merge conflicts (<<<<<<< markers)
+            - Test failures (pytest assertions, timeouts, mocks)
+            - Code formatting (ruff, black, isort violations)
+            - Type errors (mypy)
+            - Coverage drops
+            - Integration test failures
+            - FastAPI initialization issues
 
-            **IMPORTANT**: Check for merge conflicts first, then read 'failure-logs.md' to see exactly what failed!
+            **IMPORTANT**: Always check for merge conflicts first, then read failure-logs.md for exact error details!
 
       - name: Report completion
         if: always()

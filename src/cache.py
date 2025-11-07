@@ -24,6 +24,7 @@ _portkey_models_cache = {
 }
 
 _featherless_models_cache = {
+    "data": None,
     "timestamp": None,
     "ttl": 3600,  # 1 hour TTL for Featherless catalog
     "stale_ttl": 7200,
@@ -79,13 +80,6 @@ _deepinfra_models_cache = {
 }
 
 # Portkey-based individual provider caches
-_google_models_cache = {
-    "data": None,
-    "timestamp": None,
-    "ttl": 3600,  # 1 hour TTL
-    "stale_ttl": 7200,
-}
-
 _cerebras_models_cache = {
     "data": None,
     "timestamp": None,
@@ -182,7 +176,6 @@ def get_models_cache(gateway: str):
         "groq": _groq_models_cache,
         "fireworks": _fireworks_models_cache,
         "together": _together_models_cache,
-        "google": _google_models_cache,
         "google-vertex": _google_vertex_models_cache,
         "cerebras": _cerebras_models_cache,
         "nebius": _nebius_models_cache,
@@ -217,7 +210,6 @@ def clear_models_cache(gateway: str):
         "groq": _groq_models_cache,
         "fireworks": _fireworks_models_cache,
         "together": _together_models_cache,
-        "google": _google_models_cache,
         "google-vertex": _google_vertex_models_cache,
         "cerebras": _cerebras_models_cache,
         "nebius": _nebius_models_cache,

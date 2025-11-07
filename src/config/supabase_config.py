@@ -3,8 +3,11 @@ import logging
 from src.config.config import Config
 from supabase import Client, create_client
 
+<<<<<<< HEAD
 from typing import Optional
 logging.basicConfig(level=logging.INFO)
+=======
+>>>>>>> origin
 logger = logging.getLogger(__name__)
 
 _supabase_client: Optional[Client] = None

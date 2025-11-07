@@ -33,6 +33,7 @@ FALLBACK_PROVIDER_PRIORITY: tuple[str, ...] = (
     "anannas",
     "fireworks",
     "together",
+    "google-vertex",
     "openrouter",
 )
 FALLBACK_ELIGIBLE_PROVIDERS = set(FALLBACK_PROVIDER_PRIORITY)

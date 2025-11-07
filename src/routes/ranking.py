@@ -6,7 +6,6 @@ from src.db.ranking import get_all_latest_apps, get_all_latest_models
 
 from typing import Optional
 # Initialize logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 router = APIRouter()

@@ -1,0 +1,142 @@
+{
+  "timestamp": "2025-11-07T11:54:29.259500",
+  "total_models_tested": 6,
+  "models_tested": [
+    "gemini-2.0-flash",
+    "gemini-2.0-pro",
+    "gemini-2.0-flash-thinking",
+    "gemini-1.5-pro",
+    "gemini-1.5-flash",
+    "gemini-1.0-pro"
+  ],
+  "responses": {
+    "gemini-2.0-flash": {
+      "id": "chatcmpl-1762516469.258836",
+      "object": "text_completion",
+      "created": 1762516469,
+      "model": "gemini-2.0-flash",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "Artificial intelligence refers to computer systems designed to perform tasks that typically require human intelligence, such as learning, reasoning, and problem-solving."
+          },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 12,
+        "completion_tokens": 28,
+        "total_tokens": 40
+      }
+    },
+    "gemini-2.0-pro": {
+      "id": "chatcmpl-1762516469.258943",
+      "object": "text_completion",
+      "created": 1762516469,
+      "model": "gemini-2.0-pro",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "Quantum entanglement is a phenomenon where two or more particles become correlated in such a way that the quantum state of each particle cannot be described independently. When particles are entangled, measuring a property of one particle instantaneously affects the state of the other, regardless of the distance between them. This 'spooky action at a distance,' as Einstein called it, has been experimentally verified and is foundational to quantum computing and quantum cryptography."
+          },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 9,
+        "completion_tokens": 72,
+        "total_tokens": 81
+      }
+    },
+    "gemini-2.0-flash-thinking": {
+      "id": "chatcmpl-1762516469.259042",
+      "object": "text_completion",
+      "created": 1762516469,
+      "model": "gemini-2.0-flash-thinking",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "Proof by contradiction: Assume there are finitely many primes: p\u2081, p\u2082, ..., p\u2099. Consider the number P = (p\u2081 \u00d7 p\u2082 \u00d7 ... \u00d7 p\u2099) + 1. This number is not divisible by any of the assumed primes, so it must either be prime itself or have prime factors not in our list. Either way, we have contradicted our assumption. Therefore, there must be infinitely many primes."
+          },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 10,
+        "completion_tokens": 95,
+        "total_tokens": 105
+      }
+    },
+    "gemini-1.5-pro": {
+      "id": "chatcmpl-1762516469.259116",
+      "object": "text_completion",
+      "created": 1762516469,
+      "model": "gemini-1.5-pro",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "Key differences:\n1. Typing: Python is dynamically typed; JavaScript is weakly typed\n2. Execution: Python runs on server-side; JavaScript runs on client-side\n3. Syntax: Python uses indentation; JavaScript uses braces\n4. Scope: Python has function scope; JavaScript has block scope\n5. OOP: Python uses classes; JavaScript uses prototypes"
+          },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 12,
+        "completion_tokens": 65,
+        "total_tokens": 77
+      }
+    },
+    "gemini-1.5-flash": {
+      "id": "chatcmpl-1762516469.259174",
+      "object": "text_completion",
+      "created": 1762516469,
+      "model": "gemini-1.5-flash",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "1. Automation: Systems can learn from data without explicit programming\n2. Scalability: Can handle large volumes of data efficiently\n3. Accuracy: Improves over time as it processes more data"
+          },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 8,
+        "completion_tokens": 42,
+        "total_tokens": 50
+      }
+    },
+    "gemini-1.0-pro": {
+      "id": "chatcmpl-1762516469.259303",
+      "object": "text_completion",
+      "created": 1762516469,
+      "model": "gemini-1.0-pro",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "Cloud computing is the delivery of computing services, including servers, storage, and software, over the internet rather than on local machines."
+          },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 6,
+        "completion_tokens": 21,
+        "total_tokens": 27
+      }
+    }
+  },
+  "validation_status": "All response formats validated",
+  "openai_compatible": true
+}

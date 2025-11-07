@@ -26,7 +26,6 @@ from src.schemas.chat import (
 from src.security.deps import get_api_key
 
 # Initialize logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/v1/chat", tags=["chat-history"])

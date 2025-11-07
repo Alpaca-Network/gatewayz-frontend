@@ -41,23 +41,26 @@ def validate_trial_access(api_key: str) -> Dict[str, Any]:
         result = client.table("api_keys_new").select("*").eq("api_key", api_key).execute()
 
         if not result.data:
-            # Fallback to legacy users table
+            # Fallback to legacy users table for basic trial info
             logger.info(
                 f"API key not found in api_keys_new, checking legacy users table: {api_key[:20]}..."
             )
-            legacy_result = client.table("users").select("*").eq("api_key", api_key).execute()
+            legacy_result = client.table("users").select("subscription_status, trial_expires_at").eq("api_key", api_key).execute()
 
             if not legacy_result.data:
                 return {"is_valid": False, "is_trial": False, "error": "API key not found"}
 
             # For legacy keys, map users table fields to api_keys_new structure
+            # Note: tokens_used, requests_used, credits_used are not stored in users table anymore
+            # These are tracked in usage_records table or api_keys_new table
             user_data = legacy_result.data[0]
             key_data = {
                 "is_trial": user_data.get("subscription_status") == "trial",
                 "trial_end_date": user_data.get("trial_expires_at"),
-                "tokens_used": user_data.get("tokens_used", 0),
-                "requests_used": user_data.get("requests_used", 0),
-                "credits_used": user_data.get("credits_used", 0),
+                # Use default values for trial usage tracking (these columns don't exist in users table)
+                "trial_used_tokens": 0,
+                "trial_used_requests": 0,
+                "trial_used_credits": 0.0,
             }
         else:
             key_data = result.data[0]
@@ -173,15 +176,14 @@ def track_trial_usage(api_key: str, tokens_used: int, requests_used: int = 1) ->
             .execute()
         )
 
-        is_legacy = False
         if not current_result.data:
-            # Fallback to legacy users table
+            # Fallback to legacy users table - but only for verification
             logger.info(
                 f"API key not found in api_keys_new, checking legacy users table for usage tracking: {api_key[:20]}..."
             )
             legacy_result = (
                 client.table("users")
-                .select("tokens_used, requests_used, credits_used")
+                .select("id")
                 .eq("api_key", api_key)
                 .execute()
             )
@@ -192,11 +194,12 @@ def track_trial_usage(api_key: str, tokens_used: int, requests_used: int = 1) ->
                 )
                 return False
 
-            is_legacy = True
-            current_data = legacy_result.data[0]
-            old_tokens = current_data.get("tokens_used", 0)
-            old_requests = current_data.get("requests_used", 0)
-            old_credits = current_data.get("credits_used", 0.0)
+            # Legacy keys don't have a dedicated trial usage table
+            # We can't track trial usage for legacy keys in users table (columns don't exist)
+            logger.warning(
+                f"Cannot track trial usage for legacy API key {api_key[:20]}... - no trial tracking columns in users table"
+            )
+            return False
         else:
             current_data = current_result.data[0]
             old_tokens = current_data.get("trial_used_tokens", 0)
@@ -211,33 +214,19 @@ def track_trial_usage(api_key: str, tokens_used: int, requests_used: int = 1) ->
             f"Usage update: tokens {old_tokens} -> {new_tokens}, requests {old_requests} -> {new_requests}, credits {old_credits:.6f} -> {new_credits:.6f}"
         )
 
-        # Update trial usage in the appropriate table
-        if is_legacy:
-            result = (
-                client.table("users")
-                .update(
-                    {
-                        "tokens_used": new_tokens,
-                        "requests_used": new_requests,
-                        "credits_used": new_credits,
-                    }
-                )
-                .eq("api_key", api_key)
-                .execute()
+        # Update trial usage in api_keys_new table
+        result = (
+            client.table("api_keys_new")
+            .update(
+                {
+                    "trial_used_tokens": new_tokens,
+                    "trial_used_requests": new_requests,
+                    "trial_used_credits": new_credits,
+                }
             )
-        else:
-            result = (
-                client.table("api_keys_new")
-                .update(
-                    {
-                        "trial_used_tokens": new_tokens,
-                        "trial_used_requests": new_requests,
-                        "trial_used_credits": new_credits,
-                    }
-                )
-                .eq("api_key", api_key)
-                .execute()
-            )
+            .eq("api_key", api_key)
+            .execute()
+        )
 
         success = len(result.data) > 0 if result.data else False
         logger.info(f"Usage tracking result: {success}")

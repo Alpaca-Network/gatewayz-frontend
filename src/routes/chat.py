@@ -705,6 +705,7 @@ async def chat_completions(
                     "fireworks",
                     "together",
                     "portkey",
+                    "google-vertex",
                 ]:
                     transformed = transform_model_id(original_model, test_provider)
                     provider_models = get_cached_models(test_provider) or []
@@ -718,6 +719,16 @@ async def chat_completions(
 
         provider_chain = build_provider_failover_chain(provider)
         model = original_model
+        
+        # Diagnostic logging for tools parameter
+        if "tools" in optional:
+            logger.info(
+                "Tools parameter detected: tools_count=%d, provider=%s, model=%s",
+                len(optional["tools"]) if isinstance(optional["tools"], list) else 0,
+                sanitize_for_logging(provider),
+                sanitize_for_logging(original_model),
+            )
+            logger.debug("Tools content: %s", sanitize_for_logging(str(optional["tools"])[:500]))
 
         # === 3) Call upstream (streaming or non-streaming) ===
         if req.stream:
@@ -1513,6 +1524,7 @@ async def unified_responses(
                     "fireworks",
                     "together",
                     "portkey",
+                    "google-vertex",
                 ]:
                     transformed = transform_model_id(original_model, test_provider)
                     provider_models = get_cached_models(test_provider) or []
@@ -1528,6 +1540,16 @@ async def unified_responses(
 
         provider_chain = build_provider_failover_chain(provider)
         model = original_model
+        
+        # Diagnostic logging for tools parameter
+        if "tools" in optional:
+            logger.info(
+                "Tools parameter detected (unified_responses): tools_count=%d, provider=%s, model=%s",
+                len(optional["tools"]) if isinstance(optional["tools"], list) else 0,
+                sanitize_for_logging(provider),
+                sanitize_for_logging(original_model),
+            )
+            logger.debug("Tools content: %s", sanitize_for_logging(str(optional["tools"])[:500]))
 
         # === 3) Call upstream (streaming or non-streaming) ===
         if req.stream:
@@ -1543,12 +1565,14 @@ async def unified_responses(
                 http_exc = None
                 try:
                     if attempt_provider == "portkey":
-                        base_provider = req.portkey_provider or "openai"
-                        request_model = f"@{base_provider}/{attempt_model}"
+                        portkey_provider = req.portkey_provider or "openai"
+                        portkey_virtual_key = getattr(req, "portkey_virtual_key", None)
                         stream = await _to_thread(
                             make_portkey_request_openai_stream,
                             messages,
                             request_model,
+                            portkey_provider,
+                            portkey_virtual_key,
                             **optional,
                         )
                     elif attempt_provider == "featherless":
@@ -1700,11 +1724,16 @@ async def unified_responses(
             http_exc = None
             try:
                 if attempt_provider == "portkey":
-                    base_provider = req.portkey_provider or "openai"
-                    request_model = f"@{base_provider}/{attempt_model}"
+                    portkey_provider = req.portkey_provider or "openai"
+                    portkey_virtual_key = getattr(req, "portkey_virtual_key", None)
                     resp_raw = await asyncio.wait_for(
                         _to_thread(
-                            make_portkey_request_openai, messages, request_model, **optional
+                            make_portkey_request_openai,
+                            messages,
+                            request_model,
+                            portkey_provider,
+                            portkey_virtual_key,
+                            **optional,
                         ),
                         timeout=request_timeout,
                     )

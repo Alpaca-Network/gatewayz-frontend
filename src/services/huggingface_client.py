@@ -21,6 +21,7 @@ ALLOWED_PARAMS = {
     "frequency_penalty",
     "presence_penalty",
     "response_format",
+    "tools",
 }
 
 
@@ -178,13 +179,23 @@ def process_huggingface_response(response):
         choices = []
         for choice in response.get("choices", []):
             message = choice.get("message") or {}
+            msg_dict = {
+                "role": message.get("role", "assistant"),
+                "content": message.get("content", ""),
+            }
+
+            # Include tool_calls if present (for function calling)
+            if "tool_calls" in message:
+                msg_dict["tool_calls"] = message["tool_calls"]
+
+            # Include function_call if present (for legacy function_call format)
+            if "function_call" in message:
+                msg_dict["function_call"] = message["function_call"]
+
             choices.append(
                 {
                     "index": choice.get("index", 0),
-                    "message": {
-                        "role": message.get("role", "assistant"),
-                        "content": message.get("content", ""),
-                    },
+                    "message": msg_dict,
                     "finish_reason": choice.get("finish_reason"),
                 }
             )

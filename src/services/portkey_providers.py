@@ -14,7 +14,6 @@ PROVIDERS USING OPENAI SDK WITH CUSTOM BASE URL:
   - Novita: OpenAI SDK with base_url="https://api.novita.ai/v3/openai"
 
 PROVIDERS USING PORTKEY FILTERING:
-  - Google: Filters Portkey catalog by patterns "@google/", "google/", "gemini", "gemma"
   - Hugging Face: Filters Portkey catalog by patterns "llava-hf", "hugging", "hf/"
 
 IMPLEMENTATION STRATEGY:
@@ -35,7 +34,6 @@ from typing import Any, Optional, Union
 
 from src.cache import (
     _cerebras_models_cache,
-    _google_models_cache,
     _google_vertex_models_cache,
     _huggingface_models_cache,
     _nebius_models_cache,
@@ -343,55 +341,6 @@ def _filter_portkey_models_by_patterns(patterns: list, provider_name: str):
         logger.error(f"Failed to filter {provider_name} models from Portkey: {e}", exc_info=True)
         return None
 
-
-def fetch_models_from_google():
-    """
-    Fetch models from Google using their Generative AI API.
-
-    Uses the Google Generative AI API to list available models (Gemini, etc.)
-    """
-    try:
-        import httpx
-
-        from src.config import Config
-
-        if not _check_api_key(Config.GOOGLE_API_KEY, "Google"):
-            return None
-
-        # Google Generative AI API endpoint
-        url = f"https://generativelanguage.googleapis.com/v1beta/models?key={Config.GOOGLE_API_KEY}"
-
-        headers = {
-            "Content-Type": "application/json",
-        }
-
-        try:
-            response = httpx.get(url, headers=headers, timeout=20.0)
-            response.raise_for_status()
-
-            payload = response.json()
-            models_list = _extract_models_from_response(payload, key="models")
-
-            if not models_list:
-                logger.warning("No models returned from Google API")
-                return None
-
-            logger.info(f"Fetched {len(models_list)} models from Google Generative AI API")
-
-        except Exception as http_error:
-            _handle_http_error(http_error, "Google")
-            return None
-
-        # Normalize the models
-        if not models_list:
-            logger.warning("No models available from Google")
-            return None
-
-        return _cache_normalized_models(models_list, "google", _google_models_cache)
-
-    except Exception as e:
-        logger.error(f"Failed to fetch models from Google: {e}", exc_info=True)
-        return None
 
 
 def fetch_models_from_cerebras():
@@ -751,16 +700,15 @@ def fetch_models_from_google_vertex():
 
         logger.info("Fetching models from Google Vertex AI Model Registry")
 
-        # Get credentials
-        if Config.GOOGLE_APPLICATION_CREDENTIALS:
-            credentials = Credentials.from_service_account_file(
-                Config.GOOGLE_APPLICATION_CREDENTIALS
-            )
+        # Get credentials using the same method as google_vertex_client
+        # This ensures consistent credential handling across all Google Vertex AI calls
+        from src.services.google_vertex_client import get_google_vertex_credentials
+        
+        credentials = get_google_vertex_credentials()
+        
+        # Refresh credentials if needed to ensure they're valid
+        if not credentials.valid:
             credentials.refresh(Request())
-        else:
-            credentials, _ = google.auth.default()
-            if not credentials.valid:
-                credentials.refresh(Request())
 
         # Initialize Model Registry client
         aiplatform.init(
@@ -770,66 +718,22 @@ def fetch_models_from_google_vertex():
         )
 
         # Common Google Vertex AI models
-        # These are the officially supported models available in Vertex AI
+        # These are the officially supported and generally available models in Vertex AI
+        # Note: Preview models (with -preview- in the name) may not be available in all projects
         vertex_models = [
-            {
-                "id": "gemini-2.5-flash",
-                "display_name": "Gemini 2.5 Flash",
-                "description": "Latest generation fast model with improved capabilities",
-                "max_input_tokens": 1000000,
-                "max_output_tokens": 100000,
-                "modalities": ["text", "image", "audio", "video"],
-                "supported_generation_methods": _GEMINI_GENERATION_METHODS,
-            },
-            {
-                "id": "gemini-2.5-flash-lite",
-                "display_name": "Gemini 2.5 Flash Lite (GA)",
-                "description": "Lightweight, cost-effective model for high-throughput applications (stable version)",
-                "max_input_tokens": 1000000,
-                "max_output_tokens": 8192,
-                "modalities": ["text", "image", "audio", "video"],
-                "supported_generation_methods": _GEMINI_GENERATION_METHODS,
-            },
-            {
-                "id": "gemini-2.5-flash-lite-preview-09-2025",
-                "display_name": "Gemini 2.5 Flash Lite Preview (Sep 2025)",
-                "description": "Preview version with improved performance (887 tokens/sec) and enhanced reasoning capabilities",
-                "max_input_tokens": 1000000,
-                "max_output_tokens": 8192,
-                "modalities": ["text", "image", "audio", "video"],
-                "supported_generation_methods": _GEMINI_GENERATION_METHODS,
-            },
-            {
-                "id": "gemini-2.5-pro",
-                "display_name": "Gemini 2.5 Pro",
-                "description": "Most advanced reasoning model with enhanced capabilities",
-                "max_input_tokens": 1000000,
-                "max_output_tokens": 100000,
-                "modalities": ["text", "image", "audio", "video"],
-                "supported_generation_methods": _GEMINI_GENERATION_METHODS,
-            },
             {
                 "id": "gemini-2.0-flash",
                 "display_name": "Gemini 2.0 Flash",
-                "description": "Fast, efficient model optimized for real-time applications",
+                "description": "Latest stable fast model, optimized for real-time applications",
                 "max_input_tokens": 1000000,
                 "max_output_tokens": 100000,
                 "modalities": ["text", "image", "audio", "video"],
-                "supported_generation_methods": _GEMINI_GENERATION_METHODS,
-            },
-            {
-                "id": "gemini-2.0-flash-thinking",
-                "display_name": "Gemini 2.0 Flash Thinking",
-                "description": "Extended thinking variant for complex reasoning tasks",
-                "max_input_tokens": 1000000,
-                "max_output_tokens": 100000,
-                "modalities": ["text"],
                 "supported_generation_methods": _GEMINI_GENERATION_METHODS,
             },
             {
                 "id": "gemini-2.0-pro",
                 "display_name": "Gemini 2.0 Pro",
-                "description": "Advanced reasoning model for complex tasks",
+                "description": "Latest stable advanced reasoning model for complex tasks",
                 "max_input_tokens": 1000000,
                 "max_output_tokens": 4096,
                 "modalities": ["text", "image", "audio", "video"],
@@ -847,7 +751,7 @@ def fetch_models_from_google_vertex():
             {
                 "id": "gemini-1.5-flash",
                 "display_name": "Gemini 1.5 Flash",
-                "description": "Fast model for speed-focused applications",
+                "description": "Fast model optimized for speed and efficiency",
                 "max_input_tokens": 1000000,
                 "max_output_tokens": 8192,
                 "modalities": ["text", "image", "audio", "video"],
@@ -856,7 +760,7 @@ def fetch_models_from_google_vertex():
             {
                 "id": "gemini-1.0-pro",
                 "display_name": "Gemini 1.0 Pro",
-                "description": "Previous generation pro model",
+                "description": "Stable legacy model with good reasoning capabilities",
                 "max_input_tokens": 32000,
                 "max_output_tokens": 8192,
                 "modalities": ["text"],

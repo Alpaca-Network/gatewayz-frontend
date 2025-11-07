@@ -16,7 +16,6 @@ from src.cache import (
     _fireworks_models_cache,
     _together_models_cache,
     _deepinfra_models_cache,
-    _google_models_cache,
     _google_vertex_models_cache,
     _cerebras_models_cache,
     _nebius_models_cache,
@@ -36,7 +35,6 @@ from fastapi import APIRouter
 from datetime import datetime, timezone
 from src.services.pricing_lookup import enrich_model_with_pricing
 from src.services.portkey_providers import (
-    fetch_models_from_google,
     fetch_models_from_google_vertex,
     fetch_models_from_cerebras,
     fetch_models_from_nebius,
@@ -96,7 +94,6 @@ def sanitize_pricing(pricing: dict) -> dict:
 
 
 # Initialize logging
-logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -243,7 +240,6 @@ def get_all_models_parallel():
             "portkey",
             "featherless",
             "deepinfra",
-            "google",
             "cerebras",
             "nebius",
             "xai",
@@ -291,7 +287,6 @@ def get_all_models_sequential():
     portkey_models = get_cached_models("portkey") or []
     featherless_models = get_cached_models("featherless") or []
     deepinfra_models = get_cached_models("deepinfra") or []
-    google_models = get_cached_models("google") or []
     cerebras_models = get_cached_models("cerebras") or []
     nebius_models = get_cached_models("nebius") or []
     xai_models = get_cached_models("xai") or []
@@ -310,7 +305,6 @@ def get_all_models_sequential():
         + portkey_models
         + featherless_models
         + deepinfra_models
-        + google_models
         + cerebras_models
         + nebius_models
         + xai_models
@@ -387,14 +381,6 @@ def get_cached_models(gateway: str = "openrouter"):
                 if cache_age < cache["ttl"]:
                     return cache["data"]
             return fetch_models_from_deepinfra()
-
-        if gateway == "google":
-            cache = _google_models_cache
-            if cache["data"] and cache["timestamp"]:
-                cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
-                if cache_age < cache["ttl"]:
-                    return cache["data"]
-            return fetch_models_from_google()
 
         if gateway == "google-vertex":
             cache = _google_vertex_models_cache
@@ -2356,7 +2342,6 @@ def detect_model_gateway(provider_name: str, model_name: str) -> str:
             "groq",
             "fireworks",
             "together",
-            "google",
             "cerebras",
             "nebius",
             "xai",

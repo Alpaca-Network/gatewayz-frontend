@@ -70,6 +70,9 @@ class Config:
     # Vercel AI Gateway Configuration
     VERCEL_AI_GATEWAY_API_KEY = os.environ.get("VERCEL_AI_GATEWAY_API_KEY")
 
+    # Vercel AI SDK Configuration
+    AI_SDK_API_KEY = os.environ.get("AI_SDK_API_KEY")
+
     # AiHubMix Configuration
     AIHUBMIX_API_KEY = os.environ.get("AIHUBMIX_API_KEY")
     AIHUBMIX_APP_CODE = os.environ.get("AIHUBMIX_APP_CODE")
@@ -79,9 +82,6 @@ class Config:
 
     # Anannas Configuration
     ANANNAS_API_KEY = os.environ.get("ANANNAS_API_KEY")
-
-    # Google Generative AI Configuration (for language models)
-    GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
 
     # Google Vertex AI Configuration (for image generation)
     GOOGLE_PROJECT_ID = os.environ.get("GOOGLE_PROJECT_ID", "gatewayz-468519")
@@ -94,6 +94,51 @@ class Config:
 
     # Admin Configuration
     ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL")
+
+    # ==================== Monitoring & Observability Configuration ====================
+
+    # Prometheus Configuration
+    PROMETHEUS_ENABLED = os.environ.get("PROMETHEUS_ENABLED", "true").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+    PROMETHEUS_REMOTE_WRITE_URL = os.environ.get(
+        "PROMETHEUS_REMOTE_WRITE_URL",
+        "http://prometheus:9090/api/v1/write",
+    )
+    PROMETHEUS_SCRAPE_ENABLED = os.environ.get("PROMETHEUS_SCRAPE_ENABLED", "true").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+
+    # Tempo/OpenTelemetry OTLP Configuration
+    TEMPO_ENABLED = os.environ.get("TEMPO_ENABLED", "false").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+    OTEL_SERVICE_NAME = os.environ.get("OTEL_SERVICE_NAME", "gatewayz-api")
+    TEMPO_OTLP_HTTP_ENDPOINT = os.environ.get(
+        "TEMPO_OTLP_HTTP_ENDPOINT",
+        "http://tempo:4318",
+    )
+    TEMPO_OTLP_GRPC_ENDPOINT = os.environ.get(
+        "TEMPO_OTLP_GRPC_ENDPOINT",
+        "localhost:4317",
+    )
+
+    # Grafana Loki Configuration
+    LOKI_ENABLED = os.environ.get("LOKI_ENABLED", "false").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+    LOKI_PUSH_URL = os.environ.get(
+        "LOKI_PUSH_URL",
+        "http://loki:3100/loki/api/v1/push",
+    )
 
     @classmethod
     def get_portkey_virtual_key(cls, provider: Optional[str] = None) -> Optional[str]:

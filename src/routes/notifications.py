@@ -18,7 +18,6 @@ from src.schemas.notification import (
 from src.security.deps import get_api_key, require_admin
 from src.services.notification import notification_service
 
-logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 
 router = APIRouter()

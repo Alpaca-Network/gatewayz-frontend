@@ -83,8 +83,10 @@ src/security/__init__.py
 src/security/deps.py
 src/security/security.py
 src/services/__init__.py
+src/services/aihubmix_client.py
 src/services/aimo_client.py
 src/services/analytics.py
+src/services/anannas_client.py
 src/services/anthropic_transformer.py
 src/services/chutes_client.py
 src/services/connection_pool.py

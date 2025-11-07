@@ -275,15 +275,37 @@ jobs:
           echo "🌳 Branch: ${{ github.ref_name }}"
           echo ""
 
+          # Authenticate with Railway using the token
+          # Railway CLI automatically uses RAILWAY_TOKEN environment variable
+          echo "🔐 Authenticating with Railway..."
+          export RAILWAY_TOKEN
+          
+          # Verify authentication by checking Railway CLI status
+          railway whoami || {
+            echo "❌ Failed to authenticate with Railway"
+            echo "Please verify RAILWAY_TOKEN secret is valid"
+            exit 1
+          }
+          echo "✅ Authenticated successfully"
+
           # Link to Railway service
-          railway link --environment="$ENV"
+          echo "🔗 Linking to Railway service..."
+          railway link --environment="$ENV" || {
+            echo "❌ Failed to link to Railway service"
+            echo "Please verify the environment '$ENV' exists in Railway"
+            exit 1
+          }
+          echo "✅ Linked successfully"
 
           # Deploy the application
           echo "⏳ Deploying application..."
           railway up \
             --service=gatewayz \
             --detach \
-            --skip-database=true
+            --skip-database=true || {
+            echo "❌ Deployment failed"
+            exit 1
+          }
 
           echo "✅ Deployment initiated"
           echo "📊 Monitor at: https://railway.app"
