@@ -20,3 +20,33 @@ export const extractTokenValue = (str: string): string | null => {
   const match = str.match(/^(\d+(?:\.\d+)?[BTMK])\s*tokens$/i);
   return match ? match[1] : null;
 };
+
+/**
+ * Normalize model IDs to consistent format
+ * Handles various formats returned by different gateway APIs:
+ * - @google/models/gemini-pro-latest → google/gemini-pro-latest
+ * - google/gemini-pro → google/gemini-pro (no change)
+ * - gemini-pro → gemini-pro (no change)
+ *
+ * This ensures compatibility with backend API expectations
+ */
+export const normalizeModelId = (modelId: string): string => {
+  if (!modelId) return modelId;
+
+  // Handle @provider/models/model-name format → provider/model-name
+  const atProviderMatch = modelId.match(/^@([a-z0-9-]+)\/models\/(.+)$/i);
+  if (atProviderMatch) {
+    const [, provider, model] = atProviderMatch;
+    return `${provider}/${model}`;
+  }
+
+  // Handle provider/models/model-name format → provider/model-name
+  const providerModelsMatch = modelId.match(/^([a-z0-9-]+)\/models\/(.+)$/i);
+  if (providerModelsMatch) {
+    const [, provider, model] = providerModelsMatch;
+    return `${provider}/${model}`;
+  }
+
+  // Return as-is if already in correct format
+  return modelId;
+};

@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { traced, wrapTraced } from 'braintrust';
 import { isBraintrustEnabled } from '@/lib/braintrust';
+import { normalizeModelId } from '@/lib/utils';
 
 /**
  * Process LLM completion with Braintrust tracing
@@ -135,6 +136,16 @@ export async function POST(request: NextRequest) {
   try {
     console.log('[API Proxy] Parsing request body...');
     const body = await request.json();
+
+    // Normalize model ID to handle different formats from various gateway APIs
+    if (body.model) {
+      const originalModel = body.model;
+      body.model = normalizeModelId(body.model);
+      if (originalModel !== body.model) {
+        console.log('[API Proxy] Normalized model ID from', originalModel, 'to', body.model);
+      }
+    }
+
     console.log('[API Proxy] Request body parsed, model:', body.model, 'stream:', body.stream);
 
     const apiKey = request.headers.get('authorization');

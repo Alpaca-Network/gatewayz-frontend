@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/card';
 import { Send, Loader2 } from 'lucide-react';
 import { getApiKey, getUserData } from '@/lib/api';
 import { streamChatResponse } from '@/lib/streaming';
+import { normalizeModelId } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -92,12 +93,16 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
         ? '/api/chat/completions'
         : `${apiBaseUrl}/v1/chat/completions`;
 
+      // Normalize model ID to handle different formats from various gateway APIs
+      const normalizedModelId = normalizeModelId(modelId);
+
       console.log('[InlineChat] Sending message to model:', modelId);
+      console.log('[InlineChat] Normalized model ID:', normalizedModelId);
       console.log('[InlineChat] Gateway:', gateway || 'not specified');
       console.log('[InlineChat] Using API endpoint:', url);
 
       const requestBody = {
-        model: modelId,
+        model: normalizedModelId,
         ...(gateway && { gateway }), // Add gateway if provided
         messages: [...messages, userMessage].map(m => ({ role: m.role, content: m.content })),
         stream: true,
