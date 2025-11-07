@@ -40,6 +40,8 @@
     "@radix-ui/react-toast": "^1.2.6",
     "@radix-ui/react-tooltip": "^1.1.8",
     "@radix-ui/react-use-controllable-state": "^1.2.2",
+    "@sentry/nextjs": "^10.23.0",
+    "@sentry/react": "^10.23.0",
     "@statsig/react-bindings": "^3.27.0",
     "@statsig/session-replay": "^3.27.0",
     "@statsig/web-analytics": "^3.27.0",
