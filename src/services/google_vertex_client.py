@@ -81,28 +81,19 @@ def get_google_vertex_credentials():
                         creds_dict, scopes=VERTEX_AI_SCOPES
                     )
                     logger.debug("Created Credentials object from service account info with Vertex AI scopes")
-                    credentials.refresh(Request())
+                    # Don't refresh here - credentials are valid upon creation
+                    # Refresh will happen in get_google_vertex_access_token() when needed
                     logger.info(
-                        "Successfully loaded and validated Google Vertex credentials from GOOGLE_VERTEX_CREDENTIALS_JSON"
+                        "Successfully loaded Google Vertex credentials from GOOGLE_VERTEX_CREDENTIALS_JSON"
                     )
                     return credentials
                 except Exception as e:
                     error_str = str(e)
                     logger.warning(
-                        f"Failed to create/refresh credentials from GOOGLE_VERTEX_CREDENTIALS_JSON: {error_str}. "
+                        f"Failed to create credentials from GOOGLE_VERTEX_CREDENTIALS_JSON: {error_str}. "
                         "Falling back to next credential method.",
                         exc_info=True,
                     )
-                    # Check if this is a permission issue (not just a configuration issue)
-                    if "access_token" in error_str.lower() or "no access token" in error_str.lower():
-                        # Service account has credentials but lacks IAM permissions
-                        error_msg = (
-                            f"Service account credentials are configured, but the account lacks required "
-                            f"IAM permissions. The service account needs the 'Vertex AI User' role. "
-                            f"Error: {error_str}"
-                        )
-                        logger.error(error_msg)
-                        raise ValueError(error_msg)
                     # Don't raise - allow fallback to next credential method
 
         # Second, try file-based credentials (development)
@@ -114,25 +105,17 @@ def get_google_vertex_credentials():
                 credentials = Credentials.from_service_account_file(
                     Config.GOOGLE_APPLICATION_CREDENTIALS, scopes=VERTEX_AI_SCOPES
                 )
-                credentials.refresh(Request())
+                # Don't refresh here - credentials are valid upon creation
+                # Refresh will happen in get_google_vertex_access_token() when needed
                 logger.info("Successfully loaded Google Vertex credentials from file")
                 return credentials
             except Exception as e:
                 error_str = str(e)
                 logger.warning(
-                    f"Failed to load/refresh credentials from file: {error_str}. "
+                    f"Failed to load credentials from file: {error_str}. "
                     "Falling back to next credential method.",
                     exc_info=True,
                 )
-                # Check if this is a permission issue
-                if "access_token" in error_str.lower() or "no access token" in error_str.lower():
-                    error_msg = (
-                        f"Service account from {Config.GOOGLE_APPLICATION_CREDENTIALS} lacks required "
-                        f"IAM permissions. The service account needs the 'Vertex AI User' role. "
-                        f"Error: {error_str}"
-                    )
-                    logger.error(error_msg)
-                    raise ValueError(error_msg)
                 # Don't raise - allow fallback to next credential method
 
         # Third, try Application Default Credentials (ADC)
@@ -321,7 +304,7 @@ def make_google_vertex_request_openai(
             # Add generation config if provided
             if generation_config:
                 request_body["generationConfig"] = generation_config
-            
+
             # Add tools if provided (after transformation - currently not implemented)
             # if tools:
             #     request_body["tools"] = transform_openai_tools_to_gemini(tools)
