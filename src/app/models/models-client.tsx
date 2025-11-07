@@ -760,8 +760,8 @@ export default function ModelsClient({
         <SidebarInset className="flex-1 h-full flex flex-col">
           <div className="sticky top-0 z-50 bg-background border-b flex flex-col gap-3 w-full">
             <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col gap-3">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 w-full">
-              <div className="flex items-center gap-3">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 w-full">
+                <div className="flex items-center gap-3">
                   <SidebarTrigger className="lg:hidden" />
                   <h1 className="text-2xl font-bold">Models</h1>
                   {isLoadingMore && (
@@ -769,106 +769,106 @@ export default function ModelsClient({
                       Loading more...
                     </Badge>
                   )}
+                </div>
+                <div className="flex items-center gap-4">
+                  <span className={`text-sm whitespace-nowrap ${isLoadingModels || isLoadingMore ? 'shimmer-text' : 'text-muted-foreground'}`}>
+                    {isLoadingModels || isLoadingMore
+                      ? `${deduplicatedModels.length} models available,  loading...`
+                      : `${filteredModels.length} / ${deduplicatedModels.length} models`
+                    }
+                  </span>
+                  {hasActiveFilters && (
+                    <Button variant="ghost" size="sm" onClick={resetFilters}>Clear All Filters</Button>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-4">
-                <span className={`text-sm whitespace-nowrap ${isLoadingModels || isLoadingMore ? 'shimmer-text' : 'text-muted-foreground'}`}>
-                  {isLoadingModels || isLoadingMore
-                    ? `${deduplicatedModels.length} models available,  loading...`
-                    : `${filteredModels.length} / ${deduplicatedModels.length} models`
-                  }
-                </span>
-                {hasActiveFilters && (
-                  <Button variant="ghost" size="sm" onClick={resetFilters}>Clear All Filters</Button>
-                )}
-              </div>
-            </div>
 
-            {/* Active Filters */}
-            <div className="flex flex-wrap gap-2">
-              {selectedInputFormats.map(format => (
-                <Badge key={`input-${format}`} variant="secondary" className="gap-1">
-                  Input: {format}
-                  <button onClick={() => setSelectedInputFormats(prev => prev.filter(f => f !== format))} className="ml-1 hover:bg-muted rounded-sm">
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              ))}
-              {selectedOutputFormats.map(format => (
-                <Badge key={`output-${format}`} variant="secondary" className="gap-1">
-                  Output: {format}
-                  <button onClick={() => setSelectedOutputFormats(prev => prev.filter(f => f !== format))} className="ml-1 hover:bg-muted rounded-sm">
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              ))}
-              {pricingFilter !== 'all' && (
-                <Badge variant="secondary" className="gap-1">
-                  {pricingFilter === 'free' ? 'Free only' : 'Paid only'}
-                  <button onClick={() => setPricingFilter('all')} className="ml-1 hover:bg-muted rounded-sm">
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              )}
-              {releaseDateFilter !== 'all' && (
-                <Badge variant="secondary" className="gap-1">
-                  {releaseDateFilter === 'last-30-days' && 'Last 30 days'}
-                  {releaseDateFilter === 'last-90-days' && 'Last 90 days'}
-                  {releaseDateFilter === 'last-6-months' && 'Last 6 months'}
-                  {releaseDateFilter === 'last-year' && 'Last year'}
-                  <button onClick={() => setReleaseDateFilter('all')} className="ml-1 hover:bg-muted rounded-sm">
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              )}
-              {(contextLengthRange[0] !== 0 || contextLengthRange[1] !== 1024) && (
-                <Badge variant="secondary" className="gap-1">
-                  Context: {contextLengthRange[0]}K-{contextLengthRange[1]}K tokens
-                  <button onClick={() => setContextLengthRange([0, 1024])} className="ml-1 hover:bg-muted rounded-sm">
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              )}
-              {(promptPricingRange[0] !== 0 || promptPricingRange[1] !== 10) && (
-                <Badge variant="secondary" className="gap-1">
-                  Price: ${promptPricingRange[0]}-${promptPricingRange[1]}/M tokens
-                  <button onClick={() => setPromptPricingRange([0, 10])} className="ml-1 hover:bg-muted rounded-sm">
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              )}
-              {selectedParameters.map(param => (
-                <Badge key={param} variant="secondary" className="gap-1">
-                  {param}
-                  <button onClick={() => setSelectedParameters(prev => prev.filter(p => p !== param))} className="ml-1 hover:bg-muted rounded-sm">
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              ))}
-              {selectedModelSeries.map(series => (
-                <Badge key={series} variant="secondary" className="gap-1">
-                  {series}
-                  <button onClick={() => setSelectedModelSeries(prev => prev.filter(s => s !== series))} className="ml-1 hover:bg-muted rounded-sm">
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              ))}
-              {selectedDevelopers.map(developer => (
-                <Badge key={developer} variant="secondary" className="gap-1">
-                  Researcher: {developer}
-                  <button onClick={() => setSelectedDevelopers(prev => prev.filter(d => d !== developer))} className="ml-1 hover:bg-muted rounded-sm">
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              ))}
-              {selectedGateways.map(gateway => (
-                <Badge key={gateway} variant="secondary" className="gap-1">
-                  Gateway: {gateway}
-                  <button onClick={() => setSelectedGateways(prev => prev.filter(g => g !== gateway))} className="ml-1 hover:bg-muted rounded-sm">
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              ))}
-            </div>
+              {/* Active Filters */}
+              <div className="flex flex-wrap gap-2">
+                {selectedInputFormats.map(format => (
+                  <Badge key={`input-${format}`} variant="secondary" className="gap-1">
+                    Input: {format}
+                    <button onClick={() => setSelectedInputFormats(prev => prev.filter(f => f !== format))} className="ml-1 hover:bg-muted rounded-sm">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+                {selectedOutputFormats.map(format => (
+                  <Badge key={`output-${format}`} variant="secondary" className="gap-1">
+                    Output: {format}
+                    <button onClick={() => setSelectedOutputFormats(prev => prev.filter(f => f !== format))} className="ml-1 hover:bg-muted rounded-sm">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+                {pricingFilter !== 'all' && (
+                  <Badge variant="secondary" className="gap-1">
+                    {pricingFilter === 'free' ? 'Free only' : 'Paid only'}
+                    <button onClick={() => setPricingFilter('all')} className="ml-1 hover:bg-muted rounded-sm">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                )}
+                {releaseDateFilter !== 'all' && (
+                  <Badge variant="secondary" className="gap-1">
+                    {releaseDateFilter === 'last-30-days' && 'Last 30 days'}
+                    {releaseDateFilter === 'last-90-days' && 'Last 90 days'}
+                    {releaseDateFilter === 'last-6-months' && 'Last 6 months'}
+                    {releaseDateFilter === 'last-year' && 'Last year'}
+                    <button onClick={() => setReleaseDateFilter('all')} className="ml-1 hover:bg-muted rounded-sm">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                )}
+                {(contextLengthRange[0] !== 0 || contextLengthRange[1] !== 1024) && (
+                  <Badge variant="secondary" className="gap-1">
+                    Context: {contextLengthRange[0]}K-{contextLengthRange[1]}K tokens
+                    <button onClick={() => setContextLengthRange([0, 1024])} className="ml-1 hover:bg-muted rounded-sm">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                )}
+                {(promptPricingRange[0] !== 0 || promptPricingRange[1] !== 10) && (
+                  <Badge variant="secondary" className="gap-1">
+                    Price: ${promptPricingRange[0]}-${promptPricingRange[1]}/M tokens
+                    <button onClick={() => setPromptPricingRange([0, 10])} className="ml-1 hover:bg-muted rounded-sm">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                )}
+                {selectedParameters.map(param => (
+                  <Badge key={param} variant="secondary" className="gap-1">
+                    {param}
+                    <button onClick={() => setSelectedParameters(prev => prev.filter(p => p !== param))} className="ml-1 hover:bg-muted rounded-sm">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+                {selectedModelSeries.map(series => (
+                  <Badge key={series} variant="secondary" className="gap-1">
+                    {series}
+                    <button onClick={() => setSelectedModelSeries(prev => prev.filter(s => s !== series))} className="ml-1 hover:bg-muted rounded-sm">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+                {selectedDevelopers.map(developer => (
+                  <Badge key={developer} variant="secondary" className="gap-1">
+                    Researcher: {developer}
+                    <button onClick={() => setSelectedDevelopers(prev => prev.filter(d => d !== developer))} className="ml-1 hover:bg-muted rounded-sm">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+                {selectedGateways.map(gateway => (
+                  <Badge key={gateway} variant="secondary" className="gap-1">
+                    Gateway: {gateway}
+                    <button onClick={() => setSelectedGateways(prev => prev.filter(g => g !== gateway))} className="ml-1 hover:bg-muted rounded-sm">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+              </div>
             </div>
           </div>
 
