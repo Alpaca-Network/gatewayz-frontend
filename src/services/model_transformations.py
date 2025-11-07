@@ -286,28 +286,26 @@ def get_model_id_mapping(provider: str) -> dict[str, str]:
         "google-vertex": {
             # Google Vertex AI models - simple names
             # Full resource names are constructed by the client
-            # Only stable, generally available models are included
-            # Preview models (with -preview- in name) are not available in all projects
-            # Map 2.5 preview requests to stable 2.0 versions
-            "gemini-2.5-flash-lite": GEMINI_2_0_FLASH,  # Map to stable 2.0 version
-            "gemini-2.5-flash-lite-preview-09-2025": GEMINI_2_0_FLASH,
-            "google/gemini-2.5-flash-lite": GEMINI_2_0_FLASH,
-            "google/gemini-2.5-flash-lite-preview-09-2025": GEMINI_2_0_FLASH,
-            "@google/models/gemini-2.5-flash-lite": GEMINI_2_0_FLASH,
-            "@google/models/gemini-2.5-flash-lite-preview-09-2025": GEMINI_2_0_FLASH,
-            # Map 2.5 flash/pro requests to stable 2.0 versions
-            "gemini-2.5-flash": GEMINI_2_0_FLASH,
-            "gemini-2.5-flash-preview-09-2025": GEMINI_2_0_FLASH,
-            "gemini-2.5-flash-preview": GEMINI_2_0_FLASH,
-            "google/gemini-2.5-flash": GEMINI_2_0_FLASH,
-            "google/gemini-2.5-flash-preview-09-2025": GEMINI_2_0_FLASH,
-            "@google/models/gemini-2.5-flash": GEMINI_2_0_FLASH,
-            "@google/models/gemini-2.5-flash-preview-09-2025": GEMINI_2_0_FLASH,
-            # Map 2.5 pro requests to stable 2.0 pro version
-            "gemini-2.5-pro": GEMINI_2_0_PRO,
-            "gemini-2.5-pro-preview-09-2025": GEMINI_2_0_PRO,
-            "google/gemini-2.5-pro": GEMINI_2_0_PRO,
-            "@google/models/gemini-2.5-pro": GEMINI_2_0_PRO,
+            # Gemini 2.5 models (preview)
+            "gemini-2.5-flash-lite": GEMINI_2_5_FLASH_LITE_PREVIEW,
+            "gemini-2.5-flash-lite-preview-09-2025": GEMINI_2_5_FLASH_LITE_PREVIEW,
+            "google/gemini-2.5-flash-lite": GEMINI_2_5_FLASH_LITE_PREVIEW,
+            "google/gemini-2.5-flash-lite-preview-09-2025": GEMINI_2_5_FLASH_LITE_PREVIEW,
+            "@google/models/gemini-2.5-flash-lite": GEMINI_2_5_FLASH_LITE_PREVIEW,
+            "@google/models/gemini-2.5-flash-lite-preview-09-2025": GEMINI_2_5_FLASH_LITE_PREVIEW,
+            # Gemini 2.5 flash models
+            "gemini-2.5-flash": GEMINI_2_5_FLASH_PREVIEW,
+            "gemini-2.5-flash-preview-09-2025": GEMINI_2_5_FLASH_PREVIEW,
+            "gemini-2.5-flash-preview": GEMINI_2_5_FLASH_PREVIEW,
+            "google/gemini-2.5-flash": GEMINI_2_5_FLASH_PREVIEW,
+            "google/gemini-2.5-flash-preview-09-2025": GEMINI_2_5_FLASH_PREVIEW,
+            "@google/models/gemini-2.5-flash": GEMINI_2_5_FLASH_PREVIEW,
+            "@google/models/gemini-2.5-flash-preview-09-2025": GEMINI_2_5_FLASH_PREVIEW,
+            # Gemini 2.5 pro models
+            "gemini-2.5-pro": GEMINI_2_5_PRO_PREVIEW,
+            "gemini-2.5-pro-preview-09-2025": GEMINI_2_5_PRO_PREVIEW,
+            "google/gemini-2.5-pro": GEMINI_2_5_PRO_PREVIEW,
+            "@google/models/gemini-2.5-pro": GEMINI_2_5_PRO_PREVIEW,
             # Gemini 2.0 models (stable versions)
             "gemini-2.0-flash": GEMINI_2_0_FLASH,
             "gemini-2.0-flash-thinking": "gemini-2.0-flash-thinking",
