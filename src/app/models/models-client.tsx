@@ -757,9 +757,9 @@ export default function ModelsClient({
           </SidebarContent>
         </Sidebar>
 
-        <SidebarInset className="flex-1 overflow-y-auto overflow-x-hidden h-full flex flex-col">
-          <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8 pb-24 overflow-x-hidden">
-          <div className="sticky top-0 z-50 bg-background border-b flex flex-col gap-3 mb-6 w-full -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-4">
+        <SidebarInset className="flex-1 h-full flex flex-col">
+          <div className="sticky top-0 z-50 bg-background border-b flex flex-col gap-3 w-full">
+            <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col gap-3">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 w-full">
               <div className="flex items-center gap-3">
                   <SidebarTrigger className="lg:hidden" />
@@ -869,8 +869,11 @@ export default function ModelsClient({
                 </Badge>
               ))}
             </div>
+            </div>
           </div>
 
+          <div className="flex-1 overflow-y-auto overflow-x-hidden">
+            <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8 pb-24 overflow-x-hidden">
           <div className="flex flex-col sm:flex-row gap-4 mb-6">
               <div className="relative w-full">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -960,6 +963,8 @@ export default function ModelsClient({
               </div>
             </div>
           )}
+          </div>
+            </div>
           </div>
         </SidebarInset>
       </div>
