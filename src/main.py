@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from prometheus_client import generate_latest, REGISTRY, CollectorRegistry
 
 from src.config import Config
 from src.constants import FRONTEND_BETA_URL, FRONTEND_STAGING_URL
@@ -114,6 +115,34 @@ def create_app() -> FastAPI:
 
     # Security
     HTTPBearer()
+
+    # ==================== Prometheus Metrics ====================
+    logger.info("Setting up Prometheus metrics...")
+
+    # Import metrics module to initialize all metrics
+    from src.services import prometheus_metrics  # noqa: F401
+
+    # Add Prometheus metrics endpoint
+    from prometheus_client import generate_latest
+    from fastapi.responses import Response
+
+    @app.get("/metrics", tags=["monitoring"], include_in_schema=False)
+    async def metrics():
+        """
+        Prometheus metrics endpoint for monitoring.
+
+        Exposes metrics in Prometheus text format including:
+        - HTTP request counts and durations
+        - Model inference metrics (requests, latency, tokens)
+        - Database query metrics
+        - Cache hit/miss rates
+        - Rate limiting metrics
+        - Provider health metrics
+        - Business metrics (credits, tokens, subscriptions)
+        """
+        return Response(generate_latest(REGISTRY), media_type="text/plain; charset=utf-8")
+
+    logger.info("  [OK] Prometheus metrics endpoint at /metrics")
 
     # ==================== Load All Routes ====================
     logger.info("Loading application routes...")

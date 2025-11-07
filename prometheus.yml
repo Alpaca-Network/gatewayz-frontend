@@ -1,0 +1,71 @@
+# Prometheus Configuration for Gatewayz API Gateway
+# This configuration scrapes metrics from the Gatewayz API and stores them in Prometheus
+
+global:
+  scrape_interval: 15s           # How often to scrape targets by default
+  evaluation_interval: 15s       # How often to evaluate rules
+  external_labels:
+    monitor: 'gatewayz-gateway'
+    environment: 'production'
+
+# Alerting configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+# Rule files
+rule_files:
+  # - "alert_rules.yml"
+  # - "recording_rules.yml"
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Gatewayz API Gateway (main application)
+  - job_name: 'gatewayz-api'
+    scrape_interval: 10s
+    scrape_timeout: 5s
+    static_configs:
+      - targets: ['localhost:8000']  # Update with actual host:port
+        labels:
+          service: 'gatewayz-api'
+          environment: 'production'
+
+    # Metrics path - the default is /metrics
+    metrics_path: '/metrics'
+
+    # Relabel configs for customizing scrape behavior
+    relabel_configs:
+      # Example: Add environment label
+      - source_labels: [__scheme__, __address__, __metrics_path__]
+        separator: ';'
+        regex: '(.+);(.+);(.+)'
+        target_label: '__param_target'
+        replacement: '${1}://${2}${3}'
+
+    # Keep only successful scrapes
+    scrape_protocols:
+      - OpenMetricsUncompressed
+      - OpenMetrics
+      - PrometheusUncompressed
+      - Prometheus
+
+  # Optional: Node exporter for system metrics
+  # - job_name: 'node'
+  #   static_configs:
+  #     - targets: ['localhost:9100']
+
+  # Optional: Redis exporter for cache metrics
+  # - job_name: 'redis'
+  #   static_configs:
+  #     - targets: ['localhost:6379']
+
+  # Optional: PostgreSQL exporter for database metrics
+  # - job_name: 'postgres'
+  #   static_configs:
+  #     - targets: ['localhost:5432']

@@ -91,6 +91,50 @@ class Config:
     # Admin Configuration
     ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL")
 
+    # ==================== Monitoring & Observability Configuration ====================
+
+    # Prometheus Configuration
+    PROMETHEUS_ENABLED = os.environ.get("PROMETHEUS_ENABLED", "true").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+    PROMETHEUS_REMOTE_WRITE_URL = os.environ.get(
+        "PROMETHEUS_REMOTE_WRITE_URL",
+        "http://prometheus:9090/api/v1/write",
+    )
+    PROMETHEUS_SCRAPE_ENABLED = os.environ.get("PROMETHEUS_SCRAPE_ENABLED", "true").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+
+    # Tempo/OpenTelemetry OTLP Configuration
+    TEMPO_ENABLED = os.environ.get("TEMPO_ENABLED", "false").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+    TEMPO_OTLP_HTTP_ENDPOINT = os.environ.get(
+        "TEMPO_OTLP_HTTP_ENDPOINT",
+        "http://tempo:4318",
+    )
+    TEMPO_OTLP_GRPC_ENDPOINT = os.environ.get(
+        "TEMPO_OTLP_GRPC_ENDPOINT",
+        "localhost:4317",
+    )
+
+    # Grafana Loki Configuration
+    LOKI_ENABLED = os.environ.get("LOKI_ENABLED", "false").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+    LOKI_PUSH_URL = os.environ.get(
+        "LOKI_PUSH_URL",
+        "http://loki:3100/loki/api/v1/push",
+    )
+
     @classmethod
     def get_portkey_virtual_key(cls, provider: str | None = None) -> str | None:
         """

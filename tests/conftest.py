@@ -21,6 +21,11 @@ os.environ.setdefault('STRIPE_SECRET_KEY', 'sk_test_xxxxxxxxxxxxxxxxxxxxxxxxxxxx
 os.environ.setdefault('STRIPE_WEBHOOK_SECRET', 'whsec_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
 os.environ.setdefault('FRONTEND_URL', 'http://localhost:3000')
 
+# Disable monitoring services during tests to avoid network calls and async task issues
+os.environ.setdefault('PROMETHEUS_ENABLED', 'false')
+os.environ.setdefault('TEMPO_ENABLED', 'false')
+os.environ.setdefault('LOKI_ENABLED', 'false')
+
 from src.config.supabase_config import get_supabase_client
 from tests.factories import (
     UserFactory,
