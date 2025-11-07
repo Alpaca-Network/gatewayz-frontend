@@ -171,10 +171,8 @@ export function SearchBar({ autoOpenOnFocus = true }: SearchBarProps) {
                     <div className="flex flex-col">
                         {filteredModels.length > 0 ? (
                             filteredModels.map(model => {
-                                // Split model ID to preserve literal slash in URL (e.g., "provider/model-name")
-                                const modelUrl = model.id.includes('/')
-                                    ? `/models/${model.id}`
-                                    : `/models/${encodeURIComponent(model.id)}`;
+                                // Encode model ID to handle special characters like parentheses in model names
+                                const modelUrl = `/models/${encodeURIComponent(model.id)}`;
                                 
                                 return (
                                 <Link

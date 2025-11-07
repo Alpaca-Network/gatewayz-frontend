@@ -92,7 +92,7 @@ const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
 
   // Generate clean URLs:
   // - For AIMO models (providerId:model-name), extract just the model name after the colon
-  // - For regular models with slashes (provider/model-name), keep the slash
+  // - For regular models with slashes (provider/model-name), encode the entire ID to preserve it correctly
   // - Otherwise, use the full ID
   let modelUrl: string;
   if (model.id.includes(':')) {
@@ -100,8 +100,8 @@ const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
     const modelName = model.id.split(':')[1] || model.id;
     modelUrl = `/models/${encodeURIComponent(modelName)}`;
   } else if (model.id.includes('/')) {
-    // Regular provider/model format - preserve the slash
-    modelUrl = `/models/${model.id}`;
+    // Regular provider/model format - encode the entire ID to handle special characters like parentheses
+    modelUrl = `/models/${encodeURIComponent(model.id)}`;
   } else {
     // Single-part ID - encode it
     modelUrl = `/models/${encodeURIComponent(model.id)}`;
