@@ -47,7 +47,7 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
     []
   );
 
-  const renderChildren = className ? <div className={className}>{children}</div> : children;
+  const renderChildren = children;
 
   return (
     <>

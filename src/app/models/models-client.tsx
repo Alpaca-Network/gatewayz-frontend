@@ -186,6 +186,63 @@ export default function ModelsClient({
   initialModels: Model[];
   isLoadingMore?: boolean;
 }) {
+  // Initialize CSS variable for header positioning and update when banner visibility changes
+  React.useEffect(() => {
+    const updateHeaderPosition = () => {
+      const bannerElement = document.querySelector('[data-onboarding-banner]');
+      const spacer = document.querySelector('[data-header-spacer]');
+      
+      if (bannerElement) {
+        const bannerHeight = bannerElement.getBoundingClientRect().height;
+        const headerTop = 65 + bannerHeight;
+        document.documentElement.style.setProperty('--models-header-top', `${headerTop}px`);
+        
+        // Update header element directly
+        const header = document.querySelector('[data-models-header]');
+        if (header) {
+          (header as HTMLElement).style.top = `${headerTop}px`;
+        }
+        
+        // Update spacer
+        if (spacer) {
+          (spacer as HTMLElement).style.height = `${headerTop}px`;
+        }
+      } else {
+        document.documentElement.style.setProperty('--models-header-top', '65px');
+        
+        // Update header element directly
+        const header = document.querySelector('[data-models-header]');
+        if (header) {
+          (header as HTMLElement).style.top = '65px';
+        }
+        
+        // Update spacer
+        if (spacer) {
+          (spacer as HTMLElement).style.height = '65px';
+        }
+      }
+    };
+
+    // Initial update with delay to ensure banner is rendered
+    setTimeout(updateHeaderPosition, 50);
+
+    // Watch for banner visibility changes
+    const observer = new MutationObserver(() => {
+      setTimeout(updateHeaderPosition, 50);
+    });
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class']
+    });
+
+    // Also check periodically in case banner renders after initial check
+    const interval = setInterval(updateHeaderPosition, 200);
+    
+    return () => {
+      observer.disconnect();
+      clearInterval(interval);
+    };
+  }, []);
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -758,28 +815,68 @@ export default function ModelsClient({
         </Sidebar>
 
         <SidebarInset className="flex-1 overflow-x-hidden flex flex-col">
-          <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8 pb-24 overflow-x-hidden">
-          <div className="sticky top-[65px] has-onboarding-banner:top-[calc(65px+50px)] z-40 bg-background border-b flex flex-col gap-3 mb-6 w-full -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-4">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 w-full">
-              <div className="flex items-center gap-3">
+          <div className="w-full pb-24 overflow-x-hidden" style={{ marginTop: '-115px' }}>
+          <div data-models-header className="sticky z-25 bg-background border-b flex flex-col gap-3 w-full px-4 sm:px-6 lg:px-8 pt-6 pb-4" style={{ top: '125px' }}>
+            <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 w-full">
+              <div className="flex items-center gap-3 flex-1 min-w-0 w-full lg:w-auto">
                 <SidebarTrigger className="lg:hidden" />
-                <h1 className="text-2xl font-bold">Models</h1>
+                <h1 className="text-2xl font-bold whitespace-nowrap">Models</h1>
                 {isLoadingMore && (
                   <Badge variant="secondary" className="text-xs animate-pulse">
                     Loading more...
                   </Badge>
                 )}
+                <div className="relative flex-1 max-w-md ml-auto lg:ml-4">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Filter models"
+                    className="pl-9 bg-input"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                </div>
               </div>
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3 flex-shrink-0 w-full lg:w-auto justify-between lg:justify-end">
                 <span className={`text-sm whitespace-nowrap ${isLoadingModels || isLoadingMore ? 'shimmer-text' : 'text-muted-foreground'}`}>
                   {isLoadingModels || isLoadingMore
                     ? `${deduplicatedModels.length} models available,  loading...`
                     : `${filteredModels.length} / ${deduplicatedModels.length} models`
                   }
                 </span>
-                {hasActiveFilters && (
-                  <Button variant="ghost" size="sm" onClick={resetFilters}>Clear All Filters</Button>
-                )}
+                <div className="flex items-center gap-2">
+                  {hasActiveFilters && (
+                    <Button variant="ghost" size="sm" onClick={resetFilters} className="whitespace-nowrap">Clear All Filters</Button>
+                  )}
+                  <Select value={sortBy} onValueChange={setSortBy}>
+                    <SelectTrigger className="w-[180px] h-9">
+                      <SelectValue placeholder="Sort" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="tokens-desc">Tokens (High to Low)</SelectItem>
+                      <SelectItem value="tokens-asc">Tokens (Low to High)</SelectItem>
+                      <SelectItem value="price-desc">Price (High to Low)</SelectItem>
+                      <SelectItem value="price-asc">Price (Low to High)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <div className="flex items-center gap-1 bg-muted p-1 rounded-md">
+                    <Button
+                      variant={layout === 'grid' ? 'secondary' : 'ghost'}
+                      size="icon"
+                      onClick={() => setLayout('grid')}
+                      className="h-8 w-8"
+                    >
+                      <LayoutGrid className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant={layout === 'list' ? 'secondary' : 'ghost'}
+                      size="icon"
+                      onClick={() => setLayout('list')}
+                      className="h-8 w-8"
+                    >
+                      <LayoutList className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -871,45 +968,7 @@ export default function ModelsClient({
             </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-4 mb-6">
-              <div className="relative w-full">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                  placeholder="Filter models"
-                  className="pl-9 bg-input"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-              />
-              </div>
-              <Select value={sortBy} onValueChange={setSortBy}>
-              <SelectTrigger className="w-full sm:w-[180px]">
-                  <SelectValue placeholder="Sort" />
-              </SelectTrigger>
-              <SelectContent>
-                  <SelectItem value="tokens-desc">Tokens (High to Low)</SelectItem>
-                  <SelectItem value="tokens-asc">Tokens (Low to High)</SelectItem>
-                  <SelectItem value="price-desc">Price (High to Low)</SelectItem>
-                  <SelectItem value="price-asc">Price (Low to High)</SelectItem>
-              </SelectContent>
-              </Select>
-              <div className="flex items-center gap-1 bg-muted p-1 rounded-md">
-              <Button
-                  variant={layout === 'grid' ? 'secondary' : 'ghost'}
-                  size="icon"
-                  onClick={() => setLayout('grid')}
-              >
-                  <LayoutGrid className="w-5 h-5" />
-              </Button>
-              <Button
-                  variant={layout === 'list' ? 'secondary' : 'ghost'}
-                  size="icon"
-                  onClick={() => setLayout('list')}
-              >
-                  <LayoutList className="w-5 h-5" />
-              </Button>
-              </div>
-          </div>
-
+          <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 mt-40">
           <div
             className={
               layout === 'grid'
@@ -960,6 +1019,7 @@ export default function ModelsClient({
               </div>
             </div>
           )}
+          </div>
           </div>
         </SidebarInset>
       </div>
