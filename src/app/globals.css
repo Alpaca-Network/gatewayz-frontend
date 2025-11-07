@@ -107,7 +107,7 @@ body {
   }
 
   body {
-    @apply bg-background text-foreground overflow-x-hidden;
+    @apply bg-background text-foreground;
   }
 
   /* Custom text selection styling for better visibility */
