@@ -963,7 +963,6 @@ export default function ModelsClient({
                   </div>
                 </div>
               )}
-          </div>
             </div>
           </div>
         </SidebarInset>
