@@ -40,6 +40,7 @@ def get_google_vertex_credentials():
     Tries multiple credential sources in order:
     1. GOOGLE_VERTEX_CREDENTIALS_JSON environment variable (for Vercel/serverless)
        - Supports both raw JSON and base64-encoded JSON
+       - Writes to temp file and uses google.auth.default() for proper token handling
     2. GOOGLE_APPLICATION_CREDENTIALS file path (for development)
     3. Application Default Credentials (ADC) from google.auth.default()
     """
@@ -47,6 +48,7 @@ def get_google_vertex_credentials():
         # First, try to get credentials from JSON environment variable (Vercel/serverless)
         import base64
         import os
+        import tempfile
 
         creds_json_env = os.environ.get("GOOGLE_VERTEX_CREDENTIALS_JSON")
         if creds_json_env:
@@ -57,14 +59,15 @@ def get_google_vertex_credentials():
 
             try:
                 # Try to parse as raw JSON first
-                creds_dict = json_module.loads(creds_json_env)
+                creds_json = creds_json_env
+                creds_dict = json_module.loads(creds_json)
                 logger.debug("Credentials parsed as raw JSON")
             except (json_module.JSONDecodeError, ValueError):
                 # If that fails, try base64 decoding
                 try:
                     logger.debug("Attempting to decode credentials as base64")
-                    decoded = base64.b64decode(creds_json_env).decode("utf-8")
-                    creds_dict = json_module.loads(decoded)
+                    creds_json = base64.b64decode(creds_json_env).decode("utf-8")
+                    creds_dict = json_module.loads(creds_json)
                     logger.debug("Credentials successfully decoded from base64 and parsed as JSON")
                 except Exception as base64_error:
                     logger.warning(
@@ -74,23 +77,45 @@ def get_google_vertex_credentials():
                     )
                     # Don't raise - allow fallback to next credential method
                     creds_dict = None
+                    creds_json = None
 
-            if creds_dict:
+            if creds_dict and creds_json:
                 try:
-                    credentials = Credentials.from_service_account_info(
-                        creds_dict, scopes=VERTEX_AI_SCOPES
-                    )
-                    logger.debug("Created Credentials object from service account info with Vertex AI scopes")
-                    # Don't refresh here - credentials are valid upon creation
-                    # Refresh will happen in get_google_vertex_access_token() when needed
-                    logger.info(
-                        "Successfully loaded Google Vertex credentials from GOOGLE_VERTEX_CREDENTIALS_JSON"
-                    )
-                    return credentials
+                    # Write credentials to a temporary file and use google.auth.default()
+                    # This approach works better than from_service_account_info() for getting access tokens
+                    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+                        f.write(creds_json)
+                        temp_creds_path = f.name
+
+                    logger.debug(f"Wrote credentials to temporary file: {temp_creds_path}")
+
+                    # Set GOOGLE_APPLICATION_CREDENTIALS to the temp file
+                    original_gac = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+                    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = temp_creds_path
+
+                    try:
+                        # Use google.auth.default() which handles OAuth correctly
+                        credentials, project_id = google.auth.default(scopes=VERTEX_AI_SCOPES)
+                        logger.info(
+                            f"Successfully loaded Google Vertex credentials via google.auth.default() (project: {project_id})"
+                        )
+                        return credentials
+                    finally:
+                        # Restore original GOOGLE_APPLICATION_CREDENTIALS
+                        if original_gac:
+                            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = original_gac
+                        else:
+                            os.environ.pop("GOOGLE_APPLICATION_CREDENTIALS", None)
+                        # Clean up temp file
+                        try:
+                            os.unlink(temp_creds_path)
+                        except Exception:
+                            pass
+
                 except Exception as e:
                     error_str = str(e)
                     logger.warning(
-                        f"Failed to create credentials from GOOGLE_VERTEX_CREDENTIALS_JSON: {error_str}. "
+                        f"Failed to load credentials from GOOGLE_VERTEX_CREDENTIALS_JSON: {error_str}. "
                         "Falling back to next credential method.",
                         exc_info=True,
                     )
