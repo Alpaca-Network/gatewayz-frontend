@@ -1,9 +1,10 @@
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Optional, Dict, List
 
 from src.config.supabase_config import get_supabase_client
 
+from typing import Optional
 logger = logging.getLogger(__name__)
 
 # Default entitlements used when a plan cannot be resolved from the database.
@@ -14,7 +15,7 @@ DEFAULT_MONTHLY_TOKEN_LIMIT = 15_000_000
 DEFAULT_TRIAL_FEATURES = ["basic_models"]
 
 
-def get_all_plans() -> list[dict[str, Any]]:
+def get_all_plans() -> List[Dict[str, Any]]:
     """Get all available subscription plans"""
     try:
         logger.info("Getting all plans from database...")
@@ -39,7 +40,7 @@ def get_all_plans() -> list[dict[str, Any]]:
         return []
 
 
-def get_plan_by_id(plan_id: int) -> dict[str, Any] | None:
+def get_plan_by_id(plan_id: int) -> Optional[Dict[str, Any]]:
     """Get a specific plan by ID"""
     try:
         client = get_supabase_client()
@@ -67,7 +68,7 @@ def get_plan_by_id(plan_id: int) -> dict[str, Any] | None:
         return None
 
 
-def get_user_plan(user_id: int) -> dict[str, Any] | None:
+def get_user_plan(user_id: int) -> Optional[Dict[str, Any]]:
     """Get current active plan for user (robust: never silently falls back to trial)"""
     try:
         client = get_supabase_client()
@@ -180,7 +181,7 @@ def assign_user_plan(user_id: int, plan_id: int, duration_months: int = 1) -> bo
         raise RuntimeError(f"Failed to assign plan: {e}") from e
 
 
-def check_plan_entitlements(user_id: int, required_feature: str = None) -> dict[str, Any]:
+def check_plan_entitlements(user_id: int, required_feature: str = None) -> Dict[str, Any]:
     """Check if user's current plan allows certain usage"""
     try:
         user_plan = get_user_plan(user_id)
@@ -340,7 +341,7 @@ def check_plan_entitlements(user_id: int, required_feature: str = None) -> dict[
         }
 
 
-def get_user_usage_within_plan_limits(user_id: int) -> dict[str, Any]:
+def get_user_usage_within_plan_limits(user_id: int) -> Dict[str, Any]:
     """Get user's current usage against their plan limits"""
     try:
         client = get_supabase_client()
@@ -412,7 +413,7 @@ def get_user_usage_within_plan_limits(user_id: int) -> dict[str, Any]:
 
 def enforce_plan_limits(
     user_id: int, tokens_requested: int = 0, environment_tag: str = "live"
-) -> dict[str, Any]:
+) -> Dict[str, Any]:
     """Check if user can make a request within their plan limits"""
     try:
         usage_data = get_user_usage_within_plan_limits(user_id)
@@ -477,7 +478,7 @@ def enforce_plan_limits(
         return {"allowed": False, "reason": "Error checking plan limits"}
 
 
-def get_subscription_plans() -> list[dict[str, Any]]:
+def get_subscription_plans() -> List[Dict[str, Any]]:
     """Get available subscription plans"""
     try:
         client = get_supabase_client()

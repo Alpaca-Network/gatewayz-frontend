@@ -8,8 +8,9 @@ fast-track high-priority chat completion requests for improved streaming perform
 import logging
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import Any
+from typing import Any, Optional, Dict, List
 
+from typing import Optional
 logger = logging.getLogger(__name__)
 
 
@@ -29,11 +30,11 @@ class PriorityRequest:
 
     priority: RequestPriority
     request_id: str
-    user_id: str | None
+    user_id: Optional[str]
     timestamp: float
     model: str
     stream: bool
-    metadata: dict[str, Any]
+    metadata: Dict[str, Any]
 
     def __lt__(self, other):
         """Compare requests for priority queue ordering"""
@@ -59,14 +60,14 @@ class RequestPrioritizer:
             RequestPriority.LOW: 0.5,
             RequestPriority.BACKGROUND: 0.3,
         }
-        self._request_counts: dict[RequestPriority, int] = dict.fromkeys(RequestPriority, 0)
+        self._request_counts: Dict[RequestPriority, int] = dict.fromkeys(RequestPriority, 0)
         self._total_requests = 0
 
     def determine_priority(
         self,
-        user_tier: str | None = None,
+        user_tier: Optional[str] = None,
         is_streaming: bool = False,
-        model: str | None = None,
+        model: Optional[str] = None,
         is_trial: bool = False,
     ) -> RequestPriority:
         """
@@ -116,7 +117,7 @@ class RequestPrioritizer:
         self._request_counts[priority] += 1
         self._total_requests += 1
 
-    def get_priority_stats(self) -> dict[str, Any]:
+    def get_priority_stats(self) -> Dict[str, Any]:
         """Get statistics about request prioritization"""
         if self._total_requests == 0:
             return {
@@ -151,9 +152,9 @@ _prioritizer = RequestPrioritizer()
 
 
 def get_request_priority(
-    user_tier: str | None = None,
+    user_tier: Optional[str] = None,
     is_streaming: bool = False,
-    model: str | None = None,
+    model: Optional[str] = None,
     is_trial: bool = False,
 ) -> RequestPriority:
     """
@@ -201,7 +202,7 @@ def get_timeout_for_priority(
     return base_timeout * multiplier
 
 
-def get_priority_stats() -> dict[str, Any]:
+def get_priority_stats() -> Dict[str, Any]:
     """Get current prioritization statistics"""
     return _prioritizer.get_priority_stats()
 
@@ -209,8 +210,8 @@ def get_priority_stats() -> dict[str, Any]:
 def log_request_priority(
     request_id: str,
     priority: RequestPriority,
-    user_tier: str | None = None,
-    model: str | None = None,
+    user_tier: Optional[str] = None,
+    model: Optional[str] = None,
 ):
     """
     Log request priority information for monitoring.
@@ -230,8 +231,8 @@ def log_request_priority(
 # Provider selection helpers based on priority
 def get_preferred_providers_for_priority(
     priority: RequestPriority,
-    available_providers: list[str],
-) -> list[str]:
+    available_providers: List[str],
+) -> List[str]:
     """
     Get preferred providers ordered by priority.
 

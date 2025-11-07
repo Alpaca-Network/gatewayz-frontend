@@ -604,39 +604,49 @@ class TestActivityLogEndpoint:
 class TestActivityAuthentication:
     """Test authentication requirements"""
 
-    @patch('src.routes.activity.get_current_user')
     def test_stats_requires_authentication(
         self,
-        mock_get_user,
         client
     ):
         """Test that stats endpoint requires authentication"""
         from fastapi import HTTPException
+        from src.security.deps import get_current_user
 
-        mock_get_user.side_effect = HTTPException(
-            status_code=401,
-            detail="Not authenticated"
-        )
+        async def mock_get_current_user():
+            raise HTTPException(
+                status_code=401,
+                detail="Not authenticated"
+            )
+
+        app.dependency_overrides[get_current_user] = mock_get_current_user
 
         response = client.get('/user/activity/stats')
 
+        # Cleanup
+        app.dependency_overrides = {}
+
         assert response.status_code == 401
 
-    @patch('src.routes.activity.get_current_user')
     def test_log_requires_authentication(
         self,
-        mock_get_user,
         client
     ):
         """Test that log endpoint requires authentication"""
         from fastapi import HTTPException
+        from src.security.deps import get_current_user
 
-        mock_get_user.side_effect = HTTPException(
-            status_code=401,
-            detail="Not authenticated"
-        )
+        async def mock_get_current_user():
+            raise HTTPException(
+                status_code=401,
+                detail="Not authenticated"
+            )
+
+        app.dependency_overrides[get_current_user] = mock_get_current_user
 
         response = client.get('/user/activity/log')
+
+        # Cleanup
+        app.dependency_overrides = {}
 
         assert response.status_code == 401
 

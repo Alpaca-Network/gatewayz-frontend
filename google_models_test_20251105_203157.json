@@ -1,0 +1,229 @@
+{
+  "timestamp": "20251105_203157",
+  "base_url": "http://localhost:8000",
+  "total_tested": 24,
+  "successful": 0,
+  "failed": 24,
+  "success_rate": 0.0,
+  "results": {
+    "success": [],
+    "failed": [
+      {
+        "success": false,
+        "status_code": 502,
+        "response": null,
+        "elapsed": 0.19109392166137695,
+        "tokens": 0,
+        "error": "{\"detail\":\"Upstream error\"}",
+        "model_id": "google/gemini-2.5-flash-image"
+      },
+      {
+        "success": false,
+        "status_code": 502,
+        "response": null,
+        "elapsed": 0.18692421913146973,
+        "tokens": 0,
+        "error": "{\"detail\":\"Upstream error\"}",
+        "model_id": "google/gemini-2.5-flash-preview-09-2025"
+      },
+      {
+        "success": false,
+        "status_code": 502,
+        "response": null,
+        "elapsed": 0.17775583267211914,
+        "tokens": 0,
+        "error": "{\"detail\":\"Upstream error\"}",
+        "model_id": "google/gemini-2.5-flash-lite-preview-09-2025"
+      },
+      {
+        "success": false,
+        "status_code": 502,
+        "response": null,
+        "elapsed": 0.1492002010345459,
+        "tokens": 0,
+        "error": "{\"detail\":\"Upstream error\"}",
+        "model_id": "google/gemini-2.5-flash-image-preview"
+      },
+      {
+        "success": false,
+        "status_code": 502,
+        "response": null,
+        "elapsed": 0.1789538860321045,
+        "tokens": 0,
+        "error": "{\"detail\":\"Upstream error\"}",
+        "model_id": "google/gemini-2.5-flash-lite"
+      },
+      {
+        "success": false,
+        "status_code": 502,
+        "response": null,
+        "elapsed": 0.1448068618774414,
+        "tokens": 0,
+        "error": "{\"detail\":\"Upstream error\"}",
+        "model_id": "google/gemma-3n-e2b-it:free"
+      },
+      {
+        "success": false,
+        "status_code": 502,
+        "response": null,
+        "elapsed": 0.14335107803344727,
+        "tokens": 0,
+        "error": "{\"detail\":\"Upstream error\"}",
+        "model_id": "google/gemini-2.5-flash-lite-preview-06-17"
+      },
+      {
+        "success": false,
+        "status_code": 502,
+        "response": null,
+        "elapsed": 0.14925813674926758,
+        "tokens": 0,
+        "error": "{\"detail\":\"Upstream error\"}",
+        "model_id": "google/gemini-2.5-flash"
+      },
+      {
+        "success": false,
+        "status_code": 502,
+        "response": null,
+        "elapsed": 0.15097403526306152,
+        "tokens": 0,
+        "error": "{\"detail\":\"Upstream error\"}",
+        "model_id": "google/gemini-2.5-pro"
+      },
+      {
+        "success": false,
+        "status_code": 502,
+        "response": null,
+        "elapsed": 0.17357301712036133,
+        "tokens": 0,
+        "error": "{\"detail\":\"Upstream error\"}",
+        "model_id": "google/gemini-2.5-pro-preview"
+      },
+      {
+        "success": false,
+        "status_code": 502,
+        "response": null,
+        "elapsed": 0.18097305297851562,
+        "tokens": 0,
+        "error": "{\"detail\":\"Upstream error\"}",
+        "model_id": "google/gemma-3n-e4b-it:free"
+      },
+      {
+        "success": false,
+        "status_code": 502,
+        "response": null,
+        "elapsed": 0.17533087730407715,
+        "tokens": 0,
+        "error": "{\"detail\":\"Upstream error\"}",
+        "model_id": "google/gemma-3n-e4b-it"
+      },
+      {
+        "success": false,
+        "status_code": 502,
+        "response": null,
+        "elapsed": 0.17040491104125977,
+        "tokens": 0,
+        "error": "{\"detail\":\"Upstream error\"}",
+        "model_id": "google/gemini-2.5-pro-preview-05-06"
+      },
+      {
+        "success": false,
+        "status_code": 502,
+        "response": null,
+        "elapsed": 0.17001795768737793,
+        "tokens": 0,
+        "error": "{\"detail\":\"Upstream error\"}",
+        "model_id": "google/gemma-3-4b-it:free"
+      },
+      {
+        "success": false,
+        "status_code": 502,
+        "response": null,
+        "elapsed": 0.18162202835083008,
+        "tokens": 0,
+        "error": "{\"detail\":\"Upstream error\"}",
+        "model_id": "google/gemma-3-4b-it"
+      },
+      {
+        "success": false,
+        "status_code": 502,
+        "response": null,
+        "elapsed": 0.1678471565246582,
+        "tokens": 0,
+        "error": "{\"detail\":\"Upstream error\"}",
+        "model_id": "google/gemma-3-12b-it:free"
+      },
+      {
+        "success": false,
+        "status_code": 502,
+        "response": null,
+        "elapsed": 0.14287495613098145,
+        "tokens": 0,
+        "error": "{\"detail\":\"Upstream error\"}",
+        "model_id": "google/gemma-3-12b-it"
+      },
+      {
+        "success": false,
+        "status_code": 502,
+        "response": null,
+        "elapsed": 0.17020392417907715,
+        "tokens": 0,
+        "error": "{\"detail\":\"Upstream error\"}",
+        "model_id": "google/gemma-3-27b-it:free"
+      },
+      {
+        "success": false,
+        "status_code": 502,
+        "response": null,
+        "elapsed": 0.1420578956604004,
+        "tokens": 0,
+        "error": "{\"detail\":\"Upstream error\"}",
+        "model_id": "google/gemma-3-27b-it"
+      },
+      {
+        "success": false,
+        "status_code": 502,
+        "response": null,
+        "elapsed": 0.1749417781829834,
+        "tokens": 0,
+        "error": "{\"detail\":\"Upstream error\"}",
+        "model_id": "google/gemini-2.0-flash-lite-001"
+      },
+      {
+        "success": false,
+        "status_code": 502,
+        "response": null,
+        "elapsed": 0.17663884162902832,
+        "tokens": 0,
+        "error": "{\"detail\":\"Upstream error\"}",
+        "model_id": "google/gemini-2.0-flash-001"
+      },
+      {
+        "success": false,
+        "status_code": 502,
+        "response": null,
+        "elapsed": 0.14273405075073242,
+        "tokens": 0,
+        "error": "{\"detail\":\"Upstream error\"}",
+        "model_id": "google/gemini-2.0-flash-exp:free"
+      },
+      {
+        "success": false,
+        "status_code": 502,
+        "response": null,
+        "elapsed": 0.14569091796875,
+        "tokens": 0,
+        "error": "{\"detail\":\"Upstream error\"}",
+        "model_id": "google/gemma-2-27b-it"
+      },
+      {
+        "success": false,
+        "status_code": 400,
+        "response": null,
+        "elapsed": 0.19072818756103516,
+        "tokens": 0,
+        "error": "{\"detail\":\"Upstream rejected the request\"}",
+        "model_id": "google/gemma-2-9b-it"
+      }
+    ]
+  }
+}

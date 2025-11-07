@@ -53,16 +53,11 @@ def ensure_scope_permissions_table(table_name: str) -> int:
 
 
 def main():
-    total = 0
+    # Only update api_keys_new table (legacy api_keys table no longer exists)
     updated_new = ensure_scope_permissions_table("api_keys_new")
     logger.info(f"Updated scope_permissions in api_keys_new: {updated_new}")
-    total += updated_new
 
-    updated_legacy = ensure_scope_permissions_table("api_keys")
-    logger.info(f"Updated scope_permissions in api_keys (legacy): {updated_legacy}")
-    total += updated_legacy
-
-    logger.info(f"Backfill complete. Total keys updated: {total}")
+    logger.info(f"Backfill complete. Total keys updated: {updated_new}")
 
 
 if __name__ == "__main__":

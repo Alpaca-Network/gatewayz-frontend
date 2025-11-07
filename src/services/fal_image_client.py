@@ -2,21 +2,22 @@ import json
 import logging
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional, Dict, List
 
 import httpx
 
 from src.config import Config
 
+from typing import Optional
 # Initialize logging
 logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 
 # Cache for Fal.ai models catalog
-_fal_models_cache: list[dict[str, Any]] | None = None
+_fal_models_cache: Optional[List[Dict[str, Any]]] = None
 
 
-def load_fal_models_catalog() -> list[dict[str, Any]]:
+def load_fal_models_catalog() -> List[Dict[str, Any]]:
     """Load Fal.ai models catalog from the static JSON file
 
     Returns:
@@ -51,7 +52,7 @@ def load_fal_models_catalog() -> list[dict[str, Any]]:
         return []
 
 
-def get_fal_models() -> list[dict[str, Any]]:
+def get_fal_models() -> List[Dict[str, Any]]:
     """Get list of all available Fal.ai models
 
     Returns:
@@ -60,7 +61,7 @@ def get_fal_models() -> list[dict[str, Any]]:
     return load_fal_models_catalog()
 
 
-def get_fal_models_by_type(model_type: str) -> list[dict[str, Any]]:
+def get_fal_models_by_type(model_type: str) -> List[Dict[str, Any]]:
     """Get Fal.ai models filtered by type
 
     Args:
@@ -92,7 +93,7 @@ def make_fal_image_request(
     size: str = "1024x1024",
     n: int = 1,
     **kwargs,
-) -> dict[str, Any]:
+) -> Dict[str, Any]:
     """Make image generation request to Fal.ai
 
     This endpoint supports ALL 839+ models available on Fal.ai!

@@ -9,7 +9,7 @@ import logging
 import os
 import secrets
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, Optional, Dict
 
 import resend
 
@@ -126,7 +126,7 @@ class EnhancedNotificationService:
             logger.error(f"Error checking/sending welcome email: {e}")
             return False
 
-    def send_password_reset_email(self, user_id: int, username: str, email: str) -> str | None:
+    def send_password_reset_email(self, user_id: int, username: str, email: str) -> Optional[str]:
         """Send password reset email and return reset token"""
         try:
             # Generate reset token
@@ -165,7 +165,7 @@ class EnhancedNotificationService:
             return None
 
     def send_monthly_usage_report(
-        self, user_id: int, username: str, email: str, month: str, usage_stats: dict[str, Any]
+        self, user_id: int, username: str, email: str, month: str, usage_stats: Dict[str, Any]
     ) -> bool:
         """Send monthly usage report email"""
         try:
@@ -420,7 +420,7 @@ The {self.app_name} Team
             logger.error(f"Error creating notification: {e}")
             return False
 
-    def get_user_preferences(self, user_id: int) -> NotificationPreferences | None:
+    def get_user_preferences(self, user_id: int) -> Optional[NotificationPreferences]:
         """Get user notification preferences"""
         try:
             client = self.supabase or supabase_config.get_supabase_client()

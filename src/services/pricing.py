@@ -3,6 +3,7 @@ Pricing Service
 Handles model pricing calculations and credit cost computation
 """
 
+from typing import Dict
 import logging
 
 from src.services.models import get_cached_models
@@ -10,7 +11,7 @@ from src.services.models import get_cached_models
 logger = logging.getLogger(__name__)
 
 
-def get_model_pricing(model_id: str) -> dict[str, float]:
+def get_model_pricing(model_id: str) -> Dict[str, float]:
     """
     Get pricing information for a specific model
 

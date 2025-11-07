@@ -5,10 +5,11 @@ Handles user roles and permissions
 
 import logging
 from datetime import datetime
-from typing import Any
+from typing import Any, Optional, Dict, List
 
 from src.config.supabase_config import get_supabase_client
 
+from typing import Optional
 logger = logging.getLogger(__name__)
 
 
@@ -61,7 +62,7 @@ def check_user_permission(user_id: int, resource: str, action: str) -> bool:
         return False
 
 
-def get_user_permissions(user_id: int) -> list[dict[str, Any]]:
+def get_user_permissions(user_id: int) -> List[Dict[str, Any]]:
     """
     Get all permissions for a user
 
@@ -83,7 +84,7 @@ def get_user_permissions(user_id: int) -> list[dict[str, Any]]:
         return []
 
 
-def get_user_role(user_id: int) -> str | None:
+def get_user_role(user_id: int) -> Optional[str]:
     """
     Get user's role
 
@@ -114,7 +115,7 @@ def get_user_role(user_id: int) -> str | None:
 
 
 def update_user_role(
-    user_id: int, new_role: str, changed_by: int | None = None, reason: str | None = None
+    user_id: int, new_role: str, changed_by: Optional[int] = None, reason: Optional[str] = None
 ) -> bool:
     """
     Update a user's role
@@ -165,7 +166,7 @@ def update_user_role(
         return False
 
 
-def get_role_audit_log(user_id: int | None = None, limit: int = 50) -> list[dict[str, Any]]:
+def get_role_audit_log(user_id: Optional[int] = None, limit: int = 50) -> List[Dict[str, Any]]:
     """
     Get role change audit log
 
@@ -193,7 +194,7 @@ def get_role_audit_log(user_id: int | None = None, limit: int = 50) -> list[dict
         return []
 
 
-def get_users_by_role(role: str, limit: int = 100) -> list[dict[str, Any]]:
+def get_users_by_role(role: str, limit: int = 100) -> List[Dict[str, Any]]:
     """
     Get all users with a specific role
 
@@ -227,7 +228,7 @@ def get_users_by_role(role: str, limit: int = 100) -> list[dict[str, Any]]:
 # ============================================
 
 
-def get_role_permissions(role: str) -> list[dict[str, Any]]:
+def get_role_permissions(role: str) -> List[Dict[str, Any]]:
     """
     Get all permissions for a role
 

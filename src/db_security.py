@@ -6,7 +6,7 @@ Implements secure key storage, audit logging, and advanced security features.
 
 import logging
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, Optional, Dict, List
 
 from src.config.supabase_config import get_supabase_client
 from src.security.security import (
@@ -25,11 +25,11 @@ def create_secure_api_key(
     user_id: int,
     key_name: str,
     environment_tag: str = "live",
-    scope_permissions: dict[str, Any] | None = None,
-    expiration_days: int | None = None,
-    max_requests: int | None = None,
-    ip_allowlist: list[str] | None = None,
-    domain_referrers: list[str] | None = None,
+    scope_permissions: Optional[Dict[str, Any]] = None,
+    expiration_days: Optional[int] = None,
+    max_requests: Optional[int] = None,
+    ip_allowlist: Optional[List[str]] = None,
+    domain_referrers: Optional[List[str]] = None,
     is_primary: bool = False,
 ) -> str:
     """Create a new API key with enhanced security features"""
@@ -149,7 +149,7 @@ def create_secure_api_key(
 
 def validate_secure_api_key(
     api_key: str, client_ip: str = None, referer: str = None, user_agent: str = None
-) -> dict[str, Any] | None:
+) -> Optional[Dict[str, Any]]:
     """Validate an API key with enhanced security checks"""
     try:
         client = get_supabase_client()
@@ -307,7 +307,7 @@ def validate_secure_api_key(
         return None
 
 
-def rotate_api_key(key_id: int, user_id: int, new_key_name: str = None) -> str | None:
+def rotate_api_key(key_id: int, user_id: int, new_key_name: str = None) -> Optional[str]:
     """Rotate an existing API key with a new one"""
     try:
         client = get_supabase_client()
@@ -392,7 +392,7 @@ def get_audit_logs(
     start_date: datetime = None,
     end_date: datetime = None,
     limit: int = 100,
-) -> list[dict[str, Any]]:
+) -> List[Dict[str, Any]]:
     """Get audit logs with filtering options"""
     try:
         client = get_supabase_client()
@@ -419,7 +419,7 @@ def get_audit_logs(
         return []
 
 
-def bulk_rotate_user_keys(user_id: int, environment_tag: str = None) -> dict[str, Any]:
+def bulk_rotate_user_keys(user_id: int, environment_tag: str = None) -> Dict[str, Any]:
     """Bulk rotate all API keys for a user"""
     try:
         client = get_supabase_client()
@@ -469,7 +469,7 @@ def bulk_rotate_user_keys(user_id: int, environment_tag: str = None) -> dict[str
 
 
 def check_key_name_uniqueness(
-    user_id: int, key_name: str, exclude_key_id: int | None = None
+    user_id: int, key_name: str, exclude_key_id: Optional[int] = None
 ) -> bool:
     """Check if a key name is unique within the user's scope"""
     try:

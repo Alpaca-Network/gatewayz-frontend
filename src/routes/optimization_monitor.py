@@ -5,7 +5,7 @@ This module provides endpoints to monitor connection pools, caching, and request
 """
 
 import logging
-from typing import Any
+from typing import Any, Dict
 
 from fastapi import APIRouter, HTTPException
 
@@ -18,7 +18,7 @@ router = APIRouter()
 
 
 @router.get("/health/optimizations")
-async def get_optimization_health() -> dict[str, Any]:
+async def get_optimization_health() -> Dict[str, Any]:
     """
     Get health and statistics for all optimization systems.
 
@@ -38,7 +38,7 @@ async def get_optimization_health() -> dict[str, Any]:
 
 
 @router.get("/health/optimizations/connection-pools")
-async def get_connection_pool_stats() -> dict[str, Any]:
+async def get_connection_pool_stats() -> Dict[str, Any]:
     """
     Get detailed connection pool statistics.
 
@@ -53,7 +53,7 @@ async def get_connection_pool_stats() -> dict[str, Any]:
 
 
 @router.get("/health/optimizations/cache")
-async def get_cache_health() -> dict[str, Any]:
+async def get_cache_health() -> Dict[str, Any]:
     """
     Get response cache statistics.
 
@@ -68,7 +68,7 @@ async def get_cache_health() -> dict[str, Any]:
 
 
 @router.get("/health/optimizations/prioritization")
-async def get_prioritization_stats() -> dict[str, Any]:
+async def get_prioritization_stats() -> Dict[str, Any]:
     """
     Get request prioritization statistics.
 
@@ -83,7 +83,7 @@ async def get_prioritization_stats() -> dict[str, Any]:
 
 
 @router.post("/health/optimizations/cache/clear")
-async def clear_cache() -> dict[str, str]:
+async def clear_cache() -> Dict[str, str]:
     """
     Clear the response cache.
 

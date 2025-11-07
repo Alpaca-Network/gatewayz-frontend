@@ -2,6 +2,15 @@
 .venv
 venv
 .env
+.vscode
+.idea
+.claude
+
+# GCP credentials - NEVER commit these!
+.secrets/
+*-service-account.json
+gcp-*.json
+google-credentials.json
 
 # Python
 __pycache__

@@ -5,10 +5,11 @@ Handles logging and retrieval of user API activity
 
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Optional, Dict, List
 
 from src.config.supabase_config import get_supabase_client
 
+from typing import Optional
 logger = logging.getLogger(__name__)
 
 
@@ -21,8 +22,8 @@ def log_activity(
     speed: float = 0.0,
     finish_reason: str = "stop",
     app: str = "API",
-    metadata: dict[str, Any] | None = None,
-) -> dict[str, Any] | None:
+    metadata: Optional[Dict[str, Any]] = None,
+) -> Optional[Dict[str, Any]]:
     """
     Log an API activity event
 
@@ -42,7 +43,7 @@ def log_activity(
     """
     try:
         client = get_supabase_client()
-        
+
         # Ensure user_id is an integer
         user_id_int = int(user_id) if not isinstance(user_id, int) else user_id
 
@@ -65,18 +66,22 @@ def log_activity(
             logger.info(f"Activity logged for user {user_id_int}: {model} ({tokens} tokens)")
             return result.data[0]
         else:
-            logger.error(f"Failed to log activity: insert returned no data. User: {user_id_int}, Model: {model}, Result: {result}")
+            logger.error(
+                f"Failed to log activity: insert returned no data. User: {user_id_int}, Model: {model}, Result: {result}"
+            )
             return None
 
     except Exception as e:
-        logger.error(f"Failed to log activity for user {user_id_int}, model {model}: {e}", exc_info=True)
+        logger.error(
+            f"Failed to log activity for user {user_id_int}, model {model}: {e}", exc_info=True
+        )
         # Don't raise - activity logging should not break the main flow
         return None
 
 
 def get_user_activity_stats(
-    user_id: int, from_date: str | None = None, to_date: str | None = None, days: int | None = None
-) -> dict[str, Any]:
+    user_id: int, from_date: Optional[str] = None, to_date: Optional[str] = None, days: Optional[int] = None
+) -> Dict[str, Any]:
     """
     Get aggregated activity statistics for a user
 
@@ -217,11 +222,11 @@ def get_user_activity_log(
     user_id: int,
     limit: int = 50,
     offset: int = 0,
-    from_date: str | None = None,
-    to_date: str | None = None,
-    model_filter: str | None = None,
-    provider_filter: str | None = None,
-) -> list[dict[str, Any]]:
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    model_filter: Optional[str] = None,
+    provider_filter: Optional[str] = None,
+) -> List[Dict[str, Any]]:
     """
     Get paginated activity log for a user
 

@@ -5,19 +5,20 @@ Pydantic models for free trial management
 """
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Optional, Dict, List
 
 from pydantic import BaseModel, Field
 
 from src.schemas.common import SubscriptionStatus
 
 
+from typing import Optional
 class TrialStatus(BaseModel):
     """Trial status model"""
 
     is_trial: bool
-    trial_start_date: datetime | None = None
-    trial_end_date: datetime | None = None
+    trial_start_date: Optional[datetime] = None
+    trial_end_date: Optional[datetime] = None
     trial_used_tokens: int = 0
     trial_used_requests: int = 0
     trial_max_tokens: int = 100000
@@ -26,7 +27,7 @@ class TrialStatus(BaseModel):
     trial_used_credits: float = 0.00
     trial_converted: bool = False
     subscription_status: SubscriptionStatus = SubscriptionStatus.TRIAL
-    subscription_plan: str | None = "free_trial"
+    subscription_plan: Optional[str] = "free_trial"
     trial_active: bool = False
     trial_expired: bool = False
     trial_remaining_tokens: int = 0
@@ -37,25 +38,25 @@ class TrialStatus(BaseModel):
 class TrialUsage(BaseModel):
     """Trial usage tracking model"""
 
-    id: int | None = None
+    id: Optional[int] = None
     api_key_id: int
     usage_date: datetime
     requests_used: int = 0
     tokens_used: int = 0
-    created_at: datetime | None = None
+    created_at: Optional[datetime] = None
 
 
 class TrialConversion(BaseModel):
     """Trial conversion tracking model"""
 
-    id: int | None = None
+    id: Optional[int] = None
     api_key_id: int
     trial_start_date: datetime
     trial_end_date: datetime
-    conversion_date: datetime | None = None
-    converted_plan: str | None = None
+    conversion_date: Optional[datetime] = None
+    converted_plan: Optional[str] = None
     conversion_revenue: float = 0.0
-    created_at: datetime | None = None
+    created_at: Optional[datetime] = None
 
 
 class StartTrialRequest(BaseModel):
@@ -138,7 +139,7 @@ class TrialAnalytics(BaseModel):
     conversion_rate: float
     average_trial_duration_days: float
     total_trial_revenue: float
-    top_converting_plans: list[dict[str, Any]]
+    top_converting_plans: List[Dict[str, Any]]
 
 
 class TrialLimits(BaseModel):
@@ -148,7 +149,7 @@ class TrialLimits(BaseModel):
     max_requests: int
     max_concurrent_requests: int
     trial_days: int
-    features: list[str]
+    features: List[str]
 
 
 class TrialValidationResult(BaseModel):
@@ -160,5 +161,5 @@ class TrialValidationResult(BaseModel):
     remaining_tokens: int
     remaining_requests: int
     remaining_credits: float
-    trial_end_date: datetime | None = None
-    error_message: str | None = None
+    trial_end_date: Optional[datetime] = None
+    error_message: Optional[str] = None

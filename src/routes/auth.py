@@ -82,7 +82,9 @@ def _log_auth_activity_background(
             },
         )
     except Exception as e:
-        logger.error(f"Background task: Failed to log auth activity for user {user_id}: {e}", exc_info=True)
+        logger.error(
+            f"Background task: Failed to log auth activity for user {user_id}: {e}", exc_info=True
+        )
 
 
 def _log_registration_activity_background(user_id: str, metadata: dict):
@@ -102,7 +104,10 @@ def _log_registration_activity_background(user_id: str, metadata: dict):
             metadata=metadata,
         )
     except Exception as e:
-        logger.error(f"Background task: Failed to log registration activity for user {user_id}: {e}", exc_info=True)
+        logger.error(
+            f"Background task: Failed to log registration activity for user {user_id}: {e}",
+            exc_info=True,
+        )
 
 
 @router.post("/auth", response_model=PrivyAuthResponse, tags=["authentication"])

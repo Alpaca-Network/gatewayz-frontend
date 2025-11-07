@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Any
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, field_validator
 
@@ -30,23 +30,23 @@ class Message(BaseModel):
 
 class ProxyRequest(BaseModel):
     model: str
-    messages: list[Message]
-    max_tokens: int | None = 950
-    temperature: float | None = 1.0
-    top_p: float | None = 1.0
-    frequency_penalty: float | None = 0.0
-    presence_penalty: float | None = 0.0
-    stream: bool | None = False
-    provider: str | None = None  # Provider selection: "openrouter" or "portkey"
-    portkey_provider: str | None = "openai"  # Sub-provider for Portkey
-    portkey_virtual_key: str | None = None  # Virtual key for Portkey
+    messages: List[Message]
+    max_tokens: Optional[int] = 950
+    temperature: Optional[float] = 1.0
+    top_p: Optional[float] = 1.0
+    frequency_penalty: Optional[float] = 0.0
+    presence_penalty: Optional[float] = 0.0
+    stream: Optional[bool] = False
+    provider: Optional[str] = None  # Provider selection: "openrouter" or "portkey"
+    portkey_provider: Optional[str] = "openai"  # Sub-provider for Portkey
+    portkey_virtual_key: Optional[str] = None  # Virtual key for Portkey
 
     class Config:
         extra = "allow"
 
     @field_validator("messages")
     @classmethod
-    def validate_messages(cls, messages: list[Message]) -> list[Message]:
+    def validate_messages(cls, messages: List[Message]) -> List[Message]:
         if not messages:
             raise ValueError("messages must contain at least one message.")
         return messages
@@ -60,7 +60,7 @@ class ResponseFormatType(str, Enum):
 
 class ResponseFormat(BaseModel):
     type: ResponseFormatType = ResponseFormatType.text
-    json_schema: dict[str, Any] | None = None
+    json_schema: Optional[Dict[str, Any]] = None
 
 
 class InputMessage(BaseModel):
@@ -70,7 +70,7 @@ class InputMessage(BaseModel):
     """
 
     role: str
-    content: str | list[dict[str, Any]]  # String or multimodal content array
+    content: Union[str, List[Dict[str, Any]]]  # String or multimodal content array
 
 
 class ResponseRequest(BaseModel):
@@ -80,24 +80,24 @@ class ResponseRequest(BaseModel):
     """
 
     model: str
-    input: list[InputMessage]  # Replaces 'messages' in chat/completions
-    max_tokens: int | None = 950
-    temperature: float | None = 1.0
-    top_p: float | None = 1.0
-    frequency_penalty: float | None = 0.0
-    presence_penalty: float | None = 0.0
-    stream: bool | None = False
-    response_format: ResponseFormat | None = None
-    provider: str | None = None
-    portkey_provider: str | None = "openai"
-    portkey_virtual_key: str | None = None
+    input: List[InputMessage]  # Replaces 'messages' in chat/completions
+    max_tokens: Optional[int] = 950
+    temperature: Optional[float] = 1.0
+    top_p: Optional[float] = 1.0
+    frequency_penalty: Optional[float] = 0.0
+    presence_penalty: Optional[float] = 0.0
+    stream: Optional[bool] = False
+    response_format: Optional[ResponseFormat] = None
+    provider: Optional[str] = None
+    portkey_provider: Optional[str] = "openai"
+    portkey_virtual_key: Optional[str] = None
 
     class Config:
         extra = "allow"
 
     @field_validator("input")
     @classmethod
-    def validate_input(cls, messages: list[InputMessage]) -> list[InputMessage]:
+    def validate_input(cls, messages: List[InputMessage]) -> List[InputMessage]:
         if not messages:
             raise ValueError("input must contain at least one message.")
         return messages
@@ -112,8 +112,8 @@ class ContentBlock(BaseModel):
     """Content block for Anthropic Messages API"""
 
     type: str  # "text", "image", etc.
-    text: str | None = None
-    source: dict[str, Any] | None = None  # For image blocks
+    text: Optional[str] = None
+    source: Optional[Dict[str, Any]] = None  # For image blocks
 
     class Config:
         extra = "allow"
@@ -123,7 +123,7 @@ class AnthropicMessage(BaseModel):
     """Message format for Anthropic Messages API"""
 
     role: str  # "user" or "assistant"
-    content: str | list[ContentBlock]  # String or content blocks
+    content: Union[str, List[ContentBlock]]  # String or content blocks
 
     @field_validator("role")
     @classmethod
@@ -138,7 +138,7 @@ class AnthropicMessage(BaseModel):
 
     @field_validator("content")
     @classmethod
-    def validate_content(cls, content: str | list[ContentBlock]) -> str | list[ContentBlock]:
+    def validate_content(cls, content: Union[str, List[ContentBlock]]) -> Union[str, List[ContentBlock]]:
         if isinstance(content, str):
             if not content.strip():
                 raise ValueError("Message content must be a non-empty string.")
@@ -163,27 +163,27 @@ class MessagesRequest(BaseModel):
     """
 
     model: str  # e.g., "claude-sonnet-4-5-20250929"
-    messages: list[AnthropicMessage]
+    messages: List[AnthropicMessage]
     max_tokens: int  # REQUIRED for Anthropic API
-    system: str | None = None  # System prompt (separate from messages)
-    temperature: float | None = 1.0
-    top_p: float | None = None
-    top_k: int | None = None  # Anthropic-specific
-    stop_sequences: list[str] | None = None
-    stream: bool | None = False
-    metadata: dict[str, Any] | None = None
+    system: Optional[str] = None  # System prompt (separate from messages)
+    temperature: Optional[float] = 1.0
+    top_p: Optional[float] = None
+    top_k: Optional[int] = None  # Anthropic-specific
+    stop_sequences: Optional[List[str]] = None
+    stream: Optional[bool] = False
+    metadata: Optional[Dict[str, Any]] = None
 
     # Gateway-specific fields (not part of Anthropic API)
-    provider: str | None = None
-    portkey_provider: str | None = "openai"
-    portkey_virtual_key: str | None = None
+    provider: Optional[str] = None
+    portkey_provider: Optional[str] = "openai"
+    portkey_virtual_key: Optional[str] = None
 
     class Config:
         extra = "allow"
 
     @field_validator("messages")
     @classmethod
-    def validate_messages(cls, messages: list[AnthropicMessage]) -> list[AnthropicMessage]:
+    def validate_messages(cls, messages: List[AnthropicMessage]) -> List[AnthropicMessage]:
         if not messages:
             raise ValueError("messages must contain at least one message.")
         return messages

@@ -8,6 +8,7 @@ from enum import Enum
 from pydantic import BaseModel, Field, validator
 
 
+from typing import Optional, List
 class CouponScope(str, Enum):
     """Coupon scope types"""
 
@@ -45,9 +46,9 @@ class CreateCouponRequest(BaseModel):
     max_uses: int = Field(..., gt=0, description="Maximum number of redemptions")
     valid_until: datetime = Field(..., description="Expiration date")
     coupon_type: CouponType = Field(CouponType.PROMOTIONAL, description="Type of coupon")
-    assigned_to_user_id: int | None = Field(None, description="User ID for user-specific coupons")
-    description: str | None = Field(None, max_length=500, description="Internal description")
-    valid_from: datetime | None = Field(None, description="Start date (defaults to now)")
+    assigned_to_user_id: Optional[int] = Field(None, description="User ID for user-specific coupons")
+    description: Optional[str] = Field(None, max_length=500, description="Internal description")
+    valid_from: Optional[datetime] = Field(None, description="Start date (defaults to now)")
 
     @validator("code")
     def code_must_be_alphanumeric(cls, v):
@@ -84,10 +85,10 @@ class RedeemCouponRequest(BaseModel):
 class UpdateCouponRequest(BaseModel):
     """Request to update a coupon"""
 
-    valid_until: datetime | None = Field(None, description="New expiration date")
-    max_uses: int | None = Field(None, gt=0, description="New max uses")
-    is_active: bool | None = Field(None, description="Active status")
-    description: str | None = Field(None, max_length=500, description="Updated description")
+    valid_until: Optional[datetime] = Field(None, description="New expiration date")
+    max_uses: Optional[int] = Field(None, gt=0, description="New max uses")
+    is_active: Optional[bool] = Field(None, description="Active status")
+    description: Optional[str] = Field(None, max_length=500, description="Updated description")
 
 
 # ============================================
@@ -109,10 +110,10 @@ class CouponResponse(BaseModel):
     valid_until: datetime
     is_active: bool
     created_at: datetime
-    assigned_to_user_id: int | None = None
-    created_by: int | None = None
+    assigned_to_user_id: Optional[int] = None
+    created_by: Optional[int] = None
     created_by_type: str
-    description: str | None = None
+    description: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -126,7 +127,7 @@ class AvailableCouponResponse(BaseModel):
     value_usd: float
     coupon_scope: str
     coupon_type: str
-    description: str | None
+    description: Optional[str]
     valid_until: datetime
     remaining_uses: int
 
@@ -136,11 +137,11 @@ class RedemptionResponse(BaseModel):
 
     success: bool
     message: str
-    coupon_code: str | None = None
-    coupon_value: float | None = None
-    previous_balance: float | None = None
-    new_balance: float | None = None
-    error_code: str | None = None
+    coupon_code: Optional[str] = None
+    coupon_value: Optional[float] = None
+    previous_balance: Optional[float] = None
+    new_balance: Optional[float] = None
+    error_code: Optional[str] = None
 
 
 class RedemptionHistoryItem(BaseModel):
@@ -159,7 +160,7 @@ class RedemptionHistoryItem(BaseModel):
 class RedemptionHistoryResponse(BaseModel):
     """User redemption history response"""
 
-    redemptions: list[RedemptionHistoryItem]
+    redemptions: List[RedemptionHistoryItem]
     total_redemptions: int
     total_value_redeemed: float
 
@@ -192,7 +193,7 @@ class CouponStatsResponse(BaseModel):
 class ListCouponsResponse(BaseModel):
     """List of coupons response"""
 
-    coupons: list[CouponResponse]
+    coupons: List[CouponResponse]
     total: int
     offset: int
     limit: int

@@ -120,7 +120,7 @@ pytest tests/ --cov=src --cov-report=term-summary
 - Detaches process to allow workflow continuation
 
 ```bash
-railway link --environmentName="$ENV"
+railway link --environment="$ENV"
 railway up --service=gatewayz --detach --skip-database=true
 ```
 
@@ -306,7 +306,7 @@ Common commands used in workflow:
 
 ```bash
 # Link to a Railway service
-railway link --environmentName="production"
+railway link --environment="production"
 
 # Deploy the app
 railway up --detach --skip-database=true

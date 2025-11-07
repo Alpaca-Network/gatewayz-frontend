@@ -10,7 +10,7 @@ import os
 from contextlib import redirect_stdout
 from datetime import date, datetime, timezone
 from html import escape
-from typing import Any
+from typing import Any, Optional, Dict, List
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query
@@ -27,6 +27,8 @@ from src.cache import (
 from src.config import Config
 from src.services.huggingface_models import fetch_models_from_hug
 from src.services.models import (
+    fetch_models_from_aihubmix,
+    fetch_models_from_anannas,
     fetch_models_from_chutes,
     fetch_models_from_featherless,
     fetch_models_from_fireworks,
@@ -51,7 +53,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _normalize_timestamp(value: Any) -> datetime | None:
+def _normalize_timestamp(value: Any) -> Optional[datetime]:
     """Convert a cached timestamp into an aware ``datetime`` in UTC."""
 
     if not value:
@@ -80,7 +82,7 @@ def _normalize_timestamp(value: Any) -> datetime | None:
     return None
 
 
-def _render_gateway_dashboard(results: dict[str, Any], log_output: str, auto_fix: bool) -> str:
+def _render_gateway_dashboard(results: Dict[str, Any], log_output: str, auto_fix: bool) -> str:
     """Generate a minimal HTML dashboard for gateway health results."""
 
     timestamp = escape(results.get("timestamp", ""))
@@ -92,7 +94,7 @@ def _render_gateway_dashboard(results: dict[str, Any], log_output: str, auto_fix
         "fixed": results.get("fixed", 0),
     }
 
-    def format_price_value(value: Any) -> str | None:
+    def format_price_value(value: Any) -> Optional[str]:
         if value is None:
             return None
         value_str = str(value).strip()
@@ -114,7 +116,7 @@ def _render_gateway_dashboard(results: dict[str, Any], log_output: str, auto_fix
         except ValueError:
             return value_str
 
-    def format_pricing_display(pricing: dict[str, Any] | None) -> str:
+    def format_pricing_display(pricing: Optional[Dict[str, Any]]) -> str:
         if not isinstance(pricing, dict):
             return ""
         label_map = {
@@ -145,7 +147,7 @@ def _render_gateway_dashboard(results: dict[str, Any], log_output: str, auto_fix
             "training": " /hr",
             "fine_tune": " /hr",
         }
-        parts: list[str] = []
+        parts: List[str] = []
         for key, raw_value in pricing.items():
             normalized = format_price_value(raw_value)
             if not normalized:
@@ -168,7 +170,7 @@ def _render_gateway_dashboard(results: dict[str, Any], log_output: str, auto_fix
         return f'<span class="{cls}">{escape(status.title())}</span>'
 
     rows = []
-    gateways: dict[str, Any] = results.get("gateways", {}) or {}
+    gateways: Dict[str, Any] = results.get("gateways", {}) or {}
     for gateway_id in sorted(gateways.keys()):
         data = gateways[gateway_id] or {}
         name = data.get("name") or gateway_id.title()
@@ -223,8 +225,8 @@ def _render_gateway_dashboard(results: dict[str, Any], log_output: str, auto_fix
         if models and len(models) > 0:
             model_items = []
             for model in models:
-                pricing_info: dict[str, Any] | None = None
-                pricing_source: str | None = None
+                pricing_info: Optional[Dict[str, Any]] = None
+                pricing_source: Optional[str] = None
 
                 if isinstance(model, dict):
                     model_id = model.get("id") or model.get("model") or str(model)
@@ -781,7 +783,7 @@ def _render_gateway_dashboard(results: dict[str, Any], log_output: str, auto_fix
     """
 
 
-async def _run_gateway_check(auto_fix: bool) -> tuple[dict[str, Any], str]:
+async def _run_gateway_check(auto_fix: bool) -> tuple[Dict[str, Any], str]:
     """Execute the comprehensive check in a thread and capture stdout."""
 
     if run_comprehensive_check is None:
@@ -790,7 +792,7 @@ async def _run_gateway_check(auto_fix: bool) -> tuple[dict[str, Any], str]:
             detail="check_and_fix_gateway_models module is unavailable in this deployment.",
         )
 
-    def _runner() -> tuple[dict[str, Any], str]:
+    def _runner() -> tuple[Dict[str, Any], str]:
         buffer = io.StringIO()
         with redirect_stdout(buffer):
             results = run_comprehensive_check(auto_fix=auto_fix, verbose=False)  # type: ignore[arg-type]
@@ -799,7 +801,7 @@ async def _run_gateway_check(auto_fix: bool) -> tuple[dict[str, Any], str]:
     return await run_in_threadpool(_runner)
 
 
-async def _run_single_gateway_check(gateway: str, auto_fix: bool) -> tuple[dict[str, Any], str]:
+async def _run_single_gateway_check(gateway: str, auto_fix: bool) -> tuple[Dict[str, Any], str]:
     """Execute the check for a single gateway and capture stdout."""
 
     if run_comprehensive_check is None:
@@ -808,7 +810,7 @@ async def _run_single_gateway_check(gateway: str, auto_fix: bool) -> tuple[dict[
             detail="check_and_fix_gateway_models module is unavailable in this deployment.",
         )
 
-    def _runner() -> tuple[dict[str, Any], str]:
+    def _runner() -> tuple[Dict[str, Any], str]:
         buffer = io.StringIO()
         with redirect_stdout(buffer):
             results = run_comprehensive_check(  # type: ignore[arg-type]
@@ -914,6 +916,8 @@ async def get_cache_status():
             "groq",
             "fireworks",
             "together",
+            "aihubmix",
+            "anannas",
         ]
 
         for gateway in gateways:
@@ -997,7 +1001,11 @@ async def get_cache_status():
                 "has_data": False,
             }
 
-        return {"success": True, "data": cache_status, "timestamp": datetime.now(timezone.utc).isoformat()}
+        return {
+            "success": True,
+            "data": cache_status,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
 
     except Exception as e:
         logger.error(f"Failed to get cache status: {e}")
@@ -1033,6 +1041,8 @@ async def refresh_gateway_cache(
             "fireworks",
             "together",
             "huggingface",
+            "aihubmix",
+            "anannas",
         ]
 
         if gateway not in valid_gateways:
@@ -1081,6 +1091,8 @@ async def refresh_gateway_cache(
             "fireworks": fetch_models_from_fireworks,
             "together": fetch_models_from_together,
             "huggingface": fetch_models_from_hug,
+            "aihubmix": fetch_models_from_aihubmix,
+            "anannas": fetch_models_from_anannas,
         }
 
         fetch_func = fetch_functions.get(gateway)
@@ -1133,8 +1145,9 @@ async def refresh_gateway_cache(
 
 @router.post("/cache/clear", tags=["cache"])
 async def clear_all_caches(
-    gateway: str
-    | None = Query(None, description="Specific gateway to clear, or all if not specified")
+    gateway: Optional[str] = Query(
+        None, description="Specific gateway to clear, or all if not specified"
+    )
 ):
     """
     Clear cache for all gateways or a specific gateway.
@@ -1162,6 +1175,8 @@ async def clear_all_caches(
                 "groq",
                 "fireworks",
                 "together",
+                "aihubmix",
+                "anannas",
             ]
             for gw in gateways:
                 clear_models_cache(gw)
@@ -1264,6 +1279,27 @@ async def check_all_gateways():
                 "headers": (
                     {"Authorization": f"Bearer {os.environ.get('TOGETHER_API_KEY')}"}
                     if os.environ.get("TOGETHER_API_KEY")
+                    else {}
+                ),
+            },
+            "aihubmix": {
+                "url": "https://aihubmix.com/v1/models",
+                "api_key": os.environ.get("AIHUBMIX_API_KEY"),
+                "headers": (
+                    {
+                        "Authorization": f"Bearer {os.environ.get('AIHUBMIX_API_KEY')}",
+                        "APP-Code": os.environ.get("AIHUBMIX_APP_CODE", ""),
+                    }
+                    if os.environ.get("AIHUBMIX_API_KEY")
+                    else {}
+                ),
+            },
+            "anannas": {
+                "url": "https://api.anannas.ai/v1/models",
+                "api_key": os.environ.get("ANANNAS_API_KEY"),
+                "headers": (
+                    {"Authorization": f"Bearer {os.environ.get('ANANNAS_API_KEY')}"}
+                    if os.environ.get("ANANNAS_API_KEY")
                     else {}
                 ),
             },
@@ -1386,7 +1422,7 @@ async def gateway_health_dashboard_data(
 
     results, log_output = await _run_gateway_check(auto_fix=auto_fix)
 
-    payload: dict[str, Any] = {
+    payload: Dict[str, Any] = {
         "success": True,
         "timestamp": results.get("timestamp"),
         "auto_fix": auto_fix,
@@ -1491,7 +1527,11 @@ async def get_modelz_cache_status():
     """
     try:
         cache_status = get_modelz_cache_status_func()
-        return {"success": True, "data": cache_status, "timestamp": datetime.now(timezone.utc).isoformat()}
+        return {
+            "success": True,
+            "data": cache_status,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
     except Exception as e:
         logger.error(f"Failed to get Modelz cache status: {e}")
         raise HTTPException(
@@ -1528,7 +1568,11 @@ async def refresh_modelz_cache_endpoint():
         logger.info("Refreshing Modelz cache via API endpoint")
         refresh_result = await refresh_modelz_cache()
 
-        return {"success": True, "data": refresh_result, "timestamp": datetime.now(timezone.utc).isoformat()}
+        return {
+            "success": True,
+            "data": refresh_result,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
     except Exception as e:
         logger.error(f"Failed to refresh Modelz cache: {e}")
         raise HTTPException(

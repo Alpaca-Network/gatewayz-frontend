@@ -6,10 +6,11 @@ CRUD operations for payment records in Supabase
 
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Optional, Dict, List
 
 from src.config.supabase_config import get_supabase_client
 
+from typing import Optional
 logger = logging.getLogger(__name__)
 
 
@@ -22,11 +23,11 @@ def create_payment(
     currency: str = "usd",
     payment_method: str = "stripe",
     status: str = "pending",
-    stripe_payment_intent_id: str | None = None,
-    stripe_session_id: str | None = None,
-    stripe_customer_id: str | None = None,
-    metadata: dict[str, Any] | None = None,
-) -> dict[str, Any] | None:
+    stripe_payment_intent_id: Optional[str] = None,
+    stripe_session_id: Optional[str] = None,
+    stripe_customer_id: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> Optional[Dict[str, Any]]:
     """
     Create a new payment record
 
@@ -94,7 +95,7 @@ def create_payment(
 # ==================== Read ====================
 
 
-def get_payment(payment_id: int) -> dict[str, Any] | None:
+def get_payment(payment_id: int) -> Optional[Dict[str, Any]]:
     """
     Get a payment record by ID
 
@@ -120,7 +121,7 @@ def get_payment(payment_id: int) -> dict[str, Any] | None:
         return None
 
 
-def get_payment_by_stripe_intent(stripe_payment_intent_id: str) -> dict[str, Any] | None:
+def get_payment_by_stripe_intent(stripe_payment_intent_id: str) -> Optional[Dict[str, Any]]:
     """
     Get a payment record by Stripe payment intent ID
 
@@ -164,8 +165,8 @@ def get_payment_by_stripe_intent(stripe_payment_intent_id: str) -> dict[str, Any
 
 
 def get_user_payments(
-    user_id: int, limit: int = 50, offset: int = 0, status: str | None = None
-) -> list[dict[str, Any]]:
+    user_id: int, limit: int = 50, offset: int = 0, status: Optional[str] = None
+) -> List[Dict[str, Any]]:
     """
     Get all payment records for a user
 
@@ -195,7 +196,7 @@ def get_user_payments(
         return []
 
 
-def get_recent_payments(limit: int = 20) -> list[dict[str, Any]]:
+def get_recent_payments(limit: int = 20) -> List[Dict[str, Any]]:
     """
     Get recent payments across all users (admin function)
 
@@ -229,10 +230,10 @@ def get_recent_payments(limit: int = 20) -> list[dict[str, Any]]:
 def update_payment_status(
     payment_id: int,
     status: str,
-    stripe_payment_intent_id: str | None = None,
-    stripe_session_id: str | None = None,
-    error_message: str | None = None,
-) -> dict[str, Any] | None:
+    stripe_payment_intent_id: Optional[str] = None,
+    stripe_session_id: Optional[str] = None,
+    error_message: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
     """
     Update payment status and related fields
 
@@ -286,7 +287,7 @@ def update_payment_status(
         return None
 
 
-def update_payment_metadata(payment_id: int, metadata: dict[str, Any]) -> dict[str, Any] | None:
+def update_payment_metadata(payment_id: int, metadata: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """
     Update payment metadata
 
@@ -358,7 +359,7 @@ def delete_payment(payment_id: int) -> bool:
 # ==================== Statistics & Analytics ====================
 
 
-def get_payment_statistics(user_id: int | None = None) -> dict[str, Any]:
+def get_payment_statistics(user_id: Optional[int] = None) -> Dict[str, Any]:
     """
     Get payment statistics for a user or overall system
 
@@ -420,8 +421,8 @@ def get_payment_statistics(user_id: int | None = None) -> dict[str, Any]:
 
 
 def get_total_revenue(
-    start_date: datetime | None = None, end_date: datetime | None = None
-) -> dict[str, Any]:
+    start_date: Optional[datetime] = None, end_date: Optional[datetime] = None
+) -> Dict[str, Any]:
     """
     Get total revenue statistics
 
@@ -472,7 +473,7 @@ def get_total_revenue(
         return {"total_transactions": 0, "revenue_by_currency": {}, "error": str(e)}
 
 
-def get_payment_trends(days: int = 30) -> dict[str, Any]:
+def get_payment_trends(days: int = 30) -> Dict[str, Any]:
     """
     Get payment trends over specified days
 

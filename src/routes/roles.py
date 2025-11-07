@@ -2,6 +2,7 @@
 API routes for role management (Admin only)
 """
 
+from typing import Optional, List
 import logging
 
 from fastapi import APIRouter, HTTPException, Request
@@ -52,17 +53,17 @@ require_admin = _require_admin_dependency
 class UpdateRoleRequest(BaseModel):
     user_id: int
     new_role: str
-    reason: str | None = None
+    reason: Optional[str] = None
 
 
 class RoleResponse(BaseModel):
     user_id: int
     role: str
-    permissions: list[dict]
+    permissions: List[dict]
 
 
 class RoleAuditLogResponse(BaseModel):
-    logs: list[dict]
+    logs: List[dict]
     total: int
 
 
@@ -133,7 +134,7 @@ async def get_user_role_info(user_id: int, http_request: Request):
 @router.get("/admin/roles/audit/log", response_model=RoleAuditLogResponse, tags=["admin", "roles"])
 async def get_audit_log(
     http_request: Request,
-    user_id: int | None = None,
+    user_id: Optional[int] = None,
     limit: int = 50,
 ):
     """Get role change audit log (Admin only)"""

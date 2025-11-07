@@ -2,6 +2,7 @@
 API routes for coupon system
 """
 
+from typing import Optional, List
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -85,7 +86,7 @@ async def redeem_coupon_endpoint(
         raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
-@router.get("/coupons/available", response_model=list[AvailableCouponResponse], tags=["coupons"])
+@router.get("/coupons/available", response_model=List[AvailableCouponResponse], tags=["coupons"])
 async def get_available_coupons(user: dict = Depends(get_current_user)):
     """
     Get all coupons available for the current user
@@ -204,9 +205,9 @@ async def create_coupon_endpoint(
 
 @router.get("/admin/coupons", response_model=ListCouponsResponse, tags=["admin", "coupons"])
 async def list_coupons_endpoint(
-    scope: str | None = None,
-    coupon_type: str | None = None,
-    is_active: bool | None = None,
+    scope: Optional[str] = None,
+    coupon_type: Optional[str] = None,
+    is_active: Optional[bool] = None,
     limit: int = 100,
     offset: int = 0,
     user: dict = Depends(require_admin),

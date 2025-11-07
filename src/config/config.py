@@ -1,3 +1,4 @@
+from typing import Optional
 import os
 
 from dotenv import load_dotenv
@@ -69,8 +70,15 @@ class Config:
     # Vercel AI Gateway Configuration
     VERCEL_AI_GATEWAY_API_KEY = os.environ.get("VERCEL_AI_GATEWAY_API_KEY")
 
+    # AiHubMix Configuration
+    AIHUBMIX_API_KEY = os.environ.get("AIHUBMIX_API_KEY")
+    AIHUBMIX_APP_CODE = os.environ.get("AIHUBMIX_APP_CODE")
+
     # Fal.ai Configuration
     FAL_API_KEY = os.environ.get("FAL_API_KEY")
+
+    # Anannas Configuration
+    ANANNAS_API_KEY = os.environ.get("ANANNAS_API_KEY")
 
     # Google Generative AI Configuration (for language models)
     GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
@@ -88,7 +96,7 @@ class Config:
     ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL")
 
     @classmethod
-    def get_portkey_virtual_key(cls, provider: str | None = None) -> str | None:
+    def get_portkey_virtual_key(cls, provider: Optional[str] = None) -> Optional[str]:
         """
         Resolve Portkey virtual key for a provider.
 

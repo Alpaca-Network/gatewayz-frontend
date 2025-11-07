@@ -1,13 +1,14 @@
 import logging
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Optional, Dict, List
 
 from src.config.supabase_config import get_supabase_client
 
+from typing import Optional
 logger = logging.getLogger(__name__)
 
 
-def create_chat_session(user_id: int, title: str = None, model: str = None) -> dict[str, Any]:
+def create_chat_session(user_id: int, title: str = None, model: str = None) -> Dict[str, Any]:
     """Create a new chat session for a user"""
     try:
         client = get_supabase_client()
@@ -40,8 +41,13 @@ def create_chat_session(user_id: int, title: str = None, model: str = None) -> d
 
 
 def save_chat_message(
-    session_id: int, role: str, content: str, model: str = None, tokens: int = 0, user_id: int = None
-) -> dict[str, Any]:
+    session_id: int,
+    role: str,
+    content: str,
+    model: str = None,
+    tokens: int = 0,
+    user_id: int = None,
+) -> Dict[str, Any]:
     """Save a chat message to a session and update session's updated_at timestamp"""
     try:
         client = get_supabase_client()
@@ -61,31 +67,31 @@ def save_chat_message(
             raise ValueError("Failed to save chat message")
 
         message = result.data[0]
-        
+
         # Update session's updated_at timestamp to reflect latest activity
         update_time = datetime.now(timezone.utc).isoformat()
         update_data = {"updated_at": update_time}
-        
+
         # If model is provided, also update session model
         if model:
             update_data["model"] = model
-            
+
         session_update_query = (
-            client.table("chat_sessions")
-            .update(update_data)
-            .eq("id", session_id)
+            client.table("chat_sessions").update(update_data).eq("id", session_id)
         )
-        
+
         # Add user_id check if provided for additional security
         if user_id is not None:
             session_update_query = session_update_query.eq("user_id", user_id)
-            
+
         session_update_result = session_update_query.execute()
-        
+
         if not session_update_result.data:
             logger.warning(f"Failed to update session {session_id} timestamp after saving message")
 
-        logger.info(f"Saved message {message['id']} to session {session_id} and updated session timestamp")
+        logger.info(
+            f"Saved message {message['id']} to session {session_id} and updated session timestamp"
+        )
         return message
 
     except Exception as e:
@@ -93,7 +99,7 @@ def save_chat_message(
         raise RuntimeError(f"Failed to save chat message: {e}") from e
 
 
-def get_user_chat_sessions(user_id: int, limit: int = 50, offset: int = 0) -> list[dict[str, Any]]:
+def get_user_chat_sessions(user_id: int, limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
     """Get all chat sessions for a user"""
     try:
         client = get_supabase_client()
@@ -117,7 +123,7 @@ def get_user_chat_sessions(user_id: int, limit: int = 50, offset: int = 0) -> li
         raise RuntimeError(f"Failed to get chat sessions: {e}") from e
 
 
-def get_chat_session(session_id: int, user_id: int) -> dict[str, Any] | None:
+def get_chat_session(session_id: int, user_id: int) -> Optional[Dict[str, Any]]:
     """Get a specific chat session with messages"""
     try:
         client = get_supabase_client()
@@ -216,7 +222,7 @@ def delete_chat_session(session_id: int, user_id: int) -> bool:
         raise RuntimeError(f"Failed to delete chat session: {e}") from e
 
 
-def get_chat_session_stats(user_id: int) -> dict[str, Any]:
+def get_chat_session_stats(user_id: int) -> Dict[str, Any]:
     """Get chat session statistics for a user"""
     try:
         client = get_supabase_client()
@@ -269,7 +275,7 @@ def get_chat_session_stats(user_id: int) -> dict[str, Any]:
         raise RuntimeError(f"Failed to get chat session stats: {e}") from e
 
 
-def search_chat_sessions(user_id: int, query: str, limit: int = 20) -> list[dict[str, Any]]:
+def search_chat_sessions(user_id: int, query: str, limit: int = 20) -> List[Dict[str, Any]]:
     """Search chat sessions by title or message content"""
     try:
         client = get_supabase_client()

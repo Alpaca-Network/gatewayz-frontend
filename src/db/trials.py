@@ -1,19 +1,19 @@
 import logging
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Dict
 
 from src.config.supabase_config import get_supabase_client
 
 logger = logging.getLogger(__name__)
 
 
-def start_trial_for_key(api_key: str, trial_days: int = 14) -> dict[str, Any]:
+def start_trial_for_key(api_key: str, trial_days: int = 14) -> Dict[str, Any]:
     """Start a free trial for an API key"""
     try:
         client = get_supabase_client()
 
         # Get API key ID
-        key_result = client.table("api_keys").select("id").eq("key", api_key).execute()
+        key_result = client.table("api_keys_new").select("id").eq("api_key", api_key).execute()
         if not key_result.data:
             return {"success": False, "error": "API key not found"}
 
@@ -31,13 +31,13 @@ def start_trial_for_key(api_key: str, trial_days: int = 14) -> dict[str, Any]:
         return {"success": False, "error": str(e)}
 
 
-def get_trial_status_for_key(api_key: str) -> dict[str, Any]:
+def get_trial_status_for_key(api_key: str) -> Dict[str, Any]:
     """Get trial status for an API key"""
     try:
         client = get_supabase_client()
 
         # Get API key ID
-        key_result = client.table("api_keys").select("id").eq("key", api_key).execute()
+        key_result = client.table("api_keys_new").select("id").eq("api_key", api_key).execute()
         if not key_result.data:
             return {"success": False, "error": "API key not found"}
 
@@ -53,13 +53,13 @@ def get_trial_status_for_key(api_key: str) -> dict[str, Any]:
         return {"success": False, "error": str(e)}
 
 
-def convert_trial_to_paid_for_key(api_key: str, plan_name: str) -> dict[str, Any]:
+def convert_trial_to_paid_for_key(api_key: str, plan_name: str) -> Dict[str, Any]:
     """Convert trial to paid subscription for an API key"""
     try:
         client = get_supabase_client()
 
         # Get API key ID
-        key_result = client.table("api_keys").select("id").eq("key", api_key).execute()
+        key_result = client.table("api_keys_new").select("id").eq("api_key", api_key).execute()
         if not key_result.data:
             return {"success": False, "error": "API key not found"}
 
@@ -79,13 +79,13 @@ def convert_trial_to_paid_for_key(api_key: str, plan_name: str) -> dict[str, Any
 
 def track_trial_usage_for_key(
     api_key: str, tokens_used: int, requests_used: int = 1
-) -> dict[str, Any]:
+) -> Dict[str, Any]:
     """Track trial usage for an API key"""
     try:
         client = get_supabase_client()
 
         # Get API key ID
-        key_result = client.table("api_keys").select("id").eq("key", api_key).execute()
+        key_result = client.table("api_keys_new").select("id").eq("api_key", api_key).execute()
         if not key_result.data:
             return {"success": False, "error": "API key not found"}
 
@@ -104,7 +104,7 @@ def track_trial_usage_for_key(
         return {"success": False, "error": str(e)}
 
 
-def get_trial_analytics() -> dict[str, Any]:
+def get_trial_analytics() -> Dict[str, Any]:
     """Get trial analytics and conversion metrics"""
     try:
         client = get_supabase_client()
@@ -141,7 +141,7 @@ def get_trial_analytics() -> dict[str, Any]:
 
                     # Ensure both datetimes have timezone info for comparison
                     if end_date.tzinfo is None:
-                        # If end_date is naive, assume it's UTC
+                        # If end_date is naive, assume it's timezone.utc
                         end_date = end_date.replace(tzinfo=timezone.utc)
 
                     if end_date > current_time:

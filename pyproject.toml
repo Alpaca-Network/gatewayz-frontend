@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "gatewayz-backend"
 version = "2.0.3"
 description = "Gatewayz Universal Inference API"
-requires-python = ">=3.12"
+requires-python = ">=3.10"
 dependencies = [
     # Core web framework
     "fastapi==0.104.1",
@@ -80,7 +80,7 @@ full = [
 # Ruff Configuration (Fast Python Linter)
 [tool.ruff]
 # Python version
-target-version = "py312"
+target-version = "py310"
 
 # Line length
 line-length = 100
@@ -131,7 +131,7 @@ unfixable = []
 # Black Configuration (Code Formatter)
 [tool.black]
 line-length = 100
-target-version = ['py312']
+target-version = ['py310']
 include = '\.pyi?$'
 extend-exclude = '''
 /(
@@ -163,7 +163,7 @@ skip_glob = ["**/migrations/*", "**/__pycache__/*"]
 
 # MyPy Configuration (Type Checker)
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.10"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false  # Set to true when ready for strict typing

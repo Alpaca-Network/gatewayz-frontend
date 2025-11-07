@@ -13,11 +13,12 @@ from openai import AsyncOpenAI, OpenAI
 
 from src.config import Config
 
+from typing import Dict, Optional
 logger = logging.getLogger(__name__)
 
 # Global connection pool instances
-_client_pool: dict[str, OpenAI] = {}
-_async_client_pool: dict[str, AsyncOpenAI] = {}
+_client_pool: Dict[str, OpenAI] = {}
+_async_client_pool: Dict[str, AsyncOpenAI] = {}
 _pool_lock = Lock()
 
 # Connection pool configuration
@@ -72,8 +73,8 @@ def get_pooled_client(
     provider: str,
     base_url: str,
     api_key: str,
-    default_headers: dict[str, str] | None = None,
-    timeout: httpx.Timeout | None = None,
+    default_headers: Optional[Dict[str, str]] = None,
+    timeout: Optional[httpx.Timeout] = None,
 ) -> OpenAI:
     """
     Get or create a pooled OpenAI client for a specific provider.
@@ -115,8 +116,8 @@ def get_pooled_async_client(
     provider: str,
     base_url: str,
     api_key: str,
-    default_headers: dict[str, str] | None = None,
-    timeout: httpx.Timeout | None = None,
+    default_headers: Optional[Dict[str, str]] = None,
+    timeout: Optional[httpx.Timeout] = None,
 ) -> AsyncOpenAI:
     """
     Get or create a pooled AsyncOpenAI client for a specific provider.
@@ -178,7 +179,7 @@ def clear_connection_pools():
         logger.info("Cleared all connection pools")
 
 
-def get_pool_stats() -> dict[str, int]:
+def get_pool_stats() -> Dict[str, int]:
     """Get statistics about current connection pools."""
     with _pool_lock:
         return {
@@ -206,8 +207,8 @@ def get_openrouter_pooled_client() -> OpenAI:
 
 
 def get_portkey_pooled_client(
-    provider: str | None = None,
-    virtual_key: str | None = None,
+    provider: Optional[str] = None,
+    virtual_key: Optional[str] = None,
 ) -> OpenAI:
     """Get pooled client for Portkey."""
     if not Config.PORTKEY_API_KEY:

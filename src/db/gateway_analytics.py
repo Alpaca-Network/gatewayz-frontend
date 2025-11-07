@@ -5,19 +5,20 @@ Provides functions to analyze usage across different gateways and providers
 
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Optional, Dict, List
 
 from src.config.supabase_config import get_supabase_client
 
+from typing import Optional
 logger = logging.getLogger(__name__)
 
 
 def get_provider_stats(
     provider_name: str,
-    gateway: str | None = None,
+    gateway: Optional[str] = None,
     time_range: str = "24h",
-    user_id: int | None = None,
-) -> dict[str, Any]:
+    user_id: Optional[int] = None,
+) -> Dict[str, Any]:
     """
     Get comprehensive statistics for a specific provider
 
@@ -86,8 +87,8 @@ def get_provider_stats(
 
 
 def get_gateway_stats(
-    gateway: str, time_range: str = "24h", user_id: int | None = None
-) -> dict[str, Any]:
+    gateway: str, time_range: str = "24h", user_id: Optional[int] = None
+) -> Dict[str, Any]:
     """
     Get comprehensive statistics for a specific gateway
 
@@ -143,8 +144,8 @@ def get_gateway_stats(
 
 
 def get_trending_models(
-    gateway: str | None = "all", time_range: str = "24h", limit: int = 10, sort_by: str = "requests"
-) -> list[dict[str, Any]]:
+    gateway: Optional[str] = "all", time_range: str = "24h", limit: int = 10, sort_by: str = "requests"
+) -> List[Dict[str, Any]]:
     """
     Get trending models based on usage
 
@@ -238,7 +239,7 @@ def get_trending_models(
         return []
 
 
-def get_all_gateways_summary(time_range: str = "24h", user_id: int | None = None) -> dict[str, Any]:
+def get_all_gateways_summary(time_range: str = "24h", user_id: Optional[int] = None) -> Dict[str, Any]:
     """
     Get summary statistics for all gateways
 
@@ -287,7 +288,7 @@ def get_all_gateways_summary(time_range: str = "24h", user_id: int | None = None
 
 def get_top_models_by_provider(
     provider_name: str, limit: int = 5, time_range: str = "24h"
-) -> list[dict[str, Any]]:
+) -> List[Dict[str, Any]]:
     """
     Get top models for a specific provider
 
@@ -355,7 +356,7 @@ def get_top_models_by_provider(
 # Helper functions
 
 
-def _get_time_filter(time_range: str) -> str | None:
+def _get_time_filter(time_range: str) -> Optional[str]:
     """Convert time range string to ISO timestamp"""
     try:
         now = datetime.now(timezone.utc)
@@ -381,8 +382,8 @@ def _get_time_filter(time_range: str) -> str | None:
 
 
 def _calculate_provider_statistics(
-    logs: list[dict[str, Any]], provider_name: str, gateway: str | None = None
-) -> dict[str, Any]:
+    logs: List[Dict[str, Any]], provider_name: str, gateway: Optional[str] = None
+) -> Dict[str, Any]:
     """Calculate comprehensive statistics from activity logs"""
 
     total_requests = len(logs)
@@ -428,7 +429,7 @@ def _calculate_provider_statistics(
     }
 
 
-def _calculate_gateway_statistics(logs: list[dict[str, Any]], gateway: str) -> dict[str, Any]:
+def _calculate_gateway_statistics(logs: List[Dict[str, Any]], gateway: str) -> Dict[str, Any]:
     """Calculate comprehensive statistics for a gateway"""
 
     total_requests = len(logs)
@@ -475,7 +476,7 @@ def _calculate_gateway_statistics(logs: list[dict[str, Any]], gateway: str) -> d
     }
 
 
-def _empty_provider_stats(provider_name: str) -> dict[str, Any]:
+def _empty_provider_stats(provider_name: str) -> Dict[str, Any]:
     """Return empty statistics structure for a provider"""
     return {
         "provider": provider_name,
@@ -492,7 +493,7 @@ def _empty_provider_stats(provider_name: str) -> dict[str, Any]:
     }
 
 
-def _empty_gateway_stats(gateway: str) -> dict[str, Any]:
+def _empty_gateway_stats(gateway: str) -> Dict[str, Any]:
     """Return empty statistics structure for a gateway"""
     return {
         "gateway": gateway,
