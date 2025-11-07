@@ -633,7 +633,7 @@ export default function ModelsClient({
 
   return (
     <SidebarProvider>
-      <div className="relative flex w-full h-full justify-center overflow-hidden">
+      <div className="relative flex w-full justify-center">
         <Sidebar
           variant="sidebar"
           collapsible="offcanvas"
@@ -757,213 +757,209 @@ export default function ModelsClient({
           </SidebarContent>
         </Sidebar>
 
-        <SidebarInset className="flex-1 h-full flex flex-col">
-          <div className="sticky top-0 z-50 bg-background border-b flex flex-col gap-3 w-full">
-            <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col gap-3">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 w-full">
-                <div className="flex items-center gap-3">
-                  <SidebarTrigger className="lg:hidden" />
-                  <h1 className="text-2xl font-bold">Models</h1>
-                  {isLoadingMore && (
-                    <Badge variant="secondary" className="text-xs animate-pulse">
-                      Loading more...
-                    </Badge>
-                  )}
-                </div>
-                <div className="flex items-center gap-4">
-                  <span className={`text-sm whitespace-nowrap ${isLoadingModels || isLoadingMore ? 'shimmer-text' : 'text-muted-foreground'}`}>
-                    {isLoadingModels || isLoadingMore
-                      ? `${deduplicatedModels.length} models available,  loading...`
-                      : `${filteredModels.length} / ${deduplicatedModels.length} models`
-                    }
-                  </span>
-                  {hasActiveFilters && (
-                    <Button variant="ghost" size="sm" onClick={resetFilters}>Clear All Filters</Button>
-                  )}
-                </div>
+        <SidebarInset className="flex-1 overflow-x-hidden flex flex-col">
+          <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8 pb-24 overflow-x-hidden">
+          <div className="sticky top-[65px] has-onboarding-banner:top-[calc(65px+50px)] z-40 bg-background border-b flex flex-col gap-3 mb-6 w-full -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 w-full">
+              <div className="flex items-center gap-3">
+                <SidebarTrigger className="lg:hidden" />
+                <h1 className="text-2xl font-bold">Models</h1>
+                {isLoadingMore && (
+                  <Badge variant="secondary" className="text-xs animate-pulse">
+                    Loading more...
+                  </Badge>
+                )}
               </div>
+              <div className="flex items-center gap-4">
+                <span className={`text-sm whitespace-nowrap ${isLoadingModels || isLoadingMore ? 'shimmer-text' : 'text-muted-foreground'}`}>
+                  {isLoadingModels || isLoadingMore
+                    ? `${deduplicatedModels.length} models available,  loading...`
+                    : `${filteredModels.length} / ${deduplicatedModels.length} models`
+                  }
+                </span>
+                {hasActiveFilters && (
+                  <Button variant="ghost" size="sm" onClick={resetFilters}>Clear All Filters</Button>
+                )}
+              </div>
+            </div>
 
-              {/* Active Filters */}
-              <div className="flex flex-wrap gap-2">
-                {selectedInputFormats.map(format => (
-                  <Badge key={`input-${format}`} variant="secondary" className="gap-1">
-                    Input: {format}
-                    <button onClick={() => setSelectedInputFormats(prev => prev.filter(f => f !== format))} className="ml-1 hover:bg-muted rounded-sm">
-                      <X className="h-3 w-3" />
-                    </button>
-                  </Badge>
-                ))}
-                {selectedOutputFormats.map(format => (
-                  <Badge key={`output-${format}`} variant="secondary" className="gap-1">
-                    Output: {format}
-                    <button onClick={() => setSelectedOutputFormats(prev => prev.filter(f => f !== format))} className="ml-1 hover:bg-muted rounded-sm">
-                      <X className="h-3 w-3" />
-                    </button>
-                  </Badge>
-                ))}
-                {pricingFilter !== 'all' && (
-                  <Badge variant="secondary" className="gap-1">
-                    {pricingFilter === 'free' ? 'Free only' : 'Paid only'}
-                    <button onClick={() => setPricingFilter('all')} className="ml-1 hover:bg-muted rounded-sm">
-                      <X className="h-3 w-3" />
-                    </button>
-                  </Badge>
-                )}
-                {releaseDateFilter !== 'all' && (
-                  <Badge variant="secondary" className="gap-1">
-                    {releaseDateFilter === 'last-30-days' && 'Last 30 days'}
-                    {releaseDateFilter === 'last-90-days' && 'Last 90 days'}
-                    {releaseDateFilter === 'last-6-months' && 'Last 6 months'}
-                    {releaseDateFilter === 'last-year' && 'Last year'}
-                    <button onClick={() => setReleaseDateFilter('all')} className="ml-1 hover:bg-muted rounded-sm">
-                      <X className="h-3 w-3" />
-                    </button>
-                  </Badge>
-                )}
-                {(contextLengthRange[0] !== 0 || contextLengthRange[1] !== 1024) && (
-                  <Badge variant="secondary" className="gap-1">
-                    Context: {contextLengthRange[0]}K-{contextLengthRange[1]}K tokens
-                    <button onClick={() => setContextLengthRange([0, 1024])} className="ml-1 hover:bg-muted rounded-sm">
-                      <X className="h-3 w-3" />
-                    </button>
-                  </Badge>
-                )}
-                {(promptPricingRange[0] !== 0 || promptPricingRange[1] !== 10) && (
-                  <Badge variant="secondary" className="gap-1">
-                    Price: ${promptPricingRange[0]}-${promptPricingRange[1]}/M tokens
-                    <button onClick={() => setPromptPricingRange([0, 10])} className="ml-1 hover:bg-muted rounded-sm">
-                      <X className="h-3 w-3" />
-                    </button>
-                  </Badge>
-                )}
-                {selectedParameters.map(param => (
-                  <Badge key={param} variant="secondary" className="gap-1">
-                    {param}
-                    <button onClick={() => setSelectedParameters(prev => prev.filter(p => p !== param))} className="ml-1 hover:bg-muted rounded-sm">
-                      <X className="h-3 w-3" />
-                    </button>
-                  </Badge>
-                ))}
-                {selectedModelSeries.map(series => (
-                  <Badge key={series} variant="secondary" className="gap-1">
-                    {series}
-                    <button onClick={() => setSelectedModelSeries(prev => prev.filter(s => s !== series))} className="ml-1 hover:bg-muted rounded-sm">
-                      <X className="h-3 w-3" />
-                    </button>
-                  </Badge>
-                ))}
-                {selectedDevelopers.map(developer => (
-                  <Badge key={developer} variant="secondary" className="gap-1">
-                    Researcher: {developer}
-                    <button onClick={() => setSelectedDevelopers(prev => prev.filter(d => d !== developer))} className="ml-1 hover:bg-muted rounded-sm">
-                      <X className="h-3 w-3" />
-                    </button>
-                  </Badge>
-                ))}
-                {selectedGateways.map(gateway => (
-                  <Badge key={gateway} variant="secondary" className="gap-1">
-                    Gateway: {gateway}
-                    <button onClick={() => setSelectedGateways(prev => prev.filter(g => g !== gateway))} className="ml-1 hover:bg-muted rounded-sm">
-                      <X className="h-3 w-3" />
-                    </button>
-                  </Badge>
-                ))}
-              </div>
+            {/* Active Filters */}
+            <div className="flex flex-wrap gap-2">
+              {selectedInputFormats.map(format => (
+                <Badge key={`input-${format}`} variant="secondary" className="gap-1">
+                  Input: {format}
+                  <button onClick={() => setSelectedInputFormats(prev => prev.filter(f => f !== format))} className="ml-1 hover:bg-muted rounded-sm">
+                    <X className="h-3 w-3" />
+                  </button>
+                </Badge>
+              ))}
+              {selectedOutputFormats.map(format => (
+                <Badge key={`output-${format}`} variant="secondary" className="gap-1">
+                  Output: {format}
+                  <button onClick={() => setSelectedOutputFormats(prev => prev.filter(f => f !== format))} className="ml-1 hover:bg-muted rounded-sm">
+                    <X className="h-3 w-3" />
+                  </button>
+                </Badge>
+              ))}
+              {pricingFilter !== 'all' && (
+                <Badge variant="secondary" className="gap-1">
+                  {pricingFilter === 'free' ? 'Free only' : 'Paid only'}
+                  <button onClick={() => setPricingFilter('all')} className="ml-1 hover:bg-muted rounded-sm">
+                    <X className="h-3 w-3" />
+                  </button>
+                </Badge>
+              )}
+              {releaseDateFilter !== 'all' && (
+                <Badge variant="secondary" className="gap-1">
+                  {releaseDateFilter === 'last-30-days' && 'Last 30 days'}
+                  {releaseDateFilter === 'last-90-days' && 'Last 90 days'}
+                  {releaseDateFilter === 'last-6-months' && 'Last 6 months'}
+                  {releaseDateFilter === 'last-year' && 'Last year'}
+                  <button onClick={() => setReleaseDateFilter('all')} className="ml-1 hover:bg-muted rounded-sm">
+                    <X className="h-3 w-3" />
+                  </button>
+                </Badge>
+              )}
+              {(contextLengthRange[0] !== 0 || contextLengthRange[1] !== 1024) && (
+                <Badge variant="secondary" className="gap-1">
+                  Context: {contextLengthRange[0]}K-{contextLengthRange[1]}K tokens
+                  <button onClick={() => setContextLengthRange([0, 1024])} className="ml-1 hover:bg-muted rounded-sm">
+                    <X className="h-3 w-3" />
+                  </button>
+                </Badge>
+              )}
+              {(promptPricingRange[0] !== 0 || promptPricingRange[1] !== 10) && (
+                <Badge variant="secondary" className="gap-1">
+                  Price: ${promptPricingRange[0]}-${promptPricingRange[1]}/M tokens
+                  <button onClick={() => setPromptPricingRange([0, 10])} className="ml-1 hover:bg-muted rounded-sm">
+                    <X className="h-3 w-3" />
+                  </button>
+                </Badge>
+              )}
+              {selectedParameters.map(param => (
+                <Badge key={param} variant="secondary" className="gap-1">
+                  {param}
+                  <button onClick={() => setSelectedParameters(prev => prev.filter(p => p !== param))} className="ml-1 hover:bg-muted rounded-sm">
+                    <X className="h-3 w-3" />
+                  </button>
+                </Badge>
+              ))}
+              {selectedModelSeries.map(series => (
+                <Badge key={series} variant="secondary" className="gap-1">
+                  {series}
+                  <button onClick={() => setSelectedModelSeries(prev => prev.filter(s => s !== series))} className="ml-1 hover:bg-muted rounded-sm">
+                    <X className="h-3 w-3" />
+                  </button>
+                </Badge>
+              ))}
+              {selectedDevelopers.map(developer => (
+                <Badge key={developer} variant="secondary" className="gap-1">
+                  Researcher: {developer}
+                  <button onClick={() => setSelectedDevelopers(prev => prev.filter(d => d !== developer))} className="ml-1 hover:bg-muted rounded-sm">
+                    <X className="h-3 w-3" />
+                  </button>
+                </Badge>
+              ))}
+              {selectedGateways.map(gateway => (
+                <Badge key={gateway} variant="secondary" className="gap-1">
+                  Gateway: {gateway}
+                  <button onClick={() => setSelectedGateways(prev => prev.filter(g => g !== gateway))} className="ml-1 hover:bg-muted rounded-sm">
+                    <X className="h-3 w-3" />
+                  </button>
+                </Badge>
+              ))}
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto overflow-x-hidden">
-            <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8 pb-24 overflow-x-hidden">
-              <div className="flex flex-col sm:flex-row gap-4 mb-6">
-                <div className="relative w-full">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Filter models"
-                    className="pl-9 bg-input"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                  />
-                </div>
-                <Select value={sortBy} onValueChange={setSortBy}>
-                  <SelectTrigger className="w-full sm:w-[180px]">
-                    <SelectValue placeholder="Sort" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="tokens-desc">Tokens (High to Low)</SelectItem>
-                    <SelectItem value="tokens-asc">Tokens (Low to High)</SelectItem>
-                    <SelectItem value="price-desc">Price (High to Low)</SelectItem>
-                    <SelectItem value="price-asc">Price (Low to High)</SelectItem>
-                  </SelectContent>
-                </Select>
-                <div className="flex items-center gap-1 bg-muted p-1 rounded-md">
-                  <Button
-                    variant={layout === 'grid' ? 'secondary' : 'ghost'}
-                    size="icon"
-                    onClick={() => setLayout('grid')}
-                  >
-                    <LayoutGrid className="w-5 h-5" />
-                  </Button>
-                  <Button
-                    variant={layout === 'list' ? 'secondary' : 'ghost'}
-                    size="icon"
-                    onClick={() => setLayout('list')}
-                  >
-                    <LayoutList className="w-5 h-5" />
-                  </Button>
-                </div>
+          <div className="flex flex-col sm:flex-row gap-4 mb-6">
+              <div className="relative w-full">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                  placeholder="Filter models"
+                  className="pl-9 bg-input"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+              />
               </div>
-
-              <div
-                className={
-                  layout === 'grid'
-                    ? 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 lg:gap-6 overflow-x-hidden'
-                    : 'flex flex-col gap-4 lg:gap-6 overflow-x-hidden'
-                }
-                key={`models-${filteredModels.length}-${debouncedSearchTerm}`}
+              <Select value={sortBy} onValueChange={setSortBy}>
+              <SelectTrigger className="w-full sm:w-[180px]">
+                  <SelectValue placeholder="Sort" />
+              </SelectTrigger>
+              <SelectContent>
+                  <SelectItem value="tokens-desc">Tokens (High to Low)</SelectItem>
+                  <SelectItem value="tokens-asc">Tokens (Low to High)</SelectItem>
+                  <SelectItem value="price-desc">Price (High to Low)</SelectItem>
+                  <SelectItem value="price-asc">Price (Low to High)</SelectItem>
+              </SelectContent>
+              </Select>
+              <div className="flex items-center gap-1 bg-muted p-1 rounded-md">
+              <Button
+                  variant={layout === 'grid' ? 'secondary' : 'ghost'}
+                  size="icon"
+                  onClick={() => setLayout('grid')}
               >
-                {visibleModels.map((model, key) => (
-                  <ModelCard key={key} model={model} />
-                ))}
+                  <LayoutGrid className="w-5 h-5" />
+              </Button>
+              <Button
+                  variant={layout === 'list' ? 'secondary' : 'ghost'}
+                  size="icon"
+                  onClick={() => setLayout('list')}
+              >
+                  <LayoutList className="w-5 h-5" />
+              </Button>
               </div>
+          </div>
 
-              {/* No results message */}
-              {filteredModels.length === 0 && !isLoadingModels && !isLoadingMore && (
-                <div className="flex flex-col items-center justify-center py-16 px-4">
-                  <div className="text-center max-w-md">
-                    <h3 className="text-lg font-semibold mb-2">No models found</h3>
-                    <p className="text-sm text-muted-foreground mb-4">
-                      {selectedGateways.includes('cerebras') ? (
-                        <>
-                          The Cerebras gateway is experiencing data issues. Please try selecting a different gateway or <button onClick={resetFilters} className="text-primary hover:underline">clear all filters</button>.
-                        </>
-                      ) : (
-                        <>
-                          Try adjusting your filters or <button onClick={resetFilters} className="text-primary hover:underline">clearing all filters</button> to see more models.
-                        </>
-                      )}
-                    </p>
-                  </div>
-                </div>
-              )}
+          <div
+            className={
+              layout === 'grid'
+                ? 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 lg:gap-6 overflow-x-hidden'
+                : 'flex flex-col gap-4 lg:gap-6 overflow-x-hidden'
+            }
+            key={`models-${filteredModels.length}-${debouncedSearchTerm}`}
+          >
+            {visibleModels.map((model, key) => (
+              <ModelCard key={key} model={model} />
+            ))}
+          </div>
 
-              {/* Infinite Scroll Trigger */}
-              {hasMore && (
-                <div ref={loadMoreRef} className="flex items-center justify-center py-8">
-                  <div className="text-sm text-muted-foreground">
-                    Loading more models... ({visibleCount} of {filteredModels.length})
-                  </div>
-                </div>
-              )}
-
-              {/* End of results */}
-              {!hasMore && filteredModels.length > 0 && (
-                <div className="flex items-center justify-center py-8">
-                  <div className="text-sm text-muted-foreground">
-                    Showing all {filteredModels.length} models
-                  </div>
-                </div>
-              )}
+          {/* No results message */}
+          {filteredModels.length === 0 && !isLoadingModels && !isLoadingMore && (
+            <div className="flex flex-col items-center justify-center py-16 px-4">
+              <div className="text-center max-w-md">
+                <h3 className="text-lg font-semibold mb-2">No models found</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  {selectedGateways.includes('cerebras') ? (
+                    <>
+                      The Cerebras gateway is experiencing data issues. Please try selecting a different gateway or <button onClick={resetFilters} className="text-primary hover:underline">clear all filters</button>.
+                    </>
+                  ) : (
+                    <>
+                      Try adjusting your filters or <button onClick={resetFilters} className="text-primary hover:underline">clearing all filters</button> to see more models.
+                    </>
+                  )}
+                </p>
+              </div>
             </div>
+          )}
+
+          {/* Infinite Scroll Trigger */}
+          {hasMore && (
+            <div ref={loadMoreRef} className="flex items-center justify-center py-8">
+              <div className="text-sm text-muted-foreground">
+                Loading more models... ({visibleCount} of {filteredModels.length})
+              </div>
+            </div>
+          )}
+
+          {/* End of results */}
+          {!hasMore && filteredModels.length > 0 && (
+            <div className="flex items-center justify-center py-8">
+              <div className="text-sm text-muted-foreground">
+                Showing all {filteredModels.length} models
+              </div>
+            </div>
+          )}
           </div>
         </SidebarInset>
       </div>
