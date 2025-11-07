@@ -699,6 +699,7 @@ async def chat_completions(
                     "fireworks",
                     "together",
                     "portkey",
+                    "google-vertex",
                 ]:
                     transformed = transform_model_id(original_model, test_provider)
                     provider_models = get_cached_models(test_provider) or []
@@ -1517,6 +1518,7 @@ async def unified_responses(
                     "fireworks",
                     "together",
                     "portkey",
+                    "google-vertex",
                 ]:
                     transformed = transform_model_id(original_model, test_provider)
                     provider_models = get_cached_models(test_provider) or []
