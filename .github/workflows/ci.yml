@@ -383,7 +383,8 @@ jobs:
   trigger-claude-on-failure:
     name: Trigger Claude Auto-Fix
     runs-on: ubuntu-latest
-    # Run on any CI failure, but only for pull requests
+    # Depends on critical jobs and runs if any failed, only for pull requests
+    needs: [lint, security, test, coverage, build]
     if: failure() && github.event_name == 'pull_request'
     permissions:
       actions: write
