@@ -170,76 +170,30 @@ def get_google_vertex_access_token():
     Returns an access token that can be used in Authorization headers
     for REST API requests to the Vertex AI Gemini API.
 
-    WORKAROUND: Creates access token manually from service account credentials
-    to avoid id_token vs access_token issues with google.auth library.
+    Uses google.auth.default() via get_google_vertex_credentials() which
+    properly handles the OAuth2 token exchange to return access_token
+    instead of id_token.
     """
     try:
-        logger.info("Getting Google Vertex AI credentials")
+        logger.info("Getting Google Vertex AI access token")
 
-        # Load service account credentials directly from environment
-        import base64
-        import os
-        import json as json_module
-        from google.oauth2 import service_account
-        from google.auth.transport.requests import Request as AuthRequest
+        # Use the existing get_google_vertex_credentials() function
+        # which properly handles credential loading via google.auth.default()
+        credentials = get_google_vertex_credentials()
+        logger.info("Successfully obtained credentials")
 
-        creds_json_env = os.environ.get("GOOGLE_VERTEX_CREDENTIALS_JSON")
-        if not creds_json_env:
-            raise ValueError("GOOGLE_VERTEX_CREDENTIALS_JSON environment variable not set")
+        # Ensure credentials are fresh
+        if not credentials.valid or credentials.expired:
+            logger.info("Refreshing expired or invalid credentials")
+            credentials.refresh(Request())
 
-        # Decode credentials
-        try:
-            creds_json = creds_json_env
-            creds_dict = json_module.loads(creds_json)
-        except (json_module.JSONDecodeError, ValueError):
-            try:
-                creds_json = base64.b64decode(creds_json_env).decode("utf-8")
-                creds_dict = json_module.loads(creds_json)
-            except Exception as e:
-                raise ValueError(f"Failed to parse credentials JSON: {e}")
+        access_token = credentials.token
 
-        logger.info("Successfully loaded service account credentials")
+        if not access_token:
+            raise ValueError("Failed to obtain access token from credentials")
 
-        # Create credentials with explicit token_uri to force access_token
-        # The key is to use service_account.Credentials directly with proper audience
-        credentials = service_account.Credentials.from_service_account_info(
-            creds_dict,
-            scopes=VERTEX_AI_SCOPES
-        )
-
-        logger.info("Created service account credentials with scopes")
-
-        # Get token by refreshing
-        try:
-            credentials.refresh(AuthRequest())
-            access_token = credentials.token
-
-            if access_token:
-                logger.info(f"Successfully obtained access token (length: {len(access_token)} chars)")
-                return access_token
-            else:
-                raise ValueError("Token is None after refresh")
-
-        except Exception as refresh_error:
-            error_str = str(refresh_error)
-            logger.error(f"Token refresh failed: {error_str}", exc_info=True)
-
-            # If we get "No access token in response", try using id_token as workaround
-            if "No access token" in error_str or "id_token" in error_str:
-                logger.warning(
-                    "OAuth returned id_token instead of access_token. "
-                    "Attempting to extract and use it as bearer token."
-                )
-
-                # Try to extract id_token from the error message
-                import re
-                id_token_match = re.search(r"'id_token': '([^']+)'", error_str)
-                if id_token_match:
-                    id_token = id_token_match.group(1)
-                    logger.info(f"Extracted id_token (length: {len(id_token)} chars). Using as bearer token.")
-                    return id_token
-
-            raise ValueError(f"Failed to obtain usable token: {error_str}")
+        logger.info(f"Successfully obtained access token (length: {len(access_token)} chars)")
+        return access_token
 
     except ValueError:
         raise
