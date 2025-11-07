@@ -12,6 +12,7 @@ to receive metrics via:
 
 import asyncio
 import logging
+import socket
 import time
 from typing import Any, Dict, Optional
 
@@ -140,11 +141,17 @@ class PrometheusRemoteWriter:
                 return False
 
         except httpx.TimeoutException:
-            logger.error("Timeout pushing metrics to Prometheus")
+            logger.debug("Timeout pushing metrics to Prometheus")
+            self._push_errors += 1
+            return False
+        except (socket.gaierror, OSError) as e:
+            # DNS resolution or connection error - log at debug level since Prometheus
+            # may not be available in all environments (e.g., production without Grafana stack)
+            logger.debug(f"Cannot connect to Prometheus at {self.remote_write_url}: {e}")
             self._push_errors += 1
             return False
         except Exception as e:
-            logger.error(f"Error pushing metrics to Prometheus: {e}")
+            logger.debug(f"Error pushing metrics to Prometheus: {e}")
             self._push_errors += 1
             return False
 
