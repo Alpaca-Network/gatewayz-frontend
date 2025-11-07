@@ -18,10 +18,10 @@ export function SessionInitializer() {
   useEffect(() => {
     async function initializeSession() {
       // Check for URL params from session transfer
-      const { token, userId, returnUrl } = getSessionTransferParams();
+      const { token, userId, returnUrl, action } = getSessionTransferParams();
 
       if (token && userId) {
-        console.log("[SessionInit] Session transfer params detected");
+        console.log("[SessionInit] Session transfer params detected", { action });
 
         // Store token for persistence
         storeSessionTransferToken(token, userId);
@@ -61,16 +61,12 @@ export function SessionInitializer() {
         return;
       }
 
-      // Check for auth trigger parameter (from main domain "Sign In" button)
+      // Check for action parameter (from main domain redirects: signin, freetrial)
       if (status === "unauthenticated") {
-        const params = new URLSearchParams(
-          typeof window !== "undefined" ? window.location.search : ""
-        );
-        const shouldTriggerAuth = params.get("auth") === "true";
-
-        if (shouldTriggerAuth) {
+        if (action) {
           console.log(
-            "[SessionInit] Auth trigger detected, opening Privy popup"
+            "[SessionInit] Action parameter detected, opening Privy popup",
+            { action }
           );
           cleanupSessionTransferParams();
           await login();
