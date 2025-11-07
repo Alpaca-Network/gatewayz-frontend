@@ -161,6 +161,7 @@ export function isAISDKModel(modelId: string): boolean {
     // Google models
     'gemini-pro',
     'gemini-1.5-pro',
+    'gemini-2.0-flash',
 
     // Perplexity models
     'perplexity-sonar',
@@ -210,6 +211,13 @@ export function getAISDKAvailableModels() {
       provider: 'Google',
       supportsThinking: false,
       description: 'Google\'s high-performance model',
+    },
+    {
+      id: 'gemini-2.0-flash',
+      name: 'Gemini 2.0 Flash',
+      provider: 'Google',
+      supportsThinking: false,
+      description: 'Fast and efficient Gemini model optimized for speed',
     },
   ];
 }
