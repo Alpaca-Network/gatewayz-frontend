@@ -113,6 +113,12 @@ def create_app() -> FastAPI:
     app.add_middleware(GZipMiddleware, minimum_size=1000)
     logger.info("  🗜  GZip compression middleware enabled (threshold: 1KB)")
 
+    # Add observability middleware for automatic metrics collection
+    # This should be added after CORS/compression but before route handlers
+    from src.middleware.observability_middleware import ObservabilityMiddleware
+    app.add_middleware(ObservabilityMiddleware)
+    logger.info("  📊 Observability middleware enabled (automatic metrics tracking)")
+
     # Security
     HTTPBearer()
 

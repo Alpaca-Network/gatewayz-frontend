@@ -34,6 +34,28 @@ http_request_duration = Histogram(
     buckets=(0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5),
 )
 
+# Additional metrics for Grafana FastAPI Observability Dashboard compatibility
+# These are exposed by the observability middleware
+fastapi_requests_in_progress = Gauge(
+    "fastapi_requests_in_progress",
+    "Number of HTTP requests currently being processed",
+    ["method", "endpoint"],
+)
+
+fastapi_request_size_bytes = Histogram(
+    "fastapi_request_size_bytes",
+    "HTTP request body size in bytes",
+    ["method", "endpoint"],
+    buckets=(100, 1000, 10000, 100000, 1000000),
+)
+
+fastapi_response_size_bytes = Histogram(
+    "fastapi_response_size_bytes",
+    "HTTP response body size in bytes",
+    ["method", "endpoint"],
+    buckets=(100, 1000, 10000, 100000, 1000000),
+)
+
 # ==================== Model Inference Metrics ====================
 model_inference_requests = Counter(
     "model_inference_requests_total",
