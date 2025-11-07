@@ -288,6 +288,18 @@ export function getAISDKModelMetadata(modelId: string): AISDKModelConfig | null 
       modelId: 'gemini-pro',
       supportsThinking: false,
     },
+    'gemini-2.0-flash': {
+      name: 'Gemini 2.0 Flash',
+      provider: 'google',
+      modelId: 'gemini-2.0-flash',
+      supportsThinking: false,
+    },
+    'gemini-2-0-flash': {
+      name: 'Gemini 2.0 Flash',
+      provider: 'google',
+      modelId: 'gemini-2.0-flash',
+      supportsThinking: false,
+    },
   };
 
   return (
