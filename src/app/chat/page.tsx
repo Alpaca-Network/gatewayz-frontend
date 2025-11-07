@@ -994,10 +994,42 @@ const ChatMessage = ({ message, modelName }: { message: Message, modelName: stri
 
 const ChatSkeleton = () => (
   <div className="flex items-start gap-3">
-    <Avatar className="w-8 h-8"><AvatarFallback><Bot/></AvatarFallback></Avatar>
-    <div className="flex flex-col gap-2 w-full max-w-md">
-        <Skeleton className="h-4 w-24" />
-        <Skeleton className="h-10 w-full" />
+    {/* Animated arrow icon */}
+    <div className="mt-1 flex-shrink-0">
+      <svg
+        className="w-5 h-5 text-blue-500"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path
+          d="M5 12h14M12 5l7 7-7 7"
+          className="animate-pulse"
+          style={{ animationDuration: '1.5s' }}
+        />
+      </svg>
+      <style jsx>{`
+        @keyframes slideArrow {
+          0%, 100% {
+            transform: translateX(0);
+            opacity: 0.6;
+          }
+          50% {
+            transform: translateX(4px);
+            opacity: 1;
+          }
+        }
+      `}</style>
+    </div>
+
+    {/* Skeleton loading bars */}
+    <div className="flex flex-col gap-3 w-full max-w-2xl">
+      <Skeleton className="h-3 w-full rounded-full" />
+      <Skeleton className="h-3 w-full rounded-full" />
+      <Skeleton className="h-3 w-2/3 rounded-full" />
     </div>
   </div>
 );
