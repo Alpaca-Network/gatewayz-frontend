@@ -204,5 +204,12 @@ export function getAISDKAvailableModels() {
       supportsThinking: false,
       description: 'Google\'s advanced multimodal model',
     },
+    {
+      id: 'gemini-pro',
+      name: 'Gemini Pro',
+      provider: 'Google',
+      supportsThinking: false,
+      description: 'Google\'s high-performance model',
+    },
   ];
 }
