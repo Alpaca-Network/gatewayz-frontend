@@ -162,6 +162,7 @@ class MessagesRequest(BaseModel):
     - 'max_tokens' is REQUIRED (not optional)
     - Content can be string or array of content blocks
     - No frequency_penalty or presence_penalty
+    - Supports tool use (function calling)
     """
 
     model: str  # e.g., "claude-sonnet-4-5-20250929"
@@ -174,6 +175,8 @@ class MessagesRequest(BaseModel):
     stop_sequences: list[str] | None = None
     stream: bool | None = False
     metadata: dict[str, Any] | None = None
+    tools: list[dict[str, Any]] | None = None  # Tool definitions for function calling
+    tool_choice: str | dict[str, Any] | None = None  # Tool selection: "auto", "required", or specific tool
 
     # Gateway-specific fields (not part of Anthropic API)
     provider: str | None = None

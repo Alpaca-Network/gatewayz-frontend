@@ -15,6 +15,8 @@ def transform_anthropic_to_openai(
     top_p: float | None = None,
     top_k: int | None = None,
     stop_sequences: list[str] | None = None,
+    tools: list[dict[str, Any]] | None = None,
+    tool_choice: str | dict[str, Any] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """
     Transform Anthropic Messages API request to OpenAI Chat Completions format.
@@ -27,6 +29,8 @@ def transform_anthropic_to_openai(
         top_p: Top-p parameter
         top_k: Top-k parameter (Anthropic-specific, ignored)
         stop_sequences: Stop sequences (maps to 'stop' in OpenAI)
+        tools: Tool/function definitions for function calling
+        tool_choice: Tool selection strategy ("auto", "required", or specific tool)
 
     Returns:
         Tuple of (openai_messages, openai_params)
@@ -101,6 +105,10 @@ def transform_anthropic_to_openai(
         openai_params["top_p"] = top_p
     if stop_sequences:
         openai_params["stop"] = stop_sequences
+    if tools:
+        openai_params["tools"] = tools
+    if tool_choice:
+        openai_params["tool_choice"] = tool_choice
 
     # Note: top_k is Anthropic-specific and not supported in OpenAI
     # We log it but don't pass it through

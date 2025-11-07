@@ -277,6 +277,8 @@ async def anthropic_messages(
             top_p=req.top_p,
             top_k=req.top_k,
             stop_sequences=req.stop_sequences,
+            tools=req.tools,
+            tool_choice=req.tool_choice,
         )
 
         # === 2.1) Inject conversation history if session_id provided ===
