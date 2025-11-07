@@ -603,23 +603,35 @@ def _normalize_vertex_candidate_to_openai(candidate: dict, model: str) -> dict:
     
     # Extract text from parts
     text_content = ""
+    tool_calls = []
     for part in content_parts:
         if "text" in part:
             text_content += part["text"]
-    
+        # Check for tool use in parts (function calling)
+        if "functionCall" in part:
+            tool_call = part["functionCall"]
+            tool_calls.append({
+                "id": f"call_{int(time.time() * 1000)}",
+                "type": "function",
+                "function": {
+                    "name": tool_call.get("name", "unknown"),
+                    "arguments": json.dumps(tool_call.get("args", {}))
+                }
+            })
+
     logger.info(f"Extracted text content length: {len(text_content)} characters")
-    
+
     # Warn if content is empty
-    if not text_content:
+    if not text_content and not tool_calls:
         logger.warning(
             f"Received empty text content from Vertex AI for model {model}. Candidate: {json.dumps(candidate, default=str)}"
         )
-    
+
     # Extract usage information
     usage_metadata = candidate.get("usageMetadata", {})
     prompt_tokens = int(usage_metadata.get("promptTokenCount", 0))
     completion_tokens = int(usage_metadata.get("candidatesTokenCount", 0))
-    
+
     finish_reason = candidate.get("finishReason", "STOP")
     finish_reason_map = {
         "STOP": "stop",
@@ -628,7 +640,12 @@ def _normalize_vertex_candidate_to_openai(candidate: dict, model: str) -> dict:
         "RECITATION": "stop",
         "FINISH_REASON_UNSPECIFIED": "unknown",
     }
-    
+
+    # Build message with content and tool_calls if present
+    message = {"role": "assistant", "content": text_content}
+    if tool_calls:
+        message["tool_calls"] = tool_calls
+
     return {
         "id": f"vertex-{int(time.time() * 1000)}",
         "object": "text_completion",
@@ -637,7 +654,7 @@ def _normalize_vertex_candidate_to_openai(candidate: dict, model: str) -> dict:
         "choices": [
             {
                 "index": 0,
-                "message": {"role": "assistant", "content": text_content},
+                "message": message,
                 "finish_reason": finish_reason_map.get(finish_reason, "stop"),
             }
         ],
