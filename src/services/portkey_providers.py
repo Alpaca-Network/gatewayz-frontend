@@ -719,66 +719,22 @@ def fetch_models_from_google_vertex():
         )
 
         # Common Google Vertex AI models
-        # These are the officially supported models available in Vertex AI
+        # These are the officially supported and generally available models in Vertex AI
+        # Note: Preview models (with -preview- in the name) may not be available in all projects
         vertex_models = [
-            {
-                "id": "gemini-2.5-flash",
-                "display_name": "Gemini 2.5 Flash",
-                "description": "Latest generation fast model with improved capabilities",
-                "max_input_tokens": 1000000,
-                "max_output_tokens": 100000,
-                "modalities": ["text", "image", "audio", "video"],
-                "supported_generation_methods": _GEMINI_GENERATION_METHODS,
-            },
-            {
-                "id": "gemini-2.5-flash-lite",
-                "display_name": "Gemini 2.5 Flash Lite (GA)",
-                "description": "Lightweight, cost-effective model for high-throughput applications (stable version)",
-                "max_input_tokens": 1000000,
-                "max_output_tokens": 8192,
-                "modalities": ["text", "image", "audio", "video"],
-                "supported_generation_methods": _GEMINI_GENERATION_METHODS,
-            },
-            {
-                "id": "gemini-2.5-flash-lite-preview-09-2025",
-                "display_name": "Gemini 2.5 Flash Lite Preview (Sep 2025)",
-                "description": "Preview version with improved performance (887 tokens/sec) and enhanced reasoning capabilities",
-                "max_input_tokens": 1000000,
-                "max_output_tokens": 8192,
-                "modalities": ["text", "image", "audio", "video"],
-                "supported_generation_methods": _GEMINI_GENERATION_METHODS,
-            },
-            {
-                "id": "gemini-2.5-pro",
-                "display_name": "Gemini 2.5 Pro",
-                "description": "Most advanced reasoning model with enhanced capabilities",
-                "max_input_tokens": 1000000,
-                "max_output_tokens": 100000,
-                "modalities": ["text", "image", "audio", "video"],
-                "supported_generation_methods": _GEMINI_GENERATION_METHODS,
-            },
             {
                 "id": "gemini-2.0-flash",
                 "display_name": "Gemini 2.0 Flash",
-                "description": "Fast, efficient model optimized for real-time applications",
+                "description": "Latest stable fast model, optimized for real-time applications",
                 "max_input_tokens": 1000000,
                 "max_output_tokens": 100000,
                 "modalities": ["text", "image", "audio", "video"],
-                "supported_generation_methods": _GEMINI_GENERATION_METHODS,
-            },
-            {
-                "id": "gemini-2.0-flash-thinking",
-                "display_name": "Gemini 2.0 Flash Thinking",
-                "description": "Extended thinking variant for complex reasoning tasks",
-                "max_input_tokens": 1000000,
-                "max_output_tokens": 100000,
-                "modalities": ["text"],
                 "supported_generation_methods": _GEMINI_GENERATION_METHODS,
             },
             {
                 "id": "gemini-2.0-pro",
                 "display_name": "Gemini 2.0 Pro",
-                "description": "Advanced reasoning model for complex tasks",
+                "description": "Latest stable advanced reasoning model for complex tasks",
                 "max_input_tokens": 1000000,
                 "max_output_tokens": 4096,
                 "modalities": ["text", "image", "audio", "video"],
@@ -796,7 +752,7 @@ def fetch_models_from_google_vertex():
             {
                 "id": "gemini-1.5-flash",
                 "display_name": "Gemini 1.5 Flash",
-                "description": "Fast model for speed-focused applications",
+                "description": "Fast model optimized for speed and efficiency",
                 "max_input_tokens": 1000000,
                 "max_output_tokens": 8192,
                 "modalities": ["text", "image", "audio", "video"],
@@ -805,7 +761,7 @@ def fetch_models_from_google_vertex():
             {
                 "id": "gemini-1.0-pro",
                 "display_name": "Gemini 1.0 Pro",
-                "description": "Previous generation pro model",
+                "description": "Stable legacy model with good reasoning capabilities",
                 "max_input_tokens": 32000,
                 "max_output_tokens": 8192,
                 "modalities": ["text"],
