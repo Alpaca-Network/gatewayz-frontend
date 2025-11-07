@@ -69,6 +69,9 @@ class Config:
     # Vercel AI Gateway Configuration
     VERCEL_AI_GATEWAY_API_KEY = os.environ.get("VERCEL_AI_GATEWAY_API_KEY")
 
+    # Vercel AI SDK Configuration
+    AI_SDK_API_KEY = os.environ.get("AI_SDK_API_KEY")
+
     # AiHubMix Configuration
     AIHUBMIX_API_KEY = os.environ.get("AIHUBMIX_API_KEY")
     AIHUBMIX_APP_CODE = os.environ.get("AIHUBMIX_APP_CODE")
