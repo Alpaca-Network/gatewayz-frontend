@@ -994,16 +994,35 @@ const ChatMessage = ({ message, modelName }: { message: Message, modelName: stri
 
 const ChatSkeleton = () => (
   <div className="flex items-start gap-3">
-    {/* Sparkle icon */}
+    {/* Animated arrow icon */}
     <div className="mt-1 flex-shrink-0">
       <svg
-        className="w-5 h-5 text-blue-500 animate-spin"
-        style={{ animationDuration: '3s' }}
+        className="w-5 h-5 text-blue-500"
         viewBox="0 0 24 24"
-        fill="currentColor"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
       >
-        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+        <path
+          d="M5 12h14M12 5l7 7-7 7"
+          className="animate-pulse"
+          style={{ animationDuration: '1.5s' }}
+        />
       </svg>
+      <style jsx>{`
+        @keyframes slideArrow {
+          0%, 100% {
+            transform: translateX(0);
+            opacity: 0.6;
+          }
+          50% {
+            transform: translateX(4px);
+            opacity: 1;
+          }
+        }
+      `}</style>
     </div>
 
     {/* Skeleton loading bars */}
