@@ -13,7 +13,7 @@ import { saveApiKey } from "@/lib/api";
 
 export function SessionInitializer() {
   const router = useRouter();
-  const { status, refresh } = useGatewayzAuth();
+  const { status, refresh, login } = useGatewayzAuth();
 
   useEffect(() => {
     async function initializeSession() {
@@ -61,6 +61,23 @@ export function SessionInitializer() {
         return;
       }
 
+      // Check for auth trigger parameter (from main domain "Sign In" button)
+      if (status === "unauthenticated") {
+        const params = new URLSearchParams(
+          typeof window !== "undefined" ? window.location.search : ""
+        );
+        const shouldTriggerAuth = params.get("auth") === "true";
+
+        if (shouldTriggerAuth) {
+          console.log(
+            "[SessionInit] Auth trigger detected, opening Privy popup"
+          );
+          cleanupSessionTransferParams();
+          await login();
+          return;
+        }
+      }
+
       // If already authenticated, continue normally
       if (status === "authenticated") {
         console.log("[SessionInit] Already authenticated");
@@ -71,7 +88,7 @@ export function SessionInitializer() {
     initializeSession().catch((error) => {
       console.error("[SessionInit] Error initializing session:", error);
     });
-  }, [refresh, router, status]);
+  }, [refresh, router, status, login]);
 
   return null;
 }
