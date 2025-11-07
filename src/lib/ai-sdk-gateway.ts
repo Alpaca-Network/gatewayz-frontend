@@ -258,12 +258,14 @@ export function isAISDKModel(modelId: string): boolean {
  */
 export function getAISDKModelMetadata(modelId: string): AISDKModelConfig | null {
   const modelConfigs: Record<string, AISDKModelConfig> = {
+    // Anthropic Claude models
     'claude-3-5-sonnet': {
       name: 'Claude 3.5 Sonnet',
       provider: 'anthropic',
       modelId: 'claude-3-5-sonnet-20241022',
       supportsThinking: true,
     },
+    // OpenAI models
     'gpt-4o': {
       name: 'GPT-4 Omni',
       provider: 'openai',
@@ -276,16 +278,194 @@ export function getAISDKModelMetadata(modelId: string): AISDKModelConfig | null 
       modelId: 'gpt-4-turbo-2024-04-09',
       supportsThinking: false,
     },
+    // Google Gemini models - Latest versions
+    'gemini-2.1-pro': {
+      name: 'Gemini 2.1 Pro',
+      provider: 'google',
+      modelId: 'gemini-2.1-pro-latest',
+      supportsThinking: false,
+    },
+    'gemini-2.0-pro': {
+      name: 'Gemini 2.0 Pro',
+      provider: 'google',
+      modelId: 'gemini-2.0-pro-latest',
+      supportsThinking: false,
+    },
+    'gemini-2.0-flash': {
+      name: 'Gemini 2.0 Flash',
+      provider: 'google',
+      modelId: 'gemini-2.0-flash-latest',
+      supportsThinking: false,
+    },
+    'gemini-2.0-flash-lite': {
+      name: 'Gemini 2.0 Flash Lite',
+      provider: 'google',
+      modelId: 'gemini-2.0-flash-lite-latest',
+      supportsThinking: false,
+    },
+    'gemini-2.0-flash-thinking-exp': {
+      name: 'Gemini 2.0 Flash Thinking Exp',
+      provider: 'google',
+      modelId: 'gemini-2.0-flash-thinking-exp-01-21',
+      supportsThinking: false,
+    },
     'gemini-1.5-pro': {
       name: 'Gemini 1.5 Pro',
       provider: 'google',
       modelId: 'gemini-1.5-pro-latest',
       supportsThinking: false,
     },
+    'gemini-1.5-pro-exp-0801': {
+      name: 'Gemini 1.5 Pro Exp 0801',
+      provider: 'google',
+      modelId: 'gemini-1.5-pro-exp-0801',
+      supportsThinking: false,
+    },
+    'gemini-1.5-flash': {
+      name: 'Gemini 1.5 Flash',
+      provider: 'google',
+      modelId: 'gemini-1.5-flash-latest',
+      supportsThinking: false,
+    },
+    'gemini-1.5-flash-exp-0827': {
+      name: 'Gemini 1.5 Flash Exp 0827',
+      provider: 'google',
+      modelId: 'gemini-1.5-flash-exp-0827',
+      supportsThinking: false,
+    },
+    'gemini-1.5-flash-8b': {
+      name: 'Gemini 1.5 Flash 8B',
+      provider: 'google',
+      modelId: 'gemini-1.5-flash-8b-latest',
+      supportsThinking: false,
+    },
     'gemini-pro': {
       name: 'Gemini Pro',
       provider: 'google',
       modelId: 'gemini-pro',
+      supportsThinking: false,
+    },
+    'gemini-pro-vision': {
+      name: 'Gemini Pro Vision',
+      provider: 'google',
+      modelId: 'gemini-pro-vision',
+      supportsThinking: false,
+    },
+    'gemini-1.0-pro': {
+      name: 'Gemini 1.0 Pro',
+      provider: 'google',
+      modelId: 'gemini-1.0-pro-latest',
+      supportsThinking: false,
+    },
+    'gemini-1.0-pro-vision': {
+      name: 'Gemini 1.0 Pro Vision',
+      provider: 'google',
+      modelId: 'gemini-1.0-pro-vision-latest',
+      supportsThinking: false,
+    },
+    'gemini-1.0-pro-001': {
+      name: 'Gemini 1.0 Pro 001',
+      provider: 'google',
+      modelId: 'gemini-1.0-pro-001',
+      supportsThinking: false,
+    },
+    'gemini-1.0-pro-vision-001': {
+      name: 'Gemini 1.0 Pro Vision 001',
+      provider: 'google',
+      modelId: 'gemini-1.0-pro-vision-001',
+      supportsThinking: false,
+    },
+    'gemini-1.0-pro-002': {
+      name: 'Gemini 1.0 Pro 002',
+      provider: 'google',
+      modelId: 'gemini-1.0-pro-002',
+      supportsThinking: false,
+    },
+    'gemini-1.0-pro-vision-002': {
+      name: 'Gemini 1.0 Pro Vision 002',
+      provider: 'google',
+      modelId: 'gemini-1.0-pro-vision-002',
+      supportsThinking: false,
+    },
+    // Google Gemma models
+    'gemma-3-2b-it': {
+      name: 'Gemma 3 2B IT',
+      provider: 'google',
+      modelId: 'gemma-3-2b-it-latest',
+      supportsThinking: false,
+    },
+    'gemma-3-7b-it': {
+      name: 'Gemma 3 7B IT',
+      provider: 'google',
+      modelId: 'gemma-3-7b-it-latest',
+      supportsThinking: false,
+    },
+    'gemma-3n-e2b-it': {
+      name: 'Gemma 3n E2B IT',
+      provider: 'google',
+      modelId: 'gemma-3n-e2b-it:free',
+      supportsThinking: false,
+    },
+    'gemma-3-27b-it': {
+      name: 'Gemma 3 27B IT',
+      provider: 'google',
+      modelId: 'gemma-3-27b-it-latest',
+      supportsThinking: false,
+    },
+    'gemma-2-27b-it': {
+      name: 'Gemma 2 27B IT',
+      provider: 'google',
+      modelId: 'gemma-2-27b-it-latest',
+      supportsThinking: false,
+    },
+    'gemma-2-9b-it': {
+      name: 'Gemma 2 9B IT',
+      provider: 'google',
+      modelId: 'gemma-2-9b-it-latest',
+      supportsThinking: false,
+    },
+    'gemma-2-2b-it': {
+      name: 'Gemma 2 2B IT',
+      provider: 'google',
+      modelId: 'gemma-2-2b-it-latest',
+      supportsThinking: false,
+    },
+    'gemma-1.1-7b-it': {
+      name: 'Gemma 1.1 7B IT',
+      provider: 'google',
+      modelId: 'gemma-1.1-7b-it-latest',
+      supportsThinking: false,
+    },
+    'gemma-1.1-2b-it': {
+      name: 'Gemma 1.1 2B IT',
+      provider: 'google',
+      modelId: 'gemma-1.1-2b-it-latest',
+      supportsThinking: false,
+    },
+    'gemma-7b-it': {
+      name: 'Gemma 7B IT',
+      provider: 'google',
+      modelId: 'gemma-7b-it-latest',
+      supportsThinking: false,
+    },
+    'gemma-2b-it': {
+      name: 'Gemma 2B IT',
+      provider: 'google',
+      modelId: 'gemma-2b-it-latest',
+      supportsThinking: false,
+    },
+    // Google Code models
+    'codegemma-7b-it': {
+      name: 'CodeGemma 7B IT',
+      provider: 'google',
+      modelId: 'codegemma-7b-it-latest',
+      supportsThinking: false,
+    },
+    // Google Vision models
+    'paligemma-3b-mix-224': {
+      name: 'PaliGemma 3B Mix 224',
+      provider: 'google',
+      modelId: 'paligemma-3b-mix-224-latest',
       supportsThinking: false,
     },
   };
