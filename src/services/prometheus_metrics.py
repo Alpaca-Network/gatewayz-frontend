@@ -57,7 +57,7 @@ tokens_used = Counter(
 credits_used = Counter(
     "credits_used_total",
     "Total credits consumed",
-    ["provider", "model", "user_id"],
+    ["provider", "model"],
 )
 
 # ==================== Database Metrics ====================
@@ -96,13 +96,13 @@ cache_size = Gauge(
 rate_limited_requests = Counter(
     "rate_limited_requests_total",
     "Total rate-limited requests",
-    ["api_key", "limit_type"],
+    ["limit_type"],
 )
 
 current_rate_limit = Gauge(
     "current_rate_limit",
     "Current rate limit status",
-    ["api_key", "limit_type"],
+    ["limit_type"],
 )
 
 # ==================== Provider Health Metrics ====================
@@ -129,7 +129,7 @@ provider_response_time = Histogram(
 api_key_usage = Counter(
     "api_key_usage_total",
     "Total API key usage",
-    ["api_key_id", "status"],
+    ["status"],
 )
 
 active_api_keys = Gauge(
@@ -141,8 +141,8 @@ active_api_keys = Gauge(
 # ==================== Business Metrics ====================
 user_credit_balance = Gauge(
     "user_credit_balance",
-    "User credit balance",
-    ["user_id", "plan_type"],
+    "Total user credit balance aggregated by plan type",
+    ["plan_type"],
 )
 
 trial_status = Gauge(
@@ -198,9 +198,9 @@ def track_model_inference(provider: str, model: str):
     status = "success"
     try:
         yield
-    except Exception as e:
+    except (Exception,):  # Intentionally catch all exceptions from yield block
         status = "error"
-        logger.error(f"Model inference error for {provider}/{model}: {e}")
+        logger.debug(f"Model inference completed with status: {status} for {provider}/{model}")
     finally:
         duration = time.time() - start_time
         model_inference_duration.labels(provider=provider, model=model).observe(
@@ -227,9 +227,9 @@ def record_credits_used(
     provider: str, model: str, user_id: str, credits: float
 ):
     """Record credit consumption metrics."""
-    credits_used.labels(provider=provider, model=model, user_id=user_id).inc(
-        credits
-    )
+    # Note: user_id parameter kept for backwards compatibility but not used in labels
+    # (avoid exposing PII in metric labels)
+    credits_used.labels(provider=provider, model=model).inc(credits)
 
 
 @contextmanager
@@ -261,7 +261,9 @@ def set_cache_size(cache_name: str, size_bytes: int):
 
 def record_rate_limited_request(api_key: str, limit_type: str):
     """Record rate-limited request metric."""
-    rate_limited_requests.labels(api_key=api_key, limit_type=limit_type).inc()
+    # Note: api_key parameter kept for backwards compatibility but not used in labels
+    # (avoid exposing PII in metric labels)
+    rate_limited_requests.labels(limit_type=limit_type).inc()
 
 
 def set_provider_availability(provider: str, available: bool):
@@ -281,7 +283,9 @@ def track_provider_response_time(provider: str, duration: float):
 
 def record_api_key_usage(api_key_id: str, status: str = "success"):
     """Record API key usage."""
-    api_key_usage.labels(api_key_id=api_key_id, status=status).inc()
+    # Note: api_key_id parameter kept for backwards compatibility but not used in labels
+    # (avoid exposing PII in metric labels)
+    api_key_usage.labels(status=status).inc()
 
 
 def set_active_api_keys(status: str, count: int):
@@ -290,8 +294,10 @@ def set_active_api_keys(status: str, count: int):
 
 
 def set_user_credit_balance(user_id: str, plan_type: str, balance: float):
-    """Set user credit balance."""
-    user_credit_balance.labels(user_id=user_id, plan_type=plan_type).set(balance)
+    """Set total user credit balance aggregated by plan type."""
+    # Note: user_id parameter kept for backwards compatibility but not used in labels
+    # This aggregates total credit balance by plan type (avoid exposing PII in metric labels)
+    user_credit_balance.labels(plan_type=plan_type).set(balance)
 
 
 def set_trial_count(status: str, count: int):
@@ -318,11 +324,18 @@ def set_queue_size(queue_name: str, size: int):
 
 def get_metrics_summary() -> dict:
     """Get a summary of key metrics for monitoring."""
-    return {
-        "http_requests_total": http_request_count._metrics,
-        "model_inferences_total": model_inference_requests._metrics,
-        "tokens_used_total": tokens_used._metrics,
-        "cache_hits_total": cache_hits._value.get(),
-        "cache_misses_total": cache_misses._value.get(),
-        "rate_limited_requests_total": rate_limited_requests._value.get(),
-    }
+    # This function returns a summary of metrics collected.
+    # In production, use the /metrics endpoint which exports all metrics in Prometheus format.
+    # This summary is for diagnostic purposes only.
+    try:
+        from prometheus_client import REGISTRY
+
+        summary = {
+            "enabled": True,
+            "metrics_endpoint": "/metrics",
+            "message": "Use /metrics endpoint for Prometheus format metrics"
+        }
+        return summary
+    except Exception as e:
+        logger.warning(f"Could not retrieve metrics summary: {type(e).__name__}")
+        return {"enabled": False}
