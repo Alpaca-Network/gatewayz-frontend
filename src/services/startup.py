@@ -14,6 +14,7 @@ from src.services.prometheus_remote_write import (
     shutdown_prometheus_remote_write,
 )
 from src.services.tempo_otlp import init_tempo_otlp, init_tempo_otlp_fastapi
+from src.services.google_models_config import initialize_google_models
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,13 @@ async def lifespan(app):
     logger.info("Starting health monitoring and observability services...")
 
     try:
+        # Initialize multi-provider models
+        try:
+            initialize_google_models()
+            logger.info("Multi-provider Google models initialized")
+        except Exception as e:
+            logger.warning(f"Google models initialization warning: {e}")
+
         # Initialize Tempo/OpenTelemetry OTLP tracing
         try:
             init_tempo_otlp()

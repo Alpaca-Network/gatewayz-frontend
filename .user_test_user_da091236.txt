@@ -1,5 +1,0 @@
-User ID: 8
-Email: test_20251106_181312@example.com
-Username: test_user_da091236
-Credits: $10.00
-API Key: gw_2TWoQB0QoYH7I7-txEsPpCyLHSNTrGOEHx2myLWDwyI

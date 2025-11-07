@@ -1,4 +1,5 @@
 import logging
+from typing import Optional
 
 from fastapi import APIRouter
 from openai import OpenAI
@@ -6,11 +7,7 @@ from openai import OpenAI
 from src.config import Config
 from src.services.anthropic_transformer import extract_message_with_tools
 
-<<<<<<< HEAD
-from typing import Optional
 logging.basicConfig(level=logging.ERROR)
-=======
->>>>>>> origin
 logger = logging.getLogger(__name__)
 
 router = APIRouter()

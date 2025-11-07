@@ -5,13 +5,10 @@ Converts between Anthropic Messages API format and OpenAI Chat Completions forma
 
 import json
 import time
-from typing import Any, Optional, Dict, List
+from typing import Any, Optional, Dict, List, Union
 
 
-<<<<<<< HEAD
-from typing import Optional
-=======
-def extract_message_with_tools(choice_message: Any) -> dict[str, Any]:
+def extract_message_with_tools(choice_message: Any) -> Dict[str, Any]:
     """
     Extract message data including role, content, and any tool calls or function calls.
 
@@ -48,26 +45,17 @@ def extract_message_with_tools(choice_message: Any) -> dict[str, Any]:
     return msg
 
 
->>>>>>> origin
 def transform_anthropic_to_openai(
     messages: List[Dict[str, Any]],
     system: Optional[str] = None,
     max_tokens: int = 950,
-<<<<<<< HEAD
     temperature: Optional[float] = None,
     top_p: Optional[float] = None,
     top_k: Optional[int] = None,
     stop_sequences: Optional[List[str]] = None,
-) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
-=======
-    temperature: float | None = None,
-    top_p: float | None = None,
-    top_k: int | None = None,
-    stop_sequences: list[str] | None = None,
-    tools: list[dict[str, Any]] | None = None,
-    tool_choice: str | dict[str, Any] | None = None,
-) -> tuple[list[dict[str, Any]], dict[str, Any]]:
->>>>>>> origin
+    tools: Optional[List[dict]] = None,
+    tool_choice: Optional[Any] = None,
+) -> tuple:
     """
     Transform Anthropic Messages API request to OpenAI Chat Completions format.
 
@@ -258,7 +246,7 @@ def transform_openai_to_anthropic(
     return anthropic_response
 
 
-def extract_text_from_content(content: str | List[Dict[str, Any]]) -> str:
+def extract_text_from_content(content: Union[str, List[Dict[str, Any]]]) -> str:
     """
     Extract plain text from Anthropic content (string or content blocks).
 

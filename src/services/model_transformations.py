@@ -30,9 +30,12 @@ GEMINI_1_0_PRO = "gemini-1.0-pro"
 CLAUDE_SONNET_4_5 = "anthropic/claude-sonnet-4.5"
 
 
-def transform_model_id(model_id: str, provider: str) -> str:
+def transform_model_id(model_id: str, provider: str, use_multi_provider: bool = True) -> str:
     """
     Transform model ID from simplified format to provider-specific format.
+
+    Now supports multi-provider models - will automatically get the correct
+    provider-specific model ID from the registry.
 
     NOTE: All model IDs are normalized to lowercase before being sent to providers
     to ensure compatibility. Fireworks requires lowercase, while other providers
@@ -41,6 +44,7 @@ def transform_model_id(model_id: str, provider: str) -> str:
     Args:
         model_id: The input model ID (e.g., "deepseek-ai/deepseek-v3")
         provider: The target provider (e.g., "fireworks", "openrouter")
+        use_multi_provider: Whether to check multi-provider registry first (default: True)
 
     Returns:
         The transformed model ID suitable for the provider's API (always lowercase)
@@ -55,6 +59,29 @@ def transform_model_id(model_id: str, provider: str) -> str:
         Input: "OpenAI/GPT-4", provider="openrouter"
         Output: "openai/gpt-4"
     """
+
+    # Check multi-provider registry first (if enabled)
+    if use_multi_provider:
+        try:
+            from src.services.multi_provider_registry import get_registry
+
+            registry = get_registry()
+            if registry.has_model(model_id):
+                # Get provider-specific model ID from registry
+                model = registry.get_model(model_id)
+                if model:
+                    provider_config = model.get_provider_by_name(provider)
+                    if provider_config:
+                        provider_model_id = provider_config.model_id
+                        logger.info(
+                            f"Multi-provider transform: {model_id} -> {provider_model_id} "
+                            f"(provider: {provider})"
+                        )
+                        return provider_model_id.lower()
+        except ImportError:
+            pass
+        except Exception as e:
+            logger.warning(f"Error checking multi-provider registry for transform: {e}")
 
     # Normalize input to lowercase for case-insensitive matching
     # Store original for logging
@@ -245,9 +272,7 @@ def get_model_id_mapping(provider: str) -> Dict[str, str]:
             # Microsoft models
             "microsoft/phi-3": "microsoft/Phi-3-medium-4k-instruct",
             "microsoft/phi-3-medium": "microsoft/Phi-3-medium-4k-instruct",
-            # Google models
-            "google/gemma-2-9b": "google/gemma-2-9b-it",
-            "google/gemma-2-9b-it": "google/gemma-2-9b-it",
+            # Google Gemma models removed - they should use Google Vertex AI provider
         },
         "hug": {
             # Alias for huggingface - use same mappings
@@ -275,9 +300,7 @@ def get_model_id_mapping(provider: str) -> Dict[str, str]:
             # Microsoft models
             "microsoft/phi-3": "microsoft/Phi-3-medium-4k-instruct",
             "microsoft/phi-3-medium": "microsoft/Phi-3-medium-4k-instruct",
-            # Google models
-            "google/gemma-2-9b": "google/gemma-2-9b-it",
-            "google/gemma-2-9b-it": "google/gemma-2-9b-it",
+            # Google Gemma models removed - they should use Google Vertex AI provider
         },
         "chutes": {
             # Chutes uses org/model format directly
@@ -296,6 +319,8 @@ def get_model_id_mapping(provider: str) -> Dict[str, str]:
             "gemini-2.5-flash-lite-preview-09-2025": GEMINI_2_5_FLASH_LITE_PREVIEW,
             "google/gemini-2.5-flash-lite-preview-09-2025": GEMINI_2_5_FLASH_LITE_PREVIEW,
             "@google/models/gemini-2.5-flash-lite-preview-09-2025": GEMINI_2_5_FLASH_LITE_PREVIEW,
+            "gemini-2.5-flash-lite-preview-06-17": "gemini-2.5-flash-lite-preview-06-17",
+            "google/gemini-2.5-flash-lite-preview-06-17": "gemini-2.5-flash-lite-preview-06-17",
             # Gemini 2.5 flash models
             "gemini-2.5-flash": GEMINI_2_5_FLASH_PREVIEW,
             "gemini-2.5-flash-preview-09-2025": GEMINI_2_5_FLASH_PREVIEW,
@@ -304,6 +329,11 @@ def get_model_id_mapping(provider: str) -> Dict[str, str]:
             "google/gemini-2.5-flash-preview-09-2025": GEMINI_2_5_FLASH_PREVIEW,
             "@google/models/gemini-2.5-flash": GEMINI_2_5_FLASH_PREVIEW,
             "@google/models/gemini-2.5-flash-preview-09-2025": GEMINI_2_5_FLASH_PREVIEW,
+            # Image-specific models
+            "google/gemini-2.5-flash-image": "gemini-2.5-flash-image",
+            "google/gemini-2.5-flash-image-preview": "gemini-2.5-flash-image-preview",
+            "gemini-2.5-flash-image": "gemini-2.5-flash-image",
+            "gemini-2.5-flash-image-preview": "gemini-2.5-flash-image-preview",
             # Pro (use stable GA version by default)
             "gemini-2.5-pro": "gemini-2.5-pro",  # Use stable GA version
             "google/gemini-2.5-pro": "gemini-2.5-pro",
@@ -312,11 +342,20 @@ def get_model_id_mapping(provider: str) -> Dict[str, str]:
             "gemini-2.5-pro-preview-09-2025": GEMINI_2_5_PRO_PREVIEW,
             "google/gemini-2.5-pro-preview-09-2025": GEMINI_2_5_PRO_PREVIEW,
             "@google/models/gemini-2.5-pro-preview-09-2025": GEMINI_2_5_PRO_PREVIEW,
+            "gemini-2.5-pro-preview": GEMINI_2_5_PRO_PREVIEW,
+            "google/gemini-2.5-pro-preview": GEMINI_2_5_PRO_PREVIEW,
+            "gemini-2.5-pro-preview-05-06": "gemini-2.5-pro-preview-05-06",
+            "google/gemini-2.5-pro-preview-05-06": "gemini-2.5-pro-preview-05-06",
             # Gemini 2.0 models (stable versions)
             "gemini-2.0-flash": GEMINI_2_0_FLASH,
             "gemini-2.0-flash-thinking": "gemini-2.0-flash-thinking",
             "gemini-2.0-flash-001": "gemini-2.0-flash-001",
+            "gemini-2.0-flash-lite-001": "gemini-2.0-flash-lite-001",
+            "gemini-2.0-flash-exp": "gemini-2.0-flash-exp",
             "google/gemini-2.0-flash": GEMINI_2_0_FLASH,
+            "google/gemini-2.0-flash-001": "gemini-2.0-flash-001",
+            "google/gemini-2.0-flash-lite-001": "gemini-2.0-flash-lite-001",
+            "google/gemini-2.0-flash-exp": "gemini-2.0-flash-exp",
             "@google/models/gemini-2.0-flash": GEMINI_2_0_FLASH,
             "gemini-2.0-pro": GEMINI_2_0_PRO,
             "gemini-2.0-pro-001": "gemini-2.0-pro-001",
@@ -339,6 +378,22 @@ def get_model_id_mapping(provider: str) -> Dict[str, str]:
             # Aliases for convenience
             "gemini-2.0": GEMINI_2_0_FLASH,
             "gemini-1.5": GEMINI_1_5_PRO,
+            # Gemma models (open source models from Google)
+            "google/gemma-2-9b": "gemma-2-9b-it",
+            "google/gemma-2-9b-it": "gemma-2-9b-it",
+            "google/gemma-2-27b-it": "gemma-2-27b-it",
+            "google/gemma-3-4b-it": "gemma-3-4b-it",
+            "google/gemma-3-12b-it": "gemma-3-12b-it",
+            "google/gemma-3-27b-it": "gemma-3-27b-it",
+            "google/gemma-3n-e2b-it": "gemma-3n-e2b-it",
+            "google/gemma-3n-e4b-it": "gemma-3n-e4b-it",
+            "gemma-2-9b-it": "gemma-2-9b-it",
+            "gemma-2-27b-it": "gemma-2-27b-it",
+            "gemma-3-4b-it": "gemma-3-4b-it",
+            "gemma-3-12b-it": "gemma-3-12b-it",
+            "gemma-3-27b-it": "gemma-3-27b-it",
+            "gemma-3n-e2b-it": "gemma-3n-e2b-it",
+            "gemma-3n-e4b-it": "gemma-3n-e4b-it",
         },
         "vercel-ai-gateway": {
             # Vercel AI Gateway uses standard model identifiers
@@ -452,16 +507,47 @@ def get_simplified_model_id(native_id: str, provider: str) -> str:
     return native_id
 
 
-def detect_provider_from_model_id(model_id: str) -> Optional[str]:
+def detect_provider_from_model_id(model_id: str, preferred_provider: Optional[str] = None) -> Optional[str]:
     """
     Try to detect which provider a model belongs to based on its ID.
 
+    Now supports multi-provider models with automatic provider selection.
+
     Args:
         model_id: The model ID to analyze
+        preferred_provider: Optional preferred provider (for multi-provider models)
 
     Returns:
         The detected provider name, or None if unable to detect
     """
+
+    # Check multi-provider registry first
+    try:
+        from src.services.multi_provider_registry import get_registry
+
+        registry = get_registry()
+        if registry.has_model(model_id):
+            # Model is in multi-provider registry
+            from src.services.provider_selector import get_selector
+
+            selector = get_selector()
+            selected_provider = selector.registry.select_provider(
+                model_id=model_id,
+                preferred_provider=preferred_provider,
+            )
+
+            if selected_provider:
+                logger.info(
+                    f"Multi-provider model {model_id}: selected {selected_provider.name} "
+                    f"(priority {selected_provider.priority})"
+                )
+                return selected_provider.name
+    except ImportError:
+        # Multi-provider modules not available, fall through to legacy detection
+        pass
+    except Exception as e:
+        logger.warning(f"Error checking multi-provider registry: {e}")
+        # Fall through to legacy detection
 
     # Apply explicit overrides first
     normalized_id = (model_id or "").lower()
@@ -534,9 +620,11 @@ def detect_provider_from_model_id(model_id: str) -> Optional[str]:
     if "/" in model_id:
         org, model_name = model_id.split("/", 1)
 
-        # Google Vertex models (e.g., "google/gemini-2.0-flash")
-        if org == "google":
-            return "google-vertex"
+        # Google Vertex models should only be routed if explicitly in the mapping above
+        # OpenRouter also has google/ models (with :free suffix) that should stay with OpenRouter
+        # So we comment this out to avoid routing OpenRouter's google/ models to Vertex AI
+        # if org == "google":
+        #     return "google-vertex"
 
         # Near AI models (e.g., "near/deepseek-chat-v3-0324")
         if org == "near":

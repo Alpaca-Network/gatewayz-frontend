@@ -85,3 +85,11 @@ coverage.json
 .cache/
 .mypy_cache/
 coverage.xml
+
+# Test results and temporary files
+*_test_results.json
+google_models_test_*.json
+test_results.txt
+.user_test_user_*.txt
+.test_api_key
+

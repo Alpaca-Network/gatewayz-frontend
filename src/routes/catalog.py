@@ -357,7 +357,6 @@ async def get_models(
             f"Getting models with provider={provider}, limit={limit}, offset={offset}, gateway={gateway_value}"
         )
 
-<<<<<<< HEAD
         openrouter_models: List[dict] = []
         portkey_models: List[dict] = []
         featherless_models: List[dict] = []
@@ -376,26 +375,6 @@ async def get_models(
         near_models: List[dict] = []
         fal_models: List[dict] = []
         anannas_models: List[dict] = []
-=======
-        openrouter_models: list[dict] = []
-        portkey_models: list[dict] = []
-        featherless_models: list[dict] = []
-        deepinfra_models: list[dict] = []
-        chutes_models: list[dict] = []
-        groq_models: list[dict] = []
-        fireworks_models: list[dict] = []
-        together_models: list[dict] = []
-
-        cerebras_models: list[dict] = []
-        nebius_models: list[dict] = []
-        xai_models: list[dict] = []
-        novita_models: list[dict] = []
-        hug_models: list[dict] = []
-        aimo_models: list[dict] = []
-        near_models: list[dict] = []
-        fal_models: list[dict] = []
-        anannas_models: list[dict] = []
->>>>>>> origin
 
         if gateway_value in ("openrouter", "all"):
             openrouter_models = get_cached_models("openrouter") or []

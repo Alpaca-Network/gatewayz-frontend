@@ -1,5 +1,0 @@
-User ID: 7
-Email: test_20251105_182102@example.com
-Username: test_user_3ecab43a
-Credits: $10.00
-API Key: gw_nLPV34f2T-l1zbTEp5qOB7li0bvsAyHiTcekn6TWVfY

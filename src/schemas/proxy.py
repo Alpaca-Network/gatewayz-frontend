@@ -30,7 +30,6 @@ class Message(BaseModel):
 
 class ProxyRequest(BaseModel):
     model: str
-<<<<<<< HEAD
     messages: List[Message]
     max_tokens: Optional[int] = 950
     temperature: Optional[float] = 1.0
@@ -38,22 +37,10 @@ class ProxyRequest(BaseModel):
     frequency_penalty: Optional[float] = 0.0
     presence_penalty: Optional[float] = 0.0
     stream: Optional[bool] = False
+    tools: Optional[List[dict]] = None  # Function calling tools
     provider: Optional[str] = None  # Provider selection: "openrouter" or "portkey"
     portkey_provider: Optional[str] = "openai"  # Sub-provider for Portkey
     portkey_virtual_key: Optional[str] = None  # Virtual key for Portkey
-=======
-    messages: list[Message]
-    max_tokens: int | None = 950
-    temperature: float | None = 1.0
-    top_p: float | None = 1.0
-    frequency_penalty: float | None = 0.0
-    presence_penalty: float | None = 0.0
-    stream: bool | None = False
-    tools: list[dict[str, Any]] | None = None  # Function calling tools
-    provider: str | None = None  # Provider selection: "openrouter" or "portkey"
-    portkey_provider: str | None = "openai"  # Sub-provider for Portkey
-    portkey_virtual_key: str | None = None  # Virtual key for Portkey
->>>>>>> origin
 
     class Config:
         extra = "allow"
@@ -94,7 +81,6 @@ class ResponseRequest(BaseModel):
     """
 
     model: str
-<<<<<<< HEAD
     input: List[InputMessage]  # Replaces 'messages' in chat/completions
     max_tokens: Optional[int] = 950
     temperature: Optional[float] = 1.0
@@ -102,24 +88,11 @@ class ResponseRequest(BaseModel):
     frequency_penalty: Optional[float] = 0.0
     presence_penalty: Optional[float] = 0.0
     stream: Optional[bool] = False
+    tools: Optional[List[dict]] = None  # Function calling tools
     response_format: Optional[ResponseFormat] = None
     provider: Optional[str] = None
     portkey_provider: Optional[str] = "openai"
     portkey_virtual_key: Optional[str] = None
-=======
-    input: list[InputMessage]  # Replaces 'messages' in chat/completions
-    max_tokens: int | None = 950
-    temperature: float | None = 1.0
-    top_p: float | None = 1.0
-    frequency_penalty: float | None = 0.0
-    presence_penalty: float | None = 0.0
-    stream: bool | None = False
-    tools: list[dict[str, Any]] | None = None  # Function calling tools
-    response_format: ResponseFormat | None = None
-    provider: str | None = None
-    portkey_provider: str | None = "openai"
-    portkey_virtual_key: str | None = None
->>>>>>> origin
 
     class Config:
         extra = "allow"
@@ -195,7 +168,6 @@ class MessagesRequest(BaseModel):
     model: str  # e.g., "claude-sonnet-4-5-20250929"
     messages: List[AnthropicMessage]
     max_tokens: int  # REQUIRED for Anthropic API
-<<<<<<< HEAD
     system: Optional[str] = None  # System prompt (separate from messages)
     temperature: Optional[float] = 1.0
     top_p: Optional[float] = None
@@ -203,17 +175,8 @@ class MessagesRequest(BaseModel):
     stop_sequences: Optional[List[str]] = None
     stream: Optional[bool] = False
     metadata: Optional[Dict[str, Any]] = None
-=======
-    system: str | None = None  # System prompt (separate from messages)
-    temperature: float | None = 1.0
-    top_p: float | None = None
-    top_k: int | None = None  # Anthropic-specific
-    stop_sequences: list[str] | None = None
-    stream: bool | None = False
-    metadata: dict[str, Any] | None = None
-    tools: list[dict[str, Any]] | None = None  # Tool definitions for function calling
-    tool_choice: str | dict[str, Any] | None = None  # Tool selection: "auto", "required", or specific tool
->>>>>>> origin
+    tools: Optional[List[dict]] = None  # Tool definitions for function calling
+    tool_choice: Optional[Any] = None  # Tool selection: "auto", "required", or specific tool
 
     # Gateway-specific fields (not part of Anthropic API)
     provider: Optional[str] = None
