@@ -874,95 +874,95 @@ export default function ModelsClient({
 
           <div className="flex-1 overflow-y-auto overflow-x-hidden">
             <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8 pb-24 overflow-x-hidden">
-          <div className="flex flex-col sm:flex-row gap-4 mb-6">
-              <div className="relative w-full">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                  placeholder="Filter models"
-                  className="pl-9 bg-input"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-              />
+              <div className="flex flex-col sm:flex-row gap-4 mb-6">
+                <div className="relative w-full">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Filter models"
+                    className="pl-9 bg-input"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                </div>
+                <Select value={sortBy} onValueChange={setSortBy}>
+                  <SelectTrigger className="w-full sm:w-[180px]">
+                    <SelectValue placeholder="Sort" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="tokens-desc">Tokens (High to Low)</SelectItem>
+                    <SelectItem value="tokens-asc">Tokens (Low to High)</SelectItem>
+                    <SelectItem value="price-desc">Price (High to Low)</SelectItem>
+                    <SelectItem value="price-asc">Price (Low to High)</SelectItem>
+                  </SelectContent>
+                </Select>
+                <div className="flex items-center gap-1 bg-muted p-1 rounded-md">
+                  <Button
+                    variant={layout === 'grid' ? 'secondary' : 'ghost'}
+                    size="icon"
+                    onClick={() => setLayout('grid')}
+                  >
+                    <LayoutGrid className="w-5 h-5" />
+                  </Button>
+                  <Button
+                    variant={layout === 'list' ? 'secondary' : 'ghost'}
+                    size="icon"
+                    onClick={() => setLayout('list')}
+                  >
+                    <LayoutList className="w-5 h-5" />
+                  </Button>
+                </div>
               </div>
-              <Select value={sortBy} onValueChange={setSortBy}>
-              <SelectTrigger className="w-full sm:w-[180px]">
-                  <SelectValue placeholder="Sort" />
-              </SelectTrigger>
-              <SelectContent>
-                  <SelectItem value="tokens-desc">Tokens (High to Low)</SelectItem>
-                  <SelectItem value="tokens-asc">Tokens (Low to High)</SelectItem>
-                  <SelectItem value="price-desc">Price (High to Low)</SelectItem>
-                  <SelectItem value="price-asc">Price (Low to High)</SelectItem>
-              </SelectContent>
-              </Select>
-              <div className="flex items-center gap-1 bg-muted p-1 rounded-md">
-              <Button
-                  variant={layout === 'grid' ? 'secondary' : 'ghost'}
-                  size="icon"
-                  onClick={() => setLayout('grid')}
+
+              <div
+                className={
+                  layout === 'grid'
+                    ? 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 lg:gap-6 overflow-x-hidden'
+                    : 'flex flex-col gap-4 lg:gap-6 overflow-x-hidden'
+                }
+                key={`models-${filteredModels.length}-${debouncedSearchTerm}`}
               >
-                  <LayoutGrid className="w-5 h-5" />
-              </Button>
-              <Button
-                  variant={layout === 'list' ? 'secondary' : 'ghost'}
-                  size="icon"
-                  onClick={() => setLayout('list')}
-              >
-                  <LayoutList className="w-5 h-5" />
-              </Button>
+                {visibleModels.map((model, key) => (
+                  <ModelCard key={key} model={model} />
+                ))}
               </div>
-          </div>
 
-          <div
-            className={
-              layout === 'grid'
-                ? 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 lg:gap-6 overflow-x-hidden'
-                : 'flex flex-col gap-4 lg:gap-6 overflow-x-hidden'
-            }
-            key={`models-${filteredModels.length}-${debouncedSearchTerm}`}
-          >
-            {visibleModels.map((model, key) => (
-              <ModelCard key={key} model={model} />
-            ))}
-          </div>
+              {/* No results message */}
+              {filteredModels.length === 0 && !isLoadingModels && !isLoadingMore && (
+                <div className="flex flex-col items-center justify-center py-16 px-4">
+                  <div className="text-center max-w-md">
+                    <h3 className="text-lg font-semibold mb-2">No models found</h3>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      {selectedGateways.includes('cerebras') ? (
+                        <>
+                          The Cerebras gateway is experiencing data issues. Please try selecting a different gateway or <button onClick={resetFilters} className="text-primary hover:underline">clear all filters</button>.
+                        </>
+                      ) : (
+                        <>
+                          Try adjusting your filters or <button onClick={resetFilters} className="text-primary hover:underline">clearing all filters</button> to see more models.
+                        </>
+                      )}
+                    </p>
+                  </div>
+                </div>
+              )}
 
-          {/* No results message */}
-          {filteredModels.length === 0 && !isLoadingModels && !isLoadingMore && (
-            <div className="flex flex-col items-center justify-center py-16 px-4">
-              <div className="text-center max-w-md">
-                <h3 className="text-lg font-semibold mb-2">No models found</h3>
-                <p className="text-sm text-muted-foreground mb-4">
-                  {selectedGateways.includes('cerebras') ? (
-                    <>
-                      The Cerebras gateway is experiencing data issues. Please try selecting a different gateway or <button onClick={resetFilters} className="text-primary hover:underline">clear all filters</button>.
-                    </>
-                  ) : (
-                    <>
-                      Try adjusting your filters or <button onClick={resetFilters} className="text-primary hover:underline">clearing all filters</button> to see more models.
-                    </>
-                  )}
-                </p>
-              </div>
-            </div>
-          )}
+              {/* Infinite Scroll Trigger */}
+              {hasMore && (
+                <div ref={loadMoreRef} className="flex items-center justify-center py-8">
+                  <div className="text-sm text-muted-foreground">
+                    Loading more models... ({visibleCount} of {filteredModels.length})
+                  </div>
+                </div>
+              )}
 
-          {/* Infinite Scroll Trigger */}
-          {hasMore && (
-            <div ref={loadMoreRef} className="flex items-center justify-center py-8">
-              <div className="text-sm text-muted-foreground">
-                Loading more models... ({visibleCount} of {filteredModels.length})
-              </div>
-            </div>
-          )}
-
-          {/* End of results */}
-          {!hasMore && filteredModels.length > 0 && (
-            <div className="flex items-center justify-center py-8">
-              <div className="text-sm text-muted-foreground">
-                Showing all {filteredModels.length} models
-              </div>
-            </div>
-          )}
+              {/* End of results */}
+              {!hasMore && filteredModels.length > 0 && (
+                <div className="flex items-center justify-center py-8">
+                  <div className="text-sm text-muted-foreground">
+                    Showing all {filteredModels.length} models
+                  </div>
+                </div>
+              )}
           </div>
             </div>
           </div>
