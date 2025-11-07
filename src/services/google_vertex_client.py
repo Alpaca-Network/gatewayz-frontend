@@ -270,7 +270,19 @@ def make_google_vertex_request_openai(
             logger.error(f"Failed to build generation config: {config_error}", exc_info=True)
             raise
 
-        # Step 5: Prepare the request payload
+        # Step 5: Extract tools from kwargs (if provided)
+        tools = kwargs.get("tools")
+        if tools:
+            logger.info(f"Tools parameter detected: {len(tools) if isinstance(tools, list) else 0} tools")
+            logger.warning(
+                "Google Vertex AI function calling support requires transformation from OpenAI format to Gemini format. "
+                "Currently, tools are extracted but not yet transformed. Function calling may not work correctly."
+            )
+            # TODO: Transform OpenAI tools format to Gemini function calling format
+            # Gemini uses a different schema: tools need to be converted to FunctionDeclaration format
+            # See: https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/gemini#function_calling
+
+        # Step 6: Prepare the request payload
         try:
             request_body = {
                 "contents": contents,
@@ -279,13 +291,17 @@ def make_google_vertex_request_openai(
             # Add generation config if provided
             if generation_config:
                 request_body["generationConfig"] = generation_config
+            
+            # Add tools if provided (after transformation - currently not implemented)
+            # if tools:
+            #     request_body["tools"] = transform_openai_tools_to_gemini(tools)
 
             logger.debug(f"Request body prepared with keys: {list(request_body.keys())}")
         except Exception as request_error:
             logger.error(f"Failed to create request body: {request_error}", exc_info=True)
             raise
 
-        # Step 6: Make the REST API request
+        # Step 7: Make the REST API request
         try:
             # Construct the API endpoint URL
             api_endpoint = f"{Config.GOOGLE_VERTEX_LOCATION}-aiplatform.googleapis.com"
@@ -366,7 +382,7 @@ def make_google_vertex_request_openai(
             logger.error(f"Vertex AI REST API call failed: {api_error}", exc_info=True)
             raise
 
-        # Step 7: Process and normalize response
+        # Step 8: Process and normalize response
         try:
             processed_response = _process_google_vertex_rest_response(response_data, model)
             logger.info("Successfully processed Vertex AI response")

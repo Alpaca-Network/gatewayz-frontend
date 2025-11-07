@@ -21,6 +21,7 @@ ALLOWED_PARAMS = {
     "frequency_penalty",
     "presence_penalty",
     "response_format",
+    "tools",
 }
 
 

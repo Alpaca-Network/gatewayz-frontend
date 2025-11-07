@@ -37,6 +37,7 @@ class ProxyRequest(BaseModel):
     frequency_penalty: float | None = 0.0
     presence_penalty: float | None = 0.0
     stream: bool | None = False
+    tools: list[dict[str, Any]] | None = None  # Function calling tools
     provider: str | None = None  # Provider selection: "openrouter" or "portkey"
     portkey_provider: str | None = "openai"  # Sub-provider for Portkey
     portkey_virtual_key: str | None = None  # Virtual key for Portkey
@@ -87,6 +88,7 @@ class ResponseRequest(BaseModel):
     frequency_penalty: float | None = 0.0
     presence_penalty: float | None = 0.0
     stream: bool | None = False
+    tools: list[dict[str, Any]] | None = None  # Function calling tools
     response_format: ResponseFormat | None = None
     provider: str | None = None
     portkey_provider: str | None = "openai"
