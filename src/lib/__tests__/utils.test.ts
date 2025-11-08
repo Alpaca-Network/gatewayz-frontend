@@ -1,4 +1,4 @@
-import { cn, stringToColor, extractTokenValue } from '../utils'
+import { cn, stringToColor, extractTokenValue, normalizeModelId } from '../utils'
 
 describe('Utils', () => {
   describe('cn', () => {
@@ -77,6 +77,43 @@ describe('Utils', () => {
 
     it('should return null for missing tokens word', () => {
       expect(extractTokenValue('123K')).toBeNull()
+    })
+  })
+
+  describe('normalizeModelId', () => {
+    it('should leave standard gateway/model format as-is', () => {
+      expect(normalizeModelId('near/zai-org/GLM-4.6-FP8')).toBe('near/zai-org/GLM-4.6-FP8')
+    })
+
+    it('should handle @provider/models/model-name format', () => {
+      expect(normalizeModelId('@google/models/gemini-pro')).toBe('google/gemini-pro')
+    })
+
+    it('should handle provider/models/model-name format', () => {
+      expect(normalizeModelId('google/models/gemini-pro')).toBe('google/gemini-pro')
+    })
+
+    it('should handle simple model names', () => {
+      expect(normalizeModelId('gpt-4')).toBe('gpt-4')
+    })
+
+    it('should handle provider/model format', () => {
+      expect(normalizeModelId('openai/gpt-4')).toBe('openai/gpt-4')
+    })
+
+    it('should return empty string as-is', () => {
+      expect(normalizeModelId('')).toBe('')
+    })
+
+    it('should handle models with multiple slashes', () => {
+      expect(normalizeModelId('near/zai-org/GLM-4.6-FP8')).toBe('near/zai-org/GLM-4.6-FP8')
+    })
+
+    it('should extract gateway prefix correctly for routing', () => {
+      const modelId = 'near/zai-org/GLM-4.6-FP8'
+      const normalized = normalizeModelId(modelId)
+      const gateway = normalized.split('/')[0]
+      expect(gateway).toBe('near')
     })
   })
 })
