@@ -121,11 +121,7 @@ export function OnboardingBanner() {
       (content as HTMLElement).style.paddingTop = '128px'; // pt-32
     });
     
-    // Update chat container height when banner is dismissed
-    const chatContainer = document.querySelector('[data-chat-container]');
-    if (chatContainer) {
-      (chatContainer as HTMLElement).style.height = 'calc(100vh - 65px)';
-    }
+    // Chat will adjust automatically via CSS classes
     
     // Remember dismissal for this session
     sessionStorage.setItem('onboarding_banner_dismissed', 'true');
