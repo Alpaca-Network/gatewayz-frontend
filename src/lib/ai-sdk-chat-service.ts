@@ -144,7 +144,13 @@ export async function* streamAISDKChat(
  * Check if a model is available via AI SDK gateway
  */
 export function isAISDKModel(modelId: string): boolean {
-  // List of models available through AI SDK
+  if (!modelId) {
+    return false;
+  }
+
+  const normalizedModelId = modelId.toLowerCase();
+
+  // Base set of AI SDK models (matched via substring)
   const aiSdkModels = [
     // Anthropic Claude models
     'claude-3-5-sonnet',
@@ -158,17 +164,26 @@ export function isAISDKModel(modelId: string): boolean {
     'gpt-4',
     'gpt-3.5-turbo',
 
-    // Google models
+    // Perplexity models
+    'perplexity-sonar',
+
+    // Google Gemini models (direct matches)
     'gemini-pro',
     'gemini-1.5-pro',
     'gemini-2.0-flash',
-
-    // Perplexity models
-    'perplexity-sonar',
   ];
 
-  return aiSdkModels.some((model) =>
-    modelId.toLowerCase().includes(model.toLowerCase())
+  const aiSdkFamilies = [
+    // Google Gemini & Gemma families
+    'gemini-',
+    'gemma-',
+    'codegemma-',
+    'paligemma-',
+  ];
+
+  return (
+    aiSdkModels.some((model) => normalizedModelId.includes(model)) ||
+    aiSdkFamilies.some((prefix) => normalizedModelId.includes(prefix))
   );
 }
 
