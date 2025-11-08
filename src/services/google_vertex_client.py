@@ -7,23 +7,27 @@ For Gemini models, we use the REST API directly because:
 1. The new google-genai SDK is the recommended approach going forward
 2. The old PredictionServiceClient doesn't work reliably with newer Gemini models
 3. The REST API is stable and well-documented
+
+Authentication uses lightweight OAuth2 JWT exchange (no heavy Google SDKs):
+- Uses src.services.google_oauth2_jwt for lightweight token generation
+- Supports GOOGLE_VERTEX_CREDENTIALS_JSON environment variable
+- Serverless-friendly (Vercel, Railway compatible)
+- Minimal memory footprint
 """
 
 import json
 import logging
+import os
 import time
 from collections.abc import Iterator
 from typing import Any, Optional
 
-import google.auth
 import httpx
-from google.auth.transport.requests import Request
 from google.protobuf.json_format import MessageToDict
-from google.oauth2.service_account import Credentials
 
 from src.config import Config
+from src.services.google_oauth2_jwt import get_access_token_from_service_account
 
-from typing import Optional
 # Initialize logging
 logger = logging.getLogger(__name__)
 
@@ -35,115 +39,27 @@ VERTEX_AI_SCOPES = [
 
 
 def get_google_vertex_credentials():
-    """Get Google Cloud credentials for Vertex AI
+    """Get Google Cloud credentials for Vertex AI (Deprecated)
 
-    Tries multiple credential sources in order:
+    DEPRECATED: This function is kept for backward compatibility but is no longer used.
+    Credential handling is now done via get_access_token_from_service_account() using
+    lightweight OAuth2 JWT exchange.
+
+    Previously tried multiple credential sources in order:
     1. GOOGLE_VERTEX_CREDENTIALS_JSON environment variable (for Vercel/serverless)
-       - Supports both raw JSON and base64-encoded JSON
-       - Explicitly creates service account credentials using from_service_account_info()
-       - This ensures proper access token generation (not id_token)
     2. GOOGLE_APPLICATION_CREDENTIALS file path (for development)
     3. Application Default Credentials (ADC) from google.auth.default()
-    
-    This function is used by all Google Vertex AI services to ensure consistent
-    credential handling across the codebase.
+
+    This function is kept only for backward compatibility with any external code
+    that might call it directly.
     """
-    try:
-        # First, try to get credentials from JSON environment variable (Vercel/serverless)
-        import base64
-        import os
+    logger.warning(
+        "get_google_vertex_credentials() is deprecated. "
+        "Use get_access_token_from_service_account() instead for lightweight JWT exchange."
+    )
 
-        creds_json_env = os.environ.get("GOOGLE_VERTEX_CREDENTIALS_JSON")
-        if creds_json_env:
-            logger.info(
-                "Loading Google Vertex credentials from GOOGLE_VERTEX_CREDENTIALS_JSON environment variable"
-            )
-            import json as json_module
-
-            try:
-                # Try to parse as raw JSON first
-                creds_json = creds_json_env
-                creds_dict = json_module.loads(creds_json)
-                logger.debug("Credentials parsed as raw JSON")
-            except (json_module.JSONDecodeError, ValueError):
-                # If that fails, try base64 decoding
-                try:
-                    logger.debug("Attempting to decode credentials as base64")
-                    creds_json = base64.b64decode(creds_json_env).decode("utf-8")
-                    creds_dict = json_module.loads(creds_json)
-                    logger.debug("Credentials successfully decoded from base64 and parsed as JSON")
-                except Exception as base64_error:
-                    logger.warning(
-                        f"Failed to decode credentials as base64: {base64_error}. "
-                        "Falling back to next credential method.",
-                        exc_info=True,
-                    )
-                    # Don't raise - allow fallback to next credential method
-                    creds_dict = None
-                    creds_json = None
-
-            if creds_dict and creds_json:
-                try:
-                    # Explicitly create service account credentials from the JSON
-                    # This ensures we get proper service account credentials that can generate access tokens
-                    credentials = Credentials.from_service_account_info(
-                        creds_dict, scopes=VERTEX_AI_SCOPES
-                    )
-                    logger.info(
-                        f"Successfully loaded Google Vertex credentials from JSON (service account: {creds_dict.get('client_email', 'unknown')})"
-                    )
-                    return credentials
-
-                except Exception as e:
-                    error_str = str(e)
-                    logger.warning(
-                        f"Failed to load credentials from GOOGLE_VERTEX_CREDENTIALS_JSON: {error_str}. "
-                        "Falling back to next credential method.",
-                        exc_info=True,
-                    )
-                    # Don't raise - allow fallback to next credential method
-
-        # Second, try file-based credentials (development)
-        if Config.GOOGLE_APPLICATION_CREDENTIALS:
-            logger.info(
-                f"Loading Google Vertex credentials from file: {Config.GOOGLE_APPLICATION_CREDENTIALS}"
-            )
-            try:
-                credentials = Credentials.from_service_account_file(
-                    Config.GOOGLE_APPLICATION_CREDENTIALS, scopes=VERTEX_AI_SCOPES
-                )
-                # Don't refresh here - credentials are valid upon creation
-                # Refresh will happen in get_google_vertex_access_token() when needed
-                logger.info("Successfully loaded Google Vertex credentials from file")
-                return credentials
-            except Exception as e:
-                error_str = str(e)
-                logger.warning(
-                    f"Failed to load credentials from file: {error_str}. "
-                    "Falling back to next credential method.",
-                    exc_info=True,
-                )
-                # Don't raise - allow fallback to next credential method
-
-        # Third, try Application Default Credentials (ADC)
-        logger.info("Attempting to use Application Default Credentials (ADC)")
-        credentials, _ = google.auth.default(scopes=VERTEX_AI_SCOPES)
-        if not credentials.valid:
-            credentials.refresh(Request())
-        logger.info("Successfully loaded Application Default Credentials")
-        return credentials
-    except Exception as e:
-        error_msg = (
-            f"Failed to get Google Cloud credentials: {str(e)}. "
-            "Please configure credentials for Google Vertex AI. Set one of:\n"
-            "  1. GOOGLE_VERTEX_CREDENTIALS_JSON environment variable (raw JSON or base64-encoded)\n"
-            "  2. GOOGLE_APPLICATION_CREDENTIALS file path (path to service account JSON)\n"
-            "  3. Configure Application Default Credentials via 'gcloud auth application-default login'\n"
-            "For serverless deployments, use GOOGLE_VERTEX_CREDENTIALS_JSON."
-        )
-        logger.error(error_msg)
-        # Raise ValueError so it gets mapped to a 400 error instead of 502
-        raise ValueError(error_msg) from e
+    # Return None to indicate the new approach should be used
+    return None
 
 
 def get_google_vertex_access_token():
@@ -151,79 +67,48 @@ def get_google_vertex_access_token():
 
     Returns an OAuth2 access token that can be used as a bearer token.
 
-    Supports all credential sources:
-    1. GOOGLE_VERTEX_CREDENTIALS_JSON (raw JSON or base64)
-    2. GOOGLE_APPLICATION_CREDENTIALS (file path)
-    3. Application Default Credentials (ADC)
+    Uses lightweight OAuth2 JWT exchange (no heavy Google SDKs):
+    - Supports GOOGLE_VERTEX_CREDENTIALS_JSON (raw JSON or base64-encoded)
+    - Serverless-friendly (Vercel, Railway compatible)
+    - Minimal memory footprint
+    - Fast token generation via JWT Bearer flow
+
+    Raises:
+        ValueError: If credentials are not configured or token exchange fails
     """
     try:
-        logger.info("Getting credentials for Vertex AI access token")
+        logger.info("Getting Vertex AI access token using lightweight JWT exchange")
 
-        # Get credentials using existing function that supports all sources
-        credentials = get_google_vertex_credentials()
+        # Get service account JSON from environment
+        service_account_json = os.environ.get("GOOGLE_VERTEX_CREDENTIALS_JSON")
 
-        # Refresh credentials to get a valid access token
-        from google.auth.transport.requests import Request as AuthRequest
-
-        # Ensure credentials are fresh - refresh if not valid or expired
-        if not credentials.valid or credentials.expired:
-            logger.info("Refreshing expired or invalid credentials")
-            credentials.refresh(AuthRequest())
-            logger.debug("Credentials refreshed successfully")
-
-        # For service account credentials, ensure we get an access token, not id_token
-        # The refresh() method should return an access token when proper scopes are used
-        if hasattr(credentials, 'token') and credentials.token:
-            logger.info(f"Successfully obtained access token (length: {len(credentials.token)} chars)")
-            return credentials.token
-        
-        # If token is not available, try refreshing again
-        logger.warning("Token not available after refresh, attempting refresh again...")
-        credentials.refresh(AuthRequest())
-        
-        if hasattr(credentials, 'token') and credentials.token:
-            logger.info(f"Successfully obtained access token after second refresh (length: {len(credentials.token)} chars)")
-            return credentials.token
-        
-        # Check if we got an id_token instead of access_token (common issue)
-        if hasattr(credentials, 'id_token') and credentials.id_token:
+        if not service_account_json:
             error_msg = (
-                "Received id_token instead of access_token. This usually happens when:\n"
-                "1. The service account credentials are not properly configured\n"
-                "2. The scopes are incorrect\n"
-                "3. The credentials file is missing required fields\n\n"
-                "Please ensure you're using a valid service account JSON key file with:\n"
-                "- 'type': 'service_account'\n"
-                "- 'private_key' field\n"
-                "- 'client_email' field\n"
-                "- Proper IAM permissions (roles/aiplatform.user)"
+                "Failed to get Google Vertex access token: "
+                "GOOGLE_VERTEX_CREDENTIALS_JSON environment variable not set.\n"
+                "Please configure credentials for Google Vertex AI. Set:\n"
+                "  GOOGLE_VERTEX_CREDENTIALS_JSON=<service-account-json> (raw JSON or base64-encoded)\n"
+                "For serverless deployments (Vercel, Railway), use base64-encoded JSON."
             )
             logger.error(error_msg)
-            raise ValueError(f"No access token in response. {error_msg}")
+            raise ValueError(error_msg)
 
-        # If we reach here, token was not obtained through the normal flow
-        # This should not happen, but provide a clear error message
-        raise ValueError(
-            "Failed to obtain access token from credentials after refresh. "
-            "Token is None and no id_token was found. "
-            "This usually means:\n"
-            "  1. Service account credentials are invalid or expired\n"
-            "  2. Credentials lack required IAM permissions (need 'Vertex AI User' role)\n"
-            "  3. Vertex AI API is not enabled in your GCP project\n"
-            "  4. Scopes are not properly set during credential initialization\n"
-            "Please verify your GCP project configuration and service account permissions."
+        # Use lightweight JWT exchange to get access token
+        access_token = get_access_token_from_service_account(
+            service_account_json,
+            scope="https://www.googleapis.com/auth/cloud-platform"
         )
+
+        logger.info(f"Successfully obtained access token (length: {len(access_token)} chars)")
+        return access_token
+
+    except ValueError:
+        # Re-raise ValueError from JWT exchange
+        raise
     except Exception as e:
-        logger.error(f"Failed to get Vertex AI access token: {e}", exc_info=True)
-        # Check if the error contains id_token info
-        error_str = str(e)
-        if 'id_token' in error_str.lower():
-            raise ValueError(
-                f"Failed to get Google Vertex access token: {error_str}. "
-                "The credentials returned an id_token instead of an access_token. "
-                "Please ensure you're using a valid service account JSON key file."
-            ) from e
-        raise ValueError(f"Failed to get Google Vertex access token: {str(e)}") from e
+        error_msg = f"Failed to get Vertex AI access token: {str(e)}"
+        logger.error(error_msg, exc_info=True)
+        raise ValueError(error_msg) from e
 
 
 def transform_google_vertex_model_id(model_id: str) -> str:
@@ -818,29 +703,30 @@ def diagnose_google_vertex_credentials() -> dict:
     else:
         step1["details"] += f" | Location: {Config.GOOGLE_VERTEX_LOCATION}"
 
-    # Step 2: Try to load credentials
+    # Step 2: Try to load credentials (check if GOOGLE_VERTEX_CREDENTIALS_JSON is available)
     step2 = {"step": "Credential loading", "passed": False, "source": "none", "details": ""}
     try:
-        credentials = get_google_vertex_credentials()
-        result["credentials_available"] = True
-        step2["passed"] = True
+        service_account_json = os.environ.get("GOOGLE_VERTEX_CREDENTIALS_JSON")
 
-        # Determine source
-        import os
-        if os.environ.get("GOOGLE_VERTEX_CREDENTIALS_JSON"):
+        if service_account_json:
+            result["credentials_available"] = True
+            step2["passed"] = True
             step2["source"] = "GOOGLE_VERTEX_CREDENTIALS_JSON (env)"
             result["credential_source"] = "env_json"
-        elif Config.GOOGLE_APPLICATION_CREDENTIALS:
-            step2["source"] = f"GOOGLE_APPLICATION_CREDENTIALS (file)"
-            result["credential_source"] = "file"
-        else:
-            step2["source"] = "Application Default Credentials (ADC)"
-            result["credential_source"] = "adc"
 
-        step2["details"] = f"Successfully loaded from {step2['source']}"
+            # Parse to get service account email for logging
+            try:
+                creds_dict = json.loads(service_account_json)
+                service_email = creds_dict.get("client_email", "unknown")
+                step2["details"] = f"Successfully loaded from {step2['source']} (service account: {service_email})"
+            except Exception:
+                step2["details"] = f"Successfully loaded from {step2['source']}"
+        else:
+            step2["details"] = "GOOGLE_VERTEX_CREDENTIALS_JSON not configured"
+            result["error"] = "GOOGLE_VERTEX_CREDENTIALS_JSON environment variable not set"
 
     except Exception as e:
-        step2["details"] = f"Failed to load credentials: {str(e)[:200]}"
+        step2["details"] = f"Failed to check credentials: {str(e)[:200]}"
         result["error"] = str(e)
 
     result["steps"].append(step2)
