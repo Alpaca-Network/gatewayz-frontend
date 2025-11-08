@@ -80,6 +80,8 @@ __pycache__/
 htmlcov/
 coverage.json
 .pytest-split-durations
+test_report.html
+test_output.log
 
 # CI cache directories
 .cache/
