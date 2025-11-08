@@ -1,68 +1,69 @@
 from datetime import datetime
-from typing import Any
+from typing import Any, Optional, Dict, List
 
 from pydantic import BaseModel
 
 
+from typing import Optional
 # Chat History Models
 class ChatMessage(BaseModel):
-    id: int | None = None
+    id: Optional[int] = None
     session_id: int
     role: str  # 'user' or 'assistant'
     content: str
-    model: str | None = None
-    tokens: int | None = 0
-    created_at: datetime | None = None
+    model: Optional[str] = None
+    tokens: Optional[int] = 0
+    created_at: Optional[datetime] = None
 
 
 class ChatSession(BaseModel):
-    id: int | None = None
+    id: Optional[int] = None
     user_id: int
     title: str
     model: str
-    created_at: datetime | None = None
-    updated_at: datetime | None = None
-    is_active: bool | None = True
-    messages: list[ChatMessage] | None = []
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    is_active: Optional[bool] = True
+    messages: Optional[List[ChatMessage]] = []
 
 
 class CreateChatSessionRequest(BaseModel):
-    title: str | None = None
-    model: str | None = None
+    title: Optional[str] = None
+    model: Optional[str] = None
 
 
 class UpdateChatSessionRequest(BaseModel):
-    title: str | None = None
-    model: str | None = None
+    title: Optional[str] = None
+    model: Optional[str] = None
 
 
 class ChatSessionResponse(BaseModel):
     success: bool
-    data: ChatSession | None = None
-    message: str | None = None
+    data: Optional[ChatSession] = None
+    message: Optional[str] = None
 
 
 class ChatSessionsListResponse(BaseModel):
     success: bool
-    data: list[ChatSession]
+    data: List[ChatSession]
     count: int
-    message: str | None = None
+    message: Optional[str] = None
 
 
 class ChatSessionStatsResponse(BaseModel):
     success: bool
-    stats: dict[str, Any]
-    message: str | None = None
+    stats: Dict[str, Any]
+    message: Optional[str] = None
 
 
 class SearchChatSessionsRequest(BaseModel):
     query: str
-    limit: int | None = 20
+    limit: Optional[int] = 20
 
 
 class SaveChatMessageRequest(BaseModel):
     role: str  # 'user' or 'assistant'
     content: str
-    model: str | None = None
-    tokens: int | None = 0
-    created_at: str | None = None  # ISO datetime string from frontend
+    model: Optional[str] = None
+    tokens: Optional[int] = 0
+    created_at: Optional[str] = None  # ISO datetime string from frontend

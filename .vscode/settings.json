@@ -1,6 +1,0 @@
-{
-    "sonarlint.connectedMode.project": {
-        "connectionId": "alpaca-network",
-        "projectKey": "Alpaca-Network_gatewayz-backend"
-    }
-}

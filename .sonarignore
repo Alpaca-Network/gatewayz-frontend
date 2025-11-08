@@ -1,7 +1,0 @@
-# Ignore manual integration test scripts
-# These are ad-hoc testing scripts, not part of the main codebase
-scripts/**
-scripts/integration-tests/**
-
-# Ignore test data files and JSON configurations
-tests/**/google_models_*.json

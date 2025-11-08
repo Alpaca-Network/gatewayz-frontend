@@ -1,3 +1,4 @@
+from typing import Optional
 import os
 
 from dotenv import load_dotenv
@@ -140,7 +141,7 @@ class Config:
     )
 
     @classmethod
-    def get_portkey_virtual_key(cls, provider: str | None = None) -> str | None:
+    def get_portkey_virtual_key(cls, provider: Optional[str] = None) -> Optional[str]:
         """
         Resolve Portkey virtual key for a provider.
 

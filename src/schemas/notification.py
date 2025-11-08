@@ -6,11 +6,12 @@ Pydantic models for notification system
 
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import Any, Optional, Dict, List
 
 from pydantic import BaseModel
 
 
+from typing import Optional
 class NotificationType(str, Enum):
     """Notification type enumeration"""
 
@@ -55,9 +56,9 @@ class NotificationPreferences(BaseModel):
     trial_expiry_reminder_days: int = 1  # Days before trial expires to send reminder
     plan_expiry_reminder_days: int = 7  # Days before plan expires to send reminder
     usage_alerts: bool = True
-    webhook_url: str | None = None
-    created_at: datetime | None = None
-    updated_at: datetime | None = None
+    webhook_url: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
 
 class NotificationTemplate(BaseModel):
@@ -68,25 +69,25 @@ class NotificationTemplate(BaseModel):
     subject: str
     html_template: str
     text_template: str
-    variables: list[str] = []  # Template variables like {username}, {credits}, etc.
+    variables: List[str] = []  # Template variables like {username}, {credits}, etc.
     is_active: bool = True
 
 
 class Notification(BaseModel):
     """Notification record"""
 
-    id: int | None = None
+    id: Optional[int] = None
     user_id: int
     type: NotificationType
     channel: NotificationChannel
     subject: str
     content: str
     status: NotificationStatus = NotificationStatus.PENDING
-    sent_at: datetime | None = None
-    delivered_at: datetime | None = None
-    error_message: str | None = None
-    metadata: dict[str, Any] | None = None
-    created_at: datetime | None = None
+    sent_at: Optional[datetime] = None
+    delivered_at: Optional[datetime] = None
+    error_message: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+    created_at: Optional[datetime] = None
 
 
 class SendNotificationRequest(BaseModel):
@@ -97,18 +98,18 @@ class SendNotificationRequest(BaseModel):
     channel: NotificationChannel = NotificationChannel.EMAIL
     subject: str
     content: str
-    metadata: dict[str, Any] | None = None
+    metadata: Optional[Dict[str, Any]] = None
 
 
 class UpdateNotificationPreferencesRequest(BaseModel):
     """Request to update notification preferences"""
 
-    email_notifications: bool | None = None
-    low_balance_threshold: float | None = None
-    trial_expiry_reminder_days: int | None = None
-    plan_expiry_reminder_days: int | None = None
-    usage_alerts: bool | None = None
-    webhook_url: str | None = None
+    email_notifications: Optional[bool] = None
+    low_balance_threshold: Optional[float] = None
+    trial_expiry_reminder_days: Optional[int] = None
+    plan_expiry_reminder_days: Optional[int] = None
+    usage_alerts: Optional[bool] = None
+    webhook_url: Optional[str] = None
 
 
 class NotificationStats(BaseModel):
@@ -129,8 +130,8 @@ class LowBalanceAlert(BaseModel):
     current_credits: float
     threshold: float
     is_trial: bool
-    trial_remaining_days: int | None = None
-    plan_name: str | None = None
+    trial_remaining_days: Optional[int] = None
+    plan_name: Optional[str] = None
 
 
 class TrialExpiryAlert(BaseModel):

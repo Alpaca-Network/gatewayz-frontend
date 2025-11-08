@@ -13,7 +13,7 @@ import json
 import logging
 import time
 from collections.abc import Iterator
-from typing import Any
+from typing import Any, Optional
 
 import google.auth
 import httpx
@@ -23,6 +23,7 @@ from google.oauth2.service_account import Credentials
 
 from src.config import Config
 
+from typing import Optional
 # Initialize logging
 logger = logging.getLogger(__name__)
 
@@ -258,9 +259,9 @@ def transform_google_vertex_model_id(model_id: str) -> str:
 def make_google_vertex_request_openai(
     messages: list,
     model: str,
-    max_tokens: int | None = None,
-    temperature: float | None = None,
-    top_p: float | None = None,
+    max_tokens: Optional[int] = None,
+    temperature: Optional[float] = None,
+    top_p: Optional[float] = None,
     **kwargs,
 ) -> dict:
     """Make request to Google Vertex AI generative models using REST API
@@ -464,9 +465,9 @@ def make_google_vertex_request_openai(
 def make_google_vertex_request_openai_stream(
     messages: list,
     model: str,
-    max_tokens: int | None = None,
-    temperature: float | None = None,
-    top_p: float | None = None,
+    max_tokens: Optional[int] = None,
+    temperature: Optional[float] = None,
+    top_p: Optional[float] = None,
     **kwargs,
 ) -> Iterator[str]:
     """Make streaming request to Google Vertex AI

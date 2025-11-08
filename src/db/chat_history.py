@@ -1,13 +1,14 @@
 import logging
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Optional, Dict, List
 
 from src.config.supabase_config import get_supabase_client
 
+from typing import Optional
 logger = logging.getLogger(__name__)
 
 
-def create_chat_session(user_id: int, title: str = None, model: str = None) -> dict[str, Any]:
+def create_chat_session(user_id: int, title: str = None, model: str = None) -> Dict[str, Any]:
     """Create a new chat session for a user"""
     try:
         client = get_supabase_client()
@@ -46,7 +47,7 @@ def save_chat_message(
     model: str = None,
     tokens: int = 0,
     user_id: int = None,
-) -> dict[str, Any]:
+) -> Dict[str, Any]:
     """Save a chat message to a session and update session's updated_at timestamp"""
     try:
         client = get_supabase_client()
@@ -98,7 +99,7 @@ def save_chat_message(
         raise RuntimeError(f"Failed to save chat message: {e}") from e
 
 
-def get_user_chat_sessions(user_id: int, limit: int = 50, offset: int = 0) -> list[dict[str, Any]]:
+def get_user_chat_sessions(user_id: int, limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
     """Get all chat sessions for a user"""
     try:
         client = get_supabase_client()
@@ -122,7 +123,7 @@ def get_user_chat_sessions(user_id: int, limit: int = 50, offset: int = 0) -> li
         raise RuntimeError(f"Failed to get chat sessions: {e}") from e
 
 
-def get_chat_session(session_id: int, user_id: int) -> dict[str, Any] | None:
+def get_chat_session(session_id: int, user_id: int) -> Optional[Dict[str, Any]]:
     """Get a specific chat session with messages"""
     try:
         client = get_supabase_client()
@@ -221,7 +222,7 @@ def delete_chat_session(session_id: int, user_id: int) -> bool:
         raise RuntimeError(f"Failed to delete chat session: {e}") from e
 
 
-def get_chat_session_stats(user_id: int) -> dict[str, Any]:
+def get_chat_session_stats(user_id: int) -> Dict[str, Any]:
     """Get chat session statistics for a user"""
     try:
         client = get_supabase_client()
@@ -274,7 +275,7 @@ def get_chat_session_stats(user_id: int) -> dict[str, Any]:
         raise RuntimeError(f"Failed to get chat session stats: {e}") from e
 
 
-def search_chat_sessions(user_id: int, query: str, limit: int = 20) -> list[dict[str, Any]]:
+def search_chat_sessions(user_id: int, query: str, limit: int = 20) -> List[Dict[str, Any]]:
     """Search chat sessions by title or message content"""
     try:
         client = get_supabase_client()

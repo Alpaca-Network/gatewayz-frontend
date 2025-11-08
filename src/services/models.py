@@ -2,7 +2,7 @@ import logging
 import json
 from pathlib import Path
 import csv
-from typing import Any
+from typing import Any, Dict, Optional, Union
 from concurrent.futures import ThreadPoolExecutor
 
 from src.config import Config
@@ -1725,7 +1725,7 @@ def fetch_models_from_fal():
         return []
 
 
-def normalize_fal_model(fal_model: dict) -> dict | None:
+def normalize_fal_model(fal_model: dict) -> Optional[dict]:
     """Normalize Fal.ai catalog entries to resemble OpenRouter model shape
 
     Fal.ai features:
@@ -1841,7 +1841,7 @@ def fetch_models_from_vercel_ai_gateway():
         return []
 
 
-def normalize_vercel_model(model) -> dict | None:
+def normalize_vercel_model(model) -> Optional[dict]:
     """Normalize Vercel AI Gateway model to catalog schema
 
     Vercel models can originate from various providers (OpenAI, Google, Anthropic, etc.)
@@ -2554,7 +2554,7 @@ def enhance_model_with_huggingface_data(openrouter_model: dict) -> dict:
         return openrouter_model
 
 
-def _extract_model_provider_slug(model: dict) -> str | None:
+def _extract_model_provider_slug(model: dict) -> Optional[str]:
     """Determine provider slug from a model payload."""
     if not model:
         return None
@@ -2580,7 +2580,7 @@ def _extract_model_provider_slug(model: dict) -> str | None:
     return None
 
 
-def _normalize_provider_slug(provider: Any) -> str | None:
+def _normalize_provider_slug(provider: Any) -> Optional[str]:
     """Extract provider slug from a provider record."""
     if provider is None:
         return None
@@ -2602,8 +2602,8 @@ def _normalize_provider_slug(provider: Any) -> str | None:
 
 
 def get_model_count_by_provider(
-    provider_or_models: Any, models_data: list | None = None
-) -> int | dict[str, int]:
+    provider_or_models: Any, models_data: Optional[list] = None
+) -> Union[int, Dict[str, int]]:
     """Return model counts.
 
     Backwards-compatible shim that supports two call styles:
@@ -2629,7 +2629,7 @@ def get_model_count_by_provider(
         models = provider_or_models or []
         providers = models_data or []
 
-        counts: dict[str, int] = {}
+        counts: Dict[str, int] = {}
 
         for model in models:
             slug = _extract_model_provider_slug(model)
@@ -2724,7 +2724,7 @@ def fetch_models_from_aihubmix():
         return []
 
 
-def normalize_aihubmix_model(model) -> dict | None:
+def normalize_aihubmix_model(model) -> Optional[dict]:
     """Normalize AiHubMix model to catalog schema
 
     AiHubMix models use OpenAI-compatible naming conventions.
@@ -2800,7 +2800,7 @@ def fetch_models_from_anannas():
         return []
 
 
-def normalize_anannas_model(model) -> dict | None:
+def normalize_anannas_model(model) -> Optional[dict]:
     """Normalize Anannas model to catalog schema
 
     Anannas models use OpenAI-compatible naming conventions.

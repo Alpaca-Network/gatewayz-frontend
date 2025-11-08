@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 import httpx
 
+from typing import Optional
 # Make braintrust optional for test environments
 try:
     from braintrust import current_span, start_span, traced
@@ -515,7 +516,7 @@ async def stream_generator(
 async def chat_completions(
     req: ProxyRequest,
     api_key: str = Depends(get_api_key),
-    session_id: int | None = Query(None, description="Chat session ID to save messages to"),
+    session_id: Optional[int] = Query(None, description="Chat session ID to save messages to"),
     request: Request = None,
 ):
     # === 0) Setup / sanity ===
@@ -586,7 +587,12 @@ async def chat_completions(
 
         rate_limit_mgr = get_rate_limit_manager()
         should_release_concurrency = not trial.get("is_trial", False)
-        if should_release_concurrency:
+
+        # Allow disabling rate limiting for testing (DEV ONLY)
+        import os
+        disable_rate_limiting = os.getenv("DISABLE_RATE_LIMITING", "false").lower() == "true"
+
+        if should_release_concurrency and not disable_rate_limiting:
             rl_pre = await rate_limit_mgr.check_rate_limit(api_key, tokens_used=0)
             if not rl_pre.allowed:
                 await _to_thread(
@@ -1078,7 +1084,7 @@ async def chat_completions(
             except Exception as e:
                 logger.warning("Failed to track trial usage: %s", e)
 
-        if should_release_concurrency and rate_limit_mgr:
+        if should_release_concurrency and rate_limit_mgr and not disable_rate_limiting:
             try:
                 await rate_limit_mgr.release_concurrency(api_key)
             except Exception as exc:
@@ -1292,7 +1298,7 @@ async def chat_completions(
 async def unified_responses(
     req: ResponseRequest,
     api_key: str = Depends(get_api_key),
-    session_id: int | None = Query(None, description="Chat session ID to save messages to"),
+    session_id: Optional[int] = Query(None, description="Chat session ID to save messages to"),
     request: Request = None,
 ):
     """

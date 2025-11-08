@@ -7,7 +7,7 @@ Handles all Stripe payment operations
 import logging
 import os
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Dict
 
 import stripe
 
@@ -191,7 +191,7 @@ class StripeService:
             logger.error(f"Error creating checkout session: {e}")
             raise
 
-    def retrieve_checkout_session(self, session_id: str) -> dict[str, Any]:
+    def retrieve_checkout_session(self, session_id: str) -> Dict[str, Any]:
         """Retrieve checkout session details"""
         try:
             session = stripe.checkout.Session.retrieve(session_id)
@@ -274,7 +274,7 @@ class StripeService:
             logger.error(f"Error creating payment intent: {e}")
             raise
 
-    def retrieve_payment_intent(self, payment_intent_id: str) -> dict[str, Any]:
+    def retrieve_payment_intent(self, payment_intent_id: str) -> Dict[str, Any]:
         """Retrieve payment intent details"""
         try:
             intent = stripe.PaymentIntent.retrieve(payment_intent_id)

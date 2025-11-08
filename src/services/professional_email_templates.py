@@ -3,7 +3,7 @@
 Professional Email Templates for AI Gateway
 """
 
-from typing import Any
+from typing import Any, Dict
 
 from src.constants import APP_NAME, FRONTEND_BASE_URL, SUPPORT_EMAIL
 
@@ -262,7 +262,7 @@ class ProfessionalEmailTemplates:
 </html>
         """
 
-    def welcome_email(self, username: str, email: str, credits: int) -> dict[str, str]:
+    def welcome_email(self, username: str, email: str, credits: int) -> Dict[str, str]:
         """Welcome to Gatewayz!"""
         # Use display name if it looks like a real name, otherwise use email prefix
         display_name = username
@@ -400,7 +400,7 @@ The {self.app_name} Team
 """,
         }
 
-    def simple_welcome_email(self, username: str, email: str, credits: int) -> dict[str, str]:
+    def simple_welcome_email(self, username: str, email: str, credits: int) -> Dict[str, str]:
         """Simple, clean welcome email template"""
         # Use display name if it looks like a real name, otherwise use email prefix
         display_name = username
@@ -468,7 +468,7 @@ The {self.app_name} Team
         threshold: float,
         is_trial: bool = False,
         plan_name: str = None,
-    ) -> dict[str, str]:
+    ) -> Dict[str, str]:
         """Low balance alert email"""
         if is_trial:
             content = f"""
@@ -583,7 +583,7 @@ The {self.app_name} Team
         remaining_tokens: int,
         remaining_requests: int,
         trial_end_date: str,
-    ) -> dict[str, str]:
+    ) -> Dict[str, str]:
         """Trial expiry alert email"""
         content = f"""
             <h2>⏰ Trial Expiring Soon</h2>
@@ -675,7 +675,7 @@ The {self.app_name} Team
 
     def subscription_expiry_alert(
         self, username: str, email: str, plan_name: str, remaining_days: int, end_date: str
-    ) -> dict[str, str]:
+    ) -> Dict[str, str]:
         """Subscription expiry alert email"""
         content = f"""
             <h2>📅 Subscription Expiring Soon</h2>
@@ -750,7 +750,7 @@ The {self.app_name} Team
 
     def credits_added_confirmation(
         self, username: str, email: str, credits_added: float, new_balance: float
-    ) -> dict[str, str]:
+    ) -> Dict[str, str]:
         """Credits added confirmation email"""
         content = f"""
             <h2>✅ Credits Added Successfully</h2>
@@ -827,7 +827,7 @@ The {self.app_name} Team
 """,
         }
 
-    def password_reset_email(self, username: str, email: str, reset_token: str) -> dict[str, str]:
+    def password_reset_email(self, username: str, email: str, reset_token: str) -> Dict[str, str]:
         """Password reset email"""
         reset_url = f"{self.app_url}/reset-password?token={reset_token}"
 
@@ -891,8 +891,8 @@ The {self.app_name} Team
         }
 
     def monthly_usage_report(
-        self, username: str, email: str, month: str, usage_stats: dict[str, Any]
-    ) -> dict[str, str]:
+        self, username: str, email: str, month: str, usage_stats: Dict[str, Any]
+    ) -> Dict[str, str]:
         """Monthly usage report email"""
         content = f"""
             <h2>📊 Monthly Usage Report - {month}</h2>

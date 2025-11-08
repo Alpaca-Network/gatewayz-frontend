@@ -2,6 +2,15 @@
 .venv
 venv
 .env
+.vscode
+.idea
+.claude
+
+# GCP credentials - NEVER commit these!
+.secrets/
+*-service-account.json
+gcp-*.json
+google-credentials.json
 
 # Python
 __pycache__
@@ -32,7 +41,7 @@ __pycache__
 # md files
 *.md
 !docs/**/*.md
-!README.md
+!docs/README.md
 
 # Temp and output files
 temp*.json
@@ -71,8 +80,18 @@ __pycache__/
 htmlcov/
 coverage.json
 .pytest-split-durations
+test_report.html
+test_output.log
 
 # CI cache directories
 .cache/
 .mypy_cache/
 coverage.xml
+
+# Test results and temporary files
+*_test_results.json
+google_models_test_*.json
+test_results.txt
+.user_test_user_*.txt
+.test_api_key
+

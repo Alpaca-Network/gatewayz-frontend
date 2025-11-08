@@ -326,7 +326,7 @@ def test_add_credits_and_deduct_credits(sb):
     assert len(sb._tx_log) >= 2
 
     # deduct insufficient -> RuntimeError
-    with pytest.raises(RuntimeError):
+    with pytest.raises(RuntimeError, match="Insufficient credits"):
         users.deduct_credits(api_key="k22", tokens=999.0)
 
 def test_get_all_users_delete_user_count(sb):
@@ -662,7 +662,7 @@ def test_deduct_credits_user_not_found(sb):
     import src.db.users as users
 
     # When user not found, get_user returns None, which triggers error
-    with pytest.raises(RuntimeError, match="Failed to deduct credits"):
+    with pytest.raises(RuntimeError, match="User with API key nonexistent_key not found"):
         users.deduct_credits(
             api_key="nonexistent_key",
             tokens=10.0,

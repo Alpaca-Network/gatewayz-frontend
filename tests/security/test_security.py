@@ -29,10 +29,9 @@ from src.security.security import (
     get_audit_logger,
 )
 
-# Skip this module pending refactoring to match the actual API of SecurityManager
-pytestmark = pytest.mark.skip(
-    reason="Tests need refactoring - encrypt/decrypt are SecurityManager methods, not module-level functions"
-)
+# Note: encrypt/decrypt are SecurityManager methods, not tested here
+# All other security functions (hash_api_key, generate_secure_api_key,
+# validate_ip_allowlist, validate_domain_referrers) are module-level and tested below
 
 
 class TestAPIKeyHashing:

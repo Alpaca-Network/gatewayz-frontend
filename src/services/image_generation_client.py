@@ -1,7 +1,7 @@
 import logging
 import os
 import time
-from typing import Any
+from typing import Any, Dict
 
 import httpx
 
@@ -21,7 +21,7 @@ def make_portkey_image_request(
     quality: str = "standard",
     style: str = "natural",
     **kwargs,
-) -> dict[str, Any]:
+) -> Dict[str, Any]:
     """Make image generation request to Portkey
 
     Args:
@@ -100,7 +100,7 @@ def make_portkey_image_request(
 
 def make_deepinfra_image_request(
     prompt: str, model: str = "stabilityai/sd3.5", size: str = "1024x1024", n: int = 1, **kwargs
-) -> dict[str, Any]:
+) -> Dict[str, Any]:
     """Make image generation request directly to DeepInfra
 
     Args:
@@ -155,7 +155,7 @@ def make_google_vertex_image_request(
     location: str = None,
     endpoint_id: str = None,
     **kwargs,
-) -> dict[str, Any]:
+) -> Dict[str, Any]:
     """Make image generation request to Google Vertex AI endpoint
 
     Args:
@@ -305,8 +305,8 @@ def make_google_vertex_image_request(
 
 
 def process_image_generation_response(
-    response: dict[str, Any], provider: str, model: str
-) -> dict[str, Any]:
+    response: Dict[str, Any], provider: str, model: str
+) -> Dict[str, Any]:
     """Process image generation response to standard format
 
     Args:

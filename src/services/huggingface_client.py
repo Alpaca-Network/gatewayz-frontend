@@ -2,7 +2,7 @@ import json
 import logging
 from collections.abc import Generator
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, Dict, List, Optional, Union
 
 import httpx
 
@@ -28,7 +28,7 @@ ALLOWED_PARAMS = {
 class HFStreamChoice:
     """Lightweight structure that mimics OpenAI stream choice objects."""
 
-    def __init__(self, data: dict[str, Any]):
+    def __init__(self, data: Dict[str, Any]):
         self.index = data.get("index", 0)
         self.delta = SimpleNamespace(**(data.get("delta") or {}))
         self.message = SimpleNamespace(**data["message"]) if data.get("message") else None
@@ -38,7 +38,7 @@ class HFStreamChoice:
 class HFStreamChunk:
     """Stream chunk compatible with OpenAI client chunks."""
 
-    def __init__(self, payload: dict[str, Any]):
+    def __init__(self, payload: Dict[str, Any]):
         self.id = payload.get("id")
         self.object = payload.get("object")
         self.created = payload.get("created")
@@ -56,7 +56,7 @@ class HFStreamChunk:
             self.usage = None
 
 
-def _build_timeout_config(timeout: float | httpx.Timeout | None) -> httpx.Timeout:
+def _build_timeout_config(timeout: Union[float, Optional[httpx.Timeout]]) -> httpx.Timeout:
     if isinstance(timeout, httpx.Timeout):
         return timeout
 
@@ -70,7 +70,7 @@ def _build_timeout_config(timeout: float | httpx.Timeout | None) -> httpx.Timeou
     )
 
 
-def get_huggingface_client(timeout: float | httpx.Timeout | None = None) -> httpx.Client:
+def get_huggingface_client(timeout: Union[float, Optional[httpx.Timeout]] = None) -> httpx.Client:
     """Create an HTTPX client for the Hugging Face Router API."""
     if not Config.HUG_API_KEY:
         raise ValueError("Hugging Face API key (HUG_API_KEY) not configured")
@@ -91,7 +91,7 @@ def _prepare_model(model: str) -> str:
     return f"{model}:hf-inference"
 
 
-def _build_payload(messages: list[dict[str, Any]], model: str, **kwargs) -> dict[str, Any]:
+def _build_payload(messages: List[Dict[str, Any]], model: str, **kwargs) -> Dict[str, Any]:
     payload = {
         "messages": messages,
         "model": _prepare_model(model),

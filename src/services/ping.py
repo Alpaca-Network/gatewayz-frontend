@@ -6,7 +6,7 @@ Business logic for ping operations with Redis caching
 
 import logging
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Dict
 
 from src.config.redis_config import get_redis_config
 from src.db.ping import get_ping_stats, increment_ping_count, reset_ping_count
@@ -22,7 +22,7 @@ class PingService:
         self.cache_ttl = 300  # Cache for 5 minutes
         self.cache_key = "ping:count"
 
-    def handle_ping(self) -> dict[str, Any]:
+    def handle_ping(self) -> Dict[str, Any]:
         """
         Handle a ping request by incrementing counter and returning response.
         Uses Redis for caching to reduce database load.
@@ -70,7 +70,7 @@ class PingService:
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
-    def get_statistics(self) -> dict[str, Any]:
+    def get_statistics(self) -> Dict[str, Any]:
         """
         Get detailed ping statistics
 
@@ -116,7 +116,7 @@ class PingService:
             logger.error(f"Error getting ping statistics: {e}")
             return {"total_pings": 0, "error": str(e), "timestamp": datetime.now(timezone.utc).isoformat()}
 
-    def reset_counter(self) -> dict[str, Any]:
+    def reset_counter(self) -> Dict[str, Any]:
         """
         Reset the ping counter (admin operation)
 

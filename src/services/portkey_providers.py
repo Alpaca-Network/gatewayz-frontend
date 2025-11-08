@@ -30,7 +30,7 @@ HISTORICAL NOTE:
 
 import logging
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Optional, Union
 
 from src.cache import (
     _cerebras_models_cache,
@@ -67,7 +67,7 @@ XAI_FALLBACK_MODELS = [
 ]
 
 
-def _check_api_key(api_key: str | None, provider_name: str) -> bool:
+def _check_api_key(api_key: Optional[str], provider_name: str) -> bool:
     """Check if API key is configured - returns False and logs warning if not
 
     Args:
@@ -147,7 +147,7 @@ def _unwrap_sdk_response(models_response: Any) -> list:
     return raw_models if isinstance(raw_models, list) else []
 
 
-def _extract_models_from_response(payload: dict | list, key: str = "data") -> list:
+def _extract_models_from_response(payload: Union[dict, list], key: str = "data") -> list:
     """Extract models list from API response - handles dict or list formats
 
     Args:
@@ -165,7 +165,7 @@ def _extract_models_from_response(payload: dict | list, key: str = "data") -> li
         return []
 
 
-def _convert_model_to_dict(model: Any) -> dict | None:
+def _convert_model_to_dict(model: Any) -> Optional[dict]:
     """Convert SDK model object to dict - shared helper to reduce duplication
 
     Handles Pydantic v1/v2 models, regular objects, and dicts.
@@ -239,7 +239,7 @@ def _cache_normalized_models(models_list: list, provider: str, cache_dict: dict)
 
 def _fetch_openai_compatible_models(
     provider_name: str, base_url: str, api_key: str, cache_dict: dict
-) -> list | None:
+) -> Optional[list]:
     """Fetch models from OpenAI-compatible API - shared helper for Nebius and Novita
 
     Args:

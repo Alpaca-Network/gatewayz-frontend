@@ -7,7 +7,7 @@ Handles low balance notifications, trial expiry alerts, and user communication
 import logging
 import os
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Optional, Dict
 
 import requests
 import resend
@@ -41,7 +41,7 @@ class NotificationService:
         if self.resend_api_key:
             resend.api_key = self.resend_api_key
 
-    def get_user_preferences(self, user_id: int) -> NotificationPreferences | None:
+    def get_user_preferences(self, user_id: int) -> Optional[NotificationPreferences]:
         """Get user notification preferences"""
         try:
             result = (
@@ -115,7 +115,7 @@ class NotificationService:
             logger.error(f"Error creating user preferences: {e}")
             raise
 
-    def update_user_preferences(self, user_id: int, updates: dict[str, Any]) -> bool:
+    def update_user_preferences(self, user_id: int, updates: Dict[str, Any]) -> bool:
         """Update user notification preferences"""
         try:
             updates["updated_at"] = datetime.now(timezone.utc).isoformat()
@@ -131,7 +131,7 @@ class NotificationService:
             logger.error(f"Error updating user preferences: {e}")
             return False
 
-    def check_low_balance_alert(self, user_id: int) -> LowBalanceAlert | None:
+    def check_low_balance_alert(self, user_id: int) -> Optional[LowBalanceAlert]:
         """Check if user needs low balance alert - all users get notified when credits < $5"""
         try:
             user = self.supabase.table("users").select("*").eq("id", user_id).execute()
@@ -208,7 +208,7 @@ class NotificationService:
             logger.error(f"Error checking recent notifications: {e}")
             return False
 
-    def check_trial_expiry_alert(self, user_id: int) -> TrialExpiryAlert | None:
+    def check_trial_expiry_alert(self, user_id: int) -> Optional[TrialExpiryAlert]:
         """Check if user needs trial expiry alert - 1 day before expiry"""
         try:
             user = self.supabase.table("users").select("*").eq("id", user_id).execute()
@@ -255,7 +255,7 @@ class NotificationService:
             logger.error(f"Error checking trial expiry alert: {e}")
             return None
 
-    def check_subscription_expiry_alert(self, user_id: int) -> dict[str, Any] | None:
+    def check_subscription_expiry_alert(self, user_id: int) -> Optional[Dict[str, Any]]:
         """Check if paid user needs subscription expiry alert - daily starting 5 days before expiry"""
         try:
             user = self.supabase.table("users").select("*").eq("id", user_id).execute()
@@ -342,7 +342,7 @@ class NotificationService:
             logger.error(f"Error sending email notification via Resend: {e}")
             return False
 
-    def send_webhook_notification(self, webhook_url: str, data: dict[str, Any]) -> bool:
+    def send_webhook_notification(self, webhook_url: str, data: Dict[str, Any]) -> bool:
         """Send webhook notification"""
         try:
             response = requests.post(
@@ -529,7 +529,7 @@ class NotificationService:
             logger.error(f"Error sending trial expiry alert: {e}")
             return False
 
-    def send_subscription_expiry_alert(self, alert_data: dict[str, Any]) -> bool:
+    def send_subscription_expiry_alert(self, alert_data: Dict[str, Any]) -> bool:
         """Send subscription expiry alert to paid user"""
         try:
             user = (
@@ -604,7 +604,7 @@ class NotificationService:
             logger.error(f"Error sending subscription expiry alert: {e}")
             return False
 
-    def process_notifications(self) -> dict[str, Any]:
+    def process_notifications(self) -> Dict[str, Any]:
         """Process all pending notifications"""
         try:
             stats = {

@@ -6,10 +6,11 @@ Tracks all credit additions and deductions with full audit trail
 
 import logging
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Optional, Dict, List
 
 from src.config.supabase_config import get_supabase_client
 
+from typing import Optional
 logger = logging.getLogger(__name__)
 
 
@@ -34,10 +35,10 @@ def log_credit_transaction(
     description: str,
     balance_before: float,
     balance_after: float,
-    payment_id: int | None = None,
-    metadata: dict[str, Any] | None = None,
-    created_by: str | None = None,
-) -> dict[str, Any] | None:
+    payment_id: Optional[int] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+    created_by: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
     """
     Log a credit transaction to the audit trail
 
@@ -95,16 +96,16 @@ def get_user_transactions(
     user_id: int,
     limit: int = 50,
     offset: int = 0,
-    transaction_type: str | None = None,
-    from_date: str | None = None,
-    to_date: str | None = None,
-    min_amount: float | None = None,
-    max_amount: float | None = None,
-    direction: str | None = None,  # 'credit' or 'charge'
-    payment_id: int | None = None,
+    transaction_type: Optional[str] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    min_amount: Optional[float] = None,
+    max_amount: Optional[float] = None,
+    direction: Optional[str] = None,  # 'credit' or 'charge'
+    payment_id: Optional[int] = None,
     sort_by: str = "created_at",  # 'created_at', 'amount', 'transaction_type'
     sort_order: str = "desc",  # 'asc' or 'desc'
-) -> list[dict[str, Any]]:
+) -> List[Dict[str, Any]]:
     """
     Get credit transaction history for a user with advanced filtering
 
@@ -211,17 +212,17 @@ def get_user_transactions(
 def get_all_transactions(
     limit: int = 50,
     offset: int = 0,
-    user_id: int | None = None,
-    transaction_type: str | None = None,
-    from_date: str | None = None,
-    to_date: str | None = None,
-    min_amount: float | None = None,
-    max_amount: float | None = None,
-    direction: str | None = None,  # 'credit' or 'charge'
-    payment_id: int | None = None,
+    user_id: Optional[int] = None,
+    transaction_type: Optional[str] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    min_amount: Optional[float] = None,
+    max_amount: Optional[float] = None,
+    direction: Optional[str] = None,  # 'credit' or 'charge'
+    payment_id: Optional[int] = None,
     sort_by: str = "created_at",  # 'created_at', 'amount', 'transaction_type'
     sort_order: str = "desc",  # 'asc' or 'desc'
-) -> list[dict[str, Any]]:
+) -> List[Dict[str, Any]]:
     """
     Get all credit transactions across all users (admin only) with advanced filtering
 
@@ -333,9 +334,9 @@ def add_credits(
     api_key: str,
     amount: float,
     description: str,
-    metadata: dict[str, Any] | None = None,
+    metadata: Optional[Dict[str, Any]] = None,
     transaction_type: str = TransactionType.BONUS,
-    user_id: int | None = None,
+    user_id: Optional[int] = None,
 ) -> bool:
     """
     Add credits to a user's account
@@ -412,9 +413,9 @@ def add_credits(
 
 def get_transaction_summary(
     user_id: int,
-    from_date: str | None = None,
-    to_date: str | None = None,
-) -> dict[str, Any]:
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+) -> Dict[str, Any]:
     """
     Get comprehensive summary of credit transactions for a user
 

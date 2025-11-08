@@ -4,7 +4,7 @@ FastAPI dependencies for role and permission checking
 """
 
 import logging
-from typing import Any
+from typing import Any, Dict
 
 from fastapi import Depends, HTTPException
 
@@ -15,8 +15,8 @@ logger = logging.getLogger(__name__)
 
 
 async def require_role(
-    required_role: str, user: dict[str, Any] = Depends(get_current_user)
-) -> dict[str, Any]:
+    required_role: str, user: Dict[str, Any] = Depends(get_current_user)
+) -> Dict[str, Any]:
     """
     Require specific role
 
@@ -44,19 +44,19 @@ async def require_role(
     return user
 
 
-async def require_admin(user: dict[str, Any] = Depends(get_current_user)) -> dict[str, Any]:
+async def require_admin(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
     """Require admin role"""
     return await require_role(UserRole.ADMIN, user)
 
 
-async def require_developer(user: dict[str, Any] = Depends(get_current_user)) -> dict[str, Any]:
+async def require_developer(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
     """Require developer role or higher"""
     return await require_role(UserRole.DEVELOPER, user)
 
 
 async def require_permission(
-    resource: str, action: str, user: dict[str, Any] = Depends(get_current_user)
-) -> dict[str, Any]:
+    resource: str, action: str, user: Dict[str, Any] = Depends(get_current_user)
+) -> Dict[str, Any]:
     """
     Require specific permission
 
@@ -91,7 +91,7 @@ def create_permission_checker(resource: str, action: str):
             ...
     """
 
-    async def check_permission(user: dict[str, Any] = Depends(get_current_user)):
+    async def check_permission(user: Dict[str, Any] = Depends(get_current_user)):
         return await require_permission(resource, action, user)
 
     return check_permission

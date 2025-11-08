@@ -1,4 +1,5 @@
 import logging
+from typing import Optional
 
 from fastapi import APIRouter
 from openai import OpenAI
@@ -6,6 +7,7 @@ from openai import OpenAI
 from src.config import Config
 from src.services.anthropic_transformer import extract_message_with_tools
 
+logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -13,7 +15,7 @@ router = APIRouter()
 PORTKEY_BASE_URL = "https://api.portkey.ai/v1"
 
 
-def _resolve_portkey_slug(provider: str | None, override: str | None) -> str | None:
+def _resolve_portkey_slug(provider: Optional[str], override: Optional[str]) -> Optional[str]:
     slug = override or Config.get_portkey_virtual_key(provider)
     if slug:
         return slug.lstrip("@")
@@ -22,7 +24,7 @@ def _resolve_portkey_slug(provider: str | None, override: str | None) -> str | N
     return None
 
 
-def _format_portkey_model(model: str, slug: str | None) -> str:
+def _format_portkey_model(model: str, slug: Optional[str]) -> str:
     if not model:
         raise ValueError("Model name is required for Portkey requests")
 
@@ -50,7 +52,7 @@ def _format_portkey_model(model: str, slug: str | None) -> str:
     return trimmed
 
 
-def get_portkey_client(provider: str | None = None, virtual_key: str | None = None) -> OpenAI:
+def get_portkey_client(provider: Optional[str] = None, virtual_key: Optional[str] = None) -> OpenAI:
     if not Config.PORTKEY_API_KEY:
         raise ValueError("Portkey API key not configured")
 
@@ -73,7 +75,7 @@ def get_portkey_client(provider: str | None = None, virtual_key: str | None = No
 
 
 def make_portkey_request_openai(
-    messages, model, provider: str | None = None, virtual_key: str | None = None, **kwargs
+    messages, model, provider: Optional[str] = None, virtual_key: Optional[str] = None, **kwargs
 ):
     try:
         resolved_slug = _resolve_portkey_slug(provider, virtual_key)
@@ -92,7 +94,7 @@ def make_portkey_request_openai(
 
 
 def make_portkey_request_openai_stream(
-    messages, model, provider: str | None = None, virtual_key: str | None = None, **kwargs
+    messages, model, provider: Optional[str] = None, virtual_key: Optional[str] = None, **kwargs
 ):
     try:
         resolved_slug = _resolve_portkey_slug(provider, virtual_key)

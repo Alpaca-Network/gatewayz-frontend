@@ -5,6 +5,7 @@ import asyncio
 import httpx
 from fastapi import HTTPException
 
+from typing import Optional, Dict, List
 # OpenAI Python SDK raises its own exception hierarchy which we need to
 # translate into HTTP responses. Make these imports optional so the module
 # still loads if the dependency is absent (e.g. in minimal test environments).
@@ -39,14 +40,14 @@ FALLBACK_ELIGIBLE_PROVIDERS = set(FALLBACK_PROVIDER_PRIORITY)
 FAILOVER_STATUS_CODES = {401, 403, 404, 502, 503, 504}
 
 
-def build_provider_failover_chain(initial_provider: str | None) -> list[str]:
+def build_provider_failover_chain(initial_provider: Optional[str]) -> List[str]:
     """Return the provider attempt order starting with the initial provider."""
     provider = (initial_provider or "").lower()
 
     if provider not in FALLBACK_ELIGIBLE_PROVIDERS:
         return [provider] if provider else ["openrouter"]
 
-    chain: list[str] = []
+    chain: List[str] = []
     if provider:
         chain.append(provider)
 
@@ -92,7 +93,7 @@ def map_provider_error(
         except (TypeError, ValueError):
             status = 500
         detail = "Upstream error"
-        headers: dict[str, str] | None = None
+        headers: Optional[Dict[str, str]] = None
 
         if RateLimitError and isinstance(exc, RateLimitError):
             retry_after = None
@@ -135,7 +136,7 @@ def map_provider_error(
     if OpenAIError and isinstance(exc, OpenAIError):
         return HTTPException(status_code=502, detail=str(exc))
 
-    if isinstance(exc, httpx.TimeoutException | asyncio.TimeoutError):
+    if isinstance(exc, (httpx.TimeoutException, asyncio.TimeoutError)):
         return HTTPException(status_code=504, detail="Upstream timeout")
 
     if isinstance(exc, httpx.HTTPStatusError):

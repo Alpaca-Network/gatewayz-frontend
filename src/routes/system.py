@@ -10,7 +10,7 @@ import os
 from contextlib import redirect_stdout
 from datetime import date, datetime, timezone
 from html import escape
-from typing import Any
+from typing import Any, Optional, Dict, List
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query
@@ -52,7 +52,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _normalize_timestamp(value: Any) -> datetime | None:
+def _normalize_timestamp(value: Any) -> Optional[datetime]:
     """Convert a cached timestamp into an aware ``datetime`` in UTC."""
 
     if not value:
@@ -64,7 +64,7 @@ def _normalize_timestamp(value: Any) -> datetime | None:
     if isinstance(value, date):
         return datetime.combine(value, datetime.min.time(), tzinfo=timezone.utc)
 
-    if isinstance(value, int | float):
+    if isinstance(value, (int, float)):
         try:
             return datetime.fromtimestamp(value, tz=timezone.utc)
         except (OSError, OverflowError, ValueError):
@@ -81,7 +81,7 @@ def _normalize_timestamp(value: Any) -> datetime | None:
     return None
 
 
-def _render_gateway_dashboard(results: dict[str, Any], log_output: str, auto_fix: bool) -> str:
+def _render_gateway_dashboard(results: Dict[str, Any], log_output: str, auto_fix: bool) -> str:
     """Generate a minimal HTML dashboard for gateway health results."""
 
     timestamp = escape(results.get("timestamp", ""))
@@ -93,7 +93,7 @@ def _render_gateway_dashboard(results: dict[str, Any], log_output: str, auto_fix
         "fixed": results.get("fixed", 0),
     }
 
-    def format_price_value(value: Any) -> str | None:
+    def format_price_value(value: Any) -> Optional[str]:
         if value is None:
             return None
         value_str = str(value).strip()
@@ -115,7 +115,7 @@ def _render_gateway_dashboard(results: dict[str, Any], log_output: str, auto_fix
         except ValueError:
             return value_str
 
-    def format_pricing_display(pricing: dict[str, Any] | None) -> str:
+    def format_pricing_display(pricing: Optional[Dict[str, Any]]) -> str:
         if not isinstance(pricing, dict):
             return ""
         label_map = {
@@ -146,7 +146,7 @@ def _render_gateway_dashboard(results: dict[str, Any], log_output: str, auto_fix
             "training": " /hr",
             "fine_tune": " /hr",
         }
-        parts: list[str] = []
+        parts: List[str] = []
         for key, raw_value in pricing.items():
             normalized = format_price_value(raw_value)
             if not normalized:
@@ -169,7 +169,7 @@ def _render_gateway_dashboard(results: dict[str, Any], log_output: str, auto_fix
         return f'<span class="{cls}">{escape(status.title())}</span>'
 
     rows = []
-    gateways: dict[str, Any] = results.get("gateways", {}) or {}
+    gateways: Dict[str, Any] = results.get("gateways", {}) or {}
     for gateway_id in sorted(gateways.keys()):
         data = gateways[gateway_id] or {}
         name = data.get("name") or gateway_id.title()
@@ -224,8 +224,8 @@ def _render_gateway_dashboard(results: dict[str, Any], log_output: str, auto_fix
         if models and len(models) > 0:
             model_items = []
             for model in models:
-                pricing_info: dict[str, Any] | None = None
-                pricing_source: str | None = None
+                pricing_info: Optional[Dict[str, Any]] = None
+                pricing_source: Optional[str] = None
 
                 if isinstance(model, dict):
                     model_id = model.get("id") or model.get("model") or str(model)
@@ -782,7 +782,7 @@ def _render_gateway_dashboard(results: dict[str, Any], log_output: str, auto_fix
     """
 
 
-async def _run_gateway_check(auto_fix: bool) -> tuple[dict[str, Any], str]:
+async def _run_gateway_check(auto_fix: bool) -> tuple[Dict[str, Any], str]:
     """Execute the comprehensive check in a thread and capture stdout."""
 
     if run_comprehensive_check is None:
@@ -791,7 +791,7 @@ async def _run_gateway_check(auto_fix: bool) -> tuple[dict[str, Any], str]:
             detail="check_and_fix_gateway_models module is unavailable in this deployment.",
         )
 
-    def _runner() -> tuple[dict[str, Any], str]:
+    def _runner() -> tuple[Dict[str, Any], str]:
         buffer = io.StringIO()
         with redirect_stdout(buffer):
             results = run_comprehensive_check(auto_fix=auto_fix, verbose=False)  # type: ignore[arg-type]
@@ -800,7 +800,7 @@ async def _run_gateway_check(auto_fix: bool) -> tuple[dict[str, Any], str]:
     return await run_in_threadpool(_runner)
 
 
-async def _run_single_gateway_check(gateway: str, auto_fix: bool) -> tuple[dict[str, Any], str]:
+async def _run_single_gateway_check(gateway: str, auto_fix: bool) -> tuple[Dict[str, Any], str]:
     """Execute the check for a single gateway and capture stdout."""
 
     if run_comprehensive_check is None:
@@ -809,7 +809,7 @@ async def _run_single_gateway_check(gateway: str, auto_fix: bool) -> tuple[dict[
             detail="check_and_fix_gateway_models module is unavailable in this deployment.",
         )
 
-    def _runner() -> tuple[dict[str, Any], str]:
+    def _runner() -> tuple[Dict[str, Any], str]:
         buffer = io.StringIO()
         with redirect_stdout(buffer):
             results = run_comprehensive_check(  # type: ignore[arg-type]
@@ -1144,7 +1144,7 @@ async def refresh_gateway_cache(
 
 @router.post("/cache/clear", tags=["cache"])
 async def clear_all_caches(
-    gateway: str | None = Query(
+    gateway: Optional[str] = Query(
         None, description="Specific gateway to clear, or all if not specified"
     )
 ):
@@ -1421,7 +1421,7 @@ async def gateway_health_dashboard_data(
 
     results, log_output = await _run_gateway_check(auto_fix=auto_fix)
 
-    payload: dict[str, Any] = {
+    payload: Dict[str, Any] = {
         "success": True,
         "timestamp": results.get("timestamp"),
         "auto_fix": auto_fix,

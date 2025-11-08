@@ -14,8 +14,9 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any
+from typing import Any, Optional, Dict, List
 
+from typing import Optional
 logger = logging.getLogger(__name__)
 
 
@@ -47,12 +48,12 @@ class ModelAvailability:
     status: AvailabilityStatus
     last_checked: datetime
     success_rate: float
-    response_time_ms: float | None
+    response_time_ms: Optional[float]
     error_count: int
     circuit_breaker_state: CircuitBreakerState
-    fallback_models: list[str]
-    maintenance_until: datetime | None = None
-    error_message: str | None = None
+    fallback_models: List[str]
+    maintenance_until: Optional[datetime] = None
+    error_message: Optional[str] = None
 
 
 @dataclass
@@ -124,9 +125,9 @@ class ModelAvailabilityService:
     """Enhanced model availability service"""
 
     def __init__(self):
-        self.availability_cache: dict[str, ModelAvailability] = {}
-        self.circuit_breakers: dict[str, CircuitBreaker] = {}
-        self.fallback_mappings: dict[str, list[str]] = {}
+        self.availability_cache: Dict[str, ModelAvailability] = {}
+        self.circuit_breakers: Dict[str, CircuitBreaker] = {}
+        self.fallback_mappings: Dict[str, List[str]] = {}
         self.config = AvailabilityConfig()
         self.monitoring_active = False
 
@@ -238,7 +239,7 @@ class ModelAvailabilityService:
 
     def get_model_availability(
         self, model_id: str, gateway: str = None
-    ) -> ModelAvailability | None:
+    ) -> Optional[ModelAvailability]:
         """Get availability for a specific model"""
         if gateway:
             model_key = f"{gateway}:{model_id}"
@@ -252,7 +253,7 @@ class ModelAvailabilityService:
 
     def get_available_models(
         self, gateway: str = None, provider: str = None
-    ) -> list[ModelAvailability]:
+    ) -> List[ModelAvailability]:
         """Get all available models"""
         available = []
 
@@ -266,7 +267,7 @@ class ModelAvailabilityService:
 
         return available
 
-    def get_fallback_models(self, model_id: str) -> list[str]:
+    def get_fallback_models(self, model_id: str) -> List[str]:
         """Get fallback models for a given model"""
         return self.fallback_mappings.get(model_id, [])
 
@@ -286,7 +287,7 @@ class ModelAvailabilityService:
 
         return availability.status == AvailabilityStatus.AVAILABLE
 
-    def get_best_available_model(self, preferred_model: str, gateway: str = None) -> str | None:
+    def get_best_available_model(self, preferred_model: str, gateway: str = None) -> Optional[str]:
         """Get the best available model, with fallbacks"""
         # Check if preferred model is available
         if self.is_model_available(preferred_model, gateway):
@@ -308,7 +309,7 @@ class ModelAvailabilityService:
 
         return None
 
-    def get_availability_summary(self) -> dict[str, Any]:
+    def get_availability_summary(self) -> Dict[str, Any]:
         """Get availability summary"""
         total_models = len(self.availability_cache)
         available_models = len(

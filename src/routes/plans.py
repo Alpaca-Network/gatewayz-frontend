@@ -1,3 +1,4 @@
+from typing import Optional, List
 import logging
 from datetime import datetime, timezone
 
@@ -29,7 +30,7 @@ router = APIRouter()
 
 
 # Plan Management Endpoints
-@router.get("/plans", response_model=list[PlanResponse], tags=["plans"])
+@router.get("/plans", response_model=List[PlanResponse], tags=["plans"])
 async def get_plans():
     """Get all available subscription plans"""
     try:
@@ -155,7 +156,7 @@ async def get_user_plan_usage(api_key: str = Depends(get_api_key)):
     "/user/plan/entitlements", response_model=PlanEntitlementsResponse, tags=["authentication"]
 )
 async def get_user_plan_entitlements(
-    api_key: str = Depends(get_api_key), feature: str | None = Query(None)
+    api_key: str = Depends(get_api_key), feature: Optional[str] = Query(None)
 ):
     """Check user's plan entitlements"""
     try:

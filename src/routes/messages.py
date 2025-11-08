@@ -3,6 +3,7 @@ Anthropic Messages API endpoint
 Compatible with Claude API: https://docs.claude.com/en/api/messages
 """
 
+from typing import Optional
 import logging
 import asyncio
 import time
@@ -154,7 +155,7 @@ async def _to_thread(func, *args, **kwargs):
 async def anthropic_messages(
     req: MessagesRequest,
     api_key: str = Depends(get_api_key),
-    session_id: int | None = Query(None, description="Chat session ID to save messages to"),
+    session_id: Optional[int] = Query(None, description="Chat session ID to save messages to"),
     request: Request = None,
 ):
     """

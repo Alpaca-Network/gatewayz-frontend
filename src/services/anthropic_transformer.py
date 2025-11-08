@@ -5,10 +5,10 @@ Converts between Anthropic Messages API format and OpenAI Chat Completions forma
 
 import json
 import time
-from typing import Any
+from typing import Any, Optional, Dict, List, Union
 
 
-def extract_message_with_tools(choice_message: Any) -> dict[str, Any]:
+def extract_message_with_tools(choice_message: Any) -> Dict[str, Any]:
     """
     Extract message data including role, content, and any tool calls or function calls.
 
@@ -46,16 +46,16 @@ def extract_message_with_tools(choice_message: Any) -> dict[str, Any]:
 
 
 def transform_anthropic_to_openai(
-    messages: list[dict[str, Any]],
-    system: str | None = None,
+    messages: List[Dict[str, Any]],
+    system: Optional[str] = None,
     max_tokens: int = 950,
-    temperature: float | None = None,
-    top_p: float | None = None,
-    top_k: int | None = None,
-    stop_sequences: list[str] | None = None,
-    tools: list[dict[str, Any]] | None = None,
-    tool_choice: str | dict[str, Any] | None = None,
-) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    temperature: Optional[float] = None,
+    top_p: Optional[float] = None,
+    top_k: Optional[int] = None,
+    stop_sequences: Optional[List[str]] = None,
+    tools: Optional[List[dict]] = None,
+    tool_choice: Optional[Any] = None,
+) -> tuple:
     """
     Transform Anthropic Messages API request to OpenAI Chat Completions format.
 
@@ -160,9 +160,9 @@ def transform_anthropic_to_openai(
 
 
 def transform_openai_to_anthropic(
-    openai_response: dict[str, Any],
+    openai_response: Dict[str, Any],
     model: str,
-) -> dict[str, Any]:
+) -> Dict[str, Any]:
     """
     Transform OpenAI Chat Completions response to Anthropic Messages API format.
 
@@ -246,7 +246,7 @@ def transform_openai_to_anthropic(
     return anthropic_response
 
 
-def extract_text_from_content(content: str | list[dict[str, Any]]) -> str:
+def extract_text_from_content(content: Union[str, List[Dict[str, Any]]]) -> str:
     """
     Extract plain text from Anthropic content (string or content blocks).
 

@@ -4,6 +4,7 @@ Database Configuration
 PostgreSQL connection management for Docker-based database
 """
 
+from typing import Optional
 import logging
 import os
 from contextlib import contextmanager
@@ -307,7 +308,7 @@ class DatabaseConfig:
 
 
 # Global database configuration instance
-_db_config: DatabaseConfig | None = None
+_db_config: Optional[DatabaseConfig] = None
 
 
 def get_db_config() -> DatabaseConfig:

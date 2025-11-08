@@ -6,7 +6,7 @@ Direct trial validation without complex service layer
 
 import logging
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Dict
 
 from src.config.supabase_config import get_supabase_client
 
@@ -32,7 +32,7 @@ def _parse_trial_end_utc(s: str) -> datetime:
     return dt
 
 
-def validate_trial_access(api_key: str) -> dict[str, Any]:
+def validate_trial_access(api_key: str) -> Dict[str, Any]:
     """Validate trial access for an API key - simplified version"""
     try:
         client = get_supabase_client()

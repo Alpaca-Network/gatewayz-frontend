@@ -12,6 +12,7 @@ from dataclasses import dataclass
 
 from src.db.rate_limits import get_rate_limit_config, update_rate_limit_config
 
+from typing import Optional
 logger = logging.getLogger(__name__)
 
 
@@ -35,11 +36,11 @@ class RateLimitResult:
     """Rate limit check result"""
 
     allowed: bool
-    reason: str | None = None
-    retry_after: int | None = None
+    reason: Optional[str] = None
+    retry_after: Optional[int] = None
     remaining_requests: int = 0
     remaining_tokens: int = 0
-    reset_time: int | None = None
+    reset_time: Optional[int] = None
 
 
 class InMemoryRateLimiter:
@@ -228,7 +229,7 @@ class FallbackRateLimitManager:
         """Release a concurrent request"""
         await self.rate_limiter.release_concurrent_request(api_key)
 
-    async def _load_key_config_from_db(self, api_key: str) -> RateLimitConfig | None:
+    async def _load_key_config_from_db(self, api_key: str) -> Optional[RateLimitConfig]:
         """Load rate limit configuration from database"""
         try:
             config_data = get_rate_limit_config(api_key)
