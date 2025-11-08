@@ -250,7 +250,7 @@ def clear_modelz_cache():
 
 def is_cache_fresh(cache: dict) -> bool:
     """Check if cache is within fresh TTL"""
-    if not cache.get("data") or not cache.get("timestamp"):
+    if cache.get("data") is None or cache.get("timestamp") is None:
         return False
     cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
     return cache_age < cache.get("ttl", 3600)
@@ -258,7 +258,7 @@ def is_cache_fresh(cache: dict) -> bool:
 
 def is_cache_stale_but_usable(cache: dict) -> bool:
     """Check if cache is stale but within stale-while-revalidate window"""
-    if not cache.get("data") or not cache.get("timestamp"):
+    if cache.get("data") is None or cache.get("timestamp") is None:
         return False
     cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
     ttl = cache.get("ttl", 3600)
