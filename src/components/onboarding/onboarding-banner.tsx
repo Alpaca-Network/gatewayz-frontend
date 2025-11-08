@@ -115,6 +115,14 @@ export function OnboardingBanner() {
       (spacer as HTMLElement).style.height = '65px';
     }
     
+    // Update page content padding for other pages
+    const pageContents = document.querySelectorAll('[data-page-content]');
+    pageContents.forEach((content) => {
+      (content as HTMLElement).style.paddingTop = '128px'; // pt-32
+    });
+    
+    // Chat will adjust automatically via CSS classes
+    
     // Remember dismissal for this session
     sessionStorage.setItem('onboarding_banner_dismissed', 'true');
   };
