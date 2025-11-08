@@ -121,10 +121,10 @@ export function OnboardingBanner() {
       (content as HTMLElement).style.paddingTop = '128px'; // pt-32
     });
     
-    // Update chat container padding
+    // Update chat container height when banner is dismissed
     const chatContainer = document.querySelector('[data-chat-container]');
     if (chatContainer) {
-      (chatContainer as HTMLElement).style.paddingTop = '80px';
+      (chatContainer as HTMLElement).style.height = 'calc(100vh - 65px)';
     }
     
     // Remember dismissal for this session
