@@ -12,15 +12,49 @@ This module initializes and exposes Prometheus metrics for monitoring:
 """
 
 import logging
+import os
 import time
 from contextlib import contextmanager
 from typing import Optional
 
-from prometheus_client import Counter, Gauge, Histogram, Summary
+from prometheus_client import Counter, Gauge, Histogram, Summary, Info
 
 logger = logging.getLogger(__name__)
 
-# ==================== HTTP Request Metrics ====================
+# Get app name from environment or use default
+APP_NAME = os.environ.get("APP_NAME", "gatewayz")
+
+# ==================== Application Info ====================
+# This metric helps Grafana dashboard populate the app_name variable dropdown
+fastapi_app_info = Info(
+    "fastapi_app_info",
+    "FastAPI application information"
+)
+# Set the app_name label value after creation
+fastapi_app_info.info({"app_name": APP_NAME})
+
+# ==================== HTTP Request Metrics (Grafana Dashboard Compatible) ====================
+# These metrics are compatible with Grafana FastAPI Observability Dashboard (ID: 16110)
+fastapi_requests_total = Counter(
+    "fastapi_requests_total",
+    "Total FastAPI requests",
+    ["app_name", "method", "path", "status_code"],
+)
+
+fastapi_requests_duration_seconds = Histogram(
+    "fastapi_requests_duration_seconds",
+    "FastAPI request duration in seconds",
+    ["app_name", "method", "path"],
+    buckets=(0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5),
+)
+
+fastapi_requests_in_progress = Gauge(
+    "fastapi_requests_in_progress",
+    "Number of HTTP requests currently being processed",
+    ["app_name", "method", "path"],
+)
+
+# Legacy metrics for backward compatibility
 http_request_count = Counter(
     "http_requests_total",
     "Total HTTP requests by method, endpoint and status code",
@@ -34,26 +68,26 @@ http_request_duration = Histogram(
     buckets=(0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5),
 )
 
-# Additional metrics for Grafana FastAPI Observability Dashboard compatibility
-# These are exposed by the observability middleware
-fastapi_requests_in_progress = Gauge(
-    "fastapi_requests_in_progress",
-    "Number of HTTP requests currently being processed",
-    ["method", "endpoint"],
-)
-
+# Additional metrics for request/response size tracking
 fastapi_request_size_bytes = Histogram(
     "fastapi_request_size_bytes",
     "HTTP request body size in bytes",
-    ["method", "endpoint"],
+    ["app_name", "method", "path"],
     buckets=(100, 1000, 10000, 100000, 1000000),
 )
 
 fastapi_response_size_bytes = Histogram(
     "fastapi_response_size_bytes",
     "HTTP response body size in bytes",
-    ["method", "endpoint"],
+    ["app_name", "method", "path"],
     buckets=(100, 1000, 10000, 100000, 1000000),
+)
+
+# Exception tracking for Grafana dashboard
+fastapi_exceptions_total = Counter(
+    "fastapi_exceptions_total",
+    "Total FastAPI exceptions",
+    ["app_name", "exception_type"],
 )
 
 # ==================== Model Inference Metrics ====================
@@ -206,8 +240,17 @@ def track_http_request(method: str, endpoint: str):
         http_request_duration.labels(method=method, endpoint=endpoint).observe(duration)
 
 
-def record_http_response(method: str, endpoint: str, status_code: int):
+def record_http_response(method: str, endpoint: str, status_code: int, app_name: Optional[str] = None):
     """Record HTTP response metrics."""
+    # Use provided app_name or fall back to environment variable
+    app = app_name or APP_NAME
+
+    # Record in new Grafana-compatible metrics
+    fastapi_requests_total.labels(
+        app_name=app, method=method, path=endpoint, status_code=status_code
+    ).inc()
+
+    # Also record in legacy metrics for backward compatibility
     http_request_count.labels(
         method=method, endpoint=endpoint, status_code=status_code
     ).inc()

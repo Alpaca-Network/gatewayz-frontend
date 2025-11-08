@@ -23,10 +23,12 @@ from starlette.responses import Response
 
 from src.services.prometheus_metrics import (
     http_request_duration,
+    fastapi_requests_duration_seconds,
     record_http_response,
     fastapi_requests_in_progress,
     fastapi_request_size_bytes,
     fastapi_response_size_bytes,
+    APP_NAME,
 )
 
 logger = logging.getLogger(__name__)
@@ -70,15 +72,17 @@ class ObservabilityMiddleware(BaseHTTPMiddleware):
         try:
             request_content_length = request.headers.get("content-length")
             request_size = int(request_content_length) if request_content_length else 0
-            fastapi_request_size_bytes.labels(method=method, endpoint=endpoint).observe(
-                request_size
-            )
+            fastapi_request_size_bytes.labels(
+                app_name=APP_NAME, method=method, path=endpoint
+            ).observe(request_size)
         except (ValueError, TypeError) as e:
             logger.debug(f"Could not determine request size from headers: {e}")
             request_size = 0
 
         # Increment in-progress requests gauge
-        fastapi_requests_in_progress.labels(method=method, endpoint=endpoint).inc()
+        fastapi_requests_in_progress.labels(
+            app_name=APP_NAME, method=method, path=endpoint
+        ).inc()
 
         # Record start time
         start_time = time.time()
@@ -103,24 +107,29 @@ class ObservabilityMiddleware(BaseHTTPMiddleware):
                         response_size = len(response.body) if hasattr(response, "body") else 0
 
                 fastapi_response_size_bytes.labels(
-                    method=method, endpoint=endpoint
+                    app_name=APP_NAME, method=method, path=endpoint
                 ).observe(response_size)
             except (ValueError, TypeError, AttributeError) as e:
                 logger.debug(f"Could not determine response size: {e}")
                 # Record 0 if we can't determine size
                 fastapi_response_size_bytes.labels(
-                    method=method, endpoint=endpoint
+                    app_name=APP_NAME, method=method, path=endpoint
                 ).observe(0)
 
             # Record metrics
             duration = time.time() - start_time
             status_code = response.status_code
 
-            # Record HTTP metrics
+            # Record HTTP metrics (both new and legacy)
+            fastapi_requests_duration_seconds.labels(
+                app_name=APP_NAME, method=method, path=endpoint
+            ).observe(duration)
             http_request_duration.labels(method=method, endpoint=endpoint).observe(
                 duration
             )
-            record_http_response(method=method, endpoint=endpoint, status_code=status_code)
+            record_http_response(
+                method=method, endpoint=endpoint, status_code=status_code, app_name=APP_NAME
+            )
 
             return response
 
@@ -130,17 +139,24 @@ class ObservabilityMiddleware(BaseHTTPMiddleware):
             duration = time.time() - start_time
 
             # Record error response with 500 status
+            fastapi_requests_duration_seconds.labels(
+                app_name=APP_NAME, method=method, path=endpoint
+            ).observe(duration)
             http_request_duration.labels(method=method, endpoint=endpoint).observe(
                 duration
             )
-            record_http_response(method=method, endpoint=endpoint, status_code=500)
+            record_http_response(
+                method=method, endpoint=endpoint, status_code=500, app_name=APP_NAME
+            )
 
             # Re-raise the exception to be handled by FastAPI exception handlers
             raise
 
         finally:
             # Always decrement in-progress requests gauge
-            fastapi_requests_in_progress.labels(method=method, endpoint=endpoint).dec()
+            fastapi_requests_in_progress.labels(
+                app_name=APP_NAME, method=method, path=endpoint
+            ).dec()
 
     @staticmethod
     def _normalize_path(path: str) -> str:

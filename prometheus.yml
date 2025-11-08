@@ -31,22 +31,14 @@ scrape_configs:
     scrape_interval: 10s
     scrape_timeout: 5s
     static_configs:
-      - targets: ['localhost:8000']  # Update with actual host:port
+      - targets: ['api.railway.internal:8000']  # Railway internal DNS for FastAPI service
         labels:
           service: 'gatewayz-api'
           environment: 'production'
+          app_name: 'gatewayz'
 
     # Metrics path - the default is /metrics
     metrics_path: '/metrics'
-
-    # Relabel configs for customizing scrape behavior
-    relabel_configs:
-      # Example: Add environment label
-      - source_labels: [__scheme__, __address__, __metrics_path__]
-        separator: ';'
-        regex: '(.+);(.+);(.+)'
-        target_label: '__param_target'
-        replacement: '${1}://${2}${3}'
 
     # Keep only successful scrapes
     scrape_protocols:
