@@ -580,8 +580,17 @@ def detect_provider_from_model_id(model_id: str, preferred_provider: Optional[st
         # Simple patterns like "gemini-2.5-flash", "gemini-2.0-flash" or "gemini-1.5-pro"
         return "google-vertex"
     if model_id.startswith("google/") and "gemini" in model_id.lower():
-        # Patterns like "google/gemini-2.5-flash"
-        return "google-vertex"
+        # Patterns like "google/gemini-2.5-flash" or "google/gemini-2.0-flash-001"
+        # These can go to either Vertex AI or OpenRouter
+        # Check if Vertex AI credentials are available
+        import os
+        if os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
+            logger.info(f"Routing {model_id} to google-vertex (credentials available)")
+            return "google-vertex"
+        else:
+            # No Vertex credentials, route to OpenRouter which supports google/ prefix
+            logger.info(f"Routing {model_id} to openrouter (no Vertex credentials)")
+            return "openrouter"
 
     # Portkey format is @org/model (must have / to be valid)
     if model_id.startswith("@") and "/" in model_id:
