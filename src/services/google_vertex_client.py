@@ -200,28 +200,19 @@ def get_google_vertex_access_token():
             )
             logger.error(error_msg)
             raise ValueError(f"No access token in response. {error_msg}")
-        
-        raise ValueError("Failed to obtain access token from credentials after refresh")
 
-        access_token = credentials.token
-
-        # CRITICAL FIX: Validate that token was actually obtained
-        if not access_token:
-            raise RuntimeError(
-                "Failed to obtain access token from credentials. Token is None. \n"
-                "This usually means:\n"
-                "  1. Service account credentials are invalid or expired\n"
-                "  2. Credentials lack required IAM permissions (need 'Vertex AI User' role)\n"
-                "  3. Vertex AI API is not enabled in your GCP project\n"
-                "  4. Scopes are not properly set during credential initialization\n"
-                "Please verify your GCP project configuration and service account permissions."
-            )
-
-        logger.info("Successfully obtained access token")
-        return access_token
-    except Exception as e:
-        logger.error(f"Failed to get Google Vertex access token: {e}")
-        raise
+        # If we reach here, token was not obtained through the normal flow
+        # This should not happen, but provide a clear error message
+        raise ValueError(
+            "Failed to obtain access token from credentials after refresh. "
+            "Token is None and no id_token was found. "
+            "This usually means:\n"
+            "  1. Service account credentials are invalid or expired\n"
+            "  2. Credentials lack required IAM permissions (need 'Vertex AI User' role)\n"
+            "  3. Vertex AI API is not enabled in your GCP project\n"
+            "  4. Scopes are not properly set during credential initialization\n"
+            "Please verify your GCP project configuration and service account permissions."
+        )
     except Exception as e:
         logger.error(f"Failed to get Vertex AI access token: {e}", exc_info=True)
         # Check if the error contains id_token info
