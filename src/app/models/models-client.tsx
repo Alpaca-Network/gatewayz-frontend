@@ -838,8 +838,8 @@ export default function ModelsClient({
         </Sidebar>
 
         <SidebarInset className="flex-1 overflow-x-hidden flex flex-col">
-          <div data-models-container className="w-full pb-24 overflow-x-hidden" style={{ marginTop: '-115px' }}>
-          <div data-models-header className="sticky z-25 bg-background border-b flex flex-col gap-3 w-full px-4 sm:px-6 lg:px-8 pt-3 pb-3" style={{ top: 'var(--models-header-top, 125px)' }}>
+          <div data-models-container className="w-full pb-24 overflow-x-hidden -mt-[115px] has-onboarding-banner:-mt-[115px]">
+          <div data-models-header className="sticky z-25 bg-background border-b flex flex-col gap-3 w-full px-4 sm:px-6 lg:px-8 pt-3 pb-3 top-[65px] has-onboarding-banner:top-[125px]" style={{ transition: 'top 0.3s ease' }}>
             <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 w-full">
               <div className="flex items-center gap-3 flex-1 min-w-0 w-full lg:w-auto">
                 <SidebarTrigger className="lg:hidden" />
@@ -991,7 +991,7 @@ export default function ModelsClient({
             </div>
           </div>
 
-          <div data-models-list className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 mt-20">
+          <div data-models-list className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 mt-20 has-onboarding-banner:mt-40" style={{ transition: 'margin-top 0.3s ease' }}>
           <div
             className={
               layout === 'grid'
