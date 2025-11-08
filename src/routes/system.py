@@ -64,7 +64,7 @@ def _normalize_timestamp(value: Any) -> Optional[datetime]:
     if isinstance(value, date):
         return datetime.combine(value, datetime.min.time(), tzinfo=timezone.utc)
 
-    if isinstance(value, int | float):
+    if isinstance(value, (int, float)):
         try:
             return datetime.fromtimestamp(value, tz=timezone.utc)
         except (OSError, OverflowError, ValueError):
