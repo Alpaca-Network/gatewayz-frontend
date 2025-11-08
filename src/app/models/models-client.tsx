@@ -191,6 +191,7 @@ export default function ModelsClient({
     const updateHeaderPosition = () => {
       const bannerElement = document.querySelector('[data-onboarding-banner]');
       const spacer = document.querySelector('[data-header-spacer]');
+      const container = document.querySelector('[data-models-container]');
       
       if (bannerElement) {
         const bannerHeight = bannerElement.getBoundingClientRect().height;
@@ -201,6 +202,17 @@ export default function ModelsClient({
         const header = document.querySelector('[data-models-header]');
         if (header) {
           (header as HTMLElement).style.top = `${headerTop}px`;
+        }
+        
+        // Update container margin
+        if (container) {
+          (container as HTMLElement).style.marginTop = `-${headerTop}px`;
+        }
+        
+        // Update models list margin - add more space when banner is visible
+        const modelsList = document.querySelector('[data-models-list]');
+        if (modelsList) {
+          (modelsList as HTMLElement).style.marginTop = '140px';
         }
         
         // Update spacer
@@ -214,6 +226,17 @@ export default function ModelsClient({
         const header = document.querySelector('[data-models-header]');
         if (header) {
           (header as HTMLElement).style.top = '65px';
+        }
+        
+        // Update container margin - use negative margin to pull content up but keep header visible
+        if (container) {
+          (container as HTMLElement).style.marginTop = '-50px';
+        }
+        
+        // Update models list margin - keep normal spacing when banner is closed
+        const modelsList = document.querySelector('[data-models-list]');
+        if (modelsList) {
+          (modelsList as HTMLElement).style.marginTop = '80px';
         }
         
         // Update spacer
@@ -815,8 +838,8 @@ export default function ModelsClient({
         </Sidebar>
 
         <SidebarInset className="flex-1 overflow-x-hidden flex flex-col">
-          <div className="w-full pb-24 overflow-x-hidden" style={{ marginTop: '-115px' }}>
-          <div data-models-header className="sticky z-25 bg-background border-b flex flex-col gap-3 w-full px-4 sm:px-6 lg:px-8 pt-6 pb-4" style={{ top: '125px' }}>
+          <div data-models-container className="w-full pb-24 overflow-x-hidden" style={{ marginTop: '-115px' }}>
+          <div data-models-header className="sticky z-25 bg-background border-b flex flex-col gap-3 w-full px-4 sm:px-6 lg:px-8 pt-3 pb-3" style={{ top: 'var(--models-header-top, 125px)' }}>
             <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 w-full">
               <div className="flex items-center gap-3 flex-1 min-w-0 w-full lg:w-auto">
                 <SidebarTrigger className="lg:hidden" />
@@ -968,7 +991,7 @@ export default function ModelsClient({
             </div>
           </div>
 
-          <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 mt-40">
+          <div data-models-list className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 mt-20">
           <div
             className={
               layout === 'grid'
