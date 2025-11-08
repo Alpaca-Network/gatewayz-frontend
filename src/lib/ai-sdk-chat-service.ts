@@ -144,8 +144,23 @@ export async function* streamAISDKChat(
  * Check if a model is available via AI SDK gateway
  */
 export function isAISDKModel(modelId: string): boolean {
-  // List of models available through AI SDK
-  const aiSdkModels = [
+  // Normalize model ID: remove provider prefix (e.g., 'google/gemini-pro' -> 'gemini-pro')
+  // and convert to lowercase for consistent matching
+  const normalizedId = modelId.toLowerCase().replace(/^[^/]+\//, '');
+
+  // Pattern-based matching for Google models
+  const googleModelPatterns = [
+    /^gemini-/,           // All Gemini models (gemini-pro, gemini-1.5-pro, gemini-1.5-flash, gemini-2.0-flash, gemini-2.5-flash, etc.)
+    /^gemma-/,            // All Gemma models (gemma-2b, gemma-7b, gemma-3n-e2b-it, etc.)
+    /^codegemma-/,        // All CodeGemma models (codegemma-7b-it, codegemma-2b-it, etc.)
+    /^paligemma-/,        // All PaliGemma models (paligemma-3b-mix-224, paligemma-3b-pt-224, etc.)
+  ];
+
+  // Check if it matches any Google model pattern
+  const isGoogleModel = googleModelPatterns.some(pattern => pattern.test(normalizedId));
+
+  // Explicit list for non-Google models
+  const explicitModels = [
     // Anthropic Claude models
     'claude-3-5-sonnet',
     'claude-3-opus',
@@ -158,18 +173,16 @@ export function isAISDKModel(modelId: string): boolean {
     'gpt-4',
     'gpt-3.5-turbo',
 
-    // Google models
-    'gemini-pro',
-    'gemini-1.5-pro',
-    'gemini-2.0-flash',
-
     // Perplexity models
     'perplexity-sonar',
   ];
 
-  return aiSdkModels.some((model) =>
-    modelId.toLowerCase().includes(model.toLowerCase())
+  // Check if it matches any explicit model (using includes for partial matching)
+  const matchesExplicitModel = explicitModels.some((model) =>
+    normalizedId.includes(model.toLowerCase())
   );
+
+  return isGoogleModel || matchesExplicitModel;
 }
 
 /**
