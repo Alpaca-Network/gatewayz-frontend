@@ -959,7 +959,7 @@ const ChatMessage = ({ message, modelName }: { message: Message, modelName: stri
                         className="w-full"
                     />
                 )}
-                <div className={`rounded-lg p-3 ${isUser ? 'bg-blue-600 text-white' : 'bg-muted/30 dark:bg-muted/20 border border-border'} ${message.isStreaming ? 'streaming-message' : ''}`}>
+                <div className={`rounded-lg p-3 ${isUser ? 'bg-blue-600 text-white' : ''} ${message.isStreaming ? 'streaming-message' : ''}`}>
                      {!isUser && <p className="text-xs font-semibold mb-1">{modelName}</p>}
                     <div className={`text-sm prose prose-sm max-w-none ${isUser ? 'text-white prose-invert' : 'dark:prose-invert'}`}>
                         {isUser ? (
@@ -1592,42 +1592,9 @@ function ChatPageContent() {
                         b.updatedAt.getTime() - a.updatedAt.getTime()
                     )[0];
 
-                    if (mostRecentSession && mostRecentSession.apiSessionId) {
-                        console.log('[loadSessions] Setting most recent session as active:', mostRecentSession.id);
-
-                        // Set active session ID immediately
-                        setActiveSessionId(mostRecentSession.id);
-
-                        // Load messages for the active session
-                        setLoadingMessages(true);
-                        try {
-                            const messages = await apiHelpers.loadSessionMessages(
-                                mostRecentSession.id,
-                                mostRecentSession.apiSessionId
-                            );
-
-                            if (!isMounted) return;
-
-                            console.log('[loadSessions] Loaded messages:', messages.length);
-
-                            // Update the session with loaded messages
-                            setSessions(prev => prev.map(s =>
-                                s.id === mostRecentSession.id ? { ...s, messages } : s
-                            ));
-
-                            // Mark session as loaded
-                            setLoadedSessionIds(prev => new Set(prev).add(mostRecentSession.id));
-                        } catch (error) {
-                            console.error('[loadSessions] Failed to load messages:', error);
-                        } finally {
-                            if (isMounted) {
-                                setLoadingMessages(false);
-                            }
-                        }
-                    } else {
-                        // No sessions exist, create a new chat
-                        createNewChat();
-                    }
+                    // Default to empty chat with prompt suggestions
+                    console.log('[loadSessions] Loaded sessions, defaulting to empty chat state with prompt suggestions');
+                    setActiveSessionId(null);
                 } catch (error) {
                     console.error('[loadSessions] Failed to load sessions:', error);
                     // Failed to load sessions, fallback to creating a new chat
@@ -3236,7 +3203,7 @@ function ChatPageContent() {
                       ) : showThinkingLoader ? (
                         <ThinkingLoader modelName={getModelDisplayName(msg.model)} />
                       ) : (
-                        <div className="rounded-lg p-2.5 sm:p-3 bg-muted/30 dark:bg-muted/20 border border-border max-w-full w-full">
+                        <div className="rounded-lg p-2.5 sm:p-3 max-w-full w-full">
                           <div className="flex items-center justify-between mb-2">
                             <p className="text-xs font-semibold text-muted-foreground truncate">{getModelDisplayName(msg.model)}</p>
                             {msg.isStreaming && (
