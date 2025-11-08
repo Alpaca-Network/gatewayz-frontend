@@ -691,7 +691,9 @@ async def chat_completions(
                     f"Provider override applied for model {original_model}: '{provider}' -> '{override_provider}'"
                 )
                 provider = override_provider
-                req_provider_missing = False
+            # Mark provider as determined even if it matches the default
+            # This prevents the fallback logic from incorrectly routing to wrong providers
+            req_provider_missing = False
 
         if req_provider_missing:
             # Try to detect provider from model ID using the transformation module
@@ -1513,7 +1515,9 @@ async def unified_responses(
                     f"Provider override applied for model {original_model}: '{provider}' -> '{override_provider}'"
                 )
                 provider = override_provider
-                req_provider_missing = False
+            # Mark provider as determined even if it matches the default
+            # This prevents the fallback logic from incorrectly routing to wrong providers
+            req_provider_missing = False
 
         if req_provider_missing:
             # Try to detect provider from model ID using the transformation module
