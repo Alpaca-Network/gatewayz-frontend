@@ -343,6 +343,7 @@ jobs:
           test -f railway.json && echo "✅ railway.json exists"
           test -f railway.toml && echo "✅ railway.toml exists"
           test -f nixpacks.toml && echo "✅ nixpacks.toml exists"
+          test -f start.sh && echo "✅ start.sh exists"
           echo "✅ Railway deployment config verified"
 
   # Job 5: Deployment Ready Check
