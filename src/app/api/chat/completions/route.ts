@@ -229,6 +229,10 @@ export async function POST(request: NextRequest) {
             errorData = { raw: errorText };
           }
 
+          // Log the actual model ID being sent to help debug
+          console.error('[API Proxy] Model ID sent to backend:', body.model);
+          console.error('[API Proxy] Gateway param sent to backend:', body.gateway);
+
           return new Response(JSON.stringify({
             error: 'Backend API Error',
             status: response.status,
