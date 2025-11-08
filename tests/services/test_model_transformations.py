@@ -1,3 +1,4 @@
+from unittest.mock import patch
 from src.services.model_transformations import transform_model_id, detect_provider_from_model_id
 
 
@@ -46,8 +47,9 @@ def test_detect_provider_from_model_id_existing_providers():
         assert result == expected, f"Expected '{expected}' for {model_id}, got {result}"
 
 
+@patch.dict('os.environ', {'GOOGLE_VERTEX_CREDENTIALS_JSON': '{"type":"service_account"}'})
 def test_detect_provider_google_vertex_models():
-    """Test that Google Vertex AI models are correctly detected"""
+    """Test that Google Vertex AI models are correctly detected when credentials are available"""
     test_cases = [
         ("gemini-2.5-flash", "google-vertex"),
         ("gemini-2.0-flash", "google-vertex"),

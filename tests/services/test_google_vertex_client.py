@@ -353,8 +353,9 @@ class TestMakeGoogleVertexRequest:
 class TestGoogleVertexModelIntegration:
     """Integration tests for model detection and transformation"""
 
+    @patch.dict('os.environ', {'GOOGLE_VERTEX_CREDENTIALS_JSON': '{"type":"service_account"}'})
     def test_gemini_model_detection(self):
-        """Test that gemini models are properly detected"""
+        """Test that gemini models are properly detected when credentials are available"""
         from src.services.model_transformations import detect_provider_from_model_id
 
         models = [
