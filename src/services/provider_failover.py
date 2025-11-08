@@ -85,6 +85,28 @@ def map_provider_error(
         return exc
 
     if isinstance(exc, ValueError):
+        error_msg = str(exc)
+        # Check if this is a credential/authentication error that should trigger failover
+        credential_keywords = [
+            "access token",
+            "credential",
+            "authentication",
+            "id_token",
+            "service account",
+            "GOOGLE_APPLICATION_CREDENTIALS",
+            "GOOGLE_VERTEX_CREDENTIALS_JSON",
+        ]
+        if any(keyword.lower() in error_msg.lower() for keyword in credential_keywords):
+            # Map credential errors to 503 to trigger failover to alternative providers
+            logger.info(
+                f"Detected credential error for provider '{provider}': {error_msg[:200]}. "
+                "This will trigger failover to alternative providers."
+            )
+            return HTTPException(
+                status_code=503,
+                detail=f"{provider} credentials not configured or invalid. Trying alternative providers.",
+            )
+        # Other ValueErrors are treated as bad requests
         return HTTPException(status_code=400, detail=str(exc))
 
     # OpenAI SDK exceptions (used for OpenRouter and other compatible providers)
