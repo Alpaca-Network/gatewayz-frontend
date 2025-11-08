@@ -584,7 +584,11 @@ def detect_provider_from_model_id(model_id: str, preferred_provider: Optional[st
         # These can go to either Vertex AI or OpenRouter
         # Check if Vertex AI credentials are available
         import os
-        if os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
+        has_credentials = (
+            os.environ.get("GOOGLE_APPLICATION_CREDENTIALS") or
+            os.environ.get("GOOGLE_VERTEX_CREDENTIALS_JSON")
+        )
+        if has_credentials:
             logger.info(f"Routing {model_id} to google-vertex (credentials available)")
             return "google-vertex"
         else:
