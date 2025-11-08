@@ -3019,7 +3019,7 @@ function ChatPageContent() {
   return (
     <>
       <FreeModelsBanner />
-      <div className="flex h-[calc(100vh-130px)] has-onboarding-banner:h-[calc(100vh-180px)] bg-background overflow-hidden" style={{ marginTop: '-65px', paddingTop: '130px' }}>
+      <div data-chat-container className="flex h-[calc(100vh-130px)] has-onboarding-banner:h-[calc(100vh-180px)] bg-background overflow-hidden" style={{ marginTop: '-65px', paddingTop: '130px', transition: 'padding-top 0.3s ease' }}>
         {/* Left Sidebar - Desktop Only */}
         <div className="hidden lg:flex w-56 xl:w-72 border-r flex-shrink-0 overflow-hidden">
           <ChatSidebar

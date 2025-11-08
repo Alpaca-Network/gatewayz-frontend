@@ -121,6 +121,12 @@ export function OnboardingBanner() {
       (content as HTMLElement).style.paddingTop = '128px'; // pt-32
     });
     
+    // Update chat container padding
+    const chatContainer = document.querySelector('[data-chat-container]');
+    if (chatContainer) {
+      (chatContainer as HTMLElement).style.paddingTop = '80px';
+    }
+    
     // Remember dismissal for this session
     sessionStorage.setItem('onboarding_banner_dismissed', 'true');
   };
