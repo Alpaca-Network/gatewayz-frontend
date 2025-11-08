@@ -584,16 +584,23 @@ def detect_provider_from_model_id(model_id: str, preferred_provider: Optional[st
         # These can go to either Vertex AI or OpenRouter
         # Check if Vertex AI credentials are available
         import os
-        has_credentials = (
-            os.environ.get("GOOGLE_APPLICATION_CREDENTIALS") or
-            os.environ.get("GOOGLE_VERTEX_CREDENTIALS_JSON")
+
+        # Debug logging
+        gac = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+        gvc = os.environ.get("GOOGLE_VERTEX_CREDENTIALS_JSON")
+        logger.info(
+            f"[CREDENTIAL CHECK] model={model_id}, "
+            f"GOOGLE_APPLICATION_CREDENTIALS={'SET' if gac else 'NOT SET'}, "
+            f"GOOGLE_VERTEX_CREDENTIALS_JSON={'SET (len=' + str(len(gvc)) + ')' if gvc else 'NOT SET'}"
         )
+
+        has_credentials = gac or gvc
         if has_credentials:
-            logger.info(f"Routing {model_id} to google-vertex (credentials available)")
+            logger.info(f"✅ Routing {model_id} to google-vertex (credentials available)")
             return "google-vertex"
         else:
             # No Vertex credentials, route to OpenRouter which supports google/ prefix
-            logger.info(f"Routing {model_id} to openrouter (no Vertex credentials)")
+            logger.warning(f"⚠️ Routing {model_id} to openrouter (no Vertex credentials found)")
             return "openrouter"
 
     # Portkey format is @org/model (must have / to be valid)
