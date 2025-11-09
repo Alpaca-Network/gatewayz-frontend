@@ -190,7 +190,6 @@ jobs:
           # Exclude smoke tests (they require a running server)
           pytest tests/ -v --tb=short \
             -n auto \
-            --maxfail=1 \
             --dist=loadfile \
             --splits 4 --group ${{ matrix.shard }} \
             --cov=src \
