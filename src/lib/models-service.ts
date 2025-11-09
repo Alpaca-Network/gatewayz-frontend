@@ -115,8 +115,46 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
         // Use normalized name + provider slug as dedup key
         const dedupKey = `${normalizedName}:::${model.provider_slug || 'unknown'}`;
 
-        // Keep the first occurrence (usually from higher-priority gateways like openrouter)
-        if (!modelMap.has(dedupKey)) {
+        // Merge models from multiple gateways
+        if (modelMap.has(dedupKey)) {
+          const existing = modelMap.get(dedupKey);
+
+          // Merge source_gateways arrays
+          const existingGateways = Array.isArray(existing.source_gateways)
+            ? existing.source_gateways
+            : (existing.source_gateway ? [existing.source_gateway] : []);
+
+          const newGateways = Array.isArray(model.source_gateways)
+            ? model.source_gateways
+            : (model.source_gateway ? [model.source_gateway] : []);
+
+          // Combine and deduplicate gateways
+          const combinedGateways = Array.from(new Set([...existingGateways, ...newGateways]));
+
+          // Calculate data completeness score (models with more metadata are preferred)
+          const existingScore = (existing.description ? 1 : 0) +
+                                (existing.pricing?.prompt ? 1 : 0) +
+                                (existing.context_length > 0 ? 1 : 0) +
+                                (existing.architecture?.input_modalities?.length || 0);
+
+          const newScore = (model.description ? 1 : 0) +
+                           (model.pricing?.prompt ? 1 : 0) +
+                           (model.context_length > 0 ? 1 : 0) +
+                           (model.architecture?.input_modalities?.length || 0);
+
+          // Keep the model with more complete data, but always preserve all gateways
+          const mergedModel = newScore > existingScore ? model : existing;
+          mergedModel.source_gateways = combinedGateways;
+
+          modelMap.set(dedupKey, mergedModel);
+        } else {
+          // First occurrence - ensure source_gateways is an array
+          if (!Array.isArray(model.source_gateways) && model.source_gateway) {
+            model.source_gateways = [model.source_gateway];
+          } else if (!model.source_gateways) {
+            model.source_gateways = [];
+          }
+
           modelMap.set(dedupKey, model);
         }
       }
