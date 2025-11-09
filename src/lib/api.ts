@@ -22,6 +22,7 @@ export interface AuthResponse {
   credits: number;
   timestamp: string | null;
   tier?: UserTier;
+  tier_display_name?: string; // Formatted tier name from backend (e.g., "Pro", "MAX")
   subscription_status?: SubscriptionStatus;
   subscription_end_date?: number; // Unix timestamp
 }
@@ -35,6 +36,7 @@ export interface UserData {
   email: string;
   credits: number;
   tier?: UserTier;
+  tier_display_name?: string; // Formatted tier name from backend (e.g., "Pro", "MAX")
   subscription_status?: SubscriptionStatus;
   subscription_end_date?: number; // Unix timestamp
 }
@@ -152,6 +154,7 @@ export const processAuthResponse = (response: AuthResponse): void => {
       credits: creditsAsInteger,
       // Normalize tier to lowercase to handle case sensitivity from backend
       tier: response.tier?.toLowerCase() as UserTier | undefined,
+      tier_display_name: response.tier_display_name,
       subscription_status: response.subscription_status,
       subscription_end_date: response.subscription_end_date,
     };

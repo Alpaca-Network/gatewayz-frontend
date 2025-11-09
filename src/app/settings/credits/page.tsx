@@ -249,6 +249,7 @@ function CreditsPageContent() {
                   credits: data.credits,
                   // Normalize tier to lowercase to match frontend expectations
                   tier: data.tier?.toLowerCase(),
+                  tier_display_name: data.tier_display_name,
                   subscription_status: data.subscription_status,
                   subscription_end_date: data.subscription_end_date
                 });
@@ -322,6 +323,7 @@ function CreditsPageContent() {
                 credits: data.credits,
                 // Normalize tier to lowercase to match frontend expectations
                 tier: data.tier?.toLowerCase(),
+                tier_display_name: data.tier_display_name,
                 subscription_status: data.subscription_status,
                 subscription_end_date: data.subscription_end_date
               });
