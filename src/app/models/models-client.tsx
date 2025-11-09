@@ -24,7 +24,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { Slider } from "@/components/ui/slider";
-import { BookText, Bot, ChevronDown, ChevronUp, FileText, ImageIcon, LayoutGrid, LayoutList, Music, Search, Sliders as SlidersIcon, X, Zap } from 'lucide-react';
+import { BookText, Bot, Box, ChevronDown, ChevronUp, FileText, ImageIcon, LayoutGrid, LayoutList, Music, Search, Sliders as SlidersIcon, Video, X, Zap } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 import { stringToColor } from '@/lib/utils';
@@ -726,7 +726,9 @@ export default function ModelsClient({
                   const icon = item.value.toLowerCase() === 'text' ? <BookText className="w-4 h-4"/> :
                                item.value.toLowerCase() === 'image' ? <ImageIcon className="w-4 h-4"/> :
                                item.value.toLowerCase() === 'file' ? <FileText className="w-4 h-4"/> :
-                               item.value.toLowerCase() === 'audio' ? <Music className="w-4 h-4"/> : null;
+                               item.value.toLowerCase() === 'audio' ? <Music className="w-4 h-4"/> :
+                               item.value.toLowerCase() === 'video' ? <Video className="w-4 h-4"/> :
+                               item.value.toLowerCase() === '3d' ? <Box className="w-4 h-4"/> : null;
                   return (
                     <div key={item.value} className="flex items-center justify-between space-x-2">
                       <div className="flex items-center space-x-2 flex-1 min-w-0">
@@ -753,7 +755,9 @@ export default function ModelsClient({
                   const icon = item.value.toLowerCase() === 'text' ? <BookText className="w-4 h-4"/> :
                                item.value.toLowerCase() === 'image' ? <ImageIcon className="w-4 h-4"/> :
                                item.value.toLowerCase() === 'file' ? <FileText className="w-4 h-4"/> :
-                               item.value.toLowerCase() === 'audio' ? <Music className="w-4 h-4"/> : null;
+                               item.value.toLowerCase() === 'audio' ? <Music className="w-4 h-4"/> :
+                               item.value.toLowerCase() === 'video' ? <Video className="w-4 h-4"/> :
+                               item.value.toLowerCase() === '3d' ? <Box className="w-4 h-4"/> : null;
                   return (
                     <div key={item.value} className="flex items-center justify-between space-x-2">
                       <div className="flex items-center space-x-2 flex-1 min-w-0">
