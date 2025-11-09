@@ -378,6 +378,7 @@ def get_all_models_parallel():
             "aimo",
             "near",
             "fal",
+            "helicone",
             "anannas",
         ]
 
@@ -425,6 +426,7 @@ def get_all_models_sequential():
     aimo_models = get_cached_models("aimo") or []
     near_models = get_cached_models("near") or []
     fal_models = get_cached_models("fal") or []
+    helicone_models = get_cached_models("helicone") or []
     anannas_models = get_cached_models("anannas") or []
     return (
         openrouter_models
@@ -443,6 +445,7 @@ def get_all_models_sequential():
         + aimo_models
         + near_models
         + fal_models
+        + helicone_models
         + anannas_models
     )
 
