@@ -72,7 +72,32 @@ async function getPriorityModels(): Promise<Model[]> {
 
       const dedupKey = `${normalizedName}:::${model.provider_slug || 'unknown'}`;
 
-      if (!modelMap.has(dedupKey)) {
+      // Merge models from multiple gateways
+      if (modelMap.has(dedupKey)) {
+        const existing = modelMap.get(dedupKey)!;
+
+        // Merge source_gateways arrays
+        const existingGateways = existing.source_gateways || [];
+        const newGateways = model.source_gateways || [];
+        const combinedGateways = Array.from(new Set([...existingGateways, ...newGateways]));
+
+        // Calculate data completeness score
+        const existingScore = (existing.description ? 1 : 0) +
+                              (existing.pricing?.prompt ? 1 : 0) +
+                              (existing.context_length > 0 ? 1 : 0);
+        const newScore = (model.description ? 1 : 0) +
+                         (model.pricing?.prompt ? 1 : 0) +
+                         (model.context_length > 0 ? 1 : 0);
+
+        // Keep model with more complete data
+        const mergedModel = newScore > existingScore ? model : existing;
+        mergedModel.source_gateways = combinedGateways;
+        modelMap.set(dedupKey, mergedModel);
+      } else {
+        // First occurrence - ensure source_gateways is an array
+        if (!model.source_gateways) {
+          model.source_gateways = [];
+        }
         modelMap.set(dedupKey, model);
       }
     }
@@ -112,7 +137,32 @@ async function getDeferredModels(): Promise<Model[]> {
 
       const dedupKey = `${normalizedName}:::${model.provider_slug || 'unknown'}`;
 
-      if (!modelMap.has(dedupKey)) {
+      // Merge models from multiple gateways
+      if (modelMap.has(dedupKey)) {
+        const existing = modelMap.get(dedupKey)!;
+
+        // Merge source_gateways arrays
+        const existingGateways = existing.source_gateways || [];
+        const newGateways = model.source_gateways || [];
+        const combinedGateways = Array.from(new Set([...existingGateways, ...newGateways]));
+
+        // Calculate data completeness score
+        const existingScore = (existing.description ? 1 : 0) +
+                              (existing.pricing?.prompt ? 1 : 0) +
+                              (existing.context_length > 0 ? 1 : 0);
+        const newScore = (model.description ? 1 : 0) +
+                         (model.pricing?.prompt ? 1 : 0) +
+                         (model.context_length > 0 ? 1 : 0);
+
+        // Keep model with more complete data
+        const mergedModel = newScore > existingScore ? model : existing;
+        mergedModel.source_gateways = combinedGateways;
+        modelMap.set(dedupKey, mergedModel);
+      } else {
+        // First occurrence - ensure source_gateways is an array
+        if (!model.source_gateways) {
+          model.source_gateways = [];
+        }
         modelMap.set(dedupKey, model);
       }
     }
@@ -153,7 +203,32 @@ async function DeferredModelsLoader({
 
     const dedupKey = `${normalizedName}:::${model.provider_slug || 'unknown'}`;
 
-    if (!modelMap.has(dedupKey)) {
+    // Merge models from multiple gateways
+    if (modelMap.has(dedupKey)) {
+      const existing = modelMap.get(dedupKey)!;
+
+      // Merge source_gateways arrays
+      const existingGateways = existing.source_gateways || [];
+      const newGateways = model.source_gateways || [];
+      const combinedGateways = Array.from(new Set([...existingGateways, ...newGateways]));
+
+      // Calculate data completeness score
+      const existingScore = (existing.description ? 1 : 0) +
+                            (existing.pricing?.prompt ? 1 : 0) +
+                            (existing.context_length > 0 ? 1 : 0);
+      const newScore = (model.description ? 1 : 0) +
+                       (model.pricing?.prompt ? 1 : 0) +
+                       (model.context_length > 0 ? 1 : 0);
+
+      // Keep model with more complete data
+      const mergedModel = newScore > existingScore ? model : existing;
+      mergedModel.source_gateways = combinedGateways;
+      modelMap.set(dedupKey, mergedModel);
+    } else {
+      // First occurrence - ensure source_gateways is an array
+      if (!model.source_gateways) {
+        model.source_gateways = [];
+      }
       modelMap.set(dedupKey, model);
     }
   }

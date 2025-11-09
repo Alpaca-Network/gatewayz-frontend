@@ -172,6 +172,7 @@ export default function ModelProfilePage() {
     const [copiedStates, setCopiedStates] = useState<Record<string, boolean>>({});
     const [apiKey, setApiKey] = useState('gw_live_YOUR_API_KEY_HERE');
     const [selectedProvider, setSelectedProvider] = useState<string>('gatewayz');
+    const [selectedPlaygroundProvider, setSelectedPlaygroundProvider] = useState<string>('gatewayz');
 
     // Provider configurations for API calls
     const providerConfigs: Record<string, {
@@ -295,9 +296,11 @@ export default function ModelProfilePage() {
 
                 const gateway = providerNameToGateway[bestProvider.name] || modelProviders[0];
                 setSelectedProvider(gateway);
+                setSelectedPlaygroundProvider(gateway);
             } else {
                 // No performance data, default to first available provider
                 setSelectedProvider(modelProviders[0]);
+                setSelectedPlaygroundProvider(modelProviders[0]);
             }
         }
     }, [modelProviders, model]);
@@ -822,17 +825,38 @@ export default function ModelProfilePage() {
                                 Test {model.name} directly in your browser. Messages are not saved to your chat history.
                             </p>
                         </div>
+
+                        {/* Provider Selector */}
+                        <div className="mb-4">
+                            <label className="text-sm font-medium mb-2 block">Select Provider</label>
+                            <select
+                                value={selectedPlaygroundProvider}
+                                onChange={(e) => setSelectedPlaygroundProvider(e.target.value)}
+                                className="w-full max-w-md px-4 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                            >
+                                <option value="gatewayz">Gatewayz (Unified API - Recommended)</option>
+                                {modelProviders.length > 0 && modelProviders.map(provider => {
+                                    const config = providerConfigs[provider];
+                                    if (!config) return null;
+                                    return (
+                                        <option key={provider} value={provider}>
+                                            {config.name}
+                                        </option>
+                                    );
+                                })}
+                            </select>
+                            {selectedPlaygroundProvider !== 'gatewayz' && (
+                                <p className="text-sm text-muted-foreground mt-2">
+                                    ⚠️ Using {providerConfigs[selectedPlaygroundProvider]?.name} directly. Make sure you have configured your API key.
+                                </p>
+                            )}
+                        </div>
+
                         <Card className="flex-1 p-4 overflow-hidden flex flex-col">
                             <InlineChat
                                 modelId={model.id}
                                 modelName={model.name}
-                                gateway={
-                                    modelProviders.length > 0
-                                        ? modelProviders[0]
-                                        : model.id.includes('/')
-                                            ? model.id.split('/')[0]
-                                            : undefined
-                                }
+                                gateway={selectedPlaygroundProvider !== 'gatewayz' ? selectedPlaygroundProvider : undefined}
                             />
                         </Card>
                     </div>
