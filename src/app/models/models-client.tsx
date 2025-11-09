@@ -719,7 +719,7 @@ export default function ModelsClient({
           variant="sidebar"
           collapsible="offcanvas"
         >
-          <SidebarContent className="p-4 overflow-y-auto">
+          <SidebarContent className="p-4 pb-20 overflow-y-auto">
             <SidebarGroup>
               <SidebarGroupLabel>Input Formats</SidebarGroupLabel>
               <div className="flex flex-col gap-2">
@@ -886,7 +886,7 @@ export default function ModelsClient({
                       <SelectItem value="price-asc">Price (Low to High)</SelectItem>
                     </SelectContent>
                   </Select>
-                  <div className="flex items-center gap-1 bg-muted p-1 rounded-md">
+                  <div className="hidden lg:flex items-center gap-1 bg-muted p-1 rounded-md">
                     <Button
                       variant={layout === 'grid' ? 'secondary' : 'ghost'}
                       size="icon"
