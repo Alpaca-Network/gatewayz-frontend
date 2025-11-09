@@ -164,6 +164,11 @@ function buildHeaders(gateway: string): Record<string, string> {
     headers['Authorization'] = `Bearer ${nearApiKey}`;
   }
 
+  const heliconeApiKey = process.env.NEXT_PUBLIC_HELICONE_API_KEY || process.env.HELICONE_API_KEY;
+  if (gateway === 'helicone' && heliconeApiKey) {
+    headers['Authorization'] = `Bearer ${heliconeApiKey}`;
+  }
+
   return headers;
 }
 
