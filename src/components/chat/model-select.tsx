@@ -41,7 +41,7 @@ interface ModelSelectProps {
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
 
-const CACHE_KEY = 'gatewayz_models_cache_v5_optimized';
+const CACHE_KEY = 'gatewayz_models_cache_v6_gateway_prefix';
 const FAVORITES_KEY = 'gatewayz_favorite_models';
 const CACHE_DURATION = 60 * 60 * 1000; // 60 minutes - extended cache for maximum performance
 const INITIAL_MODELS_LIMIT = 50; // Load top 50 models initially for instant loading
@@ -234,8 +234,15 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
           // Get speed tier for performance indicators
           const speedTier = getModelSpeedTier(model.id, sourceGateway);
 
+          // Ensure model ID includes gateway prefix for correct backend routing
+          // Backend expects format like "near/zai-org/GLM-4.6-FP8" to route to correct provider
+          let modelId = model.id;
+          if (sourceGateway && !modelId.startsWith(`${sourceGateway}/`)) {
+            modelId = `${sourceGateway}/${modelId}`;
+          }
+
           return {
-            value: model.id,
+            value: modelId,
             label: model.name,
             category,
             sourceGateway,
