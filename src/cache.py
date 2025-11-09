@@ -16,6 +16,14 @@ _models_cache = {
     "stale_ttl": 7200,  # 2 hours stale-while-revalidate
 }
 
+# Unified multi-provider catalog cache (canonical + provider adapters)
+_multi_provider_catalog_cache = {
+    "data": None,
+    "timestamp": None,
+    "ttl": 900,  # 15 minutes TTL for aggregated catalog snapshots
+    "stale_ttl": 1800,
+}
+
 _portkey_models_cache = {
     "data": None,
     "timestamp": None,

@@ -195,6 +195,67 @@ class TestGetProvidersEndpoint:
         assert response.status_code in [503, 500]
 
 
+class TestModelsEndpoint:
+    """Test coverage for the unified /models endpoint used by the UI."""
+
+    @patch('src.routes.catalog.enhance_providers_with_logos_and_sites')
+    @patch('src.routes.catalog.get_cached_providers')
+    @patch('src.routes.catalog.get_cached_models')
+    def test_models_page_all_gateway_loads(
+        self,
+        mock_get_cached_models,
+        mock_get_cached_providers,
+        mock_enhance_providers,
+    ):
+        """Ensure the models catalog page can load aggregated data."""
+
+        sample_model = {
+            "id": "openai/gpt-4",
+            "slug": "openai-gpt-4",
+            "canonical_slug": "openai/gpt-4",
+            "provider_slug": "openai",
+            "pricing": {"prompt": "0.03", "completion": "0.06"},
+        }
+
+        def fake_get_cached_models(gateway: str):
+            gateway = (gateway or "").lower()
+            catalog_by_gateway = {
+                "openrouter": [sample_model],
+                "portkey": [],
+                "featherless": [],
+                "deepinfra": [],
+                "chutes": [],
+                "groq": [],
+                "fireworks": [],
+                "together": [],
+                "cerebras": [],
+                "nebius": [],
+                "xai": [],
+                "novita": [],
+                "hug": [],
+                "aimo": [],
+                "near": [],
+                "fal": [],
+                "anannas": [],
+                "vercel-ai-gateway": [],
+            }
+            return catalog_by_gateway.get(gateway, [])
+
+        mock_get_cached_models.side_effect = fake_get_cached_models
+        mock_get_cached_providers.return_value = [
+            {"slug": "openai", "site_url": "https://openai.com"}
+        ]
+        mock_enhance_providers.side_effect = lambda providers: providers
+
+        response = client.get("/models?gateway=all&limit=5&include_huggingface=false")
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["gateway"] == "all"
+        assert payload["returned"] == 1
+        assert payload["data"][0]["id"] == "openai/gpt-4"
+        assert payload["data"][0]["provider_slug"] == "openai"
+
 class TestMergeProviderLists:
     """Test provider list merging"""
 

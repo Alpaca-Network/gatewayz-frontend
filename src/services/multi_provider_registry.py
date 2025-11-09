@@ -1,15 +1,36 @@
-"""
-Multi-Provider Model Registry
-
-This module provides support for models that can be accessed through multiple providers
-with automatic failover, priority-based selection, and cost optimization.
-"""
+"""Multi-provider model registry and canonical catalog support."""
 
 import logging
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Iterable
 from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
+
+
+def _merge_dicts(base: Dict[str, Any], incoming: Dict[str, Any]) -> Dict[str, Any]:
+    """Merge two dictionaries preferring non-empty values from the incoming dict."""
+
+    if not incoming:
+        return base
+
+    for key, value in incoming.items():
+        if value in (None, "", [], {}):
+            continue
+
+        current = base.get(key)
+        if current in (None, "", [], {}):
+            base[key] = value
+            continue
+
+        if isinstance(current, dict) and isinstance(value, dict):
+            base[key] = _merge_dicts(dict(current), value)
+        elif isinstance(current, list) and isinstance(value, list):
+            merged_list = list(dict.fromkeys([*current, *value]))
+            base[key] = merged_list
+        else:
+            base[key] = value
+
+    return base
 
 
 @dataclass
@@ -77,6 +98,65 @@ class MultiProviderModel:
         return any(p.name == provider_name and p.enabled for p in self.providers)
 
 
+@dataclass
+class CanonicalModelProvider:
+    """Representation of a provider-specific adapter for a canonical model."""
+
+    provider_slug: str
+    native_model_id: str
+    capabilities: Dict[str, Any] = field(default_factory=dict)
+    pricing: Dict[str, Any] = field(default_factory=dict)
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+    def merge(self, other: "CanonicalModelProvider") -> None:
+        if other.provider_slug != self.provider_slug:
+            raise ValueError("Cannot merge providers with different slugs")
+
+        if other.native_model_id:
+            self.native_model_id = other.native_model_id
+
+        self.capabilities = _merge_dicts(self.capabilities, other.capabilities)
+        self.pricing = _merge_dicts(self.pricing, other.pricing)
+        self.metadata = _merge_dicts(self.metadata, other.metadata)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "provider_slug": self.provider_slug,
+            "native_model_id": self.native_model_id,
+            "capabilities": self.capabilities,
+            "pricing": self.pricing,
+            "metadata": self.metadata,
+        }
+
+
+@dataclass
+class CanonicalModel:
+    """Canonical model definition spanning multiple providers."""
+
+    id: str
+    display: Dict[str, Any] = field(default_factory=dict)
+    providers: Dict[str, CanonicalModelProvider] = field(default_factory=dict)
+
+    def merge_display(self, incoming: Dict[str, Any]) -> None:
+        if not incoming:
+            return
+        self.display = _merge_dicts(self.display, dict(incoming))
+
+    def add_provider(self, provider: CanonicalModelProvider) -> None:
+        existing = self.providers.get(provider.provider_slug)
+        if existing:
+            existing.merge(provider)
+        else:
+            self.providers[provider.provider_slug] = provider
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "display": self.display,
+            "providers": [p.to_dict() for p in self.providers.values()],
+        }
+
+
 class MultiProviderRegistry:
     """
     Registry for multi-provider models with provider selection and failover logic.
@@ -88,6 +168,8 @@ class MultiProviderRegistry:
 
     def __init__(self):
         self._models: Dict[str, MultiProviderModel] = {}
+        self._canonical_models: Dict[str, "CanonicalModel"] = {}
+        self._canonical_slug_index: Dict[str, str] = {}
         logger.info("Initialized MultiProviderRegistry")
 
     def register_model(self, model: MultiProviderModel) -> None:
@@ -97,6 +179,38 @@ class MultiProviderRegistry:
             f"Registered multi-provider model: {model.id} with "
             f"{len(model.providers)} providers"
         )
+
+        # Also register canonical representation for compatibility
+        try:
+            display = {
+                "name": model.name,
+                "description": model.description,
+                "context_length": model.context_length,
+                "modalities": model.modalities,
+            }
+
+            for provider in model.providers:
+                canonical_provider = CanonicalModelProvider(
+                    provider_slug=provider.name,
+                    native_model_id=provider.model_id,
+                    capabilities={
+                        "max_tokens": provider.max_tokens,
+                        "features": provider.features,
+                        "requires_credentials": provider.requires_credentials,
+                    },
+                    pricing={
+                        "prompt": provider.cost_per_1k_input,
+                        "completion": provider.cost_per_1k_output,
+                    },
+                    metadata={"priority": provider.priority},
+                )
+                self.register_canonical_provider(model.id, display, canonical_provider)
+        except Exception as exc:  # pragma: no cover - defensive logging
+            logger.debug(
+                "Failed to backfill canonical model from MultiProviderModel %s: %s",
+                model.id,
+                exc,
+            )
 
     def register_models(self, models: List[MultiProviderModel]) -> None:
         """Register multiple models at once"""
@@ -114,6 +228,103 @@ class MultiProviderRegistry:
     def get_all_models(self) -> List[MultiProviderModel]:
         """Get all registered models"""
         return list(self._models.values())
+
+    # ------------------------------------------------------------------
+    # Canonical catalog support
+    # ------------------------------------------------------------------
+
+    def reset_canonical_models(self) -> None:
+        """Clear the canonical catalog in preparation for a fresh rebuild."""
+
+        logger.debug("Resetting canonical model registry")
+        self._canonical_models.clear()
+        self._canonical_slug_index.clear()
+
+    def _resolve_canonical_id(self, *candidates: Iterable[Optional[str]]) -> Optional[str]:
+        for group in candidates:
+            if not group:
+                continue
+            for candidate in group:
+                if not candidate:
+                    continue
+                existing = self._canonical_slug_index.get(candidate)
+                if existing:
+                    return existing
+        return None
+
+    def _update_slug_index(self, canonical_id: str, slugs: Iterable[str]) -> None:
+        for slug in slugs:
+            if slug:
+                self._canonical_slug_index[slug] = canonical_id
+
+    def register_canonical_provider(
+        self,
+        canonical_id: Optional[str],
+        display_metadata: Optional[Dict[str, Any]],
+        provider: "CanonicalModelProvider",
+    ) -> "CanonicalModel":
+        """Register a canonical model provider mapping.
+
+        Args:
+            canonical_id: Shared ID across providers.
+            display_metadata: Human-friendly metadata for the canonical model.
+            provider: Provider adapter definition.
+        """
+
+        slug_candidates: List[str] = []
+        if display_metadata:
+            slug_candidates.extend(
+                str(value)
+                for key in ("slug", "canonical_slug")
+                if (value := display_metadata.get(key))
+            )
+            aliases = display_metadata.get("aliases")
+            if aliases:
+                if isinstance(aliases, (list, tuple, set)):
+                    slug_candidates.extend(str(alias) for alias in aliases if alias)
+                else:
+                    slug_candidates.append(str(aliases))
+
+        slug_candidates.extend(
+            str(value)
+            for key in ("slug", "canonical_slug")
+            if (value := provider.metadata.get(key))
+        )
+        slug_candidates.append(provider.native_model_id)
+
+        resolved_id = (
+            canonical_id
+            or provider.metadata.get("canonical_slug")
+            or provider.native_model_id
+        )
+
+        existing_id = self._resolve_canonical_id(slug_candidates, [resolved_id])
+        if existing_id:
+            resolved_id = existing_id
+
+        model = self._canonical_models.get(resolved_id)
+        if not model:
+            model = CanonicalModel(id=resolved_id)
+            self._canonical_models[resolved_id] = model
+
+        if display_metadata:
+            model.merge_display(display_metadata)
+
+        model.add_provider(provider)
+
+        # Update slug index for quick lookup
+        self._update_slug_index(resolved_id, slug_candidates + [resolved_id])
+
+        return model
+
+    def get_canonical_model(self, canonical_id: str) -> Optional["CanonicalModel"]:
+        return self._canonical_models.get(canonical_id)
+
+    def get_canonical_models(self) -> List["CanonicalModel"]:
+        return list(self._canonical_models.values())
+
+    def get_canonical_catalog_snapshot(self) -> List[Dict[str, Any]]:
+        return [model.to_dict() for model in self.get_canonical_models()]
 
     def select_provider(
         self,

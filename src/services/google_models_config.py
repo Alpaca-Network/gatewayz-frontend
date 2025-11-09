@@ -12,6 +12,7 @@ from src.services.multi_provider_registry import (
     MultiProviderModel,
     ProviderConfig,
     get_registry,
+    CanonicalModelProvider,
 )
 
 logger = logging.getLogger(__name__)
@@ -319,3 +320,48 @@ def initialize_google_models() -> None:
     logger.info(
         f"✓ Successfully initialized {len(models)} Google models in multi-provider registry"
     )
+
+    register_google_models_in_canonical_registry()
+
+
+def register_google_models_in_canonical_registry() -> None:
+    """Populate the canonical model registry with Google static definitions."""
+
+    registry = get_registry()
+    models = get_google_models()
+
+    for model in models:
+        display = {
+            "name": model.name,
+            "description": model.description,
+            "context_length": model.context_length,
+            "modalities": model.modalities,
+            "canonical_slug": model.id,
+            "aliases": list({
+                model.id,
+                f"google/{model.id}",
+                f"google-vertex/{model.id}",
+            }),
+        }
+
+        for provider in model.providers:
+            canonical_provider = CanonicalModelProvider(
+                provider_slug=provider.name,
+                native_model_id=provider.model_id,
+                capabilities={
+                    "features": provider.features,
+                    "max_tokens": provider.max_tokens,
+                    "requires_credentials": provider.requires_credentials,
+                    "priority": provider.priority,
+                },
+                pricing={
+                    "prompt": provider.cost_per_1k_input,
+                    "completion": provider.cost_per_1k_output,
+                },
+                metadata={
+                    "canonical_slug": model.id,
+                    "provider_priority": provider.priority,
+                },
+            )
+
+            registry.register_canonical_provider(model.id, display, canonical_provider)

@@ -111,6 +111,13 @@ class ProviderSelector:
 
     def __init__(self):
         self.registry = get_registry()
+        if not self.registry.get_all_models():
+            try:
+                from src.services.google_models_config import initialize_google_models
+
+                initialize_google_models()
+            except Exception as exc:  # pragma: no cover - defensive guard
+                logger.debug("Failed to initialize Google models for selector: %s", exc)
         self.health_tracker = ProviderHealthTracker()
         logger.info("Initialized ProviderSelector with automatic failover")
 

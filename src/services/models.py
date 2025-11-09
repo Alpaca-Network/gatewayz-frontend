@@ -2,7 +2,7 @@ import logging
 import json
 from pathlib import Path
 import csv
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional, Union, List
 from concurrent.futures import ThreadPoolExecutor
 
 from src.config import Config
@@ -27,6 +27,7 @@ from src.cache import (
     _fal_models_cache,
     _vercel_ai_gateway_models_cache,
     _anannas_models_cache,
+    _multi_provider_catalog_cache,
     is_cache_fresh,
     should_revalidate_in_background,
     _FAL_CACHE_INIT_DEFERRED,
@@ -41,6 +42,11 @@ from src.services.portkey_providers import (
     fetch_models_from_xai,
     fetch_models_from_novita,
 )
+from src.services.multi_provider_registry import (
+    CanonicalModelProvider,
+    get_registry,
+)
+from src.services.google_models_config import register_google_models_in_canonical_registry
 from src.services.huggingface_models import fetch_models_from_hug, get_huggingface_model_info
 from src.services.model_transformations import detect_provider_from_model_id
 from src.utils.security_validators import sanitize_for_logging
@@ -53,6 +59,125 @@ logger = logging.getLogger(__name__)
 MODALITY_TEXT_TO_TEXT = "text->text"
 MODALITY_TEXT_TO_IMAGE = "text->image"
 MODALITY_TEXT_TO_AUDIO = "text->audio"
+
+
+class AggregatedCatalog(list):
+    """List-like wrapper that also exposes canonical model metadata."""
+
+    def __init__(self, models: Optional[list], canonical_models: Optional[list]):
+        super().__init__(models or [])
+        self.canonical_models = canonical_models or []
+
+    def as_dict(self) -> Dict[str, Any]:
+        return {"models": list(self), "canonical_models": self.canonical_models}
+
+
+def _normalize_provider_slug(provider_slug: str) -> str:
+    mapping = {
+        "hug": "huggingface",
+        "huggingface": "huggingface",
+        "google-vertex": "google-vertex",
+    }
+    return mapping.get(provider_slug.lower(), provider_slug.lower())
+
+
+def _extract_modalities(record: dict) -> List[str]:
+    modalities = record.get("modalities")
+    if isinstance(modalities, list) and modalities:
+        return modalities
+
+    architecture = record.get("architecture") or {}
+    if isinstance(architecture, dict):
+        if isinstance(architecture.get("input_modalities"), list):
+            return architecture["input_modalities"]
+        modality = architecture.get("modality")
+        if modality:
+            if isinstance(modality, list):
+                return modality
+            return [modality]
+
+    if record.get("modality"):
+        value = record["modality"]
+        if isinstance(value, list):
+            return value
+        return [value]
+
+    return ["text"]
+
+
+def _register_canonical_records(provider_slug: str, models: Optional[list]) -> None:
+    if not models:
+        return
+
+    try:
+        registry = get_registry()
+        normalized_provider = _normalize_provider_slug(provider_slug)
+
+        for record in models:
+            if not isinstance(record, dict):
+                continue
+
+            canonical_id = (
+                record.get("canonical_slug")
+                or record.get("slug")
+                or record.get("id")
+            )
+
+            if not canonical_id:
+                continue
+
+            display_metadata = {
+                "name": record.get("name") or record.get("display_name"),
+                "description": record.get("description"),
+                "context_length": record.get("context_length")
+                or record.get("max_context_length"),
+                "modalities": _extract_modalities(record),
+                "slug": record.get("slug"),
+                "canonical_slug": record.get("canonical_slug"),
+            }
+
+            if record.get("aliases"):
+                display_metadata["aliases"] = record.get("aliases")
+
+            pricing = record.get("pricing") or {}
+            capabilities = {
+                "context_length": record.get("context_length")
+                or record.get("max_context_length"),
+                "max_output_tokens": record.get("max_tokens")
+                or record.get("max_output_tokens"),
+                "modalities": _extract_modalities(record),
+                "supported_parameters": record.get("supported_parameters"),
+                "default_parameters": record.get("default_parameters"),
+                "features": record.get("features"),
+            }
+
+            metadata = {
+                "slug": record.get("slug"),
+                "canonical_slug": record.get("canonical_slug"),
+                "provider_slug": record.get("provider_slug"),
+                "source_gateway": record.get("source_gateway"),
+            }
+
+            provider = CanonicalModelProvider(
+                provider_slug=normalized_provider,
+                native_model_id=record.get("id") or canonical_id,
+                capabilities={k: v for k, v in capabilities.items() if v not in (None, [], {})},
+                pricing=pricing,
+                metadata={k: v for k, v in metadata.items() if v is not None},
+            )
+
+            registry.register_canonical_provider(canonical_id, display_metadata, provider)
+    except Exception as exc:  # pragma: no cover - defensive guard
+        logger.debug("Canonical registration failed for %s: %s", provider_slug, exc)
+
+
+def _fresh_cached_models(cache: dict, provider_slug: str):
+    if cache.get("data") and cache.get("timestamp"):
+        cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
+        if cache_age < cache.get("ttl", 0):
+            _register_canonical_records(provider_slug, cache["data"])
+            return cache["data"]
+    return None
 
 
 def sanitize_pricing(pricing: dict) -> dict:
@@ -321,106 +446,127 @@ def get_all_models_sequential():
     )
 
 
+def _build_multi_provider_catalog() -> AggregatedCatalog:
+    registry = get_registry()
+    registry.reset_canonical_models()
+
+    try:
+        register_google_models_in_canonical_registry()
+    except Exception as exc:  # pragma: no cover - defensive guard
+        logger.debug("Failed to register Google canonical models: %s", exc)
+
+    models = get_all_models_parallel()
+    canonical_snapshot = registry.get_canonical_catalog_snapshot()
+    return AggregatedCatalog(models, canonical_snapshot)
+
+
+def _refresh_multi_provider_catalog_cache() -> AggregatedCatalog:
+    catalog = _build_multi_provider_catalog()
+    _multi_provider_catalog_cache["data"] = catalog
+    _multi_provider_catalog_cache["timestamp"] = datetime.now(timezone.utc)
+    return catalog
+
+
 def get_cached_models(gateway: str = "openrouter"):
     """Get cached models or fetch from the requested gateway if cache is expired"""
     try:
         gateway = (gateway or "openrouter").lower()
 
         if gateway == "portkey":
-            cache = _portkey_models_cache
-            if cache["data"] and cache["timestamp"]:
-                cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
-                if cache_age < cache["ttl"]:
-                    return cache["data"]
-            return fetch_models_from_portkey()
+            cached = _fresh_cached_models(_portkey_models_cache, "portkey")
+            if cached is not None:
+                return cached
+            result = fetch_models_from_portkey()
+            _register_canonical_records("portkey", result)
+            return result
 
         if gateway == "featherless":
-            cache = _featherless_models_cache
-            if cache["data"] and cache["timestamp"]:
-                cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
-                if cache_age < cache["ttl"]:
-                    return cache["data"]
-            return fetch_models_from_featherless()
+            cached = _fresh_cached_models(_featherless_models_cache, "featherless")
+            if cached is not None:
+                return cached
+            result = fetch_models_from_featherless()
+            _register_canonical_records("featherless", result)
+            return result
 
         if gateway == "chutes":
-            cache = _chutes_models_cache
-            if cache["data"] and cache["timestamp"]:
-                cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
-                if cache_age < cache["ttl"]:
-                    return cache["data"]
-            return fetch_models_from_chutes()
+            cached = _fresh_cached_models(_chutes_models_cache, "chutes")
+            if cached is not None:
+                return cached
+            result = fetch_models_from_chutes()
+            _register_canonical_records("chutes", result)
+            return result
 
         if gateway == "groq":
-            cache = _groq_models_cache
-            if cache["data"] and cache["timestamp"]:
-                cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
-                if cache_age < cache["ttl"]:
-                    return cache["data"]
-            return fetch_models_from_groq()
+            cached = _fresh_cached_models(_groq_models_cache, "groq")
+            if cached is not None:
+                return cached
+            result = fetch_models_from_groq()
+            _register_canonical_records("groq", result)
+            return result
 
         if gateway == "fireworks":
-            cache = _fireworks_models_cache
-            if cache["data"] and cache["timestamp"]:
-                cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
-                if cache_age < cache["ttl"]:
-                    return cache["data"]
-            return fetch_models_from_fireworks()
+            cached = _fresh_cached_models(_fireworks_models_cache, "fireworks")
+            if cached is not None:
+                return cached
+            result = fetch_models_from_fireworks()
+            _register_canonical_records("fireworks", result)
+            return result
 
         if gateway == "together":
-            cache = _together_models_cache
-            if cache["data"] and cache["timestamp"]:
-                cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
-                if cache_age < cache["ttl"]:
-                    return cache["data"]
-            return fetch_models_from_together()
+            cached = _fresh_cached_models(_together_models_cache, "together")
+            if cached is not None:
+                return cached
+            result = fetch_models_from_together()
+            _register_canonical_records("together", result)
+            return result
 
         if gateway == "deepinfra":
-            cache = _deepinfra_models_cache
-            if cache["data"] and cache["timestamp"]:
-                cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
-                if cache_age < cache["ttl"]:
-                    return cache["data"]
-            return fetch_models_from_deepinfra()
+            cached = _fresh_cached_models(_deepinfra_models_cache, "deepinfra")
+            if cached is not None:
+                return cached
+            result = fetch_models_from_deepinfra()
+            _register_canonical_records("deepinfra", result)
+            return result
 
         if gateway == "google-vertex":
-            cache = _google_vertex_models_cache
-            if cache["data"] and cache["timestamp"]:
-                cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
-                if cache_age < cache["ttl"]:
-                    return cache["data"]
-            return fetch_models_from_google_vertex()
+            cached = _fresh_cached_models(_google_vertex_models_cache, "google-vertex")
+            if cached is not None:
+                return cached
+            result = fetch_models_from_google_vertex()
+            _register_canonical_records("google-vertex", result)
+            return result
 
         if gateway == "cerebras":
-            cache = _cerebras_models_cache
-            if cache["data"] and cache["timestamp"]:
-                cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
-                if cache_age < cache["ttl"]:
-                    return cache["data"]
-            return fetch_models_from_cerebras()
+            cached = _fresh_cached_models(_cerebras_models_cache, "cerebras")
+            if cached is not None:
+                return cached
+            result = fetch_models_from_cerebras()
+            _register_canonical_records("cerebras", result)
+            return result
 
         if gateway == "nebius":
-            cache = _nebius_models_cache
-            if cache["data"] and cache["timestamp"]:
-                cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
-                if cache_age < cache["ttl"]:
-                    return cache["data"]
-            return fetch_models_from_nebius()
+            cached = _fresh_cached_models(_nebius_models_cache, "nebius")
+            if cached is not None:
+                return cached
+            result = fetch_models_from_nebius()
+            _register_canonical_records("nebius", result)
+            return result
 
         if gateway == "xai":
-            cache = _xai_models_cache
-            if cache["data"] and cache["timestamp"]:
-                cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
-                if cache_age < cache["ttl"]:
-                    return cache["data"]
-            return fetch_models_from_xai()
+            cached = _fresh_cached_models(_xai_models_cache, "xai")
+            if cached is not None:
+                return cached
+            result = fetch_models_from_xai()
+            _register_canonical_records("xai", result)
+            return result
 
         if gateway == "novita":
-            cache = _novita_models_cache
-            if cache["data"] and cache["timestamp"]:
-                cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
-                if cache_age < cache["ttl"]:
-                    return cache["data"]
-            return fetch_models_from_novita()
+            cached = _fresh_cached_models(_novita_models_cache, "novita")
+            if cached is not None:
+                return cached
+            result = fetch_models_from_novita()
+            _register_canonical_records("novita", result)
+            return result
 
         if gateway == "hug" or gateway == "huggingface":
             from src.services.huggingface_models import ESSENTIAL_MODELS
@@ -444,6 +590,7 @@ def get_cached_models(gateway: str = "openrouter"):
                             logger.debug(
                                 f"Using cached Hugging Face models ({cache_size} models, age: {cache_age:.0f}s)"
                             )
+                            _register_canonical_records("huggingface", cache["data"])
                             return cache["data"]
                         logger.info(
                             "Hugging Face cache missing essential models; refetching catalog"
@@ -466,64 +613,82 @@ def get_cached_models(gateway: str = "openrouter"):
                 _huggingface_models_cache["data"] = result
                 _huggingface_models_cache["timestamp"] = datetime.now(timezone.utc)
 
+            _register_canonical_records("huggingface", result)
             return result
 
         if gateway == "aimo":
-            cache = _aimo_models_cache
-            if cache["data"] and cache["timestamp"]:
-                cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
-                if cache_age < cache["ttl"]:
-                    return cache["data"]
-            return fetch_models_from_aimo()
+            cached = _fresh_cached_models(_aimo_models_cache, "aimo")
+            if cached is not None:
+                return cached
+            result = fetch_models_from_aimo()
+            _register_canonical_records("aimo", result)
+            return result
 
         if gateway == "near":
-            cache = _near_models_cache
-            if cache["data"] and cache["timestamp"]:
-                cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
-                if cache_age < cache["ttl"]:
-                    return cache["data"]
-            return fetch_models_from_near()
+            cached = _fresh_cached_models(_near_models_cache, "near")
+            if cached is not None:
+                return cached
+            result = fetch_models_from_near()
+            _register_canonical_records("near", result)
+            return result
 
         if gateway == "fal":
-            cache = _fal_models_cache
-            if cache["data"] and cache["timestamp"]:
-                cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
-                if cache_age < cache["ttl"]:
-                    return cache["data"]
-            return fetch_models_from_fal()
+            cached = _fresh_cached_models(_fal_models_cache, "fal")
+            if cached is not None:
+                return cached
+            result = fetch_models_from_fal()
+            _register_canonical_records("fal", result)
+            return result
 
         if gateway == "vercel-ai-gateway":
-            cache = _vercel_ai_gateway_models_cache
-            if cache["data"] and cache["timestamp"]:
-                cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
-                if cache_age < cache["ttl"]:
-                    return cache["data"]
-            return fetch_models_from_vercel_ai_gateway()
+            cached = _fresh_cached_models(_vercel_ai_gateway_models_cache, "vercel-ai-gateway")
+            if cached is not None:
+                return cached
+            result = fetch_models_from_vercel_ai_gateway()
+            _register_canonical_records("vercel-ai-gateway", result)
+            return result
 
         if gateway == "anannas":
-            cache = _anannas_models_cache
+            cached = _fresh_cached_models(_anannas_models_cache, "anannas")
+            if cached is not None:
+                return cached
+            result = fetch_models_from_anannas()
+            _register_canonical_records("anannas", result)
+            return result
+
+        if gateway == "all":
+            cache = _multi_provider_catalog_cache
             if cache["data"] and cache["timestamp"]:
                 cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
                 if cache_age < cache["ttl"]:
                     return cache["data"]
-            return fetch_models_from_anannas()
+                if cache_age < cache.get("stale_ttl", cache["ttl"]):
+                    revalidate_cache_in_background(
+                        "multi-provider-catalog", _refresh_multi_provider_catalog_cache
+                    )
+                    return cache["data"]
 
-        if gateway == "all":
-            # Fetch all gateways in parallel for improved performance
-            return get_all_models_parallel()
+            return _refresh_multi_provider_catalog_cache()
 
         # Default to OpenRouter with stale-while-revalidate
         if is_cache_fresh(_models_cache):
-            return _models_cache["data"]
+            data = _models_cache["data"]
+            _register_canonical_records("openrouter", data)
+            return data
 
         # Check if we can serve stale cache while revalidating
         if should_revalidate_in_background(_models_cache):
             logger.info("Serving stale OpenRouter cache while revalidating in background")
+            cached = _models_cache["data"]
+            if cached:
+                _register_canonical_records("openrouter", cached)
             revalidate_cache_in_background("openrouter", fetch_models_from_openrouter)
-            return _models_cache["data"]
+            return cached
 
         # Cache expired or empty, fetch fresh data synchronously
-        return fetch_models_from_openrouter()
+        result = fetch_models_from_openrouter()
+        _register_canonical_records("openrouter", result)
+        return result
     except Exception as e:
         logger.error(
             "Error getting cached models for gateway '%s': %s",
