@@ -13,6 +13,8 @@ import stripe
 
 from src.db.payments import create_payment, get_payment_by_stripe_intent, update_payment_status
 from src.db.users import add_credits_to_user, get_user_by_id
+from src.db.webhook_events import is_event_processed, record_processed_event
+from src.db.subscription_products import get_tier_from_product_id, get_credits_from_tier
 from src.schemas.payments import (
     CheckoutSessionResponse,
     CreateCheckoutSessionRequest,
@@ -294,7 +296,7 @@ class StripeService:
     # ==================== Webhooks ====================
 
     def handle_webhook(self, payload: bytes, signature: str) -> WebhookProcessingResult:
-        """Handle Stripe webhook events with secure signature validation"""
+        """Handle Stripe webhook events with secure signature validation and deduplication"""
         # Validate webhook secret is configured
         if not self.webhook_secret:
             logger.error("Webhook secret not configured - rejecting webhook")
@@ -307,7 +309,39 @@ class StripeService:
             # Use Stripe's built-in signature verification (constant-time comparison)
             event = stripe.Webhook.construct_event(payload, signature, self.webhook_secret)
 
-            logger.info(f"Processing webhook: {event['type']}")
+            logger.info(f"Processing webhook: {event['type']} (ID: {event['id']})")
+
+            # Check for duplicate event (idempotency)
+            if is_event_processed(event["id"]):
+                logger.warning(f"Duplicate webhook event detected, skipping: {event['id']}")
+                return WebhookProcessingResult(
+                    success=True,
+                    event_type=event["type"],
+                    event_id=event["id"],
+                    message=f"Event {event['id']} already processed (duplicate)",
+                    processed_at=datetime.now(timezone.utc),
+                )
+
+            # Extract user_id from event metadata if available
+            user_id = None
+            try:
+                event_obj = event["data"]["object"]
+                if event_obj.get("metadata"):
+                    user_id_str = event_obj["metadata"].get("user_id")
+                    if user_id_str:
+                        user_id = int(user_id_str)
+            except (AttributeError, ValueError, TypeError, KeyError):
+                pass
+
+            # Record event as processed immediately after duplicate check to ensure
+            # idempotency even if handlers raise exceptions. This prevents duplicate
+            # processing when Stripe retries the webhook.
+            record_processed_event(
+                event_id=event["id"],
+                event_type=event["type"],
+                user_id=user_id,
+                metadata={"stripe_account": event.get("account")}
+            )
 
             # One-time payment events
             if event["type"] == "checkout.session.completed":
@@ -566,9 +600,8 @@ class StripeService:
 
                 logger.info(f"Stripe customer created: {stripe_customer_id} for user {user_id}")
 
-            # Determine tier from product_id
-            tier_map = {"prod_TKOqQPhVRxNp4Q": "pro", "prod_TKOqRE2L6qXu7s": "max"}
-            tier = tier_map.get(request.product_id, "basic")
+            # Determine tier from product_id using database configuration
+            tier = get_tier_from_product_id(request.product_id)
 
             logger.info(
                 f"Creating subscription checkout for user {user_id}, tier: {tier}, price_id: {request.price_id}"
@@ -765,12 +798,8 @@ class StripeService:
             user_id = int(subscription.metadata.get("user_id"))
             tier = subscription.metadata.get("tier", "pro")
 
-            # Calculate credits based on tier
-            credits_map = {
-                "pro": 20.0,  # $20 credits per month
-                "max": 150.0,  # $150 credits per month
-            }
-            credits = credits_map.get(tier, 0)
+            # Get credits from database configuration
+            credits = get_credits_from_tier(tier)
 
             if credits > 0:
                 # Add credits to user account
@@ -797,7 +826,7 @@ class StripeService:
             raise
 
     def _handle_invoice_payment_failed(self, invoice):
-        """Handle invoice payment failed event"""
+        """Handle invoice payment failed event - mark as past_due and downgrade tier"""
         try:
             if not invoice.subscription:
                 logger.info(f"Invoice {invoice.id} is not for a subscription, skipping")
@@ -808,16 +837,27 @@ class StripeService:
 
             logger.warning(f"Invoice payment failed for user {user_id}: {invoice.id}")
 
-            # Update user's subscription status to past_due
+            # Update user's subscription status to past_due and downgrade to basic tier
             from src.config.supabase_config import get_supabase_client
 
             client = get_supabase_client()
 
-            client.table("users").update(
-                {"subscription_status": "past_due", "updated_at": datetime.now(timezone.utc).isoformat()}
-            ).eq("id", user_id).execute()
+            # Downgrade to basic tier immediately to prevent unauthorized access
+            client.table("users").update({
+                "subscription_status": "past_due",
+                "tier": "basic",  # Downgrade tier on payment failure
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }).eq("id", user_id).execute()
 
-            logger.info(f"User {user_id} subscription marked as past_due due to failed payment")
+            # Also update API keys to reflect downgrade
+            client.table("api_keys_new").update({
+                "subscription_status": "past_due",
+                "subscription_plan": "basic",
+            }).eq("user_id", user_id).execute()
+
+            logger.info(
+                f"User {user_id} subscription marked as past_due and downgraded to basic tier due to failed payment"
+            )
 
         except Exception as e:
             logger.error(f"Error handling invoice payment failed: {e}", exc_info=True)

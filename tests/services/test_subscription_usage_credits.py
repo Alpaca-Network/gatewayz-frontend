@@ -73,12 +73,14 @@ def mock_max_invoice():
 class TestSubscriptionUsageCreditsAllocation:
     """Test that users receive correct usage credits when subscribing"""
 
+    @patch('src.services.payments.get_credits_from_tier')
     @patch('src.services.payments.add_credits_to_user')
     @patch('stripe.Subscription.retrieve')
     def test_pro_subscription_receives_20_dollar_credits(
         self,
         mock_retrieve_subscription,
         mock_add_credits,
+        mock_get_credits,
         stripe_service,
         mock_pro_invoice,
         mock_pro_subscription
@@ -86,6 +88,7 @@ class TestSubscriptionUsageCreditsAllocation:
         """Test that PRO subscription gets $20 credits per month"""
         # Setup
         mock_retrieve_subscription.return_value = mock_pro_subscription
+        mock_get_credits.return_value = 20.0  # PRO tier credits
 
         # Execute
         stripe_service._handle_invoice_paid(mock_pro_invoice)
@@ -106,12 +109,14 @@ class TestSubscriptionUsageCreditsAllocation:
         assert metadata['stripe_subscription_id'] == 'sub_pro_123'
         assert metadata['tier'] == 'pro'
 
+    @patch('src.services.payments.get_credits_from_tier')
     @patch('src.services.payments.add_credits_to_user')
     @patch('stripe.Subscription.retrieve')
     def test_max_subscription_receives_150_dollar_credits(
         self,
         mock_retrieve_subscription,
         mock_add_credits,
+        mock_get_credits,
         stripe_service,
         mock_max_invoice,
         mock_max_subscription
@@ -119,6 +124,7 @@ class TestSubscriptionUsageCreditsAllocation:
         """Test that MAX subscription gets $150 credits per month"""
         # Setup
         mock_retrieve_subscription.return_value = mock_max_subscription
+        mock_get_credits.return_value = 150.0  # MAX tier credits
 
         # Execute
         stripe_service._handle_invoice_paid(mock_max_invoice)
@@ -139,12 +145,14 @@ class TestSubscriptionUsageCreditsAllocation:
         assert metadata['stripe_subscription_id'] == 'sub_max_456'
         assert metadata['tier'] == 'max'
 
+    @patch('src.services.payments.get_credits_from_tier')
     @patch('src.services.payments.add_credits_to_user')
     @patch('stripe.Subscription.retrieve')
     def test_pro_subscription_initial_payment(
         self,
         mock_retrieve_subscription,
         mock_add_credits,
+        mock_get_credits,
         stripe_service,
         mock_pro_invoice,
         mock_pro_subscription
@@ -152,6 +160,7 @@ class TestSubscriptionUsageCreditsAllocation:
         """Test PRO subscription initial payment adds credits immediately"""
         # Setup - first invoice for new subscription
         mock_retrieve_subscription.return_value = mock_pro_subscription
+        mock_get_credits.return_value = 20.0  # PRO tier credits
 
         # Execute
         stripe_service._handle_invoice_paid(mock_pro_invoice)
@@ -161,12 +170,14 @@ class TestSubscriptionUsageCreditsAllocation:
         call_args = mock_add_credits.call_args
         assert call_args.kwargs['credits'] == 20.0
 
+    @patch('src.services.payments.get_credits_from_tier')
     @patch('src.services.payments.add_credits_to_user')
     @patch('stripe.Subscription.retrieve')
     def test_max_subscription_initial_payment(
         self,
         mock_retrieve_subscription,
         mock_add_credits,
+        mock_get_credits,
         stripe_service,
         mock_max_invoice,
         mock_max_subscription
@@ -174,6 +185,7 @@ class TestSubscriptionUsageCreditsAllocation:
         """Test MAX subscription initial payment adds credits immediately"""
         # Setup - first invoice for new subscription
         mock_retrieve_subscription.return_value = mock_max_subscription
+        mock_get_credits.return_value = 150.0  # MAX tier credits
 
         # Execute
         stripe_service._handle_invoice_paid(mock_max_invoice)
@@ -183,12 +195,14 @@ class TestSubscriptionUsageCreditsAllocation:
         call_args = mock_add_credits.call_args
         assert call_args.kwargs['credits'] == 150.0
 
+    @patch('src.services.payments.get_credits_from_tier')
     @patch('src.services.payments.add_credits_to_user')
     @patch('stripe.Subscription.retrieve')
     def test_pro_subscription_monthly_renewal(
         self,
         mock_retrieve_subscription,
         mock_add_credits,
+        mock_get_credits,
         stripe_service,
         mock_pro_invoice,
         mock_pro_subscription
@@ -196,6 +210,7 @@ class TestSubscriptionUsageCreditsAllocation:
         """Test PRO subscription renewal adds $20 credits each month"""
         # Setup
         mock_retrieve_subscription.return_value = mock_pro_subscription
+        mock_get_credits.return_value = 20.0  # PRO tier credits
 
         # Simulate 3 monthly renewals
         for month in range(3):
@@ -209,12 +224,14 @@ class TestSubscriptionUsageCreditsAllocation:
             call_args = mock_add_credits.call_args
             assert call_args.kwargs['credits'] == 20.0, f"Month {month + 1} should add $20 credits"
 
+    @patch('src.services.payments.get_credits_from_tier')
     @patch('src.services.payments.add_credits_to_user')
     @patch('stripe.Subscription.retrieve')
     def test_max_subscription_monthly_renewal(
         self,
         mock_retrieve_subscription,
         mock_add_credits,
+        mock_get_credits,
         stripe_service,
         mock_max_invoice,
         mock_max_subscription
@@ -222,6 +239,7 @@ class TestSubscriptionUsageCreditsAllocation:
         """Test MAX subscription renewal adds $150 credits each month"""
         # Setup
         mock_retrieve_subscription.return_value = mock_max_subscription
+        mock_get_credits.return_value = 150.0  # MAX tier credits
 
         # Simulate 3 monthly renewals
         for month in range(3):
@@ -257,12 +275,14 @@ class TestSubscriptionUsageCreditsAllocation:
         # Verify no credits were added
         mock_add_credits.assert_not_called()
 
+    @patch('src.services.payments.get_credits_from_tier')
     @patch('src.services.payments.add_credits_to_user')
     @patch('stripe.Subscription.retrieve')
     def test_unknown_tier_no_credits(
         self,
         mock_retrieve_subscription,
         mock_add_credits,
+        mock_get_credits,
         stripe_service
     ):
         """Test that unknown tiers don't receive credits"""
@@ -279,6 +299,7 @@ class TestSubscriptionUsageCreditsAllocation:
             subscription='sub_unknown_999'
         )
         mock_retrieve_subscription.return_value = unknown_tier_sub
+        mock_get_credits.return_value = 0.0  # Unknown tier gets 0 credits
 
         # Execute
         stripe_service._handle_invoice_paid(unknown_invoice)
@@ -290,6 +311,7 @@ class TestSubscriptionUsageCreditsAllocation:
 class TestSubscriptionCreditsIntegration:
     """Integration tests for complete subscription flow with credits"""
 
+    @patch('src.services.payments.get_credits_from_tier')
     @patch('src.services.payments.add_credits_to_user')
     @patch('src.config.supabase_config.get_supabase_client')
     @patch('stripe.Subscription.retrieve')
@@ -298,6 +320,7 @@ class TestSubscriptionCreditsIntegration:
         mock_retrieve_subscription,
         mock_get_supabase,
         mock_add_credits,
+        mock_get_credits,
         stripe_service,
         mock_pro_subscription,
         mock_pro_invoice
@@ -307,6 +330,7 @@ class TestSubscriptionCreditsIntegration:
         mock_client = MagicMock()
         mock_get_supabase.return_value = mock_client
         mock_retrieve_subscription.return_value = mock_pro_subscription
+        mock_get_credits.return_value = 20.0  # PRO tier credits
 
         # Step 1: Subscription created
         stripe_service._handle_subscription_created(mock_pro_subscription)
@@ -328,6 +352,7 @@ class TestSubscriptionCreditsIntegration:
         assert call_args.kwargs['credits'] == 20.0
         assert call_args.kwargs['user_id'] == 1
 
+    @patch('src.services.payments.get_credits_from_tier')
     @patch('src.services.payments.add_credits_to_user')
     @patch('src.config.supabase_config.get_supabase_client')
     @patch('stripe.Subscription.retrieve')
@@ -336,6 +361,7 @@ class TestSubscriptionCreditsIntegration:
         mock_retrieve_subscription,
         mock_get_supabase,
         mock_add_credits,
+        mock_get_credits,
         stripe_service,
         mock_max_subscription,
         mock_max_invoice
@@ -345,6 +371,7 @@ class TestSubscriptionCreditsIntegration:
         mock_client = MagicMock()
         mock_get_supabase.return_value = mock_client
         mock_retrieve_subscription.return_value = mock_max_subscription
+        mock_get_credits.return_value = 150.0  # MAX tier credits
 
         # Step 1: Subscription created
         stripe_service._handle_subscription_created(mock_max_subscription)
@@ -361,12 +388,14 @@ class TestSubscriptionCreditsIntegration:
         assert call_args.kwargs['credits'] == 150.0
         assert call_args.kwargs['user_id'] == 2
 
+    @patch('src.services.payments.get_credits_from_tier')
     @patch('src.services.payments.add_credits_to_user')
     @patch('stripe.Subscription.retrieve')
     def test_multiple_users_different_tiers(
         self,
         mock_retrieve_subscription,
         mock_add_credits,
+        mock_get_credits,
         stripe_service
     ):
         """Test multiple users with different subscription tiers receive correct credits"""
@@ -391,14 +420,17 @@ class TestSubscriptionCreditsIntegration:
         )
         pro_invoice_2 = Mock(id='in_pro_3', subscription='sub_pro_3')
 
-        # Execute all invoices
+        # Execute all invoices with appropriate tier credits
         mock_retrieve_subscription.return_value = pro_sub
+        mock_get_credits.return_value = 20.0
         stripe_service._handle_invoice_paid(pro_invoice)
 
         mock_retrieve_subscription.return_value = max_sub
+        mock_get_credits.return_value = 150.0
         stripe_service._handle_invoice_paid(max_invoice)
 
         mock_retrieve_subscription.return_value = pro_sub_2
+        mock_get_credits.return_value = 20.0
         stripe_service._handle_invoice_paid(pro_invoice_2)
 
         # Verify all calls
@@ -444,12 +476,14 @@ class TestSubscriptionCreditsEdgeCases:
         with pytest.raises(Exception):
             stripe_service._handle_invoice_paid(invoice)
 
+    @patch('src.services.payments.get_credits_from_tier')
     @patch('src.services.payments.add_credits_to_user')
     @patch('stripe.Subscription.retrieve')
     def test_tier_defaults_to_pro_when_missing(
         self,
         mock_retrieve_subscription,
         mock_add_credits,
+        mock_get_credits,
         stripe_service
     ):
         """Test that tier defaults to 'pro' when not specified in metadata"""
@@ -460,6 +494,7 @@ class TestSubscriptionCreditsEdgeCases:
         )
         invoice = Mock(id='in_no_tier_123', subscription='sub_no_tier_123')
         mock_retrieve_subscription.return_value = sub_no_tier
+        mock_get_credits.return_value = 20.0  # Pro tier default
 
         # Execute
         stripe_service._handle_invoice_paid(invoice)
@@ -469,12 +504,14 @@ class TestSubscriptionCreditsEdgeCases:
         call_args = mock_add_credits.call_args
         assert call_args.kwargs['credits'] == 20.0  # Pro tier default
 
+    @patch('src.services.payments.get_credits_from_tier')
     @patch('src.services.payments.add_credits_to_user')
     @patch('stripe.Subscription.retrieve')
     def test_case_sensitivity_of_tier(
         self,
         mock_retrieve_subscription,
         mock_add_credits,
+        mock_get_credits,
         stripe_service
     ):
         """Test that tier matching is case-sensitive (lowercase expected)"""
@@ -485,6 +522,7 @@ class TestSubscriptionCreditsEdgeCases:
         )
         invoice_upper = Mock(id='in_upper_123', subscription='sub_upper_123')
         mock_retrieve_subscription.return_value = sub_upper
+        mock_get_credits.return_value = 0.0  # Uppercase won't match
 
         # Execute
         stripe_service._handle_invoice_paid(invoice_upper)
@@ -500,6 +538,7 @@ class TestSubscriptionCreditsEdgeCases:
         )
         invoice_lower = Mock(id='in_lower_456', subscription='sub_lower_456')
         mock_retrieve_subscription.return_value = sub_lower
+        mock_get_credits.return_value = 20.0  # Lowercase matches
 
         # Execute
         stripe_service._handle_invoice_paid(invoice_lower)
@@ -529,12 +568,14 @@ class TestSubscriptionCreditsEdgeCases:
         # Verify no credits were added
         mock_add_credits.assert_not_called()
 
+    @patch('src.services.payments.get_credits_from_tier')
     @patch('src.services.payments.add_credits_to_user')
     @patch('stripe.Subscription.retrieve')
     def test_add_credits_fails_gracefully(
         self,
         mock_retrieve_subscription,
         mock_add_credits,
+        mock_get_credits,
         stripe_service,
         mock_pro_subscription,
         mock_pro_invoice
@@ -542,6 +583,7 @@ class TestSubscriptionCreditsEdgeCases:
         """Test that errors in add_credits_to_user are propagated"""
         # Setup
         mock_retrieve_subscription.return_value = mock_pro_subscription
+        mock_get_credits.return_value = 20.0  # PRO tier credits
         mock_add_credits.side_effect = Exception("Database error")
 
         # Execute - should raise error
