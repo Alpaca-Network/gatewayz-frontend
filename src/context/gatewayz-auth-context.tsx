@@ -241,6 +241,7 @@ export function GatewayzAuthProvider({
             ...storedUser,
             api_key: preferredKey.api_key,
             tier: authData.tier,
+            tier_display_name: authData.tier_display_name,
             subscription_status: authData.subscription_status,
             subscription_end_date: authData.subscription_end_date,
           });
@@ -254,6 +255,7 @@ export function GatewayzAuthProvider({
             email: authData.email,
             credits: Math.floor(authData.credits ?? 0),
             tier: authData.tier,
+            tier_display_name: authData.tier_display_name,
             subscription_status: authData.subscription_status,
             subscription_end_date: authData.subscription_end_date,
           });
