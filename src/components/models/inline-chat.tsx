@@ -94,15 +94,7 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
         : `${apiBaseUrl}/v1/chat/completions`;
 
       // Normalize model ID to handle different formats from various gateway APIs
-      let normalizedModelId = normalizeModelId(modelId);
-
-      // If a gateway is specified and the model ID includes the gateway prefix, remove it
-      // This handles cases like "near/zai-org/GLM-4.6-FP8" where we also specify gateway: "near"
-      if (gateway && normalizedModelId.startsWith(gateway + '/')) {
-        const withoutPrefix = normalizedModelId.substring(gateway.length + 1);
-        console.log('[InlineChat] Removing gateway prefix from model ID:', normalizedModelId, '->', withoutPrefix);
-        normalizedModelId = withoutPrefix;
-      }
+      const normalizedModelId = normalizeModelId(modelId);
 
       console.log('[InlineChat] Sending message to model:', modelId);
       console.log('[InlineChat] Normalized model ID:', normalizedModelId);
@@ -111,7 +103,6 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
 
       const requestBody = {
         model: normalizedModelId,
-        ...(gateway && { gateway }), // Add gateway if provided
         messages: [...messages, userMessage].map(m => ({ role: m.role, content: m.content })),
         stream: true,
         temperature: 0.7,

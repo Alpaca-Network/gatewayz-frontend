@@ -24,7 +24,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { Slider } from "@/components/ui/slider";
-import { BookText, Bot, ChevronDown, ChevronUp, FileText, ImageIcon, LayoutGrid, LayoutList, Music, Search, Sliders as SlidersIcon, X, Zap } from 'lucide-react';
+import { BookText, Bot, Box, ChevronDown, ChevronUp, FileText, ImageIcon, LayoutGrid, LayoutList, Music, Search, Sliders as SlidersIcon, Video, X, Zap } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 import { stringToColor } from '@/lib/utils';
@@ -73,6 +73,7 @@ const GATEWAY_CONFIG: Record<string, { name: string; color: string; icon?: React
   near: { name: 'NEAR', color: 'bg-teal-600' },
   fal: { name: 'Fal', color: 'bg-emerald-600' },
   'vercel-ai-gateway': { name: 'Vercel AI', color: 'bg-slate-900' }
+  // helicone: { name: 'Helicone', color: 'bg-indigo-600' } - Disabled: backend returns "Models data unavailable"
 };
 
 const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
@@ -668,6 +669,7 @@ export default function ModelsClient({
     // Define all known gateways that should appear in the filter
     // This ensures all gateways are visible even if they have 0 models currently
     // Excludes 'portkey' as it's deprecated (use individual Portkey SDK providers instead)
+    // Excludes 'helicone' as backend returns "Models data unavailable" (needs backend implementation)
     const allKnownGateways = ['featherless', 'openrouter', 'groq', 'together', 'fireworks', 'chutes', 'deepinfra', 'google', 'cerebras', 'nebius', 'xai', 'novita', 'huggingface', 'aimo', 'near', 'fal', 'vercel-ai-gateway'];
 
     // Log gateway counts for debugging
@@ -718,7 +720,7 @@ export default function ModelsClient({
           variant="sidebar"
           collapsible="offcanvas"
         >
-          <SidebarContent className="p-4 overflow-y-auto">
+          <SidebarContent className="p-4 pb-20 overflow-y-auto">
             <SidebarGroup>
               <SidebarGroupLabel>Input Formats</SidebarGroupLabel>
               <div className="flex flex-col gap-2">
@@ -726,7 +728,9 @@ export default function ModelsClient({
                   const icon = item.value.toLowerCase() === 'text' ? <BookText className="w-4 h-4"/> :
                                item.value.toLowerCase() === 'image' ? <ImageIcon className="w-4 h-4"/> :
                                item.value.toLowerCase() === 'file' ? <FileText className="w-4 h-4"/> :
-                               item.value.toLowerCase() === 'audio' ? <Music className="w-4 h-4"/> : null;
+                               item.value.toLowerCase() === 'audio' ? <Music className="w-4 h-4"/> :
+                               item.value.toLowerCase() === 'video' ? <Video className="w-4 h-4"/> :
+                               item.value.toLowerCase() === '3d' ? <Box className="w-4 h-4"/> : null;
                   return (
                     <div key={item.value} className="flex items-center justify-between space-x-2">
                       <div className="flex items-center space-x-2 flex-1 min-w-0">
@@ -753,7 +757,9 @@ export default function ModelsClient({
                   const icon = item.value.toLowerCase() === 'text' ? <BookText className="w-4 h-4"/> :
                                item.value.toLowerCase() === 'image' ? <ImageIcon className="w-4 h-4"/> :
                                item.value.toLowerCase() === 'file' ? <FileText className="w-4 h-4"/> :
-                               item.value.toLowerCase() === 'audio' ? <Music className="w-4 h-4"/> : null;
+                               item.value.toLowerCase() === 'audio' ? <Music className="w-4 h-4"/> :
+                               item.value.toLowerCase() === 'video' ? <Video className="w-4 h-4"/> :
+                               item.value.toLowerCase() === '3d' ? <Box className="w-4 h-4"/> : null;
                   return (
                     <div key={item.value} className="flex items-center justify-between space-x-2">
                       <div className="flex items-center space-x-2 flex-1 min-w-0">
@@ -881,7 +887,7 @@ export default function ModelsClient({
                       <SelectItem value="price-asc">Price (Low to High)</SelectItem>
                     </SelectContent>
                   </Select>
-                  <div className="flex items-center gap-1 bg-muted p-1 rounded-md">
+                  <div className="hidden lg:flex items-center gap-1 bg-muted p-1 rounded-md">
                     <Button
                       variant={layout === 'grid' ? 'secondary' : 'ghost'}
                       size="icon"
