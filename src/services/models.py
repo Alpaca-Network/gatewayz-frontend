@@ -1904,6 +1904,7 @@ def normalize_near_model(near_model: dict) -> dict:
         "model_logo_url": None,
         "source_gateway": "near",
         "raw_near": near_model,
+        "is_private": True,  # NEAR models support private inference
         # Highlight security features as metadata
         "security_features": {
             "private_inference": True,

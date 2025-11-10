@@ -145,8 +145,42 @@ class TestAISDKEndpoint:
         # Check content-type contains text/event-stream (may have charset appended)
         assert "text/event-stream" in response.headers["content-type"]
 
-    def test_ai_sdk_endpoint_schema(self):
+    @patch("src.routes.ai_sdk.validate_ai_sdk_api_key")
+    @patch("src.routes.ai_sdk.make_ai_sdk_request_openai")
+    @patch("src.routes.ai_sdk.process_ai_sdk_response")
+    def test_ai_sdk_endpoint_schema(self, mock_process, mock_request, mock_validate):
         """Test that endpoint properly validates request schema"""
+        # Setup mocks
+        mock_validate.return_value = "test-api-key"
+
+        # Mock response from OpenAI client
+        mock_response = MagicMock()
+        mock_response.choices = [
+            MagicMock(
+                message=MagicMock(role="assistant", content="I am helpful."),
+                finish_reason="stop",
+            )
+        ]
+        mock_response.usage = MagicMock(
+            prompt_tokens=15, completion_tokens=5, total_tokens=20
+        )
+        mock_request.return_value = mock_response
+
+        # Mock processed response
+        mock_process.return_value = {
+            "choices": [
+                {
+                    "message": {"role": "assistant", "content": "I am helpful."},
+                    "finish_reason": "stop",
+                }
+            ],
+            "usage": {
+                "prompt_tokens": 15,
+                "completion_tokens": 5,
+                "total_tokens": 20,
+            },
+        }
+
         # Valid request with all optional fields using Vercel AI Gateway format
         response = client.post(
             "/api/chat/ai-sdk",
@@ -165,8 +199,11 @@ class TestAISDKEndpoint:
             },
         )
 
-        # Should fail validation due to missing mock, but structure is valid
-        assert response.status_code in [422, 500]  # Either validation or execution error
+        # Should succeed with proper mocking
+        assert response.status_code == 200
+        data = response.json()
+        assert "choices" in data
+        assert "usage" in data
 
 
 class TestAISDKConfiguration:
