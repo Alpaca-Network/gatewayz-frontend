@@ -150,21 +150,10 @@ export function isAISDKModel(modelId: string): boolean {
 
   // Normalize model ID: remove provider prefix (e.g., 'google/gemini-pro' -> 'gemini-pro')
   // and convert to lowercase for consistent matching
-  const normalizedId = modelId.toLowerCase().replace(/^[^/]+\//, '');
+  const normalizedModelId = modelId.toLowerCase().replace(/^[^/]+\//, '');
 
-  // Pattern-based matching for Google models
-  const googleModelPatterns = [
-    /^gemini-/,           // All Gemini models (gemini-pro, gemini-1.5-pro, gemini-1.5-flash, gemini-2.0-flash, gemini-2.5-flash, etc.)
-    /^gemma-/,            // All Gemma models (gemma-2b, gemma-7b, gemma-3n-e2b-it, etc.)
-    /^codegemma-/,        // All CodeGemma models (codegemma-7b-it, codegemma-2b-it, etc.)
-    /^paligemma-/,        // All PaliGemma models (paligemma-3b-mix-224, paligemma-3b-pt-224, etc.)
-  ];
-
-  // Check if it matches any Google model pattern
-  const isGoogleModel = googleModelPatterns.some(pattern => pattern.test(normalizedId));
-
-  // Explicit list for non-Google models
-  const explicitModels = [
+  // Base set of AI SDK models (matched via substring)
+  const aiSdkModels = [
     // Anthropic Claude models
     'claude-3-5-sonnet',
     'claude-3-opus',
@@ -179,14 +168,26 @@ export function isAISDKModel(modelId: string): boolean {
 
     // Perplexity models
     'perplexity-sonar',
+
+    // Google Gemini models (direct matches for backward compatibility)
+    'gemini-pro',
+    'gemini-1.5-pro',
+    'gemini-2.0-flash',
   ];
 
-  // Check if it matches any explicit model (using includes for partial matching)
-  const matchesExplicitModel = explicitModels.some((model) =>
-    normalizedId.includes(model.toLowerCase())
-  );
+  // Google model families using regex patterns for precise matching
+  // This ensures models start with these prefixes, not just contain them
+  const aiSdkFamilies = [
+    /^gemini-/,      // All Gemini models (gemini-pro, gemini-1.5-pro, gemini-1.5-flash, gemini-2.0-flash, gemini-2.5-flash, etc.)
+    /^gemma-/,       // All Gemma models (gemma-2b, gemma-7b, gemma-3n-e2b-it, etc.)
+    /^codegemma-/,   // All CodeGemma models (codegemma-7b-it, codegemma-2b-it, etc.)
+    /^paligemma-/,   // All PaliGemma models (paligemma-3b-mix-224, paligemma-3b-pt-224, etc.)
+  ];
 
-  return isGoogleModel || matchesExplicitModel;
+  return (
+    aiSdkModels.some((model) => normalizedModelId.includes(model)) ||
+    aiSdkFamilies.some((pattern) => pattern.test(normalizedModelId))
+  );
 }
 
 /**
