@@ -17,8 +17,10 @@ _models_cache = {
 }
 
 # Unified multi-provider catalog cache (canonical + provider adapters)
+# Note: data initialized to [] instead of None to distinguish between
+# "not yet cached" (timestamp=None) and "cached but empty" (timestamp set, data=[])
 _multi_provider_catalog_cache = {
-    "data": None,
+    "data": [],
     "timestamp": None,
     "ttl": 900,  # 15 minutes TTL for aggregated catalog snapshots
     "stale_ttl": 1800,

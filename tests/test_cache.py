@@ -37,6 +37,19 @@ class TestCacheInitialization:
         assert cache_module._provider_cache["data"] is None
         assert cache_module._provider_cache["timestamp"] is None
 
+    def test_multi_provider_catalog_cache_initialized(self):
+        """Test multi-provider catalog cache is initialized with empty list
+
+        The multi-provider catalog cache should initialize with data=[] instead
+        of data=None to distinguish between "not yet cached" (timestamp=None)
+        and "cached but empty" (timestamp set, data=[]).
+        """
+        assert cache_module._multi_provider_catalog_cache is not None
+        assert cache_module._multi_provider_catalog_cache["data"] == []
+        assert cache_module._multi_provider_catalog_cache["timestamp"] is None
+        assert cache_module._multi_provider_catalog_cache["ttl"] == 900
+        assert cache_module._multi_provider_catalog_cache["stale_ttl"] == 1800
+
     def test_all_gateway_caches_exist(self):
         """Test all gateway-specific caches are initialized"""
         expected_gateways = [
