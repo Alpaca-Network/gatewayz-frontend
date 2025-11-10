@@ -438,6 +438,11 @@ def get_model_id_mapping(provider: str) -> Dict[str, str]:
             # Qwen models
             "qwen/qwen-2-72b": "qwen-2-72b",
             "qwen-2-72b": "qwen-2-72b",
+            # Qwen3 models - proper case required
+            "qwen/qwen3-30b-a3b-instruct-2507": "Qwen/Qwen3-30B-A3B-Instruct-2507",
+            "qwen3-30b-a3b-instruct-2507": "Qwen/Qwen3-30B-A3B-Instruct-2507",
+            "qwen/qwen3-30b-a3b-thinking-2507": "Qwen/Qwen3-30B-A3B-Thinking-2507",
+            "qwen3-30b-a3b-thinking-2507": "Qwen/Qwen3-30B-A3B-Thinking-2507",
 
             # GPT-OSS models
             "gpt-oss/gpt-oss-120b": "gpt-oss-120b",
