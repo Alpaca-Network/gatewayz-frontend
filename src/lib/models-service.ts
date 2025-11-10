@@ -39,7 +39,6 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
 
   // Validate gateway
   // Note: 'portkey' is deprecated; use individual providers instead (google, cerebras, nebius, xai, novita, huggingface)
-  // Note: 'helicone' removed - backend API returns "Models data unavailable" (needs backend implementation)
   const validGateways = [
     'openrouter',
     'portkey', // Kept for backward compatibility
@@ -60,7 +59,7 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
     'near',
     'fal',
     'vercel-ai-gateway', // Vercel AI Gateway
-    // 'helicone', // Helicone AI Gateway - Disabled: backend returns "Models data unavailable"
+    'helicone', // Helicone AI Gateway - will be skipped if backend unavailable
     'all'
   ];
   if (!validGateways.includes(gateway)) {
@@ -90,8 +89,8 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
         'aimo',
         'near',
         'fal',
-        'vercel-ai-gateway'
-        // 'helicone' - Disabled: backend returns "Models data unavailable"
+        'vercel-ai-gateway',
+        'helicone'
       ];
 
       const results = await Promise.all(
@@ -300,8 +299,8 @@ function getStaticFallbackModels(gateway: string): any[] {
       'aimo',
       'near',
       'fal',
-      'vercel-ai-gateway'
-      // 'helicone' - Disabled: backend returns "Models data unavailable"
+      'vercel-ai-gateway',
+      'helicone'
     ];
     const modelsPerGateway = Math.ceil(models.length / allGateways.length);
 
@@ -330,8 +329,8 @@ function getStaticFallbackModels(gateway: string): any[] {
       'aimo',
       'near',
       'fal',
-      'vercel-ai-gateway'
-      // 'helicone' - Disabled: backend returns "Models data unavailable"
+      'vercel-ai-gateway',
+      'helicone'
     ];
     const modelsPerGateway = Math.ceil(models.length / allGateways.length);
     let gatewayModels;
