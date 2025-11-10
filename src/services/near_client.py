@@ -19,7 +19,12 @@ def get_near_client():
         if not Config.NEAR_API_KEY:
             raise ValueError("Near AI API key not configured")
 
-        return OpenAI(base_url="https://cloud-api.near.ai/v1", api_key=Config.NEAR_API_KEY)
+        # Use extended timeout for large models (e.g., Qwen3-30B-A3B)
+        return OpenAI(
+            base_url="https://cloud-api.near.ai/v1",
+            api_key=Config.NEAR_API_KEY,
+            timeout=120.0,
+        )
     except Exception as e:
         logger.error(f"Failed to initialize Near AI client: {e}")
         raise

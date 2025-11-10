@@ -204,6 +204,7 @@ router = APIRouter()
 DEFAULT_PROVIDER_TIMEOUT = 30
 PROVIDER_TIMEOUTS = {
     "huggingface": 120,
+    "near": 120,  # Large models like Qwen3-30B need extended timeout
 }
 
 
