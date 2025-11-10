@@ -153,6 +153,13 @@ _vercel_ai_gateway_models_cache = {
     "stale_ttl": 7200,
 }
 
+_helicone_models_cache = {
+    "data": None,
+    "timestamp": None,
+    "ttl": 3600,  # 1 hour TTL for Helicone AI Gateway catalog
+    "stale_ttl": 7200,
+}
+
 _aihubmix_models_cache = {
     "data": None,
     "timestamp": None,
@@ -195,6 +202,7 @@ def get_models_cache(gateway: str):
         "near": _near_models_cache,
         "fal": _fal_models_cache,
         "vercel-ai-gateway": _vercel_ai_gateway_models_cache,
+        "helicone": _helicone_models_cache,
         "aihubmix": _aihubmix_models_cache,
         "anannas": _anannas_models_cache,
         "modelz": _modelz_cache,
@@ -225,6 +233,7 @@ def clear_models_cache(gateway: str):
         "novita": _novita_models_cache,
         "huggingface": _huggingface_models_cache,
         "hug": _huggingface_models_cache,  # Alias for backward compatibility
+        "helicone": _helicone_models_cache,
         "aimo": _aimo_models_cache,
         "near": _near_models_cache,
         "fal": _fal_models_cache,
