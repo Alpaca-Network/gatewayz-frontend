@@ -124,6 +124,14 @@ def transform_model_id(model_id: str, provider: str, use_multi_provider: bool = 
         logger.info(f"Stripped 'near/' prefix: '{model_id}' -> '{stripped}' for Near")
         model_id = stripped
 
+    # Special handling for AIMO: strip 'aimo/' prefix if present
+    # AIMO models need to be in provider_pubkey:model_name format for actual API calls
+    # The aimo_native_id field contains the correct format
+    if provider_lower == "aimo" and model_id.startswith("aimo/"):
+        stripped = model_id[len("aimo/") :]
+        logger.info(f"Stripped 'aimo/' prefix: '{model_id}' -> '{stripped}' for AIMO")
+        model_id = stripped
+
     # Get the mapping for this provider
     mapping = get_model_id_mapping(provider_lower)
 

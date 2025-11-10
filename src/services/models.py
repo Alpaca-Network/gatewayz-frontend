@@ -1646,14 +1646,18 @@ def normalize_aimo_model(aimo_model: dict) -> dict:
     provider_id = provider.get("id")
     provider_name = provider.get("name", "unknown")
 
-    # Construct model ID in AIMO format: provider_pubkey:model_name
-    model_id = f"{provider_id}:{model_name}"
+    # Create user-friendly model ID in format: aimo/model_name
+    # Store the original AIMO format (provider_pubkey:model_name) in raw metadata
+    original_aimo_id = f"{provider_id}:{model_name}"
+    model_id = f"aimo/{model_name}"
 
     slug = model_id
-    # Extract provider from model ID (format: provider_pubkey:model_name)
+    # Always use "aimo" as the provider slug for AIMO Network models
     provider_slug = "aimo"
-    if ":" in model_id:
-        provider_slug = model_id.split(":")[0]
+
+    # Create canonical slug from the base model name (without the provider prefix)
+    # This allows the model to be grouped with same models from other providers
+    canonical_slug = model_name.lower()
 
     display_name = aimo_model.get("display_name") or model_name.replace("-", " ").title()
     base_description = f"AIMO Network decentralized model {model_name} provided by {provider_name}."
@@ -1702,7 +1706,7 @@ def normalize_aimo_model(aimo_model: dict) -> dict:
     normalized = {
         "id": slug,
         "slug": slug,
-        "canonical_slug": slug,
+        "canonical_slug": canonical_slug,
         "hugging_face_id": None,
         "name": display_name,
         "created": aimo_model.get("created"),
@@ -1719,6 +1723,7 @@ def normalize_aimo_model(aimo_model: dict) -> dict:
         "model_logo_url": None,
         "source_gateway": "aimo",
         "raw_aimo": aimo_model,
+        "aimo_native_id": original_aimo_id,  # Store original AIMO format for routing
     }
 
     return enrich_model_with_pricing(normalized, "aimo")
