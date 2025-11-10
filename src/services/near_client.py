@@ -30,7 +30,7 @@ def make_near_request_openai(messages, model, **kwargs):
 
     Args:
         messages: List of message objects
-        model: Model name (e.g., "deepseek-v3.1")
+        model: Model name (e.g., "deepseek-ai/DeepSeek-V3.1", "deepseek-ai/DeepSeek-R1")
         **kwargs: Additional parameters like max_tokens, temperature, etc.
     """
     try:
@@ -47,7 +47,7 @@ def make_near_request_openai_stream(messages, model, **kwargs):
 
     Args:
         messages: List of message objects
-        model: Model name (e.g., "deepseek-v3.1")
+        model: Model name (e.g., "deepseek-ai/DeepSeek-V3.1", "deepseek-ai/DeepSeek-R1")
         **kwargs: Additional parameters like max_tokens, temperature, etc.
     """
     try:
