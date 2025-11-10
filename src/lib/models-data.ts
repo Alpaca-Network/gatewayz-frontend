@@ -16,6 +16,7 @@ export type Model = {
   requiredTier?: UserTier;
   speedTier?: 'ultra-fast' | 'fast' | 'medium' | 'slow'; // Response speed indicator
   avgLatencyMs?: number; // Average time-to-first-token in milliseconds
+  is_private?: boolean; // Indicates if model is on a private network (e.g., NEAR)
 };
 
 export const models: Model[] = [

@@ -23,7 +23,8 @@ function transformModel(model: any, gateway: string) {
     },
     supported_parameters: model.supportedParameters,
     provider_slug: model.developer,
-    source_gateway: gateway === 'all' ? 'openrouter' : gateway // Set gateway source for filtering
+    source_gateway: gateway === 'all' ? 'openrouter' : gateway, // Set gateway source for filtering
+    is_private: model.is_private // Preserve is_private field if present
   };
 }
 
