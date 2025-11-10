@@ -50,7 +50,7 @@ import { getApiKey, getUserData, saveApiKey, saveUserData, type UserData } from 
 import { ChatHistoryAPI, ChatSession as ApiChatSession, ChatMessage as ApiChatMessage, handleApiError } from '@/lib/chat-history';
 import { ChatStreamHandler } from '@/lib/chat-stream-handler';
 import { Copy, Share2, RotateCcw } from 'lucide-react';
-import { usePrivy } from '@privy-io/react-auth';
+import { useAuth } from '@/hooks/use-auth';
 import { streamChatResponse } from '@/lib/streaming';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -475,7 +475,12 @@ const apiHelpers = {
     }
 };
 
-const ModelSuggestionCard = ({ title, icon: Icon }: { title: string, icon: React.ElementType }) => (
+interface ModelSuggestionCardProps {
+    title: string;
+    icon: React.ElementType;
+}
+
+const ModelSuggestionCard = ({ title, icon: Icon }: ModelSuggestionCardProps) => (
     <Card className="hover:border-primary cursor-pointer">
         <CardContent className="p-4">
             <h3 className="text-sm font-semibold">{title}</h3>
@@ -488,7 +493,13 @@ const ModelSuggestionCard = ({ title, icon: Icon }: { title: string, icon: React
     </Card>
 );
 
-const ExamplePrompt = ({ title, subtitle, onClick }: { title: string, subtitle: string, onClick?: () => void }) => (
+interface ExamplePromptProps {
+    title: string;
+    subtitle: string;
+    onClick?: () => void;
+}
+
+const ExamplePrompt = ({ title, subtitle, onClick }: ExamplePromptProps) => (
     <Card
         className="hover:border-primary cursor-pointer p-4 text-left bg-muted/30 dark:bg-muted/20 transition-colors rounded-xl border-border"
         onClick={onClick}
@@ -776,15 +787,17 @@ const VirtualSessionList = ({
     );
 };
 
-const ChatSidebar = ({ sessions, activeSessionId, switchToSession, createNewChat, onDeleteSession, onRenameSession, onClose }: {
-    sessions: ChatSession[],
-    activeSessionId: string | null,
-    switchToSession: (id: string) => void,
-    createNewChat: () => void,
-    onDeleteSession: (sessionId: string) => void,
-    onRenameSession: (sessionId: string, newTitle: string) => void,
-    onClose?: () => void
-}) => {
+interface ChatSidebarProps {
+    sessions: ChatSession[];
+    activeSessionId: string | null;
+    switchToSession: (id: string) => void;
+    createNewChat: () => void;
+    onDeleteSession: (sessionId: string) => void;
+    onRenameSession: (sessionId: string, newTitle: string) => void;
+    onClose?: () => void;
+}
+
+const ChatSidebar = ({ sessions, activeSessionId, switchToSession, createNewChat, onDeleteSession, onRenameSession, onClose }: ChatSidebarProps) => {
 
     // Memoize the grouped sessions to avoid expensive O(n) computation on every render
     const groupedSessions = useMemo(() => {
@@ -875,8 +888,12 @@ const fixLatexSyntax = (content: string): string => {
     return content;
 };
 
+interface ThinkingLoaderProps {
+    modelName: string | undefined;
+}
+
 // Exciting loading component for when AI is thinking
-const ThinkingLoader = ({ modelName }: { modelName: string | undefined }) => {
+const ThinkingLoader = ({ modelName }: ThinkingLoaderProps) => {
     return (
         <div className="flex items-start gap-3 animate-in fade-in duration-500">
             <div className="flex flex-col gap-1 items-start max-w-[85%]">
@@ -922,7 +939,12 @@ const getReasoningSource = (model?: string) => {
     return aiSdkSignatures.some(signature => normalized.includes(signature)) ? 'ai-sdk' : 'gatewayz';
 };
 
-const ChatMessage = ({ message, modelName }: { message: Message, modelName: string | undefined}) => {
+interface ChatMessageProps {
+    message: Message;
+    modelName: string | undefined;
+}
+
+const ChatMessage = ({ message, modelName }: ChatMessageProps) => {
     const isUser = message.role === 'user';
     const processedContent = fixLatexSyntax(message.content);
     const reasoningSource = getReasoningSource(message.model);
@@ -1131,7 +1153,7 @@ const devWarn = (...args: any[]) => {
 
 function ChatPageContent() {
     const searchParams = useSearchParams();
-    const { login, authenticated, ready } = usePrivy();
+    const { login, isAuthenticated, loading: authLoading } = useAuth();
     
     // All hooks must be declared before any conditional returns
     const [hasApiKey, setHasApiKey] = useState(false);
@@ -1492,11 +1514,11 @@ function ChatPageContent() {
         const apiKey = getApiKey();
         const userData = getUserData();
         setHasApiKey(!!(apiKey && userData?.privy_user_id));
-    }, [ready, authenticated]);
+    }, [authLoading, isAuthenticated]);
 
     // Check for referral bonus notification flag
     useEffect(() => {
-        if (!ready || !(authenticated || hasApiKey) || typeof window === 'undefined') return;
+        if (authLoading || !(isAuthenticated || hasApiKey) || typeof window === 'undefined') return;
 
         // Check if we should show referral bonus notification
         const showReferralBonus = localStorage.getItem('gatewayz_show_referral_bonus');
@@ -1513,13 +1535,13 @@ function ChatPageContent() {
                 });
             }, 1000); // Delay to allow page to settle
         }
-    }, [ready, authenticated, hasApiKey, toast]);
+    }, [authLoading, isAuthenticated, hasApiKey, toast]);
 
     // Send pending message after authentication completes
     useEffect(() => {
         if (!pendingMessage) return;
-        if (!ready) return;
-        if (!authenticated && !hasApiKey) return;
+        if (authLoading) return;
+        if (!isAuthenticated && !hasApiKey) return;
 
         const apiKey = getApiKey();
         const userData = getUserData();
@@ -1558,7 +1580,7 @@ function ChatPageContent() {
             handleSendMessage();
         }, 100);
 
-    }, [pendingMessage, ready, authenticated, hasApiKey, activeSessionId]);
+    }, [pendingMessage, authLoading, isAuthenticated, hasApiKey, activeSessionId]);
 
     useEffect(() => {
         // Optimized: Load sessions in parallel with auth, don't wait for ready state
@@ -1612,11 +1634,11 @@ function ChatPageContent() {
         }
 
         // If no API key yet, wait for authentication to complete
-        if (!ready) {
+        if (authLoading) {
             return;
         }
 
-        if (!authenticated && !hasApiKey) {
+        if (!isAuthenticated && !hasApiKey) {
             return;
         }
 
@@ -1637,7 +1659,7 @@ function ChatPageContent() {
             setTimeout(() => clearInterval(checkInterval), 10000);
             return () => clearInterval(checkInterval);
         }
-    }, [ready, authenticated, hasApiKey, authReady]);
+    }, [authLoading, isAuthenticated, hasApiKey, authReady]);
 
     // Handle rate limit countdown timer
     useEffect(() => {
@@ -2948,7 +2970,7 @@ function ChatPageContent() {
     };
 
   // Show login screen if not authenticated
-  if (!ready) {
+  if (authLoading) {
     return (
       <div className="flex h-[calc(100dvh-130px)] bg-background items-center justify-center">
         <div className="flex flex-col items-center gap-4">
@@ -2960,7 +2982,7 @@ function ChatPageContent() {
   }
 
   // Check if user is authenticated via Privy OR has a valid API key in localStorage
-  if (!authenticated && !hasApiKey) {
+  if (!isAuthenticated && !hasApiKey) {
     return (
       <div className="flex h-[calc(100dvh-130px)] bg-background items-center justify-center">
         <div className="flex flex-col items-center gap-6 max-w-md text-center p-6">
@@ -3398,7 +3420,7 @@ function ChatPageContent() {
                       size="icon"
                       className="h-8 w-8 rounded-lg touch-manipulation"
                       onClick={() => fileInputRef.current?.click()}
-                      disabled={!ready || (!authenticated && !hasApiKey)}
+                      disabled={authLoading || (!isAuthenticated && !hasApiKey)}
                       title="Upload an image"
                     >
                       <ImageIcon className="h-5 w-5" />
@@ -3411,7 +3433,7 @@ function ChatPageContent() {
                       size="icon"
                       className="h-8 w-8 rounded-lg"
                       onClick={() => videoInputRef.current?.click()}
-                      disabled={!ready || (!authenticated && !hasApiKey)}
+                      disabled={authLoading || (!isAuthenticated && !hasApiKey)}
                       title="Upload a video"
                     >
                       <VideoIcon className="h-5 w-5" />
@@ -3424,7 +3446,7 @@ function ChatPageContent() {
                       size="icon"
                       className="h-8 w-8 rounded-lg"
                       onClick={() => audioInputRef.current?.click()}
-                      disabled={!ready || (!authenticated && !hasApiKey)}
+                      disabled={authLoading || (!isAuthenticated && !hasApiKey)}
                       title="Upload audio"
                     >
                       <AudioIcon className="h-5 w-5" />
@@ -3432,7 +3454,7 @@ function ChatPageContent() {
                   )}
                   <Input
                     ref={messageInputRef}
-                    placeholder={!ready ? "Authenticating..." : (!authenticated && !hasApiKey) ? "Please log in..." : getPlaceholderText()}
+                    placeholder={authLoading ? "Authenticating..." : (!isAuthenticated && !hasApiKey) ? "Please log in..." : getPlaceholderText()}
                     value={message}
                     onChange={(e) => {
                       setMessage(e.target.value);
@@ -3456,23 +3478,23 @@ function ChatPageContent() {
                       setUserHasTyped(true);
                       userHasTypedRef.current = true;
                     }}
-                    disabled={!ready || (!authenticated && !hasApiKey)}
+                    disabled={authLoading || (!isAuthenticated && !hasApiKey)}
                     autoComplete="off"
                     className="border-0 bg-transparent focus-visible:ring-0 text-sm sm:text-base text-foreground flex-1 min-w-0"
                   />
                   <div className="flex items-center gap-1">
-                    {(!ready || (!authenticated && !hasApiKey) || isStreamingResponse) && (
+                    {(authLoading || (!isAuthenticated && !hasApiKey) || isStreamingResponse) && (
                       <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground flex-shrink-0" />
                     )}
                     <Button
                       size="icon"
                       variant="ghost"
                       onClick={handleSendMessage}
-                      disabled={loading || isStreamingResponse || !message.trim() || !ready || (!authenticated && !hasApiKey)}
+                      disabled={loading || isStreamingResponse || !message.trim() || (!isAuthenticated && !hasApiKey)}
                       className="h-8 w-8 sm:h-7 sm:w-7 bg-primary hover:bg-primary/90 text-primary-foreground touch-manipulation flex-shrink-0"
-                      title={!ready
+                      title={authLoading
                         ? "Waiting for authentication..."
-                        : (!authenticated && !hasApiKey)
+                        : (!isAuthenticated && !hasApiKey)
                           ? "Please log in"
                           : isStreamingResponse
                             ? "Please wait for the current response to finish"
