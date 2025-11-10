@@ -148,7 +148,9 @@ export function isAISDKModel(modelId: string): boolean {
     return false;
   }
 
-  const normalizedModelId = modelId.toLowerCase();
+  // Normalize model ID: remove provider prefix (e.g., 'google/gemini-pro' -> 'gemini-pro')
+  // and convert to lowercase for consistent matching
+  const normalizedModelId = modelId.toLowerCase().replace(/^[^/]+\//, '');
 
   // Base set of AI SDK models (matched via substring)
   const aiSdkModels = [
@@ -167,23 +169,24 @@ export function isAISDKModel(modelId: string): boolean {
     // Perplexity models
     'perplexity-sonar',
 
-    // Google Gemini models (direct matches)
+    // Google Gemini models (direct matches for backward compatibility)
     'gemini-pro',
     'gemini-1.5-pro',
     'gemini-2.0-flash',
   ];
 
+  // Google model families using regex patterns for precise matching
+  // This ensures models start with these prefixes, not just contain them
   const aiSdkFamilies = [
-    // Google Gemini & Gemma families
-    'gemini-',
-    'gemma-',
-    'codegemma-',
-    'paligemma-',
+    /^gemini-/,      // All Gemini models (gemini-pro, gemini-1.5-pro, gemini-1.5-flash, gemini-2.0-flash, gemini-2.5-flash, etc.)
+    /^gemma-/,       // All Gemma models (gemma-2b, gemma-7b, gemma-3n-e2b-it, etc.)
+    /^codegemma-/,   // All CodeGemma models (codegemma-7b-it, codegemma-2b-it, etc.)
+    /^paligemma-/,   // All PaliGemma models (paligemma-3b-mix-224, paligemma-3b-pt-224, etc.)
   ];
 
   return (
     aiSdkModels.some((model) => normalizedModelId.includes(model)) ||
-    aiSdkFamilies.some((prefix) => normalizedModelId.includes(prefix))
+    aiSdkFamilies.some((pattern) => pattern.test(normalizedModelId))
   );
 }
 
