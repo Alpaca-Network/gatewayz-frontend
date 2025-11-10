@@ -77,7 +77,6 @@ def get_provider_logo_from_services(provider_id: str, site_url: str = None) -> s
             "ai21": "https://cdn.jsdelivr.net/gh/simple-icons/simple-icons@develop/icons/ai21labs.svg",
             "inflection": "https://cdn.jsdelivr.net/gh/simple-icons/simple-icons@develop/icons/inflection.svg",
             "vercel": "https://cdn.jsdelivr.net/gh/simple-icons/simple-icons@develop/icons/vercel.svg",
-            "helicone": "https://www.helicone.ai/favicon.ico",
             "aihubmix": "https://aihubmix.com/favicon.ico",
             "anannas": "https://api.anannas.ai/favicon.ico",
         }

@@ -402,12 +402,6 @@ def get_model_id_mapping(provider: str) -> Dict[str, str]:
             # Using pass-through format - any model ID is supported
             # Minimal mappings to avoid conflicts with other providers during auto-detection
         },
-        "helicone": {
-            # Helicone AI Gateway uses standard model identifiers
-            # The gateway provides observability on top of standard provider APIs
-            # Using pass-through format - any model ID is supported
-            # Minimal mappings to avoid conflicts with other providers during auto-detection
-        },
         "aihubmix": {
             # AiHubMix uses OpenAI-compatible model identifiers
             # Pass-through format - any model ID is supported
@@ -644,7 +638,6 @@ def detect_provider_from_model_id(model_id: str, preferred_provider: Optional[st
         "chutes",
         "google-vertex",
         "vercel-ai-gateway",
-        "helicone",
         "aihubmix",
         "anannas",
         "near",
@@ -681,10 +674,6 @@ def detect_provider_from_model_id(model_id: str, preferred_provider: Optional[st
         # OpenRouter models (e.g., "openrouter/auto")
         if org == "openrouter":
             return "openrouter"
-
-        # Helicone models (e.g., "helicone/gpt-4o-mini")
-        if org == "helicone":
-            return "helicone"
 
         # DeepSeek models are primarily on Fireworks in this system
         if org == "deepseek-ai" and "deepseek" in model_name.lower():
