@@ -270,8 +270,12 @@ class TestCacheFreshness:
 
         assert cache_module.is_cache_fresh(cache) is False
 
-    def test_cache_not_fresh_no_data(self):
-        """Test cache is not fresh when data is None"""
+    def test_cache_fresh_with_none_data(self):
+        """Test cache is fresh when data is None but timestamp is valid
+        
+        Note: With the fix, we only check timestamp, not data value.
+        Empty lists [] are valid cached values representing "no models found".
+        """
         cache = {
             "data": None,
             "timestamp": datetime.now(timezone.utc),
@@ -279,7 +283,18 @@ class TestCacheFreshness:
             "stale_ttl": 7200
         }
 
-        assert cache_module.is_cache_fresh(cache) is False
+        assert cache_module.is_cache_fresh(cache) is True
+
+    def test_cache_fresh_with_empty_list(self):
+        """Test cache is fresh when data is empty list [] (valid cached value)"""
+        cache = {
+            "data": [],
+            "timestamp": datetime.now(timezone.utc),
+            "ttl": 3600,
+            "stale_ttl": 7200
+        }
+
+        assert cache_module.is_cache_fresh(cache) is True
 
     def test_cache_not_fresh_no_timestamp(self):
         """Test cache is not fresh when timestamp is None"""
@@ -369,8 +384,12 @@ class TestCacheStaleness:
 
         assert cache_module.is_cache_stale_but_usable(cache) is False
 
-    def test_cache_stale_no_data(self):
-        """Test stale check with no data"""
+    def test_cache_stale_with_none_data(self):
+        """Test stale check with None data but valid timestamp
+        
+        Note: With the fix, we only check timestamp, not data value.
+        Empty lists [] are valid cached values representing "no models found".
+        """
         cache = {
             "data": None,
             "timestamp": datetime.now(timezone.utc),
@@ -378,7 +397,21 @@ class TestCacheStaleness:
             "stale_ttl": 7200
         }
 
+        # Cache is fresh (not stale) when timestamp is recent
         assert cache_module.is_cache_stale_but_usable(cache) is False
+
+    def test_cache_stale_with_empty_list(self):
+        """Test stale check with empty list [] (valid cached value)"""
+        # Set timestamp to 90 minutes ago (between TTL and stale_ttl)
+        old_time = datetime.now(timezone.utc) - timedelta(minutes=90)
+        cache = {
+            "data": [],
+            "timestamp": old_time,
+            "ttl": 3600,  # 1 hour
+            "stale_ttl": 7200  # 2 hours
+        }
+
+        assert cache_module.is_cache_stale_but_usable(cache) is True
 
     def test_cache_stale_no_timestamp(self):
         """Test stale check with no timestamp"""
