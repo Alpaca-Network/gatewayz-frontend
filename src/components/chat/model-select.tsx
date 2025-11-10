@@ -654,6 +654,11 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
                           {model.speedTier === 'fast' && (
                             <span className="text-xs font-bold text-blue-600 dark:text-blue-400">⚡</span>
                           )}
+                          {model.sourceGateway && model.sourceGateway !== 'openrouter' && (
+                            <span className="ml-1 text-xs font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                              {model.sourceGateway.toUpperCase()}
+                            </span>
+                          )}
                           {model.category === 'Free' && (
                             <span className="ml-1 text-xs font-semibold text-green-600 dark:text-green-400 flex items-center gap-1">
                               <Sparkles className="h-3 w-3" />
@@ -715,12 +720,19 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
                             )}
                           />
                           <span className="truncate flex-1">{model.label}</span>
-                          {model.category === 'Free' && (
-                            <span className="ml-2 text-xs font-semibold text-green-600 dark:text-green-400 flex items-center gap-1">
-                              <Sparkles className="h-3 w-3" />
-                              FREE
-                            </span>
-                          )}
+                          <div className="flex items-center gap-1">
+                            {model.sourceGateway && model.sourceGateway !== 'openrouter' && (
+                              <span className="ml-1 text-xs font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                                {model.sourceGateway.toUpperCase()}
+                              </span>
+                            )}
+                            {model.category === 'Free' && (
+                              <span className="ml-1 text-xs font-semibold text-green-600 dark:text-green-400 flex items-center gap-1">
+                                <Sparkles className="h-3 w-3" />
+                                FREE
+                              </span>
+                            )}
+                          </div>
                         </CommandItem>
                       ))}
                     </div>
@@ -783,6 +795,11 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
                           )}
                           {model.speedTier === 'fast' && (
                             <span className="text-xs font-bold text-blue-600 dark:text-blue-400">⚡</span>
+                          )}
+                          {model.sourceGateway && model.sourceGateway !== 'openrouter' && (
+                            <span className="ml-1 text-xs font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                              {model.sourceGateway.toUpperCase()}
+                            </span>
                           )}
                           {model.category === 'Free' && (
                             <span className="ml-1 text-xs font-semibold text-green-600 dark:text-green-400 flex items-center gap-1">

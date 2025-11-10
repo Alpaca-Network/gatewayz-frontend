@@ -242,6 +242,54 @@ export default function ModelProfilePage() {
             requiresApiKey: true,
             apiKeyPlaceholder: 'hf_...',
         },
+        near: {
+            name: 'NEAR Protocol',
+            baseUrl: 'https://api.near.ai/v1',
+            requiresApiKey: true,
+            apiKeyPlaceholder: 'near_...',
+        },
+        nebius: {
+            name: 'Nebius AI Studio',
+            baseUrl: 'https://api.studio.nebius.ai/v1',
+            requiresApiKey: true,
+            apiKeyPlaceholder: '...',
+        },
+        featherless: {
+            name: 'Featherless',
+            baseUrl: 'https://api.featherless.ai/v1',
+            requiresApiKey: true,
+            apiKeyPlaceholder: '...',
+        },
+        chutes: {
+            name: 'Chutes',
+            baseUrl: 'https://api.chutes.ai/v1',
+            requiresApiKey: true,
+            apiKeyPlaceholder: '...',
+        },
+        portkey: {
+            name: 'Portkey',
+            baseUrl: 'https://api.portkey.ai/v1',
+            requiresApiKey: true,
+            apiKeyPlaceholder: '...',
+        },
+        novita: {
+            name: 'Novita AI',
+            baseUrl: 'https://api.novita.ai/v3/openai',
+            requiresApiKey: true,
+            apiKeyPlaceholder: '...',
+        },
+        aimo: {
+            name: 'AIMO Network',
+            baseUrl: 'https://api.aimo.network/v1',
+            requiresApiKey: true,
+            apiKeyPlaceholder: '...',
+        },
+        fal: {
+            name: 'FAL AI',
+            baseUrl: 'https://fal.run/fal-ai',
+            requiresApiKey: true,
+            apiKeyPlaceholder: '...',
+        },
     };
 
     // Handle catch-all route - params.name will be an array like ['x-ai', 'grok-4-fast']
@@ -834,7 +882,7 @@ export default function ModelProfilePage() {
                                 onChange={(e) => setSelectedPlaygroundProvider(e.target.value)}
                                 className="w-full max-w-md px-4 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                             >
-                                <option value="gatewayz">Gatewayz (Unified API - Recommended)</option>
+                                <option value="gatewayz">Gatewayz (Unified - Recommended)</option>
                                 {modelProviders.length > 0 && modelProviders.map(provider => {
                                     const config = providerConfigs[provider];
                                     if (!config) return null;
@@ -879,7 +927,7 @@ export default function ModelProfilePage() {
                                 onChange={(e) => setSelectedProvider(e.target.value)}
                                 className="w-full max-w-md px-4 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                             >
-                                <option value="gatewayz">Gatewayz (Unified API - Recommended)</option>
+                                <option value="gatewayz">Gatewayz (Unified - Recommended)</option>
                                 {modelProviders.length > 0 && modelProviders.map(provider => {
                                     const config = providerConfigs[provider];
                                     if (!config) return null;
@@ -1134,15 +1182,15 @@ console.log(response.choices[0].message.content);`
                                         together: 'Together AI',
                                         groq: 'Groq',
                                         deepinfra: 'DeepInfra',
-                                        google: 'Google',
+                                        google: 'Google AI',
                                         cerebras: 'Cerebras',
-                                        nebius: 'Nebius',
+                                        nebius: 'Nebius AI Studio',
                                         xai: 'xAI',
-                                        novita: 'Novita',
+                                        novita: 'Novita AI',
                                         huggingface: 'Hugging Face',
                                         aimo: 'AIMO Network',
-                                        near: 'NEAR',
-                                        fal: 'FAL'
+                                        near: 'NEAR Protocol',
+                                        fal: 'FAL AI'
                                     };
                                     const providerLogos: Record<string, string> = {
                                         openrouter: '/openrouter-logo.svg',
