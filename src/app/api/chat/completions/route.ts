@@ -172,14 +172,26 @@ export async function POST(request: NextRequest) {
       targetUrl.searchParams.append(key, value);
     });
 
-    // Use a 120 second timeout for streaming requests (models can be slow to start)
+    // Use longer timeouts for large models (30B+ parameters) or NEAR provider
+    // NEAR models and very large models can take 3-5 minutes to load and start responding
+    const isLargeModel = body.model?.includes('30B') || body.model?.includes('70B') || body.model?.includes('405B');
+    const isNearProvider = body.model?.startsWith('near/');
+    const needsExtendedTimeout = isLargeModel || isNearProvider;
+
+    // Use a 300 second (5 minute) timeout for large/NEAR models
+    // Use a 120 second (2 minute) timeout for regular streaming requests
     // Use a 30 second timeout for non-streaming requests
-    timeoutMs = body.stream ? 120000 : 30000;
+    if (body.stream) {
+      timeoutMs = needsExtendedTimeout ? 300000 : 120000;
+    } else {
+      timeoutMs = needsExtendedTimeout ? 180000 : 30000;
+    }
 
     // For streaming requests, bypass Braintrust to avoid interference with the stream
     if (body.stream) {
       console.log('[API Proxy] Handling streaming request directly (bypassing Braintrust)');
       console.log('[API Proxy] Target URL:', targetUrl.toString());
+      console.log('[API Proxy] Timeout configured:', timeoutMs + 'ms', `(${timeoutMs / 1000}s)`, needsExtendedTimeout ? '[EXTENDED]' : '[STANDARD]');
 
       const abortController = new AbortController();
       const timeoutId = setTimeout(() => abortController.abort(), timeoutMs);
@@ -316,7 +328,12 @@ export async function POST(request: NextRequest) {
 
     if (errorDetails.name === 'TimeoutError' || errorDetails.message.includes('timeout') || errorDetails.message.includes('timed out')) {
       status = 504;
-      details = `Request to backend API timed out after ${timeoutMs / 1000} seconds. The model may be overloaded or starting up. Please try again in a moment.`;
+      const timeoutMinutes = Math.floor(timeoutMs / 60000);
+      const timeoutSeconds = Math.floor((timeoutMs % 60000) / 1000);
+      const timeoutDisplay = timeoutMinutes > 0
+        ? `${timeoutMinutes} minute${timeoutMinutes > 1 ? 's' : ''}${timeoutSeconds > 0 ? ` ${timeoutSeconds} seconds` : ''}`
+        : `${timeoutSeconds} seconds`;
+      details = `Request to backend API timed out after ${timeoutDisplay}. The model may be overloaded or starting up. Please try again in a moment.`;
     } else if (errorDetails.message.includes('fetch') || errorDetails.message.includes('network') || errorDetails.name === 'TypeError') {
       status = 502;
       details = 'Could not connect to backend API. The service may be temporarily unavailable.';
