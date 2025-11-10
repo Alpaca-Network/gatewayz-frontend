@@ -266,16 +266,24 @@ def clear_modelz_cache():
 
 
 def is_cache_fresh(cache: dict) -> bool:
-    """Check if cache is within fresh TTL"""
-    if cache.get("data") is None or cache.get("timestamp") is None:
+    """Check if cache is within fresh TTL
+    
+    Note: Only checks timestamp, not data value. This allows empty lists []
+    to be treated as valid cached values (representing "no models found").
+    """
+    if cache.get("timestamp") is None:
         return False
     cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
     return cache_age < cache.get("ttl", 3600)
 
 
 def is_cache_stale_but_usable(cache: dict) -> bool:
-    """Check if cache is stale but within stale-while-revalidate window"""
-    if cache.get("data") is None or cache.get("timestamp") is None:
+    """Check if cache is stale but within stale-while-revalidate window
+    
+    Note: Only checks timestamp, not data value. This allows empty lists []
+    to be treated as valid cached values (representing "no models found").
+    """
+    if cache.get("timestamp") is None:
         return False
     cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
     ttl = cache.get("ttl", 3600)
