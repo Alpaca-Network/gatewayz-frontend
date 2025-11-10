@@ -144,6 +144,10 @@ export async function* streamAISDKChat(
  * Check if a model is available via AI SDK gateway
  */
 export function isAISDKModel(modelId: string): boolean {
+  if (!modelId) {
+    return false;
+  }
+
   // Normalize model ID: remove provider prefix (e.g., 'google/gemini-pro' -> 'gemini-pro')
   // and convert to lowercase for consistent matching
   const normalizedId = modelId.toLowerCase().replace(/^[^/]+\//, '');
