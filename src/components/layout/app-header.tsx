@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Menu } from "lucide-react";
 import Link from "next/link";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { Sheet, SheetContent, SheetTrigger, SheetOverlay, SheetPortal } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTrigger, SheetOverlay, SheetPortal, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { UserNav } from "./user-nav";
 import { SearchBar } from "./search-bar";
 import { Separator } from "@/components/ui/separator";
@@ -113,7 +113,7 @@ export function AppHeader() {
   }, [toUnixSeconds]);
 
   return (
-    <header className="sticky top-0 z-[60] w-full h-[65px] border-b bg-header">
+    <header className="fixed top-0 left-0 right-0 z-[60] w-full h-[65px] border-b bg-header" style={{ position: 'fixed', top: 0, left: 0, right: 0 }}>
       <div className="w-full max-w-7xl mx-auto flex h-full items-center px-3 sm:px-6 lg:px-8 gap-2 sm:gap-4">
         <div className="flex items-center gap-2 sm:gap-4 shrink-0">
           <Link href="/" className="flex items-center gap-1.5 sm:gap-2 shrink-0">
@@ -149,7 +149,7 @@ export function AppHeader() {
           </div>
 
           {/* Desktop: Theme toggle and auth */}
-          <div className="hidden md:flex items-center gap-2">
+          <div className="hidden lg:flex items-center gap-2">
             {user ? (
               <>
                 <CreditsDisplay />
@@ -161,8 +161,8 @@ export function AppHeader() {
             <ThemeToggle />
           </div>
 
-          {/* Mobile: Credits, Profile, and Menu */}
-          <div className="md:hidden flex items-center gap-1.5 sm:gap-2">
+          {/* Tablet & Mobile: Credits, Profile, and Menu */}
+          <div className="lg:hidden flex items-center gap-1.5 sm:gap-2">
             {user && (
               <>
                 <CreditsDisplay />
@@ -173,7 +173,7 @@ export function AppHeader() {
               <Button variant="outline" size="sm" onClick={() => login()}>Sign In</Button>
             )}
           </div>
-          <div className="md:hidden shrink-0">
+          <div className="lg:hidden shrink-0">
             <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
               <SheetTrigger asChild>
                 <Button variant="ghost" size="icon" className="h-9 w-9 sm:h-10 sm:w-10">
@@ -182,6 +182,9 @@ export function AppHeader() {
                 </Button>
               </SheetTrigger>
               <SheetContent side="right" className="w-[100dvw] sm:w-[400px] overflow-y-auto top-[65px] h-[calc(100dvh-65px)]" overlayClassName="top-[65px]">
+                <SheetHeader className="sr-only">
+                  <SheetTitle>Mobile Navigation Menu</SheetTitle>
+                </SheetHeader>
                 <div className="flex flex-col py-6">
                   <div className="px-2 mb-4">
                     <SearchBar autoOpenOnFocus={false} />

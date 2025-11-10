@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { validateApiKey } from '@/app/api/middleware/auth';
+import { handleApiError } from '@/app/api/middleware/error-handler';
+import { CHAT_HISTORY_API_URL } from '@/lib/config';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_CHAT_HISTORY_API_URL || 'https://api.gatewayz.ai';
 
 // POST /api/chat/sessions/[id]/messages - Save message to session
 export async function POST(
@@ -14,18 +15,12 @@ export async function POST(
     const { id } = await params;
     const body = await request.json();
     const { role, content, model, tokens } = body;
-    
+
     // Clean the session ID (remove 'api-' prefix if present)
     const cleanSessionId = id.startsWith('api-') ? id.replace('api-', '') : id;
-    
-    const apiKey = request.headers.get('authorization')?.replace('Bearer ', '');
 
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: 'API key required' },
-        { status: 401 }
-      );
-    }
+    const { key: apiKey, error } = await validateApiKey(request);
+    if (error) return error;
 
     if (!role || !content) {
       return NextResponse.json(
@@ -42,7 +37,7 @@ export async function POST(
       created_at: new Date().toISOString()
     };
 
-    const url = `${API_BASE_URL}/v1/chat/sessions/${cleanSessionId}/messages`;
+    const url = `${CHAT_HISTORY_API_URL}/v1/chat/sessions/${cleanSessionId}/messages`;
 
     // Send message data in JSON body to support long content
     console.log(`Chat messages API - Saving message to: ${url}`);
@@ -75,10 +70,6 @@ export async function POST(
     const data = await response.json();
     return NextResponse.json(data);
   } catch (error) {
-    console.error('Error saving message:', error);
-    return NextResponse.json(
-      { error: 'Failed to save message' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'Chat Messages API');
   }
 }

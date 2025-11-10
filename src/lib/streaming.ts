@@ -4,6 +4,25 @@
 
 import { removeApiKey, requestAuthRefresh } from '@/lib/api';
 
+// OPTIMIZATION: Dev-only logging helpers to remove console logs from production
+const devLog = (...args: any[]) => {
+    if (process.env.NODE_ENV === 'development') {
+        console.log(...args);
+    }
+};
+
+const devError = (...args: any[]) => {
+    if (process.env.NODE_ENV === 'development') {
+        console.error(...args);
+    }
+};
+
+const devWarn = (...args: any[]) => {
+    if (process.env.NODE_ENV === 'development') {
+        console.warn(...args);
+    }
+};
+
 export interface StreamChunk {
   content?: string;
   reasoning?: string;
@@ -86,11 +105,16 @@ export async function* streamChatResponse(
   const timeoutId = setTimeout(() => controller.abort(), 120000);
 
   try {
+    devLog('[Streaming] Initiating fetch request to:', url);
+    devLog('[Streaming] Request body:', requestBody);
+    devLog('[Streaming] API Key prefix:', apiKey.substring(0, 20) + '...');
+
     const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
+        'Accept': 'text/event-stream',
       },
       body: JSON.stringify(requestBody),
       signal: controller.signal,
@@ -98,11 +122,17 @@ export async function* streamChatResponse(
 
     clearTimeout(timeoutId);
 
+    devLog('[Streaming] Fetch completed. Status:', response.status);
+    devLog('[Streaming] Response headers:', Object.fromEntries(response.headers.entries()));
+    devLog('[Streaming] Response ok:', response.ok);
+    devLog('[Streaming] Response body exists:', !!response.body);
+    devLog('[Streaming] Content-Type:', response.headers.get('content-type'));
+
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
 
     // Log full error details for debugging
-    console.error('API Error Response:', {
+    devError('API Error Response:', {
       status: response.status,
       statusText: response.statusText,
       errorData,
@@ -114,15 +144,24 @@ export async function* streamChatResponse(
     // Handle 400 Bad Request
     if (response.status === 400) {
       const errorMessage = errorData.detail || errorData.error?.message || errorData.message || 'Bad request';
-      console.error('400 Bad Request details:', errorData);
+      devError('400 Bad Request details:', errorData);
+      // Log the actual error message for debugging credit issues
+      console.error('🔴 BACKEND ERROR MESSAGE:', errorMessage);
+      console.error('🔴 FULL ERROR DATA:', JSON.stringify(errorData, null, 2));
 
       // Check for common error patterns that indicate trial/credit issues
       if (errorMessage.toLowerCase().includes('trial has expired') ||
           errorMessage.toLowerCase().includes('upgrade to') ||
-          errorMessage.toLowerCase().includes('insufficient credits') ||
-          errorMessage.toLowerCase().includes('upstream rejected')) {
+          errorMessage.toLowerCase().includes('insufficient credits')) {
         throw new Error(
           'Trial credits have been used up. You can still use FREE models! Look for models with the "FREE" badge in the model selector, or add credits to use premium models.'
+        );
+      }
+
+      // Handle "upstream rejected" errors with the actual backend message
+      if (errorMessage.toLowerCase().includes('upstream rejected')) {
+        throw new Error(
+          `Backend error: ${errorMessage}. This may be a temporary issue with the model provider. Please try again or select a different model.`
         );
       }
 
@@ -141,7 +180,7 @@ export async function* streamChatResponse(
     // Handle 500 Internal Server Error
     if (response.status === 500) {
       const errorMessage = errorData.detail || errorData.error?.message || errorData.message || 'Internal server error';
-      console.error('500 Internal Server Error details:', errorData);
+      devError('500 Internal Server Error details:', errorData);
       throw new Error(
         `Server error: ${errorMessage}. Please try again or contact support if the issue persists.`
       );
@@ -150,7 +189,7 @@ export async function* streamChatResponse(
     // Handle 404 Model Not Found
     if (response.status === 404) {
       const errorMessage = errorData.detail || errorData.error?.message || errorData.message || 'Model not found';
-      console.error('404 Model Not Found details:', errorData);
+      devError('404 Model Not Found details:', errorData);
       throw new Error(
         `Model not found: ${errorMessage}`
       );
@@ -191,9 +230,9 @@ export async function* streamChatResponse(
         const jitter = Math.floor(Math.random() * 250);
         waitTime += jitter;
 
-        console.log(`Rate limit hit, retrying in ${waitTime}ms (attempt ${retryCount + 1}/${maxRetries})...`);
+        devLog(`Rate limit hit, retrying in ${waitTime}ms (attempt ${retryCount + 1}/${maxRetries})...`);
         if (detailMessage) {
-          console.log('Rate limit detail:', detailMessage);
+          devLog('Rate limit detail:', detailMessage);
         }
 
         // Yield a signal chunk so UI can react without showing text in the transcript
@@ -235,41 +274,60 @@ export async function* streamChatResponse(
 
   const reader = response.body?.getReader();
   if (!reader) {
+    devError('[Streaming] No readable stream in response body');
     throw new Error('Response body is not readable');
   }
 
   const decoder = new TextDecoder();
   let buffer = '';
   let chunkCount = 0;
+  let receivedDoneSignal = false;
 
-  console.log('[Streaming] Starting to read stream...');
+  devLog('[Streaming] Stream reader obtained successfully');
+  devLog('[Streaming] Starting to read stream...');
 
   try {
     while (true) {
+      devLog(`[Streaming] About to read chunk ${chunkCount + 1}...`);
       const { done, value } = await reader.read();
+      devLog(`[Streaming] Read completed. Done: ${done}, Has value: ${!!value}, Value length: ${value?.length || 0}`);
 
       if (done) {
-        console.log(`[Streaming] Stream completed. Total chunks processed: ${chunkCount}`);
+        devLog(`[Streaming] Stream completed. Total chunks processed: ${chunkCount}`);
         break;
       }
 
       chunkCount++;
-      buffer += decoder.decode(value, { stream: true });
+      const decodedValue = decoder.decode(value, { stream: true });
+      buffer += decodedValue;
+
+      // Log raw decoded value for debugging
+      if (decodedValue.length > 0) {
+        devLog(`[Streaming] Raw decoded value (first 200 chars):`, decodedValue.substring(0, 200));
+      }
+
       const lines = buffer.split('\n');
 
       // Keep the last incomplete line in the buffer
       buffer = lines.pop() || '';
 
-      console.log(`[Streaming] Processing ${lines.length} lines from chunk ${chunkCount}`);
+      devLog(`[Streaming] Processing ${lines.length} lines from chunk ${chunkCount}`);
 
       for (const line of lines) {
         const trimmedLine = line.trim();
 
-        if (!trimmedLine || trimmedLine === 'data: [DONE]') {
-          if (trimmedLine === 'data: [DONE]') {
-            console.log('[Streaming] Received [DONE] signal');
-          }
+        if (!trimmedLine) {
           continue;
+        }
+
+        // Always log non-empty lines for debugging
+        devLog('[Streaming] Processing line:', trimmedLine.substring(0, 100));
+
+        // Handle [DONE] signal by breaking out of the loop
+        if (trimmedLine === 'data: [DONE]') {
+          devLog('[Streaming] Received [DONE] signal - ending stream');
+          receivedDoneSignal = true;
+          break;
         }
 
         if (trimmedLine.startsWith('data: ')) {
@@ -277,12 +335,12 @@ export async function* streamChatResponse(
             const jsonStr = trimmedLine.slice(6);
             const data = JSON.parse(jsonStr);
 
-            console.log('[Streaming] Parsed SSE data:', {
+            devLog('[Streaming] Parsed SSE data:', {
               hasOutput: !!data.output,
               hasChoices: !!data.choices,
               hasType: !!data.type,
               dataKeys: Object.keys(data),
-              fullData: data  // Log the full data structure to debug
+              fullData: JSON.stringify(data)  // Convert to string for better logging
             });
 
             let chunk: StreamChunk | null = null;
@@ -301,7 +359,7 @@ export async function* streamChatResponse(
 
               // Log when reasoning fields are present
               if (outputRecord.reasoning || outputRecord.thinking || outputRecord.analysis) {
-                console.log('[Streaming] Found reasoning field in output:', {
+                devLog('[Streaming] Found reasoning field in output:', {
                   hasReasoning: !!outputRecord.reasoning,
                   hasThinking: !!outputRecord.thinking,
                   hasAnalysis: !!outputRecord.analysis,
@@ -316,7 +374,7 @@ export async function* streamChatResponse(
                 }
                 if (reasoningText) {
                   chunk.reasoning = reasoningText;
-                  console.log('[Streaming] Adding reasoning to chunk:', reasoningText.length, 'chars');
+                  devLog('[Streaming] Adding reasoning to chunk:', reasoningText.length, 'chars');
                 }
                 if (finishReason) {
                   chunk.done = true;
@@ -330,6 +388,14 @@ export async function* streamChatResponse(
               if (choice?.delta) {
                 const delta = choice.delta;
                 const deltaRecord = delta as Record<string, unknown>;
+
+                // OPTIMIZATION: Skip processing if delta only contains role (common in initial chunks)
+                // This improves performance when models send many empty initialization chunks
+                const deltaKeys = Object.keys(deltaRecord);
+                if (deltaKeys.length === 1 && deltaKeys[0] === 'role') {
+                  continue; // Skip to next line, don't process this empty chunk
+                }
+
                 const contentText =
                   toPlainText(deltaRecord.content) ||
                   toPlainText(deltaRecord.text) ||
@@ -345,7 +411,7 @@ export async function* streamChatResponse(
 
                 // Log when reasoning fields are present
                 if (deltaRecord.reasoning || deltaRecord.thinking || deltaRecord.analysis || deltaRecord.inner_thought || deltaRecord.thoughts) {
-                  console.log('[Streaming] Found reasoning field in delta:', {
+                  devLog('[Streaming] Found reasoning field in delta:', {
                     hasReasoning: !!deltaRecord.reasoning,
                     hasThinking: !!deltaRecord.thinking,
                     hasAnalysis: !!deltaRecord.analysis,
@@ -362,7 +428,7 @@ export async function* streamChatResponse(
                   }
                   if (reasoningText) {
                     chunk.reasoning = reasoningText;
-                    console.log('[Streaming] Adding reasoning to chunk from delta:', reasoningText.length, 'chars');
+                    devLog('[Streaming] Adding reasoning to chunk from delta:', reasoningText.length, 'chars');
                   }
                   if (finishReason) {
                     chunk.done = true;
@@ -383,9 +449,16 @@ export async function* streamChatResponse(
 
               // Check if it's a trial expiration error
               if (errorMessage.toLowerCase().includes('trial has expired') ||
-                  errorMessage.toLowerCase().includes('streaming error')) {
+                  errorMessage.toLowerCase().includes('insufficient credits')) {
                 throw new Error(
                   'Trial credits have been used up. You can still use FREE models! Look for models with the "FREE" badge in the model selector, or add credits to use premium models.'
+                );
+              }
+
+              // Handle "upstream rejected" errors with the actual backend message
+              if (errorMessage.toLowerCase().includes('upstream rejected')) {
+                throw new Error(
+                  `Backend error: ${errorMessage}. This may be a temporary issue with the model provider. Please try again or select a different model.`
                 );
               }
 
@@ -446,28 +519,63 @@ export async function* streamChatResponse(
             }
 
             if (chunk) {
-              console.log('[Streaming] Yielding chunk:', {
-                hasContent: !!chunk.content,
-                contentLength: chunk.content?.length || 0,
-                hasReasoning: !!chunk.reasoning,
-                isDone: !!chunk.done
-              });
-              yield chunk;
+              // Only yield chunks that have actual content, reasoning, or are the final chunk
+              // Skip empty chunks to improve streaming performance
+              if (chunk.content || chunk.reasoning || chunk.done) {
+                devLog('[Streaming] Yielding chunk:', {
+                  hasContent: !!chunk.content,
+                  contentLength: chunk.content?.length || 0,
+                  hasReasoning: !!chunk.reasoning,
+                  isDone: !!chunk.done
+                });
+                yield chunk;
+              } else {
+                devLog('[Streaming] Skipping empty chunk');
+              }
             } else {
-              console.warn('[Streaming] No chunk created from SSE data. This may indicate an unsupported response format or an error from the backend.');
-              console.warn('[Streaming] Unrecognized data structure:', data);
-              console.warn('[Streaming] Data as JSON:', JSON.stringify(data, null, 2));
+              // Check if the data has error indicators
+              if (data.error || data.detail || data.message) {
+                const errorMsg = data.error?.message || data.detail || data.message;
+                devError('[Streaming] Possible error in SSE data:', errorMsg);
+                console.error('[Streaming] Backend may have returned an error:', data);
+              }
+              devWarn('[Streaming] No chunk created from SSE data. This may indicate an unsupported response format or an error from the backend.');
+              devWarn('[Streaming] Unrecognized data structure:', data);
+              devWarn('[Streaming] Data as JSON:', JSON.stringify(data, null, 2));
             }
           } catch (error) {
-            console.error('[Streaming] Error parsing SSE data:', error, trimmedLine);
+            devError('[Streaming] Error parsing SSE data:', error, trimmedLine);
           }
         } else {
-          console.log('[Streaming] Line does not start with "data: ":', trimmedLine.substring(0, 50));
+          devLog('[Streaming] Line does not start with "data: ":', trimmedLine.substring(0, 50));
         }
       }
+
+      // Break out of the outer while loop if we received [DONE] signal
+      if (receivedDoneSignal) {
+        devLog('[Streaming] Breaking out of read loop due to [DONE] signal');
+        // Yield a final done chunk to signal completion to the UI
+        yield { done: true };
+        break;
+      }
     }
+
+    // If we exited the loop normally (stream closed by server), also yield done
+    devLog('[Streaming] Stream ended normally, yielding final done signal');
+
+    // Important: Log if we received any content at all
+    if (chunkCount === 0) {
+      const errorMsg = `No response received from model "${requestBody.model}". This model may not be properly configured, may be unavailable, or may not support the requested features. Please try a different model or check the model's availability status.`;
+      console.error('[Streaming] ERROR:', errorMsg);
+      console.error('[Streaming] Model:', requestBody.model);
+      console.error('[Streaming] API Base URL:', url);
+      // Throw an error so the UI can show a proper error message
+      throw new Error(errorMsg);
+    }
+
+    yield { done: true };
   } finally {
-    console.log('[Streaming] Stream reader released');
+    devLog('[Streaming] Stream reader released');
     reader.releaseLock();
   }
   } catch (error) {

@@ -1,11 +1,12 @@
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Menu } from "lucide-react";
-import { Link, useLocation } from "react-router-dom";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import React from "react";
 
 const Navigation = () => {
-  const location = useLocation();
+  const location = usePathname();
   const [scrolled, setScrolled] = React.useState(false);
   
   const navItems = [
@@ -17,8 +18,8 @@ const Navigation = () => {
     { name: "Contact", path: "/contact" },
   ];
 
-  const isActive = (path: string) => location.pathname === path;
-  const isHomePage = location.pathname === "/";
+  const isActive = (path: string) => location === path;
+  const isHomePage = location === "/";
 
   React.useEffect(() => {
     const handleScroll = () => {
@@ -33,7 +34,7 @@ const Navigation = () => {
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
-          <Link to="/" className="flex items-center gap-3 group">
+          <Link href="/" className="flex items-center gap-3 group">
             <img 
               src="/gatewayz-logo-black.png" 
               alt="Gatewayz" 
@@ -75,7 +76,7 @@ const Navigation = () => {
                   Blog
                 </a>
                 <Link
-                  to="/contact"
+                  href="/contact"
                   className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors"
                 >
                   Contact
@@ -105,7 +106,7 @@ const Navigation = () => {
                   ) : (
                     <Link
                       key={item.path}
-                      to={item.path}
+                      href={item.path}
                       className={`text-sm font-medium transition-colors ${
                         isActive(item.path)
                           ? "text-gray-900"
@@ -151,7 +152,7 @@ const Navigation = () => {
                   ) : (
                     <Link
                       key={item.path}
-                      to={item.path}
+                      href={item.path}
                       className={`text-sm font-medium transition-colors ${
                         isActive(item.path)
                           ? "text-gray-900"

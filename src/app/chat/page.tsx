@@ -10,7 +10,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
@@ -33,10 +33,13 @@ import {
   Trash2,
   RefreshCw,
   Image as ImageIcon,
+  Video as VideoIcon,
+  Mic as AudioIcon,
   X,
   Sparkles
 } from 'lucide-react';
-import { ModelSelect, type ModelOption } from '@/components/chat/model-select';
+import dynamic from 'next/dynamic';
+import type { ModelOption } from '@/components/chat/model-select';
 import { FreeModelsBanner } from '@/components/chat/free-models-banner';
 import './chat.css';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -45,26 +48,103 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { format, isToday, isYesterday, formatDistanceToNow } from 'date-fns';
 import { getApiKey, getUserData, saveApiKey, saveUserData, type UserData } from '@/lib/api';
 import { ChatHistoryAPI, ChatSession as ApiChatSession, ChatMessage as ApiChatMessage, handleApiError } from '@/lib/chat-history';
+import { ChatStreamHandler } from '@/lib/chat-stream-handler';
 import { Copy, Share2, RotateCcw } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import remarkMath from 'remark-math';
-import rehypeKatex from 'rehype-katex';
-import 'katex/dist/katex.min.css';
 import { usePrivy } from '@privy-io/react-auth';
 import { streamChatResponse } from '@/lib/streaming';
-import { ReasoningDisplay } from '@/components/chat/reasoning-display';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { logAnalyticsEvent } from '@/lib/analytics';
 
+// Lazy load ModelSelect for better initial load performance
+// Reduces initial bundle by ~100KB and defers expensive model processing
+const ModelSelect = dynamic(
+    () => import('@/components/chat/model-select').then(mod => ({ default: mod.ModelSelect })),
+    {
+        loading: () => (
+            <Button variant="outline" className="w-[250px] justify-between bg-muted/30" disabled>
+                <span className="truncate">Loading models...</span>
+            </Button>
+        ),
+        ssr: false
+    }
+);
+
+// Lazy load ReactMarkdown and plugins for better initial load performance
+// These are only needed when displaying assistant messages with markdown
+const ReactMarkdown = dynamic(() => import('react-markdown'), {
+    loading: () => <div className="animate-pulse bg-muted/30 h-16 rounded-md"></div>,
+    ssr: false
+});
+
+// Lazy-loaded markdown component with plugins
+const MarkdownRenderer = ({ children, className }: { children: string; className?: string }) => {
+    const [plugins, setPlugins] = React.useState<any>(null);
+
+    React.useEffect(() => {
+        // Load markdown plugins and KaTeX CSS dynamically
+        Promise.all([
+            import('remark-gfm'),
+            import('remark-math'),
+            import('rehype-katex'),
+            import('katex/dist/katex.min.css')
+        ]).then(([gfm, math, katex]) => {
+            setPlugins({
+                remarkPlugins: [gfm.default, math.default],
+                rehypePlugins: [katex.default]
+            });
+        });
+    }, []);
+
+    if (!plugins) {
+        return <div className={`${className} animate-pulse`}>{children}</div>;
+    }
+
+    return (
+        <ReactMarkdown
+            remarkPlugins={plugins.remarkPlugins}
+            rehypePlugins={plugins.rehypePlugins}
+            components={{
+                code: ({ node, inline, className: codeClassName, children: codeChildren, ...props }: any) => {
+                    return !inline ? (
+                        <pre className="bg-muted p-3 rounded-md overflow-x-auto">
+                            <code className={codeClassName} {...props}>
+                                {codeChildren}
+                            </code>
+                        </pre>
+                    ) : (
+                        <code className="bg-muted px-1.5 py-0.5 rounded text-sm" {...props}>
+                            {codeChildren}
+                        </code>
+                    );
+                },
+                p: ({ children: pChildren }) => <p className="mb-2 last:mb-0">{pChildren}</p>,
+                ul: ({ children: ulChildren }) => <ul className="list-disc list-inside mb-2">{ulChildren}</ul>,
+                ol: ({ children: olChildren }) => <ol className="list-decimal list-inside mb-2">{olChildren}</ol>,
+                li: ({ children: liChildren }) => <li className="mb-1">{liChildren}</li>,
+            }}
+        >
+            {children}
+        </ReactMarkdown>
+    );
+};
+
+// Lazy load ReasoningDisplay for better initial load performance
+// Only needed for models with reasoning capabilities (~10% of usage)
+const ReasoningDisplay = dynamic(() => import('@/components/chat/reasoning-display').then(mod => ({ default: mod.ReasoningDisplay })), {
+    loading: () => <div className="animate-pulse bg-muted/30 h-12 rounded-md w-full"></div>,
+    ssr: false
+});
+
 const TEMP_API_KEY_PREFIX = 'gw_temp_';
 
-type Message = {
+export type Message = {
     role: 'user' | 'assistant';
     content: string;
     reasoning?: string;
     image?: string; // Base64 image data
+    video?: string; // Base64 video data
+    audio?: string; // Base64 audio data
     isStreaming?: boolean; // Track if message is currently streaming
     model?: string; // Model ID that generated this message
 };
@@ -464,10 +544,10 @@ const SessionListItem = ({
         <>
         <li key={session.id} className="group relative min-w-0 w-full">
             <div
-                className={`flex items-start justify-between gap-2 w-full px-2 py-1.5 rounded-lg transition-colors ${
+                className={`flex items-start justify-between gap-2 w-full px-2 py-2 sm:py-1.5 rounded-lg transition-colors touch-manipulation ${
                     activeSessionId === session.id 
                         ? 'bg-secondary' 
-                        : 'hover:bg-accent'
+                        : 'hover:bg-accent active:bg-accent/80'
                 }`}
                 onContextMenu={(e) => {
                     e.preventDefault();
@@ -475,7 +555,7 @@ const SessionListItem = ({
                 }}
                 >
                    <button
-                        className="flex-1 min-w-0 justify-start items-start text-left flex flex-col h-auto"
+                        className="flex-1 min-w-0 justify-start items-start text-left flex flex-col h-auto touch-manipulation"
                         onClick={() => switchToSession(session.id)}
                     >
                         <span className="font-medium text-sm leading-tight block truncate w-full">
@@ -486,13 +566,13 @@ const SessionListItem = ({
                         </span>
                     </button>
 
-                    {/* Three dots menu stays visible and aligned */}
+                    {/* Three dots menu - Always visible on mobile for better UX */}
                     <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
                         <DropdownMenuTrigger asChild>
                             <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-7 w-7 hover:bg-muted rounded-md shrink-0 self-start opacity-0 group-hover:opacity-100 transition-opacity"
+                                className="h-8 w-8 sm:h-7 sm:w-7 hover:bg-muted active:bg-muted rounded-md shrink-0 self-start opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity touch-manipulation"
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     setMenuOpen(true);
@@ -502,13 +582,13 @@ const SessionListItem = ({
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-48">
-                            <DropdownMenuItem onClick={handleRenameClick}>
+                            <DropdownMenuItem onClick={handleRenameClick} className="touch-manipulation">
                                 <Pencil className="h-4 w-4 mr-2" />
                                 Rename
                             </DropdownMenuItem>
                             <DropdownMenuItem
                                 onClick={handleDeleteClick}
-                                className="text-destructive focus:text-destructive"
+                                className="text-destructive focus:text-destructive touch-manipulation"
                             >
                                 <Trash2 className="h-4 w-4 mr-2" />
                                 Delete
@@ -578,18 +658,138 @@ const SessionListItem = ({
     );
 };
 
-const ChatSidebar = ({ sessions, activeSessionId, switchToSession, createNewChat, onDeleteSession, onRenameSession }: {
+// Virtual scrolling component for efficient rendering of large session lists
+const VirtualSessionList = ({
+    groupedSessions,
+    activeSessionId,
+    switchToSession,
+    onRenameSession,
+    onDeleteSession
+}: {
+    groupedSessions: Record<string, ChatSession[]>,
+    activeSessionId: string | null,
+    switchToSession: (id: string) => void,
+    onRenameSession: (sessionId: string, newTitle: string) => void,
+    onDeleteSession: (sessionId: string) => void
+}) => {
+    const containerRef = useRef<HTMLDivElement>(null);
+    const [visibleRange, setVisibleRange] = useState({ start: 0, end: 20 });
+
+    // Flatten sessions with group headers for virtual scrolling
+    const flatItems = useMemo(() => {
+        const items: Array<{ type: 'header' | 'session', data: string | ChatSession, groupName?: string }> = [];
+        Object.entries(groupedSessions).forEach(([groupName, sessions]) => {
+            items.push({ type: 'header', data: groupName, groupName });
+            sessions.forEach(session => {
+                items.push({ type: 'session', data: session as ChatSession, groupName });
+            });
+        });
+        return items;
+    }, [groupedSessions]);
+
+    // Only render items within visible range + buffer (for smooth scrolling)
+    const ITEM_HEIGHT = 60; // Approximate height of each session item
+    const HEADER_HEIGHT = 30; // Height of group headers
+    const BUFFER = 10; // Render extra items outside viewport
+
+    useEffect(() => {
+        const container = containerRef.current;
+        if (!container) return;
+
+        const handleScroll = () => {
+            const scrollTop = container.scrollTop;
+            const containerHeight = container.clientHeight;
+
+            const start = Math.max(0, Math.floor(scrollTop / ITEM_HEIGHT) - BUFFER);
+            const end = Math.min(flatItems.length, Math.ceil((scrollTop + containerHeight) / ITEM_HEIGHT) + BUFFER);
+
+            setVisibleRange({ start, end });
+        };
+
+        container.addEventListener('scroll', handleScroll, { passive: true });
+        handleScroll(); // Initial calculation
+
+        return () => container.removeEventListener('scroll', handleScroll);
+    }, [flatItems.length]);
+
+    const totalHeight = flatItems.reduce((height, item) =>
+        height + (item.type === 'header' ? HEADER_HEIGHT : ITEM_HEIGHT), 0
+    );
+
+    return (
+        <div ref={containerRef} className="flex-grow overflow-y-auto" style={{ position: 'relative' }}>
+            {flatItems.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-32 text-center">
+                    <p className="text-sm text-muted-foreground">No conversations yet</p>
+                    <p className="text-xs text-muted-foreground mt-1">Start a new chat to begin</p>
+                </div>
+            ) : (
+                <div style={{ height: totalHeight, position: 'relative' }}>
+                    {flatItems.slice(visibleRange.start, visibleRange.end).map((item, index) => {
+                        const actualIndex = visibleRange.start + index;
+                        const offsetTop = flatItems.slice(0, actualIndex).reduce((height, prevItem) =>
+                            height + (prevItem.type === 'header' ? HEADER_HEIGHT : ITEM_HEIGHT), 0
+                        );
+
+                        if (item.type === 'header') {
+                            return (
+                                <div
+                                    key={`header-${item.data}`}
+                                    style={{
+                                        position: 'absolute',
+                                        top: offsetTop,
+                                        width: '100%',
+                                        height: HEADER_HEIGHT
+                                    }}
+                                >
+                                    <h3 className="text-xs font-semibold text-muted-foreground uppercase my-1.5 px-2">
+                                        {item.data as string}
+                                    </h3>
+                                </div>
+                            );
+                        }
+
+                        const session = item.data as ChatSession;
+                        return (
+                            <div
+                                key={session.id}
+                                style={{
+                                    position: 'absolute',
+                                    top: offsetTop,
+                                    width: '100%',
+                                    minHeight: ITEM_HEIGHT
+                                }}
+                            >
+                                <SessionListItem
+                                    session={session}
+                                    activeSessionId={activeSessionId}
+                                    switchToSession={switchToSession}
+                                    onRenameSession={onRenameSession}
+                                    onDeleteSession={onDeleteSession}
+                                />
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+        </div>
+    );
+};
+
+const ChatSidebar = ({ sessions, activeSessionId, switchToSession, createNewChat, onDeleteSession, onRenameSession, onClose }: {
     sessions: ChatSession[],
     activeSessionId: string | null,
     switchToSession: (id: string) => void,
     createNewChat: () => void,
     onDeleteSession: (sessionId: string) => void,
-    onRenameSession: (sessionId: string, newTitle: string) => void
+    onRenameSession: (sessionId: string, newTitle: string) => void,
+    onClose?: () => void
 }) => {
 
-    const groupChatsByDate = (chatSessions: ChatSession[]) => {
+    // Memoize the grouped sessions to avoid expensive O(n) computation on every render
+    const groupedSessions = useMemo(() => {
         // Filter out untitled chats that haven't been started yet
-        const startedChats = chatSessions.filter(session =>
+        const startedChats = sessions.filter(session =>
             session.messages.length > 0 || session.title !== 'Untitled Chat'
         );
 
@@ -606,56 +806,49 @@ const ChatSidebar = ({ sessions, activeSessionId, switchToSession, createNewChat
             return groups;
 
         }, {} as Record<string, ChatSession[]>);
+    }, [sessions]); // Only recompute when sessions array changes
+
+    // Create wrapped functions that also close the mobile sidebar
+    const wrappedSwitchToSession = (sessionId: string) => {
+        switchToSession(sessionId);
+        onClose?.();
     };
 
-    const groupedSessions = groupChatsByDate(sessions);
+    const wrappedCreateNewChat = () => {
+        createNewChat();
+        onClose?.();
+    };
 
     return (
-    <aside className="flex flex-col gap-4 p-4 pb-0 h-full w-full overflow-hidden">
+    <aside className="flex flex-col gap-3 sm:gap-4 p-3 sm:p-4 pb-0 h-full w-full overflow-hidden bg-background">
         <div className="flex items-center gap-2">
-            <h2 className="text-2xl font-bold">Chat</h2>
+            <h2 className="text-xl sm:text-2xl font-bold">Chat</h2>
         </div>
 
         <Button
-            onClick={createNewChat}
-            className="w-full bg-foreground text-background hover:bg-foreground/90 h-10 font-medium flex justify-between items-center gap-2 text-left text-sm"
+            onClick={wrappedCreateNewChat}
+            className="w-full bg-foreground text-background hover:bg-foreground/90 h-10 sm:h-9 font-medium flex justify-between items-center gap-2 text-left text-sm touch-manipulation"
         >
             <span>New Chat</span>
-            <img src="/uil_plus.svg" alt="Plus" width={20} height={20} />
+            <img src="/uil_plus.svg" alt="Plus" width={18} height={18} className="sm:w-5 sm:h-5" />
         </Button>
 
         <div className="relative">
-            <Input placeholder="Search Chats" className="pl-3 rounded-lg h-9 text-sm" />
-            <img src="/material-symbols_search.svg" alt="Search" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" style={{ width: "20px", height: "20px" }} />
-
+            <Input placeholder="Search Chats" className="pl-3 rounded-lg h-9 sm:h-8 text-sm" />
+            <img 
+                src="/material-symbols_search.svg" 
+                alt="Search" 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4 sm:w-5 sm:h-5" 
+            />
         </div>
 
-        <div className="flex-grow overflow-y-auto">
-            {Object.keys(groupedSessions).length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-32 text-center">
-                    <p className="text-sm text-muted-foreground">No conversations yet</p>
-                    <p className="text-xs text-muted-foreground mt-1">Start a new chat to begin</p>
-                </div>
-            ) : (
-                Object.entries(groupedSessions).map(([groupName, chatSessions]) => (
-                    <div key={groupName} className="min-w-0">
-                        <h3 className="text-xs font-semibold text-muted-foreground uppercase my-1.5 px-2">{groupName}</h3>
-                        <ul className="space-y-0.5 min-w-0">
-                            {chatSessions.map(session => (
-                                <SessionListItem
-                                    key={session.id}
-                                    session={session}
-                                    activeSessionId={activeSessionId}
-                                    switchToSession={switchToSession}
-                                    onRenameSession={onRenameSession}
-                                    onDeleteSession={onDeleteSession}
-                                />
-                            ))}
-                        </ul>
-                    </div>
-                ))
-            )}
-        </div>
+        <VirtualSessionList
+            groupedSessions={groupedSessions}
+            activeSessionId={activeSessionId}
+            switchToSession={wrappedSwitchToSession}
+            onRenameSession={onRenameSession}
+            onDeleteSession={onDeleteSession}
+        />
     </aside>
     )
 }
@@ -722,13 +915,36 @@ const ThinkingLoader = ({ modelName }: { modelName: string | undefined }) => {
     );
 };
 
+const getReasoningSource = (model?: string) => {
+    if (!model) return 'gatewayz';
+    const normalized = model.toLowerCase();
+    const aiSdkSignatures = ['claude', 'gpt', 'gemini', 'perplexity', 'opus', 'sonnet', 'haiku', 'sonar'];
+    return aiSdkSignatures.some(signature => normalized.includes(signature)) ? 'ai-sdk' : 'gatewayz';
+};
+
 const ChatMessage = ({ message, modelName }: { message: Message, modelName: string | undefined}) => {
     const isUser = message.role === 'user';
     const processedContent = fixLatexSyntax(message.content);
+    const reasoningSource = getReasoningSource(message.model);
+    const hasAssistantContent = Boolean(!isUser && message.content && message.content.trim().length > 0);
+    const isAssistantThinking = !isUser && message.isStreaming && !hasAssistantContent;
 
-    // Show exciting loader when AI is thinking (streaming but no content yet)
-    if (!isUser && message.isStreaming && !message.content) {
-        return <ThinkingLoader modelName={modelName} />;
+    if (isAssistantThinking) {
+        return (
+            <div className="flex items-start gap-3">
+                <div className="flex flex-col gap-2 items-start max-w-[85%]">
+                    {message.reasoning && (
+                        <ReasoningDisplay
+                            reasoning={message.reasoning}
+                            isStreaming
+                            source={reasoningSource}
+                            className="w-full"
+                        />
+                    )}
+                    <ThinkingLoader modelName={modelName} />
+                </div>
+            </div>
+        );
     }
 
     return (
@@ -736,40 +952,20 @@ const ChatMessage = ({ message, modelName }: { message: Message, modelName: stri
              {/* {!isUser && <Avatar className="w-8 h-8"><AvatarFallback><Bot/></AvatarFallback></Avatar>} */}
             <div className={`flex flex-col gap-1 ${isUser ? 'items-end' : 'items-start'} max-w-[85%]`}>
                 {!isUser && message.reasoning && (
-                    <ReasoningDisplay reasoning={message.reasoning} className="w-full" />
+                    <ReasoningDisplay
+                        reasoning={message.reasoning}
+                        isStreaming={message.isStreaming}
+                        source={reasoningSource}
+                        className="w-full"
+                    />
                 )}
-                <div className={`rounded-lg p-3 ${isUser ? 'bg-blue-600 text-white' : 'bg-muted/30 dark:bg-muted/20 border border-border'} ${message.isStreaming ? 'streaming-message' : ''}`}>
+                <div className={`rounded-lg p-3 ${isUser ? 'bg-blue-600 text-white' : ''} ${message.isStreaming ? 'streaming-message' : ''}`}>
                      {!isUser && <p className="text-xs font-semibold mb-1">{modelName}</p>}
                     <div className={`text-sm prose prose-sm max-w-none ${isUser ? 'text-white prose-invert' : 'dark:prose-invert'}`}>
                         {isUser ? (
                             <div className="whitespace-pre-wrap text-white">{processedContent}</div>
                         ) : (
-                            <ReactMarkdown
-                                remarkPlugins={[remarkGfm, remarkMath]}
-                                rehypePlugins={[rehypeKatex]}
-                                components={{
-                                    code: ({ node, inline, className, children, ...props }: any) => {
-                                        const match = /language-(\w+)/.exec(className || '');
-                                        return !inline ? (
-                                            <pre className="bg-muted p-3 rounded-md overflow-x-auto">
-                                                <code className={className} {...props}>
-                                                    {children}
-                                                </code>
-                                            </pre>
-                                        ) : (
-                                            <code className="bg-muted px-1.5 py-0.5 rounded text-sm" {...props}>
-                                                {children}
-                                            </code>
-                                        );
-                                    },
-                                    p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-                                    ul: ({ children }) => <ul className="list-disc list-inside mb-2">{children}</ul>,
-                                    ol: ({ children }) => <ol className="list-decimal list-inside mb-2">{children}</ol>,
-                                    li: ({ children }) => <li className="mb-1">{children}</li>,
-                                }}
-                            >
-                                {processedContent}
-                            </ReactMarkdown>
+                            <MarkdownRenderer>{processedContent}</MarkdownRenderer>
                         )}
                     </div>
                     {!isUser && (
@@ -798,10 +994,42 @@ const ChatMessage = ({ message, modelName }: { message: Message, modelName: stri
 
 const ChatSkeleton = () => (
   <div className="flex items-start gap-3">
-    <Avatar className="w-8 h-8"><AvatarFallback><Bot/></AvatarFallback></Avatar>
-    <div className="flex flex-col gap-2 w-full max-w-md">
-        <Skeleton className="h-4 w-24" />
-        <Skeleton className="h-10 w-full" />
+    {/* Animated arrow icon */}
+    <div className="mt-1 flex-shrink-0">
+      <svg
+        className="w-5 h-5 text-blue-500"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path
+          d="M5 12h14M12 5l7 7-7 7"
+          className="animate-pulse"
+          style={{ animationDuration: '1.5s' }}
+        />
+      </svg>
+      <style jsx>{`
+        @keyframes slideArrow {
+          0%, 100% {
+            transform: translateX(0);
+            opacity: 0.6;
+          }
+          50% {
+            transform: translateX(4px);
+            opacity: 1;
+          }
+        }
+      `}</style>
+    </div>
+
+    {/* Skeleton loading bars */}
+    <div className="flex flex-col gap-3 w-full max-w-2xl">
+      <Skeleton className="h-3 w-full rounded-full" />
+      <Skeleton className="h-3 w-full rounded-full" />
+      <Skeleton className="h-3 w-2/3 rounded-full" />
     </div>
   </div>
 );
@@ -882,9 +1110,30 @@ const generateChatTitle = (message: string): string => {
     return `${randomEmoji} ${title}`;
 };
 
+// OPTIMIZATION: Dev-only logging helper to remove console logs from production
+const devLog = (...args: any[]) => {
+    if (process.env.NODE_ENV === 'development') {
+        console.log(...args);
+    }
+};
+
+const devError = (...args: any[]) => {
+    if (process.env.NODE_ENV === 'development') {
+        console.error(...args);
+    }
+};
+
+const devWarn = (...args: any[]) => {
+    if (process.env.NODE_ENV === 'development') {
+        console.warn(...args);
+    }
+};
+
 function ChatPageContent() {
     const searchParams = useSearchParams();
     const { login, authenticated, ready } = usePrivy();
+    
+    // All hooks must be declared before any conditional returns
     const [hasApiKey, setHasApiKey] = useState(false);
     const [message, setMessage] = useState('');
     const [userHasTyped, setUserHasTyped] = useState(false);
@@ -900,17 +1149,23 @@ function ChatPageContent() {
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const [editedTitle, setEditedTitle] = useState('');
     const [selectedModel, setSelectedModel] = useState<ModelOption | null>({
-        value: 'openrouter/auto',
-        label: 'Alpaca Router',
-        category: 'Router',
-        sourceGateway: 'openrouter',
-        developer: 'Alpaca'
+        value: '@cerebras/qwen-3-32b',
+        label: 'Qwen 3 32B',
+        category: 'Free',
+        sourceGateway: 'cerebras',
+        developer: 'Qwen',
+        speedTier: 'ultra-fast'
     });
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
+    const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
+    const [selectedAudio, setSelectedAudio] = useState<string | null>(null);
+    const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
     const { toast } = useToast();
     const chatContainerRef = useRef<HTMLDivElement>(null);
     const messageInputRef = useRef<HTMLInputElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const videoInputRef = useRef<HTMLInputElement>(null);
+    const audioInputRef = useRef<HTMLInputElement>(null);
 
     // Helper function to get display name for a model ID
     const getModelDisplayName = (modelId?: string): string => {
@@ -934,6 +1189,26 @@ function ChatPageContent() {
         return modelId;
     };
 
+    // Helper function to get dynamic placeholder text based on model capabilities
+    const getPlaceholderText = (): string => {
+        if (!selectedModel) return 'Start A Message';
+
+        const capabilities = [];
+        if (selectedModel.modalities?.includes('Image')) capabilities.push('image');
+        if (selectedModel.modalities?.includes('Video')) capabilities.push('video');
+        if (selectedModel.modalities?.includes('Audio')) capabilities.push('audio');
+
+        if (capabilities.length === 0) {
+            return 'Start A Message';
+        } else if (capabilities.length === 1) {
+            return `Type a message or add an ${capabilities[0]}...`;
+        } else if (capabilities.length === 2) {
+            return `Type a message or add ${capabilities.join(' and ')}...`;
+        } else {
+            return `Type a message or add ${capabilities.join(', ')}...`;
+        }
+    };
+
     useEffect(() => {
         userHasTypedRef.current = userHasTyped;
     }, [userHasTyped]);
@@ -951,11 +1226,14 @@ function ChatPageContent() {
     // Track if we're currently creating a session to prevent race conditions
     const creatingSessionRef = useRef(false);
 
+    // Track if auto-send has already been triggered to prevent duplicate sends
+    const autoSendTriggeredRef = useRef(false);
+
     // Trigger for forcing session reload after API key becomes available
     const [authReady, setAuthReady] = useState(false);
 
     // Queue message to be sent after authentication completes
-    const [pendingMessage, setPendingMessage] = useState<{message: string, model: ModelOption | null, image: string | null} | null>(null);
+    const [pendingMessage, setPendingMessage] = useState<{message: string, model: ModelOption | null, image?: string | null, video?: string | null, audio?: string | null} | null>(null);
 
     // Test backend connectivity function
     const testBackendConnectivity = async () => {
@@ -991,531 +1269,7 @@ function ChatPageContent() {
         }
     };
 
-    // Handle model and message from URL parameters
-    useEffect(() => {
-        console.log('[URL Params] useEffect triggered, searchParams:', searchParams);
-        if (!searchParams) {
-            console.log('[URL Params] searchParams is null/undefined, skipping');
-            return;
-        }
-
-        const modelParam = searchParams.get('model');
-        const messageParam = searchParams.get('message');
-        console.log('[URL Params] Parsed params:', { modelParam, messageParam });
-
-        if (modelParam) {
-            console.log('URL model parameter detected:', modelParam);
-            // Fetch the model details from all gateways
-            Promise.all([
-                fetch(`/api/models?gateway=openrouter`).then(res => res.json()),
-                fetch(`/api/models?gateway=portkey`).then(res => res.json()),
-                fetch(`/api/models?gateway=featherless`).then(res => res.json())
-            ])
-                .then(([openrouterData, portkeyData, featherlessData]) => {
-                    const allModels = [
-                        ...(openrouterData.data || []),
-                        ...(portkeyData.data || []),
-                        ...(featherlessData.data || [])
-                    ];
-                    const foundModel = allModels.find((m: any) => m.id === modelParam);
-                    if (foundModel) {
-                        console.log('Found model from URL:', foundModel.name, foundModel.id);
-                        const sourceGateway = foundModel.source_gateway || foundModel.gateway || 'openrouter';
-                        const promptPrice = Number(foundModel.pricing?.prompt ?? 0);
-                        const completionPrice = Number(foundModel.pricing?.completion ?? 0);
-                        const isPaid = promptPrice > 0 || completionPrice > 0;
-                        const category = sourceGateway === 'portkey' ? 'Portkey' : (isPaid ? 'Paid' : 'Free');
-                        setSelectedModel({
-                            value: foundModel.id,
-                            label: foundModel.name,
-                            category,
-                            sourceGateway,
-                            developer: foundModel.provider_slug || foundModel.developer || undefined
-                        });
-                    } else {
-                        console.warn('Model not found in API:', modelParam);
-                    }
-                })
-                .catch(err => console.log('Failed to fetch model:', err));
-        }
-
-        // Set the message from URL parameter and flag for auto-send
-        const autoSendParam = searchParams.get('autoSend');
-        console.log('[URL Params] Detected:', { messageParam, autoSendParam });
-
-        if (messageParam) {
-            const decodedMessage = decodeURIComponent(messageParam);
-            console.log('[URL Params] Setting message:', decodedMessage);
-            setMessage(decodedMessage);
-            setUserHasTyped(true); // Allow auto-send from URL
-            userHasTypedRef.current = true;
-
-            // Auto-send if explicitly requested via autoSend parameter, or if message param exists
-            if (autoSendParam === 'true' || messageParam) {
-                console.log('[URL Params] Setting shouldAutoSend = true');
-                setShouldAutoSend(true);
-            }
-        }
-    }, [searchParams]);
-
-     const activeSession = useMemo(() => {
-        return sessions.find(s => s.id === activeSessionId) || null;
-    }, [sessions, activeSessionId]);
-
-    const messages = activeSession?.messages || [];
-
-    // Auto-send message from URL parameter when session is ready
-    useEffect(() => {
-        console.log('[AutoSend] Effect triggered:', {
-            shouldAutoSend,
-            activeSessionId,
-            hasMessage: !!message.trim(),
-            message: message,
-            hasModel: !!selectedModel,
-            selectedModel: selectedModel?.label,
-            loading,
-            creatingSession: creatingSessionRef.current,
-            isStreamingResponse,
-            hasPendingMessage: !!pendingMessage
-        });
-
-        if (pendingMessage) {
-            console.log('[AutoSend] Pending message exists, waiting for auth/session to complete before auto-sending.');
-            return;
-        }
-
-        if (
-            shouldAutoSend &&
-            activeSessionId &&
-            message.trim() &&
-            selectedModel &&
-            !loading &&
-            !creatingSessionRef.current &&
-            !isStreamingResponse
-        ) {
-            console.log('[AutoSend] All conditions met! Sending message now...');
-            setShouldAutoSend(false); // Reset flag to prevent re-sending
-            handleSendMessage();
-        }
-    }, [shouldAutoSend, activeSessionId, message, selectedModel, loading, isStreamingResponse, pendingMessage]);
-
-    // Check for API key in localStorage as fallback authentication
-    useEffect(() => {
-        const apiKey = getApiKey();
-        const userData = getUserData();
-        setHasApiKey(!!(apiKey && userData?.privy_user_id));
-    }, [ready, authenticated]);
-
-    // Check for referral bonus notification flag
-    useEffect(() => {
-        if (!ready || !(authenticated || hasApiKey)) return;
-
-        // Check if we should show referral bonus notification
-        const showReferralBonus = localStorage.getItem('gatewayz_show_referral_bonus');
-        if (showReferralBonus === 'true') {
-            // Remove the flag
-            localStorage.removeItem('gatewayz_show_referral_bonus');
-
-            // Show the bonus credits notification
-            setTimeout(() => {
-                toast({
-                    title: "Bonus Credits Added!",
-                    description: "An additional $10 in free credits has been added to your account from your referral. Start chatting!",
-                    duration: 8000,
-                });
-            }, 1000); // Delay to allow page to settle
-        }
-    }, [ready, authenticated, hasApiKey, toast]);
-
-    // Send pending message after authentication completes
-    useEffect(() => {
-        if (!pendingMessage) return;
-        if (!ready) return;
-        if (!authenticated && !hasApiKey) return;
-
-        const apiKey = getApiKey();
-        const userData = getUserData();
-
-        // Wait for API key to be available
-        if (!apiKey || !userData?.privy_user_id) {
-            console.log('[Pending Message] Waiting for API key to be available...');
-            return;
-        }
-
-        // Wait for active session to be created
-        if (!activeSessionId) {
-            console.log('[Pending Message] Waiting for active session to be created...');
-            return;
-        }
-
-        // All conditions met - send the pending message
-        console.log('[Pending Message] Auth complete! Sending pending message:', pendingMessage.message);
-
-        // Restore the message to state
-        setMessage(pendingMessage.message);
-        if (pendingMessage.model) {
-            setSelectedModel(pendingMessage.model);
-        }
-        if (pendingMessage.image) {
-            setSelectedImage(pendingMessage.image);
-        }
-        setUserHasTyped(true);
-        userHasTypedRef.current = true;
-
-        // Clear pending message
-        setPendingMessage(null);
-
-        // Trigger send after a short delay to ensure state is updated
-        setTimeout(() => {
-            handleSendMessage();
-        }, 100);
-
-    }, [pendingMessage, ready, authenticated, hasApiKey, activeSessionId]);
-
-    useEffect(() => {
-        // Load sessions from API when authenticated and API key is available
-        if (!ready) {
-            return;
-        }
-
-        if (!authenticated && !hasApiKey) {
-            return;
-        }
-
-        // Wait for API key to be saved to localStorage after authentication
-        const apiKey = getApiKey();
-        const userData = getUserData();
-        if (!apiKey || !userData?.privy_user_id) {
-            // Retry with increasing intervals until we have the API key
-            const checkInterval = setInterval(() => {
-                const key = getApiKey();
-                const data = getUserData();
-                if (key && data?.privy_user_id) {
-                    clearInterval(checkInterval);
-                    // Trigger auth ready state to force effect to re-run
-                    setAuthReady(true);
-                }
-            }, 100);
-
-            // Clean up after 10 seconds
-            setTimeout(() => clearInterval(checkInterval), 10000);
-            return () => clearInterval(checkInterval);
-        }
-
-        const loadSessions = async () => {
-            try {
-                const sessionsData = await apiHelpers.loadChatSessions('user-1');
-                setSessions(sessionsData);
-
-                // Check if there's already a new/empty chat, if not create one
-                const hasNewChat = sessionsData.some(session =>
-                    session.messages.length === 0 &&
-                    session.title === 'Untitled Chat'
-                );
-
-                if (!hasNewChat) {
-                    createNewChat();
-                } else {
-                    // Set the first new chat as active - use local data instead of state
-                    const firstNewChat = sessionsData.find(session =>
-                        session.messages.length === 0 &&
-                        session.title === 'Untitled Chat'
-                    );
-                    if (firstNewChat) {
-                        // Clear any stale message from the input field for new empty chats
-                        if (!userHasTypedRef.current) {
-                            setMessage('');
-                            setUserHasTyped(false); // Reset typing flag
-                            userHasTypedRef.current = false;
-                        }
-                        // Directly set active session ID instead of calling switchToSession
-                        // since setSessions hasn't completed yet
-                        setActiveSessionId(firstNewChat.id);
-                    }
-                }
-            } catch (error) {
-                // Failed to load sessions, fallback to creating a new chat
-                createNewChat();
-            }
-        };
-
-        loadSessions();
-    }, [ready, authenticated, hasApiKey, authReady]);
-
-    // Handle rate limit countdown timer
-    useEffect(() => {
-        if (rateLimitCountdown > 0) {
-            const timer = setInterval(() => {
-                setRateLimitCountdown(prev => {
-                    if (prev <= 1) {
-                        return 0;
-                    }
-                    return prev - 1;
-                });
-            }, 1000);
-
-            return () => clearInterval(timer);
-        }
-    }, [rateLimitCountdown]);
-
-    // Note: In a real app, you would save sessions to backend API here
-    // useEffect(() => {
-    //     // Save sessions to backend API whenever they change
-    //     if(sessions.length > 0) {
-    //         saveSessionsToAPI(sessions);
-    //     }
-    // }, [sessions]);
-
-     useEffect(() => {
-        if (chatContainerRef.current) {
-            chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
-        }
-    }, [messages]);
-
-    // Lazy load messages when switching to a session
-    const switchToSession = async (sessionId: string) => {
-        const session = sessions.find(s => s.id === sessionId);
-        if (!session) {
-            return;
-        }
-
-        // Log analytics event for session switch
-        logAnalyticsEvent('chat_session_switched', {
-            session_id: sessionId,
-            has_messages: session.messages.length > 0,
-            message_count: session.messages.length
-        });
-
-        // Set active session immediately for UI responsiveness
-        setActiveSessionId(sessionId);
-
-        // If messages already loaded or session is new (no messages), skip loading
-        if (loadedSessionIds.has(sessionId) || session.messages.length > 0) {
-            return;
-        }
-
-        // Load messages for this session
-        if (session.apiSessionId) {
-            setLoadingMessages(true);
-            try {
-                const messages = await apiHelpers.loadSessionMessages(sessionId, session.apiSessionId);
-
-                // Update the session with loaded messages
-                setSessions(prev => prev.map(s =>
-                    s.id === sessionId ? { ...s, messages } : s
-                ));
-
-                // Mark session as loaded
-                setLoadedSessionIds(prev => new Set(prev).add(sessionId));
-            } catch (error) {
-                // Failed to load messages
-            } finally {
-                setLoadingMessages(false);
-            }
-        }
-    };
-
-    const createNewChat = async () => {
-        // Prevent duplicate session creation
-        if (creatingSessionRef.current) {
-            return null;
-        }
-
-        // Check if there's already a new/empty chat session
-        const existingNewChat = sessions.find(session =>
-            session.messages.length === 0 &&
-            session.title === 'Untitled Chat'
-        );
-
-        if (existingNewChat) {
-            // If there's already a new chat, just switch to it
-            switchToSession(existingNewChat.id);
-            return existingNewChat;
-        }
-
-        creatingSessionRef.current = true;
-        try {
-            // Create new session using API helper
-            const newSession = await apiHelpers.createChatSession('Untitled Chat', selectedModel?.value);
-
-            // Log analytics event for new chat creation
-            logAnalyticsEvent('chat_session_created', {
-                session_id: newSession.id,
-                model: selectedModel?.value
-            });
-
-            // Set active session immediately with the created session object
-            setActiveSessionId(newSession.id);
-
-            // Then update the sessions list
-            setSessions(prev => [newSession, ...prev]);
-
-            return newSession;
-        } catch (error) {
-            toast({
-                title: "Error",
-                description: `Failed to create new chat session: ${error instanceof Error ? error.message : 'Unknown error'}`,
-                variant: 'destructive'
-            });
-            return null;
-        } finally {
-            creatingSessionRef.current = false;
-        }
-    }
-
-    const handleExamplePromptClick = (promptText: string) => {
-        // Set the message input to the clicked prompt
-        setMessage(promptText);
-        setUserHasTyped(true);
-        userHasTypedRef.current = true;
-        // Focus on the input
-        setTimeout(() => {
-            messageInputRef.current?.focus();
-        }, 100);
-    }
-
-    const handleDeleteSession = async (sessionId: string) => {
-        try {
-            // Delete from API
-            await apiHelpers.deleteChatSession(sessionId, sessions);
-            
-            setSessions(prev => {
-                const updatedSessions = prev.filter(session => session.id !== sessionId);
-                // If the deleted session was active, switch to the first available session or create a new one
-                if (activeSessionId === sessionId) {
-                    if (updatedSessions.length > 0) {
-                        switchToSession(updatedSessions[0].id);
-                    } else {
-                        createNewChat();
-                    }
-                }
-                return updatedSessions;
-            });
-        } catch (error) {
-            console.error('Failed to delete chat session:', error);
-            toast({
-                title: "Error",
-                description: "Failed to delete chat session. Please try again.",
-                variant: 'destructive'
-            });
-        }
-    }
-
-    const handleRenameSession = async (sessionId: string, newTitle: string) => {
-        try {
-            // Update in API
-            await apiHelpers.updateChatSession(sessionId, { title: newTitle }, sessions);
-            
-            setSessions(prev => prev.map(session =>
-                session.id === sessionId
-                    ? { ...session, title: newTitle, updatedAt: new Date() }
-                    : session
-            ));
-        } catch (error) {
-            console.error('Failed to rename chat session:', error);
-            toast({
-                title: "Error",
-                description: "Failed to rename chat session. Please try again.",
-                variant: 'destructive'
-            });
-        }
-    }
-
-    const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
-        // Validate file type
-        if (!file.type.startsWith('image/')) {
-            toast({
-                title: "Invalid file type",
-                description: "Please select an image file.",
-                variant: 'destructive'
-            });
-            return;
-        }
-
-        // Validate file size (max 5MB)
-        if (file.size > 5 * 1024 * 1024) {
-            toast({
-                title: "File too large",
-                description: "Please select an image smaller than 5MB.",
-                variant: 'destructive'
-            });
-            return;
-        }
-
-        // Convert to base64
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            const base64 = event.target?.result as string;
-            setSelectedImage(base64);
-        };
-        reader.onerror = () => {
-            toast({
-                title: "Error reading file",
-                description: "Failed to read the image file.",
-                variant: 'destructive'
-            });
-        };
-        reader.readAsDataURL(file);
-    };
-
-    const handleRemoveImage = () => {
-        setSelectedImage(null);
-        if (fileInputRef.current) {
-            fileInputRef.current.value = '';
-        }
-    };
-
-    const handleRegenerate = async () => {
-        if (!activeSessionId || messages.length === 0) return;
-        
-        // Get the last user message
-        const lastUserMessage = messages.filter(msg => msg.role === 'user').pop();
-        if (!lastUserMessage) return;
-        
-        // Remove the last assistant message
-        const updatedMessages = messages.slice(0, -1);
-        const updatedSessions = sessions.map(session => {
-            if (session.id === activeSessionId) {
-                return {
-                    ...session,
-                    messages: updatedMessages,
-                    updatedAt: new Date()
-                };
-            }
-            return session;
-        });
-        setSessions(updatedSessions);
-        
-        // Set the message to the last user message and send it again
-        setMessage(lastUserMessage.content);
-        setLoading(true);
-        
-        // Trigger the send message after a short delay
-        setTimeout(() => {
-            handleSendMessage();
-        }, 100);
-    };
-
-    const handleModelSelect = (model: ModelOption | null) => {
-        if (model) {
-            logAnalyticsEvent('model_selected', {
-                model_id: model.value,
-                model_name: model.label,
-                category: model.category,
-                gateway: model.sourceGateway
-            });
-        }
-        setSelectedModel(model);
-
-        // Clear selected image if switching to a text-only model
-        if (model && !model.modalities?.includes('Image') && selectedImage) {
-            handleRemoveImage();
-        }
-    };
-
+    // Upgrade temp API key if needed (must be before early return)
     const upgradeTempKeyIfNeeded = useCallback(
         async (currentKey: string, currentUserData: UserData | null): Promise<string> => {
             if (
@@ -1581,6 +1335,792 @@ function ChatPageContent() {
         [setHasApiKey]
     );
 
+    // Handle model and message from URL parameters (guard against null searchParams)
+    useEffect(() => {
+        if (!searchParams) return;
+        
+        console.log('[URL Params] useEffect triggered, searchParams:', searchParams);
+
+        const modelParam = searchParams.get('model');
+        const messageParam = searchParams.get('message');
+        console.log('[URL Params] Parsed params:', { modelParam, messageParam });
+
+        if (modelParam) {
+            console.log('URL model parameter detected:', modelParam);
+            // Check ModelSelect's localStorage cache first (avoid redundant API calls)
+            const CACHE_KEY = 'gatewayz_models_cache_v5_optimized';
+            const cached = localStorage.getItem(CACHE_KEY);
+
+            if (cached) {
+                try {
+                    const { data, timestamp } = JSON.parse(cached);
+                    const CACHE_DURATION = 60 * 60 * 1000; // 60 minutes
+
+                    // Use cache if valid
+                    if (Date.now() - timestamp < CACHE_DURATION && data && data.length > 0) {
+                        const foundModel = data.find((m: any) => m.value === modelParam);
+                        if (foundModel) {
+                            console.log('Found model from cache:', foundModel.label, foundModel.value);
+                            setSelectedModel(foundModel);
+                        } else {
+                            console.warn('Model not found in cache:', modelParam);
+                            // Fallback: create basic model option from parameter
+                            // Extract gateway from model ID (e.g., 'google/gemini-pro' -> 'google')
+                            const extractedGateway = modelParam.includes('/')
+                                ? modelParam.split('/')[0]
+                                : (modelParam.includes('openrouter') ? 'openrouter' : 'unknown');
+                            setSelectedModel({
+                                value: modelParam,
+                                label: modelParam.split('/').pop() || modelParam,
+                                category: 'Unknown',
+                                sourceGateway: extractedGateway
+                            });
+                        }
+                    }
+                } catch (e) {
+                    console.error('Failed to parse model cache:', e);
+                    // Fallback: create basic model option
+                    // Extract gateway from model ID (e.g., 'google/gemini-pro' -> 'google')
+                    const extractedGateway = modelParam.includes('/')
+                        ? modelParam.split('/')[0]
+                        : 'unknown';
+                    setSelectedModel({
+                        value: modelParam,
+                        label: modelParam.split('/').pop() || modelParam,
+                        category: 'Unknown',
+                        sourceGateway: extractedGateway
+                    });
+                }
+            } else {
+                // No cache available, create basic model option and let ModelSelect load in background
+                console.log('No cache available, using fallback model option');
+                // Extract gateway from model ID (e.g., 'google/gemini-pro' -> 'google')
+                const extractedGateway = modelParam.includes('/')
+                    ? modelParam.split('/')[0]
+                    : 'unknown';
+                setSelectedModel({
+                    value: modelParam,
+                    label: modelParam.split('/').pop() || modelParam,
+                    category: 'Unknown',
+                    sourceGateway: extractedGateway
+                });
+            }
+        }
+
+        // Set the message from URL parameter and flag for auto-send
+        const autoSendParam = searchParams.get('autoSend');
+        console.log('[URL Params] Detected:', { messageParam, autoSendParam });
+
+        if (messageParam) {
+            const decodedMessage = decodeURIComponent(messageParam);
+            console.log('[URL Params] Setting message:', decodedMessage);
+            setMessage(decodedMessage);
+            setUserHasTyped(true); // Allow auto-send from URL
+            userHasTypedRef.current = true;
+
+            // Auto-send if explicitly requested via autoSend parameter, or if message param exists
+            if (autoSendParam === 'true' || messageParam) {
+                console.log('[URL Params] Setting shouldAutoSend = true');
+                setShouldAutoSend(true);
+            }
+        }
+    }, [searchParams]);
+
+    const activeSession = useMemo(() => {
+        return sessions.find(s => s.id === activeSessionId) || null;
+    }, [sessions, activeSessionId]);
+
+    // Filter and deduplicate messages to prevent unsent messages from appearing in history
+    // Messages are deduplicated by checking for any duplicate (same role + content anywhere in history)
+    const messages = ((activeSession?.messages || []).filter(msg => msg && msg.role) as Message[]).reduce((acc, msg) => {
+        // Skip if this message already exists in accumulated messages
+        const isDuplicate = acc.some(m =>
+            m.role === msg.role &&
+            m.content === msg.content &&
+            m.image === msg.image &&
+            m.video === msg.video &&
+            m.audio === msg.audio
+        );
+
+        if (isDuplicate) {
+            console.warn('[MessageDedup] Skipping duplicate message:', { role: msg.role, contentLength: msg.content.length });
+            return acc;
+        }
+        return [...acc, msg];
+    }, [] as Message[]);
+
+    // Auto-send message from URL parameter when session is ready
+    useEffect(() => {
+        console.log('[AutoSend] Effect triggered:', {
+            shouldAutoSend,
+            activeSessionId,
+            hasMessage: !!message.trim(),
+            message: message,
+            hasModel: !!selectedModel,
+            selectedModel: selectedModel?.label,
+            loading,
+            creatingSession: creatingSessionRef.current,
+            isStreamingResponse,
+            hasPendingMessage: !!pendingMessage,
+            autoSendTriggered: autoSendTriggeredRef.current
+        });
+
+        if (pendingMessage) {
+            console.log('[AutoSend] Pending message exists, waiting for auth/session to complete before auto-sending.');
+            return;
+        }
+
+        if (
+            shouldAutoSend &&
+            activeSessionId &&
+            message.trim() &&
+            selectedModel &&
+            !loading &&
+            !creatingSessionRef.current &&
+            !isStreamingResponse &&
+            !autoSendTriggeredRef.current
+        ) {
+            console.log('[AutoSend] All conditions met! Sending message now...');
+            autoSendTriggeredRef.current = true; // Mark as triggered to prevent re-sending
+            setShouldAutoSend(false); // Reset flag
+            handleSendMessage();
+        }
+    }, [shouldAutoSend, activeSessionId, message, selectedModel, loading, isStreamingResponse, pendingMessage]);
+
+    // Check for API key in localStorage as fallback authentication
+    useEffect(() => {
+        const apiKey = getApiKey();
+        const userData = getUserData();
+        setHasApiKey(!!(apiKey && userData?.privy_user_id));
+    }, [ready, authenticated]);
+
+    // Check for referral bonus notification flag
+    useEffect(() => {
+        if (!ready || !(authenticated || hasApiKey) || typeof window === 'undefined') return;
+
+        // Check if we should show referral bonus notification
+        const showReferralBonus = localStorage.getItem('gatewayz_show_referral_bonus');
+        if (showReferralBonus === 'true') {
+            // Remove the flag
+            localStorage.removeItem('gatewayz_show_referral_bonus');
+
+            // Show the bonus credits notification
+            setTimeout(() => {
+                toast({
+                    title: "Bonus Credits Added!",
+                    description: "An additional $10 in free credits has been added to your account from your referral. Start chatting!",
+                    duration: 8000,
+                });
+            }, 1000); // Delay to allow page to settle
+        }
+    }, [ready, authenticated, hasApiKey, toast]);
+
+    // Send pending message after authentication completes
+    useEffect(() => {
+        if (!pendingMessage) return;
+        if (!ready) return;
+        if (!authenticated && !hasApiKey) return;
+
+        const apiKey = getApiKey();
+        const userData = getUserData();
+
+        // Wait for API key to be available
+        if (!apiKey || !userData?.privy_user_id) {
+            console.log('[Pending Message] Waiting for API key to be available...');
+            return;
+        }
+
+        // Wait for active session to be created
+        if (!activeSessionId) {
+            console.log('[Pending Message] Waiting for active session to be created...');
+            return;
+        }
+
+        // All conditions met - send the pending message
+        console.log('[Pending Message] Auth complete! Sending pending message:', pendingMessage.message);
+
+        // Restore the message to state
+        setMessage(pendingMessage.message);
+        if (pendingMessage.model) {
+            setSelectedModel(pendingMessage.model);
+        }
+        if (pendingMessage.image) {
+            setSelectedImage(pendingMessage.image);
+        }
+        setUserHasTyped(true);
+        userHasTypedRef.current = true;
+
+        // Clear pending message
+        setPendingMessage(null);
+
+        // Trigger send after a short delay to ensure state is updated
+        setTimeout(() => {
+            handleSendMessage();
+        }, 100);
+
+    }, [pendingMessage, ready, authenticated, hasApiKey, activeSessionId]);
+
+    useEffect(() => {
+        // Optimized: Load sessions in parallel with auth, don't wait for ready state
+        // This significantly improves perceived load time
+        const apiKey = getApiKey();
+        const userData = getUserData();
+
+        // If we already have API key in localStorage, start loading immediately
+        if (apiKey && userData?.privy_user_id) {
+            let isMounted = true; // Track if component is still mounted
+
+            const loadSessions = async () => {
+                try {
+                    const sessionsData = await apiHelpers.loadChatSessions('user-1');
+
+                    if (!isMounted) return; // Don't update state if unmounted
+
+                    setSessions(sessionsData);
+
+                    // Check if there's a message parameter in the URL - if so, create a new chat
+                    const messageParam = searchParams?.get('message');
+                    if (messageParam) {
+                        console.log('[loadSessions] Message parameter detected, creating new chat instead of loading recent session');
+                        createNewChat();
+                        return;
+                    }
+
+                    // Select the most recent session by default (most likely to have messages)
+                    // Sort by updatedAt descending to get the most recently active session
+                    const mostRecentSession = [...sessionsData].sort((a, b) =>
+                        b.updatedAt.getTime() - a.updatedAt.getTime()
+                    )[0];
+
+                    // Default to empty chat with prompt suggestions
+                    console.log('[loadSessions] Loaded sessions, defaulting to empty chat state with prompt suggestions');
+                    setActiveSessionId(null);
+                } catch (error) {
+                    console.error('[loadSessions] Failed to load sessions:', error);
+                    // Failed to load sessions, fallback to creating a new chat
+                    if (isMounted) {
+                        createNewChat();
+                    }
+                }
+            };
+
+            loadSessions();
+
+            return () => {
+                isMounted = false; // Cleanup: mark as unmounted
+            };
+        }
+
+        // If no API key yet, wait for authentication to complete
+        if (!ready) {
+            return;
+        }
+
+        if (!authenticated && !hasApiKey) {
+            return;
+        }
+
+        // Wait for API key to be saved to localStorage after authentication
+        if (!apiKey || !userData?.privy_user_id) {
+            // Retry with increasing intervals until we have the API key
+            const checkInterval = setInterval(() => {
+                const key = getApiKey();
+                const data = getUserData();
+                if (key && data?.privy_user_id) {
+                    clearInterval(checkInterval);
+                    // Trigger auth ready state to force effect to re-run
+                    setAuthReady(true);
+                }
+            }, 100);
+
+            // Clean up after 10 seconds
+            setTimeout(() => clearInterval(checkInterval), 10000);
+            return () => clearInterval(checkInterval);
+        }
+    }, [ready, authenticated, hasApiKey, authReady]);
+
+    // Handle rate limit countdown timer
+    useEffect(() => {
+        if (rateLimitCountdown > 0) {
+            const timer = setInterval(() => {
+                setRateLimitCountdown(prev => {
+                    if (prev <= 1) {
+                        return 0;
+                    }
+                    return prev - 1;
+                });
+            }, 1000);
+
+            return () => clearInterval(timer);
+        }
+    }, [rateLimitCountdown]);
+
+    // Note: In a real app, you would save sessions to backend API here
+    // useEffect(() => {
+    //     // Save sessions to backend API whenever they change
+    //     if(sessions.length > 0) {
+    //         saveSessionsToAPI(sessions);
+    //     }
+    // }, [sessions]);
+
+    // Scroll to bottom when messages change
+    useEffect(() => {
+        if (chatContainerRef.current) {
+            chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+        }
+    }, [messages]);
+
+    // Lazy load messages when switching to a session
+    const switchToSession = async (sessionId: string) => {
+        const session = sessions.find(s => s.id === sessionId);
+        if (!session) {
+            console.warn('[switchToSession] Session not found:', sessionId);
+            return;
+        }
+
+        console.log('[switchToSession] Switching to session:', {
+            sessionId,
+            hasMessages: session.messages.length > 0,
+            messageCount: session.messages.length,
+            hasApiSessionId: !!session.apiSessionId,
+            alreadyLoaded: loadedSessionIds.has(sessionId)
+        });
+
+        // Log analytics event for session switch
+        logAnalyticsEvent('chat_session_switched', {
+            session_id: sessionId,
+            has_messages: session.messages.length > 0,
+            message_count: session.messages.length
+        });
+
+        // Reset auto-send flag when switching sessions
+        autoSendTriggeredRef.current = false;
+
+        // Set active session immediately for UI responsiveness
+        setActiveSessionId(sessionId);
+
+        // If messages already loaded or session is new (no messages), skip loading
+        if (loadedSessionIds.has(sessionId) || session.messages.length > 0) {
+            console.log('[switchToSession] Skipping message load (already loaded or has messages)');
+            return;
+        }
+
+        // Load messages for this session
+        if (session.apiSessionId) {
+            console.log('[switchToSession] Loading messages for session:', sessionId, 'apiSessionId:', session.apiSessionId);
+            setLoadingMessages(true);
+            try {
+                const messages = await apiHelpers.loadSessionMessages(sessionId, session.apiSessionId);
+                console.log('[switchToSession] Loaded messages:', messages.length);
+
+                // Update the session with loaded messages
+                setSessions(prev => prev.map(s =>
+                    s.id === sessionId ? { ...s, messages } : s
+                ));
+
+                // Mark session as loaded
+                setLoadedSessionIds(prev => new Set(prev).add(sessionId));
+            } catch (error) {
+                console.error('[switchToSession] Failed to load messages:', error);
+            } finally {
+                setLoadingMessages(false);
+            }
+        } else {
+            console.warn('[switchToSession] No apiSessionId for session:', sessionId);
+        }
+    };
+
+    const createNewChat = async () => {
+        // Prevent duplicate session creation
+        if (creatingSessionRef.current) {
+            return null;
+        }
+
+        // Check if there's already a new/empty chat session
+        const existingNewChat = sessions.find(session =>
+            session.messages.length === 0 &&
+            session.title === 'Untitled Chat'
+        );
+
+        if (existingNewChat) {
+            // If there's already a new chat, just switch to it
+            autoSendTriggeredRef.current = false; // Reset auto-send flag for new chat
+            switchToSession(existingNewChat.id);
+            return existingNewChat;
+        }
+
+        creatingSessionRef.current = true;
+        try {
+            // Create new session using API helper
+            const newSession = await apiHelpers.createChatSession('Untitled Chat', selectedModel?.value);
+
+            // Log analytics event for new chat creation
+            logAnalyticsEvent('chat_session_created', {
+                session_id: newSession.id,
+                model: selectedModel?.value
+            });
+
+            // Set active session immediately with the created session object
+            setActiveSessionId(newSession.id);
+
+            // Then update the sessions list
+            setSessions(prev => [newSession, ...prev]);
+
+            // Reset auto-send flag for new chat
+            autoSendTriggeredRef.current = false;
+
+            return newSession;
+        } catch (error) {
+            toast({
+                title: "Error",
+                description: `Failed to create new chat session: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                variant: 'destructive'
+            });
+            return null;
+        } finally {
+            creatingSessionRef.current = false;
+        }
+    };
+
+    const handleExamplePromptClick = (promptText: string) => {
+        // Set the message input to the clicked prompt
+        setMessage(promptText);
+        setUserHasTyped(true);
+        userHasTypedRef.current = true;
+        // Focus on the input
+        setTimeout(() => {
+            messageInputRef.current?.focus();
+        }, 100);
+    }
+
+    const handleDeleteSession = async (sessionId: string) => {
+        try {
+            // Delete from API
+            await apiHelpers.deleteChatSession(sessionId, sessions);
+            
+            setSessions(prev => {
+                const updatedSessions = prev.filter(session => session.id !== sessionId);
+                // If the deleted session was active, switch to the first available session or create a new one
+                if (activeSessionId === sessionId) {
+                    if (updatedSessions.length > 0) {
+                        switchToSession(updatedSessions[0].id);
+                    } else {
+                        createNewChat();
+                    }
+                }
+                return updatedSessions;
+            });
+        } catch (error) {
+            console.error('Failed to delete chat session:', error);
+            toast({
+                title: "Error",
+                description: "Failed to delete chat session. Please try again.",
+                variant: 'destructive'
+            });
+        }
+    }
+
+    const handleRenameSession = async (sessionId: string, newTitle: string) => {
+        try {
+            // Update in API
+            await apiHelpers.updateChatSession(sessionId, { title: newTitle }, sessions);
+            
+            setSessions(prev => prev.map(session =>
+                session.id === sessionId
+                    ? { ...session, title: newTitle, updatedAt: new Date() }
+                    : session
+            ));
+        } catch (error) {
+            console.error('Failed to rename chat session:', error);
+            toast({
+                title: "Error",
+                description: "Failed to rename chat session. Please try again.",
+                variant: 'destructive'
+            });
+        }
+    }
+
+    const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        // Validate file type
+        if (!file.type.startsWith('image/')) {
+            toast({
+                title: "Invalid file type",
+                description: "Please select an image file.",
+                variant: 'destructive'
+            });
+            return;
+        }
+
+        // Validate file size (max 10MB before compression)
+        if (file.size > 10 * 1024 * 1024) {
+            toast({
+                title: "File too large",
+                description: "Please select an image smaller than 10MB.",
+                variant: 'destructive'
+            });
+            return;
+        }
+
+        try {
+            // Optimize image: resize and convert to WebP for better compression
+            const optimizedImage = await optimizeImage(file);
+            setSelectedImage(optimizedImage);
+
+            toast({
+                title: "Image uploaded",
+                description: "Your image has been optimized and is ready to send.",
+            });
+        } catch (error) {
+            toast({
+                title: "Error processing image",
+                description: "Failed to process the image file.",
+                variant: 'destructive'
+            });
+        }
+    };
+
+    // Optimize image by resizing and converting to WebP
+    const optimizeImage = async (file: File): Promise<string> => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+
+            reader.onload = (event) => {
+                const img = new Image();
+                img.onload = () => {
+                    // Create canvas for image processing
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    if (!ctx) {
+                        reject(new Error('Failed to get canvas context'));
+                        return;
+                    }
+
+                    // Calculate optimal dimensions (max 1920x1080 for better performance)
+                    const MAX_WIDTH = 1920;
+                    const MAX_HEIGHT = 1080;
+                    let width = img.width;
+                    let height = img.height;
+
+                    if (width > MAX_WIDTH || height > MAX_HEIGHT) {
+                        const ratio = Math.min(MAX_WIDTH / width, MAX_HEIGHT / height);
+                        width = Math.floor(width * ratio);
+                        height = Math.floor(height * ratio);
+                    }
+
+                    // Set canvas dimensions
+                    canvas.width = width;
+                    canvas.height = height;
+
+                    // Draw image with high quality
+                    ctx.imageSmoothingEnabled = true;
+                    ctx.imageSmoothingQuality = 'high';
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    // Convert to WebP with compression (0.85 quality for good balance)
+                    // Fallback to JPEG if WebP not supported
+                    const supportsWebP = canvas.toDataURL('image/webp').indexOf('data:image/webp') === 0;
+                    const format = supportsWebP ? 'image/webp' : 'image/jpeg';
+                    const quality = 0.85;
+
+                    const optimizedBase64 = canvas.toDataURL(format, quality);
+
+                    // Log compression stats
+                    const originalSize = file.size;
+                    const optimizedSize = Math.round((optimizedBase64.length * 3) / 4);
+                    const savings = Math.round((1 - optimizedSize / originalSize) * 100);
+                    console.log(`Image optimized: ${(originalSize / 1024).toFixed(1)}KB → ${(optimizedSize / 1024).toFixed(1)}KB (${savings}% reduction)`);
+
+                    resolve(optimizedBase64);
+                };
+                img.onerror = () => reject(new Error('Failed to load image'));
+                img.src = event.target?.result as string;
+            };
+
+            reader.onerror = () => reject(new Error('Failed to read file'));
+            reader.readAsDataURL(file);
+        });
+    };
+
+    const handleRemoveImage = () => {
+        setSelectedImage(null);
+        if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+        }
+    };
+
+    const handleVideoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        // Validate file type
+        if (!file.type.startsWith('video/')) {
+            toast({
+                title: "Invalid file type",
+                description: "Please select a video file.",
+                variant: 'destructive'
+            });
+            return;
+        }
+
+        // Validate file size (max 100MB for video)
+        const maxSize = 100 * 1024 * 1024;
+        if (file.size > maxSize) {
+            toast({
+                title: "File too large",
+                description: "Please select a video smaller than 100MB.",
+                variant: 'destructive'
+            });
+            return;
+        }
+
+        try {
+            // Convert video to base64
+            const videoBase64 = await fileToBase64(file);
+            setSelectedVideo(videoBase64);
+
+            toast({
+                title: "Video uploaded",
+                description: `${file.name} is ready to send.`,
+            });
+        } catch (error) {
+            toast({
+                title: "Error processing video",
+                description: "Failed to process the video file.",
+                variant: 'destructive'
+            });
+        }
+    };
+
+    const handleAudioSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        // Validate file type
+        if (!file.type.startsWith('audio/')) {
+            toast({
+                title: "Invalid file type",
+                description: "Please select an audio file.",
+                variant: 'destructive'
+            });
+            return;
+        }
+
+        // Validate file size (max 50MB for audio)
+        const maxSize = 50 * 1024 * 1024;
+        if (file.size > maxSize) {
+            toast({
+                title: "File too large",
+                description: "Please select an audio file smaller than 50MB.",
+                variant: 'destructive'
+            });
+            return;
+        }
+
+        try {
+            // Convert audio to base64
+            const audioBase64 = await fileToBase64(file);
+            setSelectedAudio(audioBase64);
+
+            toast({
+                title: "Audio uploaded",
+                description: `${file.name} is ready to send.`,
+            });
+        } catch (error) {
+            toast({
+                title: "Error processing audio",
+                description: "Failed to process the audio file.",
+                variant: 'destructive'
+            });
+        }
+    };
+
+    // Helper function to convert file to base64
+    const fileToBase64 = (file: File): Promise<string> => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+                resolve(reader.result as string);
+            };
+            reader.onerror = () => {
+                reject(new Error('Failed to read file'));
+            };
+            reader.readAsDataURL(file);
+        });
+    };
+
+    const handleRemoveVideo = () => {
+        setSelectedVideo(null);
+        if (videoInputRef.current) {
+            videoInputRef.current.value = '';
+        }
+    };
+
+    const handleRemoveAudio = () => {
+        setSelectedAudio(null);
+        if (audioInputRef.current) {
+            audioInputRef.current.value = '';
+        }
+    };
+
+    const handleRegenerate = async () => {
+        if (!activeSessionId || messages.length === 0) return;
+        
+        // Get the last user message
+        const lastUserMessage = messages.filter(msg => msg.role === 'user').pop();
+        if (!lastUserMessage) return;
+        
+        // Remove the last assistant message
+        const updatedMessages = messages.slice(0, -1);
+        const updatedSessions = sessions.map(session => {
+            if (session.id === activeSessionId) {
+                return {
+                    ...session,
+                    messages: updatedMessages,
+                    updatedAt: new Date()
+                };
+            }
+            return session;
+        });
+        setSessions(updatedSessions);
+        
+        // Set the message to the last user message and send it again
+        setMessage(lastUserMessage.content);
+        setLoading(true);
+        
+        // Trigger the send message after a short delay
+        setTimeout(() => {
+            handleSendMessage();
+        }, 100);
+    };
+
+    const handleModelSelect = (model: ModelOption | null) => {
+        if (model) {
+            logAnalyticsEvent('model_selected', {
+                model_id: model.value,
+                model_name: model.label,
+                category: model.category,
+                gateway: model.sourceGateway
+            });
+        }
+        setSelectedModel(model);
+
+        // Clear selected media if switching to a model that doesn't support those modalities
+        if (model) {
+            if (!model.modalities?.includes('Image') && selectedImage) {
+                handleRemoveImage();
+            }
+            if (!model.modalities?.includes('Video') && selectedVideo) {
+                handleRemoveVideo();
+            }
+            if (!model.modalities?.includes('Audio') && selectedAudio) {
+                handleRemoveAudio();
+            }
+        }
+    };
+
     const handleSendMessage = async () => {
         // Prevent sending if user hasn't actually typed anything
         if (!userHasTyped) {
@@ -1615,7 +2155,9 @@ function ChatPageContent() {
             setPendingMessage({
                 message: message.trim(),
                 model: selectedModel,
-                image: selectedImage
+                image: selectedImage,
+                video: selectedVideo,
+                audio: selectedAudio
             });
 
             // Show toast that we're logging them in
@@ -1648,7 +2190,9 @@ function ChatPageContent() {
             setPendingMessage({
                 message: trimmedMessage,
                 model: selectedModel,
-                image: selectedImage
+                image: selectedImage,
+                video: selectedVideo,
+                audio: selectedAudio
             });
 
             if (!creatingSessionRef.current) {
@@ -1666,22 +2210,55 @@ function ChatPageContent() {
         const isFirstMessage = messages.length === 0;
         const userMessage = message;
         const userImage = selectedImage;
+        const userVideo = selectedVideo;
+        const userAudio = selectedAudio;
+
+        // Check if this exact message already exists in history to prevent duplicate user messages
+        const isDuplicateMessage = messages.some(msg =>
+            msg.role === 'user' &&
+            msg.content === userMessage &&
+            msg.image === (userImage || undefined) &&
+            msg.video === (userVideo || undefined) &&
+            msg.audio === (userAudio || undefined)
+        );
+
+        if (isDuplicateMessage) {
+            console.warn('[MessageDedup] Attempted to add duplicate message, aborting send:', { content: userMessage.substring(0, 50) });
+            toast({
+                title: "Duplicate message",
+                description: "This message was already sent.",
+                variant: 'default'
+            });
+            return;
+        }
 
         const updatedMessages: Message[] = [...messages, {
             role: 'user' as const,
             content: userMessage,
-            image: userImage || undefined
+            image: userImage || undefined,
+            video: userVideo || undefined,
+            audio: userAudio || undefined
         }];
 
         // Generate title if this is the first message
         let newTitle = isFirstMessage ? generateChatTitle(userMessage) : undefined;
+
+        // OPTIMIZATION: Optimistic UI - add assistant message immediately with streaming flag
+        // This makes the UI feel more responsive by showing typing indicator right away
+        const optimisticAssistantMessage: Message = {
+            role: 'assistant',
+            content: '',
+            reasoning: '',
+            isStreaming: true,
+            model: selectedModel.value
+        };
 
         const updatedSessions = sessions.map(session => {
             if (session.id === currentSessionId) {
                 return {
                     ...session,
                     title: isFirstMessage && newTitle ? newTitle : session.title,
-                    messages: updatedMessages,
+                    messages: [...updatedMessages, optimisticAssistantMessage],
                     updatedAt: new Date()
                 };
             }
@@ -1691,10 +2268,25 @@ function ChatPageContent() {
 
         setMessage('');
         setSelectedImage(null);
+        setSelectedVideo(null);
+        setSelectedAudio(null);
+        setUserHasTyped(false); // Reset the flag so unsent messages don't get re-sent
+        userHasTypedRef.current = false;
         if (fileInputRef.current) {
             fileInputRef.current.value = '';
         }
-        setLoading(true);
+        if (videoInputRef.current) {
+            videoInputRef.current.value = '';
+        }
+        if (audioInputRef.current) {
+            audioInputRef.current.value = '';
+        }
+        setIsStreamingResponse(true); // Set streaming state immediately
+        setLoading(false); // Don't show loading spinner
+
+        // Use ChatStreamHandler to manage streaming state and prevent scope issues
+        // Declare outside try-catch so it's accessible in both blocks
+        const streamHandler = new ChatStreamHandler();
 
         try {
             console.log('🚀 Starting handleSendMessage - Core auth check:', {
@@ -1725,10 +2317,12 @@ function ChatPageContent() {
                 messagesCount: currentSession?.messages?.length || 0
             });
 
-            // Save the user message to the backend first
+            // OPTIMIZATION: Save the user message to the backend before streaming
+            // This ensures the backend has the user message before processing the stream
+            // which prevents race conditions where the API can't find the context
             if (currentSession?.apiSessionId) {
                 try {
-                    console.log('🔄 Attempting to save user message to backend:', {
+                    devLog('🔄 Attempting to save user message to backend:', {
                         sessionId: currentSession.apiSessionId,
                         content: userMessage.substring(0, 100) + '...',
                         model: selectedModel.value,
@@ -1736,29 +2330,32 @@ function ChatPageContent() {
                         apiKey: apiKey ? `${apiKey.substring(0, 10)}...` : 'NO_API_KEY',
                         privyUserId: userData.privy_user_id
                     });
-                    
+
                     const chatAPI = new ChatHistoryAPI(apiKey, undefined, userData.privy_user_id);
-                    const result = await chatAPI.saveMessage(
-                        currentSession.apiSessionId,
-                        'user',
-                        userMessage,
-                        selectedModel.value,
-                        undefined // Token count not calculated yet
-                    );
-                    console.log('✅ User message saved to backend successfully:', result);
+                    if (currentSession.apiSessionId) {
+                        const result = await chatAPI.saveMessage(
+                            currentSession.apiSessionId,
+                            'user',
+                            userMessage,
+                            selectedModel.value,
+                            undefined // Token count not calculated yet
+                        );
+                        devLog('✅ User message saved to backend successfully:', result);
+                    }
                 } catch (error) {
-                    console.error('❌ Failed to save user message to backend:', error);
-                    console.error('Error details:', {
+                    devError('❌ Failed to save user message to backend:', error);
+                    devError('Error details:', {
                         message: error instanceof Error ? error.message : String(error),
                         stack: error instanceof Error ? error.stack : undefined,
                         sessionId: currentSession.apiSessionId,
                         hasApiKey: !!apiKey,
                         hasPrivyUserId: !!userData.privy_user_id
                     });
-                    // Continue with the request even if saving fails
+                    // Don't throw - let the stream request proceed anyway
+                    // The message is already in the UI optimistically
                 }
             } else {
-                console.warn('⚠️ Cannot save user message - no API session ID:', {
+                devWarn('⚠️ Cannot save user message - no API session ID:', {
                     currentSession,
                     sessionId: currentSession?.apiSessionId,
                     currentSessionId
@@ -1773,75 +2370,38 @@ function ChatPageContent() {
             console.log('Model:', selectedModel.value);
             console.log('Session ID:', currentSession?.apiSessionId || 'none');
 
-            // Prepare message content with image if present
+            // Prepare message content with image, video, and audio if present
             let messageContent: any = userMessage;
-            if (userImage) {
-                messageContent = [
-                    { type: 'text', text: userMessage },
-                    { type: 'image_url', image_url: { url: userImage } }
+            if (userImage || userVideo || userAudio) {
+                const contentArray: any[] = [
+                    { type: 'text', text: userMessage }
                 ];
-            }
 
-            const mapToResponsesContent = (content: any): any[] => {
-                if (typeof content === 'string') {
-                    return [{ type: 'input_text', text: content }];
-                }
-
-                if (Array.isArray(content)) {
-                    return content.map(item => {
-                        if (!item || typeof item !== 'object') {
-                            return { type: 'input_text', text: String(item ?? '') };
-                        }
-                        if (item.type === 'text' || item.type === 'input_text') {
-                            return { type: 'input_text', text: item.text ?? '' };
-                        }
-                        if (item.type === 'image_url' || item.type === 'input_image_url') {
-                            return {
-                                type: 'input_image_url',
-                                image_url: item.image_url,
-                            };
-                        }
-                        if (item.type === 'input_audio') {
-                            return item;
-                        }
-                        if (typeof item.content === 'string') {
-                            return { type: 'input_text', text: item.content };
-                        }
-                        return { type: 'input_text', text: JSON.stringify(item) };
+                if (userImage) {
+                    contentArray.push({
+                        type: 'image_url',
+                        image_url: { url: userImage }
                     });
                 }
 
-                if (content && typeof content === 'object' && 'text' in content) {
-                    return [{ type: 'input_text', text: (content as { text: string }).text }];
+                if (userVideo) {
+                    contentArray.push({
+                        type: 'video_url',
+                        video_url: { url: userVideo }
+                    });
                 }
 
-                return [{ type: 'input_text', text: String(content ?? '') }];
-            };
-
-            // Initialize assistant message with streaming flag
-            const assistantMessage: Message = {
-                role: 'assistant',
-                content: '',
-                reasoning: '',
-                isStreaming: true,
-                model: selectedModel.value
-            };
-
-            // Add streaming message to UI
-            // Use updatedSessions to preserve the title update from line 1051
-            const streamingSessions = updatedSessions.map(session => {
-                if (session.id === currentSessionId) {
-                    return {
-                        ...session,
-                        messages: [...updatedMessages, assistantMessage],
-                        updatedAt: new Date()
-                    };
+                if (userAudio) {
+                    contentArray.push({
+                        type: 'audio_url',
+                        audio_url: { url: userAudio }
+                    });
                 }
-                return session;
-            });
-            setSessions(streamingSessions);
-            setIsStreamingResponse(true);
-            setLoading(false); // Stop loading spinner, but message is still streaming
+
+                messageContent = contentArray;
+            }
+
+            // Note: Assistant message already added optimistically above, no need to add again
 
             try {
                 // Use streaming API
@@ -1889,14 +2449,36 @@ function ChatPageContent() {
                 // Add all previous messages from the conversation
                 for (const msg of messages) {
                     if (msg.role === 'user') {
-                        // Handle user messages with potential images
-                        if (msg.image) {
+                        // Handle user messages with potential images, videos, or audio
+                        if (msg.image || msg.video || msg.audio) {
+                            const contentArray: any[] = [
+                                { type: 'text', text: msg.content }
+                            ];
+
+                            if (msg.image) {
+                                contentArray.push({
+                                    type: 'image_url',
+                                    image_url: { url: msg.image }
+                                });
+                            }
+
+                            if (msg.video) {
+                                contentArray.push({
+                                    type: 'video_url',
+                                    video_url: { url: msg.video }
+                                });
+                            }
+
+                            if (msg.audio) {
+                                contentArray.push({
+                                    type: 'audio_url',
+                                    audio_url: { url: msg.audio }
+                                });
+                            }
+
                             conversationHistory.push({
                                 role: 'user',
-                                content: [
-                                    { type: 'text', text: msg.content },
-                                    { type: 'image_url', image_url: { url: msg.image } }
-                                ]
+                                content: contentArray
                             });
                         } else {
                             // Plain text message - use string content for chat/completions endpoint
@@ -1957,10 +2539,9 @@ function ChatPageContent() {
                     url: url
                 });
 
-                // Accumulate content locally to avoid state closure issues
-                let accumulatedContent = '';
-                let accumulatedReasoning = '';
-                let inThinking = false;
+                // Use ChatStreamHandler to properly manage streaming state and avoid ReferenceErrors
+                const streamHandler = new ChatStreamHandler();
+                streamHandler.reset();
 
                 console.log('🌊 Starting to stream response...');
 
@@ -1969,102 +2550,29 @@ function ChatPageContent() {
                     model: modelValue,
                     gateway: selectedModel.sourceGateway,
                     has_image: !!selectedImage,
+                    has_video: !!selectedVideo,
+                    has_audio: !!selectedAudio,
                     message_length: messageContent.length,
                     session_id: currentSessionId
                 });
 
-                for await (const chunk of streamChatResponse(
-                    url,
-                    apiKey,
-                    requestBody
-                )) {
-                    console.log('📥 Received chunk:', {
-                        hasContent: !!chunk.content,
-                        contentLength: chunk.content?.length || 0,
-                        hasReasoning: !!chunk.reasoning,
-                        reasoningLength: chunk.reasoning?.length || 0,
-                        isDone: chunk.done,
-                        status: chunk.status
-                    });
-                    if (chunk.status === 'rate_limit_retry') {
-                        const waitSeconds = Math.max(1, Math.ceil((chunk.retryAfterMs ?? 0) / 1000));
-                        setRateLimitCountdown(waitSeconds);
-                        console.log(`Rate limit reached. Retrying in ${waitSeconds} seconds...`);
-                        continue;
-                    }
+                // OPTIMIZATION: Batch UI updates to reduce re-renders
+                // Only update UI every 16ms (60fps) for smooth streaming experience
+                let lastUpdateTime = Date.now();
+                let pendingUpdate = false;
+                const UPDATE_INTERVAL_MS = 16; // ~60fps for smoother perceived performance
 
-                    // Process content with thinking tag extraction
-                    if (chunk.content) {
-                        const content = String(chunk.content);
-
-                        // Debug: Log content to see what we're receiving
-                        if (content.includes('<thinking') || content.includes('</thinking') || content.includes('[THINKING') || content.includes('<think') || content.includes('</think')) {
-                            console.log('[THINKING DEBUG]', { content, inThinking, length: content.length });
-                        }
-
-                    // Process content character by character to handle thinking tags correctly
-                        let normalizedContent = String(content);
-                        normalizedContent = normalizedContent
-                            .replace(/\[THINKING\]/gi, '<thinking>')
-                            .replace(/\[\/THINKING\]/gi, '</thinking>')
-                            .replace(/<think>/gi, '<thinking>')
-                            .replace(/<\/think>/gi, '</thinking>')
-                            .replace(/<\|startofthinking\|>/gi, '<thinking>')
-                            .replace(/<\|endofthinking\|>/gi, '</thinking>');
-
-                        let i = 0;
-                        while (i < normalizedContent.length) {
-                            const remaining = normalizedContent.slice(i);
-                            const openMatch = remaining.match(/^<\|?(?:thinking|think)>/i);
-                            if (openMatch) {
-                                inThinking = true;
-                                i += openMatch[0].length;
-                                console.log('[THINKING DEBUG] Opened thinking tag');
-                                continue;
-                            }
-
-                            const closeMatch = remaining.match(/^<\|?\/(?:thinking|think)>/i);
-                            if (closeMatch) {
-                                inThinking = false;
-                                i += closeMatch[0].length;
-                                console.log('[THINKING DEBUG] Closed thinking tag');
-                                continue;
-                            }
-
-                            const char = normalizedContent[i];
-                            if (inThinking) {
-                                accumulatedReasoning += char;
-                            } else {
-                                accumulatedContent += char;
-                            }
-                            i++;
-                        }
-                    }
-
-                    // Also accumulate any reasoning sent explicitly from the API
-                    if (chunk.reasoning) {
-                        console.log('[REASONING] Received explicit reasoning chunk:', chunk.reasoning.length, 'chars');
-                        accumulatedReasoning += String(chunk.reasoning);
-                    }
-
-                    // Update the assistant message with streamed content
+                const performUIUpdate = () => {
+                    pendingUpdate = false;
                     setSessions(prev => prev.map(session => {
                         if (session.id === currentSessionId) {
                             const messages = [...session.messages];
                             const lastMessage = messages[messages.length - 1];
 
-                            if (lastMessage.role === 'assistant') {
-                                lastMessage.content = accumulatedContent;
-                                lastMessage.reasoning = accumulatedReasoning;
-                                lastMessage.isStreaming = !chunk.done;
-
-                                if (accumulatedReasoning.length > 0) {
-                                    console.log('[REASONING] Updated message with reasoning:', {
-                                        reasoningLength: accumulatedReasoning.length,
-                                        contentLength: accumulatedContent.length,
-                                        isStreaming: !chunk.done
-                                    });
-                                }
+                            if (lastMessage && lastMessage.role === 'assistant') {
+                                lastMessage.content = streamHandler.state.accumulatedContent;
+                                lastMessage.reasoning = streamHandler.state.accumulatedReasoning;
+                                lastMessage.isStreaming = true;
                             }
 
                             return {
@@ -2075,56 +2583,149 @@ function ChatPageContent() {
                         }
                         return session;
                     }));
+                };
+
+                for await (const chunk of streamChatResponse(
+                    url,
+                    apiKey,
+                    requestBody
+                )) {
+                    devLog('📥 Received chunk:', {
+                        hasContent: !!chunk.content,
+                        contentLength: chunk.content?.length || 0,
+                        hasReasoning: !!chunk.reasoning,
+                        reasoningLength: chunk.reasoning?.length || 0,
+                        isDone: chunk.done,
+                        status: chunk.status
+                    });
+                    if (chunk.status === 'rate_limit_retry') {
+                        const waitSeconds = Math.max(1, Math.ceil((chunk.retryAfterMs ?? 0) / 1000));
+                        setRateLimitCountdown(waitSeconds);
+                        devLog(`Rate limit reached. Retrying in ${waitSeconds} seconds...`);
+                        continue;
+                    }
+
+                    // Process content with thinking tag extraction
+                    if (chunk.content) {
+                        const content = String(chunk.content);
+
+                        // Debug: Log content to see what we're receiving
+                        if (content.includes('<thinking') || content.includes('</thinking') || content.includes('[THINKING') || content.includes('<think') || content.includes('</think')) {
+                            devLog('[THINKING DEBUG]', { content, inThinking: streamHandler.state.inThinking, length: content.length });
+                        }
+
+                        // Use handler to process content with thinking tags
+                        streamHandler.processContentWithThinking(content);
+                        streamHandler.incrementChunkCount();
+                    }
+
+                    // Also accumulate any reasoning sent explicitly from the API
+                    if (chunk.reasoning) {
+                        devLog('[REASONING] Received explicit reasoning chunk:', chunk.reasoning.length, 'chars');
+                        streamHandler.addReasoning(String(chunk.reasoning));
+                    }
+
+                    // OPTIMIZATION: Batch UI updates - only update every 50ms
+                    const now = Date.now();
+                    const timeSinceLastUpdate = now - lastUpdateTime;
+
+                    if (chunk.done) {
+                        // Always update immediately when done
+                        performUIUpdate();
+                        // Final update to mark as not streaming
+                        setSessions(prev => prev.map(session => {
+                            if (session.id === currentSessionId) {
+                                const messages = [...session.messages];
+                                const lastMessage = messages[messages.length - 1];
+
+                                if (lastMessage && lastMessage.role === 'assistant') {
+                                    lastMessage.isStreaming = false;
+                                }
+
+                                return {
+                                    ...session,
+                                    messages,
+                                    updatedAt: new Date()
+                                };
+                            }
+                            return session;
+                        }));
+                    } else if (timeSinceLastUpdate >= UPDATE_INTERVAL_MS) {
+                        // Update if enough time has passed
+                        performUIUpdate();
+                        lastUpdateTime = now;
+                    } else if (!pendingUpdate) {
+                        // Schedule an update for later
+                        pendingUpdate = true;
+                        const timeoutId = setTimeout(() => {
+                            if (pendingUpdate) {
+                                performUIUpdate();
+                                lastUpdateTime = Date.now();
+                            }
+                        }, UPDATE_INTERVAL_MS - timeSinceLastUpdate);
+                        // Register timeout so it can be cleaned up if error occurs
+                        streamHandler.registerTimeout(timeoutId);
+                    }
                 }
 
-                // Use the accumulated content instead of reading from stale state
+                // Mark streaming as complete and get final content
+                streamHandler.complete();
                 setIsStreamingResponse(false);
 
-                const finalContent = accumulatedContent;
-                console.log({finalContent});
+                const finalContent = streamHandler.getFinalContent();
+                const finalReasoning = streamHandler.getFinalReasoning();
+                devLog({finalContent, finalReasoning, chunkCount: streamHandler.state.chunkCount});
 
-                // Save the assistant's response to the backend
+                // OPTIMIZATION: Save the assistant's response to the backend asynchronously
+                // This allows the UI to be responsive immediately after streaming completes
                 if (currentSession?.apiSessionId && finalContent) {
-                    try {
-                        console.log('🔄 Attempting to save assistant message to backend:', {
-                            sessionId: currentSession.apiSessionId,
-                            content: finalContent.substring(0, 100) + '...',
-                            model: modelValue,
-                            apiKey: apiKey ? `${apiKey.substring(0, 10)}...` : 'NO_API_KEY',
-                            privyUserId: userData.privy_user_id
-                        });
-                        
-                        const chatAPI = new ChatHistoryAPI(apiKey, undefined, userData.privy_user_id);
-                        const result = await chatAPI.saveMessage(
-                            currentSession.apiSessionId,
-                            'assistant',
-                            finalContent,
-                            modelValue,
-                            undefined // Token count not available from streaming
-                        );
-                        console.log('✅ Assistant message saved to backend successfully:', result);
+                    // Fire and forget - save in background
+                    const saveAssistantMessage = async () => {
+                        try {
+                            devLog('🔄 Attempting to save assistant message to backend:', {
+                                sessionId: currentSession.apiSessionId,
+                                content: finalContent.substring(0, 100) + '...',
+                                model: modelValue,
+                                apiKey: apiKey ? `${apiKey.substring(0, 10)}...` : 'NO_API_KEY',
+                                privyUserId: userData.privy_user_id
+                            });
 
-                        // Log analytics event for successful message completion
-                        logAnalyticsEvent('chat_message_completed', {
-                            model: modelValue,
-                            gateway: selectedModel.sourceGateway,
-                            response_length: finalContent.length,
-                            has_reasoning: !!accumulatedReasoning,
-                            reasoning_length: accumulatedReasoning?.length || 0,
-                            session_id: currentSessionId
-                        });
-                    } catch (error) {
-                        console.error('❌ Failed to save assistant message to backend:', error);
-                        console.error('Error details:', {
-                            message: error instanceof Error ? error.message : String(error),
-                            stack: error instanceof Error ? error.stack : undefined,
-                            sessionId: currentSession.apiSessionId,
-                            hasApiKey: !!apiKey,
-                            hasPrivyUserId: !!userData.privy_user_id
-                        });
-                    }
+                            const chatAPI = new ChatHistoryAPI(apiKey, undefined, userData.privy_user_id);
+                            if (currentSession.apiSessionId) {
+                                const result = await chatAPI.saveMessage(
+                                    currentSession.apiSessionId,
+                                    'assistant',
+                                    finalContent,
+                                    modelValue,
+                                    undefined // Token count not available from streaming
+                                );
+                                devLog('✅ Assistant message saved to backend successfully:', result);
+                            }
+
+                            // Log analytics event for successful message completion
+                            logAnalyticsEvent('chat_message_completed', {
+                                model: modelValue,
+                                gateway: selectedModel.sourceGateway,
+                                response_length: finalContent.length,
+                                has_reasoning: !!finalReasoning,
+                                reasoning_length: finalReasoning?.length || 0,
+                                session_id: currentSessionId
+                            });
+                        } catch (error) {
+                            devError('❌ Failed to save assistant message to backend:', error);
+                            devError('Error details:', {
+                                message: error instanceof Error ? error.message : String(error),
+                                stack: error instanceof Error ? error.stack : undefined,
+                                sessionId: currentSession.apiSessionId,
+                                hasApiKey: !!apiKey,
+                                hasPrivyUserId: !!userData.privy_user_id
+                            });
+                        }
+                    };
+                    // Start saving in background - don't await
+                    saveAssistantMessage();
                 } else {
-                    console.warn('⚠️ Cannot save assistant message:', {
+                    devWarn('⚠️ Cannot save assistant message:', {
                         hasSessionId: !!currentSession?.apiSessionId,
                         hasContent: !!finalContent,
                         currentSession,
@@ -2148,6 +2749,7 @@ function ChatPageContent() {
 
                     // Mark chat task as complete in onboarding
                     try {
+                        if (typeof window !== 'undefined') {
                         const savedTasks = localStorage.getItem('gatewayz_onboarding_tasks');
                         if (savedTasks) {
                             const taskState = JSON.parse(savedTasks);
@@ -2155,6 +2757,7 @@ function ChatPageContent() {
                                 taskState.chat = true;
                                 localStorage.setItem('gatewayz_onboarding_tasks', JSON.stringify(taskState));
                                 console.log('Onboarding - Chat task marked as complete');
+                                }
                             }
                         }
                     } catch (error) {
@@ -2163,18 +2766,38 @@ function ChatPageContent() {
                 }
 
             } catch (streamError) {
+                // Clean up any pending timeouts to prevent ReferenceErrors
+                if (streamHandler) {
+                    streamHandler.cleanup();
+                    streamHandler.complete(); // Complete stops streaming
+                }
+
                 setIsStreamingResponse(false);
+                if (streamHandler) {
+                    streamHandler.addError(streamError instanceof Error ? streamError : new Error(String(streamError)));
+                }
+
                 console.error('❌ Streaming error occurred:', streamError);
                 console.error('Full error object:', {
                     name: streamError instanceof Error ? streamError.name : 'unknown',
                     message: streamError instanceof Error ? streamError.message : String(streamError),
                     stack: streamError instanceof Error ? streamError.stack : undefined,
                     type: typeof streamError,
-                    keys: Object.keys(streamError instanceof Error ? streamError : {})
+                    keys: Object.keys(streamError instanceof Error ? streamError : {}),
+                    partialContent: streamHandler.getFinalContent(), // ✅ Always accessible via streamHandler
+                    chunkCount: streamHandler.state.chunkCount
                 });
 
                 const errorMessage = streamError instanceof Error ? streamError.message : 'Failed to get response';
                 console.error('Error message for analysis:', errorMessage);
+                console.error('Stream state at error:', streamHandler.getErrorSummary());
+
+                // Log error context with accumulated content (already added above, this is redundant but kept for context)
+                if (streamHandler) {
+                    const errorSummary = streamHandler.getErrorSummary();
+                    console.error('Error summary:', errorSummary);
+                    console.error('Stream handler error summary:', streamHandler.getErrorSummary());
+                }
 
                 // Log analytics event for streaming error
                 logAnalyticsEvent('chat_message_failed', {
@@ -2363,9 +2986,10 @@ function ChatPageContent() {
   return (
     <>
       <FreeModelsBanner />
-      <div className="flex h-screen max-h-[calc(100dvh-200px)] has-onboarding-banner:max-h-[calc(100dvh-280px)] bg-background overflow-hidden">
-        {/* Left Sidebar */}
-          <div className="hidden lg:flex w-56 xl:w-72 border-r flex-shrink-0 overflow-hidden">
+      <div className="h-0 has-onboarding-banner:h-[50px]" aria-hidden="true" style={{ transition: 'height 0.3s ease' }} />
+      <div data-chat-container className="flex h-[calc(100vh-130px)] has-onboarding-banner:h-[calc(100vh-180px)] bg-background overflow-hidden">
+        {/* Left Sidebar - Desktop Only */}
+        <div className="hidden lg:flex w-56 xl:w-72 border-r flex-shrink-0 overflow-hidden">
           <ChatSidebar
             sessions={sessions}
             activeSessionId={activeSessionId}
@@ -2378,24 +3002,47 @@ function ChatPageContent() {
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col relative overflow-hidden min-w-0">
+        {/* Background Logo - Hidden on mobile for better performance */}
       <img
         src="/logo_transparent.svg"
-        alt="Stats"
+          alt="Background"
         className="absolute top-8 left-1/2 transform -translate-x-1/2 w-[75vh] h-[75vh] pointer-events-none opacity-50 hidden lg:block dark:hidden"
       />
       <img
         src="/logo_black.svg"
-        alt="Stats"
+          alt="Background"
         className="absolute top-8 left-1/2 transform -translate-x-1/2 w-[75vh] h-[75vh] pointer-events-none opacity-50 hidden dark:lg:block"
       />
 
-       
-        
-        {/* Header with title and model selector */}
-        <header className="relative z-10 w-full p-4 lg:p-6 max-w-7xl mx-auto overflow-hidden">
-          {/* Desktop Layout - Side by side */}
-          <div className="hidden lg:flex items-center justify-between gap-4">
-            <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
+        {/* Mobile Header - Compact and Touch-Friendly */}
+        <header className="relative z-10 w-full bg-background/95 backdrop-blur-sm border-b border-border/50 lg:border-none lg:bg-transparent">
+          {/* Mobile Layout - Single Row on Mobile */}
+          <div className="flex lg:hidden items-center gap-2 p-3 w-full">
+            {/* Menu Button */}
+            <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
+              <SheetTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-9 w-9 flex-shrink-0">
+                  <Menu className="h-5 w-5" />
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="left" className="w-[280px] sm:w-[320px] p-0 pt-12 overflow-hidden">
+                <SheetHeader className="sr-only">
+                  <SheetTitle>Chat Sidebar</SheetTitle>
+                </SheetHeader>
+                <ChatSidebar
+                  sessions={sessions}
+                  activeSessionId={activeSessionId}
+                  switchToSession={switchToSession}
+                  createNewChat={createNewChat}
+                  onDeleteSession={handleDeleteSession}
+                  onRenameSession={handleRenameSession}
+                  onClose={() => setMobileSidebarOpen(false)}
+                />
+              </SheetContent>
+            </Sheet>
+
+            {/* Title - Hidden on very small screens, shown on sm and up */}
+            <div className="min-w-0 flex-1">
               {isEditingTitle ? (
                 <Input
                   type="text"
@@ -2418,50 +3065,36 @@ function ChatPageContent() {
                     }
                   }}
                   autoFocus
-                  className="text-2xl font-semibold h-auto px-2 py-1 min-w-0 flex-1"
+                  className="text-sm font-semibold h-auto px-2 py-1 min-w-0"
                 />
               ) : (
-                <>
-                  <h1 className="text-2xl font-semibold truncate min-w-0 flex-1 max-w-full">{activeSession?.title || 'Untitled Chat'}</h1>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 flex-shrink-0"
-                    onClick={() => {
-                      setEditedTitle(activeSession?.title || '');
-                      setIsEditingTitle(true);
-                    }}
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                </>
+                <h1 className="text-sm font-semibold truncate">{activeSession?.title || 'Untitled Chat'}</h1>
               )}
             </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
+
+            {/* Edit Title Button */}
+            {!isEditingTitle && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 flex-shrink-0"
+                onClick={() => {
+                  setEditedTitle(activeSession?.title || '');
+                  setIsEditingTitle(true);
+                }}
+              >
+                <Pencil className="h-4 w-4" />
+              </Button>
+            )}
+
+            {/* Model Selector */}
+            <div className="flex-shrink-0">
               <ModelSelect selectedModel={selectedModel} onSelectModel={handleModelSelect} />
             </div>
           </div>
 
-          {/* Mobile Layout - TitleSection above, Model below */}
-          <div className="flex lg:hidden flex-col gap-3">
-            <div className="flex items-center gap-2 w-full">
-              <div className="flex-shrink-0">
-                <Sheet>
-                  <SheetTrigger asChild>
-                    <Button variant="ghost" size="icon"><Menu/></Button>
-                  </SheetTrigger>
-                  <SheetContent side="left" className="w-[300px] p-0">
-                    <ChatSidebar
-                      sessions={sessions}
-                      activeSessionId={activeSessionId}
-                      switchToSession={switchToSession}
-                      createNewChat={createNewChat}
-                      onDeleteSession={handleDeleteSession}
-                      onRenameSession={handleRenameSession}
-                    />
-                  </SheetContent>
-                </Sheet>
-              </div>
+          {/* Desktop Layout - Side by side */}
+          <div className="hidden lg:flex items-center justify-between gap-4 p-6 max-w-7xl mx-auto">
               <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
                 {isEditingTitle ? (
                   <Input
@@ -2485,14 +3118,26 @@ function ChatPageContent() {
                       }
                     }}
                     autoFocus
-                    className="text-lg font-semibold h-auto px-2 py-1 min-w-0 flex-1"
+                  className="text-2xl font-semibold h-auto px-2 py-1 min-w-0 flex-1"
                   />
                 ) : (
-                  <h1 className="text-lg font-semibold truncate min-w-0 flex-1">{activeSession?.title || 'Untitled Chat'}</h1>
+                <>
+                  <h1 className="text-2xl font-semibold truncate min-w-0 flex-1 max-w-full">{activeSession?.title || 'Untitled Chat'}</h1>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 flex-shrink-0"
+                    onClick={() => {
+                      setEditedTitle(activeSession?.title || '');
+                      setIsEditingTitle(true);
+                    }}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                </>
                 )}
               </div>
-            </div>
-            <div className="w-full">
+            <div className="flex items-center gap-2 flex-shrink-0">
               <ModelSelect selectedModel={selectedModel} onSelectModel={handleModelSelect} />
             </div>
           </div>
@@ -2510,57 +3155,100 @@ function ChatPageContent() {
             </div>
           )}
           {messages.length > 0 && (
-            <div ref={chatContainerRef} className="flex-1 flex flex-col gap-4 lg:gap-6 overflow-y-auto p-4 lg:p-6 max-w-4xl mx-auto w-full">
+            <div ref={chatContainerRef} className="flex-1 flex flex-col gap-3 sm:gap-4 lg:gap-6 overflow-y-auto p-3 sm:p-4 lg:p-6 max-w-4xl mx-auto w-full">
               {messages.filter(msg => msg && msg.role).map((msg, index) => {
-                // Show thinking loader for streaming messages with no content
-                if (msg.role === 'assistant' && msg.isStreaming && !msg.content) {
-                  return <ThinkingLoader key={index} modelName={getModelDisplayName(msg.model)} />;
-                }
+                const isAssistant = msg.role === 'assistant';
+                const hasAssistantContent = Boolean(isAssistant && msg.content && msg.content.trim().length > 0);
+                const showThinkingLoader = isAssistant && msg.isStreaming && !hasAssistantContent;
+                const reasoningSource = getReasoningSource(msg.model);
 
                 return (
-                  <div key={index} className={`flex items-start gap-3 ${msg.role === 'user' ? 'justify-end' : ''}`}>
-                    <div className={`flex flex-col gap-2 ${msg.role === 'user' ? 'items-end' : 'items-start'} w-full`}>
-                      {msg.role === 'assistant' && msg.reasoning && msg.reasoning.trim().length > 0 && (
+                  <div key={index} className={`flex items-start gap-2 sm:gap-3 ${msg.role === 'user' ? 'justify-end' : ''}`}>
+                    <div className={`flex flex-col gap-1 sm:gap-2 ${msg.role === 'user' ? 'items-end' : 'items-start'} w-full max-w-[95%] sm:max-w-full`}>
+                      {isAssistant && msg.reasoning && msg.reasoning.trim().length > 0 && (
                         <ReasoningDisplay
                           reasoning={msg.reasoning}
                           isStreaming={msg.isStreaming}
+                          source={reasoningSource}
                           className="w-full max-w-2xl"
                         />
                       )}
+
                       {msg.role === 'user' ? (
-                        <div className="rounded-lg p-3 bg-blue-600 dark:bg-blue-600 text-white max-w-2xl">
+                        <div className="rounded-lg p-2.5 sm:p-3 bg-blue-600 dark:bg-blue-600 text-white max-w-full">
                           {msg.image && (
                             <img
                               src={msg.image}
                               alt="Uploaded image"
-                              className="max-w-[280px] lg:max-w-md max-h-48 lg:max-h-64 rounded-lg mb-2 object-contain border border-white/20"
+                              className="max-w-[150px] sm:max-w-[200px] lg:max-w-xs rounded-lg mb-2"
                             />
                           )}
-                          <div className="text-sm whitespace-pre-wrap text-white">{msg.content}</div>
+                          {msg.video && (
+                            <video
+                              src={msg.video}
+                              controls
+                              className="max-w-[150px] sm:max-w-[200px] lg:max-w-xs rounded-lg mb-2"
+                              title="Uploaded video"
+                            />
+                          )}
+                          {msg.audio && (
+                            <audio
+                              src={msg.audio}
+                              controls
+                              className="max-w-[150px] sm:max-w-[200px] lg:max-w-xs mb-2 border-0"
+                              title="Uploaded audio"
+                            />
+                          )}
+                          <div className="text-sm whitespace-pre-wrap text-white break-words">{msg.content}</div>
                         </div>
+                      ) : showThinkingLoader ? (
+                        <ThinkingLoader modelName={getModelDisplayName(msg.model)} />
                       ) : (
-                        <div className="rounded-lg p-3 bg-muted/30 dark:bg-muted/20 border border-border max-w-2xl w-full">
+                        <div className="rounded-lg p-2.5 sm:p-3 max-w-full w-full">
                           <div className="flex items-center justify-between mb-2">
-                            <p className="text-xs font-semibold text-muted-foreground">{getModelDisplayName(msg.model)}</p>
+                            <p className="text-xs font-semibold text-muted-foreground truncate">{getModelDisplayName(msg.model)}</p>
+                            {msg.isStreaming && (
+                              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                <div className="flex gap-1">
+                                  <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" style={{ animationDelay: '0ms' }}></div>
+                                  <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" style={{ animationDelay: '150ms' }}></div>
+                                  <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" style={{ animationDelay: '300ms' }}></div>
+                                </div>
+                                <span className="font-medium">Streaming...</span>
+                              </div>
+                            )}
                           </div>
-                          <div className="text-sm prose prose-sm max-w-none dark:prose-invert">
-                            <ReactMarkdown
-                              remarkPlugins={[remarkGfm, remarkMath]}
-                              rehypePlugins={[rehypeKatex]}
-                            >
-                              {fixLatexSyntax(msg.content)}
-                            </ReactMarkdown>
+                          <div className="text-sm prose prose-sm max-w-none dark:prose-invert break-words">
+                            <MarkdownRenderer>{fixLatexSyntax(msg.content)}</MarkdownRenderer>
                           </div>
-                          {/* Action Buttons - always visible in bottom right */}
+                          {/* Action Buttons - Touch-friendly on mobile */}
                           <div className="flex items-center justify-end gap-1 mt-3 pt-2 border-t border-border">
-                            <Button variant="ghost" size="sm" onClick={() => navigator.clipboard.writeText(msg.content)} className="h-8 w-8 p-0 hover:bg-muted" title="Copy response">
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => navigator.clipboard.writeText(msg.content)} 
+                              className="h-8 w-8 sm:h-7 sm:w-7 p-0 hover:bg-muted touch-manipulation" 
+                              title="Copy response"
+                            >
                               <Copy className="h-4 w-4" />
                             </Button>
-                            <Button variant="ghost" size="sm" onClick={() => navigator.share({ text: msg.content })} className="h-8 w-8 p-0 hover:bg-muted" title="Share response">
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => navigator.share({ text: msg.content })} 
+                              className="h-8 w-8 sm:h-7 sm:w-7 p-0 hover:bg-muted touch-manipulation" 
+                              title="Share response"
+                            >
                               <Share2 className="h-4 w-4" />
                             </Button>
                             {handleRegenerate && (
-                              <Button variant="ghost" size="sm" onClick={handleRegenerate} className="h-8 w-8 p-0 hover:bg-muted" title="Regenerate response">
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                onClick={handleRegenerate} 
+                                className="h-8 w-8 sm:h-7 sm:w-7 p-0 hover:bg-muted touch-manipulation" 
+                                title="Regenerate response"
+                              >
                                 <RotateCcw className="h-4 w-4" />
                               </Button>
                             )}
@@ -2577,12 +3265,12 @@ function ChatPageContent() {
 
           {/* Welcome screen when no messages */}
           {messages.length === 0 && !loading && (
-            <div className="flex-1 flex flex-col items-center justify-start text-center p-4 lg:p-6 w-full overflow-y-auto">
+            <div className="flex-1 flex flex-col items-center justify-start text-center p-3 sm:p-4 lg:p-6 w-full overflow-y-auto">
               <div className="flex-1 flex flex-col items-center justify-center w-full min-h-0">
-                <h1 className="text-2xl lg:text-4xl font-bold mb-6 lg:mb-8">What's On Your Mind?</h1>
+                <h1 className="text-xl sm:text-2xl lg:text-4xl font-bold mb-4 sm:mb-6 lg:mb-8 px-4">What's On Your Mind?</h1>
 
-                {/* Suggested prompts */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8 w-full max-w-4xl">
+                {/* Suggested prompts - Optimized for mobile */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-6 sm:mb-8 w-full max-w-4xl px-4">
                   <ExamplePrompt
                     title="What model is better for coding?"
                     subtitle="Compare different AI models for programming tasks"
@@ -2608,17 +3296,35 @@ function ChatPageContent() {
             </div>
           )}
 
-          {/* Message input area - fixed at bottom */}
-          <div className="w-full p-4 lg:p-6 max-w-4xl mx-auto flex-shrink-0">
+          {/* Message input area - Mobile optimized */}
+          <div className="w-full p-3 sm:p-4 lg:p-6 max-w-4xl mx-auto flex-shrink-0 bg-background/95 backdrop-blur-sm border-t border-border/50 lg:border-none lg:bg-transparent">
             <div className="w-full">
               <div className="relative">
-                {/* Image preview */}
+                {/* Image preview - Mobile responsive */}
                 {selectedImage && (
+                  <div className="mb-2 relative inline-block">
+                    <img
+                      src={selectedImage}
+                      alt="Selected image"
+                      className="max-w-[150px] sm:max-w-[200px] lg:max-w-xs max-h-20 sm:max-h-24 lg:max-h-32 rounded-lg border"
+                    />
+                    <Button
+                      variant="destructive"
+                      size="icon"
+                      className="absolute -top-2 -right-2 h-6 w-6 rounded-full touch-manipulation"
+                      onClick={handleRemoveImage}
+                      title="Remove image"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
+                {/* Video preview */}
+                {selectedVideo && (
                   <div className="mb-3 relative inline-block">
                     <div className="relative group">
-                      <img
-                        src={selectedImage}
-                        alt="Selected image"
+                      <video
+                        src={selectedVideo}
                         className="max-w-[280px] lg:max-w-md max-h-32 lg:max-h-48 rounded-lg border-2 border-border shadow-md object-contain"
                       />
                       <div className="absolute inset-0 bg-black/5 dark:bg-white/5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -2627,20 +3333,42 @@ function ChatPageContent() {
                       variant="destructive"
                       size="icon"
                       className="absolute -top-2 -right-2 h-7 w-7 rounded-full shadow-lg"
-                      onClick={handleRemoveImage}
-                      title="Remove image"
+                      onClick={handleRemoveVideo}
+                      title="Remove video"
                     >
                       <X className="h-4 w-4" />
                     </Button>
                   </div>
                 )}
+                {/* Audio preview */}
+                {selectedAudio && (
+                  <div className="mb-3">
+                    <div className="relative inline-block">
+                      <audio
+                        src={selectedAudio}
+                        controls
+                        className="rounded-lg border-2 border-border shadow-md"
+                      />
+                      <Button
+                        variant="destructive"
+                        size="icon"
+                        className="absolute -top-2 -right-2 h-7 w-7 rounded-full shadow-lg"
+                        onClick={handleRemoveAudio}
+                        title="Remove audio"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
                 {rateLimitCountdown > 0 && (
-                  <div className="mb-2 px-4 py-2 bg-yellow-500/10 border border-yellow-500/20 rounded-lg text-center">
-                    <p className="text-sm text-yellow-600 dark:text-yellow-400">
+                  <div className="mb-2 px-3 py-2 bg-yellow-500/10 border border-yellow-500/20 rounded-lg text-center">
+                    <p className="text-xs sm:text-sm text-yellow-600 dark:text-yellow-400">
                       Rate limit reached. Retrying in <span className="font-bold">{rateLimitCountdown}</span> second{rateLimitCountdown !== 1 ? 's' : ''}...
                     </p>
                   </div>
                 )}
+                {/* Input container - Touch-friendly */}
                 <div className="flex items-center gap-1 px-2 py-2 bg-muted/20 dark:bg-muted/40 rounded-lg border border-border">
                   <input
                     ref={fileInputRef}
@@ -2649,12 +3377,26 @@ function ChatPageContent() {
                     onChange={handleImageSelect}
                     className="hidden"
                   />
+                  <input
+                    ref={videoInputRef}
+                    type="file"
+                    accept="video/*"
+                    onChange={handleVideoSelect}
+                    className="hidden"
+                  />
+                  <input
+                    ref={audioInputRef}
+                    type="file"
+                    accept="audio/*"
+                    onChange={handleAudioSelect}
+                    className="hidden"
+                  />
                   {/* Only show image button for models that support image input */}
                   {selectedModel?.modalities?.includes('Image') && (
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-8 w-8 rounded-lg"
+                      className="h-8 w-8 rounded-lg touch-manipulation"
                       onClick={() => fileInputRef.current?.click()}
                       disabled={!ready || (!authenticated && !hasApiKey)}
                       title="Upload an image"
@@ -2662,9 +3404,35 @@ function ChatPageContent() {
                       <ImageIcon className="h-5 w-5" />
                     </Button>
                   )}
+                  {/* Only show video button for models that support video input */}
+                  {selectedModel?.modalities?.includes('Video') && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 rounded-lg"
+                      onClick={() => videoInputRef.current?.click()}
+                      disabled={!ready || (!authenticated && !hasApiKey)}
+                      title="Upload a video"
+                    >
+                      <VideoIcon className="h-5 w-5" />
+                    </Button>
+                  )}
+                  {/* Only show audio button for models that support audio input */}
+                  {selectedModel?.modalities?.includes('Audio') && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 rounded-lg"
+                      onClick={() => audioInputRef.current?.click()}
+                      disabled={!ready || (!authenticated && !hasApiKey)}
+                      title="Upload audio"
+                    >
+                      <AudioIcon className="h-5 w-5" />
+                    </Button>
+                  )}
                   <Input
                     ref={messageInputRef}
-                    placeholder={!ready ? "Authenticating..." : (!authenticated && !hasApiKey) ? "Please log in..." : selectedModel?.modalities?.includes('Image') ? "Type a message or add an image..." : "Start A Message"}
+                    placeholder={!ready ? "Authenticating..." : (!authenticated && !hasApiKey) ? "Please log in..." : getPlaceholderText()}
                     value={message}
                     onChange={(e) => {
                       setMessage(e.target.value);
@@ -2690,27 +3458,29 @@ function ChatPageContent() {
                     }}
                     disabled={!ready || (!authenticated && !hasApiKey)}
                     autoComplete="off"
-                    className="border-0 bg-transparent focus-visible:ring-0 text-base text-foreground flex-1"
+                    className="border-0 bg-transparent focus-visible:ring-0 text-sm sm:text-base text-foreground flex-1 min-w-0"
                   />
-                  {(!ready || (!authenticated && !hasApiKey) || isStreamingResponse) && (
-                    <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
-                  )}
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={handleSendMessage}
-                    disabled={loading || isStreamingResponse || !message.trim() || !ready || (!authenticated && !hasApiKey)}
-                    className="h-8 w-8 bg-primary hover:bg-primary/90 text-primary-foreground"
-                    title={!ready
-                      ? "Waiting for authentication..."
-                      : (!authenticated && !hasApiKey)
-                        ? "Please log in"
-                        : isStreamingResponse
-                          ? "Please wait for the current response to finish"
-                          : "Send message"}
-                  >
-                     <Send className="h-5 w-5" />
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    {(!ready || (!authenticated && !hasApiKey) || isStreamingResponse) && (
+                      <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground flex-shrink-0" />
+                    )}
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={handleSendMessage}
+                      disabled={loading || isStreamingResponse || !message.trim() || !ready || (!authenticated && !hasApiKey)}
+                      className="h-8 w-8 sm:h-7 sm:w-7 bg-primary hover:bg-primary/90 text-primary-foreground touch-manipulation flex-shrink-0"
+                      title={!ready
+                        ? "Waiting for authentication..."
+                        : (!authenticated && !hasApiKey)
+                          ? "Please log in"
+                          : isStreamingResponse
+                            ? "Please wait for the current response to finish"
+                            : "Send message"}
+                    >
+                       <Send className="h-4 w-4 sm:h-5 sm:w-5" />
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>

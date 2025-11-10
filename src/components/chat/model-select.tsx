@@ -30,6 +30,8 @@ export type ModelOption = {
         downloads?: number;
         likes?: number;
     };
+    speedTier?: 'ultra-fast' | 'fast' | 'medium' | 'slow';
+    avgLatencyMs?: number;
 };
 
 interface ModelSelectProps {
@@ -86,6 +88,39 @@ const getDeveloper = (modelId: string): string => {
     return formatted[dev] || dev.charAt(0).toUpperCase() + dev.slice(1);
   }
   return 'Other';
+};
+
+// Determine model speed tier based on gateway and model characteristics
+const getModelSpeedTier = (modelId: string, gateway?: string): 'ultra-fast' | 'fast' | 'medium' | 'slow' | undefined => {
+  const id = modelId.toLowerCase();
+
+  // Ultra-fast providers (Cerebras, Groq) - known for extreme speed
+  if (gateway === 'cerebras' || id.includes('@cerebras/')) {
+    return 'ultra-fast'; // 1000+ tokens/sec
+  }
+  if (gateway === 'groq' || id.includes('groq/')) {
+    return 'ultra-fast'; // 500+ tokens/sec
+  }
+
+  // Fast providers and models
+  if (gateway === 'fireworks' || id.includes('fireworks/')) {
+    return 'fast'; // 200-500 tokens/sec
+  }
+  if (id.includes('gemini-flash') || id.includes('gpt-4o-mini') || id.includes('claude-haiku')) {
+    return 'fast';
+  }
+
+  // Medium speed - most standard models
+  if (id.includes('gpt-4') || id.includes('claude-sonnet') || id.includes('llama-3')) {
+    return 'medium';
+  }
+
+  // Slow - very large models or reasoning models
+  if (id.includes('o1') || id.includes('o3') || id.includes('deepseek-reasoner') || id.includes('qwq')) {
+    return 'slow'; // Reasoning models take longer
+  }
+
+  return undefined; // Unknown speed
 };
 
 export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) {
@@ -160,19 +195,19 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
       // Fetch from all gateways - optimized to load fewer models initially
       setLoading(true);
       try {
-        // Only fetch from OpenRouter initially for speed, load others on demand
+        // Fetch from all gateways to ensure all models (including NEAR) are available
         const limit = loadAllModels ? undefined : INITIAL_MODELS_LIMIT;
         const limitParam = limit ? `&limit=${limit}` : '';
 
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout for all gateways
 
-        const openrouterRes = await fetch(`/api/models?gateway=openrouter${limitParam}`, { signal: controller.signal });
+        const allGatewaysRes = await fetch(`/api/models?gateway=all${limitParam}`, { signal: controller.signal });
         clearTimeout(timeoutId);
-        const openrouterData = await openrouterRes.json();
+        const allGatewaysData = await allGatewaysRes.json();
 
         // Combine models from all gateways
-        const allModels = [...(openrouterData.data || [])];
+        const allModels = [...(allGatewaysData.data || [])];
 
         // Deduplicate models by ID - keep the first occurrence
         const uniqueModelsMap = new Map();
@@ -196,6 +231,9 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
             m.charAt(0).toUpperCase() + m.slice(1)
           ) || ['Text'];
 
+          // Get speed tier for performance indicators
+          const speedTier = getModelSpeedTier(model.id, sourceGateway);
+
           return {
             value: model.id,
             label: model.name,
@@ -203,6 +241,7 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
             sourceGateway,
             developer,
             modalities,
+            speedTier,
             huggingfaceMetrics: model.huggingface_metrics ? {
               downloads: model.huggingface_metrics.downloads || 0,
               likes: model.huggingface_metrics.likes || 0,
@@ -461,6 +500,74 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
     );
   }, [favoriteModels, debouncedSearchQuery]);
 
+  // Prefetch models on hover to improve perceived performance
+  const handlePrefetchModels = React.useCallback(() => {
+    if (!loadAllModels && models.length === INITIAL_MODELS_LIMIT) {
+      // Prefetch remaining models in background when user hovers
+      // This makes the "Load all models" action instant
+      const prefetchAllModels = async () => {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
+          const openrouterRes = await fetch(`/api/models?gateway=openrouter`, { signal: controller.signal });
+          clearTimeout(timeoutId);
+          const openrouterData = await openrouterRes.json();
+
+          // Cache prefetched models for instant access
+          const allModels = [...(openrouterData.data || [])];
+          const uniqueModelsMap = new Map();
+          allModels.forEach((model: any) => {
+            if (!uniqueModelsMap.has(model.id)) {
+              uniqueModelsMap.set(model.id, model);
+            }
+          });
+          const uniqueModels = Array.from(uniqueModelsMap.values());
+
+          const modelOptions: ModelOption[] = uniqueModels.map((model: any) => {
+            const sourceGateway = model.source_gateway || 'openrouter';
+            const promptPrice = Number(model.pricing?.prompt ?? 0);
+            const completionPrice = Number(model.pricing?.completion ?? 0);
+            const isPaid = promptPrice > 0 || completionPrice > 0;
+            const category = sourceGateway === 'portkey' ? 'Portkey' : (isPaid ? 'Paid' : 'Free');
+            const developer = getDeveloper(model.id);
+            const modalities = model.architecture?.input_modalities?.map((m: string) =>
+              m.charAt(0).toUpperCase() + m.slice(1)
+            ) || ['Text'];
+
+            return {
+              value: model.id,
+              label: model.name,
+              category,
+              sourceGateway,
+              developer,
+              modalities,
+              huggingfaceMetrics: model.huggingface_metrics ? {
+                downloads: model.huggingface_metrics.downloads || 0,
+                likes: model.huggingface_metrics.likes || 0,
+              } : undefined,
+            };
+          });
+
+          // Update cache for instant access
+          try {
+            localStorage.setItem(CACHE_KEY, JSON.stringify({
+              data: ensureRouterOption(modelOptions),
+              timestamp: Date.now()
+            }));
+          } catch (e) {
+            // Quota exceeded, ignore
+          }
+        } catch (error) {
+          // Prefetch failed, user can still load manually
+          console.log('Background model prefetch failed:', error);
+        }
+      };
+
+      prefetchAllModels();
+    }
+  }, [loadAllModels, models.length]);
+
   return (
     <Popover open={open} onOpenChange={(isOpen) => {
       setOpen(isOpen);
@@ -474,8 +581,9 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className="w-[250px] justify-between bg-muted/30 hover:bg-muted/50"
+          className="w-full sm:w-[250px] justify-between bg-muted/30 hover:bg-muted/50 touch-manipulation"
           disabled={loading}
+          onMouseEnter={handlePrefetchModels}
         >
           {loading ? (
             <>
@@ -483,14 +591,14 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
               <span className="truncate">Loading...</span>
             </>
           ) : selectedModel ? (
-            <span className="truncate">{selectedModel.label}</span>
+            <span className="truncate text-sm sm:text-base">{selectedModel.label}</span>
           ) : (
-            <span className="truncate">Select model...</span>
+            <span className="truncate text-sm sm:text-base">Select model...</span>
           )}
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[400px] p-0">
+      <PopoverContent className="w-[95vw] sm:w-[400px] max-w-[400px] p-0">
         <Command shouldFilter={false}>
           <CommandInput
             placeholder="Search model..."
@@ -539,12 +647,25 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
                           )}
                         />
                         <span className="truncate flex-1">{model.label}</span>
-                        {model.category === 'Free' && (
-                          <span className="ml-2 text-xs font-semibold text-green-600 dark:text-green-400 flex items-center gap-1">
-                            <Sparkles className="h-3 w-3" />
-                            FREE
-                          </span>
-                        )}
+                        <div className="flex items-center gap-1">
+                          {model.speedTier === 'ultra-fast' && (
+                            <span className="text-xs font-bold text-purple-600 dark:text-purple-400">⚡</span>
+                          )}
+                          {model.speedTier === 'fast' && (
+                            <span className="text-xs font-bold text-blue-600 dark:text-blue-400">⚡</span>
+                          )}
+                          {model.sourceGateway && model.sourceGateway !== 'openrouter' && (
+                            <span className="ml-1 text-xs font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                              {model.sourceGateway.toUpperCase()}
+                            </span>
+                          )}
+                          {model.category === 'Free' && (
+                            <span className="ml-1 text-xs font-semibold text-green-600 dark:text-green-400 flex items-center gap-1">
+                              <Sparkles className="h-3 w-3" />
+                              FREE
+                            </span>
+                          )}
+                        </div>
                       </CommandItem>
                     ))}
                   </div>
@@ -599,12 +720,19 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
                             )}
                           />
                           <span className="truncate flex-1">{model.label}</span>
-                          {model.category === 'Free' && (
-                            <span className="ml-2 text-xs font-semibold text-green-600 dark:text-green-400 flex items-center gap-1">
-                              <Sparkles className="h-3 w-3" />
-                              FREE
-                            </span>
-                          )}
+                          <div className="flex items-center gap-1">
+                            {model.sourceGateway && model.sourceGateway !== 'openrouter' && (
+                              <span className="ml-1 text-xs font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                                {model.sourceGateway.toUpperCase()}
+                              </span>
+                            )}
+                            {model.category === 'Free' && (
+                              <span className="ml-1 text-xs font-semibold text-green-600 dark:text-green-400 flex items-center gap-1">
+                                <Sparkles className="h-3 w-3" />
+                                FREE
+                              </span>
+                            )}
+                          </div>
                         </CommandItem>
                       ))}
                     </div>
@@ -661,12 +789,25 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
                           )}
                         />
                         <span className="truncate flex-1">{model.label}</span>
-                        {model.category === 'Free' && (
-                          <span className="ml-2 text-xs font-semibold text-green-600 dark:text-green-400 flex items-center gap-1">
-                            <Sparkles className="h-3 w-3" />
-                            FREE
-                          </span>
-                        )}
+                        <div className="flex items-center gap-1">
+                          {model.speedTier === 'ultra-fast' && (
+                            <span className="text-xs font-bold text-purple-600 dark:text-purple-400">⚡</span>
+                          )}
+                          {model.speedTier === 'fast' && (
+                            <span className="text-xs font-bold text-blue-600 dark:text-blue-400">⚡</span>
+                          )}
+                          {model.sourceGateway && model.sourceGateway !== 'openrouter' && (
+                            <span className="ml-1 text-xs font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                              {model.sourceGateway.toUpperCase()}
+                            </span>
+                          )}
+                          {model.category === 'Free' && (
+                            <span className="ml-1 text-xs font-semibold text-green-600 dark:text-green-400 flex items-center gap-1">
+                              <Sparkles className="h-3 w-3" />
+                              FREE
+                            </span>
+                          )}
+                        </div>
                       </CommandItem>
                     ))}
                   </div>

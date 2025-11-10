@@ -8,7 +8,6 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { ChevronDown, ArrowUp, ArrowDown } from 'lucide-react';
 import TokenStackedBarChart from '@/components/TokenStackedBarChart';
 import CategoryStackedAreaChart from '@/components/CategoryStackedAreaChart';
-import { API_BASE_URL } from '@/lib/config';
 import { extractTokenValue } from '@/lib/utils';
 import Link from 'next/link';
 
@@ -59,13 +58,13 @@ export default function RankingsPage() {
     const getModels = async () => {
       try {
         setLoading(true);
-        const response = await fetch(`${API_BASE_URL}/ranking/models`, {
+        const response = await fetch('/api/ranking/models', {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
           }
         });
-    
+
         if (response.ok) {
           const result = await response.json();
           setModels(result.data);
@@ -80,13 +79,13 @@ export default function RankingsPage() {
     }
     const getApps = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/ranking/apps`, {
+        const response = await fetch('/api/ranking/apps', {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
           }
         });
-  
+
         if (response.ok) {
           const result = await response.json();
           setApps(result.data);
@@ -135,8 +134,8 @@ export default function RankingsPage() {
   }, [selectedTimeRangeForApps, apps])
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="mx-auto max-w-screen-2xl px-4 sm:px-6 lg:px-8 py-8">
+    <div className="min-h-screen bg-background" style={{ marginTop: '-65px' }}>
+      <div data-page-content className="mx-auto max-w-screen-2xl px-4 sm:px-6 lg:px-8 py-8 pt-32 has-onboarding-banner:pt-40" style={{ transition: 'padding-top 0.3s ease' }}>
         {/* Header */}
         <header className="text-center mb-8">
           <h1 className="text-2xl lg:text-4xl font-bold tracking-tight">LLM Rankings</h1>

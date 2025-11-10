@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { validateApiKey } from '@/app/api/middleware/auth';
+import { handleApiError } from '@/app/api/middleware/error-handler';
+import { CHAT_HISTORY_API_URL } from '@/lib/config';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_CHAT_HISTORY_API_URL || 'https://api.gatewayz.ai';
 
 // GET /api/chat/sessions - List all chat sessions
 export async function GET(request: NextRequest) {
@@ -11,16 +12,11 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const limit = parseInt(searchParams.get('limit') || '50');
     const offset = parseInt(searchParams.get('offset') || '0');
-    const apiKey = request.headers.get('authorization')?.replace('Bearer ', '');
 
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: 'API key required' },
-        { status: 401 }
-      );
-    }
+    const { key: apiKey, error } = await validateApiKey(request);
+    if (error) return error;
 
-    const url = `${API_BASE_URL}/v1/chat/sessions?limit=${limit}&offset=${offset}`;
+    const url = `${CHAT_HISTORY_API_URL}/v1/chat/sessions?limit=${limit}&offset=${offset}`;
     console.log(`Chat sessions API - Calling: ${url}`);
     
     const response = await fetch(url, {
@@ -44,11 +40,7 @@ export async function GET(request: NextRequest) {
     const data = await response.json();
     return NextResponse.json(data);
   } catch (error) {
-    console.error('Error fetching chat sessions:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch chat sessions' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'Chat Sessions API - GET');
   }
 }
 
@@ -57,16 +49,11 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { title, model } = body;
-    const apiKey = request.headers.get('authorization')?.replace('Bearer ', '');
 
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: 'API key required' },
-        { status: 401 }
-      );
-    }
+    const { key: apiKey, error } = await validateApiKey(request);
+    if (error) return error;
 
-    const url = `${API_BASE_URL}/v1/chat/sessions`;
+    const url = `${CHAT_HISTORY_API_URL}/v1/chat/sessions`;
     console.log(`Chat sessions API - Creating session at: ${url}`);
     
     const response = await fetch(url, {
@@ -94,10 +81,6 @@ export async function POST(request: NextRequest) {
     const data = await response.json();
     return NextResponse.json(data);
   } catch (error) {
-    console.error('Error creating chat session:', error);
-    return NextResponse.json(
-      { error: 'Failed to create chat session' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'Chat Sessions API - POST');
   }
 }

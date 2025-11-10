@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { handleApiError } from "@/app/api/middleware/error-handler";
+import { API_BASE_URL } from "@/lib/config";
+import { proxyFetch } from "@/lib/proxy-fetch";
 
 /**
  * POST /api/auth
@@ -9,11 +12,9 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "https://api.gatewayz.ai";
-
     console.log("[API /api/auth] Proxying authentication request to backend");
 
-    const response = await fetch(`${API_BASE_URL}/auth`, {
+    const response = await proxyFetch(`${API_BASE_URL}/auth`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -42,10 +43,6 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error("[API /api/auth] Error proxying auth request:", error);
-    return NextResponse.json(
-      { error: "Internal server error during authentication" },
-      { status: 500 }
-    );
+    return handleApiError(error, "API /api/auth");
   }
 }

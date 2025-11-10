@@ -22,6 +22,7 @@ export interface AuthResponse {
   credits: number;
   timestamp: string | null;
   tier?: UserTier;
+  tier_display_name?: string; // Formatted tier name from backend (e.g., "Pro", "MAX")
   subscription_status?: SubscriptionStatus;
   subscription_end_date?: number; // Unix timestamp
 }
@@ -35,6 +36,7 @@ export interface UserData {
   email: string;
   credits: number;
   tier?: UserTier;
+  tier_display_name?: string; // Formatted tier name from backend (e.g., "Pro", "MAX")
   subscription_status?: SubscriptionStatus;
   subscription_end_date?: number; // Unix timestamp
 }
@@ -122,15 +124,25 @@ export const processAuthResponse = (response: AuthResponse): void => {
   console.log('Processing auth response:', {
     success: response.success,
     has_api_key: !!response.api_key,
-    api_key_preview: response.api_key ? `${response.api_key.substring(0, 10)}...` : 'None'
+    api_key_preview: response.api_key ? `${response.api_key.substring(0, 10)}...` : 'None',
+    credits_raw: response.credits,
+    credits_type: typeof response.credits,
   });
 
-  if (response.success && response.api_key) {
+  if (response.api_key) {
     saveApiKey(response.api_key);
     console.log('API key saved to localStorage');
 
     // Convert credits to integer to match backend expectations
-    const creditsAsInteger = Math.floor(response.credits);
+    // Handle undefined/null/NaN cases
+    const creditsAsInteger = response.credits !== undefined && response.credits !== null && !isNaN(response.credits)
+      ? Math.floor(response.credits)
+      : 0;
+
+    console.log('[processAuthResponse] Credits conversion:', {
+      original: response.credits,
+      converted: creditsAsInteger,
+    });
 
     const userData: UserData = {
       user_id: response.user_id,
@@ -140,13 +152,15 @@ export const processAuthResponse = (response: AuthResponse): void => {
       display_name: response.display_name,
       email: response.email,
       credits: creditsAsInteger,
-      tier: response.tier,
+      // Normalize tier to lowercase to handle case sensitivity from backend
+      tier: response.tier?.toLowerCase() as UserTier | undefined,
+      tier_display_name: response.tier_display_name,
       subscription_status: response.subscription_status,
       subscription_end_date: response.subscription_end_date,
     };
 
     saveUserData(userData);
-    console.log('User data saved to localStorage');
+    console.log('User data saved to localStorage:', userData);
 
     console.log('User authenticated successfully:', {
       user_id: response.user_id,
@@ -167,9 +181,10 @@ export const processAuthResponse = (response: AuthResponse): void => {
       window.dispatchEvent(event);
     }
   } else {
-    console.warn('Authentication response invalid:', {
+    console.warn('Authentication response missing API key:', {
       success: response.success,
-      has_api_key: !!response.api_key
+      has_api_key: !!response.api_key,
+      response_keys: Object.keys(response)
     });
   }
 };

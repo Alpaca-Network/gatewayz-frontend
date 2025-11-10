@@ -222,7 +222,7 @@ export default function PlaygroundPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white p-4">
+    <div className="min-h-screen bg-background text-foreground p-4">
       <div className="max-w-6xl mx-auto h-screen flex flex-col">
         {/* Header */}
         <div className="mb-4">
@@ -232,7 +232,7 @@ export default function PlaygroundPage() {
                 <Brain className="w-8 h-8 text-amber-500" />
                 AI SDK Playground
               </h1>
-              <p className="text-gray-400 mt-1">
+              <p className="text-muted-foreground mt-1">
                 Test chain-of-thought reasoning with Claude and other models
               </p>
             </div>
@@ -249,7 +249,7 @@ export default function PlaygroundPage() {
 
           {/* Settings Panel */}
           {showSettings && (
-            <Card className="bg-slate-800/50 border-slate-700 mb-4">
+            <Card className="bg-card border-border mb-4">
               <CardContent className="pt-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {/* Model Selection */}
@@ -258,7 +258,7 @@ export default function PlaygroundPage() {
                     <select
                       value={selectedModel}
                       onChange={(e) => setSelectedModel(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white"
+                      className="w-full px-3 py-2 bg-input border border-border rounded-lg text-foreground"
                     >
                       {aiSdkModels.map((model) => (
                         <option key={model.id} value={model.id}>
@@ -287,7 +287,7 @@ export default function PlaygroundPage() {
                       onValueChange={(val) => setTemperature(val[0])}
                       className="w-full"
                     />
-                    <p className="text-xs text-gray-400">Controls randomness (0=deterministic, 2=creative)</p>
+                    <p className="text-xs text-muted-foreground">Controls randomness (0=deterministic, 2=creative)</p>
                   </div>
 
                   {/* Max Tokens */}
@@ -318,7 +318,7 @@ export default function PlaygroundPage() {
                       onValueChange={(val) => setTopP(val[0])}
                       className="w-full"
                     />
-                    <p className="text-xs text-gray-400">Nucleus sampling (lower = focused, 1 = all tokens)</p>
+                    <p className="text-xs text-muted-foreground">Nucleus sampling (lower = focused, 1 = all tokens)</p>
                   </div>
                 </div>
 
@@ -337,12 +337,12 @@ export default function PlaygroundPage() {
         </div>
 
         {/* Messages Area */}
-        <div className="flex-1 overflow-y-auto mb-4 space-y-4 bg-slate-800/30 rounded-lg p-4 border border-slate-700">
+        <div className="flex-1 overflow-y-auto mb-4 space-y-4 bg-card rounded-lg p-4 border border-border">
           {messages.length === 0 && !currentContent ? (
             <div className="flex items-center justify-center h-full">
               <div className="text-center">
-                <Brain className="w-12 h-12 text-gray-600 mx-auto mb-4" />
-                <p className="text-gray-400">
+                <Brain className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                <p className="text-muted-foreground">
                   Start a conversation to see chain-of-thought reasoning in action
                 </p>
               </div>
@@ -365,13 +365,13 @@ export default function PlaygroundPage() {
                     className={cn(
                       'p-4 rounded-lg max-w-2xl',
                       message.role === 'user'
-                        ? 'bg-blue-900/30 border border-blue-700 ml-auto'
-                        : 'bg-slate-700/50 border border-slate-600'
+                        ? 'bg-primary text-primary-foreground border border-border ml-auto'
+                        : 'bg-secondary text-secondary-foreground border border-border'
                     )}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1">
-                        <p className="text-xs font-medium text-gray-400 mb-1">
+                        <p className="text-xs font-medium text-muted-foreground mb-1">
                           {message.role === 'user' ? 'You' : message.model || 'Assistant'}
                         </p>
                         <p className="text-sm whitespace-pre-wrap">{message.content}</p>
@@ -408,8 +408,8 @@ export default function PlaygroundPage() {
                     />
                   )}
                   {currentContent && (
-                    <div className="p-4 rounded-lg bg-slate-700/50 border border-slate-600 max-w-2xl">
-                      <p className="text-xs font-medium text-gray-400 mb-2">
+                    <div className="p-4 rounded-lg bg-secondary text-secondary-foreground border border-border max-w-2xl">
+                      <p className="text-xs font-medium text-muted-foreground mb-2">
                         {selectedModel}
                       </p>
                       <p className="text-sm whitespace-pre-wrap">{currentContent}</p>
@@ -424,7 +424,7 @@ export default function PlaygroundPage() {
         </div>
 
         {/* Input Area */}
-        <div className="space-y-3 border-t border-slate-700 pt-4">
+        <div className="space-y-3 border-t border-border pt-4">
           <Textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -434,7 +434,7 @@ export default function PlaygroundPage() {
               }
             }}
             placeholder="Ask anything... (Ctrl+Enter to send)"
-            className="min-h-20 bg-slate-700 border-slate-600 text-white"
+            className="min-h-20"
             disabled={loading || !authenticated}
           />
 
@@ -452,7 +452,7 @@ export default function PlaygroundPage() {
               <Button
                 onClick={handleSendMessage}
                 disabled={!input.trim() || !authenticated}
-                className="gap-2 bg-blue-600 hover:bg-blue-700"
+                className="gap-2"
               >
                 <Send className="w-4 h-4" />
                 Send
@@ -461,7 +461,7 @@ export default function PlaygroundPage() {
           </div>
 
           {!authenticated && (
-            <p className="text-xs text-gray-400">Please log in to use the playground</p>
+            <p className="text-xs text-muted-foreground">Please log in to use the playground</p>
           )}
         </div>
       </div>

@@ -1,7 +1,7 @@
 const gateways = [
   'openrouter', 'featherless', 'groq', 'together', 'fireworks',
   'chutes', 'deepinfra', 'google', 'cerebras', 'nebius',
-  'xai', 'novita', 'huggingface'
+  'xai', 'novita', 'huggingface', 'aimo', 'near', 'fal'
 ];
 
 async function getModelCounts() {

@@ -129,11 +129,11 @@ export function CodeExample() {
   }, [currentLine, currentChar, currentCodeLines, activeTab, completedTabs]);
 
   return (
-    <section className="py-12 md:py-16 px-4 sm:px-6 lg:px-8 bg-white">
+    <section className="py-12 md:py-16 px-4 sm:px-6 lg:px-8 bg-background">
       <div className="container mx-auto max-w-5xl">
         <div className="text-center mb-12">
-          <h2 className="text-3xl md:text-4xl font-bold mb-4 text-gray-900">Simple Integration</h2>
-          <p className="text-lg text-gray-600">Get started in minutes with our intuitive API</p>
+          <h2 className="text-3xl md:text-4xl font-bold mb-4 text-foreground">Simple Integration</h2>
+          <p className="text-lg text-muted-foreground">Get started in minutes with our intuitive API</p>
         </div>
 
         <Tabs defaultValue="python" value={activeTab} onValueChange={(v) => setActiveTab(v as keyof typeof codeExamples)}>

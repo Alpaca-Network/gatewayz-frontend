@@ -23,9 +23,10 @@ import { Switch } from "@/components/ui/switch";
 import { Info, RefreshCw, ArrowUpRight, ChevronLeft, ChevronRight, CreditCard, MoreHorizontal, CheckCircle } from "lucide-react";
 import Link from "next/link";
 import { redirectToCheckout } from '@/lib/stripe';
-import { getUserData, makeAuthenticatedRequest, requestAuthRefresh } from '@/lib/api';
+import { getUserData, makeAuthenticatedRequest, requestAuthRefresh, saveUserData } from '@/lib/api';
 import { API_BASE_URL } from '@/lib/config';
 import { TierInfoCard } from '@/components/tier/tier-info-card';
+import { PricingSection } from '@/components/pricing/pricing-section';
 
 // Confetti/Emoji explosion component
 const EmojiExplosion = ({ onComplete }: { onComplete: () => void }) => {
@@ -240,13 +241,20 @@ function CreditsPageContent() {
             if (data.credits !== undefined) {
               currentCredits = data.credits;
               setCredits(data.credits);
-              // Update localStorage with fresh credits
+              // Update localStorage with fresh credits, tier, and subscription info
               const userData = getUserData();
               if (userData) {
-                localStorage.setItem('gatewayz_user_data', JSON.stringify({
+                saveUserData({
                   ...userData,
-                  credits: data.credits
-                }));
+                  credits: data.credits,
+                  // Normalize tier to lowercase to match frontend expectations
+                  tier: data.tier?.toLowerCase(),
+                  tier_display_name: data.tier_display_name,
+                  subscription_status: data.subscription_status,
+                  subscription_end_date: data.subscription_end_date
+                });
+                // Trigger a storage event manually since same-tab updates don't fire storage events
+                window.dispatchEvent(new Event('storage'));
               }
             }
           }
@@ -307,6 +315,21 @@ function CreditsPageContent() {
           if (data.credits !== undefined) {
             currentCredits = data.credits;
             setCredits(data.credits);
+            // Update localStorage with fresh tier and subscription info
+            const userData = getUserData();
+            if (userData) {
+              saveUserData({
+                ...userData,
+                credits: data.credits,
+                // Normalize tier to lowercase to match frontend expectations
+                tier: data.tier?.toLowerCase(),
+                tier_display_name: data.tier_display_name,
+                subscription_status: data.subscription_status,
+                subscription_end_date: data.subscription_end_date
+              });
+              // Trigger a storage event manually since same-tab updates don't fire storage events
+              window.dispatchEvent(new Event('storage'));
+            }
           }
         }
       } catch (error) {
@@ -401,6 +424,9 @@ function CreditsPageContent() {
       <div className="max-w-2xl mx-auto">
         <TierInfoCard />
       </div>
+
+      {/* Pricing Section */}
+      <PricingSection />
 
       {/* Success message after Stripe payment */}
       {showSuccessMessage && (

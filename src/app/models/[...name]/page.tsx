@@ -1,15 +1,14 @@
 "use client";
 
+import { useMemo, lazy, Suspense, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { useMemo, useEffect, useState, lazy, Suspense } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend } from 'recharts';
-import { addDays, format } from 'date-fns';
+import { format } from 'date-fns';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { ProvidersDisplay } from '@/components/models/provider-card';
 import { Maximize, Copy, Check } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { providerData } from '@/lib/provider-data';
@@ -17,7 +16,6 @@ import { generateChartData, generateStatsTable } from '@/lib/data';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import ReactMarkdown from "react-markdown";
 import { cn } from '@/lib/utils';
-import { stringToColor } from '@/lib/utils';
 import { API_BASE_URL } from '@/lib/config';
 import { models as staticModels } from '@/lib/models-data';
 import { getApiKey } from '@/lib/api';
@@ -162,36 +160,198 @@ function transformStaticModel(staticModel: typeof staticModels[0]): Model {
 
 export default function ModelProfilePage() {
     const params = useParams();
+
+    // State declarations
     const [model, setModel] = useState<Model | null>(null);
     const [allModels, setAllModels] = useState<Model[]>([]);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<TabType>('Playground');
-    const [copiedStates, setCopiedStates] = useState<{ [key: string]: boolean }>({});
-    const [apiKey, setApiKey] = useState('gw_live_YOUR_API_KEY_HERE');
-    const [selectedLanguage, setSelectedLanguage] = useState<'curl' | 'python' | 'openai-python' | 'typescript' | 'openai-typescript'>('curl');
-    const [modelProviders, setModelProviders] = useState<string[]>([]);
     const [loadingProviders, setLoadingProviders] = useState(true);
+    const [modelProviders, setModelProviders] = useState<string[]>([]);
+    const [activeTab, setActiveTab] = useState<TabType>('Playground');
+    const [selectedLanguage, setSelectedLanguage] = useState<'curl' | 'python' | 'openai-python' | 'typescript' | 'openai-typescript'>('curl');
+    const [copiedStates, setCopiedStates] = useState<Record<string, boolean>>({});
+    const [apiKey, setApiKey] = useState('gw_live_YOUR_API_KEY_HERE');
+    const [selectedProvider, setSelectedProvider] = useState<string>('gatewayz');
+    const [selectedPlaygroundProvider, setSelectedPlaygroundProvider] = useState<string>('gatewayz');
+
+    // Provider configurations for API calls
+    const providerConfigs: Record<string, {
+        name: string;
+        baseUrl: string;
+        requiresApiKey: boolean;
+        apiKeyPlaceholder: string;
+        modelIdFormat?: (modelId: string) => string;
+    }> = {
+        gatewayz: {
+            name: 'Gatewayz (Unified)',
+            baseUrl: 'https://api.gatewayz.ai/v1',
+            requiresApiKey: true,
+            apiKeyPlaceholder: apiKey,
+        },
+        openrouter: {
+            name: 'OpenRouter',
+            baseUrl: 'https://openrouter.ai/api/v1',
+            requiresApiKey: true,
+            apiKeyPlaceholder: 'sk-or-v1-...',
+        },
+        groq: {
+            name: 'Groq',
+            baseUrl: 'https://api.groq.com/openai/v1',
+            requiresApiKey: true,
+            apiKeyPlaceholder: 'gsk_...',
+        },
+        together: {
+            name: 'Together AI',
+            baseUrl: 'https://api.together.xyz/v1',
+            requiresApiKey: true,
+            apiKeyPlaceholder: '...',
+        },
+        fireworks: {
+            name: 'Fireworks',
+            baseUrl: 'https://api.fireworks.ai/inference/v1',
+            requiresApiKey: true,
+            apiKeyPlaceholder: 'fw_...',
+        },
+        deepinfra: {
+            name: 'DeepInfra',
+            baseUrl: 'https://api.deepinfra.com/v1/openai',
+            requiresApiKey: true,
+            apiKeyPlaceholder: '...',
+        },
+        google: {
+            name: 'Google AI',
+            baseUrl: 'https://generativelanguage.googleapis.com/v1',
+            requiresApiKey: true,
+            apiKeyPlaceholder: 'AIza...',
+        },
+        cerebras: {
+            name: 'Cerebras',
+            baseUrl: 'https://api.cerebras.ai/v1',
+            requiresApiKey: true,
+            apiKeyPlaceholder: 'csk-...',
+        },
+        xai: {
+            name: 'xAI',
+            baseUrl: 'https://api.x.ai/v1',
+            requiresApiKey: true,
+            apiKeyPlaceholder: 'xai-...',
+        },
+        huggingface: {
+            name: 'Hugging Face',
+            baseUrl: 'https://api-inference.huggingface.co/models',
+            requiresApiKey: true,
+            apiKeyPlaceholder: 'hf_...',
+        },
+        near: {
+            name: 'NEAR Protocol',
+            baseUrl: 'https://api.near.ai/v1',
+            requiresApiKey: true,
+            apiKeyPlaceholder: 'near_...',
+        },
+        nebius: {
+            name: 'Nebius AI Studio',
+            baseUrl: 'https://api.studio.nebius.ai/v1',
+            requiresApiKey: true,
+            apiKeyPlaceholder: '...',
+        },
+        featherless: {
+            name: 'Featherless',
+            baseUrl: 'https://api.featherless.ai/v1',
+            requiresApiKey: true,
+            apiKeyPlaceholder: '...',
+        },
+        chutes: {
+            name: 'Chutes',
+            baseUrl: 'https://api.chutes.ai/v1',
+            requiresApiKey: true,
+            apiKeyPlaceholder: '...',
+        },
+        portkey: {
+            name: 'Portkey',
+            baseUrl: 'https://api.portkey.ai/v1',
+            requiresApiKey: true,
+            apiKeyPlaceholder: '...',
+        },
+        novita: {
+            name: 'Novita AI',
+            baseUrl: 'https://api.novita.ai/v3/openai',
+            requiresApiKey: true,
+            apiKeyPlaceholder: '...',
+        },
+        aimo: {
+            name: 'AIMO Network',
+            baseUrl: 'https://api.aimo.network/v1',
+            requiresApiKey: true,
+            apiKeyPlaceholder: '...',
+        },
+        fal: {
+            name: 'FAL AI',
+            baseUrl: 'https://fal.run/fal-ai',
+            requiresApiKey: true,
+            apiKeyPlaceholder: '...',
+        },
+    };
+
+    // Handle catch-all route - params.name will be an array like ['x-ai', 'grok-4-fast']
+    const nameParam = params.name as string | string[];
+    let modelId = Array.isArray(nameParam) ? nameParam.join('/') : nameParam;
+    // Decode URL-encoded characters (e.g., %40 -> @)
+    modelId = decodeURIComponent(modelId);
 
     // Load API key from storage
     useEffect(() => {
-        const userApiKey = getApiKey();
-        console.log('Loading user API key:', userApiKey ? 'Found' : 'Not found');
-        if (userApiKey) {
-            setApiKey(userApiKey);
-        } else {
-            // If no API key, show a placeholder that indicates the format
-            setApiKey('gw_live_YOUR_API_KEY_HERE');
+        const key = getApiKey();
+        if (key) {
+            setApiKey(key);
         }
     }, []);
 
-    const modelId = useMemo(() => {
-        // Handle catch-all route - params.name will be an array like ['x-ai', 'grok-4-fast']
-        const nameParam = params.name as string | string[];
-        let id = Array.isArray(nameParam) ? nameParam.join('/') : nameParam;
-        // Decode URL-encoded characters (e.g., %40 -> @)
-        id = decodeURIComponent(id);
-        return id || '';
-    }, [params.name]);
+    // Select default provider based on lowest cost or latency
+    useEffect(() => {
+        if (modelProviders.length > 0 && model) {
+            // Get provider performance data if available
+            const modelProviderData = providerData[model.name] || [];
+
+            if (modelProviderData.length > 0) {
+                // Find provider with lowest total cost (input + output)
+                let bestProvider = modelProviderData[0];
+                for (const provider of modelProviderData) {
+                    const currentCost = provider.inputCost + provider.outputCost;
+                    const bestCost = bestProvider.inputCost + bestProvider.outputCost;
+
+                    // Use cost as primary criteria, latency as tiebreaker
+                    if (currentCost < bestCost ||
+                        (currentCost === bestCost && provider.latency && bestProvider.latency && provider.latency < bestProvider.latency)) {
+                        bestProvider = provider;
+                    }
+                }
+
+                // Map provider name to gateway slug
+                const providerNameToGateway: Record<string, string> = {
+                    'DeepInfra': 'deepinfra',
+                    'Nebius AI Studio': 'nebius',
+                    'Fireworks': 'fireworks',
+                    'Together AI': 'together',
+                    'Groq': 'groq',
+                    'Google': 'google',
+                    'Anthropic': 'gatewayz',
+                    'AWS Bedrock': 'gatewayz',
+                    'OpenRouter': 'openrouter',
+                    'Cerebras': 'cerebras',
+                    'xAI': 'xai',
+                    'Hugging Face': 'huggingface',
+                };
+
+                const gateway = providerNameToGateway[bestProvider.name] || modelProviders[0];
+                setSelectedProvider(gateway);
+                setSelectedPlaygroundProvider(gateway);
+            } else {
+                // No performance data, default to first available provider
+                setSelectedProvider(modelProviders[0]);
+                setSelectedPlaygroundProvider(modelProviders[0]);
+            }
+        }
+    }, [modelProviders, model]);
 
     useEffect(() => {
         const CACHE_KEY = 'gatewayz_models_cache_v4_all_gateways';
@@ -267,7 +427,7 @@ export default function ModelProfilePage() {
                 };
 
                 console.log(`[ModelProfilePage] Fetching from all gateway APIs...`);
-                const [openrouterRes, portkeyRes, featherlessRes, chutesRes, fireworksRes, togetherRes, groqRes, deepinfraRes, googleRes, cerebrasRes, nebiusRes, xaiRes, novitaRes, huggingfaceRes, aimoRes, nearRes] = await Promise.allSettled([
+                const [openrouterRes, portkeyRes, featherlessRes, chutesRes, fireworksRes, togetherRes, groqRes, deepinfraRes, googleRes, cerebrasRes, nebiusRes, xaiRes, novitaRes, huggingfaceRes, aimoRes, nearRes, falRes] = await Promise.allSettled([
                     fetchWithTimeout(`/api/models?gateway=openrouter`).catch(err => {
                         console.error('OpenRouter fetch error:', err);
                         return null;
@@ -331,6 +491,10 @@ export default function ModelProfilePage() {
                     fetchWithTimeout(`/api/models?gateway=near`, 70000).catch(err => {
                         console.error('NEAR fetch error:', err);
                         return null;
+                    }),
+                    fetchWithTimeout(`/api/models?gateway=fal`, 70000).catch(err => {
+                        console.error('FAL fetch error:', err);
+                        return null;
                     })
                 ]);
                 console.log(`[ModelProfilePage] Gateway API responses:`, {
@@ -349,7 +513,8 @@ export default function ModelProfilePage() {
                     novita: novitaRes?.status,
                     huggingface: huggingfaceRes?.status,
                     aimo: aimoRes?.status,
-                    near: nearRes?.status
+                    near: nearRes?.status,
+                    fal: falRes?.status
                 });
 
                 const getData = async (result: PromiseSettledResult<Response | null>) => {
@@ -367,7 +532,7 @@ export default function ModelProfilePage() {
                     return [];
                 };
 
-                const [openrouterData, portkeyData, featherlessData, chutesData, fireworksData, togetherData, groqData, deepinfraData, googleData, cerebrasData, nebiusData, xaiData, novitaData, huggingfaceData, aimoData, nearData] = await Promise.all([
+                const [openrouterData, portkeyData, featherlessData, chutesData, fireworksData, togetherData, groqData, deepinfraData, googleData, cerebrasData, nebiusData, xaiData, novitaData, huggingfaceData, aimoData, nearData, falData] = await Promise.all([
                     getData(openrouterRes),
                     getData(portkeyRes),
                     getData(featherlessRes),
@@ -383,7 +548,8 @@ export default function ModelProfilePage() {
                     getData(novitaRes),
                     getData(huggingfaceRes),
                     getData(aimoRes),
-                    getData(nearRes)
+                    getData(nearRes),
+                    getData(falRes)
                 ]);
 
                 // Combine models from all gateways
@@ -403,7 +569,8 @@ export default function ModelProfilePage() {
                     ...novitaData,
                     ...huggingfaceData,
                     ...aimoData,
-                    ...nearData
+                    ...nearData,
+                    ...falData
                 ];
 
                 // Deduplicate models by ID - keep the first occurrence
@@ -488,7 +655,8 @@ export default function ModelProfilePage() {
                             if (normalizedModelId === normalizedDataId) return true;
 
                             // Check if the model name matches (as a fallback)
-                            if (m.name && m.name.toLowerCase() === model?.name?.toLowerCase()) return true;
+                            // Note: model may not be defined yet in this context, so we skip this check
+                            // if (m.name && m.name.toLowerCase() === model?.name?.toLowerCase()) return true;
 
                             // Check if the last part of the ID matches (for provider/model format)
                             const lastPart = m.id.split('/').pop()?.toLowerCase();
@@ -518,6 +686,7 @@ export default function ModelProfilePage() {
                     if (hasModel(huggingfaceData, 'huggingface')) providers.push('huggingface');
                     if (hasModel(aimoData, 'aimo')) providers.push('aimo');
                     if (hasModel(nearData, 'near')) providers.push('near');
+                    if (hasModel(falData, 'fal')) providers.push('fal');
 
                     console.log(`Model ${modelId} available in gateways:`, providers);
                     setModelProviders(providers);
@@ -615,11 +784,8 @@ export default function ModelProfilePage() {
                 <div className="flex flex-wrap items-start justify-between gap-4">
                     <div className="flex-1">
                         <h1 className="text-3xl lg:text-4xl font-bold mb-2">{model.name}</h1>
-                        <p className="text-sm text-muted-foreground mb-3">
-                            Created Apr 14, 2025 | By <span className="text-blue-600">{model.provider_slug} AI</span>
-                        </p>
                         {/* Model ID with copy button */}
-                        <div className="flex items-center gap-2 mb-3">
+                        <div className="flex items-center gap-2 mb-2">
                             <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-muted rounded-md border">
                                 <code className="text-sm font-mono">{model.id}</code>
                                 <button
@@ -635,7 +801,23 @@ export default function ModelProfilePage() {
                                 </button>
                             </div>
                         </div>
-                        <div className="flex items-center gap-2 flex-wrap">
+                        {/* Pricing and Context Information */}
+                        <div className="flex items-center gap-2 flex-wrap text-sm text-muted-foreground">
+                            <span>Created Oct 30, 2025</span>
+                            <span>|</span>
+                            <span>{model.context_length > 0 ? `${(model.context_length / 1000).toLocaleString()}k` : 'N/A'} context</span>
+                            <span>|</span>
+                            <span>${model.pricing && model.pricing.prompt ? (parseFloat(model.pricing.prompt) * 1000000).toFixed(2) : 'N/A'}/M input tokens</span>
+                            <span>|</span>
+                            <span>${model.pricing && model.pricing.completion ? (parseFloat(model.pricing.completion) * 1000000).toFixed(2) : 'N/A'}/M output tokens</span>
+                            {model.architecture && model.architecture.input_modalities && model.architecture.input_modalities.includes('audio') && (
+                                <>
+                                    <span>|</span>
+                                    <span>$0.0001/M audio tokens</span>
+                                </>
+                            )}
+                        </div>
+                        <div className="flex items-center gap-2 flex-wrap mt-3">
                             <Badge className="bg-black text-white hover:bg-gray-800">Free</Badge>
                             <Badge variant="secondary">Multi-Lingual</Badge>
                         </div>
@@ -691,11 +873,38 @@ export default function ModelProfilePage() {
                                 Test {model.name} directly in your browser. Messages are not saved to your chat history.
                             </p>
                         </div>
+
+                        {/* Provider Selector */}
+                        <div className="mb-4">
+                            <label className="text-sm font-medium mb-2 block">Select Provider</label>
+                            <select
+                                value={selectedPlaygroundProvider}
+                                onChange={(e) => setSelectedPlaygroundProvider(e.target.value)}
+                                className="w-full max-w-md px-4 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                            >
+                                <option value="gatewayz">Gatewayz (Unified - Recommended)</option>
+                                {modelProviders.length > 0 && modelProviders.map(provider => {
+                                    const config = providerConfigs[provider];
+                                    if (!config) return null;
+                                    return (
+                                        <option key={provider} value={provider}>
+                                            {config.name}
+                                        </option>
+                                    );
+                                })}
+                            </select>
+                            {selectedPlaygroundProvider !== 'gatewayz' && (
+                                <p className="text-sm text-muted-foreground mt-2">
+                                    ⚠️ Using {providerConfigs[selectedPlaygroundProvider]?.name} directly. Make sure you have configured your API key.
+                                </p>
+                            )}
+                        </div>
+
                         <Card className="flex-1 p-4 overflow-hidden flex flex-col">
                             <InlineChat
                                 modelId={model.id}
                                 modelName={model.name}
-                                gateway={modelProviders.length > 0 ? modelProviders[0] : undefined}
+                                gateway={selectedPlaygroundProvider !== 'gatewayz' ? selectedPlaygroundProvider : undefined}
                             />
                         </Card>
                     </div>
@@ -708,6 +917,32 @@ export default function ModelProfilePage() {
                             <p className="text-muted-foreground">
                                 Call this model with a few lines of code using the Gatewayz API
                             </p>
+                        </div>
+
+                        {/* Provider Selector */}
+                        <div className="mb-4">
+                            <label className="text-sm font-medium mb-2 block">Select Provider</label>
+                            <select
+                                value={selectedProvider}
+                                onChange={(e) => setSelectedProvider(e.target.value)}
+                                className="w-full max-w-md px-4 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                            >
+                                <option value="gatewayz">Gatewayz (Unified - Recommended)</option>
+                                {modelProviders.length > 0 && modelProviders.map(provider => {
+                                    const config = providerConfigs[provider];
+                                    if (!config) return null;
+                                    return (
+                                        <option key={provider} value={provider}>
+                                            {config.name}
+                                        </option>
+                                    );
+                                })}
+                            </select>
+                            {selectedProvider !== 'gatewayz' && (
+                                <p className="text-sm text-muted-foreground mt-2">
+                                    ⚠️ Using {providerConfigs[selectedProvider]?.name} directly requires a separate API key from that provider.
+                                </p>
+                            )}
                         </div>
 
                         {/* Language Selector */}
@@ -767,10 +1002,15 @@ export default function ModelProfilePage() {
                         {/* Code Example */}
                         <div className="mb-6">
                             {(() => {
+                                // Get provider config
+                                const providerConfig = providerConfigs[selectedProvider] || providerConfigs.gatewayz;
+                                const baseUrl = providerConfig.baseUrl;
+                                const currentApiKey = providerConfig.apiKeyPlaceholder;
+
                                 const codeExamples = {
-                                    curl: `curl -X POST https://api.gatewayz.ai/v1/chat/completions \\
+                                    curl: `curl -X POST ${baseUrl}/chat/completions \\
   -H "Content-Type: application/json" \\
-  -H "Authorization: Bearer ${apiKey}" \\
+  -H "Authorization: Bearer ${currentApiKey}" \\
   -d '{
     "model": "${model.id}",
     "messages": [
@@ -784,9 +1024,9 @@ export default function ModelProfilePage() {
 import json
 
 response = requests.post(
-    url="https://api.gatewayz.ai/v1/chat/completions",
+    url="${baseUrl}/chat/completions",
     headers={
-        "Authorization": "Bearer ${apiKey}",
+        "Authorization": "Bearer ${currentApiKey}",
         "Content-Type": "application/json"
     },
     data=json.dumps({
@@ -804,8 +1044,8 @@ print(response.json())`,
                                     'openai-python': `from openai import OpenAI
 
 client = OpenAI(
-    base_url="https://api.gatewayz.ai/v1",
-    api_key="${apiKey}"
+    base_url="${baseUrl}",
+    api_key="${currentApiKey}"
 )
 
 completion = client.chat.completions.create(
@@ -816,10 +1056,10 @@ completion = client.chat.completions.create(
 )
 
 print(completion.choices[0].message.content)`,
-                                    typescript: `fetch("https://api.gatewayz.ai/v1/chat/completions", {
+                                    typescript: `fetch("${baseUrl}/chat/completions", {
   method: "POST",
   headers: {
-    "Authorization": "Bearer ${apiKey}",
+    "Authorization": "Bearer ${currentApiKey}",
     "Content-Type": "application/json"
   },
   body: JSON.stringify({
@@ -835,8 +1075,8 @@ print(completion.choices[0].message.content)`,
                                     'openai-typescript': `import OpenAI from 'openai';
 
 const client = new OpenAI({
-  apiKey: "${apiKey}",
-  baseURL: "https://api.gatewayz.ai/v1"
+  apiKey: "${currentApiKey}",
+  baseURL: "${baseUrl}"
 });
 
 const response = await client.chat.completions.create({
@@ -932,6 +1172,7 @@ console.log(response.choices[0].message.content);`
                         ) : modelProviders.length > 0 ? (
                             <div className="space-y-4">
                                 {modelProviders.map(provider => {
+                                    const isRecommended = provider === selectedProvider;
                                     const providerNames: Record<string, string> = {
                                         openrouter: 'OpenRouter',
                                         portkey: 'Portkey',
@@ -941,14 +1182,15 @@ console.log(response.choices[0].message.content);`
                                         together: 'Together AI',
                                         groq: 'Groq',
                                         deepinfra: 'DeepInfra',
-                                        google: 'Google',
+                                        google: 'Google AI',
                                         cerebras: 'Cerebras',
-                                        nebius: 'Nebius',
+                                        nebius: 'Nebius AI Studio',
                                         xai: 'xAI',
-                                        novita: 'Novita',
+                                        novita: 'Novita AI',
                                         huggingface: 'Hugging Face',
                                         aimo: 'AIMO Network',
-                                        near: 'NEAR'
+                                        near: 'NEAR Protocol',
+                                        fal: 'FAL AI'
                                     };
                                     const providerLogos: Record<string, string> = {
                                         openrouter: '/openrouter-logo.svg',
@@ -966,11 +1208,12 @@ console.log(response.choices[0].message.content);`
                                         novita: '/novita-logo.svg',
                                         huggingface: '/huggingface-logo.svg',
                                         aimo: '/aimo-logo.svg',
-                                        near: '/near-logo.svg'
+                                        near: '/near-logo.svg',
+                                        fal: '/fal-logo.svg'
                                     };
 
                                     return (
-                                        <Card key={provider} className="p-6">
+                                        <Card key={provider} className={`p-6 ${isRecommended ? 'ring-2 ring-primary' : ''}`}>
                                             <div className="flex items-center gap-4 mb-4">
                                                 <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center border">
                                                     <img
@@ -983,22 +1226,31 @@ console.log(response.choices[0].message.content);`
                                                         }}
                                                     />
                                                 </div>
-                                                <div>
-                                                    <h3 className="text-lg font-semibold">{providerNames[provider]}</h3>
-                                                    <p className="text-sm text-muted-foreground">Gateway Provider</p>
+                                                <div className="flex-1">
+                                                    <div className="flex items-center gap-2">
+                                                        <h3 className="text-lg font-semibold">{providerNames[provider]}</h3>
+                                                        {isRecommended && (
+                                                            <Badge className="bg-primary text-primary-foreground">
+                                                                Recommended
+                                                            </Badge>
+                                                        )}
+                                                    </div>
+                                                    <p className="text-sm text-muted-foreground">
+                                                        {isRecommended ? 'Lowest cost/latency option' : 'Gateway Provider'}
+                                                    </p>
                                                 </div>
                                             </div>
                                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                                 <div>
                                                     <p className="text-sm text-muted-foreground">Input Cost</p>
                                                     <p className="text-lg font-semibold">
-                                                        ${(parseFloat(model.pricing.prompt) * 1000000).toFixed(2)}/M
+                                                        ${model.pricing && model.pricing.prompt ? (parseFloat(model.pricing.prompt) * 1000000).toFixed(2) : 'N/A'}/M
                                                     </p>
                                                 </div>
                                                 <div>
                                                     <p className="text-sm text-muted-foreground">Output Cost</p>
                                                     <p className="text-lg font-semibold">
-                                                        ${(parseFloat(model.pricing.completion) * 1000000).toFixed(2)}/M
+                                                        ${model.pricing && model.pricing.completion ? (parseFloat(model.pricing.completion) * 1000000).toFixed(2) : 'N/A'}/M
                                                     </p>
                                                 </div>
                                                 <div>

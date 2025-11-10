@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { traced, wrapTraced } from 'braintrust';
 import { isBraintrustEnabled } from '@/lib/braintrust';
+import { normalizeModelId } from '@/lib/utils';
 
 /**
  * Process LLM completion with Braintrust tracing
@@ -19,18 +20,27 @@ const processCompletion = wrapTraced(
       console.log('[API Proxy] Model:', body.model);
       console.log('[API Proxy] Stream:', body.stream);
 
-      const response = await fetch(targetUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': apiKey,
-        },
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(timeoutMs),
-      });
+      // Create an AbortController for timeout handling (AbortSignal.timeout may not be available)
+      const abortController = new AbortController();
+      const timeoutId = setTimeout(() => abortController.abort(), timeoutMs);
 
-      console.log('[API Proxy] Response status:', response.status);
-      console.log('[API Proxy] Response ok:', response.ok);
+      try {
+        const response = await fetch(targetUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': apiKey,
+          },
+          body: JSON.stringify(body),
+          signal: abortController.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        console.log('[API Proxy] Response status:', response.status);
+        console.log('[API Proxy] Response ok:', response.ok);
+        console.log('[API Proxy] Response headers:', Object.fromEntries(response.headers.entries()));
+        console.log('[API Proxy] Response body exists:', !!response.body);
 
       // If not streaming, parse and log the response
       if (!body.stream) {
@@ -103,6 +113,10 @@ const processCompletion = wrapTraced(
 
       console.log('[API Proxy] Setting up streaming response forwarding');
       return { stream: response.body, status: response.status };
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        throw fetchError;
+      }
     });
   },
   {
@@ -116,11 +130,32 @@ const processCompletion = wrapTraced(
  * This proxies requests to the Gatewayz API to bypass CORS issues in development
  */
 export async function POST(request: NextRequest) {
+  console.log('[API Proxy] POST request received');
   let timeoutMs = 30000; // Default timeout
 
   try {
+    console.log('[API Proxy] Parsing request body...');
     const body = await request.json();
+
+    // Normalize model ID to handle different formats from various gateway APIs
+    if (body.model) {
+      const originalModel = body.model;
+      body.model = normalizeModelId(body.model);
+      if (originalModel !== body.model) {
+        console.log('[API Proxy] Normalized model ID from', originalModel, 'to', body.model);
+      }
+    }
+
+    console.log('[API Proxy] Request body parsed, model:', body.model, 'stream:', body.stream);
+
     const apiKey = request.headers.get('authorization');
+    console.log('[API Proxy] API key present:', !!apiKey);
+    if (apiKey) {
+      const keyPrefix = apiKey.substring(0, 15);
+      console.log('[API Proxy] API key prefix:', keyPrefix);
+      console.log('[API Proxy] Is temp key?', apiKey.includes('gw_temp_'));
+      console.log('[API Proxy] Is live key?', apiKey.includes('gw_live_'));
+    }
 
     if (!apiKey) {
       return new Response(
@@ -137,11 +172,118 @@ export async function POST(request: NextRequest) {
       targetUrl.searchParams.append(key, value);
     });
 
-    // Use a 120 second timeout for streaming requests (models can be slow to start)
-    // Use a 30 second timeout for non-streaming requests
-    timeoutMs = body.stream ? 120000 : 30000;
+    // Use longer timeouts for large models (30B+ parameters) or NEAR provider
+    // NEAR models and very large models can take 3-5 minutes to load and start responding
+    const isLargeModel = body.model?.includes('30B') || body.model?.includes('70B') || body.model?.includes('405B');
+    const isNearProvider = body.model?.startsWith('near/');
+    const needsExtendedTimeout = isLargeModel || isNearProvider;
 
-    // Process completion with Braintrust tracing
+    // Use a 300 second (5 minute) timeout for large/NEAR models
+    // Use a 120 second (2 minute) timeout for regular streaming requests
+    // Use a 30 second timeout for non-streaming requests
+    if (body.stream) {
+      timeoutMs = needsExtendedTimeout ? 300000 : 120000;
+    } else {
+      timeoutMs = needsExtendedTimeout ? 180000 : 30000;
+    }
+
+    // For streaming requests, bypass Braintrust to avoid interference with the stream
+    if (body.stream) {
+      console.log('[API Proxy] Handling streaming request directly (bypassing Braintrust)');
+      console.log('[API Proxy] Target URL:', targetUrl.toString());
+      console.log('[API Proxy] Timeout configured:', timeoutMs + 'ms', `(${timeoutMs / 1000}s)`, needsExtendedTimeout ? '[EXTENDED]' : '[STANDARD]');
+
+      const abortController = new AbortController();
+      const timeoutId = setTimeout(() => abortController.abort(), timeoutMs);
+
+      try {
+        const requestStartTime = Date.now();
+        console.log('[API Proxy] Making fetch request to backend');
+        console.log('[API Proxy] Target URL:', targetUrl.toString());
+        console.log('[API Proxy] Request headers:', {
+          'Content-Type': 'application/json',
+          'Authorization': apiKey ? apiKey.substring(0, 20) + '...' : 'none'
+        });
+
+        const response = await fetch(targetUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': apiKey,
+            'Accept': 'text/event-stream',
+          },
+          body: JSON.stringify(body),
+          signal: abortController.signal,
+        });
+
+        clearTimeout(timeoutId);
+        const responseTime = Date.now() - requestStartTime;
+
+        console.log('[API Proxy] Streaming response received');
+        console.log('[API Proxy] Response time:', responseTime + 'ms');
+        console.log('[API Proxy] Response status:', response.status);
+        console.log('[API Proxy] Response ok:', response.ok);
+        console.log('[API Proxy] Content-Type:', response.headers.get('content-type'));
+        console.log('[API Proxy] Response body exists:', !!response.body);
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('[API Proxy] Backend returned error status:', response.status);
+          console.error('[API Proxy] Error response text:', errorText.substring(0, 500));
+          console.error('[API Proxy] Error response (first 1000 chars):', errorText.substring(0, 1000));
+          console.error('[API Proxy] Full request body:', JSON.stringify(body, null, 2));
+
+          // Try to parse the error as JSON
+          let errorData;
+          try {
+            errorData = JSON.parse(errorText);
+          } catch {
+            errorData = { raw: errorText };
+          }
+
+          // Log the actual model ID being sent to help debug
+          console.error('[API Proxy] Model ID sent to backend:', body.model);
+          console.error('[API Proxy] Gateway param sent to backend:', body.gateway);
+
+          return new Response(JSON.stringify({
+            error: 'Backend API Error',
+            status: response.status,
+            statusText: response.statusText,
+            message: errorData.message || errorData.detail || errorText.substring(0, 500),
+            model: body.model,
+            gateway: body.gateway,
+            errorData: errorData
+          }), {
+            status: response.status,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+
+        if (!response.body) {
+          console.error('[API Proxy] No response body for streaming request');
+          return new Response(
+            JSON.stringify({ error: 'No response body from backend' }),
+            { status: 500, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
+
+        console.log('[API Proxy] Returning streaming response to client');
+        return new Response(response.body, {
+          status: response.status,
+          headers: {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+          },
+        });
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        console.error('[API Proxy] Fetch error for streaming request:', fetchError);
+        throw fetchError;
+      }
+    }
+
+    // For non-streaming requests, use Braintrust tracing
     const result = await processCompletion(body, apiKey, targetUrl.toString(), timeoutMs);
 
     // Handle non-streaming response
@@ -186,7 +328,12 @@ export async function POST(request: NextRequest) {
 
     if (errorDetails.name === 'TimeoutError' || errorDetails.message.includes('timeout') || errorDetails.message.includes('timed out')) {
       status = 504;
-      details = `Request to backend API timed out after ${timeoutMs / 1000} seconds. The model may be overloaded or starting up. Please try again in a moment.`;
+      const timeoutMinutes = Math.floor(timeoutMs / 60000);
+      const timeoutSeconds = Math.floor((timeoutMs % 60000) / 1000);
+      const timeoutDisplay = timeoutMinutes > 0
+        ? `${timeoutMinutes} minute${timeoutMinutes > 1 ? 's' : ''}${timeoutSeconds > 0 ? ` ${timeoutSeconds} seconds` : ''}`
+        : `${timeoutSeconds} seconds`;
+      details = `Request to backend API timed out after ${timeoutDisplay}. The model may be overloaded or starting up. Please try again in a moment.`;
     } else if (errorDetails.message.includes('fetch') || errorDetails.message.includes('network') || errorDetails.name === 'TypeError') {
       status = 502;
       details = 'Could not connect to backend API. The service may be temporarily unavailable.';

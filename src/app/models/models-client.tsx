@@ -24,7 +24,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { Slider } from "@/components/ui/slider";
-import { BookText, Bot, ChevronDown, ChevronUp, FileText, ImageIcon, LayoutGrid, LayoutList, Music, Search, Sliders as SlidersIcon, X, Zap } from 'lucide-react';
+import { BookText, Bot, Box, ChevronDown, ChevronUp, FileText, ImageIcon, LayoutGrid, LayoutList, Music, Search, Sliders as SlidersIcon, Video, X, Zap } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 import { stringToColor } from '@/lib/utils';
@@ -70,7 +70,10 @@ const GATEWAY_CONFIG: Record<string, { name: string; color: string; icon?: React
   huggingface: { name: 'Hugging Face', color: 'bg-yellow-600' },
   hug: { name: 'Hugging Face', color: 'bg-yellow-600' }, // Backend uses 'hug' abbreviation
   aimo: { name: 'AiMo', color: 'bg-pink-600' },
-  near: { name: 'NEAR', color: 'bg-teal-600' }
+  near: { name: 'NEAR', color: 'bg-teal-600' },
+  fal: { name: 'Fal', color: 'bg-emerald-600' },
+  'vercel-ai-gateway': { name: 'Vercel AI', color: 'bg-slate-900' },
+  helicone: { name: 'Helicone', color: 'bg-indigo-600' }
 };
 
 const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
@@ -90,7 +93,7 @@ const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
 
   // Generate clean URLs:
   // - For AIMO models (providerId:model-name), extract just the model name after the colon
-  // - For regular models with slashes (provider/model-name), keep the slash
+  // - For regular models with slashes (provider/model-name), encode the entire ID to preserve it correctly
   // - Otherwise, use the full ID
   let modelUrl: string;
   if (model.id.includes(':')) {
@@ -98,8 +101,8 @@ const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
     const modelName = model.id.split(':')[1] || model.id;
     modelUrl = `/models/${encodeURIComponent(modelName)}`;
   } else if (model.id.includes('/')) {
-    // Regular provider/model format - preserve the slash
-    modelUrl = `/models/${model.id}`;
+    // Regular provider/model format - encode the entire ID to handle special characters like parentheses
+    modelUrl = `/models/${encodeURIComponent(model.id)}`;
   } else {
     // Single-part ID - encode it
     modelUrl = `/models/${encodeURIComponent(model.id)}`;
@@ -184,6 +187,86 @@ export default function ModelsClient({
   initialModels: Model[];
   isLoadingMore?: boolean;
 }) {
+  // Initialize CSS variable for header positioning and update when banner visibility changes
+  React.useEffect(() => {
+    const updateHeaderPosition = () => {
+      const bannerElement = document.querySelector('[data-onboarding-banner]');
+      const spacer = document.querySelector('[data-header-spacer]');
+      const container = document.querySelector('[data-models-container]');
+      
+      if (bannerElement) {
+        const bannerHeight = bannerElement.getBoundingClientRect().height;
+        const headerTop = 65 + bannerHeight;
+        document.documentElement.style.setProperty('--models-header-top', `${headerTop}px`);
+        
+        // Update header element directly
+        const header = document.querySelector('[data-models-header]');
+        if (header) {
+          (header as HTMLElement).style.top = `${headerTop}px`;
+        }
+        
+        // Update container margin
+        if (container) {
+          (container as HTMLElement).style.marginTop = `-${headerTop}px`;
+        }
+        
+        // Update models list margin - add more space when banner is visible
+        const modelsList = document.querySelector('[data-models-list]');
+        if (modelsList) {
+          (modelsList as HTMLElement).style.marginTop = '140px';
+        }
+        
+        // Update spacer
+        if (spacer) {
+          (spacer as HTMLElement).style.height = `${headerTop}px`;
+        }
+      } else {
+        document.documentElement.style.setProperty('--models-header-top', '65px');
+        
+        // Update header element directly
+        const header = document.querySelector('[data-models-header]');
+        if (header) {
+          (header as HTMLElement).style.top = '65px';
+        }
+        
+        // Update container margin - use negative margin to pull content up but keep header visible
+        if (container) {
+          (container as HTMLElement).style.marginTop = '-50px';
+        }
+        
+        // Update models list margin - keep normal spacing when banner is closed
+        const modelsList = document.querySelector('[data-models-list]');
+        if (modelsList) {
+          (modelsList as HTMLElement).style.marginTop = '80px';
+        }
+        
+        // Update spacer
+        if (spacer) {
+          (spacer as HTMLElement).style.height = '65px';
+        }
+      }
+    };
+
+    // Initial update with delay to ensure banner is rendered
+    setTimeout(updateHeaderPosition, 50);
+
+    // Watch for banner visibility changes
+    const observer = new MutationObserver(() => {
+      setTimeout(updateHeaderPosition, 50);
+    });
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class']
+    });
+
+    // Also check periodically in case banner renders after initial check
+    const interval = setInterval(updateHeaderPosition, 200);
+    
+    return () => {
+      observer.disconnect();
+      clearInterval(interval);
+    };
+  }, []);
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -232,6 +315,20 @@ export default function ModelsClient({
     console.log(`Models for deduplication: ${models.length}`);
     const seen = new Set<string>();
     const deduplicated = models.filter(model => {
+      // Filter out malformed models from backend (e.g., Cerebras parsing errors)
+      // These have names like "('Data', [Data(Id=..." or "('Object', 'List')"
+      const isMalformed = model.name && (
+        model.name.startsWith("('Data',") ||
+        model.name.startsWith("('Object',") ||
+        model.name.includes("Data(Id=") ||
+        model.name.includes("Data(id=")
+      );
+
+      if (isMalformed) {
+        console.warn(`Filtering out malformed model: ${model.name} (ID: ${model.id})`);
+        return false;
+      }
+
       if (seen.has(model.id)) {
         console.warn(`Duplicate model ID found: ${model.id}`);
         return false;
@@ -239,7 +336,7 @@ export default function ModelsClient({
       seen.add(model.id);
       return true;
     });
-    console.log(`After client-side deduplication: ${deduplicated.length} unique models`);
+    console.log(`After client-side deduplication and validation: ${deduplicated.length} unique models`);
     return deduplicated;
   }, [models]);
 
@@ -572,7 +669,7 @@ export default function ModelsClient({
     // Define all known gateways that should appear in the filter
     // This ensures all gateways are visible even if they have 0 models currently
     // Excludes 'portkey' as it's deprecated (use individual Portkey SDK providers instead)
-    const allKnownGateways = ['featherless', 'openrouter', 'groq', 'together', 'fireworks', 'chutes', 'deepinfra', 'google', 'cerebras', 'nebius', 'xai', 'novita', 'huggingface', 'aimo', 'near'];
+    const allKnownGateways = ['featherless', 'openrouter', 'groq', 'together', 'fireworks', 'chutes', 'deepinfra', 'google', 'cerebras', 'nebius', 'xai', 'novita', 'huggingface', 'aimo', 'near', 'fal', 'vercel-ai-gateway', 'helicone'];
 
     // Log gateway counts for debugging
     const gatewayStats = allKnownGateways.map(g => ({
@@ -617,12 +714,12 @@ export default function ModelsClient({
 
   return (
     <SidebarProvider>
-      <div className="relative flex w-full h-full justify-center overflow-hidden">
+      <div className="relative flex w-full justify-center">
         <Sidebar
           variant="sidebar"
           collapsible="offcanvas"
         >
-          <SidebarContent className="p-4 overflow-y-auto">
+          <SidebarContent className="p-4 pb-20 overflow-y-auto">
             <SidebarGroup>
               <SidebarGroupLabel>Input Formats</SidebarGroupLabel>
               <div className="flex flex-col gap-2">
@@ -630,7 +727,9 @@ export default function ModelsClient({
                   const icon = item.value.toLowerCase() === 'text' ? <BookText className="w-4 h-4"/> :
                                item.value.toLowerCase() === 'image' ? <ImageIcon className="w-4 h-4"/> :
                                item.value.toLowerCase() === 'file' ? <FileText className="w-4 h-4"/> :
-                               item.value.toLowerCase() === 'audio' ? <Music className="w-4 h-4"/> : null;
+                               item.value.toLowerCase() === 'audio' ? <Music className="w-4 h-4"/> :
+                               item.value.toLowerCase() === 'video' ? <Video className="w-4 h-4"/> :
+                               item.value.toLowerCase() === '3d' ? <Box className="w-4 h-4"/> : null;
                   return (
                     <div key={item.value} className="flex items-center justify-between space-x-2">
                       <div className="flex items-center space-x-2 flex-1 min-w-0">
@@ -657,7 +756,9 @@ export default function ModelsClient({
                   const icon = item.value.toLowerCase() === 'text' ? <BookText className="w-4 h-4"/> :
                                item.value.toLowerCase() === 'image' ? <ImageIcon className="w-4 h-4"/> :
                                item.value.toLowerCase() === 'file' ? <FileText className="w-4 h-4"/> :
-                               item.value.toLowerCase() === 'audio' ? <Music className="w-4 h-4"/> : null;
+                               item.value.toLowerCase() === 'audio' ? <Music className="w-4 h-4"/> :
+                               item.value.toLowerCase() === 'video' ? <Video className="w-4 h-4"/> :
+                               item.value.toLowerCase() === '3d' ? <Box className="w-4 h-4"/> : null;
                   return (
                     <div key={item.value} className="flex items-center justify-between space-x-2">
                       <div className="flex items-center space-x-2 flex-1 min-w-0">
@@ -741,29 +842,69 @@ export default function ModelsClient({
           </SidebarContent>
         </Sidebar>
 
-        <SidebarInset className="flex-1 overflow-y-auto overflow-x-hidden h-full flex flex-col">
-          <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8 pb-24 overflow-x-hidden">
-          <div className="sticky top-0 z-40 bg-background border-b flex flex-col gap-3 mb-6 w-full -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-4">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 w-full">
-              <div className="flex items-center gap-3">
-                  <SidebarTrigger className="lg:hidden" />
-                  <h1 className="text-2xl font-bold">Models</h1>
-                  {isLoadingMore && (
-                    <Badge variant="secondary" className="text-xs animate-pulse">
-                      Loading more...
-                    </Badge>
-                  )}
+        <SidebarInset className="flex-1 overflow-x-hidden flex flex-col">
+          <div data-models-container className="w-full pb-24 overflow-x-hidden -mt-[115px] has-onboarding-banner:-mt-[115px]">
+          <div data-models-header className="sticky z-25 bg-background border-b flex flex-col gap-3 w-full px-4 sm:px-6 lg:px-8 pt-3 pb-3 top-[65px] has-onboarding-banner:top-[125px]" style={{ transition: 'top 0.3s ease' }}>
+            <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 w-full">
+              <div className="flex items-center gap-3 flex-1 min-w-0 w-full lg:w-auto">
+                <SidebarTrigger className="lg:hidden" />
+                <h1 className="text-2xl font-bold whitespace-nowrap">Models</h1>
+                {isLoadingMore && (
+                  <Badge variant="secondary" className="text-xs animate-pulse">
+                    Loading more...
+                  </Badge>
+                )}
+                <div className="relative flex-1 max-w-md ml-auto lg:ml-4">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Filter models"
+                    className="pl-9 bg-input"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                </div>
               </div>
-              <div className="flex items-center gap-4">
-                <span className="text-sm text-muted-foreground whitespace-nowrap">
+              <div className="flex items-center gap-3 flex-shrink-0 w-full lg:w-auto justify-between lg:justify-end">
+                <span className={`text-sm whitespace-nowrap ${isLoadingModels || isLoadingMore ? 'shimmer-text' : 'text-muted-foreground'}`}>
                   {isLoadingModels || isLoadingMore
-                    ? `${filteredModels.length} of ~10,000 models (loading...)`
+                    ? `${deduplicatedModels.length} models available,  loading...`
                     : `${filteredModels.length} / ${deduplicatedModels.length} models`
                   }
                 </span>
-                {hasActiveFilters && (
-                  <Button variant="ghost" size="sm" onClick={resetFilters}>Clear All Filters</Button>
-                )}
+                <div className="flex items-center gap-2">
+                  {hasActiveFilters && (
+                    <Button variant="ghost" size="sm" onClick={resetFilters} className="whitespace-nowrap">Clear All Filters</Button>
+                  )}
+                  <Select value={sortBy} onValueChange={setSortBy}>
+                    <SelectTrigger className="w-[180px] h-9">
+                      <SelectValue placeholder="Sort" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="tokens-desc">Tokens (High to Low)</SelectItem>
+                      <SelectItem value="tokens-asc">Tokens (Low to High)</SelectItem>
+                      <SelectItem value="price-desc">Price (High to Low)</SelectItem>
+                      <SelectItem value="price-asc">Price (Low to High)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <div className="hidden lg:flex items-center gap-1 bg-muted p-1 rounded-md">
+                    <Button
+                      variant={layout === 'grid' ? 'secondary' : 'ghost'}
+                      size="icon"
+                      onClick={() => setLayout('grid')}
+                      className="h-8 w-8"
+                    >
+                      <LayoutGrid className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant={layout === 'list' ? 'secondary' : 'ghost'}
+                      size="icon"
+                      onClick={() => setLayout('list')}
+                      className="h-8 w-8"
+                    >
+                      <LayoutList className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -855,45 +996,7 @@ export default function ModelsClient({
             </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-4 mb-6">
-              <div className="relative w-full">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                  placeholder="Filter models"
-                  className="pl-9 bg-input"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-              />
-              </div>
-              <Select value={sortBy} onValueChange={setSortBy}>
-              <SelectTrigger className="w-full sm:w-[180px]">
-                  <SelectValue placeholder="Sort" />
-              </SelectTrigger>
-              <SelectContent>
-                  <SelectItem value="tokens-desc">Tokens (High to Low)</SelectItem>
-                  <SelectItem value="tokens-asc">Tokens (Low to High)</SelectItem>
-                  <SelectItem value="price-desc">Price (High to Low)</SelectItem>
-                  <SelectItem value="price-asc">Price (Low to High)</SelectItem>
-              </SelectContent>
-              </Select>
-              <div className="flex items-center gap-1 bg-muted p-1 rounded-md">
-              <Button
-                  variant={layout === 'grid' ? 'secondary' : 'ghost'}
-                  size="icon"
-                  onClick={() => setLayout('grid')}
-              >
-                  <LayoutGrid className="w-5 h-5" />
-              </Button>
-              <Button
-                  variant={layout === 'list' ? 'secondary' : 'ghost'}
-                  size="icon"
-                  onClick={() => setLayout('list')}
-              >
-                  <LayoutList className="w-5 h-5" />
-              </Button>
-              </div>
-          </div>
-
+          <div data-models-list className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 mt-20 has-onboarding-banner:mt-40" style={{ transition: 'margin-top 0.3s ease' }}>
           <div
             className={
               layout === 'grid'
@@ -906,6 +1009,26 @@ export default function ModelsClient({
               <ModelCard key={key} model={model} />
             ))}
           </div>
+
+          {/* No results message */}
+          {filteredModels.length === 0 && !isLoadingModels && !isLoadingMore && (
+            <div className="flex flex-col items-center justify-center py-16 px-4">
+              <div className="text-center max-w-md">
+                <h3 className="text-lg font-semibold mb-2">No models found</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  {selectedGateways.includes('cerebras') ? (
+                    <>
+                      The Cerebras gateway is experiencing data issues. Please try selecting a different gateway or <button onClick={resetFilters} className="text-primary hover:underline">clear all filters</button>.
+                    </>
+                  ) : (
+                    <>
+                      Try adjusting your filters or <button onClick={resetFilters} className="text-primary hover:underline">clearing all filters</button> to see more models.
+                    </>
+                  )}
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Infinite Scroll Trigger */}
           {hasMore && (
@@ -924,6 +1047,7 @@ export default function ModelsClient({
               </div>
             </div>
           )}
+          </div>
           </div>
         </SidebarInset>
       </div>

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "https://api.gatewayz.ai";
+import { validateApiKey } from "@/app/api/middleware/auth";
+import { handleApiError } from "@/app/api/middleware/error-handler";
+import { API_BASE_URL } from "@/lib/config";
+import { proxyFetch } from "@/lib/proxy-fetch";
 
 /**
  * DELETE /api/user/api-keys/[keyId]
@@ -12,21 +14,18 @@ export async function DELETE(
   { params }: { params: { keyId: string } }
 ) {
   try {
-    const authHeader = request.headers.get("Authorization");
-
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Missing or invalid Authorization header" }, { status: 401 });
-    }
+    const { key: apiKey, error } = await validateApiKey(request);
+    if (error) return error;
 
     const body = await request.json();
     const { keyId } = params;
 
     console.log(`[API /api/user/api-keys/${keyId} DELETE] Proxying delete API key request to backend`);
 
-    const response = await fetch(`${API_BASE_URL}/user/api-keys/${keyId}`, {
+    const response = await proxyFetch(`${API_BASE_URL}/user/api-keys/${keyId}`, {
       method: "DELETE",
       headers: {
-        Authorization: authHeader,
+        Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify(body),
@@ -53,10 +52,6 @@ export async function DELETE(
       },
     });
   } catch (error) {
-    console.error("[API /api/user/api-keys/[keyId] DELETE] Error proxying request:", error);
-    return NextResponse.json(
-      { error: "Internal server error deleting API key" },
-      { status: 500 }
-    );
+    return handleApiError(error, "API /api/user/api-keys/[keyId] DELETE");
   }
 }

@@ -85,10 +85,8 @@ const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
   // Get gateways - support both old and new format
   const gateways = model.source_gateways || (model.source_gateway ? [model.source_gateway] : []);
 
-  // Preserve literal slash in URL (e.g., "provider/model-name")
-  const modelUrl = model.id.includes('/')
-    ? `/models/${model.id}`
-    : `/models/${encodeURIComponent(model.id)}`;
+  // Encode model ID to handle special characters like parentheses in model names
+  const modelUrl = `/models/${encodeURIComponent(model.id)}`;
 
   return (
     <Link href={modelUrl} className="h-full block">

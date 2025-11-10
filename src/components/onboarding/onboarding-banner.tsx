@@ -81,12 +81,24 @@ export function OnboardingBanner() {
       document.documentElement.classList.add('has-onboarding-banner');
       document.documentElement.style.setProperty('--sidebar-top', '130px');
       document.documentElement.style.setProperty('--sidebar-height', 'calc(100vh - 130px)');
-      console.log('Added has-onboarding-banner class and set sidebar position');
+      // Measure banner height after render - use requestAnimationFrame to ensure DOM is ready
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const bannerElement = document.querySelector('[data-onboarding-banner]');
+          if (bannerElement) {
+            const bannerHeight = bannerElement.getBoundingClientRect().height;
+            const headerTop = 65 + bannerHeight;
+            document.documentElement.style.setProperty('--models-header-top', `${headerTop}px`);
+          } else {
+            document.documentElement.style.setProperty('--models-header-top', '115px');
+          }
+        });
+      });
     } else {
       document.documentElement.classList.remove('has-onboarding-banner');
       document.documentElement.style.setProperty('--sidebar-top', '65px');
       document.documentElement.style.setProperty('--sidebar-height', 'calc(100vh - 65px)');
-      console.log('Removed has-onboarding-banner class and reset sidebar position');
+      document.documentElement.style.setProperty('--models-header-top', '65px');
     }
   }, [pathname]);
 
@@ -95,7 +107,22 @@ export function OnboardingBanner() {
     document.documentElement.classList.remove('has-onboarding-banner');
     document.documentElement.style.setProperty('--sidebar-top', '65px');
     document.documentElement.style.setProperty('--sidebar-height', 'calc(100vh - 65px)');
-    console.log('Removed has-onboarding-banner class (dismissed) and reset sidebar position');
+    document.documentElement.style.setProperty('--models-header-top', '65px');
+    
+    // Update spacer height
+    const spacer = document.querySelector('[data-header-spacer]');
+    if (spacer) {
+      (spacer as HTMLElement).style.height = '65px';
+    }
+    
+    // Update page content padding for other pages
+    const pageContents = document.querySelectorAll('[data-page-content]');
+    pageContents.forEach((content) => {
+      (content as HTMLElement).style.paddingTop = '128px'; // pt-32
+    });
+    
+    // Chat will adjust automatically via CSS classes
+    
     // Remember dismissal for this session
     sessionStorage.setItem('onboarding_banner_dismissed', 'true');
   };
@@ -108,7 +135,7 @@ export function OnboardingBanner() {
   }
 
   return (
-    <div className="bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-md sticky top-[65px] z-30">
+    <div data-onboarding-banner className="bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-md fixed top-[65px] left-0 right-0 z-30">
       <div className="px-4 py-3 max-w-full overflow-x-hidden">
         <div className="flex items-center justify-between gap-2 sm:gap-4">
           <div className="flex items-center gap-2 sm:gap-4 flex-1 min-w-0">
@@ -159,7 +186,7 @@ export function OnboardingBanner() {
           {/* Dismiss button */}
           <button
             onClick={handleDismiss}
-            className="flex-shrink-0 hover:bg-white/20 rounded-full p-1 transition-colors"
+            className="flex-shrink-0 hover:bg-white/20 rounded-full p-1.5 transition-colors ml-2"
             aria-label="Dismiss banner"
           >
             <X className="h-5 w-5" />

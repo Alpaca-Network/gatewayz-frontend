@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/card';
 import { Send, Loader2 } from 'lucide-react';
 import { getApiKey, getUserData } from '@/lib/api';
 import { streamChatResponse } from '@/lib/streaming';
+import { normalizeModelId } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -78,6 +79,12 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
     const streamingMessageIndex = messages.length + 1;
     setMessages(prev => [...prev, { role: 'assistant', content: '', thinking: '', isStreaming: true }]);
 
+    // Initialize accumulated content outside try block to ensure it's always in scope
+    // This prevents ReferenceError when accessing these variables in catch handler
+    let accumulatedContent = '';
+    let accumulatedThinking = '';
+    let inThinking = false;
+
     try {
       // Call the backend API directly to avoid Vercel's 60-second timeout
       // CORS headers are configured in vercel.json to allow beta.gatewayz.ai
@@ -86,23 +93,21 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
         ? '/api/chat/completions'
         : `${apiBaseUrl}/v1/chat/completions`;
 
+      // Normalize model ID to handle different formats from various gateway APIs
+      const normalizedModelId = normalizeModelId(modelId);
+
       console.log('[InlineChat] Sending message to model:', modelId);
+      console.log('[InlineChat] Normalized model ID:', normalizedModelId);
       console.log('[InlineChat] Gateway:', gateway || 'not specified');
       console.log('[InlineChat] Using API endpoint:', url);
 
       const requestBody = {
-        model: modelId,
-        ...(gateway && { gateway }), // Add gateway if provided
+        model: normalizedModelId,
         messages: [...messages, userMessage].map(m => ({ role: m.role, content: m.content })),
         stream: true,
         temperature: 0.7,
         max_tokens: 8000  // Increased for reasoning models like DeepSeek
       };
-
-      let accumulatedContent = '';
-      let accumulatedThinking = '';
-      let inThinking = false;
-
       // Use the streaming utility with proper error handling and retries
       for await (const chunk of streamChatResponse(url, apiKey, requestBody)) {
         // Enhanced logging to see what data we're receiving
@@ -223,7 +228,21 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
 
     } catch (err) {
       console.error('[InlineChat] Error sending message:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Failed to send message';
+      let errorMessage = 'Failed to send message';
+
+      if (err instanceof Error) {
+        errorMessage = err.message;
+      }
+
+      // Add helpful context if no response was received
+      if (accumulatedContent.length === 0) {
+        // If the error message doesn't already explain the issue, add context
+        if (!errorMessage.includes('not properly configured') && !errorMessage.includes('not support')) {
+          errorMessage = errorMessage || 'No response from model. ';
+          errorMessage += ' This could mean: the model is unavailable, your API key is invalid, or the model provider is having issues. Try again or select a different model.';
+        }
+      }
+
       setError(errorMessage);
       // Remove the streaming message on error
       setMessages(prev => prev.slice(0, -1));
@@ -277,7 +296,7 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
                           ul: ({node, ...props}) => <ul className="list-disc list-inside mb-2" {...props} />,
                           ol: ({node, ...props}) => <ol className="list-decimal list-inside mb-2" {...props} />,
                           li: ({node, ...props}) => <li className="mb-1" {...props} />,
-                          code: ({node, inline, ...props}) =>
+                          code: ({node, inline, ...props}: any) =>
                             inline ? (
                               <code className="bg-black/20 dark:bg-white/20 px-1.5 py-0.5 rounded text-xs font-mono" {...props} />
                             ) : (

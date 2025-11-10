@@ -1,16 +1,21 @@
-# Gatewayz Frontend - Codebase Documentation
+# Gatewayz Beta - Codebase Documentation
 
 ## Application Overview
 
-**Gatewayz** is a comprehensive AI model management and routing platform that provides a unified interface for accessing and working with Large Language Models (LLMs) from 60+ providers. It serves as an AI router and gateway solution that helps teams manage, compare, and utilize 300+ AI models from multiple providers through a single, unified interface.
+**Gatewayz Beta** (beta.gatewayz.ai) is the beta version of the Gatewayz AI model management and routing platform. It provides a unified interface for accessing and working with Large Language Models (LLMs) from 60+ providers. This is a testing ground for new features before they are released to the main platform at gatewayz.ai.
 
 ### Key Objectives
-- Provide access to 300+ AI models from multiple providers
+- Provide early access to new features and improvements
+- Test AI model integrations from 60+ providers
 - Offer real-time chat interface with model switching
 - Enable model performance analytics and comparisons
 - Manage API keys and developer integration tools
 - Support team/organization management features
 - Handle billing and credits management with tiered subscription support
+
+### Important: Cross-Domain Authentication
+
+Users authenticate on **gatewayz.ai** (main domain) and are automatically redirected to **beta.gatewayz.ai** with their session. See **BETA_TEAM_QUICK_START.md** for session transfer implementation details.
 
 ---
 
@@ -600,6 +605,81 @@ When contributing to this codebase:
 
 ---
 
+## Cross-Domain Session Transfer
+
+### Overview
+
+Users authenticate on **gatewayz.ai** (main domain) and are automatically redirected to **beta.gatewayz.ai** with their authentication token. This enables seamless cross-domain authentication without requiring a second login.
+
+### Session Transfer Flow
+
+```
+gatewayz.ai (Main Domain)
+    ↓
+User authenticates via Privy
+    ↓
+Backend returns API key
+    ↓
+Automatic redirect to:
+https://beta.gatewayz.ai?token=<API_KEY>&userId=<USER_ID>
+    ↓
+beta.gatewayz.ai (This Domain)
+    ↓
+SessionInitializer receives token
+    ↓
+User automatically authenticated ✅
+```
+
+### Beta Team Implementation
+
+The beta domain implements session transfer via the `SessionInitializer` component:
+
+**Location**: `src/components/SessionInitializer.tsx`
+
+**Responsibilities**:
+1. Detects URL parameters from main domain redirect
+2. Extracts and validates session token and user ID
+3. Stores token in sessionStorage (10-minute expiry)
+4. Saves API key to localStorage
+5. Syncs authentication context
+6. Cleans URL parameters from browser history
+7. Redirects to dashboard or specified return URL
+
+**Integration**: Added to `src/app/layout.tsx` root layout
+
+### Shared Modules
+
+The following modules are shared between main and beta domains:
+
+- `src/integrations/privy/auth-session-transfer.ts` - Session transfer utilities
+- `src/integrations/privy/auth-sync.ts` - Authentication sync module
+- `src/context/gatewayz-auth-context.tsx` - Enhanced auth context with session transfer support
+
+### Documentation
+
+For implementation details, see:
+- **BETA_TEAM_QUICK_START.md** - Quick start guide (~20 minutes to implement)
+- **BETA_AUTH_TRANSFER.md** - Complete implementation guide with all details
+
+### Security
+
+- **Token Handling**: Passed in URL during redirect, immediately cleaned from history
+- **SessionStorage**: Domain-specific, auto-expires after 10 minutes
+- **localStorage**: API key persisted for session duration
+- **Bearer Token**: Used for all authenticated API requests
+- **401 Handling**: Invalid tokens automatically cleared
+
+### Key Points
+
+✅ Automatic session transfer from main domain
+✅ No second login required on beta domain
+✅ Secure token handling with auto-expiry
+✅ Backward compatible with manual Privy login
+✅ One-way flow (main → beta only)
+✅ Proper separation of concerns
+
+---
+
 ## Additional Resources
 
 - [Next.js Documentation](https://nextjs.org/docs)
@@ -607,3 +687,6 @@ When contributing to this codebase:
 - [Radix UI Documentation](https://www.radix-ui.com/docs/primitives)
 - [Privy Documentation](https://docs.privy.io)
 - [Stripe Documentation](https://stripe.com/docs)
+- **BETA_TEAM_QUICK_START.md** - Session transfer quick start guide
+- **BETA_AUTH_TRANSFER.md** - Complete session transfer documentation
+- **IMPLEMENTATION_VERIFICATION.md** - Architecture verification

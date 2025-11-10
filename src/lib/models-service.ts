@@ -57,6 +57,9 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
     'huggingface',
     'aimo',
     'near',
+    'fal',
+    'vercel-ai-gateway', // Vercel AI Gateway
+    'helicone', // Helicone AI Gateway - will be skipped if backend unavailable
     'all'
   ];
   if (!validGateways.includes(gateway)) {
@@ -84,18 +87,79 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
         'novita',
         'huggingface',
         'aimo',
-        'near'
+        'near',
+        'fal',
+        'vercel-ai-gateway',
+        'helicone'
       ];
 
       const results = await Promise.all(
         gatewaysToFetch.map(gw => fetchModelsFromGateway(gw, limit))
       );
 
-      // Combine and deduplicate models by ID
+      // Combine and deduplicate models intelligently
       const combinedModels = results.flat();
-      const uniqueModels = Array.from(
-        new Map(combinedModels.map(m => [m.id, m])).values()
-      );
+
+      // Create a normalized key for deduplication
+      // This handles cases where the same model has different IDs from different gateways
+      const modelMap = new Map<string, any>();
+
+      for (const model of combinedModels) {
+        // Normalize the model name: remove prefixes, lowercase, remove special chars, handle versioning
+        const normalizedName = (model.name || '')
+          .toLowerCase()
+          .replace(/^(google:|openai:|meta:|anthropic:|models\/)/i, '') // Remove provider prefixes
+          .replace(/\s+/g, '-') // Replace spaces with hyphens
+          .replace(/[^\w-]/g, ''); // Remove special characters except hyphens
+
+        // Use normalized name + provider slug as dedup key
+        const dedupKey = `${normalizedName}:::${model.provider_slug || 'unknown'}`;
+
+        // Merge models from multiple gateways
+        if (modelMap.has(dedupKey)) {
+          const existing = modelMap.get(dedupKey);
+
+          // Merge source_gateways arrays
+          const existingGateways = Array.isArray(existing.source_gateways)
+            ? existing.source_gateways
+            : (existing.source_gateway ? [existing.source_gateway] : []);
+
+          const newGateways = Array.isArray(model.source_gateways)
+            ? model.source_gateways
+            : (model.source_gateway ? [model.source_gateway] : []);
+
+          // Combine and deduplicate gateways
+          const combinedGateways = Array.from(new Set([...existingGateways, ...newGateways]));
+
+          // Calculate data completeness score (models with more metadata are preferred)
+          const existingScore = (existing.description ? 1 : 0) +
+                                (existing.pricing?.prompt ? 1 : 0) +
+                                (existing.context_length > 0 ? 1 : 0) +
+                                (existing.architecture?.input_modalities?.length || 0);
+
+          const newScore = (model.description ? 1 : 0) +
+                           (model.pricing?.prompt ? 1 : 0) +
+                           (model.context_length > 0 ? 1 : 0) +
+                           (model.architecture?.input_modalities?.length || 0);
+
+          // Keep the model with more complete data, but always preserve all gateways
+          const mergedModel = newScore > existingScore ? model : existing;
+          mergedModel.source_gateways = combinedGateways;
+
+          modelMap.set(dedupKey, mergedModel);
+        } else {
+          // First occurrence - ensure source_gateways is an array
+          if (!Array.isArray(model.source_gateways) && model.source_gateway) {
+            model.source_gateways = [model.source_gateway];
+          } else if (!model.source_gateways) {
+            model.source_gateways = [];
+          }
+
+          modelMap.set(dedupKey, model);
+        }
+      }
+
+      const uniqueModels = Array.from(modelMap.values());
 
       console.log(`[Models] Combined ${combinedModels.length} total (${uniqueModels.length} unique) from ${gatewaysToFetch.length} gateways`);
 
@@ -122,68 +186,69 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
   return { data: getStaticFallbackModels(gateway) };
 }
 
+// Helper function to build request headers
+function buildHeaders(gateway: string): Record<string, string> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json'
+  };
+
+  const hfApiKey = process.env.NEXT_PUBLIC_HF_API_KEY || process.env.HF_API_KEY;
+  if (gateway === 'huggingface' && hfApiKey) {
+    headers['Authorization'] = `Bearer ${hfApiKey}`;
+  }
+
+  const nearApiKey = process.env.NEXT_PUBLIC_NEAR_API_KEY || process.env.NEAR_API_KEY;
+  if (gateway === 'near' && nearApiKey) {
+    headers['Authorization'] = `Bearer ${nearApiKey}`;
+  }
+
+  return headers;
+}
+
 // Helper function to fetch models from a specific gateway
 async function fetchModelsFromGateway(gateway: string, limit?: number): Promise<any[]> {
   const allModels: any[] = [];
   const requestLimit = limit || 50000; // Request up to 50k models per page (backend limit)
-  const limitParam = `&limit=${requestLimit}`;
+  const FAST_GATEWAYS = ['openrouter', 'groq', 'together', 'fireworks', 'vercel-ai-gateway'];
+  const timeoutMs = FAST_GATEWAYS.includes(gateway) ? 3000 : 5000;
+
   let offset = 0;
   let hasMore = true;
   let pageCount = 0;
 
-  while (hasMore && pageCount < 10) { // Max 10 pages to prevent infinite loops (50k per page = 500k total)
+  while (hasMore && pageCount < 10) {
     pageCount++;
     const offsetParam = offset > 0 ? `&offset=${offset}` : '';
-    const fullLimitParam = `${limitParam}${offsetParam}`;
+    const limitParam = `limit=${requestLimit}${offsetParam}`;
 
-    // Try v1/models endpoint first (newer endpoint), then fall back to /models
-    let response;
-    let url = `${API_BASE_URL}/v1/models?gateway=${gateway}${fullLimitParam}`;
+    // Try both v1/models and /models endpoints using Promise.race for fast fallback
+    const urls = [
+      `${API_BASE_URL}/v1/models?gateway=${gateway}&${limitParam}`,
+      `${API_BASE_URL}/models?gateway=${gateway}&${limitParam}`
+    ];
 
-    // Debug logging for HuggingFace, Google, AiMo, and NEAR requests
-    if (gateway === 'huggingface' || gateway === 'google' || gateway === 'aimo' || gateway === 'near') {
-      console.log(`[Models] Requesting ${gateway} models with URL: ${url}`);
-    }
-
-    // Use longer timeout for 'all', 'huggingface', 'google', 'aimo', and 'near' gateways (they have many models)
-    const timeoutMs = (gateway === 'all' || gateway === 'huggingface' || gateway === 'google' || gateway === 'aimo' || gateway === 'near') ? 90000 : 15000;
-
-    // Try live API first (primary source)
     try {
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json'
-      };
+      const headers = buildHeaders(gateway);
 
-      // Add HF_API_KEY header if available for Hugging Face gateway (for auth and rate limit bypass)
-      const hfApiKey = process.env.NEXT_PUBLIC_HF_API_KEY || process.env.HF_API_KEY;
-      if (gateway === 'huggingface' && hfApiKey) {
-        headers['Authorization'] = `Bearer ${hfApiKey}`;
-      }
-
-      // Add NEAR_API_KEY header if available for NEAR gateway (for auth and rate limit bypass)
-      const nearApiKey = process.env.NEXT_PUBLIC_NEAR_API_KEY || process.env.NEAR_API_KEY;
-      if (gateway === 'near' && nearApiKey) {
-        headers['Authorization'] = `Bearer ${nearApiKey}`;
-      }
-
-      response = await fetch(url, {
-        method: 'GET',
-        headers,
-        // Cache aggressively for better performance (5 minutes)
-        next: { revalidate: 300 }, // Cache for 5 minutes
-        signal: AbortSignal.timeout(timeoutMs)
-      });
+      // Try both endpoints in parallel, use first successful response
+      const response = await Promise.race(
+        urls.map(url =>
+          fetch(url, {
+            method: 'GET',
+            headers,
+            next: { revalidate: 300 },
+            signal: AbortSignal.timeout(timeoutMs)
+          })
+        )
+      );
 
       if (response.ok) {
         const data = await response.json();
 
-        // Validate response structure and data
         if (data.data && Array.isArray(data.data) && data.data.length > 0) {
           allModels.push(...data.data);
           console.log(`[Models] Fetched ${data.data.length} models for gateway: ${gateway} (offset: ${offset})`);
 
-          // For HuggingFace, continue pagination even if we got 500 models (backend's old cap)
-          // For other gateways, stop if we got fewer than requested
           const isFiveHundred = data.data.length === 500 && gateway === 'huggingface';
           const hasReachedLimit = limit && allModels.length >= limit;
           const gotFewerThanRequested = data.data.length < requestLimit && !isFiveHundred;
@@ -197,127 +262,14 @@ async function fetchModelsFromGateway(gateway: string, limit?: number): Promise<
           hasMore = false;
         }
       } else {
-        // If v1/models fails, try the older /models endpoint
-        console.log(`[Models] Trying fallback /models endpoint for ${gateway}`);
-        url = `${API_BASE_URL}/models?gateway=${gateway}${fullLimitParam}`;
-
-        try {
-          const fallbackHeaders: Record<string, string> = {
-            'Content-Type': 'application/json'
-          };
-
-          // Add HF_API_KEY header if available
-          const hfApiKey = process.env.NEXT_PUBLIC_HF_API_KEY || process.env.HF_API_KEY;
-          if (gateway === 'huggingface' && hfApiKey) {
-            fallbackHeaders['Authorization'] = `Bearer ${hfApiKey}`;
-          }
-
-          // Add NEAR_API_KEY header if available
-          const nearApiKey = process.env.NEXT_PUBLIC_NEAR_API_KEY || process.env.NEAR_API_KEY;
-          if (gateway === 'near' && nearApiKey) {
-            fallbackHeaders['Authorization'] = `Bearer ${nearApiKey}`;
-          }
-
-          response = await fetch(url, {
-            method: 'GET',
-            headers: fallbackHeaders,
-            next: { revalidate: 300 },
-            signal: AbortSignal.timeout(timeoutMs)
-          });
-
-          if (response.ok) {
-            const data = await response.json();
-
-            // Validate response structure and data
-            if (data.data && Array.isArray(data.data) && data.data.length > 0) {
-              allModels.push(...data.data);
-              console.log(`[Models] Fetched ${data.data.length} models for gateway: ${gateway} (from fallback, offset: ${offset})`);
-
-              // For HuggingFace, continue pagination even if we got 500 models (backend's old cap)
-              // For other gateways, stop if we got fewer than requested
-              const isFiveHundred1 = data.data.length === 500 && gateway === 'huggingface';
-              const hasReachedLimit1 = limit && allModels.length >= limit;
-              const gotFewerThanRequested1 = data.data.length < requestLimit && !isFiveHundred1;
-
-              if (gotFewerThanRequested1 || hasReachedLimit1) {
-                hasMore = false;
-              } else {
-                offset += requestLimit;
-              }
-            } else {
-              hasMore = false;
-            }
-          } else {
-            hasMore = false;
-          }
-        } catch (backendError: any) {
-          console.error(`[Models] Nested fallback endpoint failed for ${gateway}:`, backendError.message || backendError);
-          hasMore = false;
-        }
-      }
-    } catch (backendError: any) {
-      // If v1/models fails, try the older /models endpoint
-      console.error(`[Models] v1/models endpoint failed for ${gateway}:`, backendError.message || backendError);
-      console.log(`[Models] Trying fallback /models endpoint for ${gateway}`);
-      url = `${API_BASE_URL}/models?gateway=${gateway}${fullLimitParam}`;
-
-      try{
-        const fallbackHeaders2: Record<string, string> = {
-          'Content-Type': 'application/json'
-        };
-
-        // Add HF_API_KEY header if available
-        const hfApiKey = process.env.NEXT_PUBLIC_HF_API_KEY || process.env.HF_API_KEY;
-        if (gateway === 'huggingface' && hfApiKey) {
-          fallbackHeaders2['Authorization'] = `Bearer ${hfApiKey}`;
-        }
-
-        // Add NEAR_API_KEY header if available
-        const nearApiKey = process.env.NEXT_PUBLIC_NEAR_API_KEY || process.env.NEAR_API_KEY;
-        if (gateway === 'near' && nearApiKey) {
-          fallbackHeaders2['Authorization'] = `Bearer ${nearApiKey}`;
-        }
-
-        response = await fetch(url, {
-          method: 'GET',
-          headers: fallbackHeaders2,
-          next: { revalidate: 300 },
-          signal: AbortSignal.timeout(timeoutMs)
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-
-          // Validate response structure and data
-          if (data.data && Array.isArray(data.data) && data.data.length > 0) {
-            allModels.push(...data.data);
-            console.log(`[Models] Fetched ${data.data.length} models for gateway: ${gateway} (from fallback, offset: ${offset})`);
-
-            // For HuggingFace, continue pagination even if we got 500 models (backend's old cap)
-            // For other gateways, stop if we got fewer than requested
-            const isFiveHundred2 = data.data.length === 500 && gateway === 'huggingface';
-            const hasReachedLimit2 = limit && allModels.length >= limit;
-            const gotFewerThanRequested2 = data.data.length < requestLimit && !isFiveHundred2;
-
-            if (gotFewerThanRequested2 || hasReachedLimit2) {
-              hasMore = false;
-            } else {
-              offset += requestLimit;
-            }
-          } else {
-            hasMore = false;
-          }
-        } else {
-          hasMore = false;
-        }
-      } catch (backendError: any) {
-        console.error(`[Models] Fallback endpoint failed for ${gateway}:`, backendError.message || backendError);
         hasMore = false;
       }
+    } catch (error: any) {
+      console.error(`[Models] Failed to fetch ${gateway}:`, error.message || error);
+      hasMore = false;
     }
   }
 
-  // Return fetched models
   console.log(`[Models] Total fetched for gateway ${gateway}: ${allModels.length} models`);
   return allModels;
 }
@@ -345,7 +297,10 @@ function getStaticFallbackModels(gateway: string): any[] {
       'novita',
       'huggingface',
       'aimo',
-      'near'
+      'near',
+      'fal',
+      'vercel-ai-gateway',
+      'helicone'
     ];
     const modelsPerGateway = Math.ceil(models.length / allGateways.length);
 
@@ -372,7 +327,10 @@ function getStaticFallbackModels(gateway: string): any[] {
       'novita',
       'huggingface',
       'aimo',
-      'near'
+      'near',
+      'fal',
+      'vercel-ai-gateway',
+      'helicone'
     ];
     const modelsPerGateway = Math.ceil(models.length / allGateways.length);
     let gatewayModels;

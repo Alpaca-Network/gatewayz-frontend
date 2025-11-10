@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "https://api.gatewayz.ai";
+import { validateApiKey } from "@/app/api/middleware/auth";
+import { handleApiError } from "@/app/api/middleware/error-handler";
+import { API_BASE_URL } from "@/lib/config";
+import { proxyFetch } from "@/lib/proxy-fetch";
 
 /**
  * GET /api/user/api-keys
@@ -9,18 +11,15 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "https://api.gatewa
  */
 export async function GET(request: NextRequest) {
   try {
-    const authHeader = request.headers.get("Authorization");
-
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Missing or invalid Authorization header" }, { status: 401 });
-    }
+    const { key: apiKey, error } = await validateApiKey(request);
+    if (error) return error;
 
     console.log("[API /api/user/api-keys GET] Proxying API keys request to backend");
 
-    const response = await fetch(`${API_BASE_URL}/user/api-keys`, {
+    const response = await proxyFetch(`${API_BASE_URL}/user/api-keys`, {
       method: "GET",
       headers: {
-        Authorization: authHeader,
+        Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
     });
@@ -46,11 +45,8 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error("[API /api/user/api-keys GET] Error proxying request:", error);
-    return NextResponse.json(
-      { error: "Internal server error fetching API keys" },
-      { status: 500 }
-    );
+    console.error("[API /api/user/api-keys GET] Unexpected error:", error);
+    return handleApiError(error, "API /api/user/api-keys GET");
   }
 }
 
@@ -61,20 +57,34 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const authHeader = request.headers.get("Authorization");
+    const { key: apiKey, error } = await validateApiKey(request);
+    if (error) return error;
 
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Missing or invalid Authorization header" }, { status: 401 });
+    // Safely parse request body
+    let body;
+    try {
+      const contentType = request.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        return NextResponse.json(
+          { error: "Content-Type must be application/json" },
+          { status: 400 }
+        );
+      }
+      body = await request.json();
+    } catch (parseError) {
+      console.error("[API /api/user/api-keys POST] Failed to parse request body:", parseError);
+      return NextResponse.json(
+        { error: "Invalid JSON in request body", details: parseError instanceof Error ? parseError.message : String(parseError) },
+        { status: 400 }
+      );
     }
 
-    const body = await request.json();
+    console.log("[API /api/user/api-keys POST] Proxying create API key request to backend", { body });
 
-    console.log("[API /api/user/api-keys POST] Proxying create API key request to backend");
-
-    const response = await fetch(`${API_BASE_URL}/user/api-keys`, {
+    const response = await proxyFetch(`${API_BASE_URL}/user/api-keys`, {
       method: "POST",
       headers: {
-        Authorization: authHeader,
+        Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify(body),
@@ -101,10 +111,7 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error("[API /api/user/api-keys POST] Error proxying request:", error);
-    return NextResponse.json(
-      { error: "Internal server error creating API key" },
-      { status: 500 }
-    );
+    console.error("[API /api/user/api-keys POST] Unexpected error:", error);
+    return handleApiError(error, "API /api/user/api-keys POST");
   }
 }

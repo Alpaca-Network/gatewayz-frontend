@@ -149,9 +149,37 @@ export class ChatHistoryAPI {
    * Updates a chat session's title or model
    */
   async updateSession(sessionId: number, title?: string, model?: string): Promise<ChatSession> {
-    const result = await this.makeRequest<ChatSession>('PUT', `/sessions/${sessionId}`, { 
-      title, 
-      model 
+    // Route through Next.js API to avoid CORS issues
+    const isClientSide = typeof window !== 'undefined';
+    if (isClientSide) {
+      let url = `/api/chat/sessions/${sessionId}`;
+      // Add privy_user_id to query string for consistency with other methods
+      if (this.privyUserId) {
+        url += `?privy_user_id=${encodeURIComponent(this.privyUserId)}`;
+      }
+
+      const response = await fetch(url, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ title, model })
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: 'Failed to update session' }));
+        throw new Error(error.error || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      return result.data;
+    }
+
+    // Server-side: call backend directly
+    const result = await this.makeRequest<ChatSession>('PUT', `/sessions/${sessionId}`, {
+      title,
+      model
     });
     return result.data!;
   }
@@ -160,6 +188,32 @@ export class ChatHistoryAPI {
    * Deletes a chat session and all its messages
    */
   async deleteSession(sessionId: number): Promise<boolean> {
+    // Route through Next.js API to avoid CORS issues
+    const isClientSide = typeof window !== 'undefined';
+    if (isClientSide) {
+      let url = `/api/chat/sessions/${sessionId}`;
+      // Add privy_user_id to query string for consistency with other methods
+      if (this.privyUserId) {
+        url += `?privy_user_id=${encodeURIComponent(this.privyUserId)}`;
+      }
+
+      const response = await fetch(url, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: 'Failed to delete session' }));
+        throw new Error(error.error || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      return true;
+    }
+
+    // Server-side: call backend directly
     await this.makeRequest('DELETE', `/sessions/${sessionId}`);
     return true;
   }

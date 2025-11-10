@@ -1,23 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { validateApiKey } from '@/app/api/middleware/auth';
+import { handleApiError } from '@/app/api/middleware/error-handler';
+import { CHAT_HISTORY_API_URL } from '@/lib/config';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_CHAT_HISTORY_API_URL || 'https://api.gatewayz.ai';
 
 // POST /api/chat/search - Search sessions
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { query, limit = 20 } = body;
-    const apiKey = request.headers.get('authorization')?.replace('Bearer ', '');
 
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: 'API key required' },
-        { status: 401 }
-      );
-    }
+    const { key: apiKey, error } = await validateApiKey(request);
+    if (error) return error;
 
     if (!query) {
       return NextResponse.json(
@@ -26,7 +22,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const url = `${API_BASE_URL}/v1/chat/search`;
+    const url = `${CHAT_HISTORY_API_URL}/v1/chat/search`;
     
     const response = await fetch(url, {
       method: 'POST',
@@ -48,10 +44,6 @@ export async function POST(request: NextRequest) {
     const data = await response.json();
     return NextResponse.json(data);
   } catch (error) {
-    console.error('Error searching chat sessions:', error);
-    return NextResponse.json(
-      { error: 'Failed to search chat sessions' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'Chat Search API');
   }
 }
