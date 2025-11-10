@@ -26,13 +26,12 @@ interface Model {
 }
 
 // Fast-loading gateways (typically under 1s with new timeout)
-// Note: 'helicone' removed - backend API returns "Models data unavailable" (needs backend implementation)
 const PRIORITY_GATEWAYS = ['openrouter', 'groq', 'together', 'fireworks', 'vercel-ai-gateway'];
 
 // Slower gateways that can be deferred
 const DEFERRED_GATEWAYS = [
   'featherless', 'chutes', 'deepinfra', 'google', 'cerebras',
-  'nebius', 'xai', 'novita', 'huggingface', 'aimo', 'near', 'fal'
+  'nebius', 'xai', 'novita', 'huggingface', 'aimo', 'near', 'fal', 'helicone'
 ];
 
 async function getPriorityModels(): Promise<Model[]> {
