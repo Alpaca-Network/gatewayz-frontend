@@ -309,6 +309,25 @@ export default function ModelProfilePage() {
     // Select default provider based on lowest cost or latency
     useEffect(() => {
         if (modelProviders.length > 0 && model) {
+            // For models with provider-specific prefixes (near/, aimo/, etc.),
+            // prefer using their native gateway if available
+            const modelIdLower = model.id.toLowerCase();
+            let preferredGateway: string | null = null;
+
+            if (modelIdLower.startsWith('near/') && modelProviders.includes('near')) {
+                preferredGateway = 'near';
+            } else if (modelIdLower.startsWith('aimo/') && modelProviders.includes('aimo')) {
+                preferredGateway = 'aimo';
+            } else if (modelIdLower.startsWith('huggingface/') && modelProviders.includes('huggingface')) {
+                preferredGateway = 'huggingface';
+            }
+
+            if (preferredGateway) {
+                setSelectedProvider(preferredGateway);
+                setSelectedPlaygroundProvider(preferredGateway);
+                return;
+            }
+
             // Get provider performance data if available
             const modelProviderData = providerData[model.name] || [];
 
