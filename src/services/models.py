@@ -1604,10 +1604,26 @@ def fetch_models_from_aimo():
             if model and (normalized := normalize_aimo_model(model)) is not None
         ]
 
-        _aimo_models_cache["data"] = normalized_models
+        # Deduplicate models by canonical_slug (same model from different AIMO providers)
+        # Keep only the first occurrence of each unique model
+        seen_models = {}
+        deduplicated_models = []
+        for model in normalized_models:
+            canonical_slug = model.get("canonical_slug")
+            if canonical_slug and canonical_slug not in seen_models:
+                seen_models[canonical_slug] = True
+                deduplicated_models.append(model)
+            elif not canonical_slug:
+                # If no canonical slug, keep it (shouldn't happen but be safe)
+                deduplicated_models.append(model)
+
+        logger.info(
+            f"Fetched {len(normalized_models)} AIMO models, deduplicated to {len(deduplicated_models)} unique models"
+        )
+
+        _aimo_models_cache["data"] = deduplicated_models
         _aimo_models_cache["timestamp"] = datetime.now(timezone.utc)
 
-        logger.info(f"Fetched {len(normalized_models)} AIMO models")
         return _aimo_models_cache["data"]
     except httpx.HTTPStatusError as e:
         logger.error(
@@ -1635,6 +1651,15 @@ def normalize_aimo_model(aimo_model: dict) -> dict:
         logger.warning("AIMO model missing 'name' field: %s", sanitize_for_logging(str(aimo_model)))
         return None
 
+    # Normalize model name by stripping common provider prefixes
+    # AIMO may return model names like "google/gemini-2.5-pro" or just "gemini-2.5-pro"
+    model_name_normalized = model_name
+    provider_prefixes = ["google/", "openai/", "anthropic/", "meta/", "meta-llama/", "mistralai/"]
+    for prefix in provider_prefixes:
+        if model_name.lower().startswith(prefix):
+            model_name_normalized = model_name[len(prefix):]
+            break
+
     # Get provider information (use first provider if multiple)
     providers = aimo_model.get("providers", [])
     if not providers:
@@ -1647,9 +1672,10 @@ def normalize_aimo_model(aimo_model: dict) -> dict:
     provider_name = provider.get("name", "unknown")
 
     # Create user-friendly model ID in format: aimo/model_name
+    # Use the normalized model name (without provider prefix) for consistency
     # Store the original AIMO format (provider_pubkey:model_name) in raw metadata
     original_aimo_id = f"{provider_id}:{model_name}"
-    model_id = f"aimo/{model_name}"
+    model_id = f"aimo/{model_name_normalized}"
 
     slug = model_id
     # Always use "aimo" as the provider slug for AIMO Network models
@@ -1657,10 +1683,10 @@ def normalize_aimo_model(aimo_model: dict) -> dict:
 
     # Create canonical slug from the base model name (without the provider prefix)
     # This allows the model to be grouped with same models from other providers
-    canonical_slug = model_name.lower()
+    canonical_slug = model_name_normalized.lower()
 
-    display_name = aimo_model.get("display_name") or model_name.replace("-", " ").title()
-    base_description = f"AIMO Network decentralized model {model_name} provided by {provider_name}."
+    display_name = aimo_model.get("display_name") or model_name_normalized.replace("-", " ").title()
+    base_description = f"AIMO Network decentralized model {model_name_normalized} provided by {provider_name}."
     description = base_description
 
     context_length = aimo_model.get("context_length", 0)
