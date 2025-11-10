@@ -273,6 +273,118 @@ class TestAnthropicTransformer:
             result = transform_openai_to_anthropic(openai_response, 'claude')
             assert result['stop_reason'] == expected_anthropic
 
+    def test_transform_openai_to_anthropic_tool_calls(self):
+        """Test OpenAI to Anthropic transformation with tool_calls"""
+        # Test case 1: tool_calls with null content (typical OpenAI response)
+        openai_response_with_tools = {
+            'id': 'chatcmpl-456',
+            'choices': [{
+                'message': {
+                    'content': None,  # Typically None when tool_calls are present
+                    'tool_calls': [
+                        {
+                            'id': 'call_abc123',
+                            'type': 'function',
+                            'function': {
+                                'name': 'get_weather',
+                                'arguments': '{"location": "San Francisco"}'
+                            }
+                        }
+                    ]
+                },
+                'finish_reason': 'tool_calls'
+            }],
+            'usage': {
+                'prompt_tokens': 20,
+                'completion_tokens': 15
+            }
+        }
+
+        anthropic_response = transform_openai_to_anthropic(
+            openai_response_with_tools,
+            model='claude-sonnet-4-5-20250929'
+        )
+
+        # Should have tool_use blocks, not empty text blocks
+        assert len(anthropic_response['content']) == 1
+        assert anthropic_response['content'][0]['type'] == 'tool_use'
+        assert anthropic_response['content'][0]['id'] == 'call_abc123'
+        assert anthropic_response['content'][0]['name'] == 'get_weather'
+        assert anthropic_response['content'][0]['input'] == {'location': 'San Francisco'}
+        assert anthropic_response['stop_reason'] == 'tool_use'
+
+        # Test case 2: tool_calls with empty string content
+        openai_response_empty_content = {
+            'id': 'chatcmpl-789',
+            'choices': [{
+                'message': {
+                    'content': '',  # Empty string
+                    'tool_calls': [
+                        {
+                            'id': 'call_def456',
+                            'type': 'function',
+                            'function': {
+                                'name': 'calculate',
+                                'arguments': '{"x": 5, "y": 3}'
+                            }
+                        }
+                    ]
+                },
+                'finish_reason': 'tool_calls'
+            }],
+            'usage': {
+                'prompt_tokens': 10,
+                'completion_tokens': 8
+            }
+        }
+
+        anthropic_response2 = transform_openai_to_anthropic(
+            openai_response_empty_content,
+            model='claude-sonnet-4-5-20250929'
+        )
+
+        # Should only have tool_use block, no empty text block
+        assert len(anthropic_response2['content']) == 1
+        assert anthropic_response2['content'][0]['type'] == 'tool_use'
+        assert anthropic_response2['content'][0]['name'] == 'calculate'
+
+        # Test case 3: tool_calls with both text content and tool_calls (rare but possible)
+        openai_response_with_both = {
+            'id': 'chatcmpl-101',
+            'choices': [{
+                'message': {
+                    'content': 'Let me check that for you.',
+                    'tool_calls': [
+                        {
+                            'id': 'call_ghi789',
+                            'type': 'function',
+                            'function': {
+                                'name': 'search',
+                                'arguments': '{"query": "test"}'
+                            }
+                        }
+                    ]
+                },
+                'finish_reason': 'tool_calls'
+            }],
+            'usage': {
+                'prompt_tokens': 15,
+                'completion_tokens': 12
+            }
+        }
+
+        anthropic_response3 = transform_openai_to_anthropic(
+            openai_response_with_both,
+            model='claude-sonnet-4-5-20250929'
+        )
+
+        # Should have both tool_use and text blocks
+        assert len(anthropic_response3['content']) == 2
+        # Tool_use should come first (we process it first)
+        assert anthropic_response3['content'][0]['type'] == 'tool_use'
+        assert anthropic_response3['content'][1]['type'] == 'text'
+        assert anthropic_response3['content'][1]['text'] == 'Let me check that for you.'
+
     def test_extract_text_from_string_content(self):
         """Test extracting text from string content"""
         text = extract_text_from_content("Hello, world!")

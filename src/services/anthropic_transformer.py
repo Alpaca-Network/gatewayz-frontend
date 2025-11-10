@@ -196,13 +196,13 @@ def transform_openai_to_anthropic(
     # Build content array for Anthropic response
     content_blocks = []
 
-    # Add text content if present
-    if content:
-        content_blocks.append({"type": "text", "text": content})
+    # Check for tool_calls first (they take priority when present)
+    tool_calls = message.get("tool_calls")
+    has_tool_calls = tool_calls and len(tool_calls) > 0
 
     # Handle tool_calls from OpenAI format (convert to Anthropic tool_use blocks)
-    if "tool_calls" in message and message["tool_calls"]:
-        for tool_call in message["tool_calls"]:
+    if has_tool_calls:
+        for tool_call in tool_calls:
             # Extract tool information
             tool_name = tool_call.get("function", {}).get("name", "tool")
             tool_args = tool_call.get("function", {}).get("arguments", "{}")
@@ -222,6 +222,11 @@ def transform_openai_to_anthropic(
                 "name": tool_name,
                 "input": tool_args,
             })
+
+    # Add text content if present and non-empty (only if no tool_calls or in addition to them)
+    # When tool_calls are present, content is typically None/empty, but we still check
+    if content and isinstance(content, str) and content.strip():
+        content_blocks.append({"type": "text", "text": content})
 
     # If no content blocks were created, add empty text block
     if not content_blocks:
