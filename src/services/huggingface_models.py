@@ -43,6 +43,21 @@ ESSENTIAL_MODELS = {
     "katanemo/Arch-Router-1.5B",
 }
 
+# Fallback models - used when HuggingFace API is unavailable
+# This ensures that HuggingFace models are always available even during API outages
+FALLBACK_HUGGINGFACE_MODELS = [
+    "meta-llama/Llama-3.3-70B-Instruct",
+    "meta-llama/Llama-3.2-3B-Instruct",
+    "meta-llama/Llama-3.1-8B-Instruct",
+    "microsoft/Phi-3.5-mini-instruct",
+    "Qwen/Qwen2.5-72B-Instruct",
+    "Qwen/Qwen2.5-7B-Instruct",
+    "mistralai/Mistral-7B-Instruct-v0.3",
+    "mistralai/Mixtral-8x7B-Instruct-v0.1",
+    "google/gemma-2-9b-it",
+    "google/gemma-2-2b-it",
+]
+
 
 def fetch_models_from_huggingface_api(
     search: str = None,
@@ -503,6 +518,73 @@ def get_huggingface_model_info(model_id: str) -> dict:
         return None
 
 
+def create_fallback_models() -> list:
+    """
+    Create minimal model entries for fallback models when HF API is unavailable.
+
+    Returns:
+        List of minimal normalized model dictionaries
+    """
+    fallback_models = []
+
+    for model_id in FALLBACK_HUGGINGFACE_MODELS:
+        # Extract display name from model ID
+        display_name = model_id.split("/")[-1].replace("-", " ").replace("_", " ").title()
+
+        # Create minimal model entry
+        model = {
+            "id": model_id,
+            "slug": model_id,
+            "canonical_slug": model_id,
+            "hugging_face_id": model_id,
+            "name": display_name,
+            "description": f"HuggingFace model: {model_id}",
+            "context_length": 8192,  # Common default
+            "architecture": {
+                "modality": "text->text",
+                "input_modalities": ["text"],
+                "output_modalities": ["text"],
+                "tokenizer": None,
+                "instruct_type": None,
+            },
+            "pricing": {
+                "prompt": None,
+                "completion": None,
+                "request": None,
+                "image": None,
+                "web_search": None,
+                "internal_reasoning": None,
+            },
+            "top_provider": None,
+            "per_request_limits": None,
+            "supported_parameters": [],
+            "default_parameters": {},
+            "provider_slug": model_id.split("/")[0] if "/" in model_id else "Unknown",
+            "provider_site_url": f"https://huggingface.co/{model_id}",
+            "model_logo_url": None,
+            "source_gateway": "hug",
+            "huggingface_metrics": {
+                "downloads": 0,
+                "likes": 0,
+                "pipeline_tag": "text-generation",
+                "num_parameters": None,
+                "gated": False,
+                "private": False,
+                "last_modified": None,
+                "author": model_id.split("/")[0] if "/" in model_id else "Unknown",
+                "url": f"https://huggingface.co/{model_id}",
+            },
+        }
+
+        # Enrich with pricing if available
+        from src.services.pricing_lookup import enrich_model_with_pricing
+        enriched = enrich_model_with_pricing(model, "huggingface")
+        fallback_models.append(enriched)
+
+    logger.info(f"Created {len(fallback_models)} fallback HuggingFace models")
+    return fallback_models
+
+
 def fetch_models_from_hug():
     """
     Fetch models from Hugging Face using the direct API integration.
@@ -513,11 +595,22 @@ def fetch_models_from_hug():
     Uses multi-sort strategy to fetch 1204+ models by merging results from
     multiple sort methods (likes and downloads).
 
+    If the API is unavailable, returns a fallback list of popular models.
+
     Returns:
-        List of normalized Hugging Face models or None on error
+        List of normalized Hugging Face models (never returns None)
     """
-    return fetch_models_from_huggingface_api(
+    result = fetch_models_from_huggingface_api(
         task=None,  # Fetch all models available on HF Inference
         limit=None,  # Uses multi-sort strategy internally
         use_cache=True,  # Cache results for performance
     )
+
+    # If API fetch failed or returned empty, use fallback models
+    if not result:
+        logger.warning(
+            "HuggingFace API unavailable or returned no models. Using fallback model list."
+        )
+        return create_fallback_models()
+
+    return result
