@@ -376,13 +376,13 @@ console.log(completion.choices[0].message);`,
             style={{ zIndex: 0 }}
           />
 
-          <section className="pt-8 sm:pt-16 md:pt-24 lg:pt-32 pb-6 sm:pb-8 md:pb-12 max-w-5xl mx-auto px-2 sm:px-3 md:px-4 relative min-h-auto sm:min-h-[80vh]" style={{ zIndex: 1 }}>
+          <section className="pt-6 sm:pt-12 md:pt-20 lg:pt-28 pb-3 sm:pb-6 md:pb-10 max-w-5xl mx-auto px-2 sm:px-3 md:px-4 relative" style={{ zIndex: 1 }}>
             <TitleSection/>
 
             <PathChooserModal open={showPathChooser} onOpenChange={setShowPathChooser} />
 
             {/* Three Path Cards - Above the Fold */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 xs:gap-4 sm:gap-5 md:gap-6 mt-6 xs:mt-8 sm:mt-10 md:mt-12 mb-6 xs:mb-8 sm:mb-10 md:mb-12">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 xs:gap-4 sm:gap-5 md:gap-6 mt-4 xs:mt-5 sm:mt-8 md:mt-10 mb-3 xs:mb-4 sm:mb-6 md:mb-8">
             {/* API Path Card */}
             <Link href="/start/api" className="group">
               <div className="bg-card border-2 border-border hover:border-blue-500 rounded-lg p-3 xs:p-4 sm:p-5 md:p-6 shadow-sm hover:shadow-md transition-all h-full flex flex-col">
@@ -469,7 +469,8 @@ console.log(completion.choices[0].message);`,
           </div>
           </section>
 
-          <div className="my-12 w-full animate-fade-in opacity-0 delay-400">
+          {/* Logo Marquee - moved up and reduced spacing */}
+          <div className="mt-4 mb-6 sm:mt-6 sm:mb-8 md:mt-8 md:mb-10 w-full animate-fade-in opacity-0 delay-400">
             <LogoMarquee />
           </div>
 
