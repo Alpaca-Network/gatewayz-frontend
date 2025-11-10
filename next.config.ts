@@ -61,6 +61,15 @@ const nextConfig: NextConfig = {
     optimizePackageImports: ['lucide-react', '@radix-ui/react-icons'],
   },
   allowedDevOrigins: ["*.cloudworkstations.dev"],
+  async redirects() {
+    return [
+      {
+        source: '/deck',
+        destination: 'https://www.canva.com/design/DAG2Dc4lQvI/P2ws7cdUnYAjdFxXpsKvUw/view?utm_content=DAG2Dc4lQvI&utm_campaign=designshare&utm_medium=link2&utm_source=uniquelinks&utlId=h20484be5f9',
+        permanent: false,
+      },
+    ];
+  },
   webpack: (config, { isServer }) => {
     // Fix for Handlebars require.extensions issue
     config.resolve.fallback = {
