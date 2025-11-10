@@ -670,7 +670,8 @@ def get_cached_models(gateway: str = "openrouter"):
 
         if gateway == "all":
             cache = _multi_provider_catalog_cache
-            if cache["data"] and cache["timestamp"]:
+            # Check timestamp only - empty list [] is a valid cached value
+            if cache.get("timestamp") is not None:
                 cache_age = (datetime.now(timezone.utc) - cache["timestamp"]).total_seconds()
                 if cache_age < cache["ttl"]:
                     return cache["data"]
