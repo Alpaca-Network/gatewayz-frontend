@@ -5,6 +5,7 @@ import { AppHeader } from '@/components/layout/app-header';
 import { AppFooter } from '@/components/layout/app-footer';
 import { ThemeProvider } from '@/components/theme-provider';
 import { PrivyProviderWrapper } from '@/components/providers/privy-provider';
+import { StatsigProviderWrapper } from '@/components/providers/statsig-provider';
 import { OnboardingBanner } from '@/components/onboarding/onboarding-banner';
 import { WelcomeDialog } from '@/components/dialogs/welcome-dialog';
 import { TrialCreditsNotice } from '@/components/dialogs/trial-credits-notice';
@@ -83,21 +84,23 @@ export default function RootLayout({
         >
           <ReactScanProvider />
           <PrivyProviderWrapper>
-            {/* Session transfer from main domain - handles automatic authentication */}
-            <SessionInitializer />
-            {/* <GTMLoader /> Temporarily disabled due to layout router issues */}
-            <AppHeader />
-            <OnboardingBanner />
-            <div data-header-spacer aria-hidden="true" className="flex-shrink-0 h-[65px] has-onboarding-banner:h-[115px]" style={{ transition: 'height 0.3s ease' }} />
-            <main className="flex-1 flex flex-col w-full overflow-x-hidden">
-              {children}
-            </main>
-            <Toaster />
-            <AppFooter />
-            <WelcomeDialog />
-            <TrialCreditsNotice />
-            <Analytics />
-            <SpeedInsights />
+            <StatsigProviderWrapper>
+              {/* Session transfer from main domain - handles automatic authentication */}
+              <SessionInitializer />
+              {/* <GTMLoader /> Temporarily disabled due to layout router issues */}
+              <AppHeader />
+              <OnboardingBanner />
+              <div data-header-spacer aria-hidden="true" className="flex-shrink-0 h-[65px] has-onboarding-banner:h-[115px]" style={{ transition: 'height 0.3s ease' }} />
+              <main className="flex-1 flex flex-col w-full overflow-x-hidden">
+                {children}
+              </main>
+              <Toaster />
+              <AppFooter />
+              <WelcomeDialog />
+              <TrialCreditsNotice />
+              <Analytics />
+              <SpeedInsights />
+            </StatsigProviderWrapper>
           </PrivyProviderWrapper>
         </ThemeProvider>
       </body>

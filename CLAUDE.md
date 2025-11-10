@@ -134,6 +134,8 @@ Users authenticate on **gatewayz.ai** (main domain) and are automatically redire
 - Usage statistics (token generation, model usage)
 - Trend analysis with interactive charts
 - Category filtering and time range selection
+- Statsig integration for feature flags and analytics
+- Client-side and server-side event tracking
 
 ### 5. Developer Tools
 - API key management
@@ -272,10 +274,15 @@ Users authenticate on **gatewayz.ai** (main domain) and are automatically redire
 - **Location:** `src/lib/models-service.ts`
 
 #### 4. Statsig (Feature Flags & Analytics)
-- User identification
-- Auto-capture plugin
-- Session replay plugin
-- **Location:** `src/components/providers/statsig-provider.tsx`
+- User identification with Privy integration
+- Auto-capture plugin for automatic event tracking
+- Session replay plugin for user behavior analysis
+- Server-side event logging through backend API
+- Client-side React hooks for feature flags
+- **Location:**
+  - Provider: `src/components/providers/statsig-provider.tsx`
+  - Analytics service: `src/lib/analytics.ts`
+  - API endpoints: `src/app/api/analytics/events/route.ts`, `src/app/api/analytics/batch/route.ts`
 
 #### 5. PostHog (Product Analytics)
 - Page view tracking
