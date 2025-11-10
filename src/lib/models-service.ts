@@ -101,7 +101,7 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
       const combinedModels = results.flat();
 
       // Create a normalized key for deduplication
-      // This handles cases where the same model has different IDs from different gateways
+      // This handles cases where the same model has different IDs from different gateways/providers
       const modelMap = new Map<string, any>();
 
       for (const model of combinedModels) {
@@ -112,10 +112,10 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
           .replace(/\s+/g, '-') // Replace spaces with hyphens
           .replace(/[^\w-]/g, ''); // Remove special characters except hyphens
 
-        // Use normalized name + provider slug as dedup key
-        const dedupKey = `${normalizedName}:::${model.provider_slug || 'unknown'}`;
+        // NEW: Use normalized name ONLY as dedup key (consolidate across all providers)
+        const dedupKey = normalizedName;
 
-        // Merge models from multiple gateways
+        // Merge models from multiple gateways AND providers
         if (modelMap.has(dedupKey)) {
           const existing = modelMap.get(dedupKey);
 
@@ -131,6 +131,14 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
           // Combine and deduplicate gateways
           const combinedGateways = Array.from(new Set([...existingGateways, ...newGateways]));
 
+          // NEW: Track multiple providers for the same model
+          const existingProviders = Array.isArray(existing.provider_slugs)
+            ? existing.provider_slugs
+            : (existing.provider_slug ? [existing.provider_slug] : []);
+
+          const newProviders = model.provider_slug ? [model.provider_slug] : [];
+          const combinedProviders = Array.from(new Set([...existingProviders, ...newProviders]));
+
           // Calculate data completeness score (models with more metadata are preferred)
           const existingScore = (existing.description ? 1 : 0) +
                                 (existing.pricing?.prompt ? 1 : 0) +
@@ -142,9 +150,10 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
                            (model.context_length > 0 ? 1 : 0) +
                            (model.architecture?.input_modalities?.length || 0);
 
-          // Keep the model with more complete data, but always preserve all gateways
+          // Keep the model with more complete data, but always preserve all gateways and providers
           const mergedModel = newScore > existingScore ? model : existing;
           mergedModel.source_gateways = combinedGateways;
+          mergedModel.provider_slugs = combinedProviders;
 
           modelMap.set(dedupKey, mergedModel);
         } else {
@@ -154,6 +163,9 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
           } else if (!model.source_gateways) {
             model.source_gateways = [];
           }
+
+          // NEW: Initialize provider_slugs array
+          model.provider_slugs = model.provider_slug ? [model.provider_slug] : [];
 
           modelMap.set(dedupKey, model);
         }

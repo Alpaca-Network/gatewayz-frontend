@@ -46,7 +46,8 @@ interface Model {
   } | null;
   supported_parameters: string[] | null;
   provider_slug: string;
-  source_gateways?: string[]; // Updated to array
+  provider_slugs?: string[]; // NEW: Array of all providers offering this model
+  source_gateways?: string[]; // Array of all gateways offering this model
   source_gateway?: string; // Keep for backwards compatibility
   created?: number;
 }
@@ -76,6 +77,27 @@ const GATEWAY_CONFIG: Record<string, { name: string; color: string; icon?: React
   helicone: { name: 'Helicone', color: 'bg-indigo-600' }
 };
 
+// Provider display configuration (for providers that differ from gateway names)
+const PROVIDER_CONFIG: Record<string, { name: string; color: string }> = {
+  openai: { name: 'OpenAI', color: 'bg-green-600' },
+  anthropic: { name: 'Anthropic', color: 'bg-orange-600' },
+  google: { name: 'Google', color: 'bg-blue-600' },
+  meta: { name: 'Meta', color: 'bg-blue-700' },
+  cohere: { name: 'Cohere', color: 'bg-purple-600' },
+  mistral: { name: 'Mistral', color: 'bg-orange-500' },
+  'mistralai': { name: 'Mistral AI', color: 'bg-orange-500' },
+  qwen: { name: 'Qwen', color: 'bg-red-600' },
+  deepseek: { name: 'DeepSeek', color: 'bg-cyan-600' },
+  alibaba: { name: 'Alibaba', color: 'bg-orange-700' },
+  '01-ai': { name: '01.AI', color: 'bg-indigo-600' },
+  '01ai': { name: '01.AI', color: 'bg-indigo-600' },
+  nvidia: { name: 'NVIDIA', color: 'bg-green-700' },
+  microsoft: { name: 'Microsoft', color: 'bg-blue-800' },
+  xai: { name: 'xAI', color: 'bg-black' },
+  perplexity: { name: 'Perplexity', color: 'bg-teal-700' },
+  // Add more providers as needed
+};
+
 const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
   const isFree = parseFloat(model.pricing?.prompt || '0') === 0 && parseFloat(model.pricing?.completion || '0') === 0;
   const inputCost = (parseFloat(model.pricing?.prompt || '0') * 1000000).toFixed(2);
@@ -90,6 +112,13 @@ const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
 
   // Get gateways - support both old and new format
   const gateways = (model.source_gateways && model.source_gateways.length > 0) ? model.source_gateways : (model.source_gateway ? [model.source_gateway] : []);
+
+  // NEW: Get providers - support both old and new format
+  const providers = (model.provider_slugs && model.provider_slugs.length > 0) ? model.provider_slugs : (model.provider_slug ? [model.provider_slug] : []);
+
+  // NEW: Deduplicate and combine providers that are also gateways
+  // Only show unique provider/gateway combinations
+  const allSources = [...new Set([...providers, ...gateways])];
 
   // Generate clean URLs:
   // - For AIMO models (providerId:model-name), extract just the model name after the colon
@@ -135,31 +164,34 @@ const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
           {model.description || 'Explore Token Usage Across Models, Labs, And Public Applications.'}
         </p>
 
-        {/* Gateways - New section */}
-        {gateways.length > 0 && (
+        {/* Providers & Gateways - Combined section */}
+        {allSources.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mb-3">
-            {gateways.slice(0, 3).map((gateway) => {
-              const config = GATEWAY_CONFIG[gateway.toLowerCase()] || {
-                name: gateway,
+            {allSources.slice(0, 4).map((source) => {
+              // Check if it's a provider or gateway, prefer provider config
+              const providerConfig = PROVIDER_CONFIG[source.toLowerCase()];
+              const gatewayConfig = GATEWAY_CONFIG[source.toLowerCase()];
+              const config = providerConfig || gatewayConfig || {
+                name: source,
                 color: 'bg-gray-500'
               };
               return (
                 <Badge
-                  key={gateway}
+                  key={source}
                   className={`${config.color} text-white text-[10px] px-1.5 py-0 h-5 flex items-center gap-0.5`}
                   variant="secondary"
                 >
-                  {config.icon}
+                  {gatewayConfig?.icon}
                   {config.name}
                 </Badge>
               );
             })}
-            {gateways.length > 3 && (
+            {allSources.length > 4 && (
               <Badge
                 className="bg-gray-500 text-white text-[10px] px-1.5 py-0 h-5"
                 variant="secondary"
               >
-                +{gateways.length - 3}
+                +{allSources.length - 4} more
               </Badge>
             )}
           </div>
