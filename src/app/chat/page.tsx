@@ -1153,7 +1153,7 @@ const devWarn = (...args: any[]) => {
 
 function ChatPageContent() {
     const searchParams = useSearchParams();
-    const { login, isAuthenticated, loading } = useAuth();
+    const { login, isAuthenticated, loading: authLoading } = useAuth();
     
     // All hooks must be declared before any conditional returns
     const [hasApiKey, setHasApiKey] = useState(false);
@@ -1514,11 +1514,11 @@ function ChatPageContent() {
         const apiKey = getApiKey();
         const userData = getUserData();
         setHasApiKey(!!(apiKey && userData?.privy_user_id));
-    }, [loading, isAuthenticated]);
+    }, [authLoading, isAuthenticated]);
 
     // Check for referral bonus notification flag
     useEffect(() => {
-        if (loading || !(isAuthenticated || hasApiKey) || typeof window === 'undefined') return;
+        if (authLoading || !(isAuthenticated || hasApiKey) || typeof window === 'undefined') return;
 
         // Check if we should show referral bonus notification
         const showReferralBonus = localStorage.getItem('gatewayz_show_referral_bonus');
@@ -1535,12 +1535,12 @@ function ChatPageContent() {
                 });
             }, 1000); // Delay to allow page to settle
         }
-    }, [loading, isAuthenticated, hasApiKey, toast]);
+    }, [authLoading, isAuthenticated, hasApiKey, toast]);
 
     // Send pending message after authentication completes
     useEffect(() => {
         if (!pendingMessage) return;
-        if (loading) return;
+        if (authLoading) return;
         if (!isAuthenticated && !hasApiKey) return;
 
         const apiKey = getApiKey();
@@ -1580,7 +1580,7 @@ function ChatPageContent() {
             handleSendMessage();
         }, 100);
 
-    }, [pendingMessage, loading, isAuthenticated, hasApiKey, activeSessionId]);
+    }, [pendingMessage, authLoading, isAuthenticated, hasApiKey, activeSessionId]);
 
     useEffect(() => {
         // Optimized: Load sessions in parallel with auth, don't wait for ready state
@@ -1634,7 +1634,7 @@ function ChatPageContent() {
         }
 
         // If no API key yet, wait for authentication to complete
-        if (loading) {
+        if (authLoading) {
             return;
         }
 
@@ -1659,7 +1659,7 @@ function ChatPageContent() {
             setTimeout(() => clearInterval(checkInterval), 10000);
             return () => clearInterval(checkInterval);
         }
-    }, [loading, isAuthenticated, hasApiKey, authReady]);
+    }, [authLoading, isAuthenticated, hasApiKey, authReady]);
 
     // Handle rate limit countdown timer
     useEffect(() => {
@@ -2970,7 +2970,7 @@ function ChatPageContent() {
     };
 
   // Show login screen if not authenticated
-  if (loading) {
+  if (authLoading) {
     return (
       <div className="flex h-[calc(100dvh-130px)] bg-background items-center justify-center">
         <div className="flex flex-col items-center gap-4">
@@ -3420,7 +3420,7 @@ function ChatPageContent() {
                       size="icon"
                       className="h-8 w-8 rounded-lg touch-manipulation"
                       onClick={() => fileInputRef.current?.click()}
-                      disabled={loading || (!isAuthenticated && !hasApiKey)}
+                      disabled={authLoading || (!isAuthenticated && !hasApiKey)}
                       title="Upload an image"
                     >
                       <ImageIcon className="h-5 w-5" />
@@ -3433,7 +3433,7 @@ function ChatPageContent() {
                       size="icon"
                       className="h-8 w-8 rounded-lg"
                       onClick={() => videoInputRef.current?.click()}
-                      disabled={loading || (!isAuthenticated && !hasApiKey)}
+                      disabled={authLoading || (!isAuthenticated && !hasApiKey)}
                       title="Upload a video"
                     >
                       <VideoIcon className="h-5 w-5" />
@@ -3446,7 +3446,7 @@ function ChatPageContent() {
                       size="icon"
                       className="h-8 w-8 rounded-lg"
                       onClick={() => audioInputRef.current?.click()}
-                      disabled={loading || (!isAuthenticated && !hasApiKey)}
+                      disabled={authLoading || (!isAuthenticated && !hasApiKey)}
                       title="Upload audio"
                     >
                       <AudioIcon className="h-5 w-5" />
@@ -3454,7 +3454,7 @@ function ChatPageContent() {
                   )}
                   <Input
                     ref={messageInputRef}
-                    placeholder={loading ? "Authenticating..." : (!isAuthenticated && !hasApiKey) ? "Please log in..." : getPlaceholderText()}
+                    placeholder={authLoading ? "Authenticating..." : (!isAuthenticated && !hasApiKey) ? "Please log in..." : getPlaceholderText()}
                     value={message}
                     onChange={(e) => {
                       setMessage(e.target.value);
@@ -3478,12 +3478,12 @@ function ChatPageContent() {
                       setUserHasTyped(true);
                       userHasTypedRef.current = true;
                     }}
-                    disabled={loading || (!isAuthenticated && !hasApiKey)}
+                    disabled={authLoading || (!isAuthenticated && !hasApiKey)}
                     autoComplete="off"
                     className="border-0 bg-transparent focus-visible:ring-0 text-sm sm:text-base text-foreground flex-1 min-w-0"
                   />
                   <div className="flex items-center gap-1">
-                    {(loading || (!isAuthenticated && !hasApiKey) || isStreamingResponse) && (
+                    {(authLoading || (!isAuthenticated && !hasApiKey) || isStreamingResponse) && (
                       <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground flex-shrink-0" />
                     )}
                     <Button
@@ -3492,7 +3492,7 @@ function ChatPageContent() {
                       onClick={handleSendMessage}
                       disabled={loading || isStreamingResponse || !message.trim() || (!isAuthenticated && !hasApiKey)}
                       className="h-8 w-8 sm:h-7 sm:w-7 bg-primary hover:bg-primary/90 text-primary-foreground touch-manipulation flex-shrink-0"
-                      title={loading
+                      title={authLoading
                         ? "Waiting for authentication..."
                         : (!isAuthenticated && !hasApiKey)
                           ? "Please log in"
