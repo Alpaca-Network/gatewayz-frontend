@@ -1765,6 +1765,7 @@ def fetch_models_from_near():
             {"id": "gpt-oss-120b", "owned_by": "GPT"},
             {"id": "llama-3-70b", "owned_by": "Meta"},
             {"id": "qwen-2-72b", "owned_by": "Alibaba"},
+            {"id": "glm-4.6-fp8", "owned_by": "Zhipu AI"},
         ]
 
         normalized_models = [normalize_near_model(model) for model in fallback_models if model]
