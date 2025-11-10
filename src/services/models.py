@@ -235,6 +235,16 @@ except ImportError:
     # Initialization will be deferred to first request if import fails
     logger.debug(f"{_FAL_CACHE_INIT_DEFERRED} on import")
 
+# Initialize Featherless models cache on module import for better performance
+# This ensures Featherless cache structure is ready even if no static catalog exists
+try:
+    from src.cache import initialize_featherless_cache_from_catalog
+
+    initialize_featherless_cache_from_catalog()
+except ImportError:
+    # Initialization will be deferred to first request if import fails
+    logger.debug("Featherless cache initialization deferred on import")
+
 
 def load_featherless_catalog_export() -> list:
     """

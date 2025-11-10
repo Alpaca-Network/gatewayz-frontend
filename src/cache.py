@@ -321,3 +321,34 @@ def initialize_fal_cache_from_catalog():
     except (ImportError, OSError) as error:
         # Log failure but continue - models will be loaded on first request
         logger.debug(f"{_FAL_CACHE_INIT_DEFERRED}: {type(error).__name__}")
+
+
+def initialize_featherless_cache_from_catalog():
+    """Load and initialize Featherless models cache from static catalog export
+
+    Unlike FAL which has a static JSON catalog, Featherless uses CSV exports.
+    This function attempts to load from available CSV exports and initializes
+    the cache structure even if no data is found (to enable lazy loading).
+    """
+    try:
+        from src.services.models import load_featherless_catalog_export
+
+        # Try to load from CSV export
+        raw_models = load_featherless_catalog_export()
+
+        if raw_models and len(raw_models) > 0:
+            # Successfully loaded from export
+            _featherless_models_cache["data"] = raw_models
+            _featherless_models_cache["timestamp"] = datetime.now(timezone.utc)
+            logger.debug(f"Preloaded {len(raw_models)} Featherless models from catalog export")
+        else:
+            # No export available - initialize empty to enable lazy loading via API
+            _featherless_models_cache["data"] = []
+            _featherless_models_cache["timestamp"] = None
+            logger.debug("Featherless cache initialized empty - will load from API on first request")
+
+    except (ImportError, OSError) as error:
+        # Log failure but continue - initialize empty cache for lazy loading
+        _featherless_models_cache["data"] = []
+        _featherless_models_cache["timestamp"] = None
+        logger.debug(f"Featherless cache init deferred: {type(error).__name__}")
