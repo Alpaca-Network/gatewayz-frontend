@@ -14,6 +14,7 @@ interface Model {
   };
   supported_parameters: string[];
   provider_slug: string;
+  is_private?: boolean; // Indicates if model is on a private network (e.g., NEAR)
 }
 
 interface DeferredModelData {

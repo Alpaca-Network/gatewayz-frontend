@@ -24,7 +24,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { Slider } from "@/components/ui/slider";
-import { BookText, Bot, ChevronDown, ChevronUp, FileText, ImageIcon, LayoutGrid, LayoutList, Music, Search, Sliders as SlidersIcon, X, Zap } from 'lucide-react';
+import { BookText, Bot, ChevronDown, ChevronUp, FileText, ImageIcon, LayoutGrid, LayoutList, Lock, Music, Search, Sliders as SlidersIcon, X, Zap } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 import { stringToColor } from '@/lib/utils';
@@ -48,6 +48,7 @@ interface Model {
   source_gateways?: string[]; // Updated to array
   source_gateway?: string; // Keep for backwards compatibility
   created?: number;
+  is_private?: boolean; // Indicates if model is on a private network (e.g., NEAR)
 }
 
 // Gateway display configuration
@@ -100,6 +101,12 @@ const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
             {isFree && (
               <Badge className="bg-black text-white hover:bg-black/90 text-xs px-2 py-0.5">
                 Free
+              </Badge>
+            )}
+            {model.is_private && (
+              <Badge className="bg-amber-500 text-white hover:bg-amber-600 text-xs px-2 py-0.5 flex items-center gap-1">
+                <Lock className="w-3 h-3" />
+                Private
               </Badge>
             )}
             {isMultiLingual && (

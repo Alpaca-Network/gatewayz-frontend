@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend } from 'recharts';
 import { format } from 'date-fns';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { Maximize, Copy, Check } from 'lucide-react';
+import { Maximize, Copy, Check, Lock } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { providerData } from '@/lib/provider-data';
 import { generateChartData, generateStatsTable } from '@/lib/data';
@@ -38,6 +38,7 @@ interface Model {
   };
   supported_parameters: string[];
   provider_slug: string;
+  is_private?: boolean; // Indicates if model is on a private network (e.g., NEAR)
 }
 
 const Section = ({ title, description, children, className }: { title: string, description?: string, children: React.ReactNode, className?: string }) => (
@@ -837,8 +838,18 @@ export default function ModelProfilePage() {
                             )}
                         </div>
                         <div className="flex items-center gap-2 flex-wrap mt-3">
-                            <Badge className="bg-black text-white hover:bg-gray-800">Free</Badge>
-                            <Badge variant="secondary">Multi-Lingual</Badge>
+                            {model.pricing && parseFloat(model.pricing.prompt) === 0 && parseFloat(model.pricing.completion) === 0 && (
+                                <Badge className="bg-black text-white hover:bg-gray-800">Free</Badge>
+                            )}
+                            {model.is_private && (
+                                <Badge className="bg-amber-500 text-white hover:bg-amber-600 flex items-center gap-1">
+                                    <Lock className="w-3 h-3" />
+                                    Private
+                                </Badge>
+                            )}
+                            {model.description && (model.description.toLowerCase().includes('multilingual') || model.description.toLowerCase().includes('multi-lingual')) && (
+                                <Badge variant="secondary">Multi-Lingual</Badge>
+                            )}
                         </div>
                     </div>
                     <div className="flex items-center gap-2">

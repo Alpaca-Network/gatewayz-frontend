@@ -50,6 +50,7 @@ interface Model {
   source_gateways?: string[]; // Array of all gateways offering this model
   source_gateway?: string; // Keep for backwards compatibility
   created?: number;
+  is_private?: boolean; // Indicates if model is on a private network (e.g., NEAR)
 }
 
 // Gateway display configuration
