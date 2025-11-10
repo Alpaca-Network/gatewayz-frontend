@@ -101,13 +101,18 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
       console.log('[InlineChat] Gateway:', gateway || 'not specified');
       console.log('[InlineChat] Using API endpoint:', url);
 
-      const requestBody = {
+      const requestBody: Record<string, unknown> = {
         model: normalizedModelId,
         messages: [...messages, userMessage].map(m => ({ role: m.role, content: m.content })),
         stream: true,
         temperature: 0.7,
         max_tokens: 8000  // Increased for reasoning models like DeepSeek
       };
+
+      // Add gateway parameter if specified (important for models like NEAR)
+      if (gateway) {
+        requestBody.gateway = gateway;
+      }
       // Use the streaming utility with proper error handling and retries
       for await (const chunk of streamChatResponse(url, apiKey, requestBody)) {
         // Enhanced logging to see what data we're receiving
