@@ -159,5 +159,21 @@ export const models: Model[] = [
     modalities: ['Text'],
     series: 'Other',
     supportedParameters: ['temperature', 'top_p'],
+  },
+  {
+    name: 'DeepSeek V3',
+    isFree: false,
+    tokens: '671B tokens',
+    category: 'Reasoning',
+    description: 'DeepSeek V3 is a powerful Mixture-of-Experts model with 671B total parameters and 37B activated per token. Features multi-head latent attention and DeepSeekMoE architecture for enhanced performance and efficiency.',
+    developer: 'alpaca-network',
+    context: 64,
+    inputCost: 0.27,
+    outputCost: 1.10,
+    modalities: ['Text'],
+    series: 'DeepSeek',
+    supportedParameters: ['temperature', 'top_p', 'max_tokens'],
+    speedTier: 'fast',
+    is_private: true,
   }
 ];
