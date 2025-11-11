@@ -42,12 +42,12 @@ DESC_INCLUDE_HUGGINGFACE = "Include Hugging Face metrics if available"
 DESC_GATEWAY_AUTO_DETECT = (
     "Gateway to use: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', "
     "'groq', 'fireworks', 'together', 'cerebras', 'nebius', 'xai', 'novita', "
-    "'huggingface' (or 'hug'), 'aimo', 'near', 'fal', 'anannas', 'aihubmix', 'vercel-ai-gateway', or auto-detect if not specified"
+    "'huggingface' (or 'hug'), 'aimo', 'near', 'fal', 'helicone', 'anannas', 'aihubmix', 'vercel-ai-gateway', or auto-detect if not specified"
 )
 DESC_GATEWAY_WITH_ALL = (
     "Gateway to use: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', "
     "'groq', 'fireworks', 'together', 'cerebras', 'nebius', 'xai', 'novita', "
-    "'huggingface' (or 'hug'), 'aimo', 'near', 'fal', 'anannas', 'aihubmix', 'vercel-ai-gateway', or 'all'"
+    "'huggingface' (or 'hug'), 'aimo', 'near', 'fal', 'helicone', 'anannas', 'aihubmix', 'vercel-ai-gateway', or 'all'"
 )
 ERROR_MODELS_DATA_UNAVAILABLE = "Models data unavailable"
 ERROR_PROVIDER_DATA_UNAVAILABLE = "Provider data unavailable"
@@ -375,6 +375,7 @@ async def get_models(
         aimo_models: List[dict] = []
         near_models: List[dict] = []
         fal_models: List[dict] = []
+        helicone_models: List[dict] = []
         anannas_models: List[dict] = []
         aihubmix_models: List[dict] = []
         vercel_ai_gateway_models: List[dict] = []
@@ -475,6 +476,12 @@ async def get_models(
                 logger.error("No Fal models data available from cache")
                 raise HTTPException(status_code=503, detail=ERROR_MODELS_DATA_UNAVAILABLE)
 
+        if gateway_value in ("helicone", "all"):
+            helicone_models = get_cached_models("helicone") or []
+            if gateway_value == "helicone" and not helicone_models:
+                logger.error("No Helicone models data available from cache")
+                raise HTTPException(status_code=503, detail=ERROR_MODELS_DATA_UNAVAILABLE)
+
         if gateway_value in ("anannas", "all"):
             anannas_models = get_cached_models("anannas") or []
             if gateway_value == "anannas" and not anannas_models:
@@ -525,6 +532,8 @@ async def get_models(
             models = near_models
         elif gateway_value == "fal":
             models = fal_models
+        elif gateway_value == "helicone":
+            models = helicone_models
         elif gateway_value == "anannas":
             models = anannas_models
         elif gateway_value == "aihubmix":
@@ -547,6 +556,7 @@ async def get_models(
                 aimo_models,
                 near_models,
                 fal_models,
+                helicone_models,
                 anannas_models,
                 aihubmix_models,
                 vercel_ai_gateway_models,
@@ -1108,7 +1118,7 @@ async def get_gateway_statistics(
     **This fixes the "Top Provider: N/A" issue in your UI!**
 
     Args:
-        gateway: Gateway name ('openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', 'groq')
+        gateway: Gateway name ('openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', 'groq', 'helicone', etc.)
         time_range: Time range for statistics
 
     Returns:
@@ -1710,7 +1720,7 @@ async def search_models(
     max_price: Optional[float] = Query(None, description="Maximum price per token (USD)"),
     gateway: Optional[str] = Query(
         "all",
-        description="Gateway filter: openrouter, portkey, featherless, deepinfra, chutes, groq, fireworks, together, aihubmix, vercel-ai-gateway, or all",
+        description="Gateway filter: openrouter, portkey, featherless, deepinfra, chutes, groq, fireworks, together, helicone, aihubmix, vercel-ai-gateway, or all",
     ),
     sort_by: str = Query("price", description="Sort by: price, context, popularity, name"),
     order: str = Query("asc", description="Sort order: asc or desc"),
