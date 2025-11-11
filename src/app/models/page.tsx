@@ -31,7 +31,7 @@ const PRIORITY_GATEWAYS = ['openrouter', 'groq', 'together', 'fireworks', 'verce
 // Slower gateways that can be deferred
 const DEFERRED_GATEWAYS = [
   'featherless', 'chutes', 'deepinfra', 'google', 'cerebras',
-  'nebius', 'xai', 'novita', 'huggingface', 'aimo', 'near', 'fal', 'helicone'
+  'nebius', 'xai', 'novita', 'huggingface', 'aimo', 'near', 'fal', 'helicone', 'alpaca'
 ];
 
 async function getPriorityModels(): Promise<Model[]> {

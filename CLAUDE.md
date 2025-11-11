@@ -110,7 +110,7 @@ Users authenticate on **gatewayz.ai** (main domain) and are automatically redire
 
 ### 1. Unified Model Access
 - Browse 300+ models from 60+ providers
-- Support for 16+ gateway/provider integrations
+- Support for 17+ gateway/provider integrations
 - Real-time model discovery with search
 
 ### 2. Interactive Chat Interface
@@ -254,7 +254,7 @@ Users authenticate on **gatewayz.ai** (main domain) and are automatically redire
 - Customer portal
 - **Location:** `src/app/api/stripe/`
 
-#### 3. AI Model Gateways (16+ providers)
+#### 3. AI Model Gateways (17+ providers)
 - **OpenRouter** - Multi-provider aggregator
 - **Portkey** - Gateway (deprecated)
 - **Featherless** - Open-source models
@@ -271,6 +271,7 @@ Users authenticate on **gatewayz.ai** (main domain) and are automatically redire
 - **Hugging Face** - Open-source models
 - **AiMo** - Research models
 - **NEAR** - Decentralized AI
+- **Alpaca Network** - AI model gateway
 - **Location:** `src/lib/models-service.ts`
 
 #### 4. Statsig (Feature Flags & Analytics)

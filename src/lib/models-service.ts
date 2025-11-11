@@ -61,6 +61,7 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
     'fal',
     'vercel-ai-gateway', // Vercel AI Gateway
     'helicone', // Helicone AI Gateway - will be skipped if backend unavailable
+    'alpaca', // Alpaca Network
     'all'
   ];
   if (!validGateways.includes(gateway)) {
@@ -91,7 +92,8 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
         'near',
         'fal',
         'vercel-ai-gateway',
-        'helicone'
+        'helicone',
+        'alpaca'
       ];
 
       const results = await Promise.all(
@@ -322,7 +324,8 @@ function getStaticFallbackModels(gateway: string): any[] {
       'near',
       'fal',
       'vercel-ai-gateway',
-      'helicone'
+      'helicone',
+      'alpaca'
     ];
     const modelsPerGateway = Math.ceil(models.length / allGateways.length);
 
@@ -352,7 +355,8 @@ function getStaticFallbackModels(gateway: string): any[] {
       'near',
       'fal',
       'vercel-ai-gateway',
-      'helicone'
+      'helicone',
+      'alpaca'
     ];
     const modelsPerGateway = Math.ceil(models.length / allGateways.length);
     let gatewayModels;
