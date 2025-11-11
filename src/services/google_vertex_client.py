@@ -14,6 +14,8 @@ The library will automatically find credentials from:
 1. GOOGLE_APPLICATION_CREDENTIALS environment variable (path to JSON file)
 2. GOOGLE_VERTEX_CREDENTIALS_JSON environment variable (raw JSON, written to temp file)
 3. Application Default Credentials (gcloud auth, GCE metadata server, etc.)
+
+Deployment Note: This implementation was updated to use ADC in PR #252.
 """
 
 import json
