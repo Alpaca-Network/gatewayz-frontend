@@ -16,7 +16,7 @@ import { ReactScanProvider } from '@/components/providers/react-scan-provider';
 import { GoogleAnalytics } from '@/components/analytics/google-analytics';
 import { SessionInitializer } from '@/components/SessionInitializer';
 import { PreviewHostnameRestorer } from '@/components/auth/preview-hostname-restorer';
-// import { GTMLoader } from '@/components/analytics/gtm-loader'; // Temporarily disabled due to layout router issues
+import { GTMLoader } from '@/components/analytics/gtm-loader';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -90,7 +90,7 @@ export default function RootLayout({
             <StatsigProviderWrapper>
               {/* Session transfer from main domain - handles automatic authentication */}
               <SessionInitializer />
-              {/* <GTMLoader /> Temporarily disabled due to layout router issues */}
+              <GTMLoader />
               <AppHeader />
               <OnboardingBanner />
               <div data-header-spacer aria-hidden="true" className="flex-shrink-0 h-[65px] has-onboarding-banner:h-[115px]" style={{ transition: 'height 0.3s ease' }} />
