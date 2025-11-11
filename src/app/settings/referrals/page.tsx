@@ -122,24 +122,32 @@ function ReferralsPageContent() {
     totalEarned: 0
   });
   const [loading, setLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
     const fetchReferralData = async () => {
       setLoading(true);
 
-      // Wait a bit for authentication to complete
+      // Wait for authentication to complete with multiple retries
       let userData = getUserData();
-      if (!userData) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
+      let retries = 0;
+      const maxRetries = 5;
+
+      while (!userData && retries < maxRetries) {
+        await new Promise(resolve => setTimeout(resolve, 500));
         userData = getUserData();
+        retries++;
       }
 
-      // Check if user is authenticated
+      // Check if user is authenticated after retries
       if (!userData) {
-        console.warn('No user data available - user may not be authenticated');
+        console.warn('No user data available after retries - user may not be authenticated');
         setLoading(false);
+        setIsAuthenticated(false);
         return;
       }
+
+      setIsAuthenticated(true);
 
       try {
         console.log('Fetching referral code from:', `${API_BASE_URL}/referral/code`);
@@ -155,6 +163,13 @@ function ReferralsPageContent() {
         } else {
           const errorText = await codeResponse.text();
           console.error('Failed to fetch referral code:', codeResponse.status, errorText);
+          if (codeResponse.status === 401) {
+            toast({
+              title: "Session Expired",
+              description: "Please log in again",
+              variant: "destructive"
+            });
+          }
         }
 
         console.log('Fetching referral stats from:', `${API_BASE_URL}/referral/stats`);
@@ -192,6 +207,13 @@ function ReferralsPageContent() {
         } else {
           const errorText = await statsResponse.text();
           console.error('Failed to fetch referral stats:', statsResponse.status, errorText);
+          if (statsResponse.status === 401) {
+            toast({
+              title: "Session Expired",
+              description: "Please log in again",
+              variant: "destructive"
+            });
+          }
         }
       } catch (error) {
         console.error('Error fetching referral data:', error);
@@ -219,6 +241,33 @@ function ReferralsPageContent() {
       });
     }
   };
+
+  // Show authentication required message if not authenticated
+  if (!loading && !isAuthenticated) {
+    return (
+      <div className="space-y-8">
+        <div className="flex justify-center">
+          <h1 className="text-3xl font-bold">Referrals</h1>
+        </div>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-center space-y-4">
+              <UserPlus className="h-12 w-12 mx-auto text-muted-foreground" />
+              <div>
+                <h3 className="text-lg font-semibold">Authentication Required</h3>
+                <p className="text-muted-foreground mt-2">
+                  Please log in to view your referral information
+                </p>
+              </div>
+              <Button onClick={() => window.location.href = '/chat'}>
+                Go to Login
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -348,7 +397,10 @@ export default function ReferralsPage() {
           <h1 className="text-3xl font-bold">Referrals</h1>
         </div>
         <div className="text-center py-8">
-          <p className="text-muted-foreground">Loading...</p>
+          <div className="animate-pulse space-y-4">
+            <div className="h-4 bg-muted rounded w-1/4 mx-auto"></div>
+            <div className="h-4 bg-muted rounded w-1/3 mx-auto"></div>
+          </div>
         </div>
       </div>
     }>
