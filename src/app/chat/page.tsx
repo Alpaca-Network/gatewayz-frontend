@@ -2385,7 +2385,7 @@ function ChatPageContent() {
             }
 
             const sessionIdParam = currentSession?.apiSessionId ? `?session_id=${currentSession.apiSessionId}` : '';
-            const url = `/api/chat/completions${sessionIdParam}`;
+            const url = `/v1/chat/completions${sessionIdParam}`;
 
             console.log('Sending chat request to:', url);
             console.log('API Key:', apiKey.substring(0, 10) + '...');
