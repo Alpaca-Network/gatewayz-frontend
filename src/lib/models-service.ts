@@ -303,71 +303,69 @@ function getStaticFallbackModels(gateway: string): any[] {
   console.warn(`[Models] No models fetched from API for ${gateway}, falling back to static data (${models.length} models)`);
   let transformedModels;
 
-  if (gateway === 'all') {
-    // Distribute all models across different gateways
-    const allGateways = [
-      'openrouter',
-      'portkey',
-      'featherless',
-      'chutes',
-      'fireworks',
-      'together',
-      'groq',
-      'deepinfra',
-      'google',
-      'cerebras',
-      'nebius',
-      'xai',
-      'novita',
-      'huggingface',
-      'aimo',
-      'near',
-      'fal',
-      'vercel-ai-gateway',
-      'helicone',
-      'alpaca'
-    ];
-    const modelsPerGateway = Math.ceil(models.length / allGateways.length);
+  // Map developers to their preferred gateways
+  const developerToGateway: Record<string, string> = {
+    'alpaca-network': 'alpaca',
+    'near': 'near',
+    // Add more mappings as needed
+  };
 
-    transformedModels = models.map((model, index) => {
-      const gatewayIndex = Math.floor(index / modelsPerGateway);
-      const assignedGateway = allGateways[Math.min(gatewayIndex, allGateways.length - 1)];
+  if (gateway === 'all') {
+    // Assign models to gateways based on their developer field if possible
+    transformedModels = models.map((model) => {
+      // Check if this developer has a specific gateway mapping
+      const assignedGateway = developerToGateway[model.developer] || 'openrouter';
       return transformModel(model, assignedGateway);
     });
   } else {
-    // Get models for specific gateway
-    const allGateways = [
-      'openrouter',
-      'portkey',
-      'featherless',
-      'chutes',
-      'fireworks',
-      'together',
-      'groq',
-      'deepinfra',
-      'google',
-      'cerebras',
-      'nebius',
-      'xai',
-      'novita',
-      'huggingface',
-      'aimo',
-      'near',
-      'fal',
-      'vercel-ai-gateway',
-      'helicone',
-      'alpaca'
-    ];
-    const modelsPerGateway = Math.ceil(models.length / allGateways.length);
+    // Get models for specific gateway by filtering by developer field
+    // This maps gateway names to their corresponding developer identifiers
+    const gatewayToDeveloper: Record<string, string> = {
+      'alpaca': 'alpaca-network',
+      'near': 'near',
+      // Add more mappings as needed for other gateways
+    };
+
     let gatewayModels;
 
-    const gatewayIndex = allGateways.indexOf(gateway);
-    if (gatewayIndex !== -1) {
-      const startIndex = gatewayIndex * modelsPerGateway;
-      const endIndex = gatewayIndex === allGateways.length - 1 ? models.length : (gatewayIndex + 1) * modelsPerGateway;
-      gatewayModels = models.slice(startIndex, endIndex);
+    // If we have a specific developer mapping, filter by developer field
+    if (gatewayToDeveloper[gateway]) {
+      const developerName = gatewayToDeveloper[gateway];
+      gatewayModels = models.filter(m => m.developer === developerName);
     } else {
-      gatewayModels = models; // Default to all models for unknown gateways
+      // For gateways without specific mappings, distribute models evenly as before
+      const allGateways = [
+        'openrouter',
+        'portkey',
+        'featherless',
+        'chutes',
+        'fireworks',
+        'together',
+        'groq',
+        'deepinfra',
+        'google',
+        'cerebras',
+        'nebius',
+        'xai',
+        'novita',
+        'huggingface',
+        'aimo',
+        'near',
+        'fal',
+        'vercel-ai-gateway',
+        'helicone',
+        'alpaca'
+      ];
+      const modelsPerGateway = Math.ceil(models.length / allGateways.length);
+
+      const gatewayIndex = allGateways.indexOf(gateway);
+      if (gatewayIndex !== -1) {
+        const startIndex = gatewayIndex * modelsPerGateway;
+        const endIndex = gatewayIndex === allGateways.length - 1 ? models.length : (gatewayIndex + 1) * modelsPerGateway;
+        gatewayModels = models.slice(startIndex, endIndex);
+      } else {
+        gatewayModels = models; // Default to all models for unknown gateways
+      }
     }
 
     transformedModels = gatewayModels.map(m => transformModel(m, gateway));
