@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "@flags-sdk/statsig": "^0.2.5",
+    "flags": "^4.0.2"
+  }
+}
