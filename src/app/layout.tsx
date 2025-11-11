@@ -15,6 +15,7 @@ import { Inter } from 'next/font/google';
 import { ReactScanProvider } from '@/components/providers/react-scan-provider';
 import { GoogleAnalytics } from '@/components/analytics/google-analytics';
 import { SessionInitializer } from '@/components/SessionInitializer';
+import { PreviewHostnameRestorer } from '@/components/auth/preview-hostname-restorer';
 // import { GTMLoader } from '@/components/analytics/gtm-loader'; // Temporarily disabled due to layout router issues
 
 const inter = Inter({
@@ -83,6 +84,8 @@ export default function RootLayout({
           storageKey="ui-theme"
         >
           <ReactScanProvider />
+          {/* Preview hostname restoration - handles Vercel preview OAuth redirects */}
+          <PreviewHostnameRestorer />
           <PrivyProviderWrapper>
             <StatsigProviderWrapper>
               {/* Session transfer from main domain - handles automatic authentication */}
