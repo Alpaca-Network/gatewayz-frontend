@@ -2051,6 +2051,11 @@ def fetch_models_from_vercel_ai_gateway():
     through a unified OpenAI-compatible endpoint.
     """
     try:
+        # Check if API key is configured
+        if not Config.VERCEL_AI_GATEWAY_API_KEY:
+            logger.warning("Vercel AI Gateway API key not configured - skipping model fetch")
+            return []
+
         from src.services.vercel_ai_gateway_client import get_vercel_ai_gateway_client
 
         client = get_vercel_ai_gateway_client()
@@ -2940,6 +2945,11 @@ def fetch_models_from_aihubmix():
     AiHubMix provides access to models through a unified OpenAI-compatible endpoint.
     """
     try:
+        # Check if API key is configured
+        if not Config.AIHUBMIX_API_KEY or not Config.AIHUBMIX_APP_CODE:
+            logger.warning("AiHubMix API key or APP-Code not configured - skipping model fetch")
+            return []
+
         from src.services.aihubmix_client import get_aihubmix_client
 
         client = get_aihubmix_client()
@@ -3017,6 +3027,11 @@ def fetch_models_from_helicone():
     through a unified OpenAI-compatible endpoint with observability features.
     """
     try:
+        # Check if API key is configured
+        if not Config.HELICONE_API_KEY:
+            logger.warning("Helicone API key not configured - skipping model fetch")
+            return []
+
         from src.services.helicone_client import get_helicone_client
 
         client = get_helicone_client()
@@ -3159,6 +3174,11 @@ def fetch_models_from_anannas():
     Anannas provides access to various models through a unified OpenAI-compatible endpoint.
     """
     try:
+        # Check if API key is configured
+        if not Config.ANANNAS_API_KEY:
+            logger.warning("Anannas API key not configured - skipping model fetch")
+            return []
+
         from src.services.anannas_client import get_anannas_client
 
         client = get_anannas_client()
