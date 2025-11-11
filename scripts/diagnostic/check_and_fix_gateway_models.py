@@ -21,7 +21,10 @@ from datetime import datetime, timezone
 from typing import Dict, List, Tuple, Optional
 
 # Add the project root to the path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# Get the project root (two directories up from this script)
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(os.path.dirname(script_dir))
+sys.path.insert(0, project_root)
 
 from src.services.models import get_cached_models
 from src.config import Config
