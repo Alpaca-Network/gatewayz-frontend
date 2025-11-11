@@ -41,13 +41,14 @@ from src.services.modelz_client import get_modelz_cache_status as get_modelz_cac
 from src.services.modelz_client import refresh_modelz_cache
 from src.services.pricing_lookup import get_model_pricing
 
-try:
-    from check_and_fix_gateway_models import run_comprehensive_check  # type: ignore
-except Exception:  # pragma: no cover - optional dependency for dashboard
-    run_comprehensive_check = None  # type: ignore
-
 # Initialize logging
 logger = logging.getLogger(__name__)
+
+try:
+    from src.services.gateway_health_service import run_comprehensive_check  # type: ignore
+except Exception as e:  # pragma: no cover - optional dependency for dashboard
+    logger.warning(f"Failed to import gateway_health_service: {e}")
+    run_comprehensive_check = None  # type: ignore
 
 router = APIRouter()
 
