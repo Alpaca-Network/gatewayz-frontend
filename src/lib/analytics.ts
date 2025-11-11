@@ -2,7 +2,14 @@
  * Analytics Service
  * Sends analytics events to backend Statsig integration
  * This bypasses ad-blocker restrictions on client-side analytics
+ *
+ * Enhanced with:
+ * - Release SHA and version tracking
+ * - Environment metadata
+ * - Service name identification
  */
+
+import { buildInfo } from './build-info';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
 
@@ -14,7 +21,23 @@ export interface AnalyticsEvent {
 }
 
 /**
+ * Get standard metadata to include with all events
+ */
+function getStandardMetadata(): Record<string, any> {
+  return {
+    release_sha: buildInfo.sha,
+    release_short_sha: buildInfo.shortSha,
+    release_version: buildInfo.version,
+    release_branch: buildInfo.branch,
+    service_name: buildInfo.serviceName,
+    environment: buildInfo.environment,
+    timestamp: new Date().toISOString(),
+  };
+}
+
+/**
  * Log a single analytics event to the backend
+ * Automatically includes release SHA, version, and environment metadata
  */
 export async function logAnalyticsEvent(
   eventName: string,
@@ -32,6 +55,12 @@ export async function logAnalyticsEvent(
       return;
     }
 
+    // Merge user metadata with standard metadata
+    const enrichedMetadata = {
+      ...getStandardMetadata(),
+      ...metadata,
+    };
+
     // Use the Next.js API route proxy instead of calling backend directly
     const response = await fetch('/api/analytics/events', {
       method: 'POST',
@@ -42,7 +71,7 @@ export async function logAnalyticsEvent(
       body: JSON.stringify({
         event_name: eventName,
         value,
-        metadata,
+        metadata: enrichedMetadata,
       }),
     });
 
@@ -57,6 +86,7 @@ export async function logAnalyticsEvent(
 
 /**
  * Log multiple analytics events in batch
+ * Automatically includes release SHA, version, and environment metadata for each event
  */
 export async function logAnalyticsEventBatch(
   events: AnalyticsEvent[]
@@ -72,6 +102,16 @@ export async function logAnalyticsEventBatch(
       return;
     }
 
+    // Enrich each event with standard metadata
+    const standardMetadata = getStandardMetadata();
+    const enrichedEvents = events.map(event => ({
+      ...event,
+      metadata: {
+        ...standardMetadata,
+        ...event.metadata,
+      },
+    }));
+
     // Use the Next.js API route proxy instead of calling backend directly
     const response = await fetch('/api/analytics/batch', {
       method: 'POST',
@@ -79,7 +119,7 @@ export async function logAnalyticsEventBatch(
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
       },
-      body: JSON.stringify({ events }),
+      body: JSON.stringify({ events: enrichedEvents }),
     });
 
     if (!response.ok) {

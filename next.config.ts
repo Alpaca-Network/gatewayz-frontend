@@ -46,8 +46,8 @@ const nextConfig: NextConfig = {
   },
   // Enable compression
   compress: true,
-  // Optimize production builds
-  productionBrowserSourceMaps: false,
+  // Enable source maps for production debugging (uploaded to monitoring service separately)
+  productionBrowserSourceMaps: true,
   // React optimization - disabled due to layout router mounting issues with providers
   reactStrictMode: false,
   // Optimize power preference
