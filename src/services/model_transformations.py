@@ -462,6 +462,19 @@ def get_model_id_mapping(provider: str) -> Dict[str, str]:
             "glm-4.6-fp8": "glm-4.6-fp8",
             "glm-4.6": "glm-4.6",
         },
+        "alpaca-network": {
+            # Alpaca Network uses Anyscale infrastructure with DeepSeek models
+            # Service: deepseek-v3-1 via https://deepseek-v3-1-b18ty.cld-kvytpjjrw13e2gvq.s.anyscaleuserdata.com
+
+            # DeepSeek V3.1 models
+            "deepseek-ai/deepseek-v3.1": "deepseek-v3-1",
+            "deepseek-ai/deepseek-v3": "deepseek-v3-1",  # Map v3 to v3.1
+            "deepseek/deepseek-v3.1": "deepseek-v3-1",
+            "deepseek/deepseek-v3": "deepseek-v3-1",
+            "deepseek-v3.1": "deepseek-v3-1",
+            "deepseek-v3": "deepseek-v3-1",
+            "deepseek-v3-1": "deepseek-v3-1",  # Direct service name
+        },
     }
 
     return mappings.get(provider, {})
@@ -661,6 +674,7 @@ def detect_provider_from_model_id(model_id: str, preferred_provider: Optional[st
         "aihubmix",
         "anannas",
         "near",
+        "alpaca-network",
         "fal",
     ]:
         mapping = get_model_id_mapping(provider)
@@ -698,6 +712,10 @@ def detect_provider_from_model_id(model_id: str, preferred_provider: Optional[st
         # Helicone models (e.g., "helicone/gpt-4o-mini")
         if org == "helicone":
             return "helicone"
+
+        # Alpaca Network models (e.g., "alpaca-network/deepseek-v3-1")
+        if org == "alpaca-network" or org == "alpaca":
+            return "alpaca-network"
 
         # DeepSeek models are primarily on Fireworks in this system
         if org == "deepseek-ai" and "deepseek" in model_name.lower():

@@ -73,13 +73,22 @@
       "pricing_model": "per_image"
     }
   },
+  "alpaca-network": {
+    "deepseek-v3-1": {
+      "prompt": "0.27",
+      "completion": "1.10",
+      "request": "0",
+      "image": "0"
+    }
+  },
   "_metadata": {
-    "last_updated": "2025-01-15",
+    "last_updated": "2025-11-10",
     "note": "Manual pricing data for providers that don't expose pricing via API",
     "sources": [
       "https://deepinfra.com/pricing",
       "https://featherless.ai/pricing",
-      "https://chutes.ai/pricing"
+      "https://chutes.ai/pricing",
+      "https://console.anyscale.com/services (Alpaca Network via Anyscale)"
     ],
     "currency": "USD",
     "units": "per 1M tokens (unless specified otherwise)"
