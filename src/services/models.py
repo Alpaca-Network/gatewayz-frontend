@@ -28,6 +28,7 @@ from src.cache import (
     _vercel_ai_gateway_models_cache,
     _helicone_models_cache,
     _anannas_models_cache,
+    _aihubmix_models_cache,
     _multi_provider_catalog_cache,
     is_cache_fresh,
     should_revalidate_in_background,
@@ -2939,7 +2940,6 @@ def fetch_models_from_aihubmix():
     AiHubMix provides access to models through a unified OpenAI-compatible endpoint.
     """
     try:
-        from src.cache import _aihubmix_models_cache
         from src.services.aihubmix_client import get_aihubmix_client
 
         client = get_aihubmix_client()
