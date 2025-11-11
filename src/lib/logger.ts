@@ -9,8 +9,6 @@
  * - Source map support preparation
  */
 
-import { createHash } from 'crypto';
-
 // Build-time constants (set via env vars during build)
 const RELEASE_SHA = process.env.NEXT_PUBLIC_RELEASE_SHA || process.env.VERCEL_GIT_COMMIT_SHA || 'dev';
 const RELEASE_VERSION = process.env.NEXT_PUBLIC_RELEASE_VERSION || process.env.npm_package_version || '0.1.0';
@@ -97,6 +95,23 @@ export interface LogEntry {
 }
 
 /**
+ * Simple hash function for browser compatibility
+ * Generates a stable hash from a string
+ */
+function simpleHash(str: string): string {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  // Convert to hex and pad to 16 chars
+  const hex = Math.abs(hash).toString(16).padStart(8, '0');
+  // Double it to get 16 chars for consistency
+  return (hex + hex).substring(0, 16);
+}
+
+/**
  * Generate a stable fingerprint for error grouping
  * Uses error name, message pattern, and stack trace structure
  */
@@ -121,11 +136,8 @@ export function generateErrorFingerprint(error: Error, context?: string): string
     parts.push(context);
   }
 
-  // Generate SHA-256 hash
-  const fingerprint = createHash('sha256')
-    .update(parts.join('::'))
-    .digest('hex')
-    .substring(0, 16); // First 16 chars for readability
+  // Generate stable hash from parts
+  const fingerprint = simpleHash(parts.join('::'));
 
   return fingerprint;
 }
