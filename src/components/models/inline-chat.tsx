@@ -92,7 +92,7 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
 
       // Build URL with gateway query parameter if specified
       let url = typeof window !== 'undefined'
-        ? '/api/chat/completions'
+        ? '/v1/chat/completions'
         : `${apiBaseUrl}/v1/chat/completions`;
 
       // Add gateway as query parameter (required by backend API)

@@ -85,7 +85,7 @@ export function useGatewayRouter() {
       if (gateway.type === 'ai-sdk') {
         return '/api/chat/ai-sdk';
       }
-      return '/api/chat/completions';
+      return '/v1/chat/completions';
     },
     [getGatewayFor]
   );
