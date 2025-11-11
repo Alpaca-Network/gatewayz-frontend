@@ -28,7 +28,7 @@ export default function SettingsLayout({
 
   return (
     <SidebarProvider>
-      <div className="relative flex h-[calc(100vh-130px))]">
+      <div className="relative flex h-[calc(100vh-130px)]">
         <Sidebar
           variant="sidebar"
           collapsible="icon"
