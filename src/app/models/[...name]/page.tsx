@@ -437,82 +437,91 @@ export default function ModelProfilePage() {
 
                 // Fetch from all gateways to get all models via frontend API proxy
                 // Add timeout to prevent hanging
-                const fetchWithTimeout = (url: string, timeout = 10000) => {
+                const fetchWithTimeout = (url: string, timeout = 5000) => {
                     return Promise.race([
-                        fetch(url),
+                        fetch(url, {
+                            signal: AbortSignal.timeout(timeout)
+                        }).catch(err => {
+                            // Handle both fetch errors and timeout errors
+                            console.warn(`Fetch timeout or error for ${url}:`, err.message);
+                            return null as any;
+                        }),
                         new Promise<Response>((_, reject) =>
                             setTimeout(() => reject(new Error('Request timeout')), timeout)
                         )
-                    ]);
+                    ]).catch(err => {
+                        console.warn(`Timeout wrapper error for ${url}:`, err.message);
+                        return null as any;
+                    });
                 };
 
                 console.log(`[ModelProfilePage] Fetching from all gateway APIs...`);
                 const [openrouterRes, portkeyRes, featherlessRes, chutesRes, fireworksRes, togetherRes, groqRes, deepinfraRes, googleRes, cerebrasRes, nebiusRes, xaiRes, novitaRes, huggingfaceRes, aimoRes, nearRes, falRes] = await Promise.allSettled([
-                    fetchWithTimeout(`/api/models?gateway=openrouter`).catch(err => {
+                    fetchWithTimeout(`/api/models?gateway=openrouter`, 5000).catch(err => {
                         console.error('OpenRouter fetch error:', err);
                         return null;
                     }),
-                    fetchWithTimeout(`/api/models?gateway=portkey`).catch(err => {
+                    fetchWithTimeout(`/api/models?gateway=portkey`, 5000).catch(err => {
                         console.error('Portkey fetch error:', err);
                         return null;
                     }),
-                    fetchWithTimeout(`/api/models?gateway=featherless`).catch(err => {
+                    fetchWithTimeout(`/api/models?gateway=featherless`, 5000).catch(err => {
                         console.error('Featherless fetch error:', err);
                         return null;
                     }),
-                    fetchWithTimeout(`/api/models?gateway=chutes`).catch(err => {
+                    fetchWithTimeout(`/api/models?gateway=chutes`, 5000).catch(err => {
                         console.error('Chutes fetch error:', err);
                         return null;
                     }),
-                    fetchWithTimeout(`/api/models?gateway=fireworks`).catch(err => {
+                    fetchWithTimeout(`/api/models?gateway=fireworks`, 5000).catch(err => {
                         console.error('Fireworks fetch error:', err);
                         return null;
                     }),
-                    fetchWithTimeout(`/api/models?gateway=together`).catch(err => {
+                    fetchWithTimeout(`/api/models?gateway=together`, 5000).catch(err => {
                         console.error('Together fetch error:', err);
                         return null;
                     }),
-                    fetchWithTimeout(`/api/models?gateway=groq`).catch(err => {
+                    fetchWithTimeout(`/api/models?gateway=groq`, 5000).catch(err => {
                         console.error('Groq fetch error:', err);
                         return null;
                     }),
-                    fetchWithTimeout(`/api/models?gateway=deepinfra`).catch(err => {
+                    fetchWithTimeout(`/api/models?gateway=deepinfra`, 5000).catch(err => {
                         console.error('DeepInfra fetch error:', err);
                         return null;
                     }),
-                    fetchWithTimeout(`/api/models?gateway=google`).catch(err => {
+                    fetchWithTimeout(`/api/models?gateway=google`, 5000).catch(err => {
                         console.error('Google fetch error:', err);
                         return null;
                     }),
-                    fetchWithTimeout(`/api/models?gateway=cerebras`).catch(err => {
+                    fetchWithTimeout(`/api/models?gateway=cerebras`, 5000).catch(err => {
                         console.error('Cerebras fetch error:', err);
                         return null;
                     }),
-                    fetchWithTimeout(`/api/models?gateway=nebius`).catch(err => {
+                    fetchWithTimeout(`/api/models?gateway=nebius`, 5000).catch(err => {
                         console.error('Nebius fetch error:', err);
                         return null;
                     }),
-                    fetchWithTimeout(`/api/models?gateway=xai`).catch(err => {
+                    fetchWithTimeout(`/api/models?gateway=xai`, 5000).catch(err => {
                         console.error('xAI fetch error:', err);
                         return null;
                     }),
-                    fetchWithTimeout(`/api/models?gateway=novita`).catch(err => {
+                    fetchWithTimeout(`/api/models?gateway=novita`, 5000).catch(err => {
                         console.error('Novita fetch error:', err);
                         return null;
                     }),
-                    fetchWithTimeout(`/api/models?gateway=huggingface`, 70000).catch(err => {
+                    fetchWithTimeout(`/api/models?gateway=huggingface`, 15000).catch(err => {
                         console.error('HuggingFace fetch error:', err);
                         return null;
                     }),
-                    fetchWithTimeout(`/api/models?gateway=aimo`, 70000).catch(err => {
+                    fetchWithTimeout(`/api/models?gateway=aimo`, 15000).catch(err => {
                         console.error('AIMO fetch error:', err);
                         return null;
                     }),
-                    fetchWithTimeout(`/api/models?gateway=near`, 70000).catch(err => {
+                    fetchWithTimeout(`/api/models?gateway=near`, 15000).catch(err => {
                         console.error('NEAR fetch error:', err);
                         return null;
                     }),
-                    fetchWithTimeout(`/api/models?gateway=fal`, 70000).catch(err => {
+                    fetchWithTimeout(`/api/models?gateway=fal`, 15000).catch(err => {
                         console.error('FAL fetch error:', err);
                         return null;
                     })
@@ -540,6 +549,11 @@ export default function ModelProfilePage() {
                 const getData = async (result: PromiseSettledResult<Response | null>) => {
                     if (result.status === 'fulfilled' && result.value) {
                         try {
+                            // Check if response is ok before parsing
+                            if (!result.value.ok) {
+                                console.warn(`Gateway response not ok: ${result.value.status} ${result.value.statusText}`);
+                                return [];
+                            }
                             const data = await result.value.json();
                             console.log(`Gateway data parsed, models count:`, data.data?.length || 0);
                             return data.data || [];
@@ -548,7 +562,11 @@ export default function ModelProfilePage() {
                             return [];
                         }
                     }
-                    console.log('Gateway fetch was not successful:', result.status);
+                    if (result.status === 'rejected') {
+                        console.warn('Gateway fetch rejected:', result.reason);
+                    } else {
+                        console.log('Gateway fetch returned null or undefined');
+                    }
                     return [];
                 };
 
