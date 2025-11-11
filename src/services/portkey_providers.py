@@ -700,22 +700,13 @@ def fetch_models_from_google_vertex():
 
         logger.info("Fetching models from Google Vertex AI Model Registry")
 
-        # Get credentials using the same method as google_vertex_client
+        # Initialize Vertex AI using ADC (Application Default Credentials)
         # This ensures consistent credential handling across all Google Vertex AI calls
-        from src.services.google_vertex_client import get_google_vertex_credentials
-        
-        credentials = get_google_vertex_credentials()
-        
-        # Refresh credentials if needed to ensure they're valid
-        if not credentials.valid:
-            credentials.refresh(Request())
+        from src.services.google_vertex_client import initialize_vertex_ai
 
-        # Initialize Model Registry client
-        aiplatform.init(
-            project=Config.GOOGLE_PROJECT_ID,
-            location=Config.GOOGLE_VERTEX_LOCATION,
-            credentials=credentials,
-        )
+        # This will use ADC and handle temp file creation for GOOGLE_VERTEX_CREDENTIALS_JSON
+        initialize_vertex_ai()
+        logger.info("✓ Successfully initialized Vertex AI Model Registry with ADC")
 
         # Common Google Vertex AI models
         # These are the officially supported and generally available models in Vertex AI

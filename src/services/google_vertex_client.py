@@ -1,112 +1,99 @@
 """Google Vertex AI API client for chat completions
 
 This module provides integration with Google Vertex AI generative models
-using the REST API for Gemini models (generateContent endpoint).
+using the Vertex AI SDK with Application Default Credentials (ADC).
 
-For Gemini models, we use the REST API directly because:
-1. The new google-genai SDK is the recommended approach going forward
-2. The old PredictionServiceClient doesn't work reliably with newer Gemini models
-3. The REST API is stable and well-documented
+Authentication uses Google Application Default Credentials (ADC):
+- Automatically discovers credentials from environment (GOOGLE_APPLICATION_CREDENTIALS)
+- No manual JWT exchange required
+- Supports service account JSON files
+- Works in serverless environments (Vercel, Railway)
+- Recommended by Google for production use
 
-Authentication uses lightweight OAuth2 JWT exchange (no heavy Google SDKs):
-- Uses src.services.google_oauth2_jwt for lightweight token generation
-- Supports GOOGLE_VERTEX_CREDENTIALS_JSON environment variable
-- Serverless-friendly (Vercel, Railway compatible)
-- Minimal memory footprint
+The library will automatically find credentials from:
+1. GOOGLE_APPLICATION_CREDENTIALS environment variable (path to JSON file)
+2. GOOGLE_VERTEX_CREDENTIALS_JSON environment variable (raw JSON, written to temp file)
+3. Application Default Credentials (gcloud auth, GCE metadata server, etc.)
 """
 
 import json
 import logging
 import os
+import tempfile
 import time
 from collections.abc import Iterator
 from typing import Any, Optional
 
-import httpx
-from google.protobuf.json_format import MessageToDict
+import vertexai
+from vertexai.generative_models import GenerativeModel
 
 from src.config import Config
-from src.services.google_oauth2_jwt import get_access_token_from_service_account
 
 # Initialize logging
 logger = logging.getLogger(__name__)
 
-# Vertex AI OAuth scopes required for authentication
-VERTEX_AI_SCOPES = [
-    "https://www.googleapis.com/auth/cloud-platform",
-    "https://www.googleapis.com/auth/aiplatform",
-]
 
+def initialize_vertex_ai():
+    """Initialize Vertex AI using Application Default Credentials (ADC)
 
-def get_google_vertex_credentials():
-    """Get Google Cloud credentials for Vertex AI (Deprecated)
+    This function initializes Vertex AI with your project and location.
+    It does NOT pass explicit credentials - the library will automatically
+    discover them from the environment.
 
-    DEPRECATED: This function is kept for backward compatibility but is no longer used.
-    Credential handling is now done via get_access_token_from_service_account() using
-    lightweight OAuth2 JWT exchange.
-
-    Previously tried multiple credential sources in order:
-    1. GOOGLE_VERTEX_CREDENTIALS_JSON environment variable (for Vercel/serverless)
-    2. GOOGLE_APPLICATION_CREDENTIALS file path (for development)
-    3. Application Default Credentials (ADC) from google.auth.default()
-
-    This function is kept only for backward compatibility with any external code
-    that might call it directly.
-    """
-    logger.warning(
-        "get_google_vertex_credentials() is deprecated. "
-        "Use get_access_token_from_service_account() instead for lightweight JWT exchange."
-    )
-
-    # Return None to indicate the new approach should be used
-    return None
-
-
-def get_google_vertex_access_token():
-    """Get Google Vertex AI access token for REST API calls
-
-    Returns an OAuth2 access token that can be used as a bearer token.
-
-    Uses lightweight OAuth2 JWT exchange (no heavy Google SDKs):
-    - Supports GOOGLE_VERTEX_CREDENTIALS_JSON (raw JSON or base64-encoded)
-    - Serverless-friendly (Vercel, Railway compatible)
-    - Minimal memory footprint
-    - Fast token generation via JWT Bearer flow
+    The library finds credentials in this order:
+    1. GOOGLE_APPLICATION_CREDENTIALS environment variable (path to JSON)
+    2. Application Default Credentials (ADC) from gcloud, metadata server, etc.
+    3. If GOOGLE_VERTEX_CREDENTIALS_JSON is set (raw JSON), we'll write it to a temp file
+       and set GOOGLE_APPLICATION_CREDENTIALS to point to it
 
     Raises:
-        ValueError: If credentials are not configured or token exchange fails
+        ValueError: If project_id or location is not configured
     """
     try:
-        logger.info("Getting Vertex AI access token using lightweight JWT exchange")
+        logger.info("Initializing Vertex AI with Application Default Credentials")
 
-        # Get service account JSON from environment
-        service_account_json = os.environ.get("GOOGLE_VERTEX_CREDENTIALS_JSON")
-
-        if not service_account_json:
-            error_msg = (
-                "Failed to get Google Vertex access token: "
-                "GOOGLE_VERTEX_CREDENTIALS_JSON environment variable not set.\n"
-                "Please configure credentials for Google Vertex AI. Set:\n"
-                "  GOOGLE_VERTEX_CREDENTIALS_JSON=<service-account-json> (raw JSON or base64-encoded)\n"
-                "For serverless deployments (Vercel, Railway), use base64-encoded JSON."
+        # Validate configuration
+        if not Config.GOOGLE_PROJECT_ID:
+            raise ValueError(
+                "GOOGLE_PROJECT_ID is not configured. Set this environment variable to your GCP project ID. "
+                "For example: GOOGLE_PROJECT_ID=my-project-123"
             )
-            logger.error(error_msg)
-            raise ValueError(error_msg)
 
-        # Use lightweight JWT exchange to get access token
-        access_token = get_access_token_from_service_account(
-            service_account_json,
-            scope="https://www.googleapis.com/auth/cloud-platform"
+        if not Config.GOOGLE_VERTEX_LOCATION:
+            raise ValueError(
+                "GOOGLE_VERTEX_LOCATION is not configured. Set this to a valid GCP region. "
+                "For example: GOOGLE_VERTEX_LOCATION=us-central1"
+            )
+
+        # Handle GOOGLE_VERTEX_CREDENTIALS_JSON if provided (for serverless environments)
+        # If raw JSON is provided, write it to a temp file and set GOOGLE_APPLICATION_CREDENTIALS
+        if os.environ.get("GOOGLE_VERTEX_CREDENTIALS_JSON") and not os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
+            logger.info("GOOGLE_VERTEX_CREDENTIALS_JSON detected - writing to temp file for ADC")
+            try:
+                creds_json = os.environ.get("GOOGLE_VERTEX_CREDENTIALS_JSON")
+
+                # Create a temporary file that persists for the application lifetime
+                temp_creds_file = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
+                temp_creds_file.write(creds_json)
+                temp_creds_file.close()
+
+                # Set GOOGLE_APPLICATION_CREDENTIALS to point to the temp file
+                os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = temp_creds_file.name
+                logger.info(f"Wrote credentials to temp file: {temp_creds_file.name}")
+            except Exception as e:
+                logger.warning(f"Failed to write GOOGLE_VERTEX_CREDENTIALS_JSON to temp file: {e}")
+
+        # Initialize Vertex AI - DO NOT pass credentials parameter
+        # The library will automatically find them from the environment
+        vertexai.init(
+            project=Config.GOOGLE_PROJECT_ID,
+            location=Config.GOOGLE_VERTEX_LOCATION
         )
 
-        logger.info(f"Successfully obtained access token (length: {len(access_token)} chars)")
-        return access_token
+        logger.info(f"✓ Successfully initialized Vertex AI for project: {Config.GOOGLE_PROJECT_ID}")
 
-    except ValueError:
-        # Re-raise ValueError from JWT exchange
-        raise
     except Exception as e:
-        error_msg = f"Failed to get Vertex AI access token: {str(e)}"
+        error_msg = f"Failed to initialize Vertex AI: {str(e)}"
         logger.error(error_msg, exc_info=True)
         raise ValueError(error_msg) from e
 
@@ -140,7 +127,7 @@ def make_google_vertex_request_openai(
     top_p: Optional[float] = None,
     **kwargs,
 ) -> dict:
-    """Make request to Google Vertex AI generative models using REST API
+    """Make request to Google Vertex AI using the Vertex AI SDK with ADC
 
     Converts OpenAI-compatible parameters to Google Vertex AI Gemini format
     and returns a normalized response.
@@ -159,27 +146,11 @@ def make_google_vertex_request_openai(
     try:
         logger.info(f"Making Google Vertex request for model: {model}")
 
-        # Step 0: Validate configuration before making any API calls
-        if not Config.GOOGLE_PROJECT_ID:
-            raise ValueError(
-                "GOOGLE_PROJECT_ID is not configured. Set this environment variable to your GCP project ID. "
-                "For example: GOOGLE_PROJECT_ID=my-project-123"
-            )
-
-        if not Config.GOOGLE_VERTEX_LOCATION:
-            raise ValueError(
-                "GOOGLE_VERTEX_LOCATION is not configured. Set this to a valid GCP region. "
-                "For example: GOOGLE_VERTEX_LOCATION=us-central1"
-            )
-
-        logger.info(f"Configuration verified - Project: {Config.GOOGLE_PROJECT_ID}, Location: {Config.GOOGLE_VERTEX_LOCATION}")
-
-        # Step 1: Get access token
+        # Step 1: Initialize Vertex AI (will use ADC)
         try:
-            access_token = get_google_vertex_access_token()
-            logger.info("Successfully obtained access token")
-        except Exception as token_error:
-            logger.error(f"Failed to get access token: {token_error}", exc_info=True)
+            initialize_vertex_ai()
+        except Exception as init_error:
+            logger.error(f"Failed to initialize Vertex AI: {init_error}", exc_info=True)
             raise
 
         # Step 2: Transform model ID
@@ -190,23 +161,23 @@ def make_google_vertex_request_openai(
             logger.error(f"Failed to transform model ID: {transform_error}", exc_info=True)
             raise
 
-        # Step 3: Build request content
+        # Step 3: Create GenerativeModel instance
         try:
-            contents = _build_vertex_content(messages)
-            logger.debug(f"Built contents with {len(contents)} messages")
-        except Exception as content_error:
-            logger.error(f"Failed to build vertex content: {content_error}", exc_info=True)
+            gemini_model = GenerativeModel(model_name)
+            logger.info(f"Created GenerativeModel for {model_name}")
+        except Exception as model_error:
+            logger.error(f"Failed to create GenerativeModel: {model_error}", exc_info=True)
             raise
 
         # Step 4: Build generation config
         try:
             generation_config = {}
             if max_tokens is not None:
-                generation_config["maxOutputTokens"] = max_tokens
+                generation_config["max_output_tokens"] = max_tokens
             if temperature is not None:
                 generation_config["temperature"] = temperature
             if top_p is not None:
-                generation_config["topP"] = top_p
+                generation_config["top_p"] = top_p
             logger.debug(f"Generation config: {generation_config}")
         except Exception as config_error:
             logger.error(f"Failed to build generation config: {config_error}", exc_info=True)
@@ -224,109 +195,43 @@ def make_google_vertex_request_openai(
             # Gemini uses a different schema: tools need to be converted to FunctionDeclaration format
             # See: https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/gemini#function_calling
 
-        # Step 6: Prepare the request payload
+        # Step 6: Convert messages to Vertex AI format
         try:
-            request_body = {
-                "contents": contents,
-            }
+            # Extract the last user message as the prompt
+            # For simplicity, we'll combine all messages into a single prompt
+            prompt_parts = []
+            for msg in messages:
+                role = msg.get("role", "user")
+                content = msg.get("content", "")
+                if role == "system":
+                    prompt_parts.append(f"System: {content}")
+                elif role == "user":
+                    prompt_parts.append(f"User: {content}")
+                elif role == "assistant":
+                    prompt_parts.append(f"Assistant: {content}")
 
-            # Add generation config if provided
-            if generation_config:
-                request_body["generationConfig"] = generation_config
-
-            # Add tools if provided (after transformation - currently not implemented)
-            # if tools:
-            #     request_body["tools"] = transform_openai_tools_to_gemini(tools)
-
-            logger.debug(f"Request body prepared with keys: {list(request_body.keys())}")
-        except Exception as request_error:
-            logger.error(f"Failed to create request body: {request_error}", exc_info=True)
+            prompt = "\n\n".join(prompt_parts)
+            logger.debug(f"Built prompt with {len(messages)} messages")
+        except Exception as content_error:
+            logger.error(f"Failed to build prompt: {content_error}", exc_info=True)
             raise
 
-        # Step 7: Make the REST API request
+        # Step 7: Make the API call
         try:
-            # Construct the API endpoint URL
-            api_endpoint = f"{Config.GOOGLE_VERTEX_LOCATION}-aiplatform.googleapis.com"
-            url = (
-                f"https://{api_endpoint}/v1/"
-                f"projects/{Config.GOOGLE_PROJECT_ID}/"
-                f"locations/{Config.GOOGLE_VERTEX_LOCATION}/"
-                f"publishers/google/models/{model_name}:generateContent"
+            logger.info("Calling GenerativeModel.generate_content()")
+            response = gemini_model.generate_content(
+                prompt,
+                generation_config=generation_config if generation_config else None
             )
-
-            logger.info(f"Calling Vertex AI REST API: {url}")
-
-            headers = {
-                "Authorization": f"Bearer {access_token}",
-                "Content-Type": "application/json",
-            }
-
-            # Make the HTTP POST request
-            with httpx.Client(timeout=60.0) as client:
-                response = client.post(url, headers=headers, json=request_body)
-                response.raise_for_status()
-
-            response_data = response.json()
-            logger.info("Received response from Vertex AI REST API")
-            logger.debug(f"Response data: {json.dumps(response_data, indent=2, default=str)}")
-
-        except httpx.HTTPStatusError as http_error:
-            status_code = http_error.response.status_code
-            response_text = http_error.response.text[:500]
-
-            # Provide detailed error messages based on HTTP status codes
-            if status_code == 404:
-                error_message = (
-                    f"Vertex AI API returned 404 (Not Found). This usually means:\n"
-                    f"  1. Vertex AI API is not enabled in GCP project '{Config.GOOGLE_PROJECT_ID}'\n"
-                    f"  2. Model '{model}' is not available in region '{Config.GOOGLE_VERTEX_LOCATION}'\n"
-                    f"  3. The project ID or region is incorrect\n"
-                    f"  4. The model name format is invalid\n"
-                    f"\nFull error: {response_text}"
-                )
-            elif status_code == 401:
-                error_message = (
-                    f"Vertex AI API returned 401 (Unauthorized). This usually means:\n"
-                    f"  1. Service account credentials are invalid or expired\n"
-                    f"  2. GOOGLE_VERTEX_CREDENTIALS_JSON or GOOGLE_APPLICATION_CREDENTIALS is not set correctly\n"
-                    f"  3. The credentials file/JSON has been corrupted or revoked\n"
-                    f"  4. Your credentials have expired and need to be refreshed\n"
-                    f"\nFull error: {response_text}"
-                )
-            elif status_code == 403:
-                error_message = (
-                    f"Vertex AI API returned 403 (Forbidden/Permission Denied). This usually means:\n"
-                    f"  1. Service account lacks required IAM roles:\n"
-                    f"     - Need 'roles/aiplatform.user' (Vertex AI User) or\n"
-                    f"     - 'roles/aiplatform.serviceAgent' (Vertex AI Service Agent)\n"
-                    f"  2. The service account is not authorized for project '{Config.GOOGLE_PROJECT_ID}'\n"
-                    f"  3. Vertex AI API is not enabled in your GCP project\n"
-                    f"\nHow to fix:\n"
-                    f"  1. Go to GCP Console -> IAM & Admin -> Roles\n"
-                    f"  2. Find your service account and add 'Vertex AI User' role\n"
-                    f"  3. Go to APIs & Services and ensure 'Vertex AI API' is enabled\n"
-                    f"\nFull error: {response_text}"
-                )
-            elif status_code == 429:
-                error_message = (
-                    f"Vertex AI API returned 429 (Too Many Requests). Rate limit exceeded. "
-                    f"Please retry after a delay.\n"
-                    f"Full error: {response_text}"
-                )
-            else:
-                error_message = (
-                    f"Vertex AI HTTP error {status_code}: {response_text}"
-                )
-
-            logger.error(error_message)
-            raise Exception(error_message) from http_error
+            logger.info("Received response from Vertex AI")
+            logger.debug(f"Response: {response}")
         except Exception as api_error:
-            logger.error(f"Vertex AI REST API call failed: {api_error}", exc_info=True)
+            logger.error(f"Vertex AI API call failed: {api_error}", exc_info=True)
             raise
 
         # Step 8: Process and normalize response
         try:
-            processed_response = _process_google_vertex_rest_response(response_data, model)
+            processed_response = _process_google_vertex_sdk_response(response, model)
             logger.info("Successfully processed Vertex AI response")
             return processed_response
         except Exception as process_error:
@@ -335,6 +240,74 @@ def make_google_vertex_request_openai(
 
     except Exception as e:
         logger.error(f"Google Vertex AI request failed: {e}", exc_info=True)
+        raise
+
+
+def _process_google_vertex_sdk_response(response: Any, model: str) -> dict:
+    """Process Google Vertex AI SDK response to OpenAI-compatible format
+
+    Args:
+        response: Response from GenerativeModel.generate_content()
+        model: Model name used
+
+    Returns:
+        OpenAI-compatible response dictionary
+    """
+    try:
+        logger.debug(f"Processing SDK response: {response}")
+
+        # Extract text from the response
+        text_content = response.text if hasattr(response, 'text') else ""
+        logger.info(f"Extracted text content length: {len(text_content)} characters")
+
+        # Extract usage metadata if available
+        prompt_tokens = 0
+        completion_tokens = 0
+        if hasattr(response, 'usage_metadata'):
+            usage = response.usage_metadata
+            prompt_tokens = getattr(usage, 'prompt_token_count', 0)
+            completion_tokens = getattr(usage, 'candidates_token_count', 0)
+
+        # Extract finish reason
+        finish_reason = "stop"  # Default
+        if hasattr(response, 'candidates') and response.candidates:
+            candidate = response.candidates[0]
+            if hasattr(candidate, 'finish_reason'):
+                finish_reason_value = candidate.finish_reason
+                # Map Vertex AI finish reasons to OpenAI format
+                finish_reason_map = {
+                    1: "stop",  # STOP
+                    2: "length",  # MAX_TOKENS
+                    3: "content_filter",  # SAFETY
+                    4: "stop",  # RECITATION
+                    0: "unknown",  # FINISH_REASON_UNSPECIFIED
+                }
+                finish_reason = finish_reason_map.get(finish_reason_value, "stop")
+
+        return {
+            "id": f"vertex-{int(time.time() * 1000)}",
+            "object": "text_completion",
+            "created": int(time.time()),
+            "model": model,
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": text_content
+                    },
+                    "finish_reason": finish_reason,
+                }
+            ],
+            "usage": {
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "total_tokens": prompt_tokens + completion_tokens,
+            },
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to process Google Vertex AI SDK response: {e}", exc_info=True)
         raise
 
 
@@ -348,10 +321,8 @@ def make_google_vertex_request_openai_stream(
 ) -> Iterator[str]:
     """Make streaming request to Google Vertex AI
 
-    NOTE: For compatibility, this implementation uses the REST API
-    and returns a complete response in OpenAI SSE streaming format.
-    The Gemini REST API supports streaming via streamGenerateContent,
-    but this is not yet implemented here.
+    NOTE: For compatibility, this implementation gets the full response
+    and returns it in OpenAI SSE streaming format.
 
     Args:
         messages: List of message objects in OpenAI format
@@ -366,7 +337,7 @@ def make_google_vertex_request_openai_stream(
     """
     try:
         logger.info(f"Starting streaming request for model {model}")
-        # Get non-streaming response using REST API
+        # Get non-streaming response
         response = make_google_vertex_request_openai(
             messages=messages,
             model=model,
@@ -669,8 +640,7 @@ def diagnose_google_vertex_credentials() -> dict:
     - credential_source: str - Where credentials came from (env_json, file, adc, none)
     - project_id: str or None - Configured GCP project ID
     - location: str or None - Configured GCP region
-    - token_available: bool - Whether access token was successfully obtained
-    - token_valid: bool - Whether token is valid
+    - initialization_successful: bool - Whether Vertex AI initialized successfully
     - error: str or None - Error message if any step failed
     - steps: list - Detailed step-by-step diagnostics
 
@@ -682,8 +652,7 @@ def diagnose_google_vertex_credentials() -> dict:
         "credential_source": "none",
         "project_id": Config.GOOGLE_PROJECT_ID,
         "location": Config.GOOGLE_VERTEX_LOCATION,
-        "token_available": False,
-        "token_valid": False,
+        "initialization_successful": False,
         "error": None,
         "steps": []
     }
@@ -703,12 +672,20 @@ def diagnose_google_vertex_credentials() -> dict:
     else:
         step1["details"] += f" | Location: {Config.GOOGLE_VERTEX_LOCATION}"
 
-    # Step 2: Try to load credentials (check if GOOGLE_VERTEX_CREDENTIALS_JSON is available)
-    step2 = {"step": "Credential loading", "passed": False, "source": "none", "details": ""}
+    # Step 2: Check for credentials
+    step2 = {"step": "Credential check", "passed": False, "source": "none", "details": ""}
     try:
-        service_account_json = os.environ.get("GOOGLE_VERTEX_CREDENTIALS_JSON")
+        # Check GOOGLE_APPLICATION_CREDENTIALS (file path)
+        if os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
+            result["credentials_available"] = True
+            step2["passed"] = True
+            step2["source"] = "GOOGLE_APPLICATION_CREDENTIALS (file)"
+            result["credential_source"] = "file"
+            creds_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+            step2["details"] = f"Credentials file path: {creds_path}"
 
-        if service_account_json:
+        # Check GOOGLE_VERTEX_CREDENTIALS_JSON (raw JSON)
+        elif os.environ.get("GOOGLE_VERTEX_CREDENTIALS_JSON"):
             result["credentials_available"] = True
             step2["passed"] = True
             step2["source"] = "GOOGLE_VERTEX_CREDENTIALS_JSON (env)"
@@ -716,14 +693,17 @@ def diagnose_google_vertex_credentials() -> dict:
 
             # Parse to get service account email for logging
             try:
-                creds_dict = json.loads(service_account_json)
+                creds_json = os.environ.get("GOOGLE_VERTEX_CREDENTIALS_JSON")
+                creds_dict = json.loads(creds_json)
                 service_email = creds_dict.get("client_email", "unknown")
-                step2["details"] = f"Successfully loaded from {step2['source']} (service account: {service_email})"
+                step2["details"] = f"Raw JSON credentials (service account: {service_email})"
             except Exception:
-                step2["details"] = f"Successfully loaded from {step2['source']}"
+                step2["details"] = "Raw JSON credentials detected"
         else:
-            step2["details"] = "GOOGLE_VERTEX_CREDENTIALS_JSON not configured"
-            result["error"] = "GOOGLE_VERTEX_CREDENTIALS_JSON environment variable not set"
+            step2["details"] = "No credentials found in GOOGLE_APPLICATION_CREDENTIALS or GOOGLE_VERTEX_CREDENTIALS_JSON. Will try ADC."
+            result["credential_source"] = "adc"
+            result["credentials_available"] = True  # ADC might still work
+            step2["passed"] = True
 
     except Exception as e:
         step2["details"] = f"Failed to check credentials: {str(e)[:200]}"
@@ -731,31 +711,22 @@ def diagnose_google_vertex_credentials() -> dict:
 
     result["steps"].append(step2)
 
-    # Step 3: Try to get access token
-    step3 = {"step": "Access token", "passed": False, "details": ""}
-    if result["credentials_available"]:
-        try:
-            access_token = get_google_vertex_access_token()
-            if access_token:
-                result["token_available"] = True
-                result["token_valid"] = True
-                step3["passed"] = True
-                step3["details"] = f"Token obtained (length: {len(access_token)} chars)"
-            else:
-                step3["details"] = "Token is None/empty"
-        except Exception as e:
-            step3["details"] = f"Failed to get token: {str(e)[:200]}"
-            result["error"] = str(e)
-    else:
-        step3["details"] = "Skipped - credentials not available"
+    # Step 3: Try to initialize Vertex AI
+    step3 = {"step": "Vertex AI initialization", "passed": False, "details": ""}
+    try:
+        initialize_vertex_ai()
+        result["initialization_successful"] = True
+        step3["passed"] = True
+        step3["details"] = "Successfully initialized Vertex AI with ADC"
+    except Exception as e:
+        step3["details"] = f"Failed to initialize: {str(e)[:200]}"
+        result["error"] = str(e)
 
     result["steps"].append(step3)
 
     # Step 4: Summary
     is_healthy = (
-        result["credentials_available"]
-        and result["token_available"]
-        and result["token_valid"]
+        result["initialization_successful"]
         and Config.GOOGLE_PROJECT_ID
         and Config.GOOGLE_VERTEX_LOCATION
     )
@@ -768,10 +739,8 @@ def diagnose_google_vertex_credentials() -> dict:
             issues.append("GOOGLE_PROJECT_ID not configured")
         if not Config.GOOGLE_VERTEX_LOCATION:
             issues.append("GOOGLE_VERTEX_LOCATION not configured")
-        if not result["credentials_available"]:
-            issues.append("Credentials not available")
-        if not result["token_available"]:
-            issues.append("Access token not available")
+        if not result["initialization_successful"]:
+            issues.append("Vertex AI initialization failed")
 
         result["error"] = "Configuration issues: " + "; ".join(issues)
 

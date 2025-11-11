@@ -203,41 +203,19 @@ def make_google_vertex_image_request(
             "GOOGLE_VERTEX_SERVICE_ACCOUNT", "vertex-client@gatewayz-468519.iam.gserviceaccount.com"
         )
 
-        # Try to get credentials with impersonation support
-        credentials = None
+        # Initialize Vertex AI using ADC (Application Default Credentials)
+        # The initialize_vertex_ai() function handles GOOGLE_VERTEX_CREDENTIALS_JSON
+        # and other credential sources automatically
         try:
-            # Use the same credential loading function as google_vertex_client
-            # This ensures consistent credential handling across all Google Vertex AI calls
-            from src.services.google_vertex_client import get_google_vertex_credentials
-            
-            # Get source credentials using the shared function
-            source_credentials = get_google_vertex_credentials()
+            from src.services.google_vertex_client import initialize_vertex_ai
 
-            # If GOOGLE_VERTEX_SERVICE_ACCOUNT is set, use impersonation
-            if os.getenv("GOOGLE_VERTEX_SERVICE_ACCOUNT"):
-                logger.info(f"Using service account impersonation: {target_sa}")
-                credentials = impersonated_credentials.Credentials(
-                    source_credentials=source_credentials,
-                    target_principal=target_sa,
-                    target_scopes=["https://www.googleapis.com/auth/cloud-platform"],
-                    lifetime=3600,  # 1 hour
-                )
-                logger.info("✓ Successfully created impersonated credentials")
-            else:
-                # Use credentials directly (already properly loaded as service account credentials)
-                credentials = source_credentials
-                logger.info("Using credentials from shared credential loader")
+            # This will use ADC and handle temp file creation for GOOGLE_VERTEX_CREDENTIALS_JSON
+            initialize_vertex_ai()
+            logger.info("✓ Successfully initialized Vertex AI with ADC")
 
         except Exception as auth_error:
             logger.warning(f"Authentication setup: {auth_error}")
-            # Let Vertex AI SDK handle default authentication
-            credentials = None
-
-        # Initialize Vertex AI
-        if credentials:
-            aiplatform.init(project=project_id, location=location, credentials=credentials)
-        else:
-            # Fall back to default authentication
+            # Fall back to default aiplatform initialization
             aiplatform.init(project=project_id, location=location)
 
         # Get the endpoint

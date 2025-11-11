@@ -34,7 +34,7 @@ os.environ.setdefault('ENCRYPTION_KEY', 'test-encryption-key-32-bytes-long!')
 
 from src.main import app
 from src.services.google_models_config import get_google_models
-from src.services.google_vertex_client import get_google_vertex_credentials
+from src.services.google_vertex_client import diagnose_google_vertex_credentials
 
 logger = logging.getLogger(__name__)
 
@@ -103,9 +103,13 @@ class TestGoogleVertexE2E:
     def test_01_vertex_credentials_available(self):
         """Test that Google Vertex credentials are properly configured"""
         # This test should pass if pytestmark didn't skip the tests
-        credentials = get_google_vertex_credentials()
-        assert credentials is not None, "Google Vertex credentials should be available"
+        diagnosis = diagnose_google_vertex_credentials()
+        assert diagnosis is not None, "Vertex AI diagnostic should return results"
+        assert diagnosis.get('health_status') == 'healthy', f"Vertex AI should be healthy: {diagnosis.get('error')}"
         logger.info("✓ Google Vertex credentials are properly configured")
+        logger.info(f"  Credential source: {diagnosis.get('credential_source')}")
+        logger.info(f"  Project ID: {diagnosis.get('project_id')}")
+        logger.info(f"  Location: {diagnosis.get('location')}")
 
     @patch('src.db.users.get_user')
     @patch('src.db.users.add_credits_to_user')
@@ -441,23 +445,23 @@ class TestVertexAIDirectCall:
 
     def test_vertex_client_can_make_request(self):
         """Test that the Vertex AI client can make a direct API call"""
-        from src.services.google_vertex_client import make_vertex_ai_request
+        from src.services.google_vertex_client import make_google_vertex_request_openai
 
         # Test with a simple prompt
         try:
-            response = make_vertex_ai_request(
+            response = make_google_vertex_request_openai(
                 model="gemini-2.0-flash-exp",
                 messages=[
                     {"role": "user", "content": "Say 'test successful'"}
                 ],
                 max_tokens=20,
-                temperature=0.1,
-                stream=False
+                temperature=0.1
             )
 
             assert response is not None, "Response should not be None"
+            assert 'choices' in response, "Response should have choices"
             logger.info(f"✓ Direct Vertex AI call successful")
-            logger.info(f"  Response type: {type(response)}")
+            logger.info(f"  Response: {response['choices'][0]['message']['content']}")
 
         except Exception as e:
             logger.error(f"Direct Vertex AI call failed: {str(e)}")

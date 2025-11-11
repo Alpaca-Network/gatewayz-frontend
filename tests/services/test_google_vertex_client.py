@@ -196,37 +196,22 @@ class TestProcessGoogleVertexResponse:
 class TestMakeGoogleVertexRequest:
     """Tests for making requests to Google Vertex"""
 
-    @patch("src.services.google_vertex_client.httpx.Client")
-    @patch("src.services.google_vertex_client.get_google_vertex_access_token")
-    def test_make_request_with_parameters(self, mock_get_token, mock_httpx_client):
+    @patch("src.services.google_vertex_client.GenerativeModel")
+    @patch("src.services.google_vertex_client.initialize_vertex_ai")
+    def test_make_request_with_parameters(self, mock_init_vertex, mock_generative_model):
         """Test making a request with various parameters"""
-        # Mock access token
-        mock_get_token.return_value = "test-access-token"
-
-        # Mock HTTP response
+        # Mock GenerativeModel and its response
+        mock_model_instance = Mock()
         mock_response = Mock()
-        mock_response.json.return_value = {
-            "candidates": [
-                {
-                    "content": {
-                        "parts": [
-                            {"text": "Response"}
-                        ]
-                    },
-                    "finishReason": "STOP",
-                }
-            ],
-            "usageMetadata": {
-                "promptTokenCount": 5,
-                "candidatesTokenCount": 10,
-            }
-        }
-        mock_response.raise_for_status = Mock()
+        mock_response.text = "Response"
+        mock_response.usage_metadata = Mock()
+        mock_response.usage_metadata.prompt_token_count = 5
+        mock_response.usage_metadata.candidates_token_count = 10
+        mock_response.candidates = [Mock()]
+        mock_response.candidates[0].finish_reason = 1  # STOP
 
-        # Mock httpx.Client context manager
-        mock_client_instance = Mock()
-        mock_client_instance.post.return_value = mock_response
-        mock_httpx_client.return_value.__enter__.return_value = mock_client_instance
+        mock_model_instance.generate_content.return_value = mock_response
+        mock_generative_model.return_value = mock_model_instance
 
         messages = [
             {"role": "user", "content": "Hello"}
@@ -245,42 +230,26 @@ class TestMakeGoogleVertexRequest:
         assert "usage" in result
         assert result["choices"][0]["message"]["content"] == "Response"
 
-        # Verify the HTTP request was made correctly
-        mock_client_instance.post.assert_called_once()
-        call_args = mock_client_instance.post.call_args
-        assert "gemini-2.0-flash:generateContent" in call_args[0][0]
+        # Verify initialization and model creation were called
+        mock_init_vertex.assert_called_once()
+        mock_generative_model.assert_called_once_with("gemini-2.0-flash")
 
-    @patch("src.services.google_vertex_client.httpx.Client")
-    @patch("src.services.google_vertex_client.get_google_vertex_access_token")
-    def test_make_streaming_request(self, mock_get_token, mock_httpx_client):
+    @patch("src.services.google_vertex_client.GenerativeModel")
+    @patch("src.services.google_vertex_client.initialize_vertex_ai")
+    def test_make_streaming_request(self, mock_init_vertex, mock_generative_model):
         """Test making a streaming request"""
-        # Mock access token
-        mock_get_token.return_value = "test-access-token"
-
-        # Mock HTTP response
+        # Mock GenerativeModel and its response
+        mock_model_instance = Mock()
         mock_response = Mock()
-        mock_response.json.return_value = {
-            "candidates": [
-                {
-                    "content": {
-                        "parts": [
-                            {"text": "Streaming response"}
-                        ]
-                    },
-                    "finishReason": "STOP",
-                }
-            ],
-            "usageMetadata": {
-                "promptTokenCount": 5,
-                "candidatesTokenCount": 10,
-            }
-        }
-        mock_response.raise_for_status = Mock()
+        mock_response.text = "Streaming response"
+        mock_response.usage_metadata = Mock()
+        mock_response.usage_metadata.prompt_token_count = 5
+        mock_response.usage_metadata.candidates_token_count = 10
+        mock_response.candidates = [Mock()]
+        mock_response.candidates[0].finish_reason = 1  # STOP
 
-        # Mock httpx.Client context manager
-        mock_client_instance = Mock()
-        mock_client_instance.post.return_value = mock_response
-        mock_httpx_client.return_value.__enter__.return_value = mock_client_instance
+        mock_model_instance.generate_content.return_value = mock_response
+        mock_generative_model.return_value = mock_model_instance
 
         messages = [
             {"role": "user", "content": "Hello"}
@@ -300,37 +269,22 @@ class TestMakeGoogleVertexRequest:
         assert any("Streaming response" in chunk for chunk in chunks)
         assert any("[DONE]" in chunk for chunk in chunks)
 
-    @patch("src.services.google_vertex_client.httpx.Client")
-    @patch("src.services.google_vertex_client.get_google_vertex_access_token")
-    def test_make_request_gemini_flash_lite(self, mock_get_token, mock_httpx_client):
+    @patch("src.services.google_vertex_client.GenerativeModel")
+    @patch("src.services.google_vertex_client.initialize_vertex_ai")
+    def test_make_request_gemini_flash_lite(self, mock_init_vertex, mock_generative_model):
         """Test making a request to gemini-2.5-flash-lite (maps to preview version)"""
-        # Mock access token
-        mock_get_token.return_value = "test-access-token"
-
-        # Mock HTTP response
+        # Mock GenerativeModel and its response
+        mock_model_instance = Mock()
         mock_response = Mock()
-        mock_response.json.return_value = {
-            "candidates": [
-                {
-                    "content": {
-                        "parts": [
-                            {"text": "Flash Lite works!"}
-                        ]
-                    },
-                    "finishReason": "STOP",
-                }
-            ],
-            "usageMetadata": {
-                "promptTokenCount": 3,
-                "candidatesTokenCount": 4,
-            }
-        }
-        mock_response.raise_for_status = Mock()
+        mock_response.text = "Flash Lite works!"
+        mock_response.usage_metadata = Mock()
+        mock_response.usage_metadata.prompt_token_count = 3
+        mock_response.usage_metadata.candidates_token_count = 4
+        mock_response.candidates = [Mock()]
+        mock_response.candidates[0].finish_reason = 1  # STOP
 
-        # Mock httpx.Client context manager
-        mock_client_instance = Mock()
-        mock_client_instance.post.return_value = mock_response
-        mock_httpx_client.return_value.__enter__.return_value = mock_client_instance
+        mock_model_instance.generate_content.return_value = mock_response
+        mock_generative_model.return_value = mock_model_instance
 
         messages = [
             {"role": "user", "content": "Test"}
@@ -344,9 +298,8 @@ class TestMakeGoogleVertexRequest:
         assert result["model"] == "gemini-2.5-flash-lite-preview-09-2025"
         assert result["choices"][0]["message"]["content"] == "Flash Lite works!"
 
-        # Verify the correct model endpoint was called (should use preview version)
-        call_args = mock_client_instance.post.call_args
-        assert "gemini-2.5-flash-lite-preview-09-2025:generateContent" in call_args[0][0]
+        # Verify the correct model was used
+        mock_generative_model.assert_called_once_with("gemini-2.5-flash-lite-preview-09-2025")
 
 
 @pytest.mark.skipif(not GOOGLE_VERTEX_AVAILABLE, reason="Google Vertex AI SDK not available")
