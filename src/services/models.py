@@ -390,6 +390,7 @@ def get_all_models_parallel():
             "fal",
             "helicone",
             "anannas",
+            "aihubmix",
         ]
 
         # Use ThreadPoolExecutor to fetch all gateways in parallel
@@ -438,6 +439,7 @@ def get_all_models_sequential():
     fal_models = get_cached_models("fal") or []
     helicone_models = get_cached_models("helicone") or []
     anannas_models = get_cached_models("anannas") or []
+    aihubmix_models = get_cached_models("aihubmix") or []
     return (
         openrouter_models
         + portkey_models
@@ -457,6 +459,7 @@ def get_all_models_sequential():
         + fal_models
         + helicone_models
         + anannas_models
+        + aihubmix_models
     )
 
 
@@ -676,6 +679,14 @@ def get_cached_models(gateway: str = "openrouter"):
                 return cached
             result = fetch_models_from_anannas()
             _register_canonical_records("anannas", result)
+            return result
+
+        if gateway == "aihubmix":
+            cached = _fresh_cached_models(_aihubmix_models_cache, "aihubmix")
+            if cached is not None:
+                return cached
+            result = fetch_models_from_aihubmix()
+            _register_canonical_records("aihubmix", result)
             return result
 
         if gateway == "all":
