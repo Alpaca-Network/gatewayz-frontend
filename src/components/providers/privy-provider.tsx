@@ -7,6 +7,7 @@ import { PrivyProvider } from "@privy-io/react-auth";
 import { base } from "viem/chains";
 import { RateLimitHandler } from "@/components/auth/rate-limit-handler";
 import { GatewayzAuthProvider } from "@/context/gatewayz-auth-context";
+import { PreviewHostnameInterceptor } from "@/components/auth/preview-hostname-interceptor";
 
 interface PrivyProviderWrapperProps {
   children: ReactNode;
@@ -69,6 +70,7 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
           defaultChain: base,
         }}
       >
+        <PreviewHostnameInterceptor />
         <GatewayzAuthProvider onAuthError={handleAuthError}>{renderChildren}</GatewayzAuthProvider>
       </PrivyProvider>
     </>
