@@ -107,14 +107,23 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
 
       for (const model of combinedModels) {
         // Normalize the model name: remove prefixes, lowercase, remove special chars, handle versioning
-        const normalizedName = (model.name || '')
+        let normalizedName = (model.name || '')
           .toLowerCase()
           .replace(/^(google:|openai:|meta:|anthropic:|models\/)/i, '') // Remove provider prefixes
           .replace(/\s+/g, '-') // Replace spaces with hyphens
           .replace(/[^\w-]/g, ''); // Remove special characters except hyphens
 
-        // NEW: Use normalized name ONLY as dedup key (consolidate across all providers)
-        const dedupKey = normalizedName;
+        // Also normalize based on canonical_slug or id if available, as a fallback
+        // This handles cases where the model name differs slightly but they're the same model
+        const canonicalSlug = (model.canonical_slug || model.id || '')
+          .toLowerCase()
+          .replace(/^(aimo\/|google\/|openai\/|meta\/|anthropic\/|models\/)/i, '') // Remove all provider prefixes
+          .replace(/\s+/g, '-')
+          .replace(/[^\w-]/g, '');
+
+        // Use canonical slug if it's more specific, otherwise use normalized name
+        // Prefer canonical_slug as it's designed to be a unique identifier
+        const dedupKey = canonicalSlug || normalizedName;
 
         // Merge models from multiple gateways AND providers
         if (modelMap.has(dedupKey)) {
