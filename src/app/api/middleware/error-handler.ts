@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import * as Sentry from '@sentry/nextjs';
 
 /**
  * Standardized API error handler
@@ -8,6 +9,15 @@ import { NextResponse } from 'next/server';
  */
 export function handleApiError(error: unknown, context: string = 'API'): NextResponse {
   console.error(`[${context}] Error:`, error);
+
+  // Capture exception in Sentry with context
+  Sentry.captureException(error, {
+    tags: {
+      context,
+      error_type: 'api_error',
+    },
+    level: 'error',
+  });
 
   const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
@@ -33,6 +43,16 @@ export function handleApiErrorWithStatus(
   status: number = 500
 ): NextResponse {
   console.error(`[${context}] Error:`, error);
+
+  // Capture exception in Sentry with context and status code
+  Sentry.captureException(error, {
+    tags: {
+      context,
+      error_type: 'api_error',
+      status_code: status,
+    },
+    level: status >= 500 ? 'error' : 'warning',
+  });
 
   const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
