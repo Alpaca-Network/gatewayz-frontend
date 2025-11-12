@@ -33,13 +33,14 @@ from src.services.models import (
     fetch_models_from_featherless,
     fetch_models_from_fireworks,
     fetch_models_from_groq,
+    fetch_models_from_near,
     fetch_models_from_openrouter,
     fetch_models_from_portkey,
     fetch_models_from_together,
 )
 from src.services.modelz_client import get_modelz_cache_status as get_modelz_cache_status_func
 from src.services.modelz_client import refresh_modelz_cache
-from src.services.pricing_lookup import get_model_pricing
+from src.services.pricing_lookup import get_model_pricing, refresh_pricing_cache
 
 # Initialize logging
 logger = logging.getLogger(__name__)
@@ -1058,6 +1059,7 @@ async def get_cache_status():
             "together",
             "aihubmix",
             "anannas",
+            "near",
         ]
 
         for gateway in gateways:
@@ -1183,6 +1185,7 @@ async def refresh_gateway_cache(
             "huggingface",
             "aihubmix",
             "anannas",
+            "near",
         ]
 
         if gateway not in valid_gateways:
@@ -1233,6 +1236,7 @@ async def refresh_gateway_cache(
             "huggingface": fetch_models_from_hug,
             "aihubmix": fetch_models_from_aihubmix,
             "anannas": fetch_models_from_anannas,
+            "near": fetch_models_from_near,
         }
 
         fetch_func = fetch_functions.get(gateway)
@@ -1317,6 +1321,7 @@ async def clear_all_caches(
                 "together",
                 "aihubmix",
                 "anannas",
+                "near",
             ]
             for gw in gateways:
                 clear_models_cache(gw)
@@ -1752,4 +1757,44 @@ async def clear_modelz_cache_endpoint():
         logger.error(f"Failed to clear Modelz cache: {e}")
         raise HTTPException(
             status_code=500, detail=f"Failed to clear Modelz cache: {str(e)}"
+        ) from e
+
+
+@router.post("/cache/pricing/refresh", tags=["cache", "pricing"])
+async def refresh_pricing_cache_endpoint():
+    """
+    Force refresh the pricing cache by reloading from the manual pricing file.
+
+    This endpoint:
+    - Clears the existing pricing cache
+    - Reloads pricing data from manual_pricing.json
+    - Updates the in-memory pricing cache
+
+    **Example Response:**
+    ```json
+    {
+      "success": true,
+      "message": "Pricing cache refreshed successfully",
+      "providers_loaded": 15,
+      "timestamp": "2024-01-15T10:30:45.123Z"
+    }
+    ```
+    """
+    try:
+        logger.info("Refreshing pricing cache via API endpoint")
+        pricing_data = refresh_pricing_cache()
+
+        # Count providers (excluding metadata)
+        provider_count = len([k for k in pricing_data.keys() if k != "_metadata"])
+
+        return {
+            "success": True,
+            "message": "Pricing cache refreshed successfully",
+            "providers_loaded": provider_count,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+    except Exception as e:
+        logger.error(f"Failed to refresh pricing cache: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to refresh pricing cache: {str(e)}"
         ) from e
