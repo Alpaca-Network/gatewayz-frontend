@@ -161,7 +161,7 @@ export const models: Model[] = [
     supportedParameters: ['temperature', 'top_p'],
   },
   {
-    name: 'DeepSeek V3',
+    name: 'deepseek-v3-1',
     isFree: false,
     tokens: '671B tokens',
     category: 'Reasoning',
