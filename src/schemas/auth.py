@@ -49,6 +49,7 @@ class PrivyAuthRequest(BaseModel):
     session_update_action: Optional[str] = None
     is_new_user: Optional[bool] = None
     referral_code: Optional[str] = None  # Referral code if user signed up with one
+    environment_tag: Optional[str] = "live"  # Environment tag for API keys (live, test, development)
 
 
 class PrivyAuthResponse(BaseModel):
