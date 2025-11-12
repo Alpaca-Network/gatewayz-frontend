@@ -90,15 +90,10 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
       // CORS headers are configured in vercel.json to allow beta.gatewayz.ai
       const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
 
-      // Build URL with gateway query parameter if specified
-      let url = typeof window !== 'undefined'
+      // Build URL without gateway query parameter
+      const url = typeof window !== 'undefined'
         ? '/v1/chat/completions'
         : `${apiBaseUrl}/v1/chat/completions`;
-
-      // Add gateway as query parameter (required by backend API)
-      if (gateway) {
-        url += `?gateway=${encodeURIComponent(gateway)}`;
-      }
 
       // Normalize model ID to handle different formats from various gateway APIs
       const normalizedModelId = normalizeModelId(modelId);
@@ -115,6 +110,12 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
         temperature: 0.7,
         max_tokens: 8000  // Increased for reasoning models like DeepSeek
       };
+
+      // Add gateway parameter to request body if specified (important for models like NEAR, Cerebras, etc.)
+      if (gateway) {
+        requestBody.gateway = gateway;
+      }
+
       // Use the streaming utility with proper error handling and retries
       for await (const chunk of streamChatResponse(url, apiKey, requestBody)) {
         // Enhanced logging to see what data we're receiving

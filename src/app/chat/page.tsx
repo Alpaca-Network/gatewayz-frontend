@@ -2384,16 +2384,9 @@ function ChatPageContent() {
                 });
             }
 
-            // Build URL with query parameters (session_id and gateway)
-            const queryParams = new URLSearchParams();
-            if (currentSession?.apiSessionId) {
-                queryParams.append('session_id', currentSession.apiSessionId.toString());
-            }
-            if (selectedModel.sourceGateway) {
-                queryParams.append('gateway', selectedModel.sourceGateway);
-            }
-            const queryString = queryParams.toString();
-            const url = `/v1/chat/completions${queryString ? `?${queryString}` : ''}`;
+            // Build URL with session_id query parameter (gateway goes in request body)
+            const sessionIdParam = currentSession?.apiSessionId ? `?session_id=${currentSession.apiSessionId}` : '';
+            const url = `/v1/chat/completions${sessionIdParam}`;
 
             console.log('Sending chat request to:', url);
             console.log('API Key:', apiKey.substring(0, 10) + '...');
@@ -2560,10 +2553,16 @@ function ChatPageContent() {
                     requestBody.portkey_provider = portkeyProvider;
                 }
 
+                // Add gateway parameter if specified (important for models like NEAR, Cerebras, etc.)
+                if (selectedModel.sourceGateway) {
+                    requestBody.gateway = selectedModel.sourceGateway;
+                }
+
                 // Session ID is already in the URL query parameter, no need to add it to the body
 
                 console.log('📨 Request body prepared:', {
                     model: requestBody.model,
+                    gateway: requestBody.gateway,
                     hasPortkeyProvider: !!requestBody.portkey_provider,
                     stream: requestBody.stream,
                     messagesLength: requestBody.messages?.length || 0,

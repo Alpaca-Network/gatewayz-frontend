@@ -25,6 +25,7 @@ export const extractTokenValue = (str: string): string | null => {
  * Normalize model IDs to consistent format
  * Handles various formats returned by different gateway APIs:
  * - @google/models/gemini-pro-latest → google/gemini-pro-latest
+ * - @cerebras/qwen-3-32b → cerebras/qwen-3-32b
  * - google/gemini-pro → google/gemini-pro (no change)
  * - gemini-pro → gemini-pro (no change)
  *
@@ -38,6 +39,11 @@ export const normalizeModelId = (modelId: string): string => {
   if (atProviderMatch) {
     const [, provider, model] = atProviderMatch;
     return `${provider}/${model}`;
+  }
+
+  // Handle @provider/model-name format → provider/model-name
+  if (modelId.startsWith('@')) {
+    return modelId.substring(1);
   }
 
   // Handle provider/models/model-name format → provider/model-name
