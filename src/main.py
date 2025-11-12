@@ -14,8 +14,9 @@ from src.constants import FRONTEND_BETA_URL, FRONTEND_STAGING_URL
 from src.services.startup import lifespan
 from src.utils.validators import ensure_api_key_like, ensure_non_empty_string
 
-# Initialize logging
-logging.basicConfig(level=logging.INFO)
+# Initialize logging with Loki integration
+from src.config.logging_config import configure_logging
+configure_logging()
 logger = logging.getLogger(__name__)
 
 # Constants
@@ -118,6 +119,12 @@ def create_app() -> FastAPI:
     from src.middleware.observability_middleware import ObservabilityMiddleware
     app.add_middleware(ObservabilityMiddleware)
     logger.info("  📊 Observability middleware enabled (automatic metrics tracking)")
+
+    # Add trace context middleware for log-to-trace correlation
+    # This should be added after observability middleware
+    from src.middleware.trace_context_middleware import TraceContextMiddleware
+    app.add_middleware(TraceContextMiddleware)
+    logger.info("  🔗 Trace context middleware enabled (log-to-trace correlation)")
 
     # Security
     HTTPBearer()
@@ -260,6 +267,14 @@ def create_app() -> FastAPI:
         logger.info("\n🔧 Initializing application...")
 
         try:
+            # Initialize OpenTelemetry tracing
+            try:
+                from src.config.opentelemetry_config import OpenTelemetryConfig
+                OpenTelemetryConfig.initialize()
+                OpenTelemetryConfig.instrument_fastapi(app)
+            except Exception as otel_e:
+                logger.warning(f"    OpenTelemetry initialization warning: {otel_e}")
+
             # Validate configuration
             logger.info("    Validating configuration...")
             Config.validate()
@@ -365,6 +380,13 @@ def create_app() -> FastAPI:
     @app.on_event("shutdown")
     async def on_shutdown():
         logger.info("🛑 Shutting down application...")
+
+        # Shutdown OpenTelemetry
+        try:
+            from src.config.opentelemetry_config import OpenTelemetryConfig
+            OpenTelemetryConfig.shutdown()
+        except Exception as e:
+            logger.warning(f"    OpenTelemetry shutdown warning: {e}")
 
         # Shutdown analytics services gracefully
         try:
