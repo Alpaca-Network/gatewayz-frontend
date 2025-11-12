@@ -2384,12 +2384,21 @@ function ChatPageContent() {
                 });
             }
 
-            const sessionIdParam = currentSession?.apiSessionId ? `?session_id=${currentSession.apiSessionId}` : '';
-            const url = `/v1/chat/completions${sessionIdParam}`;
+            // Build URL with query parameters (session_id and gateway)
+            const queryParams = new URLSearchParams();
+            if (currentSession?.apiSessionId) {
+                queryParams.append('session_id', currentSession.apiSessionId.toString());
+            }
+            if (selectedModel.sourceGateway) {
+                queryParams.append('gateway', selectedModel.sourceGateway);
+            }
+            const queryString = queryParams.toString();
+            const url = `/v1/chat/completions${queryString ? `?${queryString}` : ''}`;
 
             console.log('Sending chat request to:', url);
             console.log('API Key:', apiKey.substring(0, 10) + '...');
             console.log('Model:', selectedModel.value);
+            console.log('Gateway:', selectedModel.sourceGateway);
             console.log('Session ID:', currentSession?.apiSessionId || 'none');
 
             // Prepare message content with image, video, and audio if present
