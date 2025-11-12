@@ -32,7 +32,7 @@ interface Model {
   pricing: {
     prompt: string;
     completion: string;
-  };
+  } | null;
   architecture: {
     input_modalities: string[];
   };

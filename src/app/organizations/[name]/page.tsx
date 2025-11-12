@@ -55,9 +55,10 @@ interface RankingModel {
 }
 
 const ApiModelCard = ({ model }: { model: ApiModel }) => {
-  const isFree = parseFloat(model.pricing?.prompt || '0') === 0 && parseFloat(model.pricing?.completion || '0') === 0;
-  const inputCost = (parseFloat(model.pricing?.prompt || '0') * 1000000).toFixed(2);
-  const outputCost = (parseFloat(model.pricing?.completion || '0') * 1000000).toFixed(2);
+  const hasPricing = model.pricing !== null && model.pricing !== undefined;
+  const isFree = hasPricing && parseFloat(model.pricing.prompt || '0') === 0 && parseFloat(model.pricing.completion || '0') === 0;
+  const inputCost = hasPricing ? (parseFloat(model.pricing.prompt || '0') * 1000000).toFixed(2) : null;
+  const outputCost = hasPricing ? (parseFloat(model.pricing.completion || '0') * 1000000).toFixed(2) : null;
   const contextK = model.context_length > 0 ? Math.round(model.context_length / 1000) : 0;
 
   // Preserve literal slash in URL (e.g., "provider/model-name")
@@ -83,8 +84,14 @@ const ApiModelCard = ({ model }: { model: ApiModel }) => {
         </p>
         <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground pt-3 border-t">
           <span className="whitespace-nowrap">{contextK > 0 ? `${contextK}K context` : 'Pending sync'}</span>
-          <span className="whitespace-nowrap">${inputCost}/M in</span>
-          <span className="whitespace-nowrap">${outputCost}/M out</span>
+          {hasPricing ? (
+            <>
+              <span className="whitespace-nowrap">${inputCost}/M in</span>
+              <span className="whitespace-nowrap">${outputCost}/M out</span>
+            </>
+          ) : (
+            <span className="whitespace-nowrap text-amber-600">Contact for pricing</span>
+          )}
         </div>
       </Card>
     </Link>
