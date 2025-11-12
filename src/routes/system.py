@@ -1639,6 +1639,37 @@ async def gateway_health_dashboard_data(
 
     results, log_output = await _run_gateway_check(auto_fix=auto_fix)
 
+    # Enrich gateway data with models and model metadata from cache
+    gateways = results.get("gateways", {})
+    for gateway_name, gateway_data in gateways.items():
+        try:
+            # Get cached models for this gateway
+            cache_info = get_models_cache(gateway_name)
+            if cache_info and cache_info.get("data"):
+                models = cache_info.get("data", [])
+                timestamp = cache_info.get("timestamp")
+
+                # Add models array to gateway data
+                gateway_data["models"] = models
+                gateway_data["models_metadata"] = {
+                    "count": len(models),
+                    "last_updated": _normalize_timestamp(timestamp).isoformat() if _normalize_timestamp(timestamp) else None,
+                }
+            else:
+                gateway_data["models"] = []
+                gateway_data["models_metadata"] = {
+                    "count": 0,
+                    "last_updated": None,
+                }
+        except Exception as e:
+            logger.warning(f"Failed to enrich gateway {gateway_name} with models: {e}")
+            gateway_data["models"] = []
+            gateway_data["models_metadata"] = {
+                "count": 0,
+                "last_updated": None,
+                "error": str(e),
+            }
+
     payload: Dict[str, Any] = {
         "success": True,
         "timestamp": results.get("timestamp"),
@@ -1650,7 +1681,7 @@ async def gateway_health_dashboard_data(
             "unconfigured": results.get("unconfigured"),
             "auto_fixed": results.get("fixed"),
         },
-        "gateways": results.get("gateways", {}),
+        "gateways": gateways,
     }
 
     if include_logs:
