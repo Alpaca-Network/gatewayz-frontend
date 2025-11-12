@@ -3008,7 +3008,6 @@ function ChatPageContent() {
   return (
     <>
       <FreeModelsBanner />
-      <div className="h-0 has-onboarding-banner:h-[50px]" aria-hidden="true" style={{ transition: 'height 0.3s ease' }} />
       <div data-chat-container className="flex h-[calc(100vh-130px)] has-onboarding-banner:h-[calc(100vh-180px)] bg-background overflow-hidden">
         {/* Left Sidebar - Desktop Only */}
         <div className="hidden lg:flex w-56 xl:w-72 border-r flex-shrink-0 overflow-hidden">
@@ -3037,7 +3036,7 @@ function ChatPageContent() {
       />
 
         {/* Mobile Header - Compact and Touch-Friendly */}
-        <header className="sticky top-0 has-onboarding-banner:top-[50px] z-[50] w-full bg-background/95 backdrop-blur-sm border-b border-border/50 lg:relative lg:border-none lg:bg-transparent">
+        <header className="sticky top-0 z-[50] w-full bg-background/95 backdrop-blur-sm border-b border-border/50 lg:relative lg:border-none lg:bg-transparent">
           {/* Mobile Layout - Single Row on Mobile */}
           <div className="flex lg:hidden items-center gap-2 p-3 w-full">
             {/* Menu Button */}
