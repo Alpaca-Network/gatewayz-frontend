@@ -603,6 +603,15 @@ def detect_provider_from_model_id(model_id: str, preferred_provider: Optional[st
         logger.info(f"Provider override for model '{model_id}': {override}")
         return override
 
+    # OpenRouter models with colon-based suffixes (e.g., :exacto, :free, :extended)
+    # These are OpenRouter-specific model variants
+    if ":" in model_id and "/" in model_id:
+        # Models like "z-ai/glm-4.6:exacto", "google/gemini-2.0-flash-exp:free"
+        suffix = model_id.split(":", 1)[1]
+        if suffix in ["exacto", "free", "extended"]:
+            logger.info(f"Detected OpenRouter model with :{suffix} suffix: {model_id}")
+            return "openrouter"
+
     # Check if it's already in a provider-specific format
     if model_id.startswith("accounts/fireworks/models/"):
         return "fireworks"
