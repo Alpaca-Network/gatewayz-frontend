@@ -75,7 +75,8 @@ const GATEWAY_CONFIG: Record<string, { name: string; color: string; icon?: React
   near: { name: 'NEAR', color: 'bg-teal-600' },
   fal: { name: 'Fal', color: 'bg-emerald-600' },
   'vercel-ai-gateway': { name: 'Vercel AI', color: 'bg-slate-900' },
-  helicone: { name: 'Helicone', color: 'bg-indigo-600' }
+  helicone: { name: 'Helicone', color: 'bg-indigo-600' },
+  alpaca: { name: 'Alpaca Network', color: 'bg-green-700' }
 };
 
 // Provider display configuration (for providers that differ from gateway names)
@@ -96,6 +97,8 @@ const PROVIDER_CONFIG: Record<string, { name: string; color: string }> = {
   microsoft: { name: 'Microsoft', color: 'bg-blue-800' },
   xai: { name: 'xAI', color: 'bg-black' },
   perplexity: { name: 'Perplexity', color: 'bg-teal-700' },
+  'alpaca-network': { name: 'Alpaca Network', color: 'bg-green-700' },
+  alpaca: { name: 'Alpaca Network', color: 'bg-green-700' },
   // Add more providers as needed
 };
 
@@ -118,8 +121,20 @@ const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
   const providers = (model.provider_slugs && model.provider_slugs.length > 0) ? model.provider_slugs : (model.provider_slug ? [model.provider_slug] : []);
 
   // NEW: Deduplicate and combine providers that are also gateways
-  // Only show unique provider/gateway combinations
-  const allSources = [...new Set([...providers, ...gateways])];
+  // Deduplicate by display name to avoid showing "Alpaca Network" twice (once from provider, once from gateway)
+  const allSourcesRaw = [...new Set([...providers, ...gateways])];
+  const sourcesByName = new Map<string, string>();
+  allSourcesRaw.forEach(source => {
+    const providerConfig = PROVIDER_CONFIG[source.toLowerCase()];
+    const gatewayConfig = GATEWAY_CONFIG[source.toLowerCase()];
+    const config = providerConfig || gatewayConfig;
+    const displayName = config?.name || source;
+    // Only keep first occurrence of each display name
+    if (!sourcesByName.has(displayName)) {
+      sourcesByName.set(displayName, source);
+    }
+  });
+  const allSources = Array.from(sourcesByName.values());
 
   // Generate clean URLs:
   // - For AIMO models (providerId:model-name), extract just the model name after the colon
