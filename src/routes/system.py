@@ -193,6 +193,21 @@ def _render_gateway_dashboard(results: Dict[str, Any], log_output: str, auto_fix
         if cache_count is not None:
             cache_details += f" (models: {cache_count})"
 
+        # Make badges clickable for refresh actions
+        endpoint_badge_html = f'''
+        <div class="clickable-badge" onclick="event.stopPropagation(); refreshEndpoint('{escape(gateway_id)}', this)">
+            {status_badge(endpoint_status)}
+            <div class="details">{escape(endpoint_details)}</div>
+        </div>
+        '''
+
+        cache_badge_html = f'''
+        <div class="clickable-badge" onclick="event.stopPropagation(); refreshCache('{escape(gateway_id)}', this)">
+            {status_badge(cache_status)}
+            <div class="details">{escape(cache_details)}</div>
+        </div>
+        '''
+
         auto_fix_attempted = data.get("auto_fix_attempted")
         auto_fix_successful = data.get("auto_fix_successful")
         auto_fix_text = "Not attempted"
@@ -295,8 +310,8 @@ def _render_gateway_dashboard(results: Dict[str, Any], log_output: str, auto_fix
             <tr class="gateway-row {clickable_class}" data-gateway="{gateway_attr}" {onclick}>
                 <td>{name} {expand_icon}</td>
                 <td>{configured}</td>
-                <td>{endpoint_badge}<div class="details">{endpoint_details}</div></td>
-                <td>{cache_badge}<div class="details">{cache_details}</div></td>
+                <td>{endpoint_badge_cell}</td>
+                <td>{cache_badge_cell}</td>
                 <td>{final_badge}</td>
                 <td>{auto_fix}</td>
             </tr>
@@ -308,10 +323,8 @@ def _render_gateway_dashboard(results: Dict[str, Any], log_output: str, auto_fix
                 name=escape(name),
                 expand_icon='<span class="expand-icon">▶</span>' if models_html else "",
                 configured=escape(configured),
-                endpoint_badge=status_badge(endpoint_status),
-                endpoint_details=escape(endpoint_details),
-                cache_badge=status_badge(cache_status),
-                cache_details=escape(cache_details),
+                endpoint_badge_cell=endpoint_badge_html,
+                cache_badge_cell=cache_badge_html,
                 final_badge=status_badge(final_status),
                 auto_fix=auto_fix_cell,
                 models_row=models_html,
@@ -661,6 +674,42 @@ def _render_gateway_dashboard(results: Dict[str, Any], log_output: str, auto_fix
             .models-list::-webkit-scrollbar-thumb:hover {{
                 background: rgba(148, 163, 184, 0.5);
             }}
+            .clickable-badge {{
+                cursor: pointer;
+                transition: all 0.2s ease;
+                padding: 4px;
+                border-radius: 8px;
+            }}
+            .clickable-badge:hover {{
+                background: rgba(148, 163, 184, 0.1);
+                transform: translateY(-1px);
+            }}
+            .clickable-badge:active {{
+                transform: translateY(0);
+            }}
+            .clickable-badge .details {{
+                pointer-events: none;
+            }}
+            .clickable-badge .badge {{
+                pointer-events: none;
+            }}
+            .refreshing {{
+                opacity: 0.6;
+                pointer-events: none;
+            }}
+            .refresh-spinner {{
+                display: inline-block;
+                width: 12px;
+                height: 12px;
+                border: 2px solid rgba(226, 232, 240, 0.3);
+                border-top-color: #4ade80;
+                border-radius: 50%;
+                animation: spin 0.8s linear infinite;
+                margin-left: 6px;
+            }}
+            @keyframes spin {{
+                to {{ transform: rotate(360deg); }}
+            }}
         </style>
     </head>
     <body>
@@ -698,24 +747,115 @@ def _render_gateway_dashboard(results: Dict[str, Any], log_output: str, auto_fix
         <script>
             function toggleModels(gatewayId) {{
                 const modelsRow = document.getElementById('models-' + gatewayId);
-                const gatewayRows = document.querySelectorAll('.gateway-row');
-
-                // Find the gateway row that was clicked
-                let clickedRow = null;
-                gatewayRows.forEach(row => {{
-                    if (row.onclick && row.onclick.toString().includes(gatewayId)) {{
-                        clickedRow = row;
-                    }}
-                }});
+                const gatewayRow = document.querySelector('[data-gateway="' + gatewayId + '"]');
 
                 if (modelsRow) {{
                     if (modelsRow.style.display === 'none' || modelsRow.style.display === '') {{
                         modelsRow.style.display = 'table-row';
-                        if (clickedRow) clickedRow.classList.add('expanded');
+                        if (gatewayRow) gatewayRow.classList.add('expanded');
                     }} else {{
                         modelsRow.style.display = 'none';
-                        if (clickedRow) clickedRow.classList.remove('expanded');
+                        if (gatewayRow) gatewayRow.classList.remove('expanded');
                     }}
+                }}
+            }}
+
+            async function refreshEndpoint(gatewayId, element) {{
+                console.log('Refreshing endpoint for', gatewayId);
+                const container = element.closest('.clickable-badge');
+                if (!container) return;
+
+                container.classList.add('refreshing');
+                const badge = container.querySelector('.badge');
+                const details = container.querySelector('.details');
+                const originalBadgeText = badge ? badge.textContent : '';
+                const originalDetailsText = details ? details.textContent : '';
+
+                if (badge) {{
+                    badge.innerHTML = 'Checking<span class="refresh-spinner"></span>';
+                }}
+                if (details) {{
+                    details.textContent = 'Running endpoint check...';
+                }}
+
+                try {{
+                    const response = await fetch('/health/' + gatewayId);
+                    if (!response.ok) {{
+                        throw new Error('HTTP ' + response.status);
+                    }}
+                    const data = await response.json();
+
+                    if (badge) {{
+                        badge.textContent = data.data.available ? 'Pass' : 'Fail';
+                        badge.className = data.data.available ? 'badge badge-healthy' : 'badge badge-unhealthy';
+                    }}
+                    if (details) {{
+                        const latency = data.data.latency_ms ? ' (' + data.data.latency_ms + 'ms)' : '';
+                        details.textContent = (data.data.error || 'Endpoint accessible') + latency;
+                    }}
+                }} catch (error) {{
+                    console.error('Failed to refresh endpoint for', gatewayId, error);
+                    if (badge) {{
+                        badge.textContent = 'Error';
+                        badge.className = 'badge badge-unhealthy';
+                    }}
+                    if (details) {{
+                        details.textContent = 'Failed to check endpoint';
+                    }}
+                }} finally {{
+                    container.classList.remove('refreshing');
+                }}
+            }}
+
+            async function refreshCache(gatewayId, element) {{
+                console.log('Refreshing cache for', gatewayId);
+                const container = element.closest('.clickable-badge');
+                if (!container) return;
+
+                container.classList.add('refreshing');
+                const badge = container.querySelector('.badge');
+                const details = container.querySelector('.details');
+                const originalBadgeText = badge ? badge.textContent : '';
+                const originalDetailsText = details ? details.textContent : '';
+
+                if (badge) {{
+                    badge.innerHTML = 'Refreshing<span class="refresh-spinner"></span>';
+                }}
+                if (details) {{
+                    details.textContent = 'Refreshing cache...';
+                }}
+
+                try {{
+                    const response = await fetch('/cache/refresh/' + gatewayId + '?force=true', {{
+                        method: 'POST'
+                    }});
+                    if (!response.ok) {{
+                        throw new Error('HTTP ' + response.status);
+                    }}
+                    const data = await response.json();
+
+                    if (badge) {{
+                        badge.textContent = data.success ? 'Pass' : 'Fail';
+                        badge.className = data.success ? 'badge badge-healthy' : 'badge badge-unhealthy';
+                    }}
+                    if (details) {{
+                        const count = data.models_cached || 0;
+                        details.textContent = data.message + ' (models: ' + count + ')';
+                    }}
+
+                    // Reload the page after a short delay to show updated models
+                    setTimeout(() => window.location.reload(), 800);
+                }} catch (error) {{
+                    console.error('Failed to refresh cache for', gatewayId, error);
+                    if (badge) {{
+                        badge.textContent = 'Error';
+                        badge.className = 'badge badge-unhealthy';
+                    }}
+                    if (details) {{
+                        details.textContent = 'Failed to refresh cache';
+                    }}
+                }} finally {{
+                    container.classList.remove('refreshing');
                 }}
             }}
 
