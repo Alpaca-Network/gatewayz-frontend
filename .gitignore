@@ -40,6 +40,7 @@ __pycache__
 
 # md files
 *.md
+!AGENTS.md
 !docs/**/*.md
 !docs/README.md
 
