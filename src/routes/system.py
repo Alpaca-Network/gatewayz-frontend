@@ -28,8 +28,11 @@ from src.config import Config
 from src.services.huggingface_models import fetch_models_from_hug
 from src.services.models import (
     fetch_models_from_aihubmix,
+    fetch_models_from_aimo,
     fetch_models_from_anannas,
     fetch_models_from_chutes,
+    fetch_models_from_deepinfra,
+    fetch_models_from_fal,
     fetch_models_from_featherless,
     fetch_models_from_fireworks,
     fetch_models_from_groq,
@@ -37,6 +40,12 @@ from src.services.models import (
     fetch_models_from_openrouter,
     fetch_models_from_portkey,
     fetch_models_from_together,
+)
+from src.services.portkey_providers import (
+    fetch_models_from_cerebras,
+    fetch_models_from_nebius,
+    fetch_models_from_novita,
+    fetch_models_from_xai,
 )
 from src.services.modelz_client import get_modelz_cache_status as get_modelz_cache_status_func
 from src.services.modelz_client import refresh_modelz_cache
@@ -46,12 +55,112 @@ from src.services.pricing_lookup import get_model_pricing, refresh_pricing_cache
 logger = logging.getLogger(__name__)
 
 try:
-    from src.services.gateway_health_service import run_comprehensive_check  # type: ignore
+    from src.services.gateway_health_service import GATEWAY_CONFIG, run_comprehensive_check  # type: ignore
 except Exception as e:  # pragma: no cover - optional dependency for dashboard
     logger.warning(f"Failed to import gateway_health_service: {e}")
     run_comprehensive_check = None  # type: ignore
+    GATEWAY_CONFIG = {}  # type: ignore
 
 router = APIRouter()
+
+
+def get_all_gateway_names() -> List[str]:
+    """
+    Get all gateway names from GATEWAY_CONFIG.
+
+    This ensures all gateways are automatically included without manual maintenance.
+    New gateways added to GATEWAY_CONFIG will be automatically supported.
+    """
+    if GATEWAY_CONFIG:
+        return sorted(GATEWAY_CONFIG.keys())
+
+    # Fallback list if GATEWAY_CONFIG is not available
+    return [
+        "aihubmix",
+        "aimo",
+        "anannas",
+        "cerebras",
+        "chutes",
+        "deepinfra",
+        "fal",
+        "featherless",
+        "fireworks",
+        "groq",
+        "huggingface",
+        "near",
+        "nebius",
+        "novita",
+        "openrouter",
+        "portkey",
+        "together",
+        "xai",
+    ]
+
+
+def get_cacheable_gateways() -> List[str]:
+    """
+    Get list of gateways that support cache refresh.
+
+    Returns all gateways from GATEWAY_CONFIG that have cache support,
+    automatically including new gateways as they're added.
+
+    Note: deepinfra is excluded as it only supports on-demand fetching.
+    """
+    # Map of gateway names to their fetch functions
+    # Only include gateways that have fetch functions implemented
+    fetch_function_map = {
+        "aihubmix": fetch_models_from_aihubmix,
+        "aimo": fetch_models_from_aimo,
+        "anannas": fetch_models_from_anannas,
+        "cerebras": fetch_models_from_cerebras,
+        "chutes": fetch_models_from_chutes,
+        # "deepinfra": excluded - only supports on-demand fetching, not bulk refresh
+        "fal": fetch_models_from_fal,
+        "featherless": fetch_models_from_featherless,
+        "fireworks": fetch_models_from_fireworks,
+        "groq": fetch_models_from_groq,
+        "huggingface": fetch_models_from_hug,
+        "near": fetch_models_from_near,
+        "nebius": fetch_models_from_nebius,
+        "novita": fetch_models_from_novita,
+        "openrouter": fetch_models_from_openrouter,
+        "portkey": fetch_models_from_portkey,
+        "together": fetch_models_from_together,
+        "xai": fetch_models_from_xai,
+    }
+
+    return sorted(fetch_function_map.keys())
+
+
+def get_fetch_function(gateway: str):
+    """
+    Get the fetch function for a specific gateway.
+
+    Returns the appropriate fetch function or None if not available.
+    Note: deepinfra is excluded as it only supports on-demand fetching.
+    """
+    fetch_functions = {
+        "aihubmix": fetch_models_from_aihubmix,
+        "aimo": fetch_models_from_aimo,
+        "anannas": fetch_models_from_anannas,
+        "cerebras": fetch_models_from_cerebras,
+        "chutes": fetch_models_from_chutes,
+        # "deepinfra": excluded - only supports on-demand fetching, not bulk refresh
+        "fal": fetch_models_from_fal,
+        "featherless": fetch_models_from_featherless,
+        "fireworks": fetch_models_from_fireworks,
+        "groq": fetch_models_from_groq,
+        "huggingface": fetch_models_from_hug,
+        "near": fetch_models_from_near,
+        "nebius": fetch_models_from_nebius,
+        "novita": fetch_models_from_novita,
+        "openrouter": fetch_models_from_openrouter,
+        "portkey": fetch_models_from_portkey,
+        "together": fetch_models_from_together,
+        "xai": fetch_models_from_xai,
+    }
+
+    return fetch_functions.get(gateway)
 
 
 def _normalize_timestamp(value: Any) -> Optional[datetime]:
@@ -175,7 +284,6 @@ def _render_gateway_dashboard(results: Dict[str, Any], log_output: str, auto_fix
     for gateway_id in sorted(gateways.keys()):
         data = gateways[gateway_id] or {}
         name = data.get("name") or gateway_id.title()
-        final_status = data.get("final_status", "unknown")
         configured = "Yes" if data.get("configured") else "No"
 
         endpoint_test = data.get("endpoint_test") or {}
@@ -193,6 +301,15 @@ def _render_gateway_dashboard(results: Dict[str, Any], log_output: str, auto_fix
         cache_details = cache_msg
         if cache_count is not None:
             cache_details += f" (models: {cache_count})"
+
+        # Recalculate final_status based on endpoint and cache test results
+        # Final status is only "healthy" if BOTH tests pass
+        if not data.get("configured"):
+            final_status = "unconfigured"
+        elif endpoint_test.get("success") and cache_test.get("success"):
+            final_status = "healthy"
+        else:
+            final_status = "unhealthy"
 
         # Make badges clickable for refresh actions
         endpoint_badge_html = f'''
@@ -237,8 +354,9 @@ def _render_gateway_dashboard(results: Dict[str, Any], log_output: str, auto_fix
 
         # Get models from cache test
         models = cache_test.get("models", [])
+        has_models = models and len(models) > 0
         models_html = ""
-        if models and len(models) > 0:
+        if has_models:
             model_items = []
             for model in models:
                 pricing_info: Optional[Dict[str, Any]] = None
@@ -318,11 +436,11 @@ def _render_gateway_dashboard(results: Dict[str, Any], log_output: str, auto_fix
             </tr>
             {models_row}
             """.format(
-                clickable_class="clickable" if models_html else "",
-                onclick=f"onclick=\"toggleModels('{escape(gateway_id)}')\"" if models_html else "",
+                clickable_class="clickable" if has_models else "",
+                onclick=f"onclick=\"toggleModels('{escape(gateway_id)}')\"" if has_models else "",
                 gateway_attr=escape(gateway_id),
                 name=escape(name),
-                expand_icon='<span class="expand-icon">▶</span>' if models_html else "",
+                expand_icon='<span class="expand-icon">▶</span>' if has_models else "",
                 configured=escape(configured),
                 endpoint_badge_cell=endpoint_badge_html,
                 cache_badge_cell=cache_badge_html,
@@ -1048,19 +1166,8 @@ async def get_cache_status():
     """
     try:
         cache_status = {}
-        gateways = [
-            "openrouter",
-            "portkey",
-            "featherless",
-            "deepinfra",
-            "chutes",
-            "groq",
-            "fireworks",
-            "together",
-            "aihubmix",
-            "anannas",
-            "near",
-        ]
+        # Get all gateways dynamically from GATEWAY_CONFIG
+        gateways = get_all_gateway_names()
 
         for gateway in gateways:
             try:
@@ -1173,25 +1280,15 @@ async def refresh_gateway_cache(
     """
     try:
         gateway = gateway.lower()
-        valid_gateways = [
-            "openrouter",
-            "portkey",
-            "featherless",
-            "deepinfra",
-            "chutes",
-            "groq",
-            "fireworks",
-            "together",
-            "huggingface",
-            "aihubmix",
-            "anannas",
-            "near",
-        ]
+        # Get all gateway names for validation (includes deepinfra for special handling)
+        all_gateways = get_all_gateway_names()
 
-        if gateway not in valid_gateways:
+        if gateway not in all_gateways:
+            # Get cacheable gateways for error message
+            valid_gateways = get_cacheable_gateways()
             raise HTTPException(
                 status_code=400,
-                detail=f"Invalid gateway. Must be one of: {', '.join(valid_gateways)}",
+                detail=f"Invalid gateway. Must be one of: {', '.join(sorted(valid_gateways + ['deepinfra']))}",
             )
 
         # Check if refresh is needed
@@ -1225,21 +1322,8 @@ async def refresh_gateway_cache(
         # Fetch new data based on gateway
         logger.info(f"Refreshing cache for {gateway}...")
 
-        fetch_functions = {
-            "openrouter": fetch_models_from_openrouter,
-            "portkey": fetch_models_from_portkey,
-            "featherless": fetch_models_from_featherless,
-            "chutes": fetch_models_from_chutes,
-            "groq": fetch_models_from_groq,
-            "fireworks": fetch_models_from_fireworks,
-            "together": fetch_models_from_together,
-            "huggingface": fetch_models_from_hug,
-            "aihubmix": fetch_models_from_aihubmix,
-            "anannas": fetch_models_from_anannas,
-            "near": fetch_models_from_near,
-        }
-
-        fetch_func = fetch_functions.get(gateway)
+        # Get the fetch function dynamically
+        fetch_func = get_fetch_function(gateway)
         if fetch_func:
             # Most fetch functions are sync, so we need to handle both
             try:
@@ -1309,20 +1393,8 @@ async def clear_all_caches(
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
         else:
-            # Clear all gateways
-            gateways = [
-                "openrouter",
-                "portkey",
-                "featherless",
-                "deepinfra",
-                "chutes",
-                "groq",
-                "fireworks",
-                "together",
-                "aihubmix",
-                "anannas",
-                "near",
-            ]
+            # Clear all gateways dynamically
+            gateways = get_all_gateway_names()
             for gw in gateways:
                 clear_models_cache(gw)
             clear_providers_cache()
