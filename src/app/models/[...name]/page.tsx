@@ -15,7 +15,7 @@ import { providerData } from '@/lib/provider-data';
 import { generateChartData, generateStatsTable } from '@/lib/data';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import ReactMarkdown from "react-markdown";
-import { cn } from '@/lib/utils';
+import { cn, normalizeModelId } from '@/lib/utils';
 import { API_BASE_URL } from '@/lib/config';
 import { models as staticModels } from '@/lib/models-data';
 import { getApiKey } from '@/lib/api';
@@ -298,6 +298,8 @@ export default function ModelProfilePage() {
     let modelId = Array.isArray(nameParam) ? nameParam.join('/') : nameParam;
     // Decode URL-encoded characters (e.g., %40 -> @)
     modelId = decodeURIComponent(modelId);
+    // Normalize model ID to handle aliases and alternative formats
+    modelId = normalizeModelId(modelId);
 
     // Load API key from storage
     useEffect(() => {

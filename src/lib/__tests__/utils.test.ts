@@ -115,5 +115,22 @@ describe('Utils', () => {
       const gateway = normalized.split('/')[0]
       expect(gateway).toBe('near')
     })
+
+    it('should handle model ID aliases - exacto variant', () => {
+      expect(normalizeModelId('z-ai/glm-4.6:exacto')).toBe('near/zai-org/GLM-4.6')
+    })
+
+    it('should handle model ID aliases - without suffix', () => {
+      expect(normalizeModelId('z-ai/glm-4.6')).toBe('near/zai-org/GLM-4.6')
+    })
+
+    it('should handle model ID aliases - just exacto', () => {
+      expect(normalizeModelId('exacto')).toBe('near/zai-org/GLM-4.6')
+    })
+
+    it('should handle model ID aliases case-insensitively', () => {
+      expect(normalizeModelId('Z-AI/GLM-4.6:EXACTO')).toBe('near/zai-org/GLM-4.6')
+      expect(normalizeModelId('EXACTO')).toBe('near/zai-org/GLM-4.6')
+    })
   })
 })

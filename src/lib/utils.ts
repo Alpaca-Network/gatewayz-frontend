@@ -22,16 +22,36 @@ export const extractTokenValue = (str: string): string | null => {
 };
 
 /**
+ * Model ID aliases - maps alternative/legacy model IDs to their canonical IDs
+ * This handles cases where models are referenced by different names or formats
+ */
+const MODEL_ID_ALIASES: Record<string, string> = {
+  'z-ai/glm-4.6:exacto': 'near/zai-org/GLM-4.6',
+  'z-ai/glm-4.6': 'near/zai-org/GLM-4.6',
+  'exacto': 'near/zai-org/GLM-4.6',
+};
+
+/**
  * Normalize model IDs to consistent format
  * Handles various formats returned by different gateway APIs:
  * - @google/models/gemini-pro-latest → google/gemini-pro-latest
  * - google/gemini-pro → google/gemini-pro (no change)
  * - gemini-pro → gemini-pro (no change)
+ * - z-ai/glm-4.6:exacto → near/zai-org/GLM-4.6 (alias mapping)
  *
  * This ensures compatibility with backend API expectations
  */
 export const normalizeModelId = (modelId: string): string => {
   if (!modelId) return modelId;
+
+  // Check for known aliases first (case-insensitive)
+  const lowerModelId = modelId.toLowerCase();
+  for (const [alias, canonical] of Object.entries(MODEL_ID_ALIASES)) {
+    if (alias.toLowerCase() === lowerModelId) {
+      console.log(`[normalizeModelId] Mapped alias "${modelId}" → "${canonical}"`);
+      return canonical;
+    }
+  }
 
   // Handle @provider/models/model-name format → provider/model-name
   const atProviderMatch = modelId.match(/^@([a-z0-9-]+)\/models\/(.+)$/i);
