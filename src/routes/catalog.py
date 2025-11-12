@@ -335,6 +335,9 @@ async def get_providers(
 
 async def get_models(
     provider: Optional[str] = Query(None, description="Filter models by provider"),
+    is_private: Optional[bool] = Query(
+        None, description="Filter by private models: true=private only, false=non-private only, null=all models"
+    ),
     limit: Optional[int] = Query(None, description=DESC_LIMIT_NUMBER_OF_RESULTS),
     offset: Optional[int] = Query(0, description=DESC_OFFSET_FOR_PAGINATION),
     include_huggingface: bool = Query(
@@ -700,6 +703,22 @@ async def get_models(
             logger.info(
                 f"Filtered models by provider '{provider}': {original_count} -> {len(models)}"
             )
+
+        # Filter by is_private flag
+        if is_private is not None:
+            original_count = len(models)
+            if is_private:
+                # Only show private models (Near AI models)
+                models = [m for m in models if m.get("is_private") is True]
+                logger.info(
+                    f"Filtered for private models only: {original_count} -> {len(models)}"
+                )
+            else:
+                # Only show non-private models
+                models = [m for m in models if not m.get("is_private")]
+                logger.info(
+                    f"Filtered to exclude private models: {original_count} -> {len(models)}"
+                )
 
         total_models = len(models)
 
@@ -1590,6 +1609,9 @@ async def batch_compare_models(
 @router.get("/v1/models", tags=["models"])
 async def get_all_models(
     provider: Optional[str] = Query(None, description="Filter models by provider"),
+    is_private: Optional[bool] = Query(
+        None, description="Filter by private models: true=private only, false=non-private only, null=all models"
+    ),
     limit: Optional[int] = Query(
         50, description=f"{DESC_LIMIT_NUMBER_OF_RESULTS} (default: 50 for fast load)"
     ),
@@ -1605,6 +1627,7 @@ async def get_all_models(
 ):
     return await get_models(
         provider=provider,
+        is_private=is_private,
         limit=limit,
         offset=offset,
         include_huggingface=include_huggingface,
@@ -1714,6 +1737,9 @@ async def search_models(
     modality: Optional[str] = Query(
         None, description="Filter by modality: text, image, audio, video, multimodal"
     ),
+    is_private: Optional[bool] = Query(
+        None, description="Filter by private models: true=private only, false=non-private only, null=all models"
+    ),
     min_context: Optional[int] = Query(None, description="Minimum context window size (tokens)"),
     max_context: Optional[int] = Query(None, description="Maximum context window size (tokens)"),
     min_price: Optional[float] = Query(None, description="Minimum price per token (USD)"),
@@ -1738,6 +1764,8 @@ async def search_models(
     - Find models with large context: `?min_context=100000&sort_by=context&order=desc`
     - Search by name: `?q=gpt-4&gateway=openrouter`
     - Filter by modality: `?modality=image&sort_by=popularity`
+    - Filter for private models only: `?is_private=true`
+    - Exclude private models: `?is_private=false`
 
     **Returns:**
     - List of models matching the criteria
@@ -1816,6 +1844,19 @@ async def search_models(
                 if modality_lower in str(m.get("modality", "text")).lower()
                 or modality_lower in str(m.get("architecture", {}).get("modality", "text")).lower()
             ]
+
+        # Private models filter
+        if is_private is not None:
+            if is_private:
+                # Only show private models (Near AI models)
+                filtered_models = [
+                    m for m in filtered_models if m.get("is_private") is True
+                ]
+            else:
+                # Only show non-private models
+                filtered_models = [
+                    m for m in filtered_models if not m.get("is_private")
+                ]
 
         # Context window filters
         if min_context is not None:
@@ -1897,6 +1938,7 @@ async def search_models(
                 "filters_applied": {
                     "query": q,
                     "modality": modality,
+                    "is_private": is_private,
                     "min_context": min_context,
                     "max_context": max_context,
                     "min_price": min_price,

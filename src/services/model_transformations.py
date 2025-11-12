@@ -437,30 +437,27 @@ def get_model_id_mapping(provider: str) -> Dict[str, str]:
             "deepseek-v3": "deepseek-ai/DeepSeek-V3.1",
             "deepseek-v3.1": "deepseek-ai/DeepSeek-V3.1",
 
-            # Meta Llama models
-            "meta-llama/llama-3-70b": "llama-3-70b",
-            "meta-llama/llama-3.1-70b": "llama-3.1-70b",
-            "llama-3-70b": "llama-3-70b",
-            "llama-3.1-70b": "llama-3.1-70b",
+            # GPT-OSS models - requires openai/ prefix
+            "gpt-oss/gpt-oss-120b": "openai/gpt-oss-120b",
+            "gpt-oss-120b": "openai/gpt-oss-120b",
 
             # Qwen models
-            "qwen/qwen-2-72b": "qwen-2-72b",
-            "qwen-2-72b": "qwen-2-72b",
+            "qwen/qwen-2-72b": "Qwen/Qwen3-30B-A3B-Instruct-2507",  # Map old qwen-2-72b to qwen-3-30b
+            "qwen-2-72b": "Qwen/Qwen3-30B-A3B-Instruct-2507",
             # Qwen3 models - proper case required
+            "qwen/qwen-3-30b": "Qwen/Qwen3-30B-A3B-Instruct-2507",
+            "qwen/qwen-3-30b-instruct": "Qwen/Qwen3-30B-A3B-Instruct-2507",
+            "qwen-3-30b": "Qwen/Qwen3-30B-A3B-Instruct-2507",
             "qwen/qwen3-30b-a3b-instruct-2507": "Qwen/Qwen3-30B-A3B-Instruct-2507",
             "qwen3-30b-a3b-instruct-2507": "Qwen/Qwen3-30B-A3B-Instruct-2507",
             "qwen/qwen3-30b-a3b-thinking-2507": "Qwen/Qwen3-30B-A3B-Thinking-2507",
             "qwen3-30b-a3b-thinking-2507": "Qwen/Qwen3-30B-A3B-Thinking-2507",
 
-            # GPT-OSS models
-            "gpt-oss/gpt-oss-120b": "gpt-oss-120b",
-            "gpt-oss-120b": "gpt-oss-120b",
-
             # GLM models from Zhipu AI
-            "zai-org/glm-4.6-fp8": "glm-4.6-fp8",
-            "zai-org/glm-4.6": "glm-4.6",
-            "glm-4.6-fp8": "glm-4.6-fp8",
-            "glm-4.6": "glm-4.6",
+            "zai-org/glm-4.6-fp8": "zai-org/GLM-4.6",
+            "zai-org/glm-4.6": "zai-org/GLM-4.6",
+            "glm-4.6-fp8": "zai-org/GLM-4.6",
+            "glm-4.6": "zai-org/GLM-4.6",
         },
         "alpaca-network": {
             # Alpaca Network uses Anyscale infrastructure with DeepSeek models

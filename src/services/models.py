@@ -1816,11 +1816,10 @@ def fetch_models_from_near():
         # Reference: https://cloud.near.ai/models for current available models
         logger.info("Using fallback Near AI model list")
         fallback_models = [
-            {"id": "deepseek-ai/DeepSeek-V3.1", "owned_by": "DeepSeek"},  # Only available DeepSeek model
-            {"id": "gpt-oss-120b", "owned_by": "GPT"},
-            {"id": "llama-3-70b", "owned_by": "Meta"},
-            {"id": "qwen-2-72b", "owned_by": "Alibaba"},
-            {"id": "glm-4.6-fp8", "owned_by": "Zhipu AI"},
+            {"id": "deepseek-ai/DeepSeek-V3.1", "owned_by": "DeepSeek"},
+            {"id": "openai/gpt-oss-120b", "owned_by": "GPT"},
+            {"id": "Qwen/Qwen3-30B-A3B-Instruct-2507", "owned_by": "Qwen"},
+            {"id": "zai-org/GLM-4.6", "owned_by": "Zhipu AI"},
         ]
 
         normalized_models = [normalize_near_model(model) for model in fallback_models if model]
@@ -1916,7 +1915,9 @@ def normalize_near_model(near_model: dict) -> dict:
         "model_logo_url": None,
         "source_gateway": "near",
         "raw_near": near_model,
+        # Mark all Near AI models as private
         "is_private": True,  # NEAR models support private inference
+        "tags": ["Private"],
         # Highlight security features as metadata
         "security_features": {
             "private_inference": True,
