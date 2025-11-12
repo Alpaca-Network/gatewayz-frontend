@@ -173,5 +173,8 @@ export default {
   plugins: [
     require('tailwindcss-animate'),
     require('@tailwindcss/typography'),
+    function ({ addVariant }: any) {
+      addVariant('has-onboarding-banner', 'html.has-onboarding-banner &');
+    },
   ],
 } satisfies Config;

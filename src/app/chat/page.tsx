@@ -3037,7 +3037,7 @@ function ChatPageContent() {
       />
 
         {/* Mobile Header - Compact and Touch-Friendly */}
-        <header className="sticky top-0 z-[50] w-full bg-background/95 backdrop-blur-sm border-b border-border/50 lg:relative lg:border-none lg:bg-transparent">
+        <header className="sticky top-0 has-onboarding-banner:top-[50px] z-[50] w-full bg-background/95 backdrop-blur-sm border-b border-border/50 lg:relative lg:border-none lg:bg-transparent">
           {/* Mobile Layout - Single Row on Mobile */}
           <div className="flex lg:hidden items-center gap-2 p-3 w-full">
             {/* Menu Button */}
