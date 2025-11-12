@@ -117,9 +117,13 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
 
         // Also normalize based on canonical_slug or id if available, as a fallback
         // This handles cases where the model name differs slightly but they're the same model
-        const canonicalSlug = (model.canonical_slug || model.id || '')
-          .toLowerCase()
-          .replace(/^(aimo\/|google\/|openai\/|meta\/|anthropic\/|models\/)/i, '') // Remove all provider prefixes
+        // The backend returns inconsistent canonical_slugs (e.g., "gemini-2.5-pro" vs "google/gemini-2.5-pro")
+        // We normalize by removing ALL provider prefixes to ensure proper deduplication
+        let canonicalSlug = (model.canonical_slug || model.id || '').toLowerCase();
+
+        // Remove provider prefixes (some models have them, others don't)
+        canonicalSlug = canonicalSlug
+          .replace(/^(aimo\/|google\/|openai\/|meta\/|anthropic\/|models\/|mistralai\/|xai\/)/i, '')
           .replace(/\s+/g, '-')
           .replace(/[^\w-]/g, '');
 
