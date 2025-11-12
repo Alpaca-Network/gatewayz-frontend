@@ -24,7 +24,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { Slider } from "@/components/ui/slider";
-import { BookText, Bot, Box, ChevronDown, ChevronUp, FileText, ImageIcon, LayoutGrid, LayoutList, Music, Search, Sliders as SlidersIcon, Video, X, Zap } from 'lucide-react';
+import { BookText, Bot, Box, ChevronDown, ChevronUp, FileText, ImageIcon, LayoutGrid, LayoutList, Lock, Music, Search, Sliders as SlidersIcon, Video, X, Zap } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 import { stringToColor } from '@/lib/utils';
@@ -155,6 +155,12 @@ const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
             {isMultiLingual && (
               <Badge variant="secondary" className="text-xs px-2 py-0.5">
                 Multi-Lingual
+              </Badge>
+            )}
+            {model.is_private && (
+              <Badge className="bg-purple-600 text-white hover:bg-purple-700 text-xs px-2 py-0.5 flex items-center gap-1">
+                <Lock className="w-3 h-3" />
+                Private
               </Badge>
             )}
           </div>
@@ -393,6 +399,7 @@ export default function ModelsClient({
   const [pricingFilter, setPricingFilter] = useState<'all' | 'free' | 'paid'>(searchParams.get('pricing') as 'all' | 'free' | 'paid' || 'all');
   const [sortBy, setSortBy] = useState(searchParams.get('sortBy') || 'tokens-desc');
   const [releaseDateFilter, setReleaseDateFilter] = useState<string>(searchParams.get('releaseDate') || 'all');
+  const [privacyFilter, setPrivacyFilter] = useState<'all' | 'private' | 'public'>(searchParams.get('privacy') as 'all' | 'private' | 'public' || 'all');
 
   // Mark explore task as complete in onboarding when page loads
   useEffect(() => {
@@ -439,12 +446,13 @@ export default function ModelsClient({
     if (selectedGateways.length > 0) params.set('gateways', selectedGateways.join(','));
     if (selectedModelSeries.length > 0) params.set('modelSeries', selectedModelSeries.join(','));
     if (pricingFilter !== 'all') params.set('pricing', pricingFilter);
+    if (privacyFilter !== 'all') params.set('privacy', privacyFilter);
     if (sortBy !== 'tokens-desc') params.set('sortBy', sortBy);
     if (releaseDateFilter !== 'all') params.set('releaseDate', releaseDateFilter);
 
     const queryString = params.toString();
     router.replace(queryString ? `?${queryString}` : '/models', { scroll: false });
-  }, [searchTerm, selectedInputFormats, selectedOutputFormats, contextLengthRange, promptPricingRange, selectedParameters, selectedDevelopers, selectedGateways, selectedModelSeries, pricingFilter, sortBy, releaseDateFilter, router]);
+  }, [searchTerm, selectedInputFormats, selectedOutputFormats, contextLengthRange, promptPricingRange, selectedParameters, selectedDevelopers, selectedGateways, selectedModelSeries, pricingFilter, privacyFilter, sortBy, releaseDateFilter, router]);
 
   const handleCheckboxChange = (setter: React.Dispatch<React.SetStateAction<string[]>>) => (value: string, checked: boolean) => {
     setter(prev => checked ? [...prev, value] : prev.filter(v => v !== value));
@@ -479,6 +487,7 @@ export default function ModelsClient({
     setSelectedGateways([]);
     setSelectedModelSeries([]);
     setPricingFilter('all');
+    setPrivacyFilter('all');
     setSortBy('tokens-desc');
     setReleaseDateFilter('all');
   };
@@ -488,7 +497,7 @@ export default function ModelsClient({
     contextLengthRange[0] !== 0 || contextLengthRange[1] !== 1024 ||
     promptPricingRange[0] !== 0 || promptPricingRange[1] !== 10 ||
     selectedParameters.length > 0 ||
-    selectedDevelopers.length > 0 || selectedGateways.length > 0 || selectedModelSeries.length > 0 || pricingFilter !== 'all' || sortBy !== 'tokens-desc' || releaseDateFilter !== 'all';
+    selectedDevelopers.length > 0 || selectedGateways.length > 0 || selectedModelSeries.length > 0 || pricingFilter !== 'all' || privacyFilter !== 'all' || sortBy !== 'tokens-desc' || releaseDateFilter !== 'all';
 
   // Calculate search matches separately from other filters
   const searchFilteredModels = useMemo(() => {
@@ -536,6 +545,11 @@ export default function ModelsClient({
       const seriesMatch = selectedModelSeries.length === 0 || selectedModelSeries.includes(getModelSeries(model));
       const pricingMatch = pricingFilter === 'all' || (pricingFilter === 'free' && isFree) || (pricingFilter === 'paid' && !isFree);
 
+      // Privacy filter
+      const privacyMatch = privacyFilter === 'all' ||
+        (privacyFilter === 'private' && model.is_private === true) ||
+        (privacyFilter === 'public' && (model.is_private === false || model.is_private === undefined));
+
       // Release date filter
       const now = Date.now() / 1000; // Convert to Unix timestamp
       const created = model.created || 0;
@@ -550,7 +564,7 @@ export default function ModelsClient({
         releaseDateMatch = created > 0 && created >= now - (365 * 24 * 60 * 60);
       }
 
-      return inputFormatMatch && outputFormatMatch && contextMatch && priceMatch && parameterMatch && developerMatch && gatewayMatch && seriesMatch && pricingMatch && releaseDateMatch;
+      return inputFormatMatch && outputFormatMatch && contextMatch && priceMatch && parameterMatch && developerMatch && gatewayMatch && seriesMatch && pricingMatch && privacyMatch && releaseDateMatch;
     });
 
     // Then sort the filtered results
@@ -573,7 +587,7 @@ export default function ModelsClient({
     const endTime = performance.now();
     console.log(`[Models] Filtering took ${(endTime - startTime).toFixed(2)}ms (${sorted.length} results)`);
     return sorted;
-  }, [searchFilteredModels, selectedInputFormats, selectedOutputFormats, contextLengthRange, promptPricingRange, selectedParameters, selectedDevelopers, selectedGateways, selectedModelSeries, pricingFilter, sortBy, getModelSeries]);
+  }, [searchFilteredModels, selectedInputFormats, selectedOutputFormats, contextLengthRange, promptPricingRange, selectedParameters, selectedDevelopers, selectedGateways, selectedModelSeries, pricingFilter, privacyFilter, sortBy, releaseDateFilter, getModelSeries]);
 
   // Visible models for infinite scroll
   const visibleModels = useMemo(() => {
@@ -585,7 +599,7 @@ export default function ModelsClient({
   // Reset visible count when filters change
   useEffect(() => {
     setVisibleCount(24);
-  }, [searchTerm, selectedInputFormats, selectedOutputFormats, contextLengthRange, promptPricingRange, selectedParameters, selectedDevelopers, selectedGateways, selectedModelSeries, pricingFilter, sortBy, releaseDateFilter]);
+  }, [searchTerm, selectedInputFormats, selectedOutputFormats, contextLengthRange, promptPricingRange, selectedParameters, selectedDevelopers, selectedGateways, selectedModelSeries, pricingFilter, privacyFilter, sortBy, releaseDateFilter]);
 
   // Intersection Observer for infinite scroll
   useEffect(() => {
@@ -640,6 +654,19 @@ export default function ModelsClient({
       }
     });
     return { free: freeCount, paid: paidCount, all: deduplicatedModels.length };
+  }, [deduplicatedModels]);
+
+  const privacyCounts = useMemo(() => {
+    let privateCount = 0;
+    let publicCount = 0;
+    deduplicatedModels.forEach(m => {
+      if (m.is_private === true) {
+        privateCount++;
+      } else {
+        publicCount++;
+      }
+    });
+    return { private: privateCount, public: publicCount, all: deduplicatedModels.length };
   }, [deduplicatedModels]);
 
   const allParametersWithCounts = useMemo(() => {
@@ -826,6 +853,20 @@ export default function ModelsClient({
             </SidebarGroup>
 
             <SidebarGroup>
+              <SidebarGroupLabel>Privacy</SidebarGroupLabel>
+              <Select value={privacyFilter} onValueChange={(value: 'all' | 'private' | 'public') => setPrivacyFilter(value)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="All models" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All models ({privacyCounts.all})</SelectItem>
+                  <SelectItem value="private">Private only ({privacyCounts.private})</SelectItem>
+                  <SelectItem value="public">Public only ({privacyCounts.public})</SelectItem>
+                </SelectContent>
+              </Select>
+            </SidebarGroup>
+
+            <SidebarGroup>
               <SidebarGroupLabel>Release Date</SidebarGroupLabel>
               <Select value={releaseDateFilter} onValueChange={setReleaseDateFilter}>
                 <SelectTrigger className="w-full">
@@ -963,6 +1004,14 @@ export default function ModelsClient({
                 <Badge variant="secondary" className="gap-1">
                   {pricingFilter === 'free' ? 'Free only' : 'Paid only'}
                   <button onClick={() => setPricingFilter('all')} className="ml-1 hover:bg-muted rounded-sm">
+                    <X className="h-3 w-3" />
+                  </button>
+                </Badge>
+              )}
+              {privacyFilter !== 'all' && (
+                <Badge variant="secondary" className="gap-1">
+                  {privacyFilter === 'private' ? 'Private only' : 'Public only'}
+                  <button onClick={() => setPrivacyFilter('all')} className="ml-1 hover:bg-muted rounded-sm">
                     <X className="h-3 w-3" />
                   </button>
                 </Badge>
