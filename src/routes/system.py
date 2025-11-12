@@ -1043,7 +1043,7 @@ def _render_gateway_dashboard(results: Dict[str, Any], log_output: str, auto_fix
 
 
 async def _run_gateway_check(auto_fix: bool) -> tuple[Dict[str, Any], str]:
-    """Execute the comprehensive check in a thread and capture stdout."""
+    """Execute the comprehensive check and capture stdout."""
 
     if run_comprehensive_check is None:
         raise HTTPException(
@@ -1051,13 +1051,11 @@ async def _run_gateway_check(auto_fix: bool) -> tuple[Dict[str, Any], str]:
             detail="check_and_fix_gateway_models module is unavailable in this deployment.",
         )
 
-    def _runner() -> tuple[Dict[str, Any], str]:
-        buffer = io.StringIO()
-        with redirect_stdout(buffer):
-            results = run_comprehensive_check(auto_fix=auto_fix, verbose=False)  # type: ignore[arg-type]
-        return results, buffer.getvalue()
-
-    return await run_in_threadpool(_runner)
+    buffer = io.StringIO()
+    with redirect_stdout(buffer):
+        # run_comprehensive_check is now async, so we await it directly
+        results = await run_comprehensive_check(auto_fix=auto_fix, verbose=False)  # type: ignore[arg-type]
+    return results, buffer.getvalue()
 
 
 async def _run_single_gateway_check(gateway: str, auto_fix: bool) -> tuple[Dict[str, Any], str]:
@@ -1069,15 +1067,13 @@ async def _run_single_gateway_check(gateway: str, auto_fix: bool) -> tuple[Dict[
             detail="check_and_fix_gateway_models module is unavailable in this deployment.",
         )
 
-    def _runner() -> tuple[Dict[str, Any], str]:
-        buffer = io.StringIO()
-        with redirect_stdout(buffer):
-            results = run_comprehensive_check(  # type: ignore[arg-type]
-                auto_fix=auto_fix, verbose=False, gateway=gateway
-            )
-        return results, buffer.getvalue()
-
-    return await run_in_threadpool(_runner)
+    buffer = io.StringIO()
+    with redirect_stdout(buffer):
+        # run_comprehensive_check is now async, so we await it directly
+        results = await run_comprehensive_check(  # type: ignore[arg-type]
+            auto_fix=auto_fix, verbose=False, gateway=gateway
+        )
+    return results, buffer.getvalue()
 
 
 @router.post("/health/gateways/{gateway}/fix", tags=["health"])
