@@ -81,14 +81,41 @@
       "image": "0"
     }
   },
+  "near": {
+    "deepseek-ai/DeepSeek-V3.1": {
+      "prompt": "1.00",
+      "completion": "2.50",
+      "request": "0",
+      "image": "0"
+    },
+    "openai/gpt-oss-120b": {
+      "prompt": "0.20",
+      "completion": "0.60",
+      "request": "0",
+      "image": "0"
+    },
+    "Qwen/Qwen3-30B-A3B-Instruct-2507": {
+      "prompt": "0.15",
+      "completion": "0.45",
+      "request": "0",
+      "image": "0"
+    },
+    "zai-org/GLM-4.6": {
+      "prompt": "0.75",
+      "completion": "2.00",
+      "request": "0",
+      "image": "0"
+    }
+  },
   "_metadata": {
-    "last_updated": "2025-11-10",
+    "last_updated": "2025-11-12",
     "note": "Manual pricing data for providers that don't expose pricing via API",
     "sources": [
       "https://deepinfra.com/pricing",
       "https://featherless.ai/pricing",
       "https://chutes.ai/pricing",
-      "https://console.anyscale.com/services (Alpaca Network via Anyscale)"
+      "https://console.anyscale.com/services (Alpaca Network via Anyscale)",
+      "https://cloud.near.ai/models"
     ],
     "currency": "USD",
     "units": "per 1M tokens (unless specified otherwise)"
