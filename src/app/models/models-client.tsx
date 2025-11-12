@@ -412,7 +412,7 @@ export default function ModelsClient({
   const [selectedGateways, setSelectedGateways] = useState<string[]>(searchParams.get('gateways')?.split(',').filter(Boolean) || []);
   const [selectedModelSeries, setSelectedModelSeries] = useState<string[]>(searchParams.get('modelSeries')?.split(',').filter(Boolean) || []);
   const [pricingFilter, setPricingFilter] = useState<'all' | 'free' | 'paid'>(searchParams.get('pricing') as 'all' | 'free' | 'paid' || 'all');
-  const [sortBy, setSortBy] = useState(searchParams.get('sortBy') || 'tokens-desc');
+  const [sortBy, setSortBy] = useState(searchParams.get('sortBy') || 'popular');
   const [releaseDateFilter, setReleaseDateFilter] = useState<string>(searchParams.get('releaseDate') || 'all');
   const [privacyFilter, setPrivacyFilter] = useState<'all' | 'private' | 'public'>(searchParams.get('privacy') as 'all' | 'private' | 'public' || 'all');
 
@@ -462,7 +462,7 @@ export default function ModelsClient({
     if (selectedModelSeries.length > 0) params.set('modelSeries', selectedModelSeries.join(','));
     if (pricingFilter !== 'all') params.set('pricing', pricingFilter);
     if (privacyFilter !== 'all') params.set('privacy', privacyFilter);
-    if (sortBy !== 'tokens-desc') params.set('sortBy', sortBy);
+    if (sortBy !== 'popular') params.set('sortBy', sortBy);
     if (releaseDateFilter !== 'all') params.set('releaseDate', releaseDateFilter);
 
     const queryString = params.toString();
@@ -503,7 +503,7 @@ export default function ModelsClient({
     setSelectedModelSeries([]);
     setPricingFilter('all');
     setPrivacyFilter('all');
-    setSortBy('tokens-desc');
+    setSortBy('popular');
     setReleaseDateFilter('all');
   };
 
@@ -512,7 +512,7 @@ export default function ModelsClient({
     contextLengthRange[0] !== 0 || contextLengthRange[1] !== 1024 ||
     promptPricingRange[0] !== 0 || promptPricingRange[1] !== 10 ||
     selectedParameters.length > 0 ||
-    selectedDevelopers.length > 0 || selectedGateways.length > 0 || selectedModelSeries.length > 0 || pricingFilter !== 'all' || privacyFilter !== 'all' || sortBy !== 'tokens-desc' || releaseDateFilter !== 'all';
+    selectedDevelopers.length > 0 || selectedGateways.length > 0 || selectedModelSeries.length > 0 || pricingFilter !== 'all' || privacyFilter !== 'all' || sortBy !== 'popular' || releaseDateFilter !== 'all';
 
   // Calculate search matches separately from other filters
   const searchFilteredModels = useMemo(() => {
@@ -586,6 +586,14 @@ export default function ModelsClient({
     const sorted = [...filtered];
     sorted.sort((a, b) => {
         switch (sortBy) {
+            case 'popular':
+                // Sort by number of gateways (more gateways = more popular)
+                const aGateways = (a.source_gateways && a.source_gateways.length > 0) ? a.source_gateways.length : (a.source_gateway ? 1 : 0);
+                const bGateways = (b.source_gateways && b.source_gateways.length > 0) ? b.source_gateways.length : (b.source_gateway ? 1 : 0);
+                return bGateways - aGateways;
+            case 'newest':
+                // Sort by creation date (newest first)
+                return (b.created || 0) - (a.created || 0);
             case 'tokens-desc':
                 return b.context_length - a.context_length;
             case 'tokens-asc':
@@ -969,6 +977,8 @@ export default function ModelsClient({
                       <SelectValue placeholder="Sort" />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="popular">Popular</SelectItem>
+                      <SelectItem value="newest">Newest</SelectItem>
                       <SelectItem value="tokens-desc">Tokens (High to Low)</SelectItem>
                       <SelectItem value="tokens-asc">Tokens (Low to High)</SelectItem>
                       <SelectItem value="price-desc">Price (High to Low)</SelectItem>
