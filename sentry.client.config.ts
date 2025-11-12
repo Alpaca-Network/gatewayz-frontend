@@ -26,8 +26,6 @@ Sentry.init({
     Sentry.consoleLoggingIntegration({ levels: ["log", "warn", "error"] }),
   ],
 
-  // Enable experimental logs
-  _experiments: {
-    enableLogs: true,
-  },
+  // Enable logs
+  enableLogs: true,
 });
