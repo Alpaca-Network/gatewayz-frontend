@@ -82,7 +82,7 @@ describe('Utils', () => {
 
   describe('normalizeModelId', () => {
     it('should leave standard gateway/model format as-is', () => {
-      expect(normalizeModelId('near/zai-org/GLM-4.6-FP8')).toBe('near/zai-org/GLM-4.6-FP8')
+      expect(normalizeModelId('near/zai-org/GLM-4.6')).toBe('near/zai-org/GLM-4.6')
     })
 
     it('should handle @provider/models/model-name format', () => {
@@ -106,11 +106,11 @@ describe('Utils', () => {
     })
 
     it('should handle models with multiple slashes', () => {
-      expect(normalizeModelId('near/zai-org/GLM-4.6-FP8')).toBe('near/zai-org/GLM-4.6-FP8')
+      expect(normalizeModelId('near/zai-org/GLM-4.6')).toBe('near/zai-org/GLM-4.6')
     })
 
     it('should extract gateway prefix correctly for routing', () => {
-      const modelId = 'near/zai-org/GLM-4.6-FP8'
+      const modelId = 'near/zai-org/GLM-4.6'
       const normalized = normalizeModelId(modelId)
       const gateway = normalized.split('/')[0]
       expect(gateway).toBe('near')
