@@ -3008,7 +3008,7 @@ function ChatPageContent() {
   return (
     <>
       <FreeModelsBanner />
-      <div data-chat-container className="flex h-[calc(100vh-130px)] has-onboarding-banner:h-[calc(100vh-180px)] bg-background overflow-hidden">
+      <div data-chat-container className="flex h-[calc(100vh-130px)] has-onboarding-banner:h-[calc(100vh-192px)] bg-background overflow-hidden">
         {/* Left Sidebar - Desktop Only */}
         <div className="hidden lg:flex w-56 xl:w-72 border-r flex-shrink-0 overflow-hidden">
           <ChatSidebar
