@@ -498,3 +498,76 @@ class TestHealthEdgeCases:
 
         # Should not expose errors
         assert response.status_code in [404, 500]
+
+
+class TestModelHealthMonitorScheduling:
+    """Tests for model health monitor batching and scheduling"""
+
+    @pytest.mark.asyncio
+    async def test_get_models_to_check_returns_full_gateway_catalog(self, monkeypatch):
+        from src.services.model_health_monitor import ModelHealthMonitor
+
+        sample_models = [
+            {"id": f"model-{index}", "provider_slug": "openai", "name": f"Model {index}"}
+            for index in range(8)
+        ]
+
+        def fake_get_cached_models(gateway):
+            if gateway == "openrouter":
+                return sample_models
+            return []
+
+        monkeypatch.setattr(
+            "src.services.models.get_cached_models", fake_get_cached_models
+        )
+
+        monitor = ModelHealthMonitor(batch_size=3, batch_interval=0.0, fetch_chunk_size=3)
+
+        models = await monitor._get_models_to_check()
+
+        openrouter_models = [m for m in models if m["gateway"] == "openrouter"]
+        assert len(openrouter_models) == len(sample_models)
+        assert all(model["id"].startswith("model-") for model in openrouter_models)
+
+    @pytest.mark.asyncio
+    async def test_perform_health_checks_batches_models(self, monkeypatch):
+        from src.services.model_health_monitor import (
+            ModelHealthMonitor,
+            ModelHealthMetrics,
+            HealthStatus,
+        )
+
+        sample_models = [
+            {"id": f"model-{index}", "provider_slug": "openai", "name": f"Model {index}"}
+            for index in range(8)
+        ]
+
+        def fake_get_cached_models(gateway):
+            if gateway == "openrouter":
+                return sample_models
+            return []
+
+        monkeypatch.setattr(
+            "src.services.models.get_cached_models", fake_get_cached_models
+        )
+
+        monitor = ModelHealthMonitor(batch_size=3, batch_interval=0.0, fetch_chunk_size=4)
+
+        async def fake_check_model_health(model):
+            return ModelHealthMetrics(
+                model_id=model["id"],
+                provider=model.get("provider", "openai"),
+                gateway=model["gateway"],
+                status=HealthStatus.HEALTHY,
+                response_time_ms=100.0,
+                last_checked=datetime.now(timezone.utc),
+            )
+
+        monkeypatch.setattr(monitor, "_check_model_health", fake_check_model_health)
+
+        await monitor._perform_health_checks()
+
+        openrouter_keys = [
+            key for key in monitor.health_data.keys() if key.startswith("openrouter:")
+        ]
+        assert len(openrouter_keys) == len(sample_models)
