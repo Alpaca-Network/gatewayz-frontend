@@ -103,9 +103,10 @@ const PROVIDER_CONFIG: Record<string, { name: string; color: string }> = {
 };
 
 const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
-  const isFree = parseFloat(model.pricing?.prompt || '0') === 0 && parseFloat(model.pricing?.completion || '0') === 0;
-  const inputCost = (parseFloat(model.pricing?.prompt || '0') * 1000000).toFixed(2);
-  const outputCost = (parseFloat(model.pricing?.completion || '0') * 1000000).toFixed(2);
+  const hasPricing = model.pricing !== null && model.pricing !== undefined;
+  const isFree = hasPricing && parseFloat(model.pricing?.prompt || '0') === 0 && parseFloat(model.pricing?.completion || '0') === 0;
+  const inputCost = hasPricing ? (parseFloat(model.pricing?.prompt || '0') * 1000000).toFixed(2) : null;
+  const outputCost = hasPricing ? (parseFloat(model.pricing?.completion || '0') * 1000000).toFixed(2) : null;
   const contextK = model.context_length > 0 ? Math.round(model.context_length / 1000) : 0;
 
   // Determine if model is multi-lingual (simple heuristic - can be improved)
@@ -226,8 +227,14 @@ const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
           </span>
           <span className="font-medium">{contextK > 0 ? `${contextK}M Tokens` : '0M Tokens'}</span>
           <span className="font-medium">{contextK > 0 ? `${contextK}K Context` : '0K Context'}</span>
-          <span className="font-medium">${inputCost}/M Input</span>
-          <span className="font-medium">${outputCost}/M Output</span>
+          {hasPricing ? (
+            <>
+              <span className="font-medium">${inputCost}/M Input</span>
+              <span className="font-medium">${outputCost}/M Output</span>
+            </>
+          ) : (
+            <span className="font-medium text-amber-600">Contact for pricing</span>
+          )}
         </div>
       </Card>
     </Link>
