@@ -9,7 +9,43 @@ const mockConsoleError = jest.spyOn(console, 'error').mockImplementation();
 // Mock global fetch
 global.fetch = jest.fn();
 
+// Helper to mock window.location - properly mock for jsdom
+function mockLocation(props: { href?: string; search?: string; pathname?: string }) {
+  const location = {
+    href: props.href || '',
+    search: props.search || '',
+    pathname: props.pathname || '/',
+    hash: '',
+    host: 'localhost',
+    hostname: 'localhost',
+    origin: 'http://localhost',
+    port: '',
+    protocol: 'http:',
+    assign: jest.fn(),
+    reload: jest.fn(),
+    replace: jest.fn(),
+    toString: () => 'http://localhost',
+  };
+
+  // Delete existing property first
+  delete (window as any).location;
+
+  // Recreate with new value
+  Object.defineProperty(window, 'location', {
+    writable: true,
+    configurable: true,
+    value: location,
+  });
+}
+
 describe('auth-sync', () => {
+  let originalLocation: Location;
+
+  beforeAll(() => {
+    // Save original location once
+    originalLocation = window.location;
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
     localStorage.clear();
@@ -20,19 +56,20 @@ describe('auth-sync', () => {
     // Mock Date.now for consistent timestamps
     jest.spyOn(Date, 'now').mockReturnValue(1700000000000);
 
-    // Mock window.location.search
-    Object.defineProperty(window, 'location', {
-      value: {
-        search: '',
-        toString: () => 'http://localhost',
-      },
-      writable: true,
-      configurable: true,
-    });
+    // Set default location
+    mockLocation({ search: '' });
   });
 
   afterEach(() => {
     jest.restoreAllMocks();
+  });
+
+  afterAll(() => {
+    // Restore original location
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: originalLocation,
+    });
   });
 
   const createMockPrivyUser = (overrides?: Partial<User>): User => ({
@@ -236,13 +273,8 @@ describe('auth-sync', () => {
       const mockAccessToken = 'privy-access-token-xyz';
       const mockAuthResponse = createMockAuthResponse({ is_new_user: true });
 
-      Object.defineProperty(window, 'location', {
-        value: {
-          search: '?ref=URLREF456',
-          toString: () => 'http://localhost',
-        },
-        writable: true,
-        configurable: true,
+      mockLocation({
+        search: '?ref=URLREF456',
       });
 
       (global.fetch as jest.Mock).mockResolvedValue({
@@ -272,13 +304,8 @@ describe('auth-sync', () => {
 
       localStorage.setItem('gatewayz_referral_code', 'STORED123');
 
-      Object.defineProperty(window, 'location', {
-        value: {
-          search: '?ref=URLREF456',
-          toString: () => 'http://localhost',
-        },
-        writable: true,
-        configurable: true,
+      mockLocation({
+        search: '?ref=URLREF456',
       });
 
       (global.fetch as jest.Mock).mockResolvedValue({
@@ -627,13 +654,8 @@ describe('auth-sync', () => {
       const mockPrivyUser = createMockPrivyUser();
       const mockAuthResponse = createMockAuthResponse();
 
-      Object.defineProperty(window, 'location', {
-        value: {
-          search: '?ref=',
-          toString: () => 'http://localhost',
-        },
-        writable: true,
-        configurable: true,
+      mockLocation({
+        search: '?ref=',
       });
 
       (global.fetch as jest.Mock).mockResolvedValue({

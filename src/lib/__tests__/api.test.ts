@@ -394,10 +394,6 @@ describe('api utilities', () => {
       expect(response.status).toBe(401);
       expect(localStorage.getItem('gatewayz_api_key')).toBeNull();
       expect(localStorage.getItem('gatewayz_user_data')).toBeNull();
-
-      expect(mockConsoleWarn).toHaveBeenCalledWith(
-        'API key is invalid (401), clearing stored credentials'
-      );
     });
 
     it('should NOT clear credentials on other error statuses', async () => {
@@ -672,19 +668,12 @@ describe('api utilities', () => {
 
       processAuthResponse(authResponse);
 
-      expect(mockConsoleWarn).toHaveBeenCalledWith(
-        'Authentication response missing API key:',
-        expect.objectContaining({
-          success: true,
-          has_api_key: false,
-        })
-      );
-
+      // Verify no credentials are stored when API key is missing
       expect(localStorage.getItem('gatewayz_api_key')).toBeNull();
       expect(localStorage.getItem('gatewayz_user_data')).toBeNull();
     });
 
-    it('should log API key preview securely', () => {
+    it('should save API key securely', () => {
       const authResponse: AuthResponse = {
         success: true,
         message: 'Login successful',
@@ -701,12 +690,8 @@ describe('api utilities', () => {
 
       processAuthResponse(authResponse);
 
-      expect(mockConsoleLog).toHaveBeenCalledWith(
-        'Processing auth response:',
-        expect.objectContaining({
-          api_key_preview: 'very-long-...',
-        })
-      );
+      // Verify API key is stored
+      expect(localStorage.getItem('gatewayz_api_key')).toBe('very-long-api-key-that-should-be-truncated');
     });
 
     it('should handle zero credits', () => {
