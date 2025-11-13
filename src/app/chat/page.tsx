@@ -1659,7 +1659,7 @@ function ChatPageContent() {
             setTimeout(() => clearInterval(checkInterval), 10000);
             return () => clearInterval(checkInterval);
         }
-    }, [authLoading, isAuthenticated, hasApiKey, authReady]);
+    }, [authLoading, isAuthenticated, hasApiKey]);
 
     // Handle rate limit countdown timer
     useEffect(() => {
