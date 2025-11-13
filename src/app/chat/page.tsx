@@ -2189,8 +2189,10 @@ function ChatPageContent() {
                 variant: 'default'
             });
 
-            // Auto-trigger login
-            login();
+            // Auto-trigger login only if not already authenticated via Privy
+            if (!isAuthenticated) {
+                login();
+            }
             return;
         }
 
