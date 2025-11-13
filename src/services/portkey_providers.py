@@ -444,7 +444,19 @@ def fetch_models_from_cerebras():
             logger.warning("No models available from Cerebras")
             return None
 
-        normalized_models = _normalize_models_list(models_list, "cerebras")
+        # Use direct normalization for Cerebras (no @cerebras/ prefix)
+        # Since we're using direct SDK instead of Portkey routing
+        normalized_models = []
+        for model in models_list:
+            if not model:
+                continue
+            try:
+                normalized = normalize_cerebras_model_direct(model)
+                if normalized:
+                    normalized_models.append(normalized)
+            except Exception as normalization_error:
+                logger.warning(f"Failed to normalize Cerebras model: {normalization_error}")
+                continue
 
         if not normalized_models:
             logger.warning("No models were successfully normalized from Cerebras")
@@ -596,6 +608,79 @@ def fetch_models_from_hug_via_portkey():
     except Exception as e:
         logger.error(f"Failed to fetch models from Hugging Face: {e}", exc_info=True)
         return None
+
+
+def normalize_cerebras_model_direct(model: dict) -> dict:
+    """
+    Normalize Cerebras model for direct SDK integration (no Portkey).
+
+    Uses plain model IDs without @cerebras/ prefix since we're calling
+    Cerebras API directly via their SDK instead of routing through Portkey.
+    """
+    try:
+        model_id = model.get("id") or model.get("name", "")
+        if not model_id:
+            return {"source_gateway": "cerebras", "raw_cerebras": model}
+
+        # Use plain model ID (no @cerebras/ prefix for direct integration)
+        slug = model_id
+        display_name = (
+            model.get("display_name") or model_id.replace("-", " ").replace("_", " ").title()
+        )
+        description = model.get("description") or f"Cerebras hosted model: {model_id}"
+        context_length = model.get("context_length") or 0
+
+        pricing = {
+            "prompt": None,
+            "completion": None,
+            "request": None,
+            "image": None,
+            "web_search": None,
+            "internal_reasoning": None,
+        }
+
+        # Try to extract pricing if available
+        if "pricing" in model:
+            pricing_info = model.get("pricing", {})
+            if isinstance(pricing_info, dict):
+                pricing["prompt"] = pricing_info.get("prompt") or pricing_info.get("input")
+                pricing["completion"] = pricing_info.get("completion") or pricing_info.get("output")
+
+        architecture = {
+            "modality": model.get("modality", "text->text"),
+            "input_modalities": model.get("input_modalities") or ["text"],
+            "output_modalities": model.get("output_modalities") or ["text"],
+            "tokenizer": None,
+            "instruct_type": None,
+        }
+
+        normalized = {
+            "id": slug,
+            "slug": slug,
+            "canonical_slug": slug,
+            "hugging_face_id": None,
+            "name": display_name,
+            "created": model.get("created"),
+            "description": description,
+            "context_length": context_length,
+            "architecture": architecture,
+            "pricing": pricing,
+            "top_provider": None,
+            "per_request_limits": None,
+            "supported_parameters": model.get("supported_parameters") or [],
+            "default_parameters": model.get("default_parameters") or {},
+            "provider_slug": "cerebras",
+            "provider_site_url": None,
+            "model_logo_url": None,
+            "source_gateway": "cerebras",
+            "raw_cerebras": model,
+        }
+
+        return enrich_model_with_pricing(normalized, "cerebras")
+
+    except Exception as e:
+        logger.error(f"Error normalizing Cerebras model: {e}")
+        return {"source_gateway": "cerebras", "raw_cerebras": model}
 
 
 def normalize_portkey_provider_model(model: dict, provider: str) -> dict:

@@ -12,8 +12,12 @@ pytestmark = pytest.mark.smoke
 @pytest.fixture
 def api_config():
     """API configuration for smoke tests"""
+    import os
+    api_key = os.getenv("GATEWAYZ_API_KEY")
+    if not api_key:
+        pytest.skip("GATEWAYZ_API_KEY environment variable not set")
     return {
-        "api_key": "gw_live_qPKTsUInGXXyX5tI15Ymr1Xdqu5MX4NLUyamf6T2_w0",
+        "api_key": api_key,
         "base_url": "https://api.gatewayz.ai"
     }
 

@@ -34,6 +34,7 @@ from src.services.featherless_client import make_featherless_request_openai, mak
 from src.services.fireworks_client import make_fireworks_request_openai, make_fireworks_request_openai_stream
 from src.services.together_client import make_together_request_openai, make_together_request_openai_stream
 from src.services.xai_client import make_xai_request_openai, make_xai_request_openai_stream
+from src.services.cerebras_client import make_cerebras_request_openai, make_cerebras_request_openai_stream
 from src.services.models import (
     fetch_models_from_openrouter,
     fetch_models_from_portkey,
@@ -107,9 +108,9 @@ GATEWAY_INFO = {
     },
     'cerebras': {
         'fetch_func': fetch_models_from_cerebras,
-        'make_request': make_portkey_request_openai,
-        'make_stream': make_portkey_request_openai_stream,
-        'needs_transform': True,
+        'make_request': make_cerebras_request_openai,
+        'make_stream': make_cerebras_request_openai_stream,
+        'needs_transform': False,  # Direct SDK integration, no Portkey
     },
     'nebius': {
         'fetch_func': fetch_models_from_nebius,
@@ -175,10 +176,10 @@ async def test_model_inference(
         }
 
         # For Portkey-based providers, format model ID
-        if gateway in ['cerebras', 'nebius', 'novita', 'hug']:
+        # Note: Cerebras now uses direct SDK, not Portkey
+        if gateway in ['nebius', 'novita', 'hug']:
             # Extract provider from model and format for Portkey
             provider_map = {
-                'cerebras': 'cerebras',
                 'nebius': 'nebius',
                 'novita': 'novita',
                 'hug': 'huggingface',

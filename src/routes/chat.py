@@ -86,6 +86,11 @@ from src.services.xai_client import (
     process_xai_response,
     make_xai_request_openai_stream,
 )
+from src.services.cerebras_client import (
+    make_cerebras_request_openai,
+    process_cerebras_response,
+    make_cerebras_request_openai_stream,
+)
 from src.services.chutes_client import (
     make_chutes_request_openai,
     process_chutes_response,
@@ -811,6 +816,10 @@ async def chat_completions(
                         stream = await _to_thread(
                             make_xai_request_openai_stream, messages, request_model, **optional
                         )
+                    elif attempt_provider == "cerebras":
+                        stream = await _to_thread(
+                            make_cerebras_request_openai_stream, messages, request_model, **optional
+                        )
                     elif attempt_provider == "chutes":
                         stream = await _to_thread(
                             make_chutes_request_openai_stream, messages, request_model, **optional
@@ -996,6 +1005,12 @@ async def chat_completions(
                         timeout=request_timeout,
                     )
                     processed = await _to_thread(process_xai_response, resp_raw)
+                elif attempt_provider == "cerebras":
+                    resp_raw = await asyncio.wait_for(
+                        _to_thread(make_cerebras_request_openai, messages, request_model, **optional),
+                        timeout=request_timeout,
+                    )
+                    processed = await _to_thread(process_cerebras_response, resp_raw)
                 elif attempt_provider == "chutes":
                     resp_raw = await asyncio.wait_for(
                         _to_thread(make_chutes_request_openai, messages, request_model, **optional),
@@ -1671,6 +1686,10 @@ async def unified_responses(
                         stream = await _to_thread(
                             make_xai_request_openai_stream, messages, request_model, **optional
                         )
+                    elif attempt_provider == "cerebras":
+                        stream = await _to_thread(
+                            make_cerebras_request_openai_stream, messages, request_model, **optional
+                        )
                     elif attempt_provider == "chutes":
                         stream = await _to_thread(
                             make_chutes_request_openai_stream, messages, request_model, **optional
@@ -1845,6 +1864,12 @@ async def unified_responses(
                         timeout=request_timeout,
                     )
                     processed = await _to_thread(process_xai_response, resp_raw)
+                elif attempt_provider == "cerebras":
+                    resp_raw = await asyncio.wait_for(
+                        _to_thread(make_cerebras_request_openai, messages, request_model, **optional),
+                        timeout=request_timeout,
+                    )
+                    processed = await _to_thread(process_cerebras_response, resp_raw)
                 elif attempt_provider == "chutes":
                     resp_raw = await asyncio.wait_for(
                         _to_thread(make_chutes_request_openai, messages, request_model, **optional),
