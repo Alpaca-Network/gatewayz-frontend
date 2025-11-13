@@ -1803,16 +1803,16 @@ def fetch_models_from_near():
 
         try:
             # Try to fetch models from Near AI
-            # Note: Using standard OpenAI-compatible /models endpoint
+            # Note: Using Near AI's model list endpoint which includes pricing
             response = httpx.get(
-                "https://cloud-api.near.ai/v1/models",
+                "https://cloud-api.near.ai/v1/model/list",
                 headers=headers,
                 timeout=20.0,
             )
             response.raise_for_status()
 
             payload = response.json()
-            raw_models = payload.get("data", [])
+            raw_models = payload.get("models", [])
 
             if raw_models:
                 # Normalize models
@@ -1831,12 +1831,41 @@ def fetch_models_from_near():
 
         # Fallback to known Near AI models if API doesn't return results
         # Reference: https://cloud.near.ai/models for current available models
+        # Pricing from https://cloud-api.near.ai/v1/model/list (as of 2025-01)
         logger.info("Using fallback Near AI model list")
         fallback_models = [
-            {"id": "deepseek-ai/DeepSeek-V3.1", "owned_by": "DeepSeek"},
-            {"id": "openai/gpt-oss-120b", "owned_by": "GPT"},
-            {"id": "Qwen/Qwen3-30B-A3B-Instruct-2507", "owned_by": "Qwen"},
-            {"id": "zai-org/GLM-4.6", "owned_by": "Zhipu AI"},
+            {
+                "id": "deepseek-ai/DeepSeek-V3.1",
+                "modelId": "deepseek-ai/DeepSeek-V3.1",
+                "owned_by": "DeepSeek",
+                "inputCostPerToken": {"amount": 1, "scale": -6},  # $1.00 per million tokens
+                "outputCostPerToken": {"amount": 2.5, "scale": -6},  # $2.50 per million tokens
+                "metadata": {"contextLength": 128000},
+            },
+            {
+                "id": "openai/gpt-oss-120b",
+                "modelId": "openai/gpt-oss-120b",
+                "owned_by": "GPT",
+                "inputCostPerToken": {"amount": 0.2, "scale": -6},  # $0.20 per million tokens
+                "outputCostPerToken": {"amount": 0.6, "scale": -6},  # $0.60 per million tokens
+                "metadata": {"contextLength": 131000},
+            },
+            {
+                "id": "Qwen/Qwen3-30B-A3B-Instruct-2507",
+                "modelId": "Qwen/Qwen3-30B-A3B-Instruct-2507",
+                "owned_by": "Qwen",
+                "inputCostPerToken": {"amount": 0.15, "scale": -6},  # $0.15 per million tokens
+                "outputCostPerToken": {"amount": 0.45, "scale": -6},  # $0.45 per million tokens
+                "metadata": {"contextLength": 262000},
+            },
+            {
+                "id": "zai-org/GLM-4.6",
+                "modelId": "zai-org/GLM-4.6",
+                "owned_by": "Zhipu AI",
+                "inputCostPerToken": {"amount": 0.75, "scale": -6},  # $0.75 per million tokens
+                "outputCostPerToken": {"amount": 2.0, "scale": -6},  # $2.00 per million tokens
+                "metadata": {"contextLength": 200000},
+            },
         ]
 
         normalized_models = [normalize_near_model(model) for model in fallback_models if model]
@@ -1860,28 +1889,30 @@ def normalize_near_model(near_model: dict) -> dict:
     - User-owned AI services
     - Cryptographic verification and on-chain auditing
     """
-    model_id = near_model.get("id")
+    model_id = near_model.get("modelId")
     if not model_id:
-        logger.warning(
-            "Near AI model missing 'id' field: %s", sanitize_for_logging(str(near_model))
-        )
-        return None
+        # Fallback to 'id' for backward compatibility
+        model_id = near_model.get("id")
+        if not model_id:
+            logger.warning(
+                "Near AI model missing 'modelId' field: %s", sanitize_for_logging(str(near_model))
+            )
+            return None
 
     slug = f"near/{model_id}"
     provider_slug = "near"
 
-    display_name = (
-        near_model.get("display_name") or model_id.replace("-", " ").replace("_", " ").title()
-    )
+    # Extract metadata from Near AI API response
+    metadata = near_model.get("metadata") or {}
+    display_name = metadata.get("displayName") or near_model.get("display_name") or model_id.replace("-", " ").replace("_", " ").title()
     near_model.get("owned_by", "Near Protocol")
 
     # Highlight security features in description
-    base_description = near_model.get("description") or f"Near AI hosted model {model_id}."
+    base_description = metadata.get("description") or near_model.get("description") or f"Near AI hosted model {model_id}."
     security_features = " Security: Private AI inference with decentralized execution, cryptographic verification, and on-chain auditing."
     description = f"{base_description}{security_features}"
 
-    metadata = near_model.get("metadata") or {}
-    context_length = metadata.get("context_length") or near_model.get("context_length") or 0
+    context_length = metadata.get("contextLength") or metadata.get("context_length") or near_model.get("context_length") or 0
 
     pricing = {
         "prompt": None,
@@ -1892,17 +1923,39 @@ def normalize_near_model(near_model: dict) -> dict:
         "internal_reasoning": None,
     }
 
-    # Extract pricing if available from Near AI
-    pricing_info = near_model.get("pricing", {})
-    if pricing_info:
-        pricing["prompt"] = (
-            str(pricing_info.get("prompt")) if pricing_info.get("prompt") is not None else None
-        )
-        pricing["completion"] = (
-            str(pricing_info.get("completion"))
-            if pricing_info.get("completion") is not None
-            else None
-        )
+    # Extract pricing from Near AI API response
+    # Near AI provides pricing as inputCostPerToken and outputCostPerToken with amount and scale
+    # Scale is in powers of 10 (e.g., -9 means 10^-9 = per token, convert to per million tokens)
+    input_cost = near_model.get("inputCostPerToken", {})
+    output_cost = near_model.get("outputCostPerToken", {})
+
+    if input_cost and isinstance(input_cost, dict):
+        input_amount = input_cost.get("amount", 0)
+        input_scale = input_cost.get("scale", -9)  # Default scale is -9 (per token)
+        # Convert to per million tokens (multiply by 10^6 and adjust for scale)
+        # Price per million = amount * 10^(6 + scale)
+        if input_amount > 0:
+            pricing["prompt"] = str(input_amount * (10 ** (6 + input_scale)))
+
+    if output_cost and isinstance(output_cost, dict):
+        output_amount = output_cost.get("amount", 0)
+        output_scale = output_cost.get("scale", -9)  # Default scale is -9 (per token)
+        # Convert to per million tokens
+        if output_amount > 0:
+            pricing["completion"] = str(output_amount * (10 ** (6 + output_scale)))
+
+    # Fallback to old pricing format for backward compatibility
+    if not pricing["prompt"] and not pricing["completion"]:
+        pricing_info = near_model.get("pricing", {})
+        if pricing_info:
+            pricing["prompt"] = (
+                str(pricing_info.get("prompt")) if pricing_info.get("prompt") is not None else None
+            )
+            pricing["completion"] = (
+                str(pricing_info.get("completion"))
+                if pricing_info.get("completion") is not None
+                else None
+            )
 
     architecture = {
         "modality": metadata.get("modality", MODALITY_TEXT_TO_TEXT),
