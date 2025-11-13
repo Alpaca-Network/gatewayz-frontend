@@ -1,0 +1,556 @@
+import {
+  redirectToBetaWithSession,
+  getSessionTransferParams,
+  cleanupSessionTransferParams,
+  storeSessionTransferToken,
+  getStoredSessionTransferToken,
+  clearSessionTransferToken,
+  isSessionTransferTokenValid,
+} from '../auth-session-transfer';
+
+// Mock console methods (stored but not used for assertions due to implementation details)
+const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
+
+describe('auth-session-transfer', () => {
+  let originalLocation: Location;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    sessionStorage.clear();
+
+    // Save original location
+    originalLocation = window.location;
+
+    // Mock window.location using Object.defineProperty (jsdom-friendly)
+    Object.defineProperty(window, 'location', {
+      value: {
+        href: '',
+        search: '',
+        pathname: '/test-path',
+        toString: () => 'http://localhost',
+      },
+      writable: true,
+      configurable: true,
+    });
+
+    // Mock window.history
+    window.history.replaceState = jest.fn();
+
+    // Mock Date.now for consistent testing
+    jest.spyOn(Date, 'now').mockReturnValue(1000000);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  describe('redirectToBetaWithSession', () => {
+    it('should redirect to beta domain with token and userId', () => {
+      const token = 'test-api-key-123';
+      const userId = '12345';
+
+      redirectToBetaWithSession(token, userId);
+
+      expect(window.location.href).toBe(
+        'https://beta.gatewayz.ai?token=test-api-key-123&userId=12345'
+      );
+    });
+
+    it('should redirect with returnUrl parameter', () => {
+      const token = 'test-api-key-123';
+      const userId = '12345';
+      const returnUrl = '/dashboard';
+
+      redirectToBetaWithSession(token, userId, 'https://beta.gatewayz.ai', returnUrl);
+
+      expect(window.location.href).toBe(
+        'https://beta.gatewayz.ai?token=test-api-key-123&userId=12345&returnUrl=%2Fdashboard'
+      );
+    });
+
+    it('should use custom beta domain', () => {
+      const token = 'test-api-key-123';
+      const userId = '12345';
+      const customDomain = 'https://custom-beta.example.com';
+
+      redirectToBetaWithSession(token, userId, customDomain);
+
+      expect(window.location.href).toBe(
+        'https://custom-beta.example.com?token=test-api-key-123&userId=12345'
+      );
+    });
+
+    it('should convert numeric userId to string', () => {
+      const token = 'test-api-key-123';
+      const userId = 12345; // Numeric
+
+      redirectToBetaWithSession(token, userId);
+
+      expect(window.location.href).toBe(
+        'https://beta.gatewayz.ai?token=test-api-key-123&userId=12345'
+      );
+    });
+
+    it('should URL encode special characters in parameters', () => {
+      const token = 'token+with/special=chars';
+      const userId = '12345';
+      const returnUrl = '/path?query=value&foo=bar';
+
+      redirectToBetaWithSession(token, userId, 'https://beta.gatewayz.ai', returnUrl);
+
+      expect(window.location.href).toContain('token=token%2Bwith%2Fspecial%3Dchars');
+      expect(window.location.href).toContain(
+        'returnUrl=%2Fpath%3Fquery%3Dvalue%26foo%3Dbar'
+      );
+    });
+  });
+
+  describe('getSessionTransferParams', () => {
+    it('should extract all parameters from URL', () => {
+      Object.defineProperty(window, 'location', {
+        value: {
+          ...window.location,
+          search: '?token=test-token&userId=12345&returnUrl=/dashboard&action=signin',
+          toString: () => 'http://localhost',
+        },
+        writable: true,
+        configurable: true,
+      });
+
+      const params = getSessionTransferParams();
+
+      expect(params).toEqual({
+        token: 'test-token',
+        userId: '12345',
+        returnUrl: '/dashboard',
+        action: 'signin',
+      });
+    });
+
+    it('should return null for missing parameters', () => {
+      Object.defineProperty(window, 'location', {
+        value: {
+          ...window.location,
+          search: '?token=test-token',
+          toString: () => 'http://localhost',
+        },
+        writable: true,
+        configurable: true,
+      });
+
+      const params = getSessionTransferParams();
+
+      expect(params).toEqual({
+        token: 'test-token',
+        userId: null,
+        returnUrl: null,
+        action: null,
+      });
+    });
+
+    it('should handle empty search string', () => {
+      Object.defineProperty(window, 'location', {
+        value: {
+          ...window.location,
+          search: '',
+          toString: () => 'http://localhost',
+        },
+        writable: true,
+        configurable: true,
+      });
+
+      const params = getSessionTransferParams();
+
+      expect(params).toEqual({
+        token: null,
+        userId: null,
+        returnUrl: null,
+        action: null,
+      });
+    });
+
+    it('should handle URL-encoded parameters', () => {
+      Object.defineProperty(window, 'location', {
+        value: {
+          ...window.location,
+          search: '?token=token%2Bwith%2Fspecial&returnUrl=%2Fpath%3Fquery%3Dvalue',
+          toString: () => 'http://localhost',
+        },
+        writable: true,
+        configurable: true,
+      });
+
+      const params = getSessionTransferParams();
+
+      expect(params.token).toBe('token+with/special');
+      expect(params.returnUrl).toBe('/path?query=value');
+    });
+
+    it('should return null values in SSR environment', () => {
+      const originalWindow = global.window;
+      (global as any).window = undefined;
+
+      const params = getSessionTransferParams();
+
+      expect(params).toEqual({
+        token: null,
+        userId: null,
+        returnUrl: null,
+        action: null,
+      });
+
+      global.window = originalWindow;
+    });
+
+    it('should handle duplicate parameters (last one wins)', () => {
+      Object.defineProperty(window, 'location', {
+        value: {
+          ...window.location,
+          search: '?token=first-token&token=second-token&userId=123',
+          toString: () => 'http://localhost',
+        },
+        writable: true,
+        configurable: true,
+      });
+
+      const params = getSessionTransferParams();
+
+      expect(params.token).toBe('second-token');
+    });
+  });
+
+  describe('cleanupSessionTransferParams', () => {
+    it('should remove all query parameters from URL', () => {
+      Object.defineProperty(window, 'location', {
+        value: {
+          ...window.location,
+          pathname: '/test-path',
+          search: '?token=test-token&userId=12345',
+          toString: () => 'http://localhost',
+        },
+        writable: true,
+        configurable: true,
+      });
+
+      cleanupSessionTransferParams();
+
+      expect(window.history.replaceState).toHaveBeenCalledWith(
+        {},
+        document.title,
+        '/test-path'
+      );
+    });
+
+    it('should preserve pathname', () => {
+      Object.defineProperty(window, 'location', {
+        value: {
+          ...window.location,
+          pathname: '/dashboard/settings',
+          search: '?token=test-token',
+          toString: () => 'http://localhost',
+        },
+        writable: true,
+        configurable: true,
+      });
+
+      cleanupSessionTransferParams();
+
+      expect(window.history.replaceState).toHaveBeenCalledWith(
+        {},
+        document.title,
+        '/dashboard/settings'
+      );
+    });
+
+    it('should do nothing in SSR environment', () => {
+      const originalWindow = global.window;
+      const mockReplaceState = window.history.replaceState;
+
+      (global as any).window = undefined;
+
+      cleanupSessionTransferParams();
+
+      // In SSR, the function returns early and doesn't call replaceState
+      // We can't check the mock since window is undefined
+      expect(true).toBe(true); // Function didn't throw
+
+      global.window = originalWindow;
+      window.history.replaceState = mockReplaceState;
+    });
+  });
+
+  describe('storeSessionTransferToken', () => {
+    it('should store token, userId, and timestamp in sessionStorage', () => {
+      const token = 'test-api-key-123';
+      const userId = '12345';
+
+      storeSessionTransferToken(token, userId);
+
+      expect(sessionStorage.getItem('gatewayz_session_transfer_token')).toBe(token);
+      expect(sessionStorage.getItem('gatewayz_session_transfer_user_id')).toBe(userId);
+      expect(sessionStorage.getItem('gatewayz_session_transfer_timestamp')).toBe('1000000');
+    });
+
+    it('should convert numeric userId to string', () => {
+      const token = 'test-api-key-123';
+      const userId = 12345;
+
+      storeSessionTransferToken(token, userId);
+
+      expect(sessionStorage.getItem('gatewayz_session_transfer_user_id')).toBe('12345');
+    });
+
+    it('should overwrite existing values', () => {
+      storeSessionTransferToken('old-token', '111');
+      storeSessionTransferToken('new-token', '222');
+
+      expect(sessionStorage.getItem('gatewayz_session_transfer_token')).toBe('new-token');
+      expect(sessionStorage.getItem('gatewayz_session_transfer_user_id')).toBe('222');
+    });
+
+    it('should do nothing in SSR environment', () => {
+      const originalWindow = global.window;
+      (global as any).window = undefined;
+
+      storeSessionTransferToken('token', '123');
+
+      // Should not throw error
+      expect(true).toBe(true);
+
+      global.window = originalWindow;
+    });
+  });
+
+  describe('getStoredSessionTransferToken', () => {
+    it('should retrieve valid token within expiry window', () => {
+      const token = 'test-api-key-123';
+      const userId = '12345';
+
+      sessionStorage.setItem('gatewayz_session_transfer_token', token);
+      sessionStorage.setItem('gatewayz_session_transfer_user_id', userId);
+      sessionStorage.setItem('gatewayz_session_transfer_timestamp', '1000000');
+
+      // Mock current time as 2 minutes later (within 10-minute expiry)
+      jest.spyOn(Date, 'now').mockReturnValue(1000000 + 2 * 60 * 1000);
+
+      const result = getStoredSessionTransferToken();
+
+      expect(result).toEqual({ token, userId });
+    });
+
+    it('should clear and return null for expired token', () => {
+      const token = 'test-api-key-123';
+      const userId = '12345';
+
+      sessionStorage.setItem('gatewayz_session_transfer_token', token);
+      sessionStorage.setItem('gatewayz_session_transfer_user_id', userId);
+      sessionStorage.setItem('gatewayz_session_transfer_timestamp', '1000000');
+
+      // Mock current time as 11 minutes later (past 10-minute expiry)
+      jest.spyOn(Date, 'now').mockReturnValue(1000000 + 11 * 60 * 1000);
+
+      const result = getStoredSessionTransferToken();
+
+      expect(result).toEqual({ token: null, userId: null });
+
+      // Verify storage was cleared
+      expect(sessionStorage.getItem('gatewayz_session_transfer_token')).toBeNull();
+      expect(sessionStorage.getItem('gatewayz_session_transfer_user_id')).toBeNull();
+      expect(sessionStorage.getItem('gatewayz_session_transfer_timestamp')).toBeNull();
+    });
+
+    it('should return null when token is missing', () => {
+      sessionStorage.setItem('gatewayz_session_transfer_user_id', '12345');
+
+      const result = getStoredSessionTransferToken();
+
+      expect(result).toEqual({ token: null, userId: null });
+    });
+
+    it('should return null when userId is missing', () => {
+      sessionStorage.setItem('gatewayz_session_transfer_token', 'test-token');
+
+      const result = getStoredSessionTransferToken();
+
+      expect(result).toEqual({ token: null, userId: null });
+    });
+
+    it('should return token when timestamp is missing (no expiry check)', () => {
+      const token = 'test-api-key-123';
+      const userId = '12345';
+
+      sessionStorage.setItem('gatewayz_session_transfer_token', token);
+      sessionStorage.setItem('gatewayz_session_transfer_user_id', userId);
+      // No timestamp stored
+
+      const result = getStoredSessionTransferToken();
+
+      expect(result).toEqual({ token, userId });
+    });
+
+    it('should return null in SSR environment', () => {
+      const originalWindow = global.window;
+      (global as any).window = undefined;
+
+      const result = getStoredSessionTransferToken();
+
+      expect(result).toEqual({ token: null, userId: null });
+
+      global.window = originalWindow;
+    });
+
+    it('should handle exactly 10 minutes (boundary case)', () => {
+      const token = 'test-api-key-123';
+      const userId = '12345';
+
+      sessionStorage.setItem('gatewayz_session_transfer_token', token);
+      sessionStorage.setItem('gatewayz_session_transfer_user_id', userId);
+      sessionStorage.setItem('gatewayz_session_transfer_timestamp', '1000000');
+
+      // Exactly 10 minutes later
+      jest.spyOn(Date, 'now').mockReturnValue(1000000 + 10 * 60 * 1000);
+
+      const result = getStoredSessionTransferToken();
+
+      // Should still be valid (not expired)
+      expect(result).toEqual({ token, userId });
+    });
+
+    it('should handle 10 minutes + 1ms (just expired)', () => {
+      const token = 'test-api-key-123';
+      const userId = '12345';
+
+      sessionStorage.setItem('gatewayz_session_transfer_token', token);
+      sessionStorage.setItem('gatewayz_session_transfer_user_id', userId);
+      sessionStorage.setItem('gatewayz_session_transfer_timestamp', '1000000');
+
+      // 10 minutes + 1ms later
+      jest.spyOn(Date, 'now').mockReturnValue(1000000 + 10 * 60 * 1000 + 1);
+
+      const result = getStoredSessionTransferToken();
+
+      // Should be expired
+      expect(result).toEqual({ token: null, userId: null });
+    });
+  });
+
+  describe('clearSessionTransferToken', () => {
+    it('should remove all session transfer items from sessionStorage', () => {
+      sessionStorage.setItem('gatewayz_session_transfer_token', 'test-token');
+      sessionStorage.setItem('gatewayz_session_transfer_user_id', '12345');
+      sessionStorage.setItem('gatewayz_session_transfer_timestamp', '1000000');
+
+      clearSessionTransferToken();
+
+      expect(sessionStorage.getItem('gatewayz_session_transfer_token')).toBeNull();
+      expect(sessionStorage.getItem('gatewayz_session_transfer_user_id')).toBeNull();
+      expect(sessionStorage.getItem('gatewayz_session_transfer_timestamp')).toBeNull();
+    });
+
+    it('should not affect other sessionStorage items', () => {
+      sessionStorage.setItem('gatewayz_session_transfer_token', 'test-token');
+      sessionStorage.setItem('other_item', 'other-value');
+
+      clearSessionTransferToken();
+
+      expect(sessionStorage.getItem('gatewayz_session_transfer_token')).toBeNull();
+      expect(sessionStorage.getItem('other_item')).toBe('other-value');
+    });
+
+    it('should do nothing in SSR environment', () => {
+      const originalWindow = global.window;
+      (global as any).window = undefined;
+
+      clearSessionTransferToken();
+
+      // Should not throw error
+      expect(true).toBe(true);
+
+      global.window = originalWindow;
+    });
+  });
+
+  describe('isSessionTransferTokenValid', () => {
+    it('should return true when valid token exists', () => {
+      sessionStorage.setItem('gatewayz_session_transfer_token', 'test-token');
+      sessionStorage.setItem('gatewayz_session_transfer_user_id', '12345');
+      sessionStorage.setItem('gatewayz_session_transfer_timestamp', '1000000');
+
+      // Mock current time within expiry
+      jest.spyOn(Date, 'now').mockReturnValue(1000000 + 5 * 60 * 1000);
+
+      const isValid = isSessionTransferTokenValid();
+
+      expect(isValid).toBe(true);
+    });
+
+    it('should return false when token is expired', () => {
+      sessionStorage.setItem('gatewayz_session_transfer_token', 'test-token');
+      sessionStorage.setItem('gatewayz_session_transfer_user_id', '12345');
+      sessionStorage.setItem('gatewayz_session_transfer_timestamp', '1000000');
+
+      // Mock current time past expiry
+      jest.spyOn(Date, 'now').mockReturnValue(1000000 + 11 * 60 * 1000);
+
+      const isValid = isSessionTransferTokenValid();
+
+      expect(isValid).toBe(false);
+    });
+
+    it('should return false when token does not exist', () => {
+      const isValid = isSessionTransferTokenValid();
+
+      expect(isValid).toBe(false);
+    });
+
+    it('should return false in SSR environment', () => {
+      const originalWindow = global.window;
+      (global as any).window = undefined;
+
+      const isValid = isSessionTransferTokenValid();
+
+      expect(isValid).toBe(false);
+
+      global.window = originalWindow;
+    });
+  });
+
+  describe('Integration Scenarios', () => {
+    it('should support full session transfer workflow', () => {
+      // Step 1: Store token
+      storeSessionTransferToken('my-api-key', '99999');
+
+      // Step 2: Retrieve token within expiry
+      jest.spyOn(Date, 'now').mockReturnValue(1000000 + 1 * 60 * 1000);
+      const result = getStoredSessionTransferToken();
+      expect(result).toEqual({ token: 'my-api-key', userId: '99999' });
+
+      // Step 3: Validate token
+      expect(isSessionTransferTokenValid()).toBe(true);
+
+      // Step 4: Clear token
+      clearSessionTransferToken();
+
+      // Step 5: Validate again (should be false)
+      expect(isSessionTransferTokenValid()).toBe(false);
+    });
+
+    it('should handle token expiry during session', () => {
+      // Store token
+      storeSessionTransferToken('my-api-key', '99999');
+
+      // First retrieval within expiry
+      jest.spyOn(Date, 'now').mockReturnValue(1000000 + 5 * 60 * 1000);
+      let result = getStoredSessionTransferToken();
+      expect(result.token).toBe('my-api-key');
+
+      // Second retrieval past expiry
+      jest.spyOn(Date, 'now').mockReturnValue(1000000 + 15 * 60 * 1000);
+      result = getStoredSessionTransferToken();
+      expect(result.token).toBeNull();
+
+      // Validate should also return false
+      expect(isSessionTransferTokenValid()).toBe(false);
+    });
+  });
+});
