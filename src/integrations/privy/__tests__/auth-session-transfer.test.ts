@@ -11,51 +11,24 @@ import {
 // Mock console methods (stored but not used for assertions due to implementation details)
 const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
 
-// Helper to mock window.location - properly mock for jsdom
+// Helper to mock window.location - use jsdom's Location properly
 function mockLocation(props: { href?: string; search?: string; pathname?: string }) {
-  const location = {
-    href: props.href || '',
-    search: props.search || '',
-    pathname: props.pathname || '/',
-    hash: '',
-    host: 'localhost',
-    hostname: 'localhost',
-    origin: 'http://localhost',
-    port: '',
-    protocol: 'http:',
-    assign: jest.fn(),
-    reload: jest.fn(),
-    replace: jest.fn(),
-    toString: () => 'http://localhost',
-  };
+  // Create a new URL object that jsdom can work with
+  const url = `http://localhost${props.pathname || '/'}${props.search || ''}`;
 
-  // Delete existing property first
-  delete (window as any).location;
-
-  // Recreate with new value
-  Object.defineProperty(window, 'location', {
-    writable: true,
-    configurable: true,
-    value: location,
-  });
+  // Use jsdom's built-in history API to change location
+  window.history.pushState({}, '', url);
 }
 
 describe('auth-session-transfer', () => {
-  let originalLocation: Location;
-
-  beforeAll(() => {
-    // Save original location once
-    originalLocation = window.location;
-  });
-
   beforeEach(() => {
     jest.clearAllMocks();
     sessionStorage.clear();
 
     // Set default location
-    mockLocation({ href: '', search: '', pathname: '/test-path' });
+    mockLocation({ search: '', pathname: '/test-path' });
 
-    // Mock window.history
+    // Mock window.history.replaceState (but not pushState, used by mockLocation)
     window.history.replaceState = jest.fn();
 
     // Mock Date.now for consistent testing
@@ -64,14 +37,6 @@ describe('auth-session-transfer', () => {
 
   afterEach(() => {
     jest.restoreAllMocks();
-  });
-
-  afterAll(() => {
-    // Restore original location
-    Object.defineProperty(window, 'location', {
-      writable: true,
-      value: originalLocation,
-    });
   });
 
   describe('redirectToBetaWithSession', () => {
@@ -214,14 +179,15 @@ describe('auth-session-transfer', () => {
       global.window = originalWindow;
     });
 
-    it('should handle duplicate parameters (last one wins)', () => {
+    it('should handle duplicate parameters (first one wins in URLSearchParams)', () => {
       mockLocation({
         search: '?token=first-token&token=second-token&userId=123',
       });
 
       const params = getSessionTransferParams();
 
-      expect(params.token).toBe('second-token');
+      // URLSearchParams.get() returns the first value for duplicate keys
+      expect(params.token).toBe('first-token');
     });
   });
 

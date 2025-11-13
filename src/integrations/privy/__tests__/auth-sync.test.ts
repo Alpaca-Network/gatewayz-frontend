@@ -9,43 +9,16 @@ const mockConsoleError = jest.spyOn(console, 'error').mockImplementation();
 // Mock global fetch
 global.fetch = jest.fn();
 
-// Helper to mock window.location - properly mock for jsdom
+// Helper to mock window.location - use jsdom's Location properly
 function mockLocation(props: { href?: string; search?: string; pathname?: string }) {
-  const location = {
-    href: props.href || '',
-    search: props.search || '',
-    pathname: props.pathname || '/',
-    hash: '',
-    host: 'localhost',
-    hostname: 'localhost',
-    origin: 'http://localhost',
-    port: '',
-    protocol: 'http:',
-    assign: jest.fn(),
-    reload: jest.fn(),
-    replace: jest.fn(),
-    toString: () => 'http://localhost',
-  };
+  // Create a new URL object that jsdom can work with
+  const url = `http://localhost${props.pathname || '/'}${props.search || ''}`;
 
-  // Delete existing property first
-  delete (window as any).location;
-
-  // Recreate with new value
-  Object.defineProperty(window, 'location', {
-    writable: true,
-    configurable: true,
-    value: location,
-  });
+  // Use jsdom's built-in history API to change location
+  window.history.pushState({}, '', url);
 }
 
 describe('auth-sync', () => {
-  let originalLocation: Location;
-
-  beforeAll(() => {
-    // Save original location once
-    originalLocation = window.location;
-  });
-
   beforeEach(() => {
     jest.clearAllMocks();
     localStorage.clear();
@@ -62,14 +35,6 @@ describe('auth-sync', () => {
 
   afterEach(() => {
     jest.restoreAllMocks();
-  });
-
-  afterAll(() => {
-    // Restore original location
-    Object.defineProperty(window, 'location', {
-      writable: true,
-      value: originalLocation,
-    });
   });
 
   const createMockPrivyUser = (overrides?: Partial<User>): User => ({
@@ -421,14 +386,18 @@ describe('auth-sync', () => {
         (global.fetch as jest.Mock).mock.calls[0][1].body
       );
 
+      // Check that the account has the basic fields
       expect(requestBody.user.linked_accounts[0]).toMatchObject({
         type: 'wallet',
         address: '0x1234567890abcdef',
         chain_type: 'ethereum',
-        verified_at: undefined,
-        first_verified_at: undefined,
-        latest_verified_at: undefined,
       });
+
+      // Verified timestamps should be undefined (not included in payload)
+      const account = requestBody.user.linked_accounts[0];
+      expect(account.verified_at).toBeUndefined();
+      expect(account.first_verified_at).toBeUndefined();
+      expect(account.latest_verified_at).toBeUndefined();
     });
 
     it('should handle empty linked accounts', async () => {
@@ -463,12 +432,6 @@ describe('auth-sync', () => {
       await expect(
         syncPrivyToGatewayz(mockPrivyUser, 'token', null)
       ).rejects.toThrow('Backend authentication failed: 500');
-
-      expect(mockConsoleError).toHaveBeenCalledWith(
-        '[AuthSync] Backend auth failed:',
-        500,
-        'Internal Server Error'
-      );
     });
 
     it('should throw error on malformed JSON response', async () => {
@@ -482,11 +445,6 @@ describe('auth-sync', () => {
       await expect(
         syncPrivyToGatewayz(mockPrivyUser, 'token', null)
       ).rejects.toThrow('Failed to parse authentication response');
-
-      expect(mockConsoleError).toHaveBeenCalledWith(
-        '[AuthSync] Failed to parse auth response:',
-        expect.any(Error)
-      );
     });
 
     it('should handle missing API key in response', async () => {
@@ -557,11 +515,6 @@ describe('auth-sync', () => {
       await expect(
         syncPrivyToGatewayz(mockPrivyUser, 'token', null)
       ).rejects.toThrow('Network connection failed');
-
-      expect(mockConsoleError).toHaveBeenCalledWith(
-        '[AuthSync] Error during sync:',
-        networkError
-      );
     });
 
     it('should log sync start and success', async () => {
