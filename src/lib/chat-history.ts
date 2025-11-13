@@ -83,14 +83,19 @@ export class ChatHistoryAPI {
   private async makeRequest<T>(
     method: string,
     endpoint: string,
-    body: any = null
+    body: any = null,
+    timeout: number = 30000 // 30 second default timeout
   ): Promise<ApiResponse<T>> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+
     const config: RequestInit = {
       method,
       headers: {
         'Authorization': `Bearer ${this.apiKey}`,
         'Content-Type': 'application/json'
-      }
+      },
+      signal: controller.signal
     };
 
     if (body) {
@@ -108,14 +113,24 @@ export class ChatHistoryAPI {
     console.log('ChatHistoryAPI - Method:', method);
     console.log('ChatHistoryAPI - Has API key:', !!this.apiKey);
 
-    const response = await fetch(url, config);
-    
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || `HTTP ${response.status}: ${response.statusText}`);
-    }
+    try {
+      const response = await fetch(url, config);
+      clearTimeout(timeoutId);
 
-    return await response.json();
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      clearTimeout(timeoutId);
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.error('ChatHistoryAPI - Request timed out after', timeout, 'ms');
+        throw new Error(`Request timed out after ${timeout / 1000} seconds. Please try again.`);
+      }
+      throw error;
+    }
   }
 
   /**
@@ -152,28 +167,44 @@ export class ChatHistoryAPI {
     // Route through Next.js API to avoid CORS issues
     const isClientSide = typeof window !== 'undefined';
     if (isClientSide) {
+      const controller = new AbortController();
+      const timeout = 30000; // 30 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
+
       let url = `/api/chat/sessions/${sessionId}`;
       // Add privy_user_id to query string for consistency with other methods
       if (this.privyUserId) {
         url += `?privy_user_id=${encodeURIComponent(this.privyUserId)}`;
       }
 
-      const response = await fetch(url, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${this.apiKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ title, model })
-      });
+      try {
+        const response = await fetch(url, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${this.apiKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ title, model }),
+          signal: controller.signal
+        });
 
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({ error: 'Failed to update session' }));
-        throw new Error(error.error || `HTTP ${response.status}: ${response.statusText}`);
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({ error: 'Failed to update session' }));
+          throw new Error(error.error || `HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const result = await response.json();
+        return result.data;
+      } catch (error) {
+        clearTimeout(timeoutId);
+        if (error instanceof Error && error.name === 'AbortError') {
+          console.error('ChatHistoryAPI.updateSession - Request timed out after', timeout, 'ms');
+          throw new Error(`Request timed out after ${timeout / 1000} seconds. Please try again.`);
+        }
+        throw error;
       }
-
-      const result = await response.json();
-      return result.data;
     }
 
     // Server-side: call backend directly
@@ -191,26 +222,42 @@ export class ChatHistoryAPI {
     // Route through Next.js API to avoid CORS issues
     const isClientSide = typeof window !== 'undefined';
     if (isClientSide) {
+      const controller = new AbortController();
+      const timeout = 30000; // 30 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
+
       let url = `/api/chat/sessions/${sessionId}`;
       // Add privy_user_id to query string for consistency with other methods
       if (this.privyUserId) {
         url += `?privy_user_id=${encodeURIComponent(this.privyUserId)}`;
       }
 
-      const response = await fetch(url, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${this.apiKey}`,
-          'Content-Type': 'application/json'
+      try {
+        const response = await fetch(url, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${this.apiKey}`,
+            'Content-Type': 'application/json'
+          },
+          signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({ error: 'Failed to delete session' }));
+          throw new Error(error.error || `HTTP ${response.status}: ${response.statusText}`);
         }
-      });
 
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({ error: 'Failed to delete session' }));
-        throw new Error(error.error || `HTTP ${response.status}: ${response.statusText}`);
+        return true;
+      } catch (error) {
+        clearTimeout(timeoutId);
+        if (error instanceof Error && error.name === 'AbortError') {
+          console.error('ChatHistoryAPI.deleteSession - Request timed out after', timeout, 'ms');
+          throw new Error(`Request timed out after ${timeout / 1000} seconds. Please try again.`);
+        }
+        throw error;
       }
-
-      return true;
     }
 
     // Server-side: call backend directly
@@ -228,6 +275,10 @@ export class ChatHistoryAPI {
     model?: string,
     tokens?: number
   ): Promise<ChatMessage> {
+    const controller = new AbortController();
+    const timeout = 30000; // 30 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+
     let url = `${this.baseUrl}/sessions/${sessionId}/messages`;
 
     // Add privy_user_id to query string for consistency with other methods
@@ -240,31 +291,42 @@ export class ChatHistoryAPI {
     console.log('ChatHistoryAPI.saveMessage - Role:', role);
     console.log('ChatHistoryAPI.saveMessage - Content length:', content.length);
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${this.apiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        role,
-        content,
-        model: model || '',
-        tokens: tokens || 0
-      })
-    });
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          role,
+          content,
+          model: model || '',
+          tokens: tokens || 0
+        }),
+        signal: controller.signal
+      });
 
-    console.log('ChatHistoryAPI.saveMessage - Response status:', response.status);
+      clearTimeout(timeoutId);
+      console.log('ChatHistoryAPI.saveMessage - Response status:', response.status);
 
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      console.error('ChatHistoryAPI.saveMessage - Error response:', error);
-      throw new Error(error.detail || `Failed to save message (${response.status}): ${response.statusText}`);
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        console.error('ChatHistoryAPI.saveMessage - Error response:', error);
+        throw new Error(error.detail || `Failed to save message (${response.status}): ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      console.log('ChatHistoryAPI.saveMessage - Success');
+      return result.data;
+    } catch (error) {
+      clearTimeout(timeoutId);
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.error('ChatHistoryAPI.saveMessage - Request timed out after', timeout, 'ms');
+        throw new Error(`Request timed out after ${timeout / 1000} seconds. Please try again.`);
+      }
+      throw error;
     }
-
-    const result = await response.json();
-    console.log('ChatHistoryAPI.saveMessage - Success');
-    return result.data;
   }
 
   /**
