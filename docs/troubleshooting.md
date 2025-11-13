@@ -461,8 +461,115 @@ Template not found: welcome_email
 - **500**: Internal Server Error - Check logs for server issues
 - **503**: Service Unavailable - Check external service status
 
+## Testing and Development Issues
+
+### Cryptography Module Failures
+
+#### ModuleNotFoundError: No module named '_cffi_backend'
+**Symptoms:**
+- Tests fail with `pyo3_runtime.PanicException: Python API call failed`
+- Error message: `ModuleNotFoundError: No module named '_cffi_backend'`
+- Cryptography-related imports fail during test execution
+- Hundreds of test errors related to encryption/security modules
+
+**Root Cause:**
+The `cryptography` package (v41.0.7) depends on `cffi` (C Foreign Function Interface) for its low-level cryptographic operations. While `cffi` is a transitive dependency, it may not be installed in certain environments or Docker containers.
+
+**Solutions:**
+1. **Install cffi Explicitly**
+   ```bash
+   # Install cffi package
+   pip install cffi
+
+   # Or with system packages
+   pip install cffi --break-system-packages --user
+   ```
+
+2. **Reinstall Cryptography with Dependencies**
+   ```bash
+   # Reinstall cryptography to ensure all dependencies
+   pip install --force-reinstall cryptography==41.0.7
+   ```
+
+3. **System-Level Dependencies**
+   ```bash
+   # On Debian/Ubuntu systems, install build dependencies
+   apt-get update
+   apt-get install -y python3-dev libffi-dev build-essential
+
+   # Then reinstall Python packages
+   pip install cffi cryptography
+   ```
+
+4. **Verify Installation**
+   ```bash
+   # Test cffi import
+   python -c "import _cffi_backend; print('cffi OK')"
+
+   # Test cryptography import
+   python -c "from cryptography.fernet import Fernet; print('cryptography OK')"
+   ```
+
+**Prevention:**
+- Ensure all dependencies from `requirements.txt` are installed
+- Use virtual environments to isolate dependencies
+- In Docker, install system dependencies before Python packages:
+  ```dockerfile
+  RUN apt-get update && apt-get install -y \
+      python3-dev \
+      libffi-dev \
+      build-essential \
+      && rm -rf /var/lib/apt/lists/*
+  ```
+
+**Error Messages:**
+```
+pyo3_runtime.PanicException: Python API call failed
+ModuleNotFoundError: No module named '_cffi_backend'
+thread '<unnamed>' panicked at /usr/share/cargo/registry/pyo3-0.20.2/src/err/mod.rs:788:5:
+Python API call failed
+```
+
+### Test Suite Issues
+
+#### Database Not Available During Testing
+**Symptoms:**
+- Many tests skip with "Database not available: Supabase client initialization failed"
+- Integration tests don't run
+- Database-dependent tests are automatically skipped
+
+**Expected Behavior:**
+This is normal for CI/CD environments and local testing without database credentials. The test suite is designed to:
+- Pass all unit tests (core logic, schemas, services)
+- Skip integration tests that require live database connections
+- Skip tests requiring external API credentials
+
+**Solutions:**
+1. **For Full Integration Testing**
+   ```bash
+   # Set up environment variables
+   export SUPABASE_URL=your_supabase_url
+   export SUPABASE_KEY=your_supabase_key
+
+   # Run tests
+   pytest -v
+   ```
+
+2. **Run Only Unit Tests**
+   ```bash
+   # Skip integration tests
+   pytest -m "not integration" -v
+   ```
+
+3. **Run with Live API Tests**
+   ```bash
+   # Enable external API tests
+   pytest --run-live-tests -v
+   ```
+
 ### Support Resources
 - **Documentation**: Check other docs in this directory
 - **API Documentation**: Visit `/docs` endpoint for interactive API docs
 - **Logs**: Review application and platform logs
 - **Community**: Join discussions and get help from community
+- **Test Reports**: See `docs/TEST_REPORT_*.md` for detailed test results
