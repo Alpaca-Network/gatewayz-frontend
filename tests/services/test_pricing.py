@@ -40,7 +40,10 @@ def test_get_model_pricing_found_by_id(monkeypatch, mod):
     def fake_get_cached_models(arg):
         called["args"] = arg
         return _models_fixture()
-    monkeypatch.setattr(mod, "get_cached_models", fake_get_cached_models)
+    # Patch at the source module where it's imported from
+    monkeypatch.setattr("src.services.models.get_cached_models", fake_get_cached_models)
+    # Mock _is_building_catalog to return False
+    monkeypatch.setattr("src.services.models._is_building_catalog", lambda: False)
 
     out = mod.get_model_pricing("openai/gpt-4o")
     assert called["args"] == "all"
@@ -50,7 +53,8 @@ def test_get_model_pricing_found_by_id(monkeypatch, mod):
 
 
 def test_get_model_pricing_found_by_slug(monkeypatch, mod):
-    monkeypatch.setattr(mod, "get_cached_models", lambda _: _models_fixture())
+    monkeypatch.setattr("src.services.models.get_cached_models", lambda _: _models_fixture())
+    monkeypatch.setattr("src.services.models._is_building_catalog", lambda: False)
     out = mod.get_model_pricing("claude-3-opus")  # matches by slug
     assert out["found"] is True
     assert math.isclose(out["prompt"], 0.00003)
@@ -58,7 +62,8 @@ def test_get_model_pricing_found_by_slug(monkeypatch, mod):
 
 
 def test_get_model_pricing_model_not_found_uses_default(monkeypatch, mod):
-    monkeypatch.setattr(mod, "get_cached_models", lambda _: _models_fixture())
+    monkeypatch.setattr("src.services.models.get_cached_models", lambda _: _models_fixture())
+    monkeypatch.setattr("src.services.models._is_building_catalog", lambda: False)
     out = mod.get_model_pricing("totally/unknown-model")
     assert out["found"] is False
     assert math.isclose(out["prompt"], 0.00002)
@@ -66,7 +71,8 @@ def test_get_model_pricing_model_not_found_uses_default(monkeypatch, mod):
 
 
 def test_get_model_pricing_empty_cache_uses_default(monkeypatch, mod):
-    monkeypatch.setattr(mod, "get_cached_models", lambda _: [])
+    monkeypatch.setattr("src.services.models.get_cached_models", lambda _: [])
+    monkeypatch.setattr("src.services.models._is_building_catalog", lambda: False)
     out = mod.get_model_pricing("anything")
     assert out["found"] is False
     assert math.isclose(out["prompt"], 0.00002)
@@ -75,7 +81,8 @@ def test_get_model_pricing_empty_cache_uses_default(monkeypatch, mod):
 
 def test_get_model_pricing_handles_missing_prices(monkeypatch, mod):
     # The "bad/model" entry has None/""; code should coerce to 0.0, still found=True
-    monkeypatch.setattr(mod, "get_cached_models", lambda _: _models_fixture())
+    monkeypatch.setattr("src.services.models.get_cached_models", lambda _: _models_fixture())
+    monkeypatch.setattr("src.services.models._is_building_catalog", lambda: False)
     out = mod.get_model_pricing("bad/model")
     assert out["found"] is True
     assert math.isclose(out["prompt"], 0.0)
@@ -85,7 +92,8 @@ def test_get_model_pricing_handles_missing_prices(monkeypatch, mod):
 def test_get_model_pricing_exception_returns_default(monkeypatch, mod):
     def boom(_):
         raise RuntimeError("cache layer down")
-    monkeypatch.setattr(mod, "get_cached_models", boom)
+    monkeypatch.setattr("src.services.models.get_cached_models", boom)
+    monkeypatch.setattr("src.services.models._is_building_catalog", lambda: False)
     out = mod.get_model_pricing("openai/gpt-4o")
     assert out["found"] is False
     assert math.isclose(out["prompt"], 0.00002)
@@ -102,7 +110,8 @@ def test_get_model_pricing_normalizes_hf_suffix(monkeypatch, mod):
             "pricing": {"prompt": "0", "completion": "0"},  # Free model
         }
     ]
-    monkeypatch.setattr(mod, "get_cached_models", lambda _: hf_models)
+    monkeypatch.setattr("src.services.models.get_cached_models", lambda _: hf_models)
+    monkeypatch.setattr("src.services.models._is_building_catalog", lambda: False)
 
     # Request with :hf-inference suffix should still find the model
     out = mod.get_model_pricing("meta-llama/Llama-2-7b-chat-hf:hf-inference")
@@ -120,7 +129,8 @@ def test_get_model_pricing_handles_multiple_provider_suffixes(monkeypatch, mod):
             "pricing": {"prompt": "0.00001", "completion": "0.00002"},
         }
     ]
-    monkeypatch.setattr(mod, "get_cached_models", lambda _: models)
+    monkeypatch.setattr("src.services.models.get_cached_models", lambda _: models)
+    monkeypatch.setattr("src.services.models._is_building_catalog", lambda: False)
 
     # Test with :hf-inference suffix
     out_hf = mod.get_model_pricing("test/model-1:hf-inference")

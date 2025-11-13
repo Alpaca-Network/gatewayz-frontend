@@ -2,6 +2,7 @@ import logging
 import json
 from pathlib import Path
 import csv
+import threading
 from typing import Any, Dict, Optional, Union, List
 from concurrent.futures import ThreadPoolExecutor
 
@@ -56,6 +57,17 @@ from src.utils.security_validators import sanitize_for_logging
 import httpx
 
 logger = logging.getLogger(__name__)
+
+# Thread-local context to prevent circular dependencies during catalog building
+_building_catalog = threading.local()
+
+def _is_building_catalog() -> bool:
+    """Check if we're currently building the model catalog"""
+    return getattr(_building_catalog, 'active', False)
+
+def _set_building_catalog(active: bool):
+    """Set the building catalog flag"""
+    _building_catalog.active = active
 
 # Modality constants to reduce duplication
 MODALITY_TEXT_TO_TEXT = "text->text"
@@ -473,9 +485,14 @@ def _build_multi_provider_catalog() -> AggregatedCatalog:
     except Exception as exc:  # pragma: no cover - defensive guard
         logger.debug("Failed to register Google canonical models: %s", exc)
 
-    models = get_all_models_parallel()
-    canonical_snapshot = registry.get_canonical_catalog_snapshot()
-    return AggregatedCatalog(models, canonical_snapshot)
+    # Set flag to prevent circular dependencies during catalog building
+    _set_building_catalog(True)
+    try:
+        models = get_all_models_parallel()
+        canonical_snapshot = registry.get_canonical_catalog_snapshot()
+        return AggregatedCatalog(models, canonical_snapshot)
+    finally:
+        _set_building_catalog(False)
 
 
 def _refresh_multi_provider_catalog_cache() -> AggregatedCatalog:
@@ -3139,6 +3156,15 @@ def get_helicone_model_pricing(model_id: str) -> dict:
     Returns:
         dict with 'prompt', 'completion', 'request', and 'image' pricing fields
     """
+    # If we're building the catalog, return default pricing to avoid circular dependency
+    if _is_building_catalog():
+        return {
+            "prompt": "0",
+            "completion": "0",
+            "request": "0",
+            "image": "0",
+        }
+
     try:
         from src.services.helicone_client import fetch_model_pricing_from_helicone
 

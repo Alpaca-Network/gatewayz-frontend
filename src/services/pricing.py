@@ -6,8 +6,6 @@ Handles model pricing calculations and credit cost computation
 from typing import Dict
 import logging
 
-from src.services.models import get_cached_models
-
 logger = logging.getLogger(__name__)
 
 
@@ -27,6 +25,14 @@ def get_model_pricing(model_id: str) -> Dict[str, float]:
         }
     """
     try:
+        # Import here to avoid circular imports
+        from src.services.models import get_cached_models, _is_building_catalog
+
+        # If we're building the catalog, return default pricing to avoid circular dependency
+        if _is_building_catalog():
+            logger.debug(f"Returning default pricing for {model_id} (catalog building in progress)")
+            return {"prompt": 0.00002, "completion": 0.00002, "found": False}
+
         # Get all models from cache
         models = get_cached_models("all")
         if not models:
