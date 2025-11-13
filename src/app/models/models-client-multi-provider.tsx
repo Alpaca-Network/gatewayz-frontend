@@ -73,9 +73,9 @@ const GATEWAY_CONFIG: Record<string, { name: string; color: string; icon?: React
 
 const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
   const hasPricing = model.pricing !== null && model.pricing !== undefined;
-  const isFree = hasPricing && parseFloat(model.pricing.prompt || '0') === 0 && parseFloat(model.pricing.completion || '0') === 0;
-  const inputCost = hasPricing ? (parseFloat(model.pricing.prompt || '0') * 1000000).toFixed(2) : null;
-  const outputCost = hasPricing ? (parseFloat(model.pricing.completion || '0') * 1000000).toFixed(2) : null;
+  const isFree = hasPricing && parseFloat(model.pricing?.prompt || '0') === 0 && parseFloat(model.pricing?.completion || '0') === 0;
+  const inputCost = hasPricing ? (parseFloat(model.pricing?.prompt || '0') * 1000000).toFixed(2) : null;
+  const outputCost = hasPricing ? (parseFloat(model.pricing?.completion || '0') * 1000000).toFixed(2) : null;
   const contextK = model.context_length > 0 ? Math.round(model.context_length / 1000) : 0;
 
   // Determine if model is multi-lingual (simple heuristic - can be improved)
