@@ -36,10 +36,6 @@ export function StatsigProviderWrapper({ children }: { children: React.ReactNode
         new StatsigAutoCapturePlugin(),
         new StatsigSessionReplayPlugin()
       ],
-      // Suppress network errors from ad blockers
-      networkConfig: {
-        preventAllNetworkErrors: true,
-      }
     },
   );
 
