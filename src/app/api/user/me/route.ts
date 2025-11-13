@@ -6,6 +6,7 @@ import { proxyFetch } from "@/lib/proxy-fetch";
 /**
  * GET /api/user/me
  * Fetches current user information using the API key from Authorization header
+ * Proxies to backend /user/profile endpoint
  */
 export async function GET(request: NextRequest) {
   try {
@@ -20,7 +21,7 @@ export async function GET(request: NextRequest) {
 
     console.log("[API /api/user/me] Fetching user info from backend");
 
-    const response = await proxyFetch(`${API_BASE_URL}/user/me`, {
+    const response = await proxyFetch(`${API_BASE_URL}/user/profile`, {
       method: "GET",
       headers: {
         "Authorization": authHeader,
