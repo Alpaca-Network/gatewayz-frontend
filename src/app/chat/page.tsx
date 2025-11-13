@@ -2388,7 +2388,7 @@ function ChatPageContent() {
 
             // Build URL with session_id query parameter (gateway goes in request body)
             const sessionIdParam = currentSession?.apiSessionId ? `?session_id=${currentSession.apiSessionId}` : '';
-            const url = `/v1/chat/completions${sessionIdParam}`;
+            const url = `/api/chat/completions${sessionIdParam}`;
 
             console.log('Sending chat request to:', url);
             console.log('API Key:', apiKey.substring(0, 10) + '...');
