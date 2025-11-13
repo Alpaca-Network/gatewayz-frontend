@@ -35,10 +35,15 @@ class LokiLogHandler(logging.Handler):
         self._session = None
 
     def _get_session(self):
-        """Lazy-load HTTP session for sending logs."""
+        """Lazy-load HTTP session for sending logs with connection limits."""
         if self._session is None:
             import httpx
-            self._session = httpx.Client(timeout=5.0)
+            # Create client with strict timeouts and connection limits to prevent resource exhaustion
+            # Set max_connections to prevent too many concurrent connections
+            # Set max_keepalive_connections to limit persistent connections
+            limits = httpx.Limits(max_connections=10, max_keepalive_connections=5)
+            timeout = httpx.Timeout(5.0, connect=2.0)
+            self._session = httpx.Client(timeout=timeout, limits=limits)
         return self._session
 
     def emit(self, record: logging.LogRecord) -> None:
@@ -75,15 +80,17 @@ class LokiLogHandler(logging.Handler):
                 ]
             }
 
-            # Send to Loki
+            # Send to Loki with timeout to prevent hanging
             session = self._get_session()
-            response = session.post(self.loki_url, json=payload)
+            response = session.post(self.loki_url, json=payload, timeout=5.0)
             response.raise_for_status()
 
-        except Exception as e:
-            # Don't fail the application if logging fails
-            # Use handleError to avoid infinite recursion
-            self.handleError(record)
+        except Exception:
+            # Silently ignore Loki logging failures to prevent cascade errors
+            # Do NOT use handleError() as it can trigger recursive logging
+            # Do NOT log the error as it can create infinite loops
+            # Just continue - the log will be lost but the application won't crash
+            pass
 
     def close(self) -> None:
         """Close HTTP session."""

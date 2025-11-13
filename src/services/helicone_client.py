@@ -23,7 +23,14 @@ def get_helicone_client():
                 "Helicone AI Gateway API key not configured. Please set HELICONE_API_KEY environment variable."
             )
 
-        return OpenAI(base_url="https://ai-gateway.helicone.ai/v1", api_key=api_key)
+        # Create client with reasonable timeout (60s for completion requests)
+        # Default timeout for OpenAI is 600s which is too long
+        return OpenAI(
+            base_url="https://ai-gateway.helicone.ai/v1",
+            api_key=api_key,
+            timeout=60.0,
+            max_retries=2,
+        )
     except Exception as e:
         logger.error(f"Failed to initialize Helicone AI Gateway client: {e}")
         raise
@@ -113,6 +120,12 @@ def fetch_model_pricing_from_helicone(model_id: str):
     """
     try:
         import httpx
+        from src.services.models import _is_building_catalog
+
+        # If we're building the catalog, return None to avoid circular dependency
+        if _is_building_catalog():
+            logger.debug(f"Skipping pricing fetch for {model_id} (catalog building in progress)")
+            return None
 
         api_key = Config.HELICONE_API_KEY
         if not api_key or api_key == "placeholder-key":
@@ -164,7 +177,16 @@ def get_provider_pricing_for_helicone_model(model_id: str):
         # Cross-reference with known provider pricing from the system
         # This leverages the existing pricing infrastructure
         try:
+            from src.services.models import _is_building_catalog
             from src.services.pricing import get_model_pricing
+
+            # If we're building the catalog, return None to avoid circular dependency
+            # The pricing will be populated in a later pass if needed
+            if _is_building_catalog():
+                logger.debug(
+                    f"Skipping provider pricing lookup for {model_id} (catalog building in progress)"
+                )
+                return None
 
             # Try the full model ID first
             pricing = get_model_pricing(model_id)

@@ -58,16 +58,30 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-# Thread-local context to prevent circular dependencies during catalog building
-_building_catalog = threading.local()
+# Global lock and flag to prevent circular dependencies during catalog building
+# Using a global lock instead of threading.local() to ensure the flag is visible
+# across all threads spawned by ThreadPoolExecutor during parallel model fetching
+_building_catalog_lock = threading.Lock()
+_building_catalog_flag = False
 
 def _is_building_catalog() -> bool:
-    """Check if we're currently building the model catalog"""
-    return getattr(_building_catalog, 'active', False)
+    """Check if we're currently building the model catalog
+
+    Uses a global lock to ensure thread-safety and visibility across
+    all threads spawned by ThreadPoolExecutor.
+    """
+    with _building_catalog_lock:
+        return _building_catalog_flag
 
 def _set_building_catalog(active: bool):
-    """Set the building catalog flag"""
-    _building_catalog.active = active
+    """Set the building catalog flag
+
+    Uses a global lock to ensure thread-safety and visibility across
+    all threads spawned by ThreadPoolExecutor.
+    """
+    global _building_catalog_flag
+    with _building_catalog_lock:
+        _building_catalog_flag = active
 
 # Modality constants to reduce duplication
 MODALITY_TEXT_TO_TEXT = "text->text"
@@ -408,7 +422,9 @@ def get_all_models_parallel():
 
         # Use ThreadPoolExecutor to fetch all gateways in parallel
         # Since get_cached_models uses synchronous httpx, we use threads
-        with ThreadPoolExecutor(max_workers=16) as executor:
+        # Reduced max_workers from 16 to 8 to prevent thread exhaustion
+        # in case of recursive calls or errors
+        with ThreadPoolExecutor(max_workers=8) as executor:
             futures = {executor.submit(get_cached_models, gw): gw for gw in gateways}
             all_models = []
 
@@ -417,6 +433,12 @@ def get_all_models_parallel():
                     models = future.result(timeout=30)
                     if models:
                         all_models.extend(models)
+                except TimeoutError:
+                    gateway_name = futures[future]
+                    logger.warning(
+                        "Timeout fetching models from %s after 30s",
+                        sanitize_for_logging(gateway_name),
+                    )
                 except Exception as e:
                     gateway_name = futures[future]
                     logger.warning(
