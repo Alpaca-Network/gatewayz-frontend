@@ -210,11 +210,18 @@ def create_app() -> FastAPI:
     for module_name, display_name in routes_to_load:
         try:
             # Import the route module
+            logger.debug(f"  [LOADING] Importing src.routes.{module_name}...")
             module = __import__(f"src.routes.{module_name}", fromlist=["router"])
+
+            if not hasattr(module, "router"):
+                raise AttributeError(f"Module 'src.routes.{module_name}' has no 'router' attribute")
+
             router = module.router
+            logger.debug(f"  [LOADING] Router found for {module_name}")
 
             # Include the router (all routes now follow clean REST patterns)
             app.include_router(router)
+            logger.debug(f"  [LOADING] Router included for {module_name}")
 
             # Log success
             success_msg = f"  [OK] {display_name} ({module_name})"
@@ -222,23 +229,33 @@ def create_app() -> FastAPI:
             loaded_count += 1
 
         except ImportError as e:
-            error_msg = f"  [WARN] {display_name} ({module_name}) - Module not found: {e}"
+            error_msg = f"  [FAIL] {display_name} ({module_name}) - Import failed"
             logger.error(error_msg)
-            logger.error(f"       Full error details: {repr(e)}")
+            logger.error(f"       Error: {str(e)}")
+            logger.error(f"       Type: {type(e).__name__}")
             import traceback
 
             tb = traceback.format_exc()
             logger.error(f"       Traceback:\n{tb}")
             failed_count += 1
 
+            # For critical routes, log more details
+            if module_name in ["chat", "messages", "catalog", "health"]:
+                logger.error(f"       [CRITICAL] Failed to load critical route: {module_name}")
+
         except AttributeError as e:
-            error_msg = f"  [ERROR] {display_name} ({module_name}) - No router found: {e}"
+            error_msg = f"  [FAIL] {display_name} ({module_name}) - No router found"
             logger.error(error_msg)
+            logger.error(f"       Error: {str(e)}")
+            import traceback
+            logger.error(f"       Traceback:\n{traceback.format_exc()}")
             failed_count += 1
 
         except Exception as e:
-            error_msg = f"  [ERROR] {display_name} ({module_name}) - Error: {e}"
+            error_msg = f"  [FAIL] {display_name} ({module_name}) - Unexpected error"
             logger.error(error_msg)
+            logger.error(f"       Error: {str(e)}")
+            logger.error(f"       Type: {type(e).__name__}")
             import traceback
 
             logger.error(f"       Traceback:\n{traceback.format_exc()}")
@@ -280,10 +297,10 @@ def create_app() -> FastAPI:
             Config.validate()
             logger.info("  [OK] Configuration validated")
 
-            # Enforce admin key presence in production
+            # Warn if admin key is missing in production (don't fail startup)
             if Config.IS_PRODUCTION and not os.environ.get("ADMIN_API_KEY"):
-                logger.error("  [ERROR] ADMIN_API_KEY is not set in production. Aborting startup.")
-                raise RuntimeError("ADMIN_API_KEY is required in production")
+                logger.warning("  [WARN] ADMIN_API_KEY is not set in production. Admin endpoints will be inaccessible.")
+                logger.warning("        Set ADMIN_API_KEY environment variable to enable admin functionality.")
 
             # Initialize database
             try:
