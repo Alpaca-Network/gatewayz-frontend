@@ -153,8 +153,8 @@ def make_fal_image_request(
                 "Fal.ai API key not configured. Please set FAL_API_KEY environment variable"
             )
 
-        # Fal.ai API endpoint - using subscribe endpoint for synchronous requests
-        url = f"https://fal.run/{model}"
+        # Fal.ai Queue API endpoint - recommended for production use
+        queue_url = f"https://queue.fal.run/{model}"
 
         headers = {"Authorization": f"Key {Config.FAL_API_KEY}", "Content-Type": "application/json"}
 
@@ -199,23 +199,72 @@ def make_fal_image_request(
             if param in kwargs:
                 payload[param] = kwargs[param]
 
-        logger.info(f"Making image generation request to Fal.ai with model {model}")
+        logger.info(f"Submitting image generation request to Fal.ai queue with model {model}")
 
-        # Make synchronous request to Fal.ai
-        response = httpx.post(url, headers=headers, json=payload, timeout=120.0)
+        # Submit request to Fal.ai queue
+        response = httpx.post(queue_url, headers=headers, json=payload, timeout=30.0)
         response.raise_for_status()
 
-        fal_response = response.json()
+        queue_response = response.json()
 
-        # Convert Fal.ai response to OpenAI-compatible format
-        data = []
-        if "images" in fal_response:
-            for img in fal_response["images"]:
-                data.append(
-                    {"url": img.get("url"), "b64_json": None}  # Fal.ai returns URLs by default
-                )
+        # Get the request ID, status URL, and response URL for polling
+        request_id = queue_response.get("request_id")
+        status_url = queue_response.get("status_url")
+        response_url = queue_response.get("response_url")
 
-        return {"created": int(time.time()), "data": data, "provider": "fal", "model": model}
+        if not status_url:
+            raise Exception("Fal.ai did not return a status_url")
+
+        logger.info(f"Fal.ai request submitted (ID: {request_id}), polling status at {status_url}")
+
+        # Poll for completion (max 2 minutes)
+        max_attempts = 60  # 60 attempts * 2 seconds = 2 minutes
+        attempt = 0
+
+        while attempt < max_attempts:
+            attempt += 1
+            time.sleep(2)  # Wait 2 seconds between polls
+
+            # Check status
+            status_response = httpx.get(status_url, headers=headers, timeout=30.0)
+            status_response.raise_for_status()
+
+            status_data = status_response.json()
+            status = status_data.get("status")
+
+            logger.info(f"Fal.ai request status (attempt {attempt}): {status}")
+
+            if status == "COMPLETED":
+                # Get the actual result from response_url
+                result_url = status_data.get("response_url") or response_url
+                if not result_url:
+                    raise Exception("Fal.ai did not return a response_url")
+
+                logger.info(f"Fetching completed result from {result_url}")
+                result_response = httpx.get(result_url, headers=headers, timeout=30.0)
+                result_response.raise_for_status()
+
+                fal_response = result_response.json()
+
+                # Convert Fal.ai response to OpenAI-compatible format
+                data = []
+                if "images" in fal_response:
+                    for img in fal_response["images"]:
+                        data.append(
+                            {"url": img.get("url"), "b64_json": None}  # Fal.ai returns URLs by default
+                        )
+
+                return {"created": int(time.time()), "data": data, "provider": "fal", "model": model}
+
+            elif status in ["FAILED", "ERROR"]:
+                error_msg = status_data.get("error", "Unknown error")
+                logger.error(f"Fal.ai request failed: {error_msg}")
+                raise Exception(f"Fal.ai request failed: {error_msg}")
+
+            # Continue polling if status is IN_QUEUE or IN_PROGRESS
+
+        # Timeout after max attempts
+        raise Exception(f"Fal.ai request timed out after {max_attempts * 2} seconds")
 
     except httpx.HTTPStatusError as e:
         logger.error(
