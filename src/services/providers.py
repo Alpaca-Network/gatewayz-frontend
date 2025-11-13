@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime, timezone
+from urllib.parse import urlparse
 
 import httpx
 
@@ -234,11 +235,21 @@ def enhance_providers_with_logos_and_sites(providers: list) -> list:
             # Generate logo URL using Google favicon service
             logo_url = None
             if site_url:
-                # Clean the site URL for favicon service
-                clean_url = site_url.replace("https://", "").replace("http://", "")
-                if clean_url.startswith("www."):
-                    clean_url = clean_url[4:]
-                logo_url = f"https://www.google.com/s2/favicons?domain={clean_url}&sz=128"
+                # Extract domain from URL for favicon service
+                try:
+                    parsed_url = urlparse(site_url)
+                    domain = parsed_url.netloc or parsed_url.path
+                    # Remove www. prefix if present
+                    if domain.startswith("www."):
+                        domain = domain[4:]
+                    logo_url = f"https://www.google.com/s2/favicons?domain={domain}&sz=128"
+                except Exception as e:
+                    logger.warning(f"Failed to parse site_url '{site_url}': {e}")
+                    # Fallback to old method
+                    clean_url = site_url.replace("https://", "").replace("http://", "").split("/")[0]
+                    if clean_url.startswith("www."):
+                        clean_url = clean_url[4:]
+                    logo_url = f"https://www.google.com/s2/favicons?domain={clean_url}&sz=128"
 
             enhanced_provider = {**provider, "site_url": site_url, "logo_url": logo_url}
 

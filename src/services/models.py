@@ -5,6 +5,7 @@ import csv
 import threading
 from typing import Any, Dict, Optional, Union, List
 from concurrent.futures import ThreadPoolExecutor
+from urllib.parse import urlparse
 
 from src.config import Config
 from src.cache import (
@@ -3009,12 +3010,23 @@ def enhance_model_with_provider_info(openrouter_model: dict, providers_data: lis
         # Generate model logo URL using Google favicon service
         model_logo_url = None
         if provider_site_url:
-            # Clean the site URL for favicon service
-            clean_url = provider_site_url.replace("https://", "").replace("http://", "")
-            if clean_url.startswith("www."):
-                clean_url = clean_url[4:]
-            model_logo_url = f"https://www.google.com/s2/favicons?domain={clean_url}&sz=128"
-            logger.info(f"Generated model_logo_url: {model_logo_url}")
+            # Extract domain from URL for favicon service
+            try:
+                parsed_url = urlparse(provider_site_url)
+                domain = parsed_url.netloc or parsed_url.path
+                # Remove www. prefix if present
+                if domain.startswith("www."):
+                    domain = domain[4:]
+                model_logo_url = f"https://www.google.com/s2/favicons?domain={domain}&sz=128"
+                logger.info(f"Generated model_logo_url: {model_logo_url}")
+            except Exception as e:
+                logger.warning(f"Failed to parse provider_site_url '{provider_site_url}': {e}")
+                # Fallback to old method
+                clean_url = provider_site_url.replace("https://", "").replace("http://", "").split("/")[0]
+                if clean_url.startswith("www."):
+                    clean_url = clean_url[4:]
+                model_logo_url = f"https://www.google.com/s2/favicons?domain={clean_url}&sz=128"
+                logger.info(f"Generated model_logo_url (fallback): {model_logo_url}")
 
         # Add provider information to model
         enhanced_model = {
