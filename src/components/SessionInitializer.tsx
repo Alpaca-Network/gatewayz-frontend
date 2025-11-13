@@ -9,7 +9,7 @@ import {
   storeSessionTransferToken,
   getStoredSessionTransferToken,
 } from "@/integrations/privy/auth-session-transfer";
-import { saveApiKey } from "@/lib/api";
+import { saveApiKey, saveUserData, type UserData } from "@/lib/api";
 
 export function SessionInitializer() {
   const router = useRouter();
@@ -28,6 +28,49 @@ export function SessionInitializer() {
 
         // Save API key to localStorage
         saveApiKey(token);
+
+        // Fetch user data using the API key
+        try {
+          console.log("[SessionInit] Fetching user data from backend");
+          const userResponse = await fetch("/api/user/me", {
+            headers: {
+              "Authorization": `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          });
+
+          if (userResponse.ok) {
+            const userData = await userResponse.json();
+            console.log("[SessionInit] User data fetched successfully:", {
+              user_id: userData.user_id,
+              credits: userData.credits,
+              tier: userData.tier,
+              subscription_status: userData.subscription_status,
+            });
+
+            // Save complete user data to localStorage
+            const userDataToSave: UserData = {
+              user_id: userData.user_id,
+              api_key: token,
+              auth_method: userData.auth_method || "session_transfer",
+              privy_user_id: userData.privy_user_id || userId.toString(),
+              display_name: userData.display_name || userData.email || "User",
+              email: userData.email || "",
+              credits: Math.floor(userData.credits ?? 0),
+              tier: userData.tier?.toLowerCase() as UserData["tier"],
+              tier_display_name: userData.tier_display_name,
+              subscription_status: userData.subscription_status,
+              subscription_end_date: userData.subscription_end_date,
+            };
+
+            saveUserData(userDataToSave);
+            console.log("[SessionInit] User data saved to localStorage");
+          } else {
+            console.error("[SessionInit] Failed to fetch user data:", userResponse.status);
+          }
+        } catch (error) {
+          console.error("[SessionInit] Error fetching user data:", error);
+        }
 
         // Clean up URL to remove transfer params
         cleanupSessionTransferParams();
@@ -54,6 +97,49 @@ export function SessionInitializer() {
 
         // Restore API key from sessionStorage
         saveApiKey(storedToken);
+
+        // Fetch user data using the API key
+        try {
+          console.log("[SessionInit] Fetching user data from backend (stored token)");
+          const userResponse = await fetch("/api/user/me", {
+            headers: {
+              "Authorization": `Bearer ${storedToken}`,
+              "Content-Type": "application/json",
+            },
+          });
+
+          if (userResponse.ok) {
+            const userData = await userResponse.json();
+            console.log("[SessionInit] User data fetched successfully (stored token):", {
+              user_id: userData.user_id,
+              credits: userData.credits,
+              tier: userData.tier,
+              subscription_status: userData.subscription_status,
+            });
+
+            // Save complete user data to localStorage
+            const userDataToSave: UserData = {
+              user_id: userData.user_id,
+              api_key: storedToken,
+              auth_method: userData.auth_method || "session_transfer",
+              privy_user_id: userData.privy_user_id || storedUserId.toString(),
+              display_name: userData.display_name || userData.email || "User",
+              email: userData.email || "",
+              credits: Math.floor(userData.credits ?? 0),
+              tier: userData.tier?.toLowerCase() as UserData["tier"],
+              tier_display_name: userData.tier_display_name,
+              subscription_status: userData.subscription_status,
+              subscription_end_date: userData.subscription_end_date,
+            };
+
+            saveUserData(userDataToSave);
+            console.log("[SessionInit] User data saved to localStorage (stored token)");
+          } else {
+            console.error("[SessionInit] Failed to fetch user data (stored token):", userResponse.status);
+          }
+        } catch (error) {
+          console.error("[SessionInit] Error fetching user data (stored token):", error);
+        }
 
         // Trigger auth refresh
         await refresh({ force: true });
