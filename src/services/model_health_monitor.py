@@ -212,6 +212,11 @@ class ModelHealthMonitor:
                 "chutes",
                 "aimo",
                 "near",
+                "fal",
+                "google-vertex",
+                "cerebras",
+                "nebius",
+                "helicone",
             ]
 
             for gateway in gateways:
