@@ -17,6 +17,7 @@ import { GoogleAnalytics } from '@/components/analytics/google-analytics';
 import { SessionInitializer } from '@/components/SessionInitializer';
 import { PreviewHostnameRestorer } from '@/components/auth/preview-hostname-restorer';
 import { GTMLoader } from '@/components/analytics/gtm-loader';
+import { ErrorSuppressor } from '@/components/error-suppressor';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -78,6 +79,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning className="scroll-smooth">
       <body className={`${inter.className} antialiased bg-background min-h-screen flex flex-col`} suppressHydrationWarning>
+        <ErrorSuppressor />
         <GoogleAnalytics />
         <ThemeProvider
           defaultTheme="system"
