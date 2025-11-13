@@ -44,6 +44,8 @@ export function SessionInitializer() {
             console.log("[SessionInit] User data fetched successfully:", {
               user_id: userData.user_id,
               credits: userData.credits,
+              tier: userData.tier,
+              subscription_status: userData.subscription_status,
             });
 
             // Save complete user data to localStorage
@@ -111,6 +113,8 @@ export function SessionInitializer() {
             console.log("[SessionInit] User data fetched successfully (stored token):", {
               user_id: userData.user_id,
               credits: userData.credits,
+              tier: userData.tier,
+              subscription_status: userData.subscription_status,
             });
 
             // Save complete user data to localStorage
