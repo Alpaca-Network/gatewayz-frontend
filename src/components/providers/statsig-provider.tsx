@@ -35,7 +35,7 @@ export function StatsigProviderWrapper({ children }: { children: React.ReactNode
       plugins: [
         new StatsigAutoCapturePlugin(),
         new StatsigSessionReplayPlugin()
-      ]
+      ],
     },
   );
 
