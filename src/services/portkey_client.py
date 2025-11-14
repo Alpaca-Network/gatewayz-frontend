@@ -32,24 +32,29 @@ def _format_portkey_model(model: str, slug: Optional[str]) -> str:
     if not trimmed:
         raise ValueError("Model name is required for Portkey requests")
 
-    # Already namespaced
-    if trimmed.startswith("@"):
-        return trimmed
+    # Normalize for @ prefix checking (case-insensitive)
+    trimmed_lower = trimmed.lower()
+
+    # Already namespaced (case-insensitive check)
+    if trimmed_lower.startswith("@"):
+        # Return as-is (preserving original case) since Portkey expects lowercase for model IDs
+        return trimmed.lower()
 
     if "/" in trimmed:
         prefix, _ = trimmed.split("/", 1)
-        if prefix.startswith("@"):
-            return trimmed
-        if slug and prefix == slug:
-            return f"@{trimmed}"
+        if prefix.lower().startswith("@"):
+            # Return with proper lowercasing for Portkey format
+            return f"@{trimmed.lower()}"
+        if slug and prefix.lower() == slug.lower():
+            return f"@{trimmed.lower()}"
         # Assume caller supplied provider slug without '@'
-        return f"@{trimmed}"
+        return f"@{trimmed.lower()}"
 
     if slug:
-        return f"@{slug}/{trimmed}"
+        return f"@{slug.lower()}/{trimmed.lower()}"
 
     # Fallback: return raw model, Portkey will attempt to resolve default
-    return trimmed
+    return trimmed.lower()
 
 
 def get_portkey_client(provider: Optional[str] = None, virtual_key: Optional[str] = None) -> OpenAI:

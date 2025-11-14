@@ -49,15 +49,16 @@ def make_portkey_image_request(
         if virtual_key:
             headers["x-portkey-virtual-key"] = virtual_key
         # Method 2: Use @provider format (Portkey SDK style)
-        elif provider and provider.startswith("@"):
+        # Normalize provider to lowercase for case-insensitive @ prefix checking
+        elif provider and provider.lower().startswith("@"):
             # Use config-based provider format
             import json
 
-            config = {"provider": provider}  # e.g., "@openai", "@stability-ai"
+            config = {"provider": provider.lower()}  # e.g., "@openai", "@stability-ai"
             headers["x-portkey-config"] = json.dumps(config)
         # Method 3: Legacy provider header
         elif provider:
-            headers["x-portkey-provider"] = provider
+            headers["x-portkey-provider"] = provider.lower()
         else:
             raise ValueError(
                 "Either virtual_key or provider must be specified for Portkey image generation"

@@ -616,25 +616,28 @@ def detect_provider_from_model_id(model_id: str, preferred_provider: Optional[st
     if model_id.startswith("accounts/fireworks/models/"):
         return "fireworks"
 
+    # Normalize to lowercase for consistency in all @ prefix checks
+    normalized_model = model_id.lower()
+
     # Check for Google Vertex AI models first (before Portkey check)
     if model_id.startswith("projects/") and "/models/" in model_id:
         return "google-vertex"
-    if model_id.startswith("@google/models/") and any(
-        pattern in model_id.lower()
+    if normalized_model.startswith("@google/models/") and any(
+        pattern in normalized_model
         for pattern in ["gemini-2.5", "gemini-2.0", "gemini-1.5", "gemini-1.0"]
     ):
         # Patterns like "@google/models/gemini-2.5-flash"
         return "google-vertex"
     if (
         any(
-            pattern in model_id.lower()
+            pattern in normalized_model
             for pattern in ["gemini-2.5", "gemini-2.0", "gemini-1.5", "gemini-1.0"]
         )
         and "/" not in model_id
     ):
         # Simple patterns like "gemini-2.5-flash", "gemini-2.0-flash" or "gemini-1.5-pro"
         return "google-vertex"
-    if model_id.startswith("google/") and "gemini" in model_id.lower():
+    if model_id.startswith("google/") and "gemini" in normalized_model:
         # Patterns like "google/gemini-2.5-flash" or "google/gemini-2.0-flash-001"
         # These can go to either Vertex AI or OpenRouter
         # Check if Vertex AI credentials are available
@@ -659,9 +662,10 @@ def detect_provider_from_model_id(model_id: str, preferred_provider: Optional[st
             return "openrouter"
 
     # Portkey format is @org/model (must have / to be valid)
-    if model_id.startswith("@") and "/" in model_id:
+    # Normalize to lowercase for case-insensitive @ prefix detection
+    if normalized_model.startswith("@") and "/" in model_id:
         # Only Portkey if not a Google format
-        if not model_id.startswith("@google/models/"):
+        if not normalized_model.startswith("@google/models/"):
             return "portkey"
 
     # Check all mappings to see if this model exists
