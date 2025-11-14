@@ -261,12 +261,15 @@ async function fetchModelsFromGateway(gateway: string, limit?: number): Promise<
       // Try both endpoints in parallel, use first successful response
       const response = await Promise.race(
         urls.map(url =>
-          fetch(url, {
-            method: 'GET',
-            headers,
-            next: { revalidate: 300 },
-            signal: AbortSignal.timeout(timeoutMs)
-          })
+fetch(url, {
+             method: 'GET',
+             headers,
+             next: { 
+               revalidate: 300,
+               tags: [`models:gateway:${gateway}`, 'models:all']
+             },
+             signal: AbortSignal.timeout(timeoutMs)
+           })
         )
       );
 

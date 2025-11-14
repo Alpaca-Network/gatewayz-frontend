@@ -10,7 +10,9 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test": "jest --passWithNoTests",
-    "check-subscription": "node scripts/check-subscription-config.js"
+    "check-subscription": "node scripts/check-subscription-config.js",
+    "sync-models": "node scripts/sync-models.js",
+    "model-sync-status": "node scripts/model-sync-status.js"
   },
   "dependencies": {
     "@ai-sdk/react": "^2.0.81",
