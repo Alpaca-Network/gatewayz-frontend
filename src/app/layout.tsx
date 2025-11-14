@@ -18,6 +18,7 @@ import { SessionInitializer } from '@/components/SessionInitializer';
 import { PreviewHostnameRestorer } from '@/components/auth/preview-hostname-restorer';
 import { GTMLoader } from '@/components/analytics/gtm-loader';
 import { ErrorSuppressor } from '@/components/error-suppressor';
+import { ModelSyncInitializer } from '@/components/model-sync-initializer';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -92,6 +93,8 @@ export default function RootLayout({
             <StatsigProviderWrapper>
               {/* Session transfer from main domain - handles automatic authentication */}
               <SessionInitializer />
+              {/* Initialize background model synchronization */}
+              <ModelSyncInitializer />
               <GTMLoader />
               <AppHeader />
               <OnboardingBanner />

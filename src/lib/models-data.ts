@@ -21,6 +21,20 @@ export type Model = {
 
 export const models: Model[] = [
   {
+    name: 'gpt-5.1',
+    isFree: false,
+    tokens: '200B+ tokens',
+    category: 'Multimodal',
+    description: 'GPT-5.1 is the latest frontier-grade model in the GPT-5 series, offering stronger general-purpose reasoning, improved instruction adherence, and a more natural conversational style compared to GPT-5. It uses adaptive reasoning to allocate computation dynamically, responding quickly to simple queries while spending more depth on complex tasks. The model produces clearer, more grounded explanations with reduced jargon, making it easier to follow even on technical or multi-step problems.',
+    developer: 'openai',
+    context: 400,
+    inputCost: 1.25,
+    outputCost: 10,
+    modalities: ['Text', 'Image', 'File'],
+    series: 'GPT',
+    supportedParameters: ['frequency_penalty', 'logit_bias', 'logprobs', 'max_tokens', 'presence_penalty', 'reasoning', 'response_format', 'seed', 'stop', 'tools', 'tool_choice', 'temperature', 'top_p'],
+  },
+  {
     name: 'GPT-4o mini',
     isFree: false,
     tokens: '21B tokens',
