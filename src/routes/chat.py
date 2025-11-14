@@ -46,91 +46,181 @@ from src.schemas import ProxyRequest, ResponseRequest
 from src.security.deps import get_api_key
 from src.config import Config
 import importlib
-from src.services.openrouter_client import (
-    make_openrouter_request_openai,
-    process_openrouter_response,
-    make_openrouter_request_openai_stream,
-)
-from src.services.portkey_client import (
-    make_portkey_request_openai,
-    process_portkey_response,
-    make_portkey_request_openai_stream,
-)
-from src.services.featherless_client import (
-    make_featherless_request_openai,
-    process_featherless_response,
-    make_featherless_request_openai_stream,
-)
-from src.services.fireworks_client import (
-    make_fireworks_request_openai,
-    process_fireworks_response,
-    make_fireworks_request_openai_stream,
-)
-from src.services.together_client import (
-    make_together_request_openai,
-    process_together_response,
-    make_together_request_openai_stream,
-)
-from src.services.huggingface_client import (
-    make_huggingface_request_openai,
-    process_huggingface_response,
-    make_huggingface_request_openai_stream,
-)
-from src.services.aimo_client import (
-    make_aimo_request_openai,
-    process_aimo_response,
-    make_aimo_request_openai_stream,
-)
-from src.services.xai_client import (
-    make_xai_request_openai,
-    process_xai_response,
-    make_xai_request_openai_stream,
-)
-from src.services.cerebras_client import (
-    make_cerebras_request_openai,
-    process_cerebras_response,
-    make_cerebras_request_openai_stream,
-)
-from src.services.chutes_client import (
-    make_chutes_request_openai,
-    process_chutes_response,
-    make_chutes_request_openai_stream,
-)
-from src.services.google_vertex_client import (
-    make_google_vertex_request_openai,
-    process_google_vertex_response,
-    make_google_vertex_request_openai_stream,
-)
-from src.services.near_client import (
-    make_near_request_openai,
-    process_near_response,
-    make_near_request_openai_stream,
-)
-from src.services.vercel_ai_gateway_client import (
-    make_vercel_ai_gateway_request_openai,
-    process_vercel_ai_gateway_response,
-    make_vercel_ai_gateway_request_openai_stream,
-)
-from src.services.helicone_client import (
-    make_helicone_request_openai,
-    process_helicone_response,
-    make_helicone_request_openai_stream,
-)
-from src.services.aihubmix_client import (
-    make_aihubmix_request_openai,
-    process_aihubmix_response,
-    make_aihubmix_request_openai_stream,
-)
-from src.services.anannas_client import (
-    make_anannas_request_openai,
-    process_anannas_response,
-    make_anannas_request_openai_stream,
-)
-from src.services.alpaca_network_client import (
-    make_alpaca_network_request_openai,
-    process_alpaca_network_response,
-    make_alpaca_network_request_openai_stream,
-)
+# Import provider clients with graceful error handling
+# This prevents a single provider's import failure from breaking the entire chat endpoint
+_provider_import_errors = {}
+
+# Helper function to safely import provider clients
+def _safe_import_provider(provider_name, imports_list):
+    """Safely import provider functions with error logging"""
+    try:
+        module_path = f"src.services.{provider_name}_client"
+        module = __import__(module_path, fromlist=imports_list)
+        result = {}
+        for import_name in imports_list:
+            result[import_name] = getattr(module, import_name)
+        logging.getLogger(__name__).debug(f"✓ Loaded {provider_name} provider client")
+        return result
+    except Exception as e:
+        error_msg = f"⚠  Failed to load {provider_name} provider client: {type(e).__name__}: {str(e)}"
+        logging.getLogger(__name__).warning(error_msg)
+        _provider_import_errors[provider_name] = str(e)
+        # Return a stub that will raise an error if actually used
+        return {import_name: lambda *args, **kwargs: None for import_name in imports_list}
+
+# Load all provider clients
+_openrouter = _safe_import_provider("openrouter", [
+    "make_openrouter_request_openai",
+    "process_openrouter_response",
+    "make_openrouter_request_openai_stream",
+])
+make_openrouter_request_openai = _openrouter.get("make_openrouter_request_openai")
+process_openrouter_response = _openrouter.get("process_openrouter_response")
+make_openrouter_request_openai_stream = _openrouter.get("make_openrouter_request_openai_stream")
+
+_portkey = _safe_import_provider("portkey", [
+    "make_portkey_request_openai",
+    "process_portkey_response",
+    "make_portkey_request_openai_stream",
+])
+make_portkey_request_openai = _portkey.get("make_portkey_request_openai")
+process_portkey_response = _portkey.get("process_portkey_response")
+make_portkey_request_openai_stream = _portkey.get("make_portkey_request_openai_stream")
+
+_featherless = _safe_import_provider("featherless", [
+    "make_featherless_request_openai",
+    "process_featherless_response",
+    "make_featherless_request_openai_stream",
+])
+make_featherless_request_openai = _featherless.get("make_featherless_request_openai")
+process_featherless_response = _featherless.get("process_featherless_response")
+make_featherless_request_openai_stream = _featherless.get("make_featherless_request_openai_stream")
+
+_fireworks = _safe_import_provider("fireworks", [
+    "make_fireworks_request_openai",
+    "process_fireworks_response",
+    "make_fireworks_request_openai_stream",
+])
+make_fireworks_request_openai = _fireworks.get("make_fireworks_request_openai")
+process_fireworks_response = _fireworks.get("process_fireworks_response")
+make_fireworks_request_openai_stream = _fireworks.get("make_fireworks_request_openai_stream")
+
+_together = _safe_import_provider("together", [
+    "make_together_request_openai",
+    "process_together_response",
+    "make_together_request_openai_stream",
+])
+make_together_request_openai = _together.get("make_together_request_openai")
+process_together_response = _together.get("process_together_response")
+make_together_request_openai_stream = _together.get("make_together_request_openai_stream")
+
+_huggingface = _safe_import_provider("huggingface", [
+    "make_huggingface_request_openai",
+    "process_huggingface_response",
+    "make_huggingface_request_openai_stream",
+])
+make_huggingface_request_openai = _huggingface.get("make_huggingface_request_openai")
+process_huggingface_response = _huggingface.get("process_huggingface_response")
+make_huggingface_request_openai_stream = _huggingface.get("make_huggingface_request_openai_stream")
+
+_aimo = _safe_import_provider("aimo", [
+    "make_aimo_request_openai",
+    "process_aimo_response",
+    "make_aimo_request_openai_stream",
+])
+make_aimo_request_openai = _aimo.get("make_aimo_request_openai")
+process_aimo_response = _aimo.get("process_aimo_response")
+make_aimo_request_openai_stream = _aimo.get("make_aimo_request_openai_stream")
+
+_xai = _safe_import_provider("xai", [
+    "make_xai_request_openai",
+    "process_xai_response",
+    "make_xai_request_openai_stream",
+])
+make_xai_request_openai = _xai.get("make_xai_request_openai")
+process_xai_response = _xai.get("process_xai_response")
+make_xai_request_openai_stream = _xai.get("make_xai_request_openai_stream")
+
+_cerebras = _safe_import_provider("cerebras", [
+    "make_cerebras_request_openai",
+    "process_cerebras_response",
+    "make_cerebras_request_openai_stream",
+])
+make_cerebras_request_openai = _cerebras.get("make_cerebras_request_openai")
+process_cerebras_response = _cerebras.get("process_cerebras_response")
+make_cerebras_request_openai_stream = _cerebras.get("make_cerebras_request_openai_stream")
+
+_chutes = _safe_import_provider("chutes", [
+    "make_chutes_request_openai",
+    "process_chutes_response",
+    "make_chutes_request_openai_stream",
+])
+make_chutes_request_openai = _chutes.get("make_chutes_request_openai")
+process_chutes_response = _chutes.get("process_chutes_response")
+make_chutes_request_openai_stream = _chutes.get("make_chutes_request_openai_stream")
+
+_google_vertex = _safe_import_provider("google_vertex", [
+    "make_google_vertex_request_openai",
+    "process_google_vertex_response",
+    "make_google_vertex_request_openai_stream",
+])
+make_google_vertex_request_openai = _google_vertex.get("make_google_vertex_request_openai")
+process_google_vertex_response = _google_vertex.get("process_google_vertex_response")
+make_google_vertex_request_openai_stream = _google_vertex.get("make_google_vertex_request_openai_stream")
+
+_near = _safe_import_provider("near", [
+    "make_near_request_openai",
+    "process_near_response",
+    "make_near_request_openai_stream",
+])
+make_near_request_openai = _near.get("make_near_request_openai")
+process_near_response = _near.get("process_near_response")
+make_near_request_openai_stream = _near.get("make_near_request_openai_stream")
+
+_vercel_ai_gateway = _safe_import_provider("vercel_ai_gateway", [
+    "make_vercel_ai_gateway_request_openai",
+    "process_vercel_ai_gateway_response",
+    "make_vercel_ai_gateway_request_openai_stream",
+])
+make_vercel_ai_gateway_request_openai = _vercel_ai_gateway.get("make_vercel_ai_gateway_request_openai")
+process_vercel_ai_gateway_response = _vercel_ai_gateway.get("process_vercel_ai_gateway_response")
+make_vercel_ai_gateway_request_openai_stream = _vercel_ai_gateway.get("make_vercel_ai_gateway_request_openai_stream")
+
+_helicone = _safe_import_provider("helicone", [
+    "make_helicone_request_openai",
+    "process_helicone_response",
+    "make_helicone_request_openai_stream",
+])
+make_helicone_request_openai = _helicone.get("make_helicone_request_openai")
+process_helicone_response = _helicone.get("process_helicone_response")
+make_helicone_request_openai_stream = _helicone.get("make_helicone_request_openai_stream")
+
+_aihubmix = _safe_import_provider("aihubmix", [
+    "make_aihubmix_request_openai",
+    "process_aihubmix_response",
+    "make_aihubmix_request_openai_stream",
+])
+make_aihubmix_request_openai = _aihubmix.get("make_aihubmix_request_openai")
+process_aihubmix_response = _aihubmix.get("process_aihubmix_response")
+make_aihubmix_request_openai_stream = _aihubmix.get("make_aihubmix_request_openai_stream")
+
+_anannas = _safe_import_provider("anannas", [
+    "make_anannas_request_openai",
+    "process_anannas_response",
+    "make_anannas_request_openai_stream",
+])
+make_anannas_request_openai = _anannas.get("make_anannas_request_openai")
+process_anannas_response = _anannas.get("process_anannas_response")
+make_anannas_request_openai_stream = _anannas.get("make_anannas_request_openai_stream")
+
+_alpaca_network = _safe_import_provider("alpaca_network", [
+    "make_alpaca_network_request_openai",
+    "process_alpaca_network_response",
+    "make_alpaca_network_request_openai_stream",
+])
+make_alpaca_network_request_openai = _alpaca_network.get("make_alpaca_network_request_openai")
+process_alpaca_network_response = _alpaca_network.get("process_alpaca_network_response")
+make_alpaca_network_request_openai_stream = _alpaca_network.get("make_alpaca_network_request_openai_stream")
 from src.services.model_transformations import detect_provider_from_model_id, transform_model_id
 from src.services.provider_failover import (
     build_provider_failover_chain,
@@ -2192,3 +2282,11 @@ async def unified_responses(
 # Log successful module load - this should appear in startup logs if chat.py loads correctly
 logger.info("✅ Chat module fully loaded - all routes registered successfully")
 logger.info(f"   Total routes in router: {len(router.routes)}")
+
+# Log any provider import errors that occurred during safe imports
+if _provider_import_errors:
+    logger.warning(f"⚠  Provider import warnings ({len(_provider_import_errors)} failed):")
+    for provider_name, error_msg in _provider_import_errors.items():
+        logger.warning(f"     - {provider_name}: {error_msg}")
+else:
+    logger.info("✓ All provider clients loaded successfully")
