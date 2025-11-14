@@ -2572,7 +2572,6 @@ function ChatPageContent() {
                 });
 
                 // Use ChatStreamHandler to properly manage streaming state and avoid ReferenceErrors
-                const streamHandler = new ChatStreamHandler();
                 streamHandler.reset();
 
                 console.log('🌊 Starting to stream response...');
