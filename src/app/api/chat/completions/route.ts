@@ -2,15 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { handleApiError } from '@/app/api/middleware/error-handler';
 import { API_BASE_URL } from '@/lib/config';
 import { normalizeModelId } from '@/lib/utils';
-import { proxyFetch } from '@/lib/proxy-fetch';
 
-export const runtime = 'nodejs';
+export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const apiKey = body.apiKey || request.headers.get('authorization')?.replace('Bearer ', '');
+    const apiKey = body.apiKey || request.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
 
     // Normalize @provider format model IDs (e.g., @google/models/gemini-pro → google/gemini-pro)
     const originalModel = body.model;
@@ -85,7 +84,7 @@ export async function POST(request: NextRequest) {
     // Retry logic for network errors
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
-        response = await proxyFetch(url, {
+        response = await fetch(url, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -144,13 +143,13 @@ export async function POST(request: NextRequest) {
     if (body.stream) {
       console.log('Chat completions API route - Streaming response...');
 
-      // Return the streaming response with proper headers
+      // Return the streaming response with proper headers for Edge runtime
       return new NextResponse(response!.body, {
         status: 200,
         headers: {
           'Content-Type': 'text/event-stream',
-          'Cache-Control': 'no-cache',
-          'Connection': 'keep-alive',
+          'Cache-Control': 'no-cache, no-transform',
+          'X-Accel-Buffering': 'no',
         },
       });
     }
