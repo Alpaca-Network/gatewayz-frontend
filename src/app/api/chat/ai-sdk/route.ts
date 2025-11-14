@@ -4,6 +4,7 @@ import {
   parseAISDKStream,
   AISDKMessage,
 } from '@/lib/ai-sdk-gateway';
+import { normalizeModelId } from '@/lib/utils';
 
 /**
  * AI SDK Chat Completions Endpoint
@@ -40,6 +41,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Normalize @provider format model IDs (e.g., @google/models/gemini-pro → google/gemini-pro)
+    const originalModel = model;
+    const normalizedModel = normalizeModelId(model);
+    if (originalModel !== normalizedModel) {
+      console.log('[AI SDK Route] Normalized model ID from', originalModel, 'to', normalizedModel);
+    }
+
     // Convert to AI SDK message format
     const aiSdkMessages: AISDKMessage[] = messages.map((m: any) => ({
       role: m.role,
@@ -50,7 +58,7 @@ export async function POST(request: NextRequest) {
     // Get the stream from AI SDK
     const stream = await callAISDKCompletion(
       aiSdkMessages,
-      model,
+      normalizedModel,
       {
         temperature: temperature ?? 0.7,
         maxTokens: max_tokens ?? 4096,

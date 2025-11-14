@@ -25,7 +25,11 @@ export const extractTokenValue = (str: string): string | null => {
  * Normalize model IDs to consistent format
  * Handles various formats returned by different gateway APIs:
  * - @google/models/gemini-pro-latest → google/gemini-pro-latest
+<<<<<<< HEAD
   * - @cerebras/llama3.1-8b → cerebras/llama3.1-8b
+=======
+ * - @openrouter/qwen/qwen3-32b → openrouter/qwen/qwen3-32b
+>>>>>>> origin/master
  * - google/gemini-pro → google/gemini-pro (no change)
  * - gemini-pro → gemini-pro (no change)
  *
