@@ -2768,7 +2768,7 @@ function ChatPageContent() {
                 // Update session title in API if this is the first message
                 // Note: Messages are automatically saved by the backend when session_id is passed
                 // The title was already updated locally in updatedSessions (line 1326)
-                if (isFirstMessage && currentSession?.apiSessionId && newTitle) {
+                if (isFirstMessage && currentSession?.apiSessionId && newTitle && userData) {
                     try {
                         if (apiKey) {
                             const chatAPI = new ChatHistoryAPI(apiKey, undefined, userData?.privy_user_id);
