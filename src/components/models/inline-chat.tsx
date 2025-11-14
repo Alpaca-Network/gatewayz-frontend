@@ -86,13 +86,13 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
     let inThinking = false;
 
     try {
-      // Call the backend API directly to avoid Vercel's 60-second timeout
-      // CORS headers are configured in vercel.json to allow beta.gatewayz.ai
+      // Call the backend API through Next.js API route (which proxies to backend)
+      // This avoids CORS issues and allows for proper error handling
       const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
 
-      // Build URL without gateway query parameter
+      // Build URL - use Next.js API route when in browser
       const url = typeof window !== 'undefined'
-        ? '/v1/chat/completions'
+        ? '/api/chat/completions'
         : `${apiBaseUrl}/v1/chat/completions`;
 
       // Normalize model ID to handle different formats from various gateway APIs
