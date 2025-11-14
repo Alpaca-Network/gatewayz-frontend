@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test User Setup - Gatewayz</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #555;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        textarea {
+            min-height: 100px;
+            font-family: monospace;
+        }
+        button {
+            background: #0070f3;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+        }
+        button:hover {
+            background: #0051cc;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 20px;
+            display: none;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 20px;
+            display: none;
+        }
+        .info {
+            background: #d1ecf1;
+            color: #0c5460;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+        .links {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+        }
+        .links a {
+            color: #0070f3;
+            text-decoration: none;
+            margin-right: 15px;
+        }
+        .links a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Test User Setup for Local Development</h1>
+
+        <div class="info">
+            <strong>Note:</strong> To use the chat functionality, you need a valid API key from the Gatewayz backend.
+            You can either:
+            <ol>
+                <li>Authenticate through Privy (Email, Google, GitHub, or Wallet) on the main site</li>
+                <li>Use an existing API key if you have one</li>
+            </ol>
+        </div>
+
+        <div class="form-group">
+            <label for="apiKey">Enter Your Gatewayz API Key:</label>
+            <input type="text" id="apiKey" placeholder="gw_..." />
+            <small style="color: #666; display: block; margin-top: 5px;">
+                Don't have an API key? Visit <a href="https://beta.gatewayz.ai" target="_blank">beta.gatewayz.ai</a> to sign up
+            </small>
+        </div>
+
+        <div class="form-group">
+            <label for="userId">User ID (numeric):</label>
+            <input type="number" id="userId" placeholder="12345" value="1" />
+        </div>
+
+        <div class="form-group">
+            <label for="displayName">Display Name:</label>
+            <input type="text" id="displayName" placeholder="Test User" value="Test User" />
+        </div>
+
+        <div class="form-group">
+            <label for="email">Email:</label>
+            <input type="email" id="email" placeholder="test@example.com" value="test@localhost.local" />
+        </div>
+
+        <div class="form-group">
+            <label for="credits">Credits:</label>
+            <input type="number" id="credits" placeholder="100" value="100" />
+        </div>
+
+        <button onclick="setupTestUser()">💾 Setup Test User</button>
+        <button onclick="clearAuth()" style="background: #dc3545; margin-left: 10px;">🗑️ Clear Auth Data</button>
+
+        <div class="success" id="successMessage"></div>
+        <div class="error" id="errorMessage"></div>
+
+        <div class="status" id="statusDisplay">
+            <strong>Current Status:</strong>
+            <pre id="currentStatus" style="margin-top: 10px; overflow-x: auto;">Loading...</pre>
+        </div>
+
+        <div class="links">
+            <a href="http://localhost:3000" target="_blank">Open Home Page →</a>
+            <a href="http://localhost:3000/chat" target="_blank">Open Chat →</a>
+            <a href="http://localhost:3000/settings/keys" target="_blank">Manage API Keys →</a>
+        </div>
+    </div>
+
+    <script>
+        function showSuccess(message) {
+            const el = document.getElementById('successMessage');
+            el.textContent = message;
+            el.style.display = 'block';
+            document.getElementById('errorMessage').style.display = 'none';
+            setTimeout(() => { el.style.display = 'none'; }, 5000);
+        }
+
+        function showError(message) {
+            const el = document.getElementById('errorMessage');
+            el.textContent = message;
+            el.style.display = 'block';
+            document.getElementById('successMessage').style.display = 'none';
+        }
+
+        function updateStatus() {
+            const apiKey = localStorage.getItem('gatewayz_api_key');
+            const userData = localStorage.getItem('gatewayz_user_data');
+
+            const status = {
+                hasApiKey: !!apiKey,
+                apiKeyPreview: apiKey ? apiKey.substring(0, 10) + '...' : 'None',
+                userData: userData ? JSON.parse(userData) : null,
+                storageKeys: Object.keys(localStorage).filter(k => k.startsWith('gatewayz_'))
+            };
+
+            document.getElementById('currentStatus').textContent = JSON.stringify(status, null, 2);
+        }
+
+        function setupTestUser() {
+            const apiKey = document.getElementById('apiKey').value.trim();
+            const userId = parseInt(document.getElementById('userId').value);
+            const displayName = document.getElementById('displayName').value.trim();
+            const email = document.getElementById('email').value.trim();
+            const credits = parseInt(document.getElementById('credits').value);
+
+            if (!apiKey) {
+                showError('API Key is required!');
+                return;
+            }
+
+            if (!apiKey.startsWith('gw_')) {
+                showError('Invalid API key format. Should start with "gw_"');
+                return;
+            }
+
+            if (!userId || !displayName || !email) {
+                showError('All fields are required!');
+                return;
+            }
+
+            const userData = {
+                user_id: userId,
+                api_key: apiKey,
+                auth_method: 'email',
+                privy_user_id: 'test-user-' + userId,
+                display_name: displayName,
+                email: email,
+                credits: credits,
+                tier: 'basic',
+                tier_display_name: 'Basic'
+            };
+
+            try {
+                // Save to localStorage
+                localStorage.setItem('gatewayz_api_key', apiKey);
+                localStorage.setItem('gatewayz_user_data', JSON.stringify(userData));
+
+                showSuccess('✅ Test user setup successful! You can now use the chat interface.');
+                updateStatus();
+
+                // Dispatch auth refresh event
+                window.dispatchEvent(new CustomEvent('gatewayz-auth-refresh'));
+            } catch (error) {
+                showError('Failed to setup test user: ' + error.message);
+            }
+        }
+
+        function clearAuth() {
+            const keysToRemove = Object.keys(localStorage).filter(k => k.startsWith('gatewayz_'));
+            keysToRemove.forEach(key => localStorage.removeItem(key));
+
+            showSuccess('✅ Auth data cleared!');
+            updateStatus();
+
+            // Dispatch auth refresh event
+            window.dispatchEvent(new CustomEvent('gatewayz-auth-refresh'));
+        }
+
+        // Update status on page load
+        updateStatus();
+
+        // Listen for storage changes
+        window.addEventListener('storage', updateStatus);
+    </script>
+</body>
+</html>
