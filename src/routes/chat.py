@@ -211,6 +211,10 @@ def track_trial_usage(*args, **kwargs):
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+# Log module initialization to help debug route loading
+logger.info("🔄 Chat module initialized - router created")
+logger.info(f"   Router type: {type(router)}")
+
 DEFAULT_PROVIDER_TIMEOUT = 30
 PROVIDER_TIMEOUTS = {
     "huggingface": 120,
@@ -526,6 +530,9 @@ async def stream_generator(
         yield f"data: {json.dumps(error_chunk)}\n\n"
         yield "data: [DONE]\n\n"
 
+
+# Log route registration for debugging
+logger.info("📍 Registering /v1/chat/completions endpoint")
 
 @router.post("/v1/chat/completions", tags=["chat"])
 @traced(name="chat_completions", type="llm")
@@ -2180,3 +2187,8 @@ async def unified_responses(
                 await rate_limit_mgr.release_concurrency(api_key)
             except Exception as exc:
                 logger.debug("Failed to release concurrency for %s: %s", mask_key(api_key), exc)
+
+
+# Log successful module load - this should appear in startup logs if chat.py loads correctly
+logger.info("✅ Chat module fully loaded - all routes registered successfully")
+logger.info(f"   Total routes in router: {len(router.routes)}")
