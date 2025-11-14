@@ -1906,21 +1906,19 @@ function ChatPageContent() {
 
     // Optimize image by resizing and converting to WebP
     const optimizeImage = async (file: File): Promise<string> => {
-        try {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
 
-                reader.onload = (event) => {
-                    const img = new Image();
-                    img.onload = () => {
-                        try {
-                            // Create canvas for image processing
-                            const canvas = document.createElement('canvas');
-                            const ctx = canvas.getContext('2d');
-                            if (!ctx) {
-                                reject(new Error('Failed to get canvas context'));
-                                return;
-                            }
+            reader.onload = (event) => {
+                const img = new Image();
+                img.onload = () => {
+                    // Create canvas for image processing
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    if (!ctx) {
+                        reject(new Error('Failed to get canvas context'));
+                        return;
+                    }
 
                     // Calculate optimal dimensions (max 1920x1080 for better performance)
                     const MAX_WIDTH = 1920;
@@ -1958,7 +1956,7 @@ function ChatPageContent() {
                     console.log(`Image optimized: ${(originalSize / 1024).toFixed(1)}KB → ${(optimizedSize / 1024).toFixed(1)}KB (${savings}% reduction)`);
 
                     resolve(optimizedBase64);
-                };
+                }
                 img.onerror = () => reject(new Error('Failed to load image'));
                 img.src = event.target?.result as string;
             };
