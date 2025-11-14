@@ -1171,11 +1171,11 @@ function ChatPageContent() {
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const [editedTitle, setEditedTitle] = useState('');
     const [selectedModel, setSelectedModel] = useState<ModelOption | null>({
-        value: '@cerebras/qwen-3-32b',
-        label: 'Qwen 3 32B',
+        value: '@cerebras/llama3.1-8b',
+        label: 'Llama 3.1 8B',
         category: 'Free',
         sourceGateway: 'cerebras',
-        developer: 'Qwen',
+        developer: 'Cerebras',
         speedTier: 'ultra-fast'
     });
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
