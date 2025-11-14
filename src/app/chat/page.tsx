@@ -3529,7 +3529,7 @@ function ChatPageContent() {
                     <Button
                       size="icon"
                       variant="ghost"
-                      onClick={handleSendMessage}
+                      onClick={() => handleSendMessage()}
                       disabled={loading || isStreamingResponse || !message.trim() || (!isAuthenticated && !hasApiKey)}
                       className="h-8 w-8 sm:h-7 sm:w-7 bg-primary hover:bg-primary/90 text-primary-foreground touch-manipulation flex-shrink-0"
                       title={authLoading
