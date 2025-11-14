@@ -2144,8 +2144,8 @@ function ChatPageContent() {
     };
 
     const handleSendMessage = async (retryCount = 0) => {
-        // Prevent sending if user hasn't actually typed anything
-        if (!userHasTyped) {
+        // Check if there's actually a message to send
+        if (!message.trim()) {
             return;
         }
 
@@ -2170,8 +2170,9 @@ function ChatPageContent() {
             }
         }
 
-        if (!apiKey || !userData || typeof userData.privy_user_id !== 'string') {
-            console.log('[Auth] User not authenticated - queuing message and triggering login');
+        // Only require API key for sending messages - Privy user data is optional for history
+        if (!apiKey) {
+            console.log('[Auth] No API key - queuing message and triggering login');
 
             // Queue the message to be sent after authentication
             setPendingMessage({
@@ -2321,7 +2322,7 @@ function ChatPageContent() {
             });
 
             // Auth is already checked at the beginning of handleSendMessage
-            const privyUserId = userData.privy_user_id;
+            const privyUserId = userData?.privy_user_id;
 
             // Call backend API directly with privy_user_id and session_id query parameters
             const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
@@ -2344,7 +2345,7 @@ function ChatPageContent() {
             // OPTIMIZATION: Save the user message to the backend before streaming
             // This ensures the backend has the user message before processing the stream
             // which prevents race conditions where the API can't find the context
-            if (currentSession?.apiSessionId) {
+            if (currentSession?.apiSessionId && userData) {
                 try {
                     devLog('🔄 Attempting to save user message to backend:', {
                         sessionId: currentSession.apiSessionId,
@@ -2373,7 +2374,7 @@ function ChatPageContent() {
                         stack: error instanceof Error ? error.stack : undefined,
                         sessionId: currentSession.apiSessionId,
                         hasApiKey: !!apiKey,
-                        hasPrivyUserId: !!userData.privy_user_id
+                        hasPrivyUserId: !!userData?.privy_user_id
                     });
                     // Don't throw - let the stream request proceed anyway
                     // The message is already in the UI optimistically
@@ -2571,8 +2572,7 @@ function ChatPageContent() {
                     url: url
                 });
 
-                // Use ChatStreamHandler to properly manage streaming state and avoid ReferenceErrors
-                const streamHandler = new ChatStreamHandler();
+                // Reset the existing streamHandler (declared at top of try block)
                 streamHandler.reset();
 
                 console.log('🌊 Starting to stream response...');
@@ -2710,7 +2710,7 @@ function ChatPageContent() {
 
                 // OPTIMIZATION: Save the assistant's response to the backend asynchronously
                 // This allows the UI to be responsive immediately after streaming completes
-                if (currentSession?.apiSessionId && finalContent) {
+                if (currentSession?.apiSessionId && finalContent && userData) {
                     // Fire and forget - save in background
                     const saveAssistantMessage = async () => {
                         try {
@@ -2750,7 +2750,7 @@ function ChatPageContent() {
                                 stack: error instanceof Error ? error.stack : undefined,
                                 sessionId: currentSession.apiSessionId,
                                 hasApiKey: !!apiKey,
-                                hasPrivyUserId: !!userData.privy_user_id
+                                hasPrivyUserId: !!userData?.privy_user_id
                             });
                         }
                     };
@@ -2771,7 +2771,7 @@ function ChatPageContent() {
                 if (isFirstMessage && currentSession?.apiSessionId && newTitle) {
                     try {
                         if (apiKey) {
-                            const chatAPI = new ChatHistoryAPI(apiKey, undefined, userData.privy_user_id);
+                            const chatAPI = new ChatHistoryAPI(apiKey, undefined, userData?.privy_user_id);
                             console.log('Updating session title in API:', { oldTitle: 'Untitled Chat', newTitle, sessionId: currentSession.apiSessionId });
                             await chatAPI.updateSession(currentSession.apiSessionId, newTitle);
                         }
