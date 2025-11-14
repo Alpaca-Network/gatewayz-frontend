@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { handleApiError } from '@/app/api/middleware/error-handler';
 import { API_BASE_URL } from '@/lib/config';
+import { normalizeModelId } from '@/lib/utils';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -22,6 +23,14 @@ export async function POST(request: NextRequest) {
     const url = `${API_BASE_URL}/v1/chat/completions`;
     console.log(`Chat API route - Calling: ${url}`);
 
+    // Normalize @provider format model IDs (e.g., @google/models/gemini-pro → google/gemini-pro)
+    let normalizedModel = model === 'gpt-4o mini' ? 'deepseek/deepseek-chat' : model;
+    const originalModel = normalizedModel;
+    normalizedModel = normalizeModelId(normalizedModel);
+    if (originalModel !== normalizedModel) {
+      console.log('[Chat API] Normalized model ID from', originalModel, 'to', normalizedModel);
+    }
+
     const response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -29,7 +38,7 @@ export async function POST(request: NextRequest) {
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: model === 'gpt-4o mini' ? 'deepseek/deepseek-chat' : model,
+        model: normalizedModel,
         messages: [{ role: 'user', content: message }],
       }),
     });

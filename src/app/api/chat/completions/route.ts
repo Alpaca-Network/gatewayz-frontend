@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { handleApiError } from '@/app/api/middleware/error-handler';
 import { API_BASE_URL } from '@/lib/config';
+import { normalizeModelId } from '@/lib/utils';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -9,6 +10,14 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const apiKey = body.apiKey || request.headers.get('authorization')?.replace('Bearer ', '');
+
+    // Normalize @provider format model IDs (e.g., @google/models/gemini-pro → google/gemini-pro)
+    const originalModel = body.model;
+    const normalizedModel = normalizeModelId(body.model);
+    if (originalModel !== normalizedModel) {
+      console.log('[API Completions] Normalized model ID from', originalModel, 'to', normalizedModel);
+    }
+    body.model = normalizedModel;
 
     console.log('Chat completions API route - Request:', {
       model: body.model,
