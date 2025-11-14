@@ -97,7 +97,8 @@ class ModelSyncService {
       } catch (error) {
         console.error(`[ModelSync] Failed to sync gateway ${gateway}:`, error);
         Sentry.captureException(error, {
-          tags: { gateway, sync_type: 'gateway_interval' }
+          tags: { gateway, sync_type: 'gateway_interval' },
+          extra: { gateway, sync_type: 'gateway_interval' }
         });
       }
     }, intervalMs);
@@ -201,10 +202,14 @@ class ModelSyncService {
         errors: [error instanceof Error ? error.message : 'Unknown error']
       };
 
-      Sentry.captureException(error, {
-        tags: { gateway, sync_type: 'gateway_sync' },
-        extra: result
-      });
+Sentry.captureException(error, {
+          tags: { gateway, sync_type: 'gateway_sync' },
+          extra: { 
+            gateway: result.gateway,
+            totalModels: result.totalModels,
+            errors: result.errors 
+          }
+        });
 
       return result;
     }

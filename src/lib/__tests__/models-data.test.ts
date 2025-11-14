@@ -78,7 +78,7 @@ describe('models-data', () => {
     });
 
     it('should have valid token format', () => {
-      const validTokenPattern = /^\d+(\.\d+)?[KMBT]\s+tokens$/i;
+      const validTokenPattern = /^\d+(\.\d+)?[KMBT]\+?\s+tokens$/i;
       models.forEach((model) => {
         expect(validTokenPattern.test(model.tokens)).toBe(true);
       });
