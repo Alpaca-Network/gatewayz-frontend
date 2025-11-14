@@ -2143,7 +2143,7 @@ function ChatPageContent() {
         }
     };
 
-    const handleSendMessage = async () => {
+    const handleSendMessage = async (retryCount = 0) => {
         // Prevent sending if user hasn't actually typed anything
         if (!userHasTyped) {
             return;
@@ -2854,6 +2854,36 @@ function ChatPageContent() {
                 });
 
                 if (shouldFallback && selectedModel) {
+                    // Limit model retries to 3 attempts to prevent infinite loops
+                    const maxRetries = 3;
+
+                    if (retryCount >= maxRetries) {
+                        console.log(`Maximum retry attempts (${maxRetries}) reached, stopping fallback chain`);
+                        // Show error instead of continuing to retry
+                        setSessions(prev => prev.map(session => {
+                            if (session.id === currentSessionId) {
+                                return {
+                                    ...session,
+                                    messages: [...updatedMessages, {
+                                        role: 'assistant' as const,
+                                        content: 'All available models are currently experiencing issues. Please try again in a few moments.',
+                                        model: selectedModel.value
+                                    }],
+                                    updatedAt: new Date()
+                                };
+                            }
+                            return session;
+                        }));
+
+                        toast({
+                            title: "All Models Unavailable",
+                            description: `Tried ${maxRetries} models but all are currently unavailable. Please try again later.`,
+                            variant: 'destructive'
+                        });
+
+                        return; // Exit early
+                    }
+
                     // Define fallback models in order of preference (using truly free models):
                     // 1. DeepSeek V3.1 Free (default)
                     // 2. Mistral Small Free
@@ -2872,12 +2902,12 @@ function ChatPageContent() {
                     const fallbackModel = fallbackModels.find(fm => fm.value !== selectedModel.value);
 
                     if (fallbackModel) {
-                        console.log(`Model ${selectedModel.value} failed with 500 error, attempting fallback to ${fallbackModel.value}`);
+                        console.log(`Model ${selectedModel.value} failed with 500 error, attempting fallback to ${fallbackModel.value} (retry ${retryCount + 1}/${maxRetries})`);
 
                         // Show a toast notification about the fallback
                         toast({
                             title: "Model Unavailable",
-                            description: `${selectedModel.label} is temporarily unavailable. Switched to ${fallbackModel.label}.`,
+                            description: `${selectedModel.label} is temporarily unavailable. Switched to ${fallbackModel.label}. (Attempt ${retryCount + 1}/${maxRetries})`,
                             variant: 'default'
                         });
 
@@ -2897,14 +2927,15 @@ function ChatPageContent() {
                         }));
 
                         // Retry the request with the fallback model by recursively calling handleSendMessage
+                        // Pass retryCount + 1 to track the number of retries
                         // Wait a short moment before retrying
                         setTimeout(() => {
                             // Re-populate the message field with the original user message
                             setMessage(userMessage);
                             setUserHasTyped(true);
                             userHasTypedRef.current = true;
-                            // Trigger send
-                            handleSendMessage();
+                            // Trigger send with incremented retry count
+                            handleSendMessage(retryCount + 1);
                         }, 500);
 
                         return; // Exit early to prevent showing error message
@@ -3498,7 +3529,7 @@ function ChatPageContent() {
                     <Button
                       size="icon"
                       variant="ghost"
-                      onClick={handleSendMessage}
+                      onClick={() => handleSendMessage()}
                       disabled={loading || isStreamingResponse || !message.trim() || (!isAuthenticated && !hasApiKey)}
                       className="h-8 w-8 sm:h-7 sm:w-7 bg-primary hover:bg-primary/90 text-primary-foreground touch-manipulation flex-shrink-0"
                       title={authLoading

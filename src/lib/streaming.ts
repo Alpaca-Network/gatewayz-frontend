@@ -109,16 +109,56 @@ export async function* streamChatResponse(
     devLog('[Streaming] Request body:', requestBody);
     devLog('[Streaming] API Key prefix:', apiKey.substring(0, 20) + '...');
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-        'Accept': 'text/event-stream',
-      },
-      body: JSON.stringify(requestBody),
-      signal: controller.signal,
-    });
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+          'Accept': 'text/event-stream',
+        },
+        body: JSON.stringify(requestBody),
+        signal: controller.signal,
+      });
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+
+      // Handle network errors with retry logic
+      if (fetchError instanceof TypeError ||
+          (fetchError instanceof Error && (
+            fetchError.message.includes('fetch') ||
+            fetchError.message.includes('network') ||
+            fetchError.message.includes('ECONNREFUSED') ||
+            fetchError.message.includes('ECONNRESET') ||
+            fetchError.message.includes('ETIMEDOUT')
+          ))) {
+
+        if (retryCount < maxRetries) {
+          // Exponential backoff: 2s, 4s, 8s, 16s, 32s
+          const waitTime = Math.min(2000 * Math.pow(2, retryCount), 32000);
+          const jitter = Math.floor(Math.random() * 1000);
+          const totalWaitTime = waitTime + jitter;
+
+          devLog(`Network error detected, retrying in ${totalWaitTime}ms (attempt ${retryCount + 1}/${maxRetries})...`);
+          devError('Network error details:', fetchError);
+
+          await sleep(totalWaitTime);
+
+          // Recursive retry
+          yield* streamChatResponse(url, apiKey, requestBody, retryCount + 1, maxRetries);
+          return;
+        }
+
+        // Max retries exceeded
+        throw new Error(
+          `Network connection failed after ${maxRetries} attempts. Please check your internet connection and try again.`
+        );
+      }
+
+      // Re-throw non-network errors
+      throw fetchError;
+    }
 
     clearTimeout(timeoutId);
 
