@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { handleApiError } from '@/app/api/middleware/error-handler';
 import { API_BASE_URL } from '@/lib/config';
 import { normalizeModelId } from '@/lib/utils';
+import { proxyFetch } from '@/lib/proxy-fetch';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -84,7 +85,7 @@ export async function POST(request: NextRequest) {
     // Retry logic for network errors
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
-        response = await fetch(url, {
+        response = await proxyFetch(url, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
