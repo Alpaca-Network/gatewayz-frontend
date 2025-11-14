@@ -1,9 +1,24 @@
 #!/bin/bash
 
 # Test User Setup Script
-# This script demonstrates setting up the test user with the provided API key
+# This script demonstrates setting up the test user with an API key from environment
 
-API_KEY="gw_live_hMdf3qaEzGnM1l3164lMjE0Q6pHVgKfmAoQEBgD67OA"
+# Load API key from .env.local if available
+if [ -f .env.local ]; then
+    export $(grep -v '^#' .env.local | grep TEST_API_KEY | xargs)
+fi
+
+# Use environment variable or prompt for API key
+API_KEY="${TEST_API_KEY:-}"
+
+if [ -z "$API_KEY" ]; then
+    echo "⚠️  No API key found in environment"
+    echo ""
+    echo "Please set TEST_API_KEY in .env.local or export it:"
+    echo "  export TEST_API_KEY='your-api-key-here'"
+    echo ""
+    exit 1
+fi
 
 echo "🧪 Test User Setup"
 echo "===================="

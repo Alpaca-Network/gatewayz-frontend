@@ -5,9 +5,12 @@ Your Gatewayz local development server is ready with test authentication!
 ## 🎯 Quick Start
 
 ### Your API Key
-```
-gw_live_hMdf3qaEzGnM1l3164lMjE0Q6pHVgKfmAoQEBgD67OA
-```
+
+**IMPORTANT**: Never commit API keys to git! Your API key is stored in `.env.local` (which is gitignored).
+
+To get your API key:
+1. Check `.env.local` for the `TEST_API_KEY` variable
+2. Or get a new one from https://beta.gatewayz.ai/settings/keys
 
 ### Setup Steps (Browser-Based)
 
@@ -17,7 +20,7 @@ gw_live_hMdf3qaEzGnM1l3164lMjE0Q6pHVgKfmAoQEBgD67OA
    ```
 
 2. **Enter Your Credentials**
-   - **API Key**: `gw_live_hMdf3qaEzGnM1l3164lMjE0Q6pHVgKfmAoQEBgD67OA`
+   - **API Key**: (Get from `.env.local` or https://beta.gatewayz.ai/settings/keys)
    - **User ID**: `1` (or any number)
    - **Display Name**: `Test User`
    - **Email**: `test@localhost.local`
@@ -61,9 +64,12 @@ After setting up credentials via the test auth page:
 
 **Test with GPT-3.5 Turbo:**
 ```bash
+# Load API key from .env.local
+export $(grep TEST_API_KEY .env.local | xargs)
+
 curl -X POST http://localhost:3000/api/chat/completions \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer gw_live_hMdf3qaEzGnM1l3164lMjE0Q6pHVgKfmAoQEBgD67OA" \
+  -H "Authorization: Bearer $TEST_API_KEY" \
   -d '{
     "model": "gpt-3.5-turbo",
     "messages": [{"role": "user", "content": "Hello! Tell me a joke."}],
@@ -75,7 +81,7 @@ curl -X POST http://localhost:3000/api/chat/completions \
 ```bash
 curl -X POST http://localhost:3000/api/chat/completions \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer gw_live_hMdf3qaEzGnM1l3164lMjE0Q6pHVgKfmAoQEBgD67OA" \
+  -H "Authorization: Bearer $TEST_API_KEY" \
   -d '{
     "model": "Qwen: Qwen2 72B A16B 2507",
     "messages": [{"role": "user", "content": "Write a haiku about coding"}],
