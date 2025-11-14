@@ -232,7 +232,7 @@
                 updateStatus();
 
                 // Dispatch auth refresh event
-                window.dispatchEvent(new CustomEvent('gatewayz-auth-refresh'));
+                window.dispatchEvent(new CustomEvent('gatewayz:refresh-auth'));
             } catch (error) {
                 showError('Failed to setup test user: ' + error.message);
             }
@@ -246,7 +246,7 @@
             updateStatus();
 
             // Dispatch auth refresh event
-            window.dispatchEvent(new CustomEvent('gatewayz-auth-refresh'));
+            window.dispatchEvent(new CustomEvent('gatewayz:refresh-auth'));
         }
 
         // Update status on page load
