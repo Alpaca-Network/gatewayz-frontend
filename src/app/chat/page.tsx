@@ -55,6 +55,8 @@ import { streamChatResponse } from '@/lib/streaming';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { logAnalyticsEvent } from '@/lib/analytics';
+import { useEagerModelPreload } from '@/hooks/useEagerModelPreload';
+import { useRecentlyUsedModels } from '@/hooks/useRecentlyUsedModels';
 
 // Lazy load ModelSelect for better initial load performance
 // Reduces initial bundle by ~100KB and defers expensive model processing
@@ -1154,7 +1156,14 @@ const devWarn = (...args: any[]) => {
 function ChatPageContent() {
     const searchParams = useSearchParams();
     const { login, isAuthenticated, loading: authLoading } = useAuth();
-    
+
+    // Eager preload models in the background for instant access
+    // This runs on component mount and preloads the first 50 models
+    useEagerModelPreload();
+
+    // Track recently used models for quick access
+    const { recentModels, addRecentModel } = useRecentlyUsedModels();
+
     // All hooks must be declared before any conditional returns
     const [hasApiKey, setHasApiKey] = useState(false);
     const [message, setMessage] = useState('');
@@ -2126,6 +2135,8 @@ function ChatPageContent() {
                 category: model.category,
                 gateway: model.sourceGateway
             });
+            // Track model as recently used for instant access next time
+            addRecentModel(model);
         }
         setSelectedModel(model);
 

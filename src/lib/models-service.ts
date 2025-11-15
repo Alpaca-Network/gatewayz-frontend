@@ -259,7 +259,8 @@ async function fetchModelsFromGateway(gateway: string, limit?: number): Promise<
   const allModels: any[] = [];
   const requestLimit = limit || 50000; // Request up to 50k models per page (backend limit)
   const FAST_GATEWAYS = ['openrouter', 'groq', 'together', 'fireworks', 'vercel-ai-gateway'];
-  const timeoutMs = FAST_GATEWAYS.includes(gateway) ? 3000 : 5000;
+  // Optimized timeouts: reduce from 5000ms to 3500ms for slow gateways to speed up parallel requests
+  const timeoutMs = FAST_GATEWAYS.includes(gateway) ? 2500 : 3500;
 
   let offset = 0;
   let hasMore = true;
