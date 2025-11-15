@@ -310,12 +310,17 @@ export default function ModelProfilePage() {
     // Select default provider based on lowest cost or latency
     useEffect(() => {
         if (modelProviders.length > 0 && model) {
-            // For models with provider-specific prefixes (near/, aimo/, etc.),
+            // For models with provider-specific prefixes (near/, aimo/, @cerebras/, etc.),
             // prefer using their native gateway if available
             const modelIdLower = model.id.toLowerCase();
             let preferredGateway: string | null = null;
 
-            if (modelIdLower.startsWith('near/') && modelProviders.includes('near')) {
+            // Handle '@provider/' prefix models (e.g., @cerebras/qwen-3-32b)
+            if (modelIdLower.startsWith('@cerebras/') && modelProviders.includes('cerebras')) {
+                preferredGateway = 'cerebras';
+            } else if (modelIdLower.startsWith('@xai/') && modelProviders.includes('xai')) {
+                preferredGateway = 'xai';
+            } else if (modelIdLower.startsWith('near/') && modelProviders.includes('near')) {
                 preferredGateway = 'near';
             } else if (modelIdLower.startsWith('aimo/') && modelProviders.includes('aimo')) {
                 preferredGateway = 'aimo';

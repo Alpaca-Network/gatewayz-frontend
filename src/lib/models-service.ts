@@ -121,15 +121,24 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
         // We normalize by removing ALL provider prefixes to ensure proper deduplication
         let canonicalSlug = (model.canonical_slug || model.id || '').toLowerCase();
 
-        // Remove provider prefixes (some models have them, others don't)
-        canonicalSlug = canonicalSlug
-          .replace(/^(aimo\/|google\/|openai\/|meta\/|anthropic\/|models\/|mistralai\/|xai\/)/i, '')
-          .replace(/\s+/g, '-')
-          .replace(/[^\w-]/g, '');
+        // For models with '@' prefix (like @cerebras/qwen-3-32b), preserve the full ID as the dedupKey
+        // to ensure they're not confused with other models during deduplication
+        let dedupKey: string;
 
-        // Use canonical slug if it's more specific, otherwise use normalized name
-        // Prefer canonical_slug as it's designed to be a unique identifier
-        const dedupKey = canonicalSlug || normalizedName;
+        if (canonicalSlug.startsWith('@')) {
+          // Preserve the full ID for provider-prefixed models (@provider/model-name)
+          dedupKey = canonicalSlug;
+        } else {
+          // Remove provider prefixes (some models have them, others don't)
+          canonicalSlug = canonicalSlug
+            .replace(/^(aimo\/|google\/|openai\/|meta\/|anthropic\/|models\/|mistralai\/|xai\/)/i, '')
+            .replace(/\s+/g, '-')
+            .replace(/[^\w-]/g, '');
+
+          // Use canonical slug if it's more specific, otherwise use normalized name
+          // Prefer canonical_slug as it's designed to be a unique identifier
+          dedupKey = canonicalSlug || normalizedName;
+        }
 
         // Merge models from multiple gateways AND providers
         if (modelMap.has(dedupKey)) {
