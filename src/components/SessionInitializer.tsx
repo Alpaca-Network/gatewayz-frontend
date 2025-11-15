@@ -11,20 +11,26 @@ import {
 } from "@/integrations/privy/auth-session-transfer";
 import { saveApiKey, saveUserData, type UserData } from "@/lib/api";
 
-// Cache for user data fetches to avoid duplicate requests
+// Cache for user data fetches to avoid duplicate requests within same session
 const userDataCache = new Map<string, { data: UserData; timestamp: number }>();
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL = 1 * 60 * 1000; // 1 minute cache
 
 function getCachedUserData(token: string): UserData | null {
   const cached = userDataCache.get(token);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
     return cached.data;
   }
+  userDataCache.delete(token); // Clean up expired cache
   return null;
 }
 
 function setCachedUserData(token: string, data: UserData): void {
   userDataCache.set(token, { data, timestamp: Date.now() });
+}
+
+// For testing: export a function to clear the cache
+if (typeof window !== 'undefined' && (window as any).__testing) {
+  (window as any).__clearSessionInitializerCache = () => userDataCache.clear();
 }
 
 async function fetchUserDataOptimized(token: string): Promise<UserData | null> {
