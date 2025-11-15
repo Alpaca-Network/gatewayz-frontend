@@ -151,13 +151,15 @@ def test_get_model_pricing_handles_multiple_provider_suffixes(monkeypatch, mod):
 # -------------------- calculate_cost --------------------
 
 def test_calculate_cost_happy(monkeypatch, mod):
-    # Force a specific pricing
+    # Force a specific pricing (pricing is per 1M tokens)
+    # 10 per 1M tokens = $0.00001 per token
+    # 20 per 1M tokens = $0.00002 per token
     monkeypatch.setattr(
         mod, "get_model_pricing",
-        lambda model_id: {"prompt": 0.00001, "completion": 0.00002, "found": True}
+        lambda model_id: {"prompt": 10, "completion": 20, "found": True}
     )
     cost = mod.calculate_cost("any/model", prompt_tokens=1000, completion_tokens=500)
-    # 1000*1e-5 + 500*2e-5 = 0.01 + 0.01 = 0.02
+    # (1000 * 10 + 500 * 20) / 1_000_000 = (10_000 + 10_000) / 1_000_000 = 0.02
     assert math.isclose(cost, 0.02)
 
 

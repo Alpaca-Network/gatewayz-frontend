@@ -3,8 +3,8 @@ Pricing Service
 Handles model pricing calculations and credit cost computation
 """
 
-from typing import Dict
 import logging
+from typing import Dict
 
 logger = logging.getLogger(__name__)
 
@@ -103,8 +103,9 @@ def calculate_cost(model_id: str, prompt_tokens: int, completion_tokens: int) ->
     try:
         pricing = get_model_pricing(model_id)
 
-        prompt_cost = prompt_tokens * pricing["prompt"]
-        completion_cost = completion_tokens * pricing["completion"]
+        # Pricing is per 1M tokens, so divide by 1,000,000
+        prompt_cost = (prompt_tokens * pricing["prompt"]) / 1_000_000
+        completion_cost = (completion_tokens * pricing["completion"]) / 1_000_000
         total_cost = prompt_cost + completion_cost
 
         logger.info(
