@@ -81,10 +81,11 @@ describe('ChatHistoryAPI', () => {
         expect.stringContaining('/sessions'),
         expect.objectContaining({
           method: 'POST',
-          headers: {
+          headers: expect.objectContaining({
             Authorization: `Bearer ${mockApiKey}`,
             'Content-Type': 'application/json',
-          },
+            'Connection': 'keep-alive',
+          }),
           body: JSON.stringify({
             title: 'Test Chat',
             model: 'gpt-4',
