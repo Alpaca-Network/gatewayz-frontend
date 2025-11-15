@@ -10,6 +10,8 @@ import httpx
 from typing import Optional
 from contextvars import ContextVar
 
+from src.utils.performance_tracker import PerformanceTracker
+
 # Request correlation ID for distributed tracing
 request_id_var: ContextVar[str] = ContextVar("request_id", default="")
 # Make braintrust optional for test environments
@@ -363,6 +365,7 @@ async def stream_generator(
     messages,
     rate_limit_mgr=None,
     provider="openrouter",
+    tracker=None,
 ):
     """Generate SSE stream from OpenAI stream response with thinking tag support"""
     accumulated_content = ""
@@ -373,8 +376,14 @@ async def stream_generator(
     start_time = time.monotonic()
     rate_limit_mgr is not None and not trial.get("is_trial", False)
     has_thinking = False
+    streaming_ctx = None
 
     try:
+        # Track streaming duration if tracker is provided
+        if tracker:
+            streaming_ctx = tracker.streaming()
+            streaming_ctx.__enter__()
+
         chunk_count = 0
         for chunk in stream:
             chunk_count += 1
@@ -631,6 +640,13 @@ async def stream_generator(
         error_chunk = {"error": {"message": "Streaming error occurred", "type": "stream_error"}}
         yield f"data: {json.dumps(error_chunk)}\n\n"
         yield "data: [DONE]\n\n"
+    finally:
+        # Record streaming duration
+        if streaming_ctx:
+            streaming_ctx.__exit__(None, None, None)
+        # Record performance percentages if tracker is provided
+        if tracker:
+            tracker.record_percentages()
 
 
 # Log route registration for debugging
@@ -666,9 +682,13 @@ async def chat_completions(
     # Start Braintrust span for this request
     span = start_span(name=f"chat_{req.model}", type="llm")
 
+    # Initialize performance tracker
+    tracker = PerformanceTracker(endpoint="/v1/chat/completions")
+
     try:
         # === 1) User + plan/trial prechecks (DB calls on thread) ===
-        user = await _to_thread(get_user, api_key)
+        with tracker.stage("auth_validation"):
+            user = await _to_thread(get_user, api_key)
         if not user and Config.IS_TESTING:
             logger.debug("Fallback user lookup invoked for %s", mask_key(api_key))
             user = await _to_thread(_fallback_get_user, api_key)
@@ -753,7 +773,8 @@ async def chat_completions(
             raise HTTPException(status_code=402, detail="Insufficient credits")
 
         # === 2) Build upstream request ===
-        messages = [m.model_dump() for m in req.messages]
+        with tracker.stage("request_parsing"):
+            messages = [m.model_dump() for m in req.messages]
 
         # === 2.1) Inject conversation history if session_id provided ===
         if session_id:
@@ -793,81 +814,82 @@ async def chat_completions(
         # Store original model for response
         original_model = req.model
 
-        optional = {}
-        for name in (
-            "max_tokens",
-            "temperature",
-            "top_p",
-            "frequency_penalty",
-            "presence_penalty",
-            "tools",
-        ):
-            val = getattr(req, name, None)
-            if val is not None:
-                optional[name] = val
+        with tracker.stage("request_preparation"):
+            optional = {}
+            for name in (
+                "max_tokens",
+                "temperature",
+                "top_p",
+                "frequency_penalty",
+                "presence_penalty",
+                "tools",
+            ):
+                val = getattr(req, name, None)
+                if val is not None:
+                    optional[name] = val
 
-        # Auto-detect provider if not specified
-        req_provider_missing = req.provider is None or (
-            isinstance(req.provider, str) and not req.provider
-        )
-        provider = (req.provider or "openrouter").lower()
+            # Auto-detect provider if not specified
+            req_provider_missing = req.provider is None or (
+                isinstance(req.provider, str) and not req.provider
+            )
+            provider = (req.provider or "openrouter").lower()
 
-        # Normalize provider aliases
-        if provider == "hug":
-            provider = "huggingface"
+            # Normalize provider aliases
+            if provider == "hug":
+                provider = "huggingface"
 
-        override_provider = detect_provider_from_model_id(original_model)
-        if override_provider:
-            override_provider = override_provider.lower()
-            if override_provider == "hug":
-                override_provider = "huggingface"
-            if override_provider != provider:
-                logger.info(
-                    f"Provider override applied for model {original_model}: '{provider}' -> '{override_provider}'"
-                )
-                provider = override_provider
-            # Mark provider as determined even if it matches the default
-            # This prevents the fallback logic from incorrectly routing to wrong providers
-            req_provider_missing = False
+            override_provider = detect_provider_from_model_id(original_model)
+            if override_provider:
+                override_provider = override_provider.lower()
+                if override_provider == "hug":
+                    override_provider = "huggingface"
+                if override_provider != provider:
+                    logger.info(
+                        f"Provider override applied for model {original_model}: '{provider}' -> '{override_provider}'"
+                    )
+                    provider = override_provider
+                # Mark provider as determined even if it matches the default
+                # This prevents the fallback logic from incorrectly routing to wrong providers
+                req_provider_missing = False
 
-        if req_provider_missing:
-            # Try to detect provider from model ID using the transformation module
-            detected_provider = detect_provider_from_model_id(original_model)
-            if detected_provider:
-                provider = detected_provider
-                # Normalize provider aliases
-                if provider == "hug":
-                    provider = "huggingface"
-                logger.info(
-                    "Auto-detected provider '%s' for model %s",
-                    sanitize_for_logging(provider),
-                    sanitize_for_logging(original_model),
-                )
-            else:
-                # Fallback to checking cached models
-                from src.services.models import get_cached_models
+            if req_provider_missing:
+                # Try to detect provider from model ID using the transformation module
+                detected_provider = detect_provider_from_model_id(original_model)
+                if detected_provider:
+                    provider = detected_provider
+                    # Normalize provider aliases
+                    if provider == "hug":
+                        provider = "huggingface"
+                    logger.info(
+                        "Auto-detected provider '%s' for model %s",
+                        sanitize_for_logging(provider),
+                        sanitize_for_logging(original_model),
+                    )
+                else:
+                    # Fallback to checking cached models
+                    from src.services.models import get_cached_models
 
-                # Try each provider with transformation
-                for test_provider in [
-                    "huggingface",
-                    "featherless",
-                    "fireworks",
-                    "together",
-                    "portkey",
-                    "google-vertex",
-                ]:
-                    transformed = transform_model_id(original_model, test_provider)
-                    provider_models = get_cached_models(test_provider) or []
-                    if any(m.get("id") == transformed for m in provider_models):
-                        provider = test_provider
-                        logger.info(
-                            f"Auto-detected provider '{provider}' for model {original_model} (transformed to {transformed})"
-                        )
-                        break
-                # Otherwise default to openrouter (already set)
+                    # Try each provider with transformation
+                    for test_provider in [
+                        "huggingface",
+                        "featherless",
+                        "fireworks",
+                        "together",
+                        "portkey",
+                        "google-vertex",
+                    ]:
+                        transformed = transform_model_id(original_model, test_provider)
+                        provider_models = get_cached_models(test_provider) or []
+                        if any(m.get("id") == transformed for m in provider_models):
+                            provider = test_provider
+                            logger.info(
+                                f"Auto-detected provider '{provider}' for model {original_model} (transformed to {transformed})"
+                            )
+                            break
+                    # Otherwise default to openrouter (already set)
 
-        provider_chain = build_provider_failover_chain(provider)
-        model = original_model
+            provider_chain = build_provider_failover_chain(provider)
+            model = original_model
         
         # Diagnostic logging for tools parameter
         if "tools" in optional:
@@ -1011,6 +1033,7 @@ async def chat_completions(
                             messages,
                             rate_limit_mgr,
                             provider,
+                            tracker,
                         ),
                         media_type="text/event-stream",
                     )
@@ -1839,6 +1862,8 @@ async def unified_responses(
                             session_id,
                             messages,
                             rate_limit_mgr,
+                            provider="openrouter",
+                            tracker=None,
                         ):
                             if chunk_data.startswith("data: "):
                                 data_str = chunk_data[6:].strip()

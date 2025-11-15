@@ -10,6 +10,8 @@ import time
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
+from src.utils.performance_tracker import PerformanceTracker
+
 import src.db.api_keys as api_keys_module
 import src.db.plans as plans_module
 import src.db.rate_limits as rate_limits_module
@@ -195,6 +197,9 @@ async def anthropic_messages(
     }
     ```
     """
+    # Initialize performance tracker
+    tracker = PerformanceTracker(endpoint="/v1/messages")
+
     if Config.IS_TESTING and request:
         auth_header = request.headers.get("Authorization")
         if auth_header and auth_header.lower().startswith("bearer "):
