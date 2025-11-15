@@ -1623,9 +1623,16 @@ function ChatPageContent() {
                         b.updatedAt.getTime() - a.updatedAt.getTime()
                     )[0];
 
-                    // Default to empty chat with prompt suggestions
-                    console.log('[loadSessions] Loaded sessions, defaulting to empty chat state with prompt suggestions');
-                    setActiveSessionId(null);
+                    // If there are existing sessions, load the most recent one
+                    // Otherwise, create a new chat session
+                    if (mostRecentSession) {
+                        console.log('[loadSessions] Loaded sessions, switching to most recent:', mostRecentSession.id);
+                        setActiveSessionId(mostRecentSession.id);
+                    } else {
+                        console.log('[loadSessions] No existing sessions, creating new chat');
+                        // Auto-create first chat session when no sessions exist
+                        await createNewChat();
+                    }
                 } catch (error) {
                     console.error('[loadSessions] Failed to load sessions:', error);
                     // Failed to load sessions, fallback to creating a new chat
@@ -2217,12 +2224,13 @@ function ChatPageContent() {
             return;
         }
 
-        // Check if session exists - if not, don't auto-create, just show error
+        // Check if session exists - if not, auto-create silently
         const trimmedMessage = message.trim();
         let currentSessionId = activeSessionId;
         if (!currentSessionId) {
-            console.log('[Session] No active session - queuing send until session ready');
+            console.log('[Session] No active session - creating and queuing send');
 
+            // Queue the message to be sent after session is ready
             setPendingMessage({
                 message: trimmedMessage,
                 model: selectedModel,
@@ -2231,15 +2239,23 @@ function ChatPageContent() {
                 audio: selectedAudio
             });
 
+            // Create new session silently (no toast)
             if (!creatingSessionRef.current) {
-                await createNewChat();
+                try {
+                    const newSession = await createNewChat();
+                    if (newSession) {
+                        console.log('[Session] Chat session created successfully:', newSession.id);
+                        // Session will trigger pendingMessage effect automatically
+                    }
+                } catch (error) {
+                    console.error('[Session] Failed to create chat session:', error);
+                    toast({
+                        title: "Error",
+                        description: "Failed to create chat session. Please try again.",
+                        variant: 'destructive'
+                    });
+                }
             }
-
-            toast({
-                title: "Setting up chat...",
-                description: "We're preparing your chat session. Your message will send automatically.",
-                variant: 'default'
-            });
             return;
         }
 
