@@ -226,6 +226,43 @@ queue_size = Gauge(
     ["queue_name"],
 )
 
+# ==================== Performance Stage Metrics ====================
+# Detailed stage breakdown metrics for performance profiling
+backend_ttfb_seconds = Histogram(
+    "backend_ttfb_seconds",
+    "Backend API time to first byte (TTFB) in seconds",
+    ["provider", "model", "endpoint"],
+    buckets=(0.1, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 5.0, 10.0),
+)
+
+streaming_duration_seconds = Histogram(
+    "streaming_duration_seconds",
+    "Time spent streaming response to client in seconds",
+    ["provider", "model", "endpoint"],
+    buckets=(0.1, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 5.0, 10.0),
+)
+
+frontend_processing_seconds = Histogram(
+    "frontend_processing_seconds",
+    "Frontend processing time (request parsing, auth, preparation) in seconds",
+    ["endpoint"],
+    buckets=(0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5),
+)
+
+request_stage_duration_seconds = Histogram(
+    "request_stage_duration_seconds",
+    "Duration of specific request processing stages in seconds",
+    ["stage", "endpoint"],
+    buckets=(0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 5.0),
+)
+
+# Stage breakdown percentages
+stage_percentage = Gauge(
+    "stage_percentage",
+    "Percentage of total request time spent in each stage",
+    ["stage", "endpoint"],
+)
+
 # ==================== Context Managers & Helpers ====================
 
 
@@ -385,6 +422,45 @@ def set_active_connections(connection_type: str, count: int):
 def set_queue_size(queue_name: str, size: int):
     """Set queue size."""
     queue_size.labels(queue_name=queue_name).set(size)
+
+
+# ==================== Performance Stage Tracking Functions ====================
+
+def track_backend_ttfb(provider: str, model: str, endpoint: str, duration: float):
+    """Track backend API time to first byte (TTFB)."""
+    backend_ttfb_seconds.labels(provider=provider, model=model, endpoint=endpoint).observe(
+        duration
+    )
+
+
+def track_streaming_duration(provider: str, model: str, endpoint: str, duration: float):
+    """Track streaming response duration."""
+    streaming_duration_seconds.labels(provider=provider, model=model, endpoint=endpoint).observe(
+        duration
+    )
+
+
+def track_frontend_processing(endpoint: str, duration: float):
+    """Track frontend processing time (parsing, auth, preparation)."""
+    frontend_processing_seconds.labels(endpoint=endpoint).observe(duration)
+
+
+def track_request_stage(stage: str, endpoint: str, duration: float):
+    """Track duration of a specific request processing stage.
+    
+    Stages:
+    - request_parsing: Time to parse and validate request
+    - auth_validation: Time to validate authentication
+    - request_preparation: Time to prepare request for backend
+    - backend_fetch: Time waiting for backend API response (TTFB)
+    - stream_processing: Time spent streaming response to client
+    """
+    request_stage_duration_seconds.labels(stage=stage, endpoint=endpoint).observe(duration)
+
+
+def record_stage_percentage(stage: str, endpoint: str, percentage: float):
+    """Record percentage of total request time spent in a stage."""
+    stage_percentage.labels(stage=stage, endpoint=endpoint).set(percentage)
 
 
 def get_metrics_summary() -> dict:

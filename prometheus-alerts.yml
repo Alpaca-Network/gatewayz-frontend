@@ -1,0 +1,133 @@
+groups:
+  - name: performance_alerts
+    interval: 30s
+    rules:
+      # Backend TTFB Alerts
+      - alert: HighBackendTTFB
+        expr: histogram_quantile(0.95, sum(rate(backend_ttfb_seconds_bucket[5m])) by (le)) > 2.0
+        for: 5m
+        labels:
+          severity: warning
+          component: backend
+        annotations:
+          summary: "High Backend TTFB detected"
+          description: "Backend time to first byte (p95) is {{ $value }}s, exceeding threshold of 2.0s. This indicates slow backend API response times."
+
+      - alert: CriticalBackendTTFB
+        expr: histogram_quantile(0.95, sum(rate(backend_ttfb_seconds_bucket[5m])) by (le)) > 3.0
+        for: 2m
+        labels:
+          severity: critical
+          component: backend
+        annotations:
+          summary: "Critical Backend TTFB detected"
+          description: "Backend time to first byte (p95) is {{ $value }}s, exceeding critical threshold of 3.0s. Immediate investigation required."
+
+      # Streaming Duration Alerts
+      - alert: HighStreamingDuration
+        expr: histogram_quantile(0.95, sum(rate(streaming_duration_seconds_bucket[5m])) by (le)) > 1.5
+        for: 5m
+        labels:
+          severity: warning
+          component: streaming
+        annotations:
+          summary: "High streaming duration detected"
+          description: "Streaming duration (p95) is {{ $value }}s, exceeding threshold of 1.5s. This may indicate network or model generation issues."
+
+      - alert: CriticalStreamingDuration
+        expr: histogram_quantile(0.95, sum(rate(streaming_duration_seconds_bucket[5m])) by (le)) > 2.5
+        for: 2m
+        labels:
+          severity: critical
+          component: streaming
+        annotations:
+          summary: "Critical streaming duration detected"
+          description: "Streaming duration (p95) is {{ $value }}s, exceeding critical threshold of 2.5s. Immediate investigation required."
+
+      # Frontend Processing Alerts
+      - alert: HighFrontendProcessing
+        expr: histogram_quantile(0.95, sum(rate(frontend_processing_seconds_bucket[5m])) by (le)) > 0.01
+        for: 5m
+        labels:
+          severity: warning
+          component: frontend
+        annotations:
+          summary: "High frontend processing time detected"
+          description: "Frontend processing time (p95) is {{ $value }}s, exceeding threshold of 0.01s. This is unusual as frontend overhead should be minimal."
+
+      # Stage Percentage Alerts
+      - alert: BackendResponseDominating
+        expr: avg(stage_percentage{stage="backend_response"}) > 70
+        for: 10m
+        labels:
+          severity: info
+          component: performance
+        annotations:
+          summary: "Backend response time dominating total request time"
+          description: "Backend response accounts for {{ $value }}% of total request time, indicating backend is the main bottleneck."
+
+      - alert: StreamingTimeHigh
+        expr: avg(stage_percentage{stage="stream_processing"}) > 50
+        for: 10m
+        labels:
+          severity: warning
+          component: streaming
+        annotations:
+          summary: "Streaming time accounts for high percentage of total time"
+          description: "Streaming processing accounts for {{ $value }}% of total request time. Consider optimizing network or chunk sizes."
+
+      # Provider-Specific Alerts
+      - alert: SlowProviderTTFB
+        expr: histogram_quantile(0.95, sum(rate(backend_ttfb_seconds_bucket{provider!=""}[5m])) by (le, provider)) > 2.5
+        for: 5m
+        labels:
+          severity: warning
+          component: provider
+        annotations:
+          summary: "Slow TTFB for provider {{ $labels.provider }}"
+          description: "Provider {{ $labels.provider }} has TTFB (p95) of {{ $value }}s, exceeding threshold of 2.5s."
+
+      # Model-Specific Alerts
+      - alert: SlowModelTTFB
+        expr: histogram_quantile(0.95, sum(rate(backend_ttfb_seconds_bucket{model!=""}[5m])) by (le, model)) > 3.0
+        for: 5m
+        labels:
+          severity: warning
+          component: model
+        annotations:
+          summary: "Slow TTFB for model {{ $labels.model }}"
+          description: "Model {{ $labels.model }} has TTFB (p95) of {{ $value }}s, exceeding threshold of 3.0s. This may indicate model cold start or capacity issues."
+
+  - name: performance_trends
+    interval: 1m
+    rules:
+      # Trend Detection - Backend TTFB Degradation
+      - alert: BackendTTFBDegrading
+        expr: |
+          (
+            histogram_quantile(0.95, sum(rate(backend_ttfb_seconds_bucket[15m])) by (le)) /
+            histogram_quantile(0.95, sum(rate(backend_ttfb_seconds_bucket[15m] offset 1h)) by (le))
+          ) > 1.5
+        for: 10m
+        labels:
+          severity: warning
+          component: backend
+        annotations:
+          summary: "Backend TTFB degrading over time"
+          description: "Backend TTFB (p95) has increased by more than 50% compared to 1 hour ago. Current: {{ $value }}x baseline."
+
+      # Trend Detection - Streaming Duration Degradation
+      - alert: StreamingDurationDegrading
+        expr: |
+          (
+            histogram_quantile(0.95, sum(rate(streaming_duration_seconds_bucket[15m])) by (le)) /
+            histogram_quantile(0.95, sum(rate(streaming_duration_seconds_bucket[15m] offset 1h)) by (le))
+          ) > 1.5
+        for: 10m
+        labels:
+          severity: warning
+          component: streaming
+        annotations:
+          summary: "Streaming duration degrading over time"
+          description: "Streaming duration (p95) has increased by more than 50% compared to 1 hour ago. Current: {{ $value }}x baseline."
+
