@@ -127,8 +127,10 @@ const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
         {gateways.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mb-3">
             {gateways.slice(0, 3).map((gateway) => {
-              const config = GATEWAY_CONFIG[gateway.toLowerCase()] || {
-                name: gateway,
+              // Normalize gateway by removing @ prefix
+              const normalizedGateway = gateway.replace(/^@/, '').toLowerCase();
+              const config = GATEWAY_CONFIG[normalizedGateway] || {
+                name: normalizedGateway,
                 color: 'bg-gray-500'
               };
               return (

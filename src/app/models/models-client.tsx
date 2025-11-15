@@ -126,13 +126,16 @@ const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
   const allSourcesRaw = [...new Set([...providers, ...gateways])];
   const sourcesByName = new Map<string, string>();
   allSourcesRaw.forEach(source => {
-    const providerConfig = PROVIDER_CONFIG[source.toLowerCase()];
-    const gatewayConfig = GATEWAY_CONFIG[source.toLowerCase()];
+    // Normalize source: remove @ prefix and handle both singular and configured names
+    let normalizedSource = source.replace(/^@/, '').toLowerCase();
+
+    const providerConfig = PROVIDER_CONFIG[normalizedSource];
+    const gatewayConfig = GATEWAY_CONFIG[normalizedSource];
     const config = providerConfig || gatewayConfig;
-    const displayName = config?.name || source;
+    const displayName = config?.name || source.replace(/^@/, '');
     // Only keep first occurrence of each display name
     if (!sourcesByName.has(displayName)) {
-      sourcesByName.set(displayName, source);
+      sourcesByName.set(displayName, normalizedSource);
     }
   });
   const allSources = Array.from(sourcesByName.values());
@@ -191,11 +194,13 @@ const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
         {allSources.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mb-3">
             {allSources.slice(0, 4).map((source) => {
+              // Normalize source by removing @ prefix
+              const normalizedSource = source.replace(/^@/, '').toLowerCase();
               // Check if it's a provider or gateway, prefer provider config
-              const providerConfig = PROVIDER_CONFIG[source.toLowerCase()];
-              const gatewayConfig = GATEWAY_CONFIG[source.toLowerCase()];
+              const providerConfig = PROVIDER_CONFIG[normalizedSource];
+              const gatewayConfig = GATEWAY_CONFIG[normalizedSource];
               const config = providerConfig || gatewayConfig || {
-                name: source,
+                name: normalizedSource,
                 color: 'bg-gray-500'
               };
               return (
