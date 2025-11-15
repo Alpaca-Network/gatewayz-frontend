@@ -154,13 +154,17 @@ export async function POST(request: NextRequest) {
     if (body.stream) {
       console.log('Chat completions API route - Streaming response...');
 
-      // Return the streaming response with proper headers for Edge runtime
+      // OPTIMIZATION: Return streaming response with optimized Edge Runtime headers
+      // Connection pooling and low buffering for fast response
       return new NextResponse(response!.body, {
         status: 200,
         headers: {
           'Content-Type': 'text/event-stream',
           'Cache-Control': 'no-cache, no-transform',
           'X-Accel-Buffering': 'no',
+          'Connection': 'keep-alive', // Maintain connection for streaming
+          'Transfer-Encoding': 'chunked', // Enable chunked encoding for responsiveness
+          'X-Content-Type-Options': 'nosniff', // Security header
         },
       });
     }
