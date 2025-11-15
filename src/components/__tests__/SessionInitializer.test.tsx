@@ -38,7 +38,18 @@ describe('SessionInitializer', () => {
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    // Reset ALL mocks including their implementations and return values
+    jest.resetAllMocks();
+
+    // Reset fetch mock completely
+    (global.fetch as jest.Mock).mockReset();
+    // Set a default that will cause tests to fail if they don't set up fetch
+    (global.fetch as jest.Mock).mockRejectedValue(new Error('fetch not mocked in test'));
+
+    // Clear SessionInitializer cache for tests
+    if (typeof (window as any).__clearSessionInitializerCache === 'function') {
+      (window as any).__clearSessionInitializerCache();
+    }
 
     // Setup router mock
     mockRouter = {
@@ -107,12 +118,12 @@ describe('SessionInitializer', () => {
       expect(api.saveApiKey).toHaveBeenCalledWith(mockToken);
 
       // Verify user data fetch
-      expect(global.fetch).toHaveBeenCalledWith('/api/user/me', {
+      expect(global.fetch).toHaveBeenCalledWith('/api/user/me', expect.objectContaining({
         headers: {
           Authorization: `Bearer ${mockToken}`,
           'Content-Type': 'application/json',
         },
-      });
+      }));
 
       // Verify user data was saved
       await waitFor(() => {
@@ -136,7 +147,7 @@ describe('SessionInitializer', () => {
     });
 
     it('should redirect to returnUrl when provided', async () => {
-      const mockToken = 'test-api-key-123';
+      const mockToken = 'test-api-key-redirect';
       const mockUserId = '12345';
       const mockReturnUrl = '/dashboard';
       const mockUserData = {
@@ -174,7 +185,7 @@ describe('SessionInitializer', () => {
     });
 
     it('should handle failed user data fetch gracefully', async () => {
-      const mockToken = 'test-api-key-123';
+      const mockToken = 'test-api-key-failed';
       const mockUserId = '12345';
 
       (sessionTransfer.getSessionTransferParams as jest.Mock).mockReturnValue({
@@ -214,7 +225,7 @@ describe('SessionInitializer', () => {
     });
 
     it('should handle network errors during user data fetch', async () => {
-      const mockToken = 'test-api-key-123';
+      const mockToken = 'test-api-key-network';
       const mockUserId = '12345';
 
       (sessionTransfer.getSessionTransferParams as jest.Mock).mockReturnValue({
@@ -249,7 +260,7 @@ describe('SessionInitializer', () => {
     });
 
     it('should normalize user data correctly', async () => {
-      const mockToken = 'test-api-key-123';
+      const mockToken = 'test-api-key-normalize';
       const mockUserId = '12345';
       const mockUserData = {
         user_id: 12345,
@@ -288,7 +299,7 @@ describe('SessionInitializer', () => {
     });
 
     it('should use fallback values for missing user data fields', async () => {
-      const mockToken = 'test-api-key-123';
+      const mockToken = 'test-api-key-456-fallback';
       const mockUserId = '12345';
       const mockUserData = {
         user_id: 12345,
@@ -315,9 +326,10 @@ describe('SessionInitializer', () => {
             user_id: 12345,
             auth_method: 'session_transfer',
             privy_user_id: '12345',
-            display_name: 'User', // Fallback
-            email: '', // Fallback
-            credits: 0, // Fallback
+            display_name: 'User', // Fallback when not provided
+            email: '', // Fallback when not provided
+            credits: 0, // Fallback when not provided
+            api_key: mockToken,
           })
         );
       });
@@ -374,12 +386,12 @@ describe('SessionInitializer', () => {
       });
 
       // Verify user data fetch
-      expect(global.fetch).toHaveBeenCalledWith('/api/user/me', {
+      expect(global.fetch).toHaveBeenCalledWith('/api/user/me', expect.objectContaining({
         headers: {
           Authorization: `Bearer ${mockToken}`,
           'Content-Type': 'application/json',
         },
-      });
+      }));
 
       // Verify user data was saved
       await waitFor(() => {
@@ -569,7 +581,7 @@ describe('SessionInitializer', () => {
 
   describe('Component Lifecycle', () => {
     it('should only run initialization once on mount', async () => {
-      const mockToken = 'test-api-key-123';
+      const mockToken = 'test-api-key-lifecycle';
       const mockUserId = '12345';
       const mockUserData = {
         user_id: 12345,

@@ -5,20 +5,18 @@ import { AppHeader } from '@/components/layout/app-header';
 import { AppFooter } from '@/components/layout/app-footer';
 import { ThemeProvider } from '@/components/theme-provider';
 import { PrivyProviderWrapper } from '@/components/providers/privy-provider';
-import { StatsigProviderWrapper } from '@/components/providers/statsig-provider';
 import { OnboardingBanner } from '@/components/onboarding/onboarding-banner';
 import { WelcomeDialog } from '@/components/dialogs/welcome-dialog';
 import { TrialCreditsNotice } from '@/components/dialogs/trial-credits-notice';
 import { Analytics } from '@vercel/analytics/next';
 import { SpeedInsights } from '@vercel/speed-insights/next';
 import { Inter } from 'next/font/google';
-import { ReactScanProvider } from '@/components/providers/react-scan-provider';
 import { GoogleAnalytics } from '@/components/analytics/google-analytics';
 import { SessionInitializer } from '@/components/SessionInitializer';
 import { PreviewHostnameRestorer } from '@/components/auth/preview-hostname-restorer';
 import { GTMLoader } from '@/components/analytics/gtm-loader';
 import { ErrorSuppressor } from '@/components/error-suppressor';
-import { ModelSyncInitializer } from '@/components/model-sync-initializer';
+import { AnalyticsProvidersWrapper } from '@/components/providers/analytics-providers-wrapper';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -86,15 +84,12 @@ export default function RootLayout({
           defaultTheme="system"
           storageKey="ui-theme"
         >
-          <ReactScanProvider />
           {/* Preview hostname restoration - handles Vercel preview OAuth redirects */}
           <PreviewHostnameRestorer />
           <PrivyProviderWrapper>
-            <StatsigProviderWrapper>
+            <AnalyticsProvidersWrapper>
               {/* Session transfer from main domain - handles automatic authentication */}
               <SessionInitializer />
-              {/* Initialize background model synchronization */}
-              <ModelSyncInitializer />
               <GTMLoader />
               <AppHeader />
               <OnboardingBanner />
@@ -108,7 +103,7 @@ export default function RootLayout({
               <TrialCreditsNotice />
               <Analytics />
               <SpeedInsights />
-            </StatsigProviderWrapper>
+            </AnalyticsProvidersWrapper>
           </PrivyProviderWrapper>
         </ThemeProvider>
       </body>

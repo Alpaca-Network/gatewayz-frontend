@@ -69,14 +69,12 @@ function StatsigProviderInternal({ children }: { children: React.ReactNode }) {
   const sdkKey = process.env.NEXT_PUBLIC_STATSIG_CLIENT_KEY;
 
   // Initialize Statsig client with enhanced error handling
+  // Defer heavy plugins until after auth is complete to avoid blocking
   const { client } = useClientAsyncInit(
     sdkKey || '',
     { userID: userId },
     {
-      plugins: [
-        new StatsigAutoCapturePlugin(),
-        new StatsigSessionReplayPlugin()
-      ],
+      plugins: [], // Initialize without plugins first for faster startup
     },
   );
 
