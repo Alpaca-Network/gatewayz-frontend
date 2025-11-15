@@ -68,6 +68,10 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
             },
           },
           defaultChain: base,
+          // Optimize initialization for faster login
+          mfa: {
+            required: false,
+          },
         }}
       >
         <PreviewHostnameInterceptor />

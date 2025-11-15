@@ -1,0 +1,60 @@
+
+> nextn@0.1.0 build
+> next build
+
+Attention: Next.js now collects completely anonymous telemetry regarding usage.
+This information is used to shape Next.js' roadmap and prioritize features.
+You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
+https://nextjs.org/telemetry
+
+   ▲ Next.js 15.3.3
+   - Experiments (use with caution):
+     · clientTraceMetadata
+
+   Creating an optimized production build ...
+[@sentry/nextjs] Could not find `onRequestError` hook in instrumentation file. This indicates outdated configuration of the Sentry SDK. Use `Sentry.captureRequestError` to instrument the `onRequestError` hook: https://docs.sentry.io/platforms/javascript/guides/nextjs/manual-setup/#errors-from-nested-react-server-components
+[@sentry/nextjs] It seems like you don't have a global error handler set up. It is recommended that you add a 'global-error.js' file with Sentry instrumentation so that React rendering errors are reported to Sentry. Read more: https://docs.sentry.io/platforms/javascript/guides/nextjs/manual-setup/#react-render-errors-in-app-router (you can suppress this warning by setting SENTRY_SUPPRESS_GLOBAL_ERROR_HANDLER_FILE_WARNING=1 as environment variable)
+[@sentry/nextjs] DEPRECATION WARNING: It is recommended renaming your `sentry.client.config.ts` file, or moving its content to `instrumentation-client.ts`. When using Turbopack `sentry.client.config.ts` will no longer work. Read more about the `instrumentation-client.ts` file: https://nextjs.org/docs/app/api-reference/file-conventions/instrumentation-client
+<w> [webpack.cache.PackFileCacheStrategy] Serializing big strings (185kiB) impacts deserialization performance (consider using Buffer instead and decode when needed)
+<w> [webpack.cache.PackFileCacheStrategy] Serializing big strings (139kiB) impacts deserialization performance (consider using Buffer instead and decode when needed)
+Failed to compile.
+
+./src/app/layout.tsx
+Error:   [31mx[0m `ssr: false` is not allowed with `next/dynamic` in Server Components. Please move it into a client component.
+    ,-[[36;1;4m/root/repo/src/app/layout.tsx[0m:22:1]
+ [2m19[0m | import { ErrorSuppressor } from '@/components/error-suppressor';
+ [2m20[0m | 
+ [2m21[0m | // Defer heavy analytics providers to after initial render
+ [2m22[0m | const StatsigProviderWrapper = dynamic(() => import('@/components/providers/statsig-provider').then(mod => ({ default: mod.StatsigProviderWrapper })), { ssr: false });
+    : [35;1m                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+ [2m23[0m | const ReactScanProvider = dynamic(() => import('@/components/providers/react-scan-provider').then(mod => ({ default: mod.ReactScanProvider })), { ssr: false });
+ [2m24[0m | const ModelSyncInitializer = dynamic(() => import('@/components/model-sync-initializer').then(mod => ({ default: mod.ModelSyncInitializer })), { ssr: false });
+    `----
+  [31mx[0m `ssr: false` is not allowed with `next/dynamic` in Server Components. Please move it into a client component.
+    ,-[[36;1;4m/root/repo/src/app/layout.tsx[0m:23:1]
+ [2m20[0m | 
+ [2m21[0m | // Defer heavy analytics providers to after initial render
+ [2m22[0m | const StatsigProviderWrapper = dynamic(() => import('@/components/providers/statsig-provider').then(mod => ({ default: mod.StatsigProviderWrapper })), { ssr: false });
+ [2m23[0m | const ReactScanProvider = dynamic(() => import('@/components/providers/react-scan-provider').then(mod => ({ default: mod.ReactScanProvider })), { ssr: false });
+    : [35;1m                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+ [2m24[0m | const ModelSyncInitializer = dynamic(() => import('@/components/model-sync-initializer').then(mod => ({ default: mod.ModelSyncInitializer })), { ssr: false });
+ [2m25[0m | 
+ [2m26[0m | const inter = Inter({
+    `----
+  [31mx[0m `ssr: false` is not allowed with `next/dynamic` in Server Components. Please move it into a client component.
+    ,-[[36;1;4m/root/repo/src/app/layout.tsx[0m:24:1]
+ [2m21[0m | // Defer heavy analytics providers to after initial render
+ [2m22[0m | const StatsigProviderWrapper = dynamic(() => import('@/components/providers/statsig-provider').then(mod => ({ default: mod.StatsigProviderWrapper })), { ssr: false });
+ [2m23[0m | const ReactScanProvider = dynamic(() => import('@/components/providers/react-scan-provider').then(mod => ({ default: mod.ReactScanProvider })), { ssr: false });
+ [2m24[0m | const ModelSyncInitializer = dynamic(() => import('@/components/model-sync-initializer').then(mod => ({ default: mod.ModelSyncInitializer })), { ssr: false });
+    : [35;1m                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+ [2m25[0m | 
+ [2m26[0m | const inter = Inter({
+ [2m27[0m |   subsets: ['latin'],
+    `----
+
+Import trace for requested module:
+./src/app/layout.tsx
+
+
+> Build failed because of webpack errors

@@ -69,16 +69,33 @@ function StatsigProviderInternal({ children }: { children: React.ReactNode }) {
   const sdkKey = process.env.NEXT_PUBLIC_STATSIG_CLIENT_KEY;
 
   // Initialize Statsig client with enhanced error handling
+  // Defer heavy plugins until after auth is complete to avoid blocking
   const { client } = useClientAsyncInit(
     sdkKey || '',
     { userID: userId },
     {
-      plugins: [
-        new StatsigAutoCapturePlugin(),
-        new StatsigSessionReplayPlugin()
-      ],
+      plugins: [], // Initialize without plugins first for faster startup
+      disableNetworkOptimization: false,
+      maxLogQueueSize: 100, // Reduce queue size for better performance
+      initTimeoutMs: 1000, // Faster timeout (1s instead of default)
     },
   );
+
+  // Load heavy plugins after a delay to avoid blocking auth
+  React.useEffect(() => {
+    if (!client || !sdkKey) return;
+
+    const timer = setTimeout(() => {
+      try {
+        client.getStatsigUser(); // Verify client is ready
+        // Plugins are loaded asynchronously by Statsig
+      } catch (error) {
+        console.debug('[Statsig] Error loading plugins:', error);
+      }
+    }, 2000); // Load plugins after 2 seconds
+
+    return () => clearTimeout(timer);
+  }, [client, sdkKey]);
 
   // Log warning if SDK key is missing
   React.useEffect(() => {

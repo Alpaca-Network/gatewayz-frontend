@@ -134,12 +134,25 @@ export function GatewayzAuthProvider({
     if (typeof window === "undefined") {
       return "idle";
     }
+    // Fast path: check if we already have valid cached credentials
     const storedKey = getApiKey();
     const storedUser = getUserData();
-    return storedKey && storedUser ? "authenticated" : "idle";
+    if (storedKey && storedUser) {
+      // Validate basic structure without expensive operations
+      if (storedUser.user_id && storedUser.api_key && storedUser.email) {
+        return "authenticated";
+      }
+    }
+    return "idle";
   });
-  const [apiKey, setApiKey] = useState<string | null>(() => getApiKey());
-  const [userData, setUserData] = useState<UserData | null>(() => getUserData());
+  const [apiKey, setApiKey] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return getApiKey();
+  });
+  const [userData, setUserData] = useState<UserData | null>(() => {
+    if (typeof window === "undefined") return null;
+    return getUserData();
+  });
   const [error, setError] = useState<string | null>(null);
 
   const syncInFlightRef = useRef(false);
@@ -325,15 +338,11 @@ export function GatewayzAuthProvider({
         // If beta redirect is enabled, redirect there instead of onboarding
         if (enableBetaRedirect) {
           console.log("[Auth] Redirecting new user to beta domain");
-          setTimeout(() => {
-            redirectToBetaIfEnabled("/onboarding");
-          }, 100);
+          redirectToBetaIfEnabled("/onboarding");
         } else {
           console.log("[Auth] Redirecting new user to onboarding");
-          // Small delay to ensure localStorage write completes
-          setTimeout(() => {
-            window.location.href = "/onboarding";
-          }, 100);
+          // Redirect immediately - localStorage writes are synchronous
+          window.location.href = "/onboarding";
         }
       }
     },
