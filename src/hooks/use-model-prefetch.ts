@@ -1,5 +1,6 @@
 import { useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import { getModelUrl } from '@/lib/utils';
 
 const CACHE_KEY = 'gatewayz_models_cache_v4_all_gateways';
 const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
@@ -160,7 +161,7 @@ export function useModelPrefetch() {
     prefetchTimeoutRef.current = setTimeout(() => {
       prefetchModelData(modelId);
       // Also prefetch the route
-      router.prefetch(`/models/${encodeURIComponent(modelId)}`);
+      router.prefetch(getModelUrl(modelId));
     }, 100);
   }, [prefetchModelData, router]);
 
@@ -178,7 +179,7 @@ export function useModelPrefetch() {
    */
   const onFocus = useCallback((modelId: string) => {
     prefetchModelData(modelId);
-    router.prefetch(`/models/${encodeURIComponent(modelId)}`);
+    router.prefetch(getModelUrl(modelId));
   }, [prefetchModelData, router]);
 
   return {
