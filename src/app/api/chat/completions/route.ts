@@ -2,15 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { handleApiError } from '@/app/api/middleware/error-handler';
 import { API_BASE_URL } from '@/lib/config';
 import { normalizeModelId } from '@/lib/utils';
-import { proxyFetch } from '@/lib/proxy-fetch';
 
-export const runtime = 'nodejs';
+export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const apiKey = body.apiKey || request.headers.get('authorization')?.replace('Bearer ', '');
+    const apiKey = body.apiKey || request.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
 
     // Normalize @provider format model IDs (e.g., @google/models/gemini-pro → google/gemini-pro)
     const originalModel = body.model;
@@ -79,26 +78,59 @@ export async function POST(request: NextRequest) {
     }
 
     let response: Response;
-    const maxRetries = 3;
+    const maxRetries = 5;
     let lastError: Error | null = null;
 
-    // Retry logic for network errors
+    // Retry logic for network errors and rate limits
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
-        response = await proxyFetch(url, {
+        // Add AbortController for timeout (6 minutes max for streaming)
+        // This prevents infinite hangs on backend API failures
+        const fetchController = new AbortController();
+        const fetchTimeoutId = setTimeout(() => fetchController.abort(), 360000); // 6 minutes
+
+        response = await fetch(url, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${apiKey}`,
+            'Connection': 'keep-alive', // Enable connection pooling
           },
           body: JSON.stringify(backendRequestBody),
+          signal: fetchController.signal, // Add abort signal for timeout
         });
-        break; // Success, exit retry loop
+
+        clearTimeout(fetchTimeoutId);
+
+        // Check for rate limit (429) and retry with exponential backoff
+        if (response.status === 429 && attempt < maxRetries) {
+          const retryAfterHeader = response.headers.get('retry-after');
+          let waitTime = 1000 * Math.pow(2, attempt); // 1s, 2s, 4s, 8s, 16s, 32s
+
+          // Honor Retry-After header if present
+          if (retryAfterHeader) {
+            const numericRetry = Number(retryAfterHeader);
+            if (!Number.isNaN(numericRetry) && numericRetry > 0) {
+              waitTime = Math.max(waitTime, numericRetry * 1000);
+            }
+          }
+
+          // Add small jitter to prevent thundering herd
+          const jitter = Math.floor(Math.random() * 100);
+          const totalWaitTime = waitTime + jitter;
+
+          console.log(`Chat completions API route - Rate limit (429), retrying in ${totalWaitTime}ms (attempt ${attempt + 1}/${maxRetries})...`);
+          await new Promise(resolve => setTimeout(resolve, totalWaitTime));
+          continue;
+        }
+
+        break; // Success or non-retryable error, exit retry loop
       } catch (fetchError) {
         lastError = fetchError instanceof Error ? fetchError : new Error(String(fetchError));
 
-        // Check if it's a network error
-        const isNetworkError = fetchError instanceof TypeError ||
+        // Check if it's a timeout or network error
+        const isTimeoutError = fetchError instanceof Error && fetchError.name === 'AbortError';
+        const isNetworkError = isTimeoutError || fetchError instanceof TypeError ||
           (fetchError instanceof Error && (
             fetchError.message.includes('fetch') ||
             fetchError.message.includes('network') ||
@@ -108,8 +140,9 @@ export async function POST(request: NextRequest) {
           ));
 
         if (isNetworkError && attempt < maxRetries) {
-          const waitTime = 2000 * Math.pow(2, attempt); // 2s, 4s, 8s
-          console.log(`Chat completions API route - Network error, retrying in ${waitTime}ms (attempt ${attempt + 1}/${maxRetries})...`);
+          const waitTime = 2000 * Math.pow(2, attempt); // 2s, 4s, 8s, 16s, 32s, 64s
+          const errorType = isTimeoutError ? 'timeout' : 'network';
+          console.log(`Chat completions API route - ${errorType} error, retrying in ${waitTime}ms (attempt ${attempt + 1}/${maxRetries})...`);
           await new Promise(resolve => setTimeout(resolve, waitTime));
           continue;
         }
@@ -119,7 +152,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           {
             error: isNetworkError
-              ? `Network connection failed after ${maxRetries + 1} attempts. Please check your internet connection and try again.`
+              ? `Backend connection failed after ${maxRetries + 1} attempts. Please try again.`
               : 'Failed to connect to backend API',
             details: lastError.message
           },
@@ -134,9 +167,16 @@ export async function POST(request: NextRequest) {
       const errorText = await response!.text();
       console.log(`Chat completions API route - Backend error:`, errorText);
 
+      // For 429 errors, include retry-after headers from backend if available
+      const headers: Record<string, string> = {};
+      const retryAfter = response!.headers.get('retry-after');
+      if (retryAfter && response!.status === 429) {
+        headers['retry-after'] = retryAfter;
+      }
+
       return NextResponse.json(
         { error: `Backend API error: ${response!.status}`, details: errorText },
-        { status: response!.status }
+        { status: response!.status, headers }
       );
     }
 
@@ -144,13 +184,17 @@ export async function POST(request: NextRequest) {
     if (body.stream) {
       console.log('Chat completions API route - Streaming response...');
 
-      // Return the streaming response with proper headers
+      // OPTIMIZATION: Return streaming response with optimized Edge Runtime headers
+      // Connection pooling and low buffering for fast response
       return new NextResponse(response!.body, {
         status: 200,
         headers: {
           'Content-Type': 'text/event-stream',
-          'Cache-Control': 'no-cache',
-          'Connection': 'keep-alive',
+          'Cache-Control': 'no-cache, no-transform',
+          'X-Accel-Buffering': 'no',
+          'Connection': 'keep-alive', // Maintain connection for streaming
+          'Transfer-Encoding': 'chunked', // Enable chunked encoding for responsiveness
+          'X-Content-Type-Options': 'nosniff', // Security header
         },
       });
     }

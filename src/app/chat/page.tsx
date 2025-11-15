@@ -360,8 +360,7 @@ const apiHelpers = {
                 };
             }
 
-            const userData = getUserData();
-            const chatAPI = new ChatHistoryAPI(apiKey, undefined, userData?.privy_user_id);
+            const chatAPI = new ChatHistoryAPI(apiKey, undefined, getUserData()?.privy_user_id);
             console.log('Create session - Making API request to createSession');
             const apiSession = await chatAPI.createSession(title, model);
             
@@ -433,9 +432,8 @@ const apiHelpers = {
     // Save message to API session
     saveMessage: async (sessionId: string, role: 'user' | 'assistant', content: string, model?: string, tokens?: number, currentSessions?: ChatSession[]): Promise<{ apiSessionId?: number } | null> => {
         try {
-const apiKey = getApiKey();
+            const apiKey = getApiKey();
             const session = currentSessions?.find(s => s.id === sessionId);
-            const userData = getUserData();
             
             console.log(`SaveMessage - Session ID: ${sessionId}`);
             console.log(`SaveMessage - Session found:`, session);
@@ -447,7 +445,7 @@ const apiKey = getApiKey();
                 return null;
             }
 
-            const chatAPI = new ChatHistoryAPI(apiKey, undefined, userData?.privy_user_id);
+            const chatAPI = new ChatHistoryAPI(apiKey, undefined, getUserData()?.privy_user_id);
             
             // If no API session exists, try to create one
             if (!session.apiSessionId) {
@@ -1271,7 +1269,7 @@ function ChatPageContent() {
 
         try {
             console.log('🧪 Testing backend connectivity...');
-            const chatAPI = new ChatHistoryAPI(apiKey, undefined, userData?.privy_user_id);
+            const chatAPI = new ChatHistoryAPI(apiKey, undefined, userData.privy_user_id);
             
             // Test 1: Get sessions (this is the most important one)
             const sessions = await chatAPI.getSessions(5, 0);
@@ -1958,7 +1956,7 @@ function ChatPageContent() {
                     console.log(`Image optimized: ${(originalSize / 1024).toFixed(1)}KB → ${(optimizedSize / 1024).toFixed(1)}KB (${savings}% reduction)`);
 
                     resolve(optimizedBase64);
-                };
+                }
                 img.onerror = () => reject(new Error('Failed to load image'));
                 img.src = event.target?.result as string;
             };
@@ -2146,8 +2144,8 @@ function ChatPageContent() {
     };
 
     const handleSendMessage = async (retryCount = 0) => {
-        // Prevent sending if user hasn't actually typed anything
-        if (!userHasTyped) {
+        // Check if there's actually a message to send
+        if (!message.trim()) {
             return;
         }
 
@@ -2172,15 +2170,9 @@ function ChatPageContent() {
             }
         }
 
-        // If we have an API key but missing user data, try to get it from localStorage
-        if (apiKey && !userData) {
-            // This can happen if the page was reloaded or in some edge cases
-            // We'll proceed with just the API key for now
-            console.log('[Auth] API key found but missing user data, proceeding with API key only');
-        }
-
-        if (!apiKey || (userData && typeof (userData?.privy_user_id) !== 'string')) {
-            console.log('[Auth] User not authenticated - queuing message and triggering login');
+        // Only require API key for sending messages - Privy user data is optional for history
+        if (!apiKey) {
+            console.log('[Auth] No API key - queuing message and triggering login');
 
             // Queue the message to be sent after authentication
             setPendingMessage({
@@ -2350,43 +2342,46 @@ function ChatPageContent() {
                 messagesCount: currentSession?.messages?.length || 0
             });
 
-            // OPTIMIZATION: Save the user message to the backend before streaming
-            // This ensures the backend has the user message before processing the stream
-            // which prevents race conditions where the API can't find the context
-            if (currentSession?.apiSessionId) {
-                try {
-                    devLog('🔄 Attempting to save user message to backend:', {
-                        sessionId: currentSession.apiSessionId,
-                        content: userMessage.substring(0, 100) + '...',
-                        model: selectedModel.value,
-                        hasImage: !!userImage,
-                        apiKey: apiKey ? `${apiKey.substring(0, 10)}...` : 'NO_API_KEY',
-privyUserId: userData?.privy_user_id
-                    });
- 
-                    const chatAPI = new ChatHistoryAPI(apiKey, undefined, userData?.privy_user_id);
-                    if (currentSession.apiSessionId) {
-                        const result = await chatAPI.saveMessage(
-                            currentSession.apiSessionId,
-                            'user',
-                            userMessage,
-                            selectedModel.value,
-                            undefined // Token count not calculated yet
-                        );
-                        devLog('✅ User message saved to backend successfully:', result);
+            // OPTIMIZATION: Save the user message to the backend asynchronously
+            // Don't block the streaming request - send both in parallel
+            // The message is already in the UI optimistically
+            if (currentSession?.apiSessionId && userData) {
+                const saveUserMessage = async () => {
+                    try {
+                        devLog('🔄 Attempting to save user message to backend:', {
+                            sessionId: currentSession.apiSessionId,
+                            content: userMessage.substring(0, 100) + '...',
+                            model: selectedModel.value,
+                            hasImage: !!userImage,
+                            apiKey: apiKey ? `${apiKey.substring(0, 10)}...` : 'NO_API_KEY',
+                            privyUserId: userData.privy_user_id
+                        });
+
+                        const chatAPI = new ChatHistoryAPI(apiKey, undefined, userData.privy_user_id);
+                        if (currentSession.apiSessionId) {
+                            const result = await chatAPI.saveMessage(
+                                currentSession.apiSessionId,
+                                'user',
+                                userMessage,
+                                selectedModel.value,
+                                undefined // Token count not calculated yet
+                            );
+                            devLog('✅ User message saved to backend successfully:', result);
+                        }
+                    } catch (error) {
+                        devError('❌ Failed to save user message to backend:', error);
+                        devError('Error details:', {
+                            message: error instanceof Error ? error.message : String(error),
+                            stack: error instanceof Error ? error.stack : undefined,
+                            sessionId: currentSession.apiSessionId,
+                            hasApiKey: !!apiKey,
+                            hasPrivyUserId: !!userData?.privy_user_id
+                        });
+                        // Don't throw - the message is already in the UI optimistically
                     }
-                } catch (error) {
-                    devError('❌ Failed to save user message to backend:', error);
-                    devError('Error details:', {
-                        message: error instanceof Error ? error.message : String(error),
-                        stack: error instanceof Error ? error.stack : undefined,
-                        sessionId: currentSession.apiSessionId,
-                        hasApiKey: !!apiKey,
-                        hasPrivyUserId: !!userData?.privy_user_id
-                    });
-                    // Don't throw - let the stream request proceed anyway
-                    // The message is already in the UI optimistically
-                }
+                };
+                // Start saving in background - don't await
+                saveUserMessage();
             } else {
                 devWarn('⚠️ Cannot save user message - no API session ID:', {
                     currentSession,
@@ -2580,8 +2575,7 @@ privyUserId: userData?.privy_user_id
                     url: url
                 });
 
-                // Use ChatStreamHandler to properly manage streaming state and avoid ReferenceErrors
-                const streamHandler = new ChatStreamHandler();
+                // Reset the existing streamHandler (declared at top of try block)
                 streamHandler.reset();
 
                 console.log('🌊 Starting to stream response...');
@@ -2719,7 +2713,7 @@ privyUserId: userData?.privy_user_id
 
                 // OPTIMIZATION: Save the assistant's response to the backend asynchronously
                 // This allows the UI to be responsive immediately after streaming completes
-                if (currentSession?.apiSessionId && finalContent) {
+                if (currentSession?.apiSessionId && finalContent && userData) {
                     // Fire and forget - save in background
                     const saveAssistantMessage = async () => {
                         try {
@@ -2728,10 +2722,10 @@ privyUserId: userData?.privy_user_id
                                 content: finalContent.substring(0, 100) + '...',
                                 model: modelValue,
                                 apiKey: apiKey ? `${apiKey.substring(0, 10)}...` : 'NO_API_KEY',
-privyUserId: userData?.privy_user_id
+                                privyUserId: userData.privy_user_id
                             });
 
-                            const chatAPI = new ChatHistoryAPI(apiKey, undefined, userData?.privy_user_id);
+                            const chatAPI = new ChatHistoryAPI(apiKey, undefined, userData.privy_user_id);
                             if (currentSession.apiSessionId) {
                                 const result = await chatAPI.saveMessage(
                                     currentSession.apiSessionId,
@@ -2759,7 +2753,7 @@ privyUserId: userData?.privy_user_id
                                 stack: error instanceof Error ? error.stack : undefined,
                                 sessionId: currentSession.apiSessionId,
                                 hasApiKey: !!apiKey,
-hasPrivyUserId: !!userData?.privy_user_id
+                                hasPrivyUserId: !!userData?.privy_user_id
                             });
                         }
                     };
@@ -2777,7 +2771,7 @@ hasPrivyUserId: !!userData?.privy_user_id
                 // Update session title in API if this is the first message
                 // Note: Messages are automatically saved by the backend when session_id is passed
                 // The title was already updated locally in updatedSessions (line 1326)
-                if (isFirstMessage && currentSession?.apiSessionId && newTitle) {
+                if (isFirstMessage && currentSession?.apiSessionId && newTitle && userData) {
                     try {
                         if (apiKey) {
                             const chatAPI = new ChatHistoryAPI(apiKey, undefined, userData?.privy_user_id);

@@ -93,7 +93,8 @@ export class ChatHistoryAPI {
       method,
       headers: {
         'Authorization': `Bearer ${this.apiKey}`,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Connection': 'keep-alive' // Enable connection pooling for session API
       },
       signal: controller.signal
     };
@@ -164,11 +165,13 @@ export class ChatHistoryAPI {
    * Updates a chat session's title or model
    */
   async updateSession(sessionId: number, title?: string, model?: string): Promise<ChatSession> {
-    // Route through Next.js API to avoid CORS issues
+    // OPTIMIZATION: Route through Next.js API with optimized timeout
+    // Reduced timeout from 30s to 10s for quick session updates
+    // These calls should be fast and not block user interactions
     const isClientSide = typeof window !== 'undefined';
     if (isClientSide) {
       const controller = new AbortController();
-      const timeout = 30000; // 30 second timeout
+      const timeout = 10000; // OPTIMIZATION: Reduced from 30s to 10s
       const timeoutId = setTimeout(() => controller.abort(), timeout);
 
       let url = `/api/chat/sessions/${sessionId}`;
@@ -182,7 +185,8 @@ export class ChatHistoryAPI {
           method: 'PUT',
           headers: {
             'Authorization': `Bearer ${this.apiKey}`,
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'Connection': 'keep-alive' // Enable connection pooling
           },
           body: JSON.stringify({ title, model }),
           signal: controller.signal
@@ -201,7 +205,7 @@ export class ChatHistoryAPI {
         clearTimeout(timeoutId);
         if (error instanceof Error && error.name === 'AbortError') {
           console.error('ChatHistoryAPI.updateSession - Request timed out after', timeout, 'ms');
-          throw new Error(`Request timed out after ${timeout / 1000} seconds. Please try again.`);
+          throw new Error(`Request timed out. Session update took too long.`);
         }
         throw error;
       }
@@ -276,7 +280,9 @@ export class ChatHistoryAPI {
     tokens?: number
   ): Promise<ChatMessage> {
     const controller = new AbortController();
-    const timeout = 30000; // 30 second timeout
+    // OPTIMIZATION: Reduced timeout from 30s to 5s
+    // Message saves are fire-and-forget and shouldn't block UI
+    const timeout = 5000;
     const timeoutId = setTimeout(() => controller.abort(), timeout);
 
     let url = `${this.baseUrl}/sessions/${sessionId}/messages`;
@@ -287,16 +293,13 @@ export class ChatHistoryAPI {
       url += `${separator}privy_user_id=${encodeURIComponent(this.privyUserId)}`;
     }
 
-    console.log('ChatHistoryAPI.saveMessage - URL:', url);
-    console.log('ChatHistoryAPI.saveMessage - Role:', role);
-    console.log('ChatHistoryAPI.saveMessage - Content length:', content.length);
-
     try {
       const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${this.apiKey}`,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Connection': 'keep-alive' // Enable connection pooling
         },
         body: JSON.stringify({
           role,
@@ -308,22 +311,20 @@ export class ChatHistoryAPI {
       });
 
       clearTimeout(timeoutId);
-      console.log('ChatHistoryAPI.saveMessage - Response status:', response.status);
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));
-        console.error('ChatHistoryAPI.saveMessage - Error response:', error);
         throw new Error(error.detail || `Failed to save message (${response.status}): ${response.statusText}`);
       }
 
       const result = await response.json();
-      console.log('ChatHistoryAPI.saveMessage - Success');
       return result.data;
     } catch (error) {
       clearTimeout(timeoutId);
       if (error instanceof Error && error.name === 'AbortError') {
         console.error('ChatHistoryAPI.saveMessage - Request timed out after', timeout, 'ms');
-        throw new Error(`Request timed out after ${timeout / 1000} seconds. Please try again.`);
+        // Don't throw on timeout - message is already in UI optimistically
+        return { id: 0, session_id: sessionId, role, content, created_at: new Date().toISOString() };
       }
       throw error;
     }
