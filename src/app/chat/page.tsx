@@ -1956,7 +1956,7 @@ function ChatPageContent() {
                     console.log(`Image optimized: ${(originalSize / 1024).toFixed(1)}KB → ${(optimizedSize / 1024).toFixed(1)}KB (${savings}% reduction)`);
 
                     resolve(optimizedBase64);
-                };
+                }
                 img.onerror = () => reject(new Error('Failed to load image'));
                 img.src = event.target?.result as string;
             };
