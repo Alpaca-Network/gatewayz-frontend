@@ -116,7 +116,7 @@ export default function TopModelsTable({ models }: TopModelsTableProps) {
                     </div>
                   </TableCell>
                   <TableCell className="font-medium">
-                    <Link href={`/models/${model.name}`} className="flex items-center gap-2 hover:underline">
+                    <Link href={`/models/${model.organization.toLowerCase()}/${model.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`} className="flex items-center gap-2 hover:underline">
                       <Bot className="h-4 w-4 text-muted-foreground" />
                       <span>{model.name}</span>
                     </Link>

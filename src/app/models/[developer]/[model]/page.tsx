@@ -293,9 +293,11 @@ export default function ModelProfilePage() {
         },
     };
 
-    // Handle catch-all route - params.name will be an array like ['x-ai', 'grok-4-fast']
-    const nameParam = params.name as string | string[];
-    let modelId = Array.isArray(nameParam) ? nameParam.join('/') : nameParam;
+    // Handle new route structure - params.developer and params.model
+    const developer = (params.developer as string)?.toLowerCase() || '';
+    const modelNameParam = (params.model as string) || '';
+    // Store the URL-safe model name for searching
+    let modelId = `${developer}/${modelNameParam}`;
     // Decode URL-encoded characters (e.g., %40 -> @)
     modelId = decodeURIComponent(modelId);
 
@@ -380,13 +382,19 @@ export default function ModelProfilePage() {
 
         // Load static data immediately for instant page render (only if found)
         const staticModelsTransformed = staticModels.map(transformStaticModel);
+        const normalizeForUrl = (str: string): string => {
+            return str.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+        };
+        const urlNormalizedSearchName = normalizeForUrl(modelNameParam);
+
         let staticFoundModel = staticModelsTransformed.find((m: Model) => m.id === modelId);
 
-        // If not found by full ID, try matching by name (for AIMO models)
+        // If not found by full ID, try matching by name using URL normalization
         if (!staticFoundModel) {
             staticFoundModel = staticModelsTransformed.find((m: Model) => {
-                const modelNamePart = m.id.includes(':') ? m.id.split(':')[1] : m.id;
-                return modelNamePart === modelId || m.id.split('/').pop() === modelId;
+                const modelNamePart = m.id.split('/').pop() || '';
+                const urlNormalizedDataName = normalizeForUrl(modelNamePart);
+                return urlNormalizedDataName === urlNormalizedSearchName && m.provider_slug?.toLowerCase() === developer;
             });
         }
 
@@ -413,11 +421,12 @@ export default function ModelProfilePage() {
                                 setAllModels(models);
                                 let foundModel = models.find((m: Model) => m.id === modelId);
 
-                                // If not found by full ID, try matching by name (for AIMO models)
+                                // If not found by full ID, try matching by name using URL normalization
                                 if (!foundModel) {
                                     foundModel = models.find((m: Model) => {
-                                        const modelNamePart = m.id.includes(':') ? m.id.split(':')[1] : m.id;
-                                        return modelNamePart === modelId || m.id.split('/').pop() === modelId;
+                                        const modelNamePart = m.id.split('/').pop() || '';
+                                        const urlNormalizedDataName = normalizeForUrl(modelNamePart);
+                                        return urlNormalizedDataName === urlNormalizedSearchName && m.provider_slug?.toLowerCase() === developer;
                                     });
                                 }
 
@@ -654,12 +663,12 @@ export default function ModelProfilePage() {
                     // Find model by ID or by name (for AIMO models where URL uses just the model name)
                     let foundModel = models.find((m: Model) => m.id === modelId);
 
-                    // If not found by full ID, try matching by the part after the colon (for AIMO models)
+                    // If not found by full ID, try matching by name using URL normalization
                     if (!foundModel) {
                         foundModel = models.find((m: Model) => {
-                            // For AIMO models (providerId:model-name), extract the model name
-                            const modelNamePart = m.id.includes(':') ? m.id.split(':')[1] : m.id;
-                            return modelNamePart === modelId || m.id.split('/').pop() === modelId;
+                            const modelNamePart = m.id.split('/').pop() || '';
+                            const urlNormalizedDataName = normalizeForUrl(modelNamePart);
+                            return urlNormalizedDataName === urlNormalizedSearchName && m.provider_slug?.toLowerCase() === developer;
                         });
                     }
 
@@ -677,28 +686,35 @@ export default function ModelProfilePage() {
                     const providers: string[] = [];
                     const modelIdLower = modelId.toLowerCase();
 
+                    // Helper function to normalize model names for URL matching
+                    // Converts spaces, dots, underscores, and hyphens to hyphens
+                    const normalizeForUrl = (str: string): string => {
+                        return str.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+                    };
+
                     // Helper function to check if model exists in gateway data
                     const hasModel = (data: Model[], gateway: string) => {
                         const found = data.some((m: Model) => {
+                            // Extract just the model name part (after /)
+                            const modelNamePart = m.id.split('/').pop()?.toLowerCase() || '';
+                            const urlNormalizedSearchName = normalizeForUrl(modelNameParam);
+                            const urlNormalizedDataName = normalizeForUrl(modelNamePart);
+
                             // Check exact match (case-insensitive)
                             if (m.id.toLowerCase() === modelIdLower) return true;
 
+                            // Check if the model name parts match after URL normalization
+                            // This handles: "GPT-4o mini" -> "gpt-4o-mini" matching
+                            if (urlNormalizedDataName === urlNormalizedSearchName && m.provider_slug?.toLowerCase() === developer) return true;
+
                             // For AIMO models, check if the model name part matches
-                            const modelNamePart = m.id.includes(':') ? m.id.split(':')[1].toLowerCase() : m.id.toLowerCase();
-                            if (modelNamePart === modelIdLower) return true;
+                            const aimoModelNamePart = m.id.includes(':') ? m.id.split(':')[1].toLowerCase() : m.id.toLowerCase();
+                            if (aimoModelNamePart === modelIdLower) return true;
 
                             // Check if IDs match after normalization (handle different separators)
                             const normalizedModelId = modelIdLower.replace(/[_\-\/]/g, '');
                             const normalizedDataId = m.id.toLowerCase().replace(/[_\-\/]/g, '');
                             if (normalizedModelId === normalizedDataId) return true;
-
-                            // Check if the model name matches (as a fallback)
-                            // Note: model may not be defined yet in this context, so we skip this check
-                            // if (m.name && m.name.toLowerCase() === model?.name?.toLowerCase()) return true;
-
-                            // Check if the last part of the ID matches (for provider/model format)
-                            const lastPart = m.id.split('/').pop()?.toLowerCase();
-                            if (lastPart === modelIdLower) return true;
 
                             return false;
                         });
