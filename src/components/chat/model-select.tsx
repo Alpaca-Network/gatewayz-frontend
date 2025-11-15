@@ -200,7 +200,8 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
         const limitParam = limit ? `&limit=${limit}` : '';
 
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout for all gateways
+        // Reduced timeout from 10s to 7s - models should load much faster with optimized gateways
+        const timeoutId = setTimeout(() => controller.abort(), 7000);
 
         const allGatewaysRes = await fetch(`/api/models?gateway=all${limitParam}`, { signal: controller.signal });
         clearTimeout(timeoutId);
