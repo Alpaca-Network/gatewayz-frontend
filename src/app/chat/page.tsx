@@ -360,7 +360,8 @@ const apiHelpers = {
                 };
             }
 
-            const chatAPI = new ChatHistoryAPI(apiKey, undefined, getUserData()?.privy_user_id);
+            const userData = getUserData();
+            const chatAPI = new ChatHistoryAPI(apiKey, undefined, userData?.privy_user_id);
             console.log('Create session - Making API request to createSession');
             const apiSession = await chatAPI.createSession(title, model);
             
@@ -445,7 +446,8 @@ const apiHelpers = {
                 return null;
             }
 
-            const chatAPI = new ChatHistoryAPI(apiKey, undefined, getUserData()?.privy_user_id);
+            const userData = getUserData();
+            const chatAPI = new ChatHistoryAPI(apiKey, undefined, userData?.privy_user_id);
             
             // If no API session exists, try to create one
             if (!session.apiSessionId) {
@@ -2170,7 +2172,14 @@ function ChatPageContent() {
             }
         }
 
-        if (!apiKey || !userData || typeof userData.privy_user_id !== 'string') {
+        // If we have an API key but missing user data, try to get it from localStorage
+        if (apiKey && !userData) {
+            // This can happen if the page was reloaded or in some edge cases
+            // We'll proceed with just the API key for now
+            console.log('[Auth] API key found but missing user data, proceeding with API key only');
+        }
+
+        if (!apiKey || (userData && typeof userData.privy_user_id !== 'string')) {
             console.log('[Auth] User not authenticated - queuing message and triggering login');
 
             // Queue the message to be sent after authentication
