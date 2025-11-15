@@ -56,3 +56,37 @@ export const normalizeModelId = (modelId: string): string => {
   // Return as-is if already in correct format
   return modelId;
 };
+
+/**
+ * Generate a model URL in the format /models/[developer]/[model]
+ * Handles various model ID formats:
+ * - "openai/gpt-5.1" → "/models/openai/gpt-5-1"
+ * - "aimo:model-name" → "/models/aimo/model-name"
+ * - "gpt-4o mini" → Uses provider_slug if available
+ */
+export const getModelUrl = (modelId: string, providerSlug?: string): string => {
+  if (!modelId) return '/models';
+
+  // Handle provider:model format (e.g., "aimo:model-name")
+  if (modelId.includes(':')) {
+    const [provider, model] = modelId.split(':');
+    const urlSafeName = model.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    return `/models/${provider.toLowerCase()}/${urlSafeName}`;
+  }
+
+  // Handle provider/model format (e.g., "openai/gpt-5.1")
+  if (modelId.includes('/')) {
+    const [provider, ...modelParts] = modelId.split('/');
+    const model = modelParts.join('/'); // In case there are multiple slashes
+    const urlSafeName = model.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    return `/models/${provider.toLowerCase()}/${urlSafeName}`;
+  }
+
+  // Fallback: just the model ID (should rarely happen)
+  if (providerSlug) {
+    const urlSafeName = modelId.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    return `/models/${providerSlug.toLowerCase()}/${urlSafeName}`;
+  }
+
+  return `/models`;
+};

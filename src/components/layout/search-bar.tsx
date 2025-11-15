@@ -7,6 +7,7 @@ import { Search, Bot } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import Link from 'next/link';
 import { models as staticModels } from '@/lib/models-data';
+import { getModelUrl } from '@/lib/utils';
 
 interface Model {
     id: string;
@@ -171,9 +172,9 @@ export function SearchBar({ autoOpenOnFocus = true }: SearchBarProps) {
                     <div className="flex flex-col">
                         {filteredModels.length > 0 ? (
                             filteredModels.map(model => {
-                                // Encode model ID to handle special characters like parentheses in model names
-                                const modelUrl = `/models/${encodeURIComponent(model.id)}`;
-                                
+                                // Generate clean URL in format /models/[developer]/[model]
+                                const modelUrl = getModelUrl(model.id, model.provider_slug);
+
                                 return (
                                 <Link
                                     key={model.id}
