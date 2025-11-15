@@ -228,7 +228,7 @@ const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
         {/* Bottom metadata row */}
         <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground border-t pt-3">
           <span className="flex items-center gap-1">
-            By <span className="font-medium text-foreground">{model.provider_slug}</span>
+            By <span className="font-medium text-foreground">{model.provider_slug?.replace(/^@/, '') || 'Unknown'}</span>
           </span>
           <span className="font-medium">{contextK > 0 ? `${contextK}M Tokens` : '0M Tokens'}</span>
           <span className="font-medium">{contextK > 0 ? `${contextK}K Context` : '0K Context'}</span>
