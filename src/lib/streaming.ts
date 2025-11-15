@@ -118,6 +118,7 @@ export async function* streamChatResponse(
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${apiKey}`,
           'Accept': 'text/event-stream',
+          'Connection': 'keep-alive', // Enable connection pooling
         },
         body: JSON.stringify(requestBody),
         signal: controller.signal,
@@ -136,9 +137,11 @@ export async function* streamChatResponse(
           ))) {
 
         if (retryCount < maxRetries) {
-          // Exponential backoff: 2s, 4s, 8s, 16s, 32s
-          const waitTime = Math.min(2000 * Math.pow(2, retryCount), 32000);
-          const jitter = Math.floor(Math.random() * 1000);
+          // OPTIMIZATION: Faster exponential backoff for network errors
+          // 500ms, 1s, 2s, 4s, 8s (vs old 2s, 4s, 8s, 16s, 32s)
+          // Allows quick recovery from transient failures without excessive delays
+          const waitTime = Math.min(500 * Math.pow(2, retryCount), 8000);
+          const jitter = Math.floor(Math.random() * 300); // Reduced jitter
           const totalWaitTime = waitTime + jitter;
 
           devLog(`Network error detected, retrying in ${totalWaitTime}ms (attempt ${retryCount + 1}/${maxRetries})...`);
@@ -243,32 +246,37 @@ export async function* streamChatResponse(
         (typeof errorData.error?.message === 'string' && errorData.error?.message) ||
         '';
 
-      // Retry with exponential backoff for rate limits
+      // OPTIMIZATION: Faster rate limit retry with smarter backoff
+      // Retry aggressively on rate limits to recover quickly
       if (retryCount < maxRetries) {
         const retryAfterHeader = response.headers.get('retry-after');
         const isConcurrencyLimit = detailMessage.toLowerCase().includes('concurrency');
-        const baseDelay = isConcurrencyLimit ? 4000 : 1000;
-        const maxDelay = isConcurrencyLimit ? 20000 : 8000;
+        // OPTIMIZATION: Reduced delays for faster recovery
+        // 500ms, 1s, 2s for concurrency; 200ms, 500ms, 1s for regular rate limits
+        const baseDelay = isConcurrencyLimit ? 500 : 200;
+        const maxDelay = isConcurrencyLimit ? 2000 : 1000;
 
         let waitTime = Math.min(baseDelay * Math.pow(2, retryCount), maxDelay);
 
+        // Respect Retry-After header if provided
         if (retryAfterHeader) {
           const numericRetry = Number(retryAfterHeader);
           if (!Number.isNaN(numericRetry) && numericRetry > 0) {
-            waitTime = Math.max(waitTime, numericRetry * 1000);
+            // Use Retry-After but cap at 3 seconds to avoid long waits
+            waitTime = Math.min(numericRetry * 1000, 3000);
           } else {
             const retryDate = Date.parse(retryAfterHeader);
             if (!Number.isNaN(retryDate)) {
-              const headerWait = retryDate - Date.now();
+              const headerWait = Math.min(retryDate - Date.now(), 3000);
               if (headerWait > 0) {
-                waitTime = Math.max(waitTime, headerWait);
+                waitTime = headerWait;
               }
             }
           }
         }
 
-        waitTime = Math.max(waitTime, 1000); // Ensure a minimum delay
-        const jitter = Math.floor(Math.random() * 250);
+        waitTime = Math.max(waitTime, 100); // Minimum 100ms
+        const jitter = Math.floor(Math.random() * 50); // Minimal jitter
         waitTime += jitter;
 
         devLog(`Rate limit hit, retrying in ${waitTime}ms (attempt ${retryCount + 1}/${maxRetries})...`);
@@ -329,9 +337,7 @@ export async function* streamChatResponse(
 
   try {
     while (true) {
-      devLog(`[Streaming] About to read chunk ${chunkCount + 1}...`);
       const { done, value } = await reader.read();
-      devLog(`[Streaming] Read completed. Done: ${done}, Has value: ${!!value}, Value length: ${value?.length || 0}`);
 
       if (done) {
         devLog(`[Streaming] Stream completed. Total chunks processed: ${chunkCount}`);
@@ -342,17 +348,10 @@ export async function* streamChatResponse(
       const decodedValue = decoder.decode(value, { stream: true });
       buffer += decodedValue;
 
-      // Log raw decoded value for debugging
-      if (decodedValue.length > 0) {
-        devLog(`[Streaming] Raw decoded value (first 200 chars):`, decodedValue.substring(0, 200));
-      }
-
       const lines = buffer.split('\n');
 
       // Keep the last incomplete line in the buffer
       buffer = lines.pop() || '';
-
-      devLog(`[Streaming] Processing ${lines.length} lines from chunk ${chunkCount}`);
 
       for (const line of lines) {
         const trimmedLine = line.trim();
@@ -360,9 +359,6 @@ export async function* streamChatResponse(
         if (!trimmedLine) {
           continue;
         }
-
-        // Always log non-empty lines for debugging
-        devLog('[Streaming] Processing line:', trimmedLine.substring(0, 100));
 
         // Handle [DONE] signal by breaking out of the loop
         if (trimmedLine === 'data: [DONE]') {
@@ -375,14 +371,6 @@ export async function* streamChatResponse(
           try {
             const jsonStr = trimmedLine.slice(6);
             const data = JSON.parse(jsonStr);
-
-            devLog('[Streaming] Parsed SSE data:', {
-              hasOutput: !!data.output,
-              hasChoices: !!data.choices,
-              hasType: !!data.type,
-              dataKeys: Object.keys(data),
-              fullData: JSON.stringify(data)  // Convert to string for better logging
-            });
 
             let chunk: StreamChunk | null = null;
 
@@ -398,16 +386,6 @@ export async function* streamChatResponse(
                 toPlainText(outputRecord.analysis);
               const finishReason = outputRecord.finish_reason;
 
-              // Log when reasoning fields are present
-              if (outputRecord.reasoning || outputRecord.thinking || outputRecord.analysis) {
-                devLog('[Streaming] Found reasoning field in output:', {
-                  hasReasoning: !!outputRecord.reasoning,
-                  hasThinking: !!outputRecord.thinking,
-                  hasAnalysis: !!outputRecord.analysis,
-                  reasoningLength: reasoningText.length
-                });
-              }
-
               if (contentText || reasoningText || finishReason) {
                 chunk = {};
                 if (contentText) {
@@ -415,7 +393,6 @@ export async function* streamChatResponse(
                 }
                 if (reasoningText) {
                   chunk.reasoning = reasoningText;
-                  devLog('[Streaming] Adding reasoning to chunk:', reasoningText.length, 'chars');
                 }
                 if (finishReason) {
                   chunk.done = true;
@@ -450,18 +427,6 @@ export async function* streamChatResponse(
                   toPlainText(deltaRecord.thoughts);
                 const finishReason = choice.finish_reason;
 
-                // Log when reasoning fields are present
-                if (deltaRecord.reasoning || deltaRecord.thinking || deltaRecord.analysis || deltaRecord.inner_thought || deltaRecord.thoughts) {
-                  devLog('[Streaming] Found reasoning field in delta:', {
-                    hasReasoning: !!deltaRecord.reasoning,
-                    hasThinking: !!deltaRecord.thinking,
-                    hasAnalysis: !!deltaRecord.analysis,
-                    hasInnerThought: !!deltaRecord.inner_thought,
-                    hasThoughts: !!deltaRecord.thoughts,
-                    reasoningLength: reasoningText.length
-                  });
-                }
-
                 if (contentText || reasoningText || finishReason) {
                   chunk = {};
                   if (contentText) {
@@ -469,7 +434,6 @@ export async function* streamChatResponse(
                   }
                   if (reasoningText) {
                     chunk.reasoning = reasoningText;
-                    devLog('[Streaming] Adding reasoning to chunk from delta:', reasoningText.length, 'chars');
                   }
                   if (finishReason) {
                     chunk.done = true;
@@ -563,33 +527,18 @@ export async function* streamChatResponse(
               // Only yield chunks that have actual content, reasoning, or are the final chunk
               // Skip empty chunks to improve streaming performance
               if (chunk.content || chunk.reasoning || chunk.done) {
-                devLog('[Streaming] Yielding chunk:', {
-                  hasContent: !!chunk.content,
-                  contentLength: chunk.content?.length || 0,
-                  hasReasoning: !!chunk.reasoning,
-                  isDone: !!chunk.done
-                });
                 yield chunk;
-              } else {
-                devLog('[Streaming] Skipping empty chunk');
               }
             } else {
               // Check if the data has error indicators
               if (data.error || data.detail || data.message) {
                 const errorMsg = data.error?.message || data.detail || data.message;
-                devError('[Streaming] Possible error in SSE data:', errorMsg);
-                console.error('[Streaming] Backend may have returned an error:', data);
+                devError('[Streaming] Backend error in response:', errorMsg);
               }
-              devWarn('[Streaming] No chunk created from SSE data. This may indicate an unsupported response format or an error from the backend.');
-              devWarn('[Streaming] Unrecognized data structure:', data);
-              devWarn('[Streaming] Data as JSON:', JSON.stringify(data, null, 2));
             }
           } catch (error) {
-            devError('[Streaming] Error parsing SSE data:', error, trimmedLine);
+            devError('[Streaming] Error parsing SSE data:', error);
           }
-        } else {
-          devLog('[Streaming] Line does not start with "data: ":', trimmedLine.substring(0, 50));
-        }
       }
 
       // Break out of the outer while loop if we received [DONE] signal
