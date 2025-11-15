@@ -1963,11 +1963,8 @@ function ChatPageContent() {
 
             reader.onerror = () => reject(new Error('Failed to read file'));
             reader.readAsDataURL(file);
-            });
-        } catch (error) {
-            reject(error);
-        }
-    });
+        });
+    OMIT
     };
 
     const handleRemoveImage = () => {
