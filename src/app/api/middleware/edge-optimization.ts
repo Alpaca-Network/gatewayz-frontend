@@ -90,10 +90,13 @@ export function createEdgeOptimizedResponse<T>(
  * Check if running on Edge Runtime
  */
 export function isEdgeRuntime(): boolean {
-  // Edge Runtime doesn't have Node.js APIs like fs, process, etc.
-  return typeof process === 'undefined' ||
-         typeof process.platform === 'undefined' ||
-         process.platform === 'browser';
+  // Edge Runtime doesn't have Node.js APIs like fs
+  // On Edge Runtime, process might be undefined or not have standard Node.js properties
+  return typeof globalThis === 'object' && (
+    'Deno' in globalThis ||
+    'EdgeRuntime' in globalThis ||
+    (!('fs' in globalThis) && typeof process === 'undefined')
+  );
 }
 
 /**
