@@ -78,10 +78,10 @@ export async function POST(request: NextRequest) {
     }
 
     let response: Response;
-    const maxRetries = 3;
+    const maxRetries = 5;
     let lastError: Error | null = null;
 
-    // Retry logic for network errors
+    // Retry logic for network errors and rate limits
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
         // Add AbortController for timeout (6 minutes max for streaming)
@@ -101,7 +101,30 @@ export async function POST(request: NextRequest) {
         });
 
         clearTimeout(fetchTimeoutId);
-        break; // Success, exit retry loop
+
+        // Check for rate limit (429) and retry with exponential backoff
+        if (response.status === 429 && attempt < maxRetries) {
+          const retryAfterHeader = response.headers.get('retry-after');
+          let waitTime = 1000 * Math.pow(2, attempt); // 1s, 2s, 4s, 8s, 16s, 32s
+
+          // Honor Retry-After header if present
+          if (retryAfterHeader) {
+            const numericRetry = Number(retryAfterHeader);
+            if (!Number.isNaN(numericRetry) && numericRetry > 0) {
+              waitTime = Math.max(waitTime, numericRetry * 1000);
+            }
+          }
+
+          // Add small jitter to prevent thundering herd
+          const jitter = Math.floor(Math.random() * 100);
+          const totalWaitTime = waitTime + jitter;
+
+          console.log(`Chat completions API route - Rate limit (429), retrying in ${totalWaitTime}ms (attempt ${attempt + 1}/${maxRetries})...`);
+          await new Promise(resolve => setTimeout(resolve, totalWaitTime));
+          continue;
+        }
+
+        break; // Success or non-retryable error, exit retry loop
       } catch (fetchError) {
         lastError = fetchError instanceof Error ? fetchError : new Error(String(fetchError));
 
@@ -117,7 +140,7 @@ export async function POST(request: NextRequest) {
           ));
 
         if (isNetworkError && attempt < maxRetries) {
-          const waitTime = 2000 * Math.pow(2, attempt); // 2s, 4s, 8s
+          const waitTime = 2000 * Math.pow(2, attempt); // 2s, 4s, 8s, 16s, 32s, 64s
           const errorType = isTimeoutError ? 'timeout' : 'network';
           console.log(`Chat completions API route - ${errorType} error, retrying in ${waitTime}ms (attempt ${attempt + 1}/${maxRetries})...`);
           await new Promise(resolve => setTimeout(resolve, waitTime));
@@ -144,9 +167,16 @@ export async function POST(request: NextRequest) {
       const errorText = await response!.text();
       console.log(`Chat completions API route - Backend error:`, errorText);
 
+      // For 429 errors, include retry-after headers from backend if available
+      const headers: Record<string, string> = {};
+      const retryAfter = response!.headers.get('retry-after');
+      if (retryAfter && response!.status === 429) {
+        headers['retry-after'] = retryAfter;
+      }
+
       return NextResponse.json(
         { error: `Backend API error: ${response!.status}`, details: errorText },
-        { status: response!.status }
+        { status: response!.status, headers }
       );
     }
 
