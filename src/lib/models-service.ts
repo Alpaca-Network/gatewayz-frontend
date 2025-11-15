@@ -299,7 +299,7 @@ fetch(url, {
 
         if (data.data && Array.isArray(data.data) && data.data.length > 0) {
           // Normalize each model to ensure provider_slugs and source_gateways are arrays
-          const normalizedModels = data.data.map(model => normalizeModel(model, gateway));
+          const normalizedModels = data.data.map((model: any) => normalizeModel(model, gateway));
           allModels.push(...normalizedModels);
           console.log(`[Models] Fetched ${data.data.length} models for gateway: ${gateway} (offset: ${offset})`);
 
