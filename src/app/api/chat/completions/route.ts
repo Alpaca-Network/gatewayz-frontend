@@ -84,20 +84,30 @@ export async function POST(request: NextRequest) {
     // Retry logic for network errors
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
+        // Add AbortController for timeout (6 minutes max for streaming)
+        // This prevents infinite hangs on backend API failures
+        const fetchController = new AbortController();
+        const fetchTimeoutId = setTimeout(() => fetchController.abort(), 360000); // 6 minutes
+
         response = await fetch(url, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${apiKey}`,
+            'Connection': 'keep-alive', // Enable connection pooling
           },
           body: JSON.stringify(backendRequestBody),
+          signal: fetchController.signal, // Add abort signal for timeout
         });
+
+        clearTimeout(fetchTimeoutId);
         break; // Success, exit retry loop
       } catch (fetchError) {
         lastError = fetchError instanceof Error ? fetchError : new Error(String(fetchError));
 
-        // Check if it's a network error
-        const isNetworkError = fetchError instanceof TypeError ||
+        // Check if it's a timeout or network error
+        const isTimeoutError = fetchError instanceof Error && fetchError.name === 'AbortError';
+        const isNetworkError = isTimeoutError || fetchError instanceof TypeError ||
           (fetchError instanceof Error && (
             fetchError.message.includes('fetch') ||
             fetchError.message.includes('network') ||
@@ -108,7 +118,8 @@ export async function POST(request: NextRequest) {
 
         if (isNetworkError && attempt < maxRetries) {
           const waitTime = 2000 * Math.pow(2, attempt); // 2s, 4s, 8s
-          console.log(`Chat completions API route - Network error, retrying in ${waitTime}ms (attempt ${attempt + 1}/${maxRetries})...`);
+          const errorType = isTimeoutError ? 'timeout' : 'network';
+          console.log(`Chat completions API route - ${errorType} error, retrying in ${waitTime}ms (attempt ${attempt + 1}/${maxRetries})...`);
           await new Promise(resolve => setTimeout(resolve, waitTime));
           continue;
         }
@@ -118,7 +129,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           {
             error: isNetworkError
-              ? `Network connection failed after ${maxRetries + 1} attempts. Please check your internet connection and try again.`
+              ? `Backend connection failed after ${maxRetries + 1} attempts. Please try again.`
               : 'Failed to connect to backend API',
             details: lastError.message
           },
@@ -143,13 +154,17 @@ export async function POST(request: NextRequest) {
     if (body.stream) {
       console.log('Chat completions API route - Streaming response...');
 
-      // Return the streaming response with proper headers for Edge runtime
+      // OPTIMIZATION: Return streaming response with optimized Edge Runtime headers
+      // Connection pooling and low buffering for fast response
       return new NextResponse(response!.body, {
         status: 200,
         headers: {
           'Content-Type': 'text/event-stream',
           'Cache-Control': 'no-cache, no-transform',
           'X-Accel-Buffering': 'no',
+          'Connection': 'keep-alive', // Maintain connection for streaming
+          'Transfer-Encoding': 'chunked', // Enable chunked encoding for responsiveness
+          'X-Content-Type-Options': 'nosniff', // Security header
         },
       });
     }
