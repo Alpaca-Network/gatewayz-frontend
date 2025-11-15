@@ -26,13 +26,50 @@ import time
 from collections.abc import Iterator
 from typing import Any, Optional
 
-import vertexai
-from vertexai.generative_models import GenerativeModel
-
 from src.config import Config
 
 # Initialize logging
 logger = logging.getLogger(__name__)
+
+# Lazy imports for Google Vertex AI SDK to prevent import errors in environments
+# where libstdc++.so.6 is not available. These will be imported only when needed.
+_vertexai = None
+_GenerativeModel = None
+_MessageToDict = None
+
+def _ensure_vertex_imports():
+    """Ensure Vertex AI SDK is imported. Raises ImportError if SDK not available."""
+    global _vertexai, _GenerativeModel
+    if _vertexai is None:
+        try:
+            import vertexai
+            from vertexai.generative_models import GenerativeModel
+            _vertexai = vertexai
+            _GenerativeModel = GenerativeModel
+            logger.debug("Successfully imported Vertex AI SDK")
+        except ImportError as e:
+            raise ImportError(
+                f"Google Vertex AI SDK is not available: {e}. "
+                "This is typically due to missing system dependencies (libstdc++.so.6). "
+                "Ensure the environment has the required C++ runtime libraries."
+            ) from e
+    return _vertexai, _GenerativeModel
+
+
+def _ensure_protobuf_imports():
+    """Ensure protobuf utilities are imported. Raises ImportError if not available."""
+    global _MessageToDict
+    if _MessageToDict is None:
+        try:
+            from google.protobuf.json_format import MessageToDict
+            _MessageToDict = MessageToDict
+            logger.debug("Successfully imported MessageToDict from protobuf")
+        except ImportError as e:
+            raise ImportError(
+                f"protobuf utilities are not available: {e}. "
+                "This is typically due to missing system dependencies."
+            ) from e
+    return _MessageToDict
 
 
 def initialize_vertex_ai():
@@ -66,6 +103,9 @@ def initialize_vertex_ai():
                 "GOOGLE_VERTEX_LOCATION is not configured. Set this to a valid GCP region. "
                 "For example: GOOGLE_VERTEX_LOCATION=us-central1"
             )
+
+        # Ensure Vertex AI SDK is available
+        vertexai, _ = _ensure_vertex_imports()
 
         # Handle GOOGLE_VERTEX_CREDENTIALS_JSON if provided (for serverless environments)
         # If raw JSON is provided, write it to a temp file and set GOOGLE_APPLICATION_CREDENTIALS
@@ -165,6 +205,7 @@ def make_google_vertex_request_openai(
 
         # Step 3: Create GenerativeModel instance
         try:
+            _, GenerativeModel = _ensure_vertex_imports()
             gemini_model = GenerativeModel(model_name)
             logger.info(f"Created GenerativeModel for {model_name}")
         except Exception as model_error:
@@ -542,6 +583,7 @@ def _process_google_vertex_response(response: Any, model: str) -> dict:
     """
     try:
         # Convert protobuf response to dictionary
+        MessageToDict = _ensure_protobuf_imports()
         response_dict = MessageToDict(response)
         logger.debug(
             f"Google Vertex response dict: {json.dumps(response_dict, indent=2, default=str)}"

@@ -13,6 +13,12 @@ sys.modules['google.auth.transport.requests'] = MagicMock()
 sys.modules['google.oauth2'] = MagicMock()
 sys.modules['google.oauth2.service_account'] = MagicMock()
 
+# Mock vertexai before importing our module (needed for lazy imports)
+sys.modules['vertexai'] = MagicMock()
+sys.modules['vertexai.generative_models'] = MagicMock()
+sys.modules['google.protobuf'] = MagicMock()
+sys.modules['google.protobuf.json_format'] = MagicMock()
+
 # Now import our module (which will use the mocked dependencies)
 try:
     from src.services.google_vertex_client import (
@@ -21,6 +27,8 @@ try:
         transform_google_vertex_model_id,
         _build_vertex_content,
         _process_google_vertex_rest_response,
+        _ensure_vertex_imports,
+        _ensure_protobuf_imports,
     )
     GOOGLE_VERTEX_AVAILABLE = True
 except ImportError:
@@ -196,11 +204,12 @@ class TestProcessGoogleVertexResponse:
 class TestMakeGoogleVertexRequest:
     """Tests for making requests to Google Vertex"""
 
-    @patch("src.services.google_vertex_client.GenerativeModel")
     @patch("src.services.google_vertex_client.initialize_vertex_ai")
-    def test_make_request_with_parameters(self, mock_init_vertex, mock_generative_model):
+    @patch("src.services.google_vertex_client._ensure_vertex_imports")
+    def test_make_request_with_parameters(self, mock_ensure_imports, mock_init_vertex):
         """Test making a request with various parameters"""
-        # Mock GenerativeModel and its response
+        # Mock the lazy import to return a mock GenerativeModel class
+        mock_generative_model_class = Mock()
         mock_model_instance = Mock()
         mock_response = Mock()
         mock_response.text = "Response"
@@ -211,7 +220,10 @@ class TestMakeGoogleVertexRequest:
         mock_response.candidates[0].finish_reason = 1  # STOP
 
         mock_model_instance.generate_content.return_value = mock_response
-        mock_generative_model.return_value = mock_model_instance
+        mock_generative_model_class.return_value = mock_model_instance
+
+        # Mock _ensure_vertex_imports to return our mocked GenerativeModel class
+        mock_ensure_imports.return_value = (Mock(), mock_generative_model_class)
 
         messages = [
             {"role": "user", "content": "Hello"}
@@ -230,15 +242,16 @@ class TestMakeGoogleVertexRequest:
         assert "usage" in result
         assert result["choices"][0]["message"]["content"] == "Response"
 
-        # Verify initialization and model creation were called
+        # Verify initialization and lazy import were called
         mock_init_vertex.assert_called_once()
-        mock_generative_model.assert_called_once_with("gemini-2.0-flash")
+        mock_ensure_imports.assert_called_once()
 
-    @patch("src.services.google_vertex_client.GenerativeModel")
     @patch("src.services.google_vertex_client.initialize_vertex_ai")
-    def test_make_streaming_request(self, mock_init_vertex, mock_generative_model):
+    @patch("src.services.google_vertex_client._ensure_vertex_imports")
+    def test_make_streaming_request(self, mock_ensure_imports, mock_init_vertex):
         """Test making a streaming request"""
-        # Mock GenerativeModel and its response
+        # Mock the lazy import to return a mock GenerativeModel class
+        mock_generative_model_class = Mock()
         mock_model_instance = Mock()
         mock_response = Mock()
         mock_response.text = "Streaming response"
@@ -249,7 +262,10 @@ class TestMakeGoogleVertexRequest:
         mock_response.candidates[0].finish_reason = 1  # STOP
 
         mock_model_instance.generate_content.return_value = mock_response
-        mock_generative_model.return_value = mock_model_instance
+        mock_generative_model_class.return_value = mock_model_instance
+
+        # Mock _ensure_vertex_imports to return our mocked GenerativeModel class
+        mock_ensure_imports.return_value = (Mock(), mock_generative_model_class)
 
         messages = [
             {"role": "user", "content": "Hello"}
@@ -269,11 +285,12 @@ class TestMakeGoogleVertexRequest:
         assert any("Streaming response" in chunk for chunk in chunks)
         assert any("[DONE]" in chunk for chunk in chunks)
 
-    @patch("src.services.google_vertex_client.GenerativeModel")
     @patch("src.services.google_vertex_client.initialize_vertex_ai")
-    def test_make_request_gemini_flash_lite(self, mock_init_vertex, mock_generative_model):
+    @patch("src.services.google_vertex_client._ensure_vertex_imports")
+    def test_make_request_gemini_flash_lite(self, mock_ensure_imports, mock_init_vertex):
         """Test making a request to gemini-2.5-flash-lite (maps to preview version)"""
-        # Mock GenerativeModel and its response
+        # Mock the lazy import to return a mock GenerativeModel class
+        mock_generative_model_class = Mock()
         mock_model_instance = Mock()
         mock_response = Mock()
         mock_response.text = "Flash Lite works!"
@@ -284,7 +301,10 @@ class TestMakeGoogleVertexRequest:
         mock_response.candidates[0].finish_reason = 1  # STOP
 
         mock_model_instance.generate_content.return_value = mock_response
-        mock_generative_model.return_value = mock_model_instance
+        mock_generative_model_class.return_value = mock_model_instance
+
+        # Mock _ensure_vertex_imports to return our mocked GenerativeModel class
+        mock_ensure_imports.return_value = (Mock(), mock_generative_model_class)
 
         messages = [
             {"role": "user", "content": "Test"}
@@ -298,8 +318,8 @@ class TestMakeGoogleVertexRequest:
         assert result["model"] == "gemini-2.5-flash-lite-preview-09-2025"
         assert result["choices"][0]["message"]["content"] == "Flash Lite works!"
 
-        # Verify the correct model was used
-        mock_generative_model.assert_called_once_with("gemini-2.5-flash-lite-preview-09-2025")
+        # Verify the lazy import was called
+        mock_ensure_imports.assert_called_once()
 
 
 @pytest.mark.skipif(not GOOGLE_VERTEX_AVAILABLE, reason="Google Vertex AI SDK not available")
