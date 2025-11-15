@@ -26,6 +26,16 @@ async def lifespan(app):
     # Startup
     logger.info("Starting health monitoring and observability services...")
 
+    # Validate critical environment variables at runtime startup
+    from src.config import Config
+    is_valid, missing_vars = Config.validate_critical_env_vars()
+    if not is_valid:
+        logger.error(f"❌ CRITICAL: Missing required environment variables: {missing_vars}")
+        logger.error("Application cannot start without these variables")
+        raise RuntimeError(f"Missing required environment variables: {missing_vars}")
+    else:
+        logger.info(f"✅ All critical environment variables validated")
+
     try:
         # Initialize Tempo/OpenTelemetry OTLP tracing
         try:

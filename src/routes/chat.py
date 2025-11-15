@@ -2,11 +2,16 @@ import logging
 import asyncio
 import time
 import json
+import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 import httpx
 
 from typing import Optional
+from contextvars import ContextVar
+
+# Request correlation ID for distributed tracing
+request_id_var: ContextVar[str] = ContextVar("request_id", default="")
 # Make braintrust optional for test environments
 try:
     from braintrust import current_span, start_span, traced
@@ -63,10 +68,17 @@ def _safe_import_provider(provider_name, imports_list):
         return result
     except Exception as e:
         error_msg = f"⚠  Failed to load {provider_name} provider client: {type(e).__name__}: {str(e)}"
-        logging.getLogger(__name__).warning(error_msg)
+        logging.getLogger(__name__).error(error_msg)
         _provider_import_errors[provider_name] = str(e)
-        # Return a stub that will raise an error if actually used
-        return {import_name: lambda *args, **kwargs: None for import_name in imports_list}
+        # Return error-raising stubs instead of silent None returns
+        def create_error_stub(prov_name, error_details):
+            async def error_stub(*args, **kwargs):
+                raise ImportError(
+                    f"Provider '{prov_name}' failed to import during startup: {error_details}. "
+                    "This provider is currently unavailable. Check logs for details."
+                )
+            return error_stub
+        return {import_name: create_error_stub(provider_name, str(e)) for import_name in imports_list}
 
 # Load all provider clients
 _openrouter = _safe_import_provider("openrouter", [
@@ -633,13 +645,23 @@ async def chat_completions(
     request: Request = None,
 ):
     # === 0) Setup / sanity ===
+    # Generate request correlation ID for distributed tracing
+    request_id = str(uuid.uuid4())
+    request_id_var.set(request_id)
+
     # Never print keys; log masked
     if Config.IS_TESTING and request:
         auth_header = request.headers.get("Authorization")
         if auth_header and auth_header.lower().startswith("bearer "):
             api_key = auth_header.split(" ", 1)[1].strip()
 
-    logger.info("chat_completions start (api_key=%s, model=%s)", mask_key(api_key), req.model)
+    logger.info(
+        "chat_completions start (request_id=%s, api_key=%s, model=%s)",
+        request_id,
+        mask_key(api_key),
+        req.model,
+        extra={"request_id": request_id}
+    )
 
     # Start Braintrust span for this request
     span = start_span(name=f"chat_{req.model}", type="llm")
@@ -1448,10 +1470,16 @@ async def chat_completions(
 
     except HTTPException:
         raise
-    except Exception:
-        logger.exception("Unhandled server error")
-        # Don't leak internal details
-        raise HTTPException(status_code=500, detail="Internal server error")
+    except Exception as e:
+        logger.exception(
+            f"[{request_id}] Unhandled server error: {type(e).__name__}",
+            extra={"request_id": request_id, "error_type": type(e).__name__}
+        )
+        # Don't leak internal details, but include request ID for support
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal server error (request ID: {request_id})"
+        )
 
 
 @router.post("/v1/responses", tags=["chat"])

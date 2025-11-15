@@ -664,3 +664,71 @@ async def check_google_vertex_health():
             "error": str(e),
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
+
+
+@router.get("/health/database", tags=["health"])
+async def database_health():
+    """
+    Check database connectivity and health
+
+    Returns database connection status and any errors.
+    This is critical for startup diagnostics in Railway.
+    """
+    try:
+        from src.config.supabase_config import supabase
+
+        logger.info("Checking database connectivity...")
+        # Try a simple query to verify connection
+        result = supabase.table("users").limit(1).execute()
+
+        logger.info("✅ Database connection verified")
+        return {
+            "status": "healthy",
+            "database": "supabase",
+            "connection": "verified",
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+    except Exception as e:
+        logger.error(f"❌ Database connection failed: {type(e).__name__}: {str(e)}")
+        return {
+            "status": "unhealthy",
+            "database": "supabase",
+            "connection": "failed",
+            "error": str(e),
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+
+
+@router.get("/health/providers", tags=["health"])
+async def provider_health():
+    """
+    Check provider import status
+
+    Returns which providers successfully imported and which failed.
+    This is essential for debugging chat endpoint issues in Railway.
+    """
+    try:
+        from src.routes.chat import _provider_import_errors
+
+        # Count total providers and failed
+        total_providers = 16  # Based on the code, there are 16 providers
+        failed_count = len(_provider_import_errors)
+        loaded_count = total_providers - failed_count
+
+        logger.info(f"Provider status: {loaded_count}/{total_providers} loaded, {failed_count} failed")
+
+        return {
+            "status": "healthy" if failed_count == 0 else "degraded",
+            "total_providers": total_providers,
+            "loaded_providers": loaded_count,
+            "failed_providers": failed_count,
+            "failures": _provider_import_errors if _provider_import_errors else None,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error checking provider health: {str(e)}")
+        return {
+            "status": "error",
+            "error": str(e),
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
