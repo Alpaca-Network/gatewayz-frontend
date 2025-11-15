@@ -3107,7 +3107,7 @@ function ChatPageContent() {
       />
 
         {/* Mobile Header - Compact and Touch-Friendly */}
-        <header className="sticky top-0 z-[50] w-full bg-background/95 backdrop-blur-sm border-b border-border/50 lg:relative lg:border-none lg:bg-transparent">
+        <header className="sticky top-0 z-[50] w-full bg-background/95 border-b border-border/50 lg:relative lg:border-none lg:bg-transparent">
           {/* Mobile Layout - Single Row on Mobile */}
           <div className="flex lg:hidden items-center gap-2 p-3 w-full">
             {/* Menu Button */}
@@ -3389,7 +3389,7 @@ function ChatPageContent() {
           )}
 
           {/* Message input area - Mobile optimized */}
-          <div className="w-full p-3 sm:p-4 lg:p-6 max-w-4xl mx-auto flex-shrink-0 bg-background/95 backdrop-blur-sm border-t border-border/50 lg:border-none lg:bg-transparent">
+          <div className="w-full p-3 sm:p-4 lg:p-6 max-w-4xl mx-auto flex-shrink-0 bg-background/95 border-t border-border/50 lg:border-none lg:bg-transparent">
             <div className="w-full">
               <div className="relative">
                 {/* Image preview - Mobile responsive */}
