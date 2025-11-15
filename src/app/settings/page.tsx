@@ -224,7 +224,7 @@ export default function SettingsPage() {
           <div className="flex flex-wrap gap-2 mt-4">
             {allowedProviders.map(provider => (
               <Badge key={provider} variant="secondary" className="capitalize">
-                {provider}
+                {provider.replace(/^@/, '')}
                 <button
                   onClick={() => handleRemoveAllowedProvider(provider)}
                   className="ml-2 hover:text-destructive"
@@ -266,7 +266,7 @@ export default function SettingsPage() {
           <div className="flex flex-wrap gap-2 mb-4">
             {ignoredProviders.map(provider => (
               <Badge key={provider} variant="secondary" className="capitalize">
-                {provider}
+                {provider.replace(/^@/, '')}
                 <button
                   onClick={() => handleRemoveIgnoredProvider(provider)}
                   className="ml-2 hover:text-destructive"

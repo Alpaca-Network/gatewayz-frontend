@@ -278,7 +278,7 @@ export default function RankingsPage() {
 
                     {/* Top Provider - hidden on mobile, 3 columns on desktop */}
                     <div className="hidden lg:flex lg:col-span-3 items-center">
-                      <span className="text-xs">{model.provider || 'OpenRouter'}</span>
+                      <span className="text-xs">{(model.provider?.replace(/^@/, '') || 'OpenRouter')}</span>
                     </div>
 
                     {/* Tokens Generated - 3 columns on mobile and desktop */}
