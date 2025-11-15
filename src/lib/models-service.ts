@@ -8,6 +8,7 @@ const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
 
 // Transform static models data to backend format
 function transformModel(model: any, gateway: string) {
+  const resolvedGateway = gateway === 'all' ? 'openrouter' : gateway;
   return {
     id: `${model.developer}/${model.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
     name: model.name,
@@ -23,7 +24,9 @@ function transformModel(model: any, gateway: string) {
     },
     supported_parameters: model.supportedParameters,
     provider_slug: model.developer,
-    source_gateway: gateway === 'all' ? 'openrouter' : gateway, // Set gateway source for filtering
+    provider_slugs: [model.developer], // NEW: Track provider as array for consistent display
+    source_gateway: resolvedGateway, // Keep for backwards compatibility
+    source_gateways: [resolvedGateway], // NEW: Track gateway as array for consistent display
     is_private: model.is_private // Preserve is_private field if present
   };
 }
@@ -233,6 +236,24 @@ function buildHeaders(gateway: string): Record<string, string> {
   return headers;
 }
 
+// Helper function to normalize model fields for consistent tag display
+function normalizeModel(model: any, gateway: string): any {
+  return {
+    ...model,
+    // Ensure source_gateways is always an array
+    source_gateways: Array.isArray(model.source_gateways)
+      ? model.source_gateways
+      : (model.source_gateway ? [model.source_gateway] : [gateway]),
+    // Ensure provider_slugs is always an array
+    provider_slugs: Array.isArray(model.provider_slugs)
+      ? model.provider_slugs
+      : (model.provider_slug ? [model.provider_slug] : []),
+    // Keep singular fields for backwards compatibility
+    source_gateway: model.source_gateway || gateway,
+    provider_slug: model.provider_slug || 'unknown'
+  };
+}
+
 // Helper function to fetch models from a specific gateway
 async function fetchModelsFromGateway(gateway: string, limit?: number): Promise<any[]> {
   const allModels: any[] = [];
@@ -264,7 +285,7 @@ async function fetchModelsFromGateway(gateway: string, limit?: number): Promise<
 fetch(url, {
              method: 'GET',
              headers,
-             next: { 
+             next: {
                revalidate: 300,
                tags: [`models:gateway:${gateway}`, 'models:all']
              },
@@ -277,7 +298,9 @@ fetch(url, {
         const data = await response.json();
 
         if (data.data && Array.isArray(data.data) && data.data.length > 0) {
-          allModels.push(...data.data);
+          // Normalize each model to ensure provider_slugs and source_gateways are arrays
+          const normalizedModels = data.data.map((model: any) => normalizeModel(model, gateway));
+          allModels.push(...normalizedModels);
           console.log(`[Models] Fetched ${data.data.length} models for gateway: ${gateway} (offset: ${offset})`);
 
           const isFiveHundred = data.data.length === 500 && gateway === 'huggingface';
