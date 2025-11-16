@@ -1,0 +1,322 @@
+name: Codex Coverage Boost
+
+on:
+  schedule:
+    # Run weekly on Wednesdays at 3 PM UTC
+    - cron: '0 15 * * 3'
+  workflow_dispatch:
+  pull_request:
+    types: [labeled, opened, synchronize]
+    paths:
+      - "src/**"
+      - "tests/**"
+
+permissions:
+  id-token: write
+  contents: write
+  pull-requests: write
+  checks: write
+  issues: write
+
+jobs:
+  coverage-boost:
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'schedule' ||
+      (github.event_name == 'pull_request' &&
+       contains(github.event.pull_request.labels.*.name, 'coverage-boost'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    strategy:
+      matrix:
+        python-version: ["3.12"]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov pytest-xdist pytest-asyncio
+
+      - name: Generate coverage report
+        id: coverage
+        run: |
+          # Set environment variables for tests
+          export SUPABASE_URL="${{ secrets.SUPABASE_URL || 'https://test.supabase.co' }}"
+          export SUPABASE_KEY="${{ secrets.SUPABASE_KEY || 'test-key' }}"
+          export OPENROUTER_API_KEY="${{ secrets.OPENROUTER_API_KEY || 'test-key' }}"
+          export ENCRYPTION_KEY="${{ secrets.ENCRYPTION_KEY || 'test-encryption-key-32-bytes!' }}"
+
+          # Run tests with coverage
+          pytest tests/ \
+            --cov=src \
+            --cov-report=json \
+            --cov-report=html \
+            --cov-report=term \
+            -m "not smoke" \
+            -x \
+            --tb=short || true
+
+          # Generate coverage analysis
+          python << 'EOF'
+          import json
+          import os
+          from pathlib import Path
+
+          coverage_file = 'coverage.json'
+          if not os.path.exists(coverage_file):
+              print("No coverage data generated")
+              exit(0)
+
+          with open(coverage_file) as f:
+              data = json.load(f)
+
+          files = data.get('files', {})
+          low_coverage = []
+
+          for file_path, file_data in files.items():
+              if 'src/' not in file_path:
+                  continue
+
+              summary = file_data.get('summary', {})
+              percent = summary.get('percent_covered', 0)
+
+              if percent < 75:  # Focus on files below 75%
+                  covered = summary.get('covered_lines', 0)
+                  missing = summary.get('missing_lines', 0)
+
+                  low_coverage.append({
+                      'path': file_path,
+                      'percent': percent,
+                      'covered': covered,
+                      'missing': missing
+                  })
+
+          # Sort by percent covered
+          low_coverage.sort(key=lambda x: x['percent'])
+
+          # Write analysis
+          with open('coverage_analysis.md', 'w') as f:
+              f.write('# Coverage Analysis for Test Generation\n\n')
+              f.write('## Files Below 75% Coverage\n\n')
+
+              for item in low_coverage[:20]:  # Top 20 lowest
+                  f.write(f"### {item['path']}\n")
+                  f.write(f"- Coverage: **{item['percent']:.1f}%**\n")
+                  f.write(f"- Lines: {item['covered']} covered, {item['missing']} missing\n\n")
+
+          print(f"Found {len(low_coverage)} files below 75% coverage")
+          EOF
+
+      - name: Generate tests with Codex
+        timeout-minutes: 50
+        uses: anthropics/claude-code-action@8a1c4371755898f67cd97006ba7c97702d5fc4bf  # v1.0.16
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          use_commit_signing: false
+          claude_args: "--max-turns 15"
+          prompt: |
+            Your task is to generate high-quality pytest tests to improve code coverage.
+
+            **Coverage Goal:** Increase overall coverage from current baseline to 35-40% (next phase target).
+
+            **Files to Focus On** (read coverage_analysis.md):
+            - Files with 0-30% coverage (highest priority)
+            - Focus on src/db/ and src/services/ modules
+            - Include src/routes/ endpoints
+
+            **Test Generation Guidelines:**
+
+            1. **Test Structure** - Follow existing patterns:
+               - Use pytest with async support (@pytest.mark.asyncio)
+               - Leverage fixtures from tests/conftest.py
+               - Use factories from tests/factories.py for test data
+               - Mock external dependencies (Supabase, Redis, provider APIs)
+
+            2. **Mock Strategy:**
+               - Mock Supabase PostgREST responses (don't hit real DB)
+               - Mock Redis for rate limiting and caching
+               - Mock provider clients (OpenRouter, Portkey, etc.)
+               - Use unittest.mock.patch or pytest-mock
+
+            3. **Test Coverage Include:**
+               - Happy path (successful operations)
+               - Error cases (validation, API errors)
+               - Edge cases (empty data, large payloads, timeouts)
+               - Boundary conditions (rate limits, max values)
+               - Integration between modules
+
+            4. **Test Categories:**
+
+               A) **Database Tests** (src/db/):
+                  - CRUD operations (create, read, update, delete)
+                  - Query filtering and sorting
+                  - Error handling (not found, duplicates, etc.)
+                  - Transaction handling
+
+               B) **Service Tests** (src/services/):
+                  - Provider client tests (mock HTTP calls)
+                  - Pricing calculation tests
+                  - Rate limiting tests
+                  - Cache behavior tests
+
+               C) **Route Tests** (src/routes/):
+                  - Endpoint functionality
+                  - Request validation
+                  - Error responses
+                  - Authentication/authorization
+
+            5. **Mocking Checklist:**
+               - Supabase: Mock with appropriate response structures
+               - Redis: Mock with in-memory dict or fakeredis
+               - HTTP: Mock with httpx or responses library
+               - Environment: Use monkeypatch for env vars
+
+            6. **Test File Organization:**
+               - Create: tests/db/test_<module>.py
+               - Create: tests/services/test_<module>.py
+               - Create: tests/routes/test_<module>.py
+               - Keep files <300 lines, split if larger
+
+            **Implementation Steps:**
+
+            1. Read coverage_analysis.md to see low-coverage files
+            2. For each target file:
+               - Identify all public functions/methods
+               - Create test cases for each
+               - Include error paths
+               - Use appropriate mocks
+            3. Place tests in correct directory structure
+            4. Ensure tests import correctly
+            5. Add docstrings explaining test purpose
+
+            **Example Test Structure:**
+
+            ```python
+            import pytest
+            from unittest.mock import Mock, patch, AsyncMock
+            from src.db.api_keys import create_api_key, get_api_key
+            from tests.factories import UserFactory
+
+            @pytest.mark.asyncio
+            async def test_create_api_key_success(mock_supabase):
+                '''Test successful API key creation'''
+                user = UserFactory()
+                mock_supabase.table.return_value.insert.return_value.execute.return_value.data = [...]
+
+                result = await create_api_key(user.id)
+                assert result is not None
+
+            @pytest.mark.asyncio
+            async def test_create_api_key_user_not_found(mock_supabase):
+                '''Test error when user doesn't exist'''
+                mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value.data = []
+
+                with pytest.raises(ValueError, match="User not found"):
+                    await get_api_key("nonexistent_id")
+            ```
+
+            **Priority Files to Test:**
+            1. src/db/api_keys.py - API key encryption/decryption
+            2. src/db/credit_transactions.py - Financial transactions
+            3. src/services/pricing.py - Cost calculations
+            4. src/services/rate_limiting.py - Rate limiting logic
+            5. src/routes/chat.py - Main chat endpoint
+            6. src/routes/auth.py - Authentication endpoints
+            7. src/security/security.py - Encryption functions
+
+            **DO NOT:**
+            - Add tests for third-party library code
+            - Test infrastructure (logging, config)
+            - Make actual HTTP calls or DB queries
+            - Skip error cases
+            - Leave TODOs in test code
+
+            **COMMIT MESSAGE:**
+            "test: add comprehensive test coverage for [module_name]
+
+            - Added X test cases covering Y lines of code
+            - Increased coverage from Z% to Z+X%
+            - Focus on [error cases/edge cases/integration]"
+
+      - name: Verify coverage improvement
+        id: verify
+        run: |
+          # Re-run tests to verify new tests pass
+          pytest tests/ \
+            --cov=src \
+            --cov-report=term \
+            -m "not smoke" \
+            --tb=short || true
+
+          # Generate summary
+          python << 'EOF'
+          import json
+          import os
+
+          if os.path.exists('coverage.json'):
+              with open('coverage.json') as f:
+                  data = json.load(f)
+                  total = data.get('totals', {})
+                  percent = total.get('percent_covered', 0)
+
+              print(f"\n📊 Coverage Summary: {percent:.1f}%")
+              print(f"📈 Target: 40% by end of Phase 3")
+
+              with open('coverage_summary.txt', 'w') as f:
+                  f.write(f"Coverage: {percent:.1f}%\n")
+          EOF
+
+      - name: Comment on PR with results
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
+        with:
+          script: |
+            const fs = require('fs');
+
+            let comment = '## 🔬 Codex Coverage Boost Results\n\n';
+
+            if (fs.existsSync('coverage_summary.txt')) {
+              const summary = fs.readFileSync('coverage_summary.txt', 'utf8');
+              comment += `### Current Coverage\n\`\`\`\n${summary}\`\`\`\n\n`;
+            }
+
+            if (fs.existsSync('coverage_analysis.md')) {
+              const analysis = fs.readFileSync('coverage_analysis.md', 'utf8');
+              comment += `### Low Coverage Files\n${analysis}\n\n`;
+            }
+
+            comment += 'Please review and merge these test additions to improve coverage. ✅';
+
+            try {
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: comment
+              });
+              console.log('PR comment posted successfully');
+            } catch (error) {
+              console.error('Failed to post PR comment:', error);
+            }
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: htmlcov/
+          if-no-files-found: ignore

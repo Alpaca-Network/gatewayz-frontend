@@ -1,0 +1,337 @@
+name: Codex Performance Review
+
+on:
+  schedule:
+    # Run weekly on Fridays at 10 AM UTC
+    - cron: '0 10 * * 5'
+  workflow_dispatch:
+  pull_request:
+    types: [labeled, opened, synchronize]
+    paths:
+      - "src/services/**"
+      - "src/db/**"
+
+permissions:
+  id-token: write
+  contents: write
+  pull-requests: write
+  checks: write
+  issues: write
+
+jobs:
+  performance-review:
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'schedule' ||
+      (github.event_name == 'pull_request' &&
+       contains(github.event.pull_request.labels.*.name, 'perf-review'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: 'pip'
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install ruff
+
+      - name: Analyze code for performance issues
+        id: analysis
+        run: |
+          mkdir -p perf-analysis
+
+          # Create checklist for performance analysis
+          cat > perf-analysis/checklist.md << 'EOF'
+          # Performance Analysis Checklist
+
+          ## Database & Query Optimization
+          - [ ] Check for N+1 queries in src/db/
+          - [ ] Review connection pool configuration
+          - [ ] Identify missing indexes
+          - [ ] Find query optimization opportunities
+
+          ## Caching Strategy
+          - [ ] Review Redis usage patterns
+          - [ ] Check cache TTL settings
+          - [ ] Identify cache misses
+          - [ ] Find operations that should be cached
+
+          ## Provider Integration
+          - [ ] Check timeout configurations
+          - [ ] Review retry logic
+          - [ ] Analyze failure handling
+          - [ ] Look for unnecessary retries
+
+          ## Rate Limiting
+          - [ ] Review rate limit implementation
+          - [ ] Check fairness algorithm
+          - [ ] Analyze throughput limits
+          - [ ] Find potential bottlenecks
+
+          ## Async/Concurrency
+          - [ ] Check for blocking operations
+          - [ ] Review async function usage
+          - [ ] Identify synchronous bottlenecks
+          - [ ] Analyze concurrency limits
+
+          ## Memory Management
+          - [ ] Look for memory leaks
+          - [ ] Review large data structure handling
+          - [ ] Check streaming implementations
+          - [ ] Analyze buffer management
+
+          ## API Response Times
+          - [ ] Measure endpoint latencies
+          - [ ] Identify slow endpoints
+          - [ ] Check response payload sizes
+          - [ ] Review compression usage
+          EOF
+
+          echo "checklist_created=true" >> $GITHUB_OUTPUT
+
+      - name: Run Codex Performance Analysis
+        timeout-minutes: 45
+        uses: anthropics/claude-code-action@8a1c4371755898f67cd97006ba7c97702d5fc4bf  # v1.0.16
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          use_commit_signing: false
+          claude_args: "--max-turns 10"
+          prompt: |
+            Analyze this FastAPI gateway application for performance issues and optimization opportunities.
+
+            **Codebase:** FastAPI inference gateway with 17+ providers, Supabase backend, Redis caching
+
+            **Analysis Scope:**
+
+            1. **Database Performance** - Review src/db/ modules:
+               - Identify N+1 query patterns
+               - Check for missing indexes
+               - Find query optimization opportunities
+               - Review connection pooling (src/config/db_config.py)
+               - Suggest bulk operations where applicable
+
+            2. **Caching Effectiveness** - Check src/services/:
+               - Redis configuration (src/config/redis_config.py)
+               - Cache TTL settings
+               - Cache key strategies
+               - Find high-value cache opportunities
+               - Suggest cache invalidation improvements
+
+            3. **Provider Integration Performance:**
+               - HTTP client configuration (connection pooling, timeouts)
+               - Retry logic efficiency
+               - Circuit breaker patterns
+               - Failover strategy optimization
+               - Request batching opportunities
+
+            4. **Rate Limiting Analysis** (src/services/rate_limiting.py):
+               - Algorithm efficiency
+               - Fairness under high load
+               - Memory usage of rate limit storage
+               - Throughput capacity
+               - Suggest capacity improvements
+
+            5. **Async/Await Patterns:**
+               - Identify blocking operations in async context
+               - Review task scheduling
+               - Check for deadlocks or race conditions
+               - Suggest parallelization opportunities
+               - Analyze context switching overhead
+
+            6. **Memory Efficiency:**
+               - Large data structure handling
+               - Streaming implementation
+               - Buffer management
+               - Memory leak detection
+               - Garbage collection tuning
+
+            7. **API Response Optimization:**
+               - Response payload size analysis
+               - JSON serialization efficiency
+               - Gzip compression configuration
+               - Data pagination opportunities
+               - Filtering/sorting efficiency
+
+            **Key Files to Analyze:**
+            - src/services/connection_pool.py
+            - src/services/response_cache.py
+            - src/services/rate_limiting.py
+            - src/services/provider_failover.py
+            - src/routes/chat.py (hot path)
+            - src/routes/messages.py (hot path)
+            - src/db/credit_transactions.py (frequently accessed)
+
+            **Performance Metrics to Consider:**
+            - Endpoint latency (p50, p95, p99)
+            - Database query time
+            - Cache hit rate
+            - Memory usage patterns
+            - CPU utilization
+            - Provider API response times
+
+            **Output Format:**
+            Create a detailed performance analysis report with:
+
+            1. **Executive Summary**
+               - Top 3 performance bottlenecks
+               - Estimated performance impact
+               - Recommended priority order
+
+            2. **Detailed Findings** (for each issue):
+               - Issue description
+               - Current behavior
+               - Impact on performance/costs
+               - Recommended fix
+               - Estimated improvement
+               - Effort to implement (small/medium/large)
+
+            3. **Quick Wins**
+               - Changes that are easy to implement
+               - Expected immediate impact
+               - Ready-to-use code examples
+
+            4. **Long-Term Improvements**
+               - Architectural changes
+               - Infrastructure upgrades
+               - Monitoring additions
+
+            5. **Monitoring Recommendations**
+               - Key metrics to track
+               - Alert thresholds
+               - Dashboard recommendations
+
+            **Prioritization Criteria:**
+            1. High impact + Low effort = Quick wins
+            2. High impact + Medium effort = Priority work
+            3. Medium impact + Low effort = Should do
+            4. Low impact = Nice to have
+
+            **Code Review Areas:**
+            - src/main.py - FastAPI setup and middleware
+            - src/routes/chat.py - Most critical endpoint
+            - src/services/openrouter_client.py - Primary provider
+            - src/services/pricing.py - Calculation efficiency
+            - src/db/credit_transactions.py - Transaction tracking
+
+            **Specific Questions to Answer:**
+            1. What's the current bottleneck in chat completions?
+            2. Can we reduce database queries per request?
+            3. Are we leveraging caching effectively?
+            4. Can we batch provider requests?
+            5. Are async operations truly non-blocking?
+            6. Can we optimize memory usage for streaming?
+            7. What's the connection pool utilization?
+            8. Are rate limits fairly distributed?
+
+            **DO NOT:**
+            - Suggest microservices if monolith works fine
+            - Over-engineer solutions
+            - Add premature optimization
+            - Ignore trade-offs
+
+            **Provide:**
+            - Specific file paths and line numbers
+            - Code examples for suggested improvements
+            - Quantified performance gains
+            - Implementation difficulty estimates
+
+      - name: Save analysis results
+        if: always()
+        run: |
+          # Results are automatically saved by Codex
+          echo "Performance analysis complete"
+
+      - name: Create performance improvement issue
+        if: always()
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
+        with:
+          script: |
+            try {
+              const issue = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: '⚡ Codex Performance Review Results',
+                body: `## Performance Analysis Report\n\nCodex has completed a comprehensive performance analysis of the codebase.\n\nReview the workflow run for detailed findings and recommendations.\n\n**Run:** ${context.runId}\n\nKey areas reviewed:\n- Database query optimization\n- Caching effectiveness\n- Provider integration performance\n- Rate limiting efficiency\n- Async/await patterns\n- Memory usage\n- API response optimization`,
+                labels: ['performance', 'codex-analyze'],
+              });
+
+              console.log(`Created issue #${issue.data.number}`);
+            } catch (error) {
+              console.error('Note: Issue creation skipped (may already exist)');
+            }
+
+      - name: Comment on PR if applicable
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
+        with:
+          script: |
+            try {
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: `## ⚡ Codex Performance Analysis\n\nCodex has analyzed this PR for performance implications.\n\nCheck the workflow run logs for detailed performance insights and optimization recommendations.\n\n**Workflow Run:** ${context.runId}`,
+              });
+              console.log('PR comment posted successfully');
+            } catch (error) {
+              console.error('Failed to post PR comment:', error);
+            }
+
+      - name: Generate performance metrics report
+        if: always()
+        run: |
+          cat > perf-metrics.md << EOF
+          # Performance Metrics Summary
+
+          ## Analyzed Components
+          - Database layer (src/db/)
+          - Service layer (src/services/)
+          - Route handlers (src/routes/)
+          - Configuration (src/config/)
+
+          ## Review Date
+          $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+
+          ## Key Recommendations
+          1. Review database N+1 queries
+          2. Optimize hot path endpoints
+          3. Enhance caching strategy
+          4. Improve rate limiting
+          5. Monitor memory usage
+
+          ## Next Steps
+          1. Review findings in GitHub issue
+          2. Prioritize recommendations
+          3. Create separate PRs for improvements
+          4. Measure impact after implementation
+          5. Update monitoring/alerting
+
+          EOF
+
+      - name: Upload analysis report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-analysis
+          path: perf-analysis/
+          if-no-files-found: ignore
+
+      - name: Upload metrics report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-metrics
+          path: perf-metrics.md
+          if-no-files-found: ignore

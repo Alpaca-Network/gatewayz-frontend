@@ -1,0 +1,186 @@
+name: Codex Bug Analysis
+
+on:
+  schedule:
+    # Run daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+  # Also run on PRs with specific labels
+  pull_request:
+    types: [labeled, opened, synchronize]
+
+permissions:
+  id-token: write
+  contents: write
+  pull-requests: write
+  checks: write
+  issues: write
+
+jobs:
+  bug-analysis:
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'schedule' ||
+      (github.event_name == 'pull_request' &&
+       contains(github.event.pull_request.labels.*.name, 'codex-analyze'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies for analysis
+        run: |
+          pip install -q ruff bandit semgrep
+
+      - name: Run static analysis
+        id: analysis
+        run: |
+          mkdir -p analysis-reports
+
+          # Ruff security and code quality checks
+          echo "# Code Quality Analysis Report" > analysis-reports/findings.md
+          echo "" >> analysis-reports/findings.md
+
+          echo "## Ruff Security Checks" >> analysis-reports/findings.md
+          ruff check src/ --select=E,W,F --output-format=github >> analysis-reports/findings.md 2>&1 || true
+
+          echo "" >> analysis-reports/findings.md
+          echo "## Bandit Security Issues" >> analysis-reports/findings.md
+          bandit -r src/ -f txt -o analysis-reports/bandit.txt 2>/dev/null || true
+          cat analysis-reports/bandit.txt >> analysis-reports/findings.md
+
+          echo "Analysis complete"
+
+      - name: Run Codex Bug Analysis
+        timeout-minutes: 45
+        uses: anthropics/claude-code-action@8a1c4371755898f67cd97006ba7c97702d5fc4bf  # v1.0.16
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          use_commit_signing: false
+          claude_args: "--max-turns 8"
+          prompt: |
+            You are a security and code quality expert. Analyze this FastAPI codebase for potential bugs, security issues, and improvements.
+
+            **Scope:** FastAPI gateway for AI inference with 17+ provider integrations, Supabase backend, Redis caching, Stripe payments.
+
+            **Analysis Tasks:**
+
+            1. **Security Issues** - Look for:
+               - Unencrypted sensitive data (API keys, tokens)
+               - SQL injection or query injection risks
+               - Missing input validation on user data
+               - Insecure API key handling in src/security/
+               - Credential exposure in logs or error messages
+               - CORS misconfigurations
+               - JWT token validation issues
+
+            2. **Performance Issues** - Identify:
+               - N+1 query problems in src/db/ modules
+               - Missing caching opportunities in src/services/
+               - Inefficient async operations
+               - Database connection pool exhaustion risks
+               - Memory leaks in long-running operations
+               - Provider timeout configurations
+
+            3. **Code Quality** - Check for:
+               - Dead code or unused imports
+               - Missing error handling in critical paths
+               - Duplicated code that should be refactored
+               - Type hint coverage (especially in routes)
+               - Exception handling gaps
+
+            4. **Testing Gaps** - Find:
+               - Critical functions without tests (provider clients, payment processing)
+               - Edge cases not covered (rate limiting, failover scenarios)
+               - Error paths not tested
+               - Mocking issues in integration tests
+
+            **Key Areas to Focus On:**
+            - src/security/security.py - Encryption and key handling
+            - src/db/api_keys.py - API key storage and retrieval
+            - src/services/pricing.py - Financial calculations
+            - src/services/rate_limiting.py - Rate limit enforcement
+            - src/services/openrouter_client.py - Provider integration
+            - src/routes/payments.py - Payment webhook handling
+            - src/routes/auth.py - Authentication logic
+
+            **For Each Issue Found:**
+            1. File path and line number
+            2. Description of the security/quality issue
+            3. Current risky code pattern
+            4. Recommended fix with code example
+            5. Priority: Critical (security), High (data loss), Medium (performance), Low (style)
+
+            **Output Format:**
+            Create a detailed analysis report as a GitHub issue comment describing:
+            - Summary of total issues found by category
+            - Top 5 Critical/High priority issues
+            - Detailed remediation steps
+            - Estimated effort to fix
+
+            Focus on actionable findings only. Don't report style issues unless they affect security or maintainability.
+
+      - name: Create GitHub issue with findings
+        if: always()
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea  # v7.0.1
+        with:
+          script: |
+            // Read analysis results and create an issue if needed
+            const fs = require('fs');
+            const findings_path = 'analysis-reports/findings.md';
+
+            if (fs.existsSync(findings_path)) {
+              const findings = fs.readFileSync(findings_path, 'utf8');
+
+              // Only create issue if there are findings
+              if (findings.length > 100) {
+                try {
+                  const issue = await github.rest.issues.create({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    title: '🔍 Codex Security & Quality Analysis Results',
+                    body: `${findings}\n\n---\n\n**Generated by:** Codex Bug Analysis\n**Run:** ${context.runId}`,
+                    labels: ['codex-analyze', 'security', 'code-quality'],
+                  });
+
+                  console.log(`Created issue #${issue.data.number}`);
+                } catch (error) {
+                  console.error('Failed to create issue:', error);
+                }
+              }
+            }
+
+      - name: Comment on PR if applicable
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
+        with:
+          script: |
+            const fs = require('fs');
+            const findings_path = 'analysis-reports/findings.md';
+
+            if (fs.existsSync(findings_path)) {
+              const findings = fs.readFileSync(findings_path, 'utf8');
+
+              if (findings.length > 100) {
+                try {
+                  await github.rest.issues.createComment({
+                    issue_number: context.issue.number,
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    body: `## 🔍 Codex Security Analysis Results\n\n${findings}\n\nPlease address the findings above before merging.`,
+                  });
+                  console.log('PR comment posted successfully');
+                } catch (error) {
+                  console.error('Failed to post PR comment:', error);
+                }
+              }
+            }
