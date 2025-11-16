@@ -219,7 +219,11 @@ describe('SessionInitializer', () => {
 
       // URL cleanup and refresh should still happen
       expect(sessionTransfer.cleanupSessionTransferParams).toHaveBeenCalled();
-      expect(mockAuthContext.refresh).toHaveBeenCalledWith({ force: true });
+
+      // Wait for async refresh to be called (refresh is now non-blocking)
+      await waitFor(() => {
+        expect(mockAuthContext.refresh).toHaveBeenCalledWith({ force: true });
+      });
 
       consoleErrorSpy.mockRestore();
     });
@@ -254,7 +258,11 @@ describe('SessionInitializer', () => {
 
       // URL cleanup and refresh should still happen
       expect(sessionTransfer.cleanupSessionTransferParams).toHaveBeenCalled();
-      expect(mockAuthContext.refresh).toHaveBeenCalledWith({ force: true });
+
+      // Wait for async refresh to be called (refresh is now non-blocking)
+      await waitFor(() => {
+        expect(mockAuthContext.refresh).toHaveBeenCalledWith({ force: true });
+      });
 
       consoleErrorSpy.mockRestore();
     });

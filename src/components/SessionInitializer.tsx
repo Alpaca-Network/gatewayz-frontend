@@ -125,18 +125,16 @@ export function SessionInitializer() {
             saveUserData(userDataToSave);
             setCachedUserData(token, userDataToSave);
             console.log("[SessionInit] User data saved to localStorage");
-
-            // Trigger context refresh after user data is saved
-            refresh({ force: true }).catch((error) => {
-              console.error("[SessionInit] Error refreshing auth after user data fetch:", error);
-            });
           }
+          // Always trigger refresh, whether user data was fetched or not
+          refresh({ force: true }).catch((error) => {
+            console.error("[SessionInit] Error refreshing auth after user data fetch:", error);
+          });
         }).catch((error) => {
-          console.error("[SessionInit] Error fetching user data:", error);
-          // Still trigger refresh even if user data fetch fails
-          // The context has the API key and can continue
+          console.error("[SessionInit] Unexpected error during session init:", error);
+          // Still trigger refresh even if something unexpected happens
           refresh({ force: true }).catch((err) => {
-            console.error("[SessionInit] Error refreshing auth after fetch error:", err);
+            console.error("[SessionInit] Error refreshing auth after error:", err);
           });
         });
 
@@ -180,13 +178,16 @@ export function SessionInitializer() {
             setCachedUserData(storedToken, userDataToSave);
             console.log("[SessionInit] User data saved to localStorage (stored token)");
           }
+          // Always trigger refresh after user data fetch attempt
+          refresh({ force: true }).catch((error) => {
+            console.error("[SessionInit] Error refreshing auth after stored token fetch:", error);
+          });
         }).catch((error) => {
           console.error("[SessionInit] Error fetching user data from stored token:", error);
-        });
-
-        // Trigger auth refresh - this won't block navigation
-        refresh({ force: true }).catch((error) => {
-          console.error("[SessionInit] Error refreshing auth:", error);
+          // Still trigger refresh on error
+          refresh({ force: true }).catch((err) => {
+            console.error("[SessionInit] Error refreshing auth after stored token error:", err);
+          });
         });
 
         return;
