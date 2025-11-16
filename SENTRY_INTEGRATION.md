@@ -27,11 +27,11 @@ SENTRY_AUTH_TOKEN=your-sentry-auth-token
 Sentry is configured in three main files:
 
 1. **`sentry.client.config.ts`** - Client-side configuration with Session Replay and console logging
-2. **`sentry.server.config.ts`** - Server-side configuration with console logging
-3. **`sentry.edge.config.ts`** - Edge runtime configuration
+2. **`sentry.server.config.ts`** - Server-side configuration with console logging (loaded via `instrumentation.ts`)
+3. **`sentry.edge.config.ts`** - Edge runtime configuration (loaded via `instrumentation.ts`)
 
 All configurations enable:
-- Structured logging via `_experiments.enableLogs`
+- Structured logging via `enableLogs: true`
 - Automatic console logging integration
 - Performance tracing
 
