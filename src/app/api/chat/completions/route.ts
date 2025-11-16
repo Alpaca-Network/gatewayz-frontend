@@ -1,6 +1,57 @@
 import { NextRequest } from 'next/server';
 import { traced, wrapTraced } from 'braintrust';
 import { isBraintrustEnabled } from '@/lib/braintrust';
+import { profiler, generateRequestId } from '@/lib/performance-profiler';
+
+/**
+ * Calculate retry delay for rate limit errors with exponential backoff
+ */
+function calculateRetryDelay(
+  retryCount: number,
+  retryAfterHeader: string | null,
+  isBurstLimit: boolean
+): number {
+  // Base delay: longer for burst limits, shorter for regular rate limits
+  const baseDelay = isBurstLimit ? 2000 : 1000;
+  const maxDelay = isBurstLimit ? 30000 : 10000;
+  
+  // Exponential backoff: baseDelay * 2^retryCount
+  let waitTime = Math.min(baseDelay * Math.pow(2, retryCount), maxDelay);
+  
+  // Parse Retry-After header if present
+  if (retryAfterHeader) {
+    const numericRetry = Number(retryAfterHeader);
+    if (!Number.isNaN(numericRetry) && numericRetry > 0) {
+      // Retry-After is in seconds
+      waitTime = Math.max(waitTime, numericRetry * 1000);
+    } else {
+      // Try parsing as HTTP date
+      const retryDate = Date.parse(retryAfterHeader);
+      if (!Number.isNaN(retryDate)) {
+        const headerWait = retryDate - Date.now();
+        if (headerWait > 0) {
+          waitTime = Math.max(waitTime, headerWait);
+        }
+      }
+    }
+  }
+  
+  // Ensure minimum delay
+  waitTime = Math.max(waitTime, 1000);
+  
+  // Add jitter to prevent thundering herd
+  const jitter = Math.floor(Math.random() * 500);
+  waitTime += jitter;
+  
+  return waitTime;
+}
+
+/**
+ * Sleep helper for retries
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
 /**
  * Process LLM completion with Braintrust tracing
@@ -14,48 +65,88 @@ const processCompletion = wrapTraced(
   ) {
     return traced(async (span) => {
       const startTime = Date.now();
+      const maxRetries = 3;
+      let lastError: { status: number; errorData: any; retryAfter: string | null } | null = null;
 
       console.log('[API Proxy] Forwarding request to:', targetUrl);
       console.log('[API Proxy] Model:', body.model);
       console.log('[API Proxy] Stream:', body.stream);
 
-      // Create an AbortController for timeout handling (AbortSignal.timeout may not be available)
-      const abortController = new AbortController();
-      const timeoutId = setTimeout(() => abortController.abort(), timeoutMs);
+      for (let retryCount = 0; retryCount <= maxRetries; retryCount++) {
+        // Create an AbortController for timeout handling (AbortSignal.timeout may not be available)
+        const abortController = new AbortController();
+        const timeoutId = setTimeout(() => abortController.abort(), timeoutMs);
 
-      try {
-        const response = await fetch(targetUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': apiKey,
-          },
-          body: JSON.stringify(body),
-          signal: abortController.signal,
-        });
-
-        clearTimeout(timeoutId);
-
-        console.log('[API Proxy] Response status:', response.status);
-        console.log('[API Proxy] Response ok:', response.ok);
-        console.log('[API Proxy] Response headers:', Object.fromEntries(response.headers.entries()));
-        console.log('[API Proxy] Response body exists:', !!response.body);
-
-      // If not streaming, parse and log the response
-      if (!body.stream) {
-        const contentType = response.headers.get('content-type');
-
-        // Try to parse JSON response
-        let data;
         try {
-          data = await response.json();
-        } catch (parseError) {
-          console.error('[API Proxy] Failed to parse JSON response:', parseError);
-          const text = await response.text();
-          console.error('[API Proxy] Response text:', text);
+          if (retryCount > 0) {
+            const waitTime = calculateRetryDelay(
+              retryCount - 1,
+              lastError?.retryAfter || null,
+              lastError?.errorData?.detail?.toLowerCase().includes('burst') || false
+            );
+            console.log(`[API Proxy] Retry attempt ${retryCount}/${maxRetries} after ${waitTime}ms delay`);
+            await sleep(waitTime);
+          }
 
-          throw new Error(`Invalid response from backend: ${text || 'Could not parse backend response'}`);
-        }
+          const response = await fetch(targetUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': apiKey,
+            },
+            body: JSON.stringify(body),
+            signal: abortController.signal,
+          });
+
+          clearTimeout(timeoutId);
+
+          console.log('[API Proxy] Response status:', response.status);
+          console.log('[API Proxy] Response ok:', response.ok);
+          console.log('[API Proxy] Response headers:', Object.fromEntries(response.headers.entries()));
+          console.log('[API Proxy] Response body exists:', !!response.body);
+
+          // Handle rate limit errors with retry
+          if (response.status === 429) {
+            const errorText = await response.text();
+            let errorData;
+            try {
+              errorData = JSON.parse(errorText);
+            } catch {
+              errorData = { raw: errorText };
+            }
+
+            const retryAfter = response.headers.get('retry-after');
+            const isBurstLimit = errorData.detail?.toLowerCase().includes('burst') || false;
+
+            console.warn(`[API Proxy] Rate limit error (429) on attempt ${retryCount + 1}/${maxRetries + 1}`);
+            console.warn('[API Proxy] Error detail:', errorData.detail || errorData.message);
+            console.warn('[API Proxy] Retry-After header:', retryAfter || 'not present');
+            console.warn('[API Proxy] Is burst limit:', isBurstLimit);
+
+            if (retryCount < maxRetries) {
+              lastError = { status: 429, errorData, retryAfter };
+              // Use isBurstLimit for logging context
+              console.log(`[API Proxy] Will retry (burst limit: ${isBurstLimit})`);
+              continue; // Retry
+            } else {
+              // Max retries exceeded
+              throw new Error(`Rate limit exceeded after ${maxRetries + 1} attempts: ${errorData.detail || errorData.message || 'Rate limit exceeded'}`);
+            }
+          }
+
+          // If not streaming, parse and log the response
+          if (!body.stream) {
+            // Try to parse JSON response
+            let data;
+            try {
+              data = await response.json();
+            } catch (parseError) {
+              console.error('[API Proxy] Failed to parse JSON response:', parseError);
+              const text = await response.text();
+              console.error('[API Proxy] Response text:', text);
+
+              throw new Error(`Invalid response from backend: ${text || 'Could not parse backend response'}`);
+            }
 
         // Extract metrics from response
         const promptTokens = data.usage?.prompt_tokens || 0;
@@ -87,35 +178,57 @@ const processCompletion = wrapTraced(
           });
         }
 
-        return { data, status: response.status };
-      }
+            return { data, status: response.status };
+          }
 
-      // For streaming responses, we'll log basic info and return the stream
-      if (!response.body) {
-        throw new Error('No response body for streaming response');
-      }
+          // For streaming responses, we'll log basic info and return the stream
+          if (!response.body) {
+            throw new Error('No response body for streaming response');
+          }
 
-      // Log streaming request to Braintrust (without output since it's streaming)
-      if (isBraintrustEnabled()) {
-        span.log({
-          input: body.messages || [{ role: 'user', content: body.prompt || '' }],
-          metadata: {
-            model: body.model,
-            temperature: body.temperature,
-            max_tokens: body.max_tokens,
-            top_p: body.top_p,
-            stream: true,
-            response_status: response.status,
-          },
-        });
-      }
+          // Log streaming request to Braintrust (without output since it's streaming)
+          if (isBraintrustEnabled()) {
+            span.log({
+              input: body.messages || [{ role: 'user', content: body.prompt || '' }],
+              metadata: {
+                model: body.model,
+                temperature: body.temperature,
+                max_tokens: body.max_tokens,
+                top_p: body.top_p,
+                stream: true,
+                response_status: response.status,
+              },
+            });
+          }
 
-      console.log('[API Proxy] Setting up streaming response forwarding');
-      return { stream: response.body, status: response.status };
-      } catch (fetchError) {
-        clearTimeout(timeoutId);
-        throw fetchError;
+          console.log('[API Proxy] Setting up streaming response forwarding');
+          return { stream: response.body, status: response.status };
+        } catch (fetchError) {
+          clearTimeout(timeoutId);
+          
+          // Don't retry on abort/timeout errors
+          if (fetchError instanceof Error && (
+            fetchError.name === 'AbortError' ||
+            fetchError.message.includes('aborted') ||
+            fetchError.message.includes('timeout')
+          )) {
+            console.error('[API Proxy] Request aborted/timed out, not retrying:', fetchError);
+            throw fetchError;
+          }
+          
+          // Retry on network errors if we haven't exceeded max retries
+          if (retryCount < maxRetries) {
+            console.warn(`[API Proxy] Fetch error on attempt ${retryCount + 1}, will retry:`, fetchError);
+            await sleep(calculateRetryDelay(retryCount, null, false));
+            continue;
+          }
+          
+          throw fetchError;
+        }
       }
+      
+      // Should never reach here, but TypeScript needs it
+      throw new Error('Unexpected error in processCompletion');
     });
   },
   {
@@ -129,13 +242,29 @@ const processCompletion = wrapTraced(
  * This proxies requests to the Gatewayz API to bypass CORS issues in development
  */
 export async function POST(request: NextRequest) {
-  console.log('[API Proxy] POST request received');
+  const requestId = generateRequestId();
+  const requestStartTime = performance.now();
+  
+  console.log(`[API Proxy] POST request received [${requestId}]`);
+  profiler.startRequest(requestId, {
+    method: 'POST',
+    url: request.url,
+    userAgent: request.headers.get('user-agent'),
+  });
+  
   let timeoutMs = 30000; // Default timeout
 
   try {
+    profiler.markStage(requestId, 'parse_request_body');
     console.log('[API Proxy] Parsing request body...');
     const body = await request.json();
     console.log('[API Proxy] Request body parsed, model:', body.model, 'stream:', body.stream);
+    
+    profiler.markStage(requestId, 'validate_auth', {
+      model: body.model,
+      stream: body.stream,
+      messageCount: body.messages?.length || 0,
+    });
 
     const apiKey = request.headers.get('authorization');
     console.log('[API Proxy] API key present:', !!apiKey);
@@ -153,6 +282,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    profiler.markStage(requestId, 'prepare_backend_request');
     const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
     const targetUrl = new URL(`${apiUrl}/v1/chat/completions`);
 
@@ -164,106 +294,215 @@ export async function POST(request: NextRequest) {
     // Use a 120 second timeout for streaming requests (models can be slow to start)
     // Use a 30 second timeout for non-streaming requests
     timeoutMs = body.stream ? 120000 : 30000;
+    
+    profiler.markStage(requestId, 'timeout_configured', {
+      timeoutMs,
+      targetUrl: targetUrl.toString(),
+    });
 
     // For streaming requests, bypass Braintrust to avoid interference with the stream
     if (body.stream) {
       console.log('[API Proxy] Handling streaming request directly (bypassing Braintrust)');
       console.log('[API Proxy] Target URL:', targetUrl.toString());
 
-      const abortController = new AbortController();
-      const timeoutId = setTimeout(() => abortController.abort(), timeoutMs);
+      // Retry logic for streaming requests
+      const maxRetries = 3;
+      let lastError: { status: number; errorData: any; retryAfter: string | null } | null = null;
 
-      try {
-        const requestStartTime = Date.now();
-        console.log('[API Proxy] Making fetch request to backend');
-        console.log('[API Proxy] Target URL:', targetUrl.toString());
-        console.log('[API Proxy] Request headers:', {
-          'Content-Type': 'application/json',
-          'Authorization': apiKey ? apiKey.substring(0, 20) + '...' : 'none'
-        });
+      for (let retryCount = 0; retryCount <= maxRetries; retryCount++) {
+        const abortController = new AbortController();
+        const timeoutId = setTimeout(() => abortController.abort(), timeoutMs);
 
-        const response = await fetch(targetUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': apiKey,
-            'Accept': 'text/event-stream',
-          },
-          body: JSON.stringify(body),
-          signal: abortController.signal,
-        });
-
-        clearTimeout(timeoutId);
-        const responseTime = Date.now() - requestStartTime;
-
-        console.log('[API Proxy] Streaming response received');
-        console.log('[API Proxy] Response time:', responseTime + 'ms');
-        console.log('[API Proxy] Response status:', response.status);
-        console.log('[API Proxy] Response ok:', response.ok);
-        console.log('[API Proxy] Content-Type:', response.headers.get('content-type'));
-        console.log('[API Proxy] Response body exists:', !!response.body);
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error('[API Proxy] Backend returned error status:', response.status);
-          console.error('[API Proxy] Error response text:', errorText.substring(0, 500));
-          console.error('[API Proxy] Error response (first 1000 chars):', errorText.substring(0, 1000));
-          console.error('[API Proxy] Full request body:', JSON.stringify(body, null, 2));
-
-          // Try to parse the error as JSON
-          let errorData;
-          try {
-            errorData = JSON.parse(errorText);
-          } catch {
-            errorData = { raw: errorText };
+        try {
+          if (retryCount > 0) {
+            const waitTime = calculateRetryDelay(
+              retryCount - 1,
+              lastError?.retryAfter || null,
+              lastError?.errorData?.detail?.toLowerCase().includes('burst') || false
+            );
+            console.log(`[API Proxy] Retry attempt ${retryCount}/${maxRetries} after ${waitTime}ms delay`);
+            profiler.markStage(requestId, 'rate_limit_retry', {
+              retryCount,
+              waitTime,
+            });
+            await sleep(waitTime);
           }
 
-          return new Response(JSON.stringify({
-            error: 'Backend API Error',
-            status: response.status,
-            statusText: response.statusText,
-            message: errorData.message || errorData.detail || errorText.substring(0, 500),
-            model: body.model,
-            gateway: body.gateway,
-            errorData: errorData
-          }), {
-            status: response.status,
-            headers: { 'Content-Type': 'application/json' },
+          profiler.markStage(requestId, 'backend_fetch_start', { retryCount });
+          const backendRequestStartTime = Date.now();
+          console.log('[API Proxy] Making fetch request to backend');
+          console.log('[API Proxy] Target URL:', targetUrl.toString());
+          console.log('[API Proxy] Request headers:', {
+            'Content-Type': 'application/json',
+            'Authorization': apiKey ? apiKey.substring(0, 20) + '...' : 'none'
           });
-        }
 
-        if (!response.body) {
-          console.error('[API Proxy] No response body for streaming request');
-          return new Response(
-            JSON.stringify({ error: 'No response body from backend' }),
-            { status: 500, headers: { 'Content-Type': 'application/json' } }
-          );
-        }
+          const response = await fetch(targetUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': apiKey,
+              'Accept': 'text/event-stream',
+            },
+            body: JSON.stringify(body),
+            signal: abortController.signal,
+          });
 
-        console.log('[API Proxy] Returning streaming response to client');
-        return new Response(response.body, {
-          status: response.status,
-          headers: {
-            'Content-Type': 'text/event-stream',
-            'Cache-Control': 'no-cache',
-            'Connection': 'keep-alive',
-          },
-        });
-      } catch (fetchError) {
-        clearTimeout(timeoutId);
-        console.error('[API Proxy] Fetch error for streaming request:', fetchError);
-        throw fetchError;
+          clearTimeout(timeoutId);
+          const backendResponseTime = Date.now() - backendRequestStartTime;
+          profiler.markStage(requestId, 'backend_response_received', {
+            backendResponseTime,
+            status: response.status,
+            contentType: response.headers.get('content-type'),
+            retryCount,
+          });
+
+          console.log('[API Proxy] Streaming response received');
+          console.log(`[API Proxy] Backend response time: ${backendResponseTime}ms`);
+          console.log('[API Proxy] Response status:', response.status);
+          console.log('[API Proxy] Response ok:', response.ok);
+          console.log('[API Proxy] Content-Type:', response.headers.get('content-type'));
+          console.log('[API Proxy] Response body exists:', !!response.body);
+
+          // Handle rate limit errors with retry
+          if (response.status === 429) {
+            const errorText = await response.text();
+            let errorData;
+            try {
+              errorData = JSON.parse(errorText);
+            } catch {
+              errorData = { raw: errorText };
+            }
+
+            const retryAfter = response.headers.get('retry-after');
+            const isBurstLimit = errorData.detail?.toLowerCase().includes('burst') || false;
+
+            console.warn(`[API Proxy] Rate limit error (429) on attempt ${retryCount + 1}/${maxRetries + 1}`);
+            console.warn('[API Proxy] Error detail:', errorData.detail || errorData.message);
+            console.warn('[API Proxy] Retry-After header:', retryAfter || 'not present');
+            console.warn('[API Proxy] Is burst limit:', isBurstLimit);
+
+            if (retryCount < maxRetries) {
+              lastError = { status: 429, errorData, retryAfter };
+              continue; // Retry - delay already calculated in next iteration
+            } else {
+              // Max retries exceeded
+              console.error('[API Proxy] Max retries exceeded for rate limit');
+              return new Response(JSON.stringify({
+                error: 'Rate Limit Exceeded',
+                status: 429,
+                statusText: 'Too Many Requests',
+                message: errorData.detail || errorData.message || 'Rate limit exceeded. Please wait before trying again.',
+                model: body.model,
+                gateway: body.gateway,
+                errorData: errorData,
+                retryAfter: retryAfter,
+                retriesExhausted: true,
+              }), {
+                status: 429,
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Retry-After': retryAfter || '60',
+                },
+              });
+            }
+          }
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error('[API Proxy] Backend returned error status:', response.status);
+            console.error('[API Proxy] Error response text:', errorText.substring(0, 500));
+            console.error('[API Proxy] Error response (first 1000 chars):', errorText.substring(0, 1000));
+            console.error('[API Proxy] Full request body:', JSON.stringify(body, null, 2));
+
+            // Try to parse the error as JSON
+            let errorData;
+            try {
+              errorData = JSON.parse(errorText);
+            } catch {
+              errorData = { raw: errorText };
+            }
+
+            return new Response(JSON.stringify({
+              error: 'Backend API Error',
+              status: response.status,
+              statusText: response.statusText,
+              message: errorData.message || errorData.detail || errorText.substring(0, 500),
+              model: body.model,
+              gateway: body.gateway,
+              errorData: errorData
+            }), {
+              status: response.status,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+
+          if (!response.body) {
+            console.error('[API Proxy] No response body for streaming request');
+            return new Response(
+              JSON.stringify({ error: 'No response body from backend' }),
+              { status: 500, headers: { 'Content-Type': 'application/json' } }
+            );
+          }
+
+          profiler.markStage(requestId, 'stream_response_ready');
+          console.log('[API Proxy] Returning streaming response to client');
+          profiler.endRequest(requestId);
+          console.log(`[API Proxy] Request ${requestId} complete. Total time: ${(performance.now() - requestStartTime).toFixed(2)}ms`);
+          
+          return new Response(response.body, {
+            status: response.status,
+            headers: {
+              'Content-Type': 'text/event-stream',
+              'Cache-Control': 'no-cache',
+              'Connection': 'keep-alive',
+              'X-Request-ID': requestId,
+              'X-Response-Time': `${(performance.now() - requestStartTime).toFixed(2)}ms`,
+            },
+          });
+        } catch (fetchError) {
+          clearTimeout(timeoutId);
+          
+          // Don't retry on abort/timeout errors
+          if (fetchError instanceof Error && (
+            fetchError.name === 'AbortError' ||
+            fetchError.message.includes('aborted') ||
+            fetchError.message.includes('timeout')
+          )) {
+            console.error('[API Proxy] Request aborted/timed out, not retrying:', fetchError);
+            throw fetchError;
+          }
+          
+          // Retry on network errors if we haven't exceeded max retries
+          if (retryCount < maxRetries) {
+            console.warn(`[API Proxy] Fetch error on attempt ${retryCount + 1}, will retry:`, fetchError);
+            await sleep(calculateRetryDelay(retryCount, null, false));
+            continue;
+          }
+          
+          console.error('[API Proxy] Fetch error for streaming request after max retries:', fetchError);
+          throw fetchError;
+        }
       }
     }
 
     // For non-streaming requests, use Braintrust tracing
+    profiler.markStage(requestId, 'process_completion_start');
     const result = await processCompletion(body, apiKey, targetUrl.toString(), timeoutMs);
+    profiler.markStage(requestId, 'process_completion_complete');
 
     // Handle non-streaming response
     if ('data' in result) {
+      profiler.endRequest(requestId);
+      console.log(`[API Proxy] Request ${requestId} complete. Total time: ${(performance.now() - requestStartTime).toFixed(2)}ms`);
+      
       return new Response(JSON.stringify(result.data), {
         status: result.status,
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Request-ID': requestId,
+          'X-Response-Time': `${(performance.now() - requestStartTime).toFixed(2)}ms`,
+        },
       });
     }
 
@@ -285,7 +524,12 @@ export async function POST(request: NextRequest) {
       { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   } catch (error) {
-    console.error('[API Proxy] Error:', error);
+    profiler.markStage(requestId, 'error_occurred', {
+      errorName: error instanceof Error ? error.name : 'UnknownError',
+      errorMessage: error instanceof Error ? error.message : String(error),
+    });
+    profiler.endRequest(requestId);
+    console.error(`[API Proxy] Error [${requestId}]:`, error);
 
     // Extract more detailed error information
     const errorDetails = error instanceof Error ? {

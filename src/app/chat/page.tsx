@@ -1134,6 +1134,7 @@ function ChatPageContent() {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const videoInputRef = useRef<HTMLInputElement>(null);
     const audioInputRef = useRef<HTMLInputElement>(null);
+    const fallbackAttemptRef = useRef<{ messageId: string; attempts: number } | null>(null);
 
     // Helper function to get display name for a model ID
     const getModelDisplayName = (modelId?: string): string => {
@@ -1412,11 +1413,28 @@ function ChatPageContent() {
             hasPendingMessage: !!pendingMessage
         });
 
+        // If we have a pending message, let the pending message handler deal with it
         if (pendingMessage) {
             console.log('[AutoSend] Pending message exists, waiting for auth/session to complete before auto-sending.');
             return;
         }
 
+        // If shouldAutoSend is true but we don't have a session yet, trigger session creation
+        // Note: We use a ref to track if we're already creating to avoid dependency issues
+        if (shouldAutoSend && !activeSessionId && message.trim() && selectedModel && !loading && !creatingSessionRef.current && !isStreamingResponse) {
+            const apiKey = getApiKey();
+            const userData = getUserData();
+            
+            // Only create session if we're authenticated
+            if (apiKey && userData?.privy_user_id) {
+                console.log('[AutoSend] Session needed for auto-send, will be handled by session loading logic');
+                // The session loading logic will create a new chat when message param is detected
+                // We just need to ensure shouldAutoSend stays true until session is ready
+                return;
+            }
+        }
+
+        // All conditions met - send the message
         if (
             shouldAutoSend &&
             activeSessionId &&
@@ -1495,12 +1513,20 @@ function ChatPageContent() {
         setUserHasTyped(true);
         userHasTypedRef.current = true;
 
+        // Set shouldAutoSend flag to ensure auto-send effect triggers
+        setShouldAutoSend(true);
+
         // Clear pending message
         setPendingMessage(null);
 
         // Trigger send after a short delay to ensure state is updated
+        // Note: We rely on the auto-send effect to actually send, which will handle
+        // the case where activeSessionId might not be set yet
         setTimeout(() => {
-            handleSendMessage();
+            // If session is ready, send immediately, otherwise auto-send effect will handle it
+            if (activeSessionId && !loading && !creatingSessionRef.current && !isStreamingResponse) {
+                handleSendMessage();
+            }
         }, 100);
 
     }, [pendingMessage, ready, authenticated, hasApiKey, activeSessionId]);
@@ -1527,7 +1553,11 @@ function ChatPageContent() {
                     const messageParam = searchParams?.get('message');
                     if (messageParam) {
                         console.log('[loadSessions] Message parameter detected, creating new chat instead of loading recent session');
-                        createNewChat();
+                        const newSession = await createNewChat();
+                        // After creating session, the auto-send effect will trigger when activeSessionId is set
+                        if (newSession) {
+                            console.log('[loadSessions] New session created, activeSessionId will be set and auto-send will trigger');
+                        }
                         return;
                     }
 
@@ -2781,18 +2811,41 @@ function ChatPageContent() {
                 });
 
                 // Check if this is a 500 error or 404 error (model unavailable) and attempt fallback
-                const is500Error = errorMessage.includes('500') || errorMessage.includes('Internal server error') || errorMessage.includes('Server error');
-                const is404Error = errorMessage.includes('404') || errorMessage.includes('not found') || errorMessage.includes('unavailable');
-                const shouldFallback = is500Error || is404Error;
+                // IMPORTANT: Don't treat timeout or rate limit errors as fallback candidates
+                const isTimeoutError = errorMessage.includes('timed out') || errorMessage.includes('timeout') || errorMessage.includes('Request timed out');
+                const isRateLimitError = errorMessage.includes('Rate limit') || errorMessage.includes('429') || errorMessage.includes('Too Many Requests');
+                const is500Error = !isTimeoutError && !isRateLimitError && (errorMessage.includes('500') || errorMessage.includes('Internal server error') || errorMessage.includes('Server error'));
+                const is404Error = !isTimeoutError && !isRateLimitError && (errorMessage.includes('404') || errorMessage.includes('not found'));
+                const canFallback = (is500Error || is404Error) && !isTimeoutError && !isRateLimitError;
 
                 console.log('Error analysis:', {
+                    isTimeoutError,
+                    isRateLimitError,
                     is500Error,
                     is404Error,
-                    shouldFallback,
+                    canFallback,
                     selectedModelValue: selectedModel.value
                 });
 
-                if (shouldFallback && selectedModel) {
+                // Prevent infinite fallback loops - only allow one fallback attempt per message send
+                let shouldAttemptFallback = false;
+                if (canFallback && selectedModel) {
+                    const currentMessageId = `${currentSessionId}-${userMessage.substring(0, 20)}`;
+                    
+                    // Check if we've already attempted fallback for this message
+                    if (fallbackAttemptRef.current?.messageId === currentMessageId && fallbackAttemptRef.current.attempts >= 1) {
+                        console.log('Fallback already attempted for this message, skipping to prevent infinite loop');
+                    } else {
+                        // Track fallback attempt
+                        fallbackAttemptRef.current = {
+                            messageId: currentMessageId,
+                            attempts: (fallbackAttemptRef.current?.messageId === currentMessageId ? fallbackAttemptRef.current.attempts : 0) + 1
+                        };
+                        shouldAttemptFallback = true;
+                    }
+                }
+
+                if (shouldAttemptFallback && selectedModel) {
                     // Define fallback models in order of preference (using truly free models):
                     // 1. DeepSeek V3.1 Free (default)
                     // 2. Mistral Small Free
