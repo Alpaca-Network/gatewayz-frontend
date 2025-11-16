@@ -44,7 +44,7 @@ async function fetchUserDataOptimized(token: string): Promise<UserData | null> {
   try {
     console.log("[SessionInit] Fetching user data from backend");
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout for user fetch
 
     const userResponse = await fetch("/api/user/me", {
       headers: {
@@ -57,13 +57,15 @@ async function fetchUserDataOptimized(token: string): Promise<UserData | null> {
     clearTimeout(timeoutId);
 
     if (userResponse.ok) {
-      const userData = await userResponse.json();
+      const userData = await userResponse.json() as UserData;
       console.log("[SessionInit] User data fetched successfully:", {
         user_id: userData.user_id,
         credits: userData.credits,
         tier: userData.tier,
       });
 
+      // Cache the result for fast re-access
+      setCachedUserData(token, userData);
       return userData;
     } else {
       console.error("[SessionInit] Failed to fetch user data:", userResponse.status);
@@ -71,6 +73,7 @@ async function fetchUserDataOptimized(token: string): Promise<UserData | null> {
     }
   } catch (error) {
     console.error("[SessionInit] Error fetching user data:", error);
+    // Return null on timeout or network error - context will handle it
     return null;
   }
 }
@@ -98,39 +101,47 @@ export function SessionInitializer() {
         // Save API key to localStorage immediately
         saveApiKey(token);
 
-        // Fetch user data
-        const userData = await fetchUserDataOptimized(token);
-
-        if (userData) {
-          // Save complete user data to localStorage
-          const userDataToSave: UserData = {
-            user_id: userData.user_id,
-            api_key: token,
-            auth_method: userData.auth_method || "session_transfer",
-            privy_user_id: userData.privy_user_id || userId.toString(),
-            display_name: userData.display_name || userData.email || "User",
-            email: userData.email || "",
-            credits: Math.floor(userData.credits ?? 0),
-            tier: userData.tier?.toLowerCase() as UserData["tier"],
-            tier_display_name: userData.tier_display_name,
-            subscription_status: userData.subscription_status,
-            subscription_end_date: userData.subscription_end_date,
-          };
-
-          saveUserData(userDataToSave);
-          setCachedUserData(token, userDataToSave);
-          console.log("[SessionInit] User data saved to localStorage");
-        }
-
-        // Clean up URL to remove transfer params
+        // Clean up URL immediately to prevent browser history pollution
         cleanupSessionTransferParams();
 
-        // Trigger auth refresh to sync with context
-        await refresh({ force: true });
+        // Fetch user data in background (non-blocking)
+        fetchUserDataOptimized(token).then((userData) => {
+          if (userData) {
+            // Save complete user data to localStorage
+            const userDataToSave: UserData = {
+              user_id: userData.user_id,
+              api_key: token,
+              auth_method: userData.auth_method || "session_transfer",
+              privy_user_id: userData.privy_user_id || userId.toString(),
+              display_name: userData.display_name || userData.email || "User",
+              email: userData.email || "",
+              credits: Math.floor(userData.credits ?? 0),
+              tier: userData.tier?.toLowerCase() as UserData["tier"],
+              tier_display_name: userData.tier_display_name,
+              subscription_status: userData.subscription_status,
+              subscription_end_date: userData.subscription_end_date,
+            };
 
-        // Redirect to return URL if provided, otherwise stay on current page
+            saveUserData(userDataToSave);
+            setCachedUserData(token, userDataToSave);
+            console.log("[SessionInit] User data saved to localStorage");
+
+            // Trigger context refresh after user data is saved
+            refresh({ force: true }).catch((error) => {
+              console.error("[SessionInit] Error refreshing auth after user data fetch:", error);
+            });
+          }
+        }).catch((error) => {
+          console.error("[SessionInit] Error fetching user data:", error);
+          // Still trigger refresh even if user data fetch fails
+          // The context has the API key and can continue
+          refresh({ force: true }).catch((err) => {
+            console.error("[SessionInit] Error refreshing auth after fetch error:", err);
+          });
+        });
+
+        // Redirect to return URL if provided (immediate, don't wait for user fetch)
         if (returnUrl) {
-          // No delay for faster navigation
           router.push(returnUrl);
         }
 
@@ -147,32 +158,36 @@ export function SessionInitializer() {
         // Restore API key from sessionStorage
         saveApiKey(storedToken);
 
-        // Fetch user data
-        const userData = await fetchUserDataOptimized(storedToken);
+        // Fetch user data in background
+        fetchUserDataOptimized(storedToken).then((userData) => {
+          if (userData) {
+            // Save complete user data to localStorage
+            const userDataToSave: UserData = {
+              user_id: userData.user_id,
+              api_key: storedToken,
+              auth_method: userData.auth_method || "session_transfer",
+              privy_user_id: userData.privy_user_id || storedUserId.toString(),
+              display_name: userData.display_name || userData.email || "User",
+              email: userData.email || "",
+              credits: Math.floor(userData.credits ?? 0),
+              tier: userData.tier?.toLowerCase() as UserData["tier"],
+              tier_display_name: userData.tier_display_name,
+              subscription_status: userData.subscription_status,
+              subscription_end_date: userData.subscription_end_date,
+            };
 
-        if (userData) {
-          // Save complete user data to localStorage
-          const userDataToSave: UserData = {
-            user_id: userData.user_id,
-            api_key: storedToken,
-            auth_method: userData.auth_method || "session_transfer",
-            privy_user_id: userData.privy_user_id || storedUserId.toString(),
-            display_name: userData.display_name || userData.email || "User",
-            email: userData.email || "",
-            credits: Math.floor(userData.credits ?? 0),
-            tier: userData.tier?.toLowerCase() as UserData["tier"],
-            tier_display_name: userData.tier_display_name,
-            subscription_status: userData.subscription_status,
-            subscription_end_date: userData.subscription_end_date,
-          };
+            saveUserData(userDataToSave);
+            setCachedUserData(storedToken, userDataToSave);
+            console.log("[SessionInit] User data saved to localStorage (stored token)");
+          }
+        }).catch((error) => {
+          console.error("[SessionInit] Error fetching user data from stored token:", error);
+        });
 
-          saveUserData(userDataToSave);
-          setCachedUserData(storedToken, userDataToSave);
-          console.log("[SessionInit] User data saved to localStorage (stored token)");
-        }
-
-        // Trigger auth refresh
-        await refresh({ force: true });
+        // Trigger auth refresh - this won't block navigation
+        refresh({ force: true }).catch((error) => {
+          console.error("[SessionInit] Error refreshing auth:", error);
+        });
 
         return;
       }
