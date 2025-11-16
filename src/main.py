@@ -184,6 +184,7 @@ def create_app() -> FastAPI:
             "optimization_monitor",
             "Optimization Monitoring",
         ),  # Connection pool, cache, and priority stats
+        ("error_monitor", "Error Monitoring"),  # Error detection and auto-fix system
         ("root", "Root/Home"),
         ("auth", "Authentication"),
         ("users", "User Management"),
