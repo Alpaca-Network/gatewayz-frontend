@@ -16,6 +16,33 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 
+def _calculate_burst_window_description(config: "RateLimitConfig") -> str:
+    """Generate a human-readable burst window description.
+
+    Example: "100 per 60 seconds"
+    """
+    return f"{config.burst_limit} per {config.window_size_seconds} seconds"
+
+
+def _populate_rate_limit_headers(
+    result: "RateLimitResult", config: "RateLimitConfig", request_limit: int, token_limit: int, reset_time: Optional[int] = None
+) -> None:
+    """Populate rate limit header fields in the result object.
+
+    Sets:
+    - ratelimit_limit_requests: Total request limit
+    - ratelimit_limit_tokens: Total token limit
+    - ratelimit_reset_requests: Unix timestamp when request limit resets
+    - ratelimit_reset_tokens: Unix timestamp when token limit resets
+    - burst_window_description: Human-readable burst window (e.g., "100 per 60 seconds")
+    """
+    result.ratelimit_limit_requests = request_limit
+    result.ratelimit_limit_tokens = token_limit
+    result.ratelimit_reset_requests = reset_time or int(time.time()) + 60
+    result.ratelimit_reset_tokens = reset_time or int(time.time()) + 60
+    result.burst_window_description = _calculate_burst_window_description(config)
+
+
 @dataclass
 class RateLimitConfig:
     """Rate limit configuration"""
@@ -26,7 +53,7 @@ class RateLimitConfig:
     tokens_per_minute: int = 10000
     tokens_per_hour: int = 100000
     tokens_per_day: int = 500000
-    burst_limit: int = 500
+    burst_limit: int = 100
     concurrency_limit: int = 50  # Updated from 5 to 50
     window_size_seconds: int = 60
 
@@ -41,6 +68,12 @@ class RateLimitResult:
     remaining_requests: int = 0
     remaining_tokens: int = 0
     reset_time: Optional[int] = None
+    # Rate limit headers for HTTP responses
+    ratelimit_limit_requests: int = 0  # X-RateLimit-Limit-Requests
+    ratelimit_limit_tokens: int = 0  # X-RateLimit-Limit-Tokens
+    ratelimit_reset_requests: int = 0  # X-RateLimit-Reset-Requests (Unix timestamp)
+    ratelimit_reset_tokens: int = 0  # X-RateLimit-Reset-Tokens (Unix timestamp)
+    burst_window_description: str = ""  # Human-readable burst window (e.g., "100 per 60 seconds")
 
 
 class InMemoryRateLimiter:
@@ -78,13 +111,15 @@ class InMemoryRateLimiter:
             # Check burst limit
             burst_allowed = await self._check_burst_limit(api_key, config, current_time)
             if not burst_allowed:
-                return RateLimitResult(
+                result = RateLimitResult(
                     allowed=False,
                     reason="Burst limit exceeded",
                     retry_after=1,
                     remaining_requests=0,
                     remaining_tokens=0,
                 )
+                _populate_rate_limit_headers(result, config, config.requests_per_minute, config.tokens_per_minute, int(current_time) + 60)
+                return result
 
             # Check request rate limits
             request_result = await self._check_request_limits(api_key, config, current_time)
@@ -112,12 +147,14 @@ class InMemoryRateLimiter:
                 0, config.tokens_per_minute - sum(t for _, t in self.token_windows[api_key])
             )
 
-            return RateLimitResult(
+            result = RateLimitResult(
                 allowed=True,
                 remaining_requests=remaining_requests,
                 remaining_tokens=remaining_tokens,
                 reset_time=int(current_time + config.window_size_seconds),
             )
+            _populate_rate_limit_headers(result, config, config.requests_per_minute, config.tokens_per_minute, int(current_time + config.window_size_seconds))
+            return result
 
     async def release_concurrent_request(self, api_key: str):
         """Release a concurrent request"""
@@ -172,14 +209,18 @@ class InMemoryRateLimiter:
         current_requests = len(self.request_windows[api_key])
 
         if current_requests >= config.requests_per_minute:
-            return RateLimitResult(
+            result = RateLimitResult(
                 allowed=False,
                 reason="Request rate limit exceeded",
                 retry_after=60,
                 remaining_requests=0,
             )
+            _populate_rate_limit_headers(result, config, config.requests_per_minute, config.tokens_per_minute, int(current_time) + 60)
+            return result
 
-        return RateLimitResult(allowed=True)
+        result = RateLimitResult(allowed=True)
+        _populate_rate_limit_headers(result, config, config.requests_per_minute, config.tokens_per_minute, int(current_time) + 60)
+        return result
 
     async def _check_token_limits(
         self, api_key: str, config: RateLimitConfig, tokens_used: int, current_time: float
@@ -188,14 +229,18 @@ class InMemoryRateLimiter:
         current_tokens = sum(t for _, t in self.token_windows[api_key])
 
         if current_tokens + tokens_used > config.tokens_per_minute:
-            return RateLimitResult(
+            result = RateLimitResult(
                 allowed=False,
                 reason="Token rate limit exceeded",
                 retry_after=60,
                 remaining_tokens=0,
             )
+            _populate_rate_limit_headers(result, config, config.requests_per_minute, config.tokens_per_minute, int(current_time) + 60)
+            return result
 
-        return RateLimitResult(allowed=True)
+        result = RateLimitResult(allowed=True)
+        _populate_rate_limit_headers(result, config, config.requests_per_minute, config.tokens_per_minute, int(current_time) + 60)
+        return result
 
 
 class FallbackRateLimitManager:

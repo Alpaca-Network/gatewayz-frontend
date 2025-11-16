@@ -77,6 +77,12 @@ class TestChatCompletionsFunctionCalling:
         mock_rl_result.remaining_requests = 1000
         mock_rl_result.remaining_tokens = 1000000
         mock_rl_result.retry_after = None
+        # Add rate limit header fields
+        mock_rl_result.ratelimit_limit_requests = 250
+        mock_rl_result.ratelimit_limit_tokens = 10000
+        mock_rl_result.ratelimit_reset_requests = 1700000000
+        mock_rl_result.ratelimit_reset_tokens = 1700000000
+        mock_rl_result.burst_window_description = "100 per 60 seconds"
 
         mock_rl_manager = MagicMock()
         mock_rl_manager.check_rate_limit = AsyncMock(return_value=mock_rl_result)
@@ -210,6 +216,12 @@ class TestChatCompletionsFunctionCalling:
         mock_rl_result.remaining_requests = 1000
         mock_rl_result.remaining_tokens = 1000000
         mock_rl_result.retry_after = None
+        # Add rate limit header fields
+        mock_rl_result.ratelimit_limit_requests = 250
+        mock_rl_result.ratelimit_limit_tokens = 10000
+        mock_rl_result.ratelimit_reset_requests = 1700000000
+        mock_rl_result.ratelimit_reset_tokens = 1700000000
+        mock_rl_result.burst_window_description = "100 per 60 seconds"
 
         mock_rl_manager = MagicMock()
         mock_rl_manager.check_rate_limit = AsyncMock(return_value=mock_rl_result)

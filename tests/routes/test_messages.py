@@ -460,6 +460,13 @@ class TestMessagesEndpointSuccess:
 
         rate_limit_result = Mock()
         rate_limit_result.allowed = True
+        rate_limit_result.remaining_requests = 249
+        rate_limit_result.remaining_tokens = 9900
+        rate_limit_result.ratelimit_limit_requests = 250
+        rate_limit_result.ratelimit_limit_tokens = 10000
+        rate_limit_result.ratelimit_reset_requests = 1700000000
+        rate_limit_result.ratelimit_reset_tokens = 1700000000
+        rate_limit_result.burst_window_description = "100 per 60 seconds"
         rate_limit_mgr_instance = Mock()
         rate_limit_mgr_instance.check_rate_limit = AsyncMock(return_value=rate_limit_result)
         rate_limit_mgr_instance.release_concurrency = AsyncMock()
@@ -561,6 +568,13 @@ class TestMessagesEndpointCredits:
 
         rate_limit_result = Mock()
         rate_limit_result.allowed = True
+        rate_limit_result.remaining_requests = 249
+        rate_limit_result.remaining_tokens = 9900
+        rate_limit_result.ratelimit_limit_requests = 250
+        rate_limit_result.ratelimit_limit_tokens = 10000
+        rate_limit_result.ratelimit_reset_requests = 1700000000
+        rate_limit_result.ratelimit_reset_tokens = 1700000000
+        rate_limit_result.burst_window_description = "100 per 60 seconds"
         rate_limit_mgr_instance = Mock()
         rate_limit_mgr_instance.check_rate_limit = AsyncMock(return_value=rate_limit_result)
         mock_rate_limit_mgr.return_value = rate_limit_mgr_instance
@@ -608,6 +622,11 @@ class TestMessagesEndpointRateLimiting:
         rate_limit_result.retry_after = 60
         rate_limit_result.remaining_requests = 0
         rate_limit_result.remaining_tokens = 0
+        rate_limit_result.ratelimit_limit_requests = 250
+        rate_limit_result.ratelimit_limit_tokens = 10000
+        rate_limit_result.ratelimit_reset_requests = 1700000000
+        rate_limit_result.ratelimit_reset_tokens = 1700000000
+        rate_limit_result.burst_window_description = "100 per 60 seconds"
 
         rate_limit_mgr_instance = Mock()
         rate_limit_mgr_instance.check_rate_limit = AsyncMock(return_value=rate_limit_result)
@@ -805,6 +824,13 @@ class TestMessagesEndpointFailover:
 
         rate_limit_result = Mock()
         rate_limit_result.allowed = True
+        rate_limit_result.remaining_requests = 249
+        rate_limit_result.remaining_tokens = 9900
+        rate_limit_result.ratelimit_limit_requests = 250
+        rate_limit_result.ratelimit_limit_tokens = 10000
+        rate_limit_result.ratelimit_reset_requests = 1700000000
+        rate_limit_result.ratelimit_reset_tokens = 1700000000
+        rate_limit_result.burst_window_description = "100 per 60 seconds"
         rate_limit_mgr_instance = Mock()
         rate_limit_mgr_instance.check_rate_limit = AsyncMock(return_value=rate_limit_result)
         rate_limit_mgr_instance.release_concurrency = AsyncMock()

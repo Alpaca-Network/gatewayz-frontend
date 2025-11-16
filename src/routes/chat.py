@@ -4,7 +4,7 @@ import time
 import json
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 import httpx
 
 from typing import Optional
@@ -52,6 +52,7 @@ import src.db.activity as activity_module
 from src.schemas import ProxyRequest, ResponseRequest
 from src.security.deps import get_api_key
 from src.config import Config
+from src.utils.rate_limit_headers import get_rate_limit_headers
 import importlib
 # Import provider clients with graceful error handling
 # This prevents a single provider's import failure from breaking the entire chat endpoint
@@ -747,6 +748,10 @@ async def chat_completions(
         import os
         disable_rate_limiting = os.getenv("DISABLE_RATE_LIMITING", "false").lower() == "true"
 
+        # Initialize rate limit variables
+        rl_pre = None
+        rl_final = None
+
         if should_release_concurrency and not disable_rate_limiting:
             rl_pre = await rate_limit_mgr.check_rate_limit(api_key, tokens_used=0)
             if not rl_pre.allowed:
@@ -1021,6 +1026,11 @@ async def chat_completions(
 
                     provider = attempt_provider
                     model = request_model
+                    # Get rate limit headers if available (pre-stream check)
+                    stream_headers = {}
+                    if rl_pre is not None:
+                        stream_headers.update(get_rate_limit_headers(rl_pre))
+
                     return StreamingResponse(
                         stream_generator(
                             stream,
@@ -1036,6 +1046,7 @@ async def chat_completions(
                             tracker,
                         ),
                         media_type="text/event-stream",
+                        headers=stream_headers,
                     )
                 except Exception as exc:
                     if isinstance(exc, (httpx.TimeoutException, asyncio.TimeoutError)):
@@ -1489,7 +1500,12 @@ async def chat_completions(
         except Exception as e:
             logger.warning(f"Failed to log to Braintrust: {e}")
 
-        return processed
+        # Prepare headers including rate limit information
+        headers = {}
+        if rl_final is not None:
+            headers.update(get_rate_limit_headers(rl_final))
+
+        return JSONResponse(content=processed, headers=headers)
 
     except HTTPException:
         raise

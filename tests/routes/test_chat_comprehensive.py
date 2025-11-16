@@ -425,13 +425,19 @@ def client(sb, monkeypatch):
 
     # 4) Mock rate limiting
     class MockRateLimitManager:
-        async def check_rate_limit(self, api_key, tokens_used=0):
+        async def check_rate_limit(self, api_key, config=None, tokens_used=0):
             result = MagicMock()
             result.allowed = True
             result.remaining_requests = 100
             result.remaining_tokens = 10000
             result.retry_after = 0
             result.reason = None
+            # Add rate limit header fields
+            result.ratelimit_limit_requests = 250
+            result.ratelimit_limit_tokens = 10000
+            result.ratelimit_reset_requests = 1700000000
+            result.ratelimit_reset_tokens = 1700000000
+            result.burst_window_description = "100 per 60 seconds"
             return result
 
         async def release_concurrency(self, api_key):

@@ -176,6 +176,13 @@ class TestGoogleVertexE2E:
         # Mock rate limiter
         mock_rate_limit_result = Mock()
         mock_rate_limit_result.allowed = True
+        mock_rate_limit_result.remaining_requests = 249
+        mock_rate_limit_result.remaining_tokens = 9900
+        mock_rate_limit_result.ratelimit_limit_requests = 250
+        mock_rate_limit_result.ratelimit_limit_tokens = 10000
+        mock_rate_limit_result.ratelimit_reset_requests = 1700000000
+        mock_rate_limit_result.ratelimit_reset_tokens = 1700000000
+        mock_rate_limit_result.burst_window_description = "100 per 60 seconds"
         mock_rate_limiter_instance = Mock()
         mock_rate_limiter_instance.check_rate_limit.return_value = mock_rate_limit_result
         mock_rate_limiter.return_value = mock_rate_limiter_instance
@@ -368,6 +375,13 @@ class TestGoogleVertexE2E:
         # Mock rate limiter
         mock_rate_limit_result = Mock()
         mock_rate_limit_result.allowed = True
+        mock_rate_limit_result.remaining_requests = 249
+        mock_rate_limit_result.remaining_tokens = 9900
+        mock_rate_limit_result.ratelimit_limit_requests = 250
+        mock_rate_limit_result.ratelimit_limit_tokens = 10000
+        mock_rate_limit_result.ratelimit_reset_requests = 1700000000
+        mock_rate_limit_result.ratelimit_reset_tokens = 1700000000
+        mock_rate_limit_result.burst_window_description = "100 per 60 seconds"
         mock_rate_limiter_instance = Mock()
         mock_rate_limiter_instance.check_rate_limit.return_value = mock_rate_limit_result
         mock_rate_limiter.return_value = mock_rate_limiter_instance

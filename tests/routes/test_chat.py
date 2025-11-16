@@ -52,6 +52,12 @@ class _RLResult:
         self.retry_after = retry_after
         self.remaining_requests = rem_req
         self.remaining_tokens = rem_tok
+        # Rate limit header fields (new in latest version)
+        self.ratelimit_limit_requests = 250
+        self.ratelimit_limit_tokens = 10000
+        self.ratelimit_reset_requests = int(__import__('time').time()) + 60
+        self.ratelimit_reset_tokens = int(__import__('time').time()) + 60
+        self.burst_window_description = "100 per 60 seconds"
 
 class _RateLimitMgr:
     def __init__(self, allowed_pre=True, allowed_final=True):

@@ -25,7 +25,8 @@ def mod():
 # --------- Fake fallback rate limiting service ---------
 class _FallbackResult:
     def __init__(self, allowed=True, remaining_requests=59, remaining_tokens=9990,
-                 reset_time=None, retry_after=None, reason=None):
+                 reset_time=None, retry_after=None, reason=None,
+                 limit_req=250, limit_tok=10000):
         self.allowed = allowed
         self.remaining_requests = remaining_requests
         self.remaining_tokens = remaining_tokens
@@ -33,6 +34,12 @@ class _FallbackResult:
         self.reset_time = int(time.time()) + 60 if reset_time is None else reset_time
         self.retry_after = retry_after
         self.reason = reason
+        # Rate limit header fields (new in latest version)
+        self.ratelimit_limit_requests = limit_req
+        self.ratelimit_limit_tokens = limit_tok
+        self.ratelimit_reset_requests = int(time.time()) + 60
+        self.ratelimit_reset_tokens = int(time.time()) + 60
+        self.burst_window_description = "100 per 60 seconds"
 
 
 class _FakeFallback:

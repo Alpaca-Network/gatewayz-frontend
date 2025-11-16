@@ -22,6 +22,38 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 
+def _calculate_burst_window_description(config: "RateLimitConfig") -> str:
+    """Generate a human-readable burst window description.
+
+    Example: "100 per 60 seconds"
+    """
+    return f"{config.burst_limit} per {config.window_size_seconds} seconds"
+
+
+def _populate_rate_limit_headers(
+    result: "RateLimitResult", config: "RateLimitConfig", request_limit: int, token_limit: int
+) -> None:
+    """Populate rate limit header fields in the result object.
+
+    Sets:
+    - ratelimit_limit_requests: Total request limit
+    - ratelimit_limit_tokens: Total token limit
+    - ratelimit_reset_requests: Unix timestamp when request limit resets
+    - ratelimit_reset_tokens: Unix timestamp when token limit resets
+    - burst_window_description: Human-readable burst window (e.g., "100 per 60 seconds")
+    """
+    result.ratelimit_limit_requests = request_limit
+    result.ratelimit_limit_tokens = token_limit
+    # Safely convert reset_time to Unix timestamp
+    if result.reset_time:
+        reset_timestamp = int(result.reset_time.timestamp()) if hasattr(result.reset_time, 'timestamp') else int(result.reset_time)
+    else:
+        reset_timestamp = int(time.time()) + 60
+    result.ratelimit_reset_requests = reset_timestamp
+    result.ratelimit_reset_tokens = reset_timestamp
+    result.burst_window_description = _calculate_burst_window_description(config)
+
+
 @dataclass
 class RateLimitConfig:
     """Rate limit configuration for a specific key"""
@@ -32,7 +64,7 @@ class RateLimitConfig:
     tokens_per_minute: int = 10000
     tokens_per_hour: int = 100000
     tokens_per_day: int = 1000000
-    burst_limit: int = 500  # Maximum burst requests
+    burst_limit: int = 100  # Maximum burst requests
     concurrency_limit: int = 50  # Maximum concurrent requests
     window_size_seconds: int = 60  # Sliding window size
 
@@ -49,6 +81,12 @@ class RateLimitResult:
     reason: Optional[str] = None
     burst_remaining: int = 0
     concurrency_remaining: int = 0
+    # Rate limit headers for HTTP responses
+    ratelimit_limit_requests: int = 0  # X-RateLimit-Limit-Requests
+    ratelimit_limit_tokens: int = 0  # X-RateLimit-Limit-Tokens
+    ratelimit_reset_requests: int = 0  # X-RateLimit-Reset-Requests (Unix timestamp)
+    ratelimit_reset_tokens: int = 0  # X-RateLimit-Reset-Tokens (Unix timestamp)
+    burst_window_description: str = ""  # Human-readable burst window (e.g., "100 per 60 seconds")
 
 
 # Default configurations
@@ -59,7 +97,7 @@ DEFAULT_CONFIG = RateLimitConfig(
     tokens_per_minute=10000,
     tokens_per_hour=100000,
     tokens_per_day=1000000,
-    burst_limit=500,
+    burst_limit=100,
     concurrency_limit=50,
 )
 
@@ -86,7 +124,7 @@ class SlidingWindowRateLimiter:
             # Check concurrency limit first
             concurrency_check = await self._check_concurrency_limit(api_key, config)
             if not concurrency_check["allowed"]:
-                return RateLimitResult(
+                result = RateLimitResult(
                     allowed=False,
                     remaining_requests=0,
                     remaining_tokens=0,
@@ -95,11 +133,13 @@ class SlidingWindowRateLimiter:
                     reason="Concurrency limit exceeded",
                     concurrency_remaining=0,
                 )
+                _populate_rate_limit_headers(result, config, config.requests_per_minute, config.tokens_per_minute)
+                return result
 
             # Check burst limit
             burst_check = await self._check_burst_limit(api_key, config)
             if not burst_check["allowed"]:
-                return RateLimitResult(
+                result = RateLimitResult(
                     allowed=False,
                     remaining_requests=0,
                     remaining_tokens=0,
@@ -108,11 +148,13 @@ class SlidingWindowRateLimiter:
                     reason="Burst limit exceeded",
                     burst_remaining=burst_check["remaining"],
                 )
+                _populate_rate_limit_headers(result, config, config.requests_per_minute, config.tokens_per_minute)
+                return result
 
             # Check sliding window limits
             window_check = await self._check_sliding_window(api_key, config, tokens_used)
             if not window_check["allowed"]:
-                return RateLimitResult(
+                result = RateLimitResult(
                     allowed=False,
                     remaining_requests=window_check["remaining_requests"],
                     remaining_tokens=window_check["remaining_tokens"],
@@ -122,16 +164,17 @@ class SlidingWindowRateLimiter:
                     burst_remaining=burst_check["remaining"],
                     concurrency_remaining=concurrency_check["remaining"],
                 )
+                _populate_rate_limit_headers(result, config, config.requests_per_minute, config.tokens_per_minute)
+                return result
 
             # All checks passed
             # Use the fallback rate limiting system
-            # Note: FallbackRateLimitManager.check_rate_limit() loads config internally
             result = await self.fallback_manager.check_rate_limit(
-                api_key=api_key, tokens_used=tokens_used
+                api_key=api_key, config=config, tokens_used=tokens_used
             )
 
             # Convert fallback result to our format
-            return RateLimitResult(
+            limit_result = RateLimitResult(
                 allowed=result.allowed,
                 remaining_requests=result.remaining_requests,
                 remaining_tokens=result.remaining_tokens,
@@ -145,17 +188,21 @@ class SlidingWindowRateLimiter:
                 burst_remaining=0,  # Not tracked in fallback system
                 concurrency_remaining=0,  # Not tracked in fallback system
             )
+            _populate_rate_limit_headers(limit_result, config, config.requests_per_minute, config.tokens_per_minute)
+            return limit_result
 
         except Exception as e:
             logger.error(f"Rate limit check failed for key {api_key[:10]}...: {e}")
             # Fail open - allow request if rate limiting fails
-            return RateLimitResult(
+            result = RateLimitResult(
                 allowed=True,
                 remaining_requests=config.requests_per_minute,
                 remaining_tokens=config.tokens_per_minute,
                 reset_time=datetime.now(timezone.utc) + timedelta(minutes=1),
                 reason="Rate limit check failed, allowing request",
             )
+            _populate_rate_limit_headers(result, config, config.requests_per_minute, config.tokens_per_minute)
+            return result
 
     async def _check_concurrency_limit(
         self, api_key: str, config: RateLimitConfig

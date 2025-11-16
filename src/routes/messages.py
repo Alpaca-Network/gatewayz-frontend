@@ -9,8 +9,10 @@ import asyncio
 import time
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
 
 from src.utils.performance_tracker import PerformanceTracker
+from src.utils.rate_limit_headers import get_rate_limit_headers
 
 import src.db.api_keys as api_keys_module
 import src.db.plans as plans_module
@@ -247,6 +249,10 @@ async def anthropic_messages(
 
         rate_limit_mgr = get_rate_limit_manager()
         should_release_concurrency = not trial.get("is_trial", False)
+
+        # Initialize rate limit variables
+        rl_pre = None
+        rl_final = None
 
         if should_release_concurrency:
             rl_pre = await rate_limit_mgr.check_rate_limit(api_key, tokens_used=0)
@@ -724,7 +730,12 @@ async def anthropic_messages(
         if not trial.get("is_trial", False):
             anthropic_response["gateway_usage"]["cost_usd"] = round(cost, 6)
 
-        return anthropic_response
+        # Prepare headers including rate limit information
+        headers = {}
+        if rl_final is not None:
+            headers.update(get_rate_limit_headers(rl_final))
+
+        return JSONResponse(content=anthropic_response, headers=headers)
 
     except HTTPException:
         raise
