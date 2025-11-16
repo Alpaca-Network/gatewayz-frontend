@@ -27,7 +27,7 @@ import { Slider } from "@/components/ui/slider";
 import { BookText, Bot, ChevronDown, ChevronUp, FileText, ImageIcon, LayoutGrid, LayoutList, Lock, Music, Search, Sliders as SlidersIcon, X, Zap } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
-import { stringToColor } from '@/lib/utils';
+import { stringToColor, getModelUrl } from '@/lib/utils';
 import ReactMarkdown from "react-markdown";
 
 interface Model {
@@ -87,8 +87,8 @@ const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
   // Get gateways - support both old and new format
   const gateways = model.source_gateways || (model.source_gateway ? [model.source_gateway] : []);
 
-  // Encode model ID to handle special characters like parentheses in model names
-  const modelUrl = `/models/${encodeURIComponent(model.id)}`;
+  // Generate clean URL in format /models/[developer]/[model]
+  const modelUrl = getModelUrl(model.id, model.provider_slug);
 
   return (
     <Link href={modelUrl} className="h-full block">

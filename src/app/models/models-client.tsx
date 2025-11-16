@@ -27,7 +27,7 @@ import { Slider } from "@/components/ui/slider";
 import { BookText, Bot, Box, ChevronDown, ChevronUp, FileText, ImageIcon, LayoutGrid, LayoutList, Lock, Music, Search, Sliders as SlidersIcon, Video, X, Zap } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
-import { stringToColor } from '@/lib/utils';
+import { stringToColor, getModelUrl } from '@/lib/utils';
 import ReactMarkdown from "react-markdown";
 
 
@@ -140,22 +140,8 @@ const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
   });
   const allSources = Array.from(sourcesByName.values());
 
-  // Generate clean URLs:
-  // - For AIMO models (providerId:model-name), extract just the model name after the colon
-  // - For regular models with slashes (provider/model-name), encode the entire ID to preserve it correctly
-  // - Otherwise, use the full ID
-  let modelUrl: string;
-  if (model.id.includes(':')) {
-    // AIMO model - extract model name after the colon
-    const modelName = model.id.split(':')[1] || model.id;
-    modelUrl = `/models/${encodeURIComponent(modelName)}`;
-  } else if (model.id.includes('/')) {
-    // Regular provider/model format - encode the entire ID to handle special characters like parentheses
-    modelUrl = `/models/${encodeURIComponent(model.id)}`;
-  } else {
-    // Single-part ID - encode it
-    modelUrl = `/models/${encodeURIComponent(model.id)}`;
-  }
+  // Generate clean URLs in format /models/[developer]/[model]
+  const modelUrl = getModelUrl(model.id, model.provider_slug);
 
   return (
     <Link href={modelUrl} className="h-full block">
