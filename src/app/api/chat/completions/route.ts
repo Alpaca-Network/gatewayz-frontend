@@ -1,7 +1,10 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { traced, wrapTraced } from 'braintrust';
 import { isBraintrustEnabled } from '@/lib/braintrust';
 import { profiler, generateRequestId } from '@/lib/performance-profiler';
+import { normalizeModelId } from '@/lib/utils';
+import { API_BASE_URL } from '@/lib/config';
+import { handleApiError } from '@/app/api/middleware/error-handler';
 
 /**
  * Calculate retry delay for rate limit errors with exponential backoff
@@ -265,6 +268,11 @@ export async function POST(request: NextRequest) {
       stream: body.stream,
       messageCount: body.messages?.length || 0,
     });
+
+    // Extract API key and session ID
+    const apiKey = body.apiKey || request.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
+    const { searchParams } = new URL(request.url);
+    const sessionId = searchParams.get('session_id');
 
     // Normalize @provider format model IDs (e.g., @google/models/gemini-pro → google/gemini-pro)
     const originalModel = body.model;

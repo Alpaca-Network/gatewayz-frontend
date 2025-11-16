@@ -2955,12 +2955,12 @@ function ChatPageContent() {
                     const fallbackModel = fallbackModels.find(fm => fm.value !== selectedModel.value);
 
                     if (fallbackModel) {
-                        console.log(`Model ${selectedModel.value} failed with 500 error, attempting fallback to ${fallbackModel.value} (retry ${retryCount + 1}/${maxRetries})`);
+                        console.log(`Model ${selectedModel.value} failed with error, attempting fallback to ${fallbackModel.value}`);
 
                         // Show a toast notification about the fallback
                         toast({
                             title: "Model Unavailable",
-                            description: `${selectedModel.label} is temporarily unavailable. Switched to ${fallbackModel.label}. (Attempt ${retryCount + 1}/${maxRetries})`,
+                            description: `${selectedModel.label} is temporarily unavailable. Switched to ${fallbackModel.label}.`,
                             variant: 'default'
                         });
 
@@ -2980,15 +2980,14 @@ function ChatPageContent() {
                         }));
 
                         // Retry the request with the fallback model by recursively calling handleSendMessage
-                        // Pass retryCount + 1 to track the number of retries
                         // Wait a short moment before retrying
                         setTimeout(() => {
                             // Re-populate the message field with the original user message
                             setMessage(userMessage);
                             setUserHasTyped(true);
                             userHasTypedRef.current = true;
-                            // Trigger send with incremented retry count
-                            handleSendMessage(retryCount + 1);
+                            // Trigger send
+                            handleSendMessage();
                         }, 500);
 
                         return; // Exit early to prevent showing error message
