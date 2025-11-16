@@ -516,7 +516,7 @@ describe('POST /api/auth', () => {
         success: true,
         message: 'User authenticated successfully',
         user_id: 123456,
-        api_key: 'gw_live_abc123def456',
+        api_key: 'gw_live_test_key_123456', // Test fixture, not a real secret
         auth_method: 'email',
         privy_user_id: 'did:privy:cm5abc123',
         is_new_user: true,
@@ -544,7 +544,7 @@ describe('POST /api/auth', () => {
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
       expect(data.is_new_user).toBe(true);
-      expect(data.api_key).toBe('gw_live_abc123def456');
+      expect(data.api_key).toBe('gw_live_test_key_123456');
       expect(data.credits).toBe(500);
       expect(data.tier).toBe('basic');
       // Note: Console logging assertions can be flaky in tests
@@ -562,7 +562,7 @@ describe('POST /api/auth', () => {
         success: true,
         message: 'User authenticated successfully',
         user_id: 789012,
-        api_key: 'gw_live_xyz789abc',
+        api_key: 'gw_live_test_key_789012', // Test fixture, not a real secret
         auth_method: 'google',
         privy_user_id: 'did:privy:google789xyz',
         is_new_user: false,
@@ -595,6 +595,7 @@ describe('POST /api/auth', () => {
       expect(data.tier).toBe('pro');
       expect(data.subscription_status).toBe('active');
       expect(data.credits).toBe(2500);
+      expect(data.api_key).toBe('gw_live_test_key_789012');
     });
   });
 });

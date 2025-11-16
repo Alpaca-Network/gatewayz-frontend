@@ -45,3 +45,7 @@ next-env.d.ts
 firebase-debug.log
 firestore-debug.log.env.local
 .claude/settings.local.json
+
+# PM2 logs
+/logs
+*.log
