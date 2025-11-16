@@ -165,10 +165,31 @@ export async function callAISDKCompletion(
   }
 ) {
   const apiKey = process.env.AI_SDK_API_KEY || '';
-  const baseURL = process.env.AI_SDK_BASE_URL || 'https://api.anthropic.com/v1';
 
   if (!apiKey) {
     throw new Error('AI_SDK_API_KEY not configured');
+  }
+
+  // Determine which API endpoint to use based on model provider
+  let baseURL = process.env.AI_SDK_BASE_URL || 'https://api.anthropic.com/v1';
+  let headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+
+  // Route to appropriate provider API
+  if (modelId.toLowerCase().includes('gemini')) {
+    // For Gemini models, use the Gatewayz backend proxy
+    baseURL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
+    headers['Authorization'] = `Bearer ${apiKey}`;
+  } else if (modelId.toLowerCase().includes('gpt')) {
+    // For OpenAI models
+    baseURL = process.env.AI_SDK_BASE_URL || 'https://api.openai.com/v1';
+    headers['Authorization'] = `Bearer ${apiKey}`;
+  } else {
+    // For Anthropic Claude models
+    baseURL = process.env.AI_SDK_BASE_URL || 'https://api.anthropic.com/v1';
+    headers['Authorization'] = `Bearer ${apiKey}`;
+    headers['Anthropic-Version'] = '2023-06-01';
   }
 
   const body: any = {
@@ -193,13 +214,17 @@ export async function callAISDKCompletion(
     };
   }
 
-  const response = await fetch(`${baseURL}/messages`, {
+  // Determine endpoint path based on model provider
+  let endpoint = '/messages';
+  if (modelId.toLowerCase().includes('gemini')) {
+    endpoint = '/v1/chat/completions';
+  } else if (modelId.toLowerCase().includes('gpt')) {
+    endpoint = '/chat/completions';
+  }
+
+  const response = await fetch(`${baseURL}${endpoint}`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-      'Anthropic-Version': '2023-06-01',
-    },
+    headers,
     body: JSON.stringify(body),
   });
 
@@ -232,7 +257,7 @@ export function isAISDKModel(modelId: string): boolean {
  * Get AI SDK model metadata
  */
 export function getAISDKModelMetadata(modelId: string): AISDKModelConfig | null {
-  const modelConfigs: Record<string, AISDKModelConfig> = {
+  const baseConfigs: Record<string, AISDKModelConfig> = {
     'claude-3-5-sonnet': {
       name: 'Claude 3.5 Sonnet',
       provider: 'anthropic',
@@ -251,12 +276,38 @@ export function getAISDKModelMetadata(modelId: string): AISDKModelConfig | null 
       modelId: 'gpt-4-turbo-2024-04-09',
       supportsThinking: false,
     },
+    'gemini-1.5-pro': {
+      name: 'Gemini 1.5 Pro',
+      provider: 'google',
+      modelId: 'gemini-1.5-pro-latest',
+      supportsThinking: false,
+    },
+    'gemini-pro': {
+      name: 'Gemini Pro',
+      provider: 'google',
+      modelId: 'gemini-pro',
+      supportsThinking: false,
+    },
+    'gemini-2.0-flash': {
+      name: 'Gemini 2.0 Flash',
+      provider: 'google',
+      modelId: 'gemini-2.0-flash',
+      supportsThinking: false,
+    },
   };
 
+  // Map alternative naming conventions to base models
+  const alternativeNames: Record<string, string> = {
+    'gemini-2-0-flash': 'gemini-2.0-flash',
+  };
+
+  const normalizedId = alternativeNames[modelId] || modelId;
+  const modelConfigs: Record<string, AISDKModelConfig> = baseConfigs;
+
   return (
-    modelConfigs[modelId] ||
+    modelConfigs[normalizedId] ||
     Object.values(modelConfigs).find(config =>
-      config.modelId.toLowerCase() === modelId.toLowerCase()
+      config.modelId.toLowerCase() === normalizedId.toLowerCase()
     ) ||
     null
   );

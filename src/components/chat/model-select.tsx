@@ -195,19 +195,20 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
       // Fetch from all gateways - optimized to load fewer models initially
       setLoading(true);
       try {
-        // Only fetch from OpenRouter initially for speed, load others on demand
+        // Fetch from all gateways to ensure all models (including NEAR) are available
         const limit = loadAllModels ? undefined : INITIAL_MODELS_LIMIT;
         const limitParam = limit ? `&limit=${limit}` : '';
 
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+        // Reduced timeout from 10s to 7s - models should load much faster with optimized gateways
+        const timeoutId = setTimeout(() => controller.abort(), 7000);
 
-        const openrouterRes = await fetch(`/api/models?gateway=openrouter${limitParam}`, { signal: controller.signal });
+        const allGatewaysRes = await fetch(`/api/models?gateway=all${limitParam}`, { signal: controller.signal });
         clearTimeout(timeoutId);
-        const openrouterData = await openrouterRes.json();
+        const allGatewaysData = await allGatewaysRes.json();
 
         // Combine models from all gateways
-        const allModels = [...(openrouterData.data || [])];
+        const allModels = [...(allGatewaysData.data || [])];
 
         // Deduplicate models by ID - keep the first occurrence
         const uniqueModelsMap = new Map();
@@ -654,6 +655,11 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
                           {model.speedTier === 'fast' && (
                             <span className="text-xs font-bold text-blue-600 dark:text-blue-400">⚡</span>
                           )}
+                          {model.sourceGateway && model.sourceGateway !== 'openrouter' && (
+                            <span className="ml-1 text-xs font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                              {model.sourceGateway.toUpperCase()}
+                            </span>
+                          )}
                           {model.category === 'Free' && (
                             <span className="ml-1 text-xs font-semibold text-green-600 dark:text-green-400 flex items-center gap-1">
                               <Sparkles className="h-3 w-3" />
@@ -715,12 +721,19 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
                             )}
                           />
                           <span className="truncate flex-1">{model.label}</span>
-                          {model.category === 'Free' && (
-                            <span className="ml-2 text-xs font-semibold text-green-600 dark:text-green-400 flex items-center gap-1">
-                              <Sparkles className="h-3 w-3" />
-                              FREE
-                            </span>
-                          )}
+                          <div className="flex items-center gap-1">
+                            {model.sourceGateway && model.sourceGateway !== 'openrouter' && (
+                              <span className="ml-1 text-xs font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                                {model.sourceGateway.toUpperCase()}
+                              </span>
+                            )}
+                            {model.category === 'Free' && (
+                              <span className="ml-1 text-xs font-semibold text-green-600 dark:text-green-400 flex items-center gap-1">
+                                <Sparkles className="h-3 w-3" />
+                                FREE
+                              </span>
+                            )}
+                          </div>
                         </CommandItem>
                       ))}
                     </div>
@@ -783,6 +796,11 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
                           )}
                           {model.speedTier === 'fast' && (
                             <span className="text-xs font-bold text-blue-600 dark:text-blue-400">⚡</span>
+                          )}
+                          {model.sourceGateway && model.sourceGateway !== 'openrouter' && (
+                            <span className="ml-1 text-xs font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                              {model.sourceGateway.toUpperCase()}
+                            </span>
                           )}
                           {model.category === 'Free' && (
                             <span className="ml-1 text-xs font-semibold text-green-600 dark:text-green-400 flex items-center gap-1">

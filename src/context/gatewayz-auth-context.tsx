@@ -14,6 +14,13 @@ import {
   type UserData,
 } from "@/lib/api";
 import { usePrivy, type User, type LinkedAccountWithMetadata } from "@privy-io/react-auth";
+import {
+  redirectToBetaWithSession,
+  getSessionTransferParams,
+  cleanupSessionTransferParams,
+  storeSessionTransferToken,
+  getStoredSessionTransferToken,
+} from "@/integrations/privy/auth-session-transfer";
 
 type AuthStatus = "idle" | "unauthenticated" | "authenticating" | "authenticated" | "error";
 
@@ -34,15 +41,18 @@ interface GatewayzAuthContextValue {
   login: () => Promise<void> | void;
   logout: () => Promise<void> | void;
   refresh: (options?: { force?: boolean }) => Promise<void>;
+  redirectToBeta?: (returnUrl?: string) => void;
 }
-
-const GatewayzAuthContext = createContext<GatewayzAuthContextValue | undefined>(undefined);
-const TEMP_API_KEY_PREFIX = "gw_temp_";
 
 interface GatewayzAuthProviderProps {
   children: ReactNode;
   onAuthError?: (error: AuthError) => void;
+  enableBetaRedirect?: boolean;
+  betaDomain?: string;
 }
+
+const GatewayzAuthContext = createContext<GatewayzAuthContextValue | undefined>(undefined);
+const TEMP_API_KEY_PREFIX = "gw_temp_";
 
 const stripUndefined = <T,>(value: T): T => {
   if (Array.isArray(value)) {
@@ -105,7 +115,12 @@ const mapLinkedAccount = (account: LinkedAccountWithMetadata) => {
   });
 };
 
-export function GatewayzAuthProvider({ children, onAuthError }: GatewayzAuthProviderProps) {
+export function GatewayzAuthProvider({
+  children,
+  onAuthError,
+  enableBetaRedirect = false,
+  betaDomain = 'https://beta.gatewayz.ai',
+}: GatewayzAuthProviderProps) {
   const {
     ready: privyReady,
     authenticated,
@@ -119,17 +134,31 @@ export function GatewayzAuthProvider({ children, onAuthError }: GatewayzAuthProv
     if (typeof window === "undefined") {
       return "idle";
     }
+    // Fast path: check if we already have valid cached credentials
     const storedKey = getApiKey();
     const storedUser = getUserData();
-    return storedKey && storedUser ? "authenticated" : "idle";
+    if (storedKey && storedUser) {
+      // Validate basic structure without expensive operations
+      if (storedUser.user_id && storedUser.api_key && storedUser.email) {
+        return "authenticated";
+      }
+    }
+    return "idle";
   });
-  const [apiKey, setApiKey] = useState<string | null>(() => getApiKey());
-  const [userData, setUserData] = useState<UserData | null>(() => getUserData());
+  const [apiKey, setApiKey] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return getApiKey();
+  });
+  const [userData, setUserData] = useState<UserData | null>(() => {
+    if (typeof window === "undefined") return null;
+    return getUserData();
+  });
   const [error, setError] = useState<string | null>(null);
 
   const syncInFlightRef = useRef(false);
   const lastSyncedPrivyIdRef = useRef<string | null>(null);
   const upgradeAttemptedRef = useRef(false);
+  const betaRedirectAttemptedRef = useRef(false);
 
   const updateStateFromStorage = useCallback(() => {
     const key = getApiKey();
@@ -225,6 +254,7 @@ export function GatewayzAuthProvider({ children, onAuthError }: GatewayzAuthProv
             ...storedUser,
             api_key: preferredKey.api_key,
             tier: authData.tier,
+            tier_display_name: authData.tier_display_name,
             subscription_status: authData.subscription_status,
             subscription_end_date: authData.subscription_end_date,
           });
@@ -238,6 +268,7 @@ export function GatewayzAuthProvider({ children, onAuthError }: GatewayzAuthProv
             email: authData.email,
             credits: Math.floor(authData.credits ?? 0),
             tier: authData.tier,
+            tier_display_name: authData.tier_display_name,
             subscription_status: authData.subscription_status,
             subscription_end_date: authData.subscription_end_date,
           });
@@ -250,6 +281,28 @@ export function GatewayzAuthProvider({ children, onAuthError }: GatewayzAuthProv
       }
     },
     [updateStateFromStorage]
+  );
+
+  const redirectToBetaIfEnabled = useCallback(
+    (returnUrl?: string) => {
+      if (!enableBetaRedirect || !apiKey || !userData) {
+        return;
+      }
+
+      if (betaRedirectAttemptedRef.current) {
+        return;
+      }
+
+      betaRedirectAttemptedRef.current = true;
+      console.log("[Auth] Redirecting to beta domain with session");
+
+      // Store token in sessionStorage before redirect
+      storeSessionTransferToken(apiKey, userData.user_id);
+
+      // Redirect to beta domain
+      redirectToBetaWithSession(apiKey, userData.user_id, betaDomain, returnUrl);
+    },
+    [enableBetaRedirect, apiKey, userData, betaDomain]
   );
 
   const handleAuthSuccess = useCallback(
@@ -280,14 +333,20 @@ export function GatewayzAuthProvider({ children, onAuthError }: GatewayzAuthProv
       console.log("[Auth] Verified saved user data before redirect:", savedUserData);
 
       if (authData.is_new_user ?? isNewUserExpected) {
-        console.log("[Auth] New user detected, redirecting to onboarding");
-        // Small delay to ensure localStorage write completes
-        setTimeout(() => {
+        console.log("[Auth] New user detected");
+
+        // If beta redirect is enabled, redirect there instead of onboarding
+        if (enableBetaRedirect) {
+          console.log("[Auth] Redirecting new user to beta domain");
+          redirectToBetaIfEnabled("/onboarding");
+        } else {
+          console.log("[Auth] Redirecting new user to onboarding");
+          // Redirect immediately - localStorage writes are synchronous
           window.location.href = "/onboarding";
-        }, 100);
+        }
       }
     },
-    [updateStateFromStorage]
+    [updateStateFromStorage, enableBetaRedirect, redirectToBetaIfEnabled]
   );
 
   const handleAuthSuccessAsync = useCallback(
@@ -510,15 +569,18 @@ export function GatewayzAuthProvider({ children, onAuthError }: GatewayzAuthProv
         setStatus("unauthenticated");
       },
       refresh: (options) => syncWithBackend(options),
+      redirectToBeta: enableBetaRedirect ? redirectToBetaIfEnabled : undefined,
     }),
     [
       apiKey,
       authenticated,
       clearStoredCredentials,
+      enableBetaRedirect,
       error,
       privyLogin,
       privyLogout,
       privyReady,
+      redirectToBetaIfEnabled,
       status,
       syncWithBackend,
       user,

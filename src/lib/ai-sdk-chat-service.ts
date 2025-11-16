@@ -144,7 +144,15 @@ export async function* streamAISDKChat(
  * Check if a model is available via AI SDK gateway
  */
 export function isAISDKModel(modelId: string): boolean {
-  // List of models available through AI SDK
+  if (!modelId) {
+    return false;
+  }
+
+  // Normalize model ID: remove provider prefix (e.g., 'google/gemini-pro' -> 'gemini-pro')
+  // and convert to lowercase for consistent matching
+  const normalizedModelId = modelId.toLowerCase().replace(/^[^/]+\//, '');
+
+  // Base set of AI SDK models (matched via substring)
   const aiSdkModels = [
     // Anthropic Claude models
     'claude-3-5-sonnet',
@@ -158,16 +166,27 @@ export function isAISDKModel(modelId: string): boolean {
     'gpt-4',
     'gpt-3.5-turbo',
 
-    // Google models
-    'gemini-pro',
-    'gemini-1.5-pro',
-
     // Perplexity models
     'perplexity-sonar',
+
+    // Google Gemini models (direct matches for backward compatibility)
+    'gemini-pro',
+    'gemini-1.5-pro',
+    'gemini-2.0-flash',
   ];
 
-  return aiSdkModels.some((model) =>
-    modelId.toLowerCase().includes(model.toLowerCase())
+  // Google model families using regex patterns for precise matching
+  // This ensures models start with these prefixes, not just contain them
+  const aiSdkFamilies = [
+    /^gemini-/,      // All Gemini models (gemini-pro, gemini-1.5-pro, gemini-1.5-flash, gemini-2.0-flash, gemini-2.5-flash, etc.)
+    /^gemma-/,       // All Gemma models (gemma-2b, gemma-7b, gemma-3n-e2b-it, etc.)
+    /^codegemma-/,   // All CodeGemma models (codegemma-7b-it, codegemma-2b-it, etc.)
+    /^paligemma-/,   // All PaliGemma models (paligemma-3b-mix-224, paligemma-3b-pt-224, etc.)
+  ];
+
+  return (
+    aiSdkModels.some((model) => normalizedModelId.includes(model)) ||
+    aiSdkFamilies.some((pattern) => pattern.test(normalizedModelId))
   );
 }
 
@@ -203,6 +222,20 @@ export function getAISDKAvailableModels() {
       provider: 'Google',
       supportsThinking: false,
       description: 'Google\'s advanced multimodal model',
+    },
+    {
+      id: 'gemini-pro',
+      name: 'Gemini Pro',
+      provider: 'Google',
+      supportsThinking: false,
+      description: 'Google\'s high-performance model',
+    },
+    {
+      id: 'gemini-2.0-flash',
+      name: 'Gemini 2.0 Flash',
+      provider: 'Google',
+      supportsThinking: false,
+      description: 'Fast and efficient Gemini model optimized for speed',
     },
   ];
 }

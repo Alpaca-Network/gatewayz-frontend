@@ -24,7 +24,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { Slider } from "@/components/ui/slider";
-import { BookText, Bot, ChevronDown, ChevronUp, FileText, ImageIcon, LayoutGrid, LayoutList, Music, Search, Sliders as SlidersIcon, X, Zap } from 'lucide-react';
+import { BookText, Bot, Box, ChevronDown, ChevronUp, FileText, ImageIcon, LayoutGrid, LayoutList, Lock, Music, Search, Sliders as SlidersIcon, Video, X, Zap } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 import { stringToColor } from '@/lib/utils';
@@ -46,9 +46,11 @@ interface Model {
   } | null;
   supported_parameters: string[] | null;
   provider_slug: string;
-  source_gateways?: string[]; // Updated to array
+  provider_slugs?: string[]; // NEW: Array of all providers offering this model
+  source_gateways?: string[]; // Array of all gateways offering this model
   source_gateway?: string; // Keep for backwards compatibility
   created?: number;
+  is_private?: boolean; // Indicates if model is on a private network (e.g., NEAR)
 }
 
 // Gateway display configuration
@@ -72,13 +74,39 @@ const GATEWAY_CONFIG: Record<string, { name: string; color: string; icon?: React
   aimo: { name: 'AiMo', color: 'bg-pink-600' },
   near: { name: 'NEAR', color: 'bg-teal-600' },
   fal: { name: 'Fal', color: 'bg-emerald-600' },
-  'vercel-ai-gateway': { name: 'Vercel AI', color: 'bg-slate-900' }
+  'vercel-ai-gateway': { name: 'Vercel AI', color: 'bg-slate-900' },
+  helicone: { name: 'Helicone', color: 'bg-indigo-600' },
+  alpaca: { name: 'Alpaca Network', color: 'bg-green-700' }
+};
+
+// Provider display configuration (for providers that differ from gateway names)
+const PROVIDER_CONFIG: Record<string, { name: string; color: string }> = {
+  openai: { name: 'OpenAI', color: 'bg-green-600' },
+  anthropic: { name: 'Anthropic', color: 'bg-orange-600' },
+  google: { name: 'Google', color: 'bg-blue-600' },
+  meta: { name: 'Meta', color: 'bg-blue-700' },
+  cohere: { name: 'Cohere', color: 'bg-purple-600' },
+  mistral: { name: 'Mistral', color: 'bg-orange-500' },
+  'mistralai': { name: 'Mistral AI', color: 'bg-orange-500' },
+  qwen: { name: 'Qwen', color: 'bg-red-600' },
+  deepseek: { name: 'DeepSeek', color: 'bg-cyan-600' },
+  alibaba: { name: 'Alibaba', color: 'bg-orange-700' },
+  '01-ai': { name: '01.AI', color: 'bg-indigo-600' },
+  '01ai': { name: '01.AI', color: 'bg-indigo-600' },
+  nvidia: { name: 'NVIDIA', color: 'bg-green-700' },
+  microsoft: { name: 'Microsoft', color: 'bg-blue-800' },
+  xai: { name: 'xAI', color: 'bg-black' },
+  perplexity: { name: 'Perplexity', color: 'bg-teal-700' },
+  'alpaca-network': { name: 'Alpaca Network', color: 'bg-green-700' },
+  alpaca: { name: 'Alpaca Network', color: 'bg-green-700' },
+  // Add more providers as needed
 };
 
 const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
-  const isFree = parseFloat(model.pricing?.prompt || '0') === 0 && parseFloat(model.pricing?.completion || '0') === 0;
-  const inputCost = (parseFloat(model.pricing?.prompt || '0') * 1000000).toFixed(2);
-  const outputCost = (parseFloat(model.pricing?.completion || '0') * 1000000).toFixed(2);
+  const hasPricing = model.pricing !== null && model.pricing !== undefined;
+  const isFree = hasPricing && parseFloat(model.pricing?.prompt || '0') === 0 && parseFloat(model.pricing?.completion || '0') === 0;
+  const inputCost = hasPricing ? (parseFloat(model.pricing?.prompt || '0') * 1000000).toFixed(2) : null;
+  const outputCost = hasPricing ? (parseFloat(model.pricing?.completion || '0') * 1000000).toFixed(2) : null;
   const contextK = model.context_length > 0 ? Math.round(model.context_length / 1000) : 0;
 
   // Determine if model is multi-lingual (simple heuristic - can be improved)
@@ -90,9 +118,31 @@ const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
   // Get gateways - support both old and new format
   const gateways = (model.source_gateways && model.source_gateways.length > 0) ? model.source_gateways : (model.source_gateway ? [model.source_gateway] : []);
 
+  // NEW: Get providers - support both old and new format
+  const providers = (model.provider_slugs && model.provider_slugs.length > 0) ? model.provider_slugs : (model.provider_slug ? [model.provider_slug] : []);
+
+  // NEW: Deduplicate and combine providers that are also gateways
+  // Deduplicate by display name to avoid showing "Alpaca Network" twice (once from provider, once from gateway)
+  const allSourcesRaw = [...new Set([...providers, ...gateways])];
+  const sourcesByName = new Map<string, string>();
+  allSourcesRaw.forEach(source => {
+    // Normalize source: remove @ prefix and handle both singular and configured names
+    let normalizedSource = source.replace(/^@/, '').toLowerCase();
+
+    const providerConfig = PROVIDER_CONFIG[normalizedSource];
+    const gatewayConfig = GATEWAY_CONFIG[normalizedSource];
+    const config = providerConfig || gatewayConfig;
+    const displayName = config?.name || source.replace(/^@/, '');
+    // Only keep first occurrence of each display name
+    if (!sourcesByName.has(displayName)) {
+      sourcesByName.set(displayName, normalizedSource);
+    }
+  });
+  const allSources = Array.from(sourcesByName.values());
+
   // Generate clean URLs:
   // - For AIMO models (providerId:model-name), extract just the model name after the colon
-  // - For regular models with slashes (provider/model-name), keep the slash
+  // - For regular models with slashes (provider/model-name), encode the entire ID to preserve it correctly
   // - Otherwise, use the full ID
   let modelUrl: string;
   if (model.id.includes(':')) {
@@ -100,8 +150,8 @@ const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
     const modelName = model.id.split(':')[1] || model.id;
     modelUrl = `/models/${encodeURIComponent(modelName)}`;
   } else if (model.id.includes('/')) {
-    // Regular provider/model format - preserve the slash
-    modelUrl = `/models/${model.id}`;
+    // Regular provider/model format - encode the entire ID to handle special characters like parentheses
+    modelUrl = `/models/${encodeURIComponent(model.id)}`;
   } else {
     // Single-part ID - encode it
     modelUrl = `/models/${encodeURIComponent(model.id)}`;
@@ -126,6 +176,12 @@ const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
                 Multi-Lingual
               </Badge>
             )}
+            {model.is_private && (
+              <Badge className="bg-purple-600 text-white hover:bg-purple-700 text-xs px-2 py-0.5 flex items-center gap-1">
+                <Lock className="w-3 h-3" />
+                Private
+              </Badge>
+            )}
           </div>
         </div>
 
@@ -134,31 +190,36 @@ const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
           {model.description || 'Explore Token Usage Across Models, Labs, And Public Applications.'}
         </p>
 
-        {/* Gateways - New section */}
-        {gateways.length > 0 && (
+        {/* Providers & Gateways - Combined section */}
+        {allSources.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mb-3">
-            {gateways.slice(0, 3).map((gateway) => {
-              const config = GATEWAY_CONFIG[gateway.toLowerCase()] || {
-                name: gateway,
+            {allSources.slice(0, 4).map((source) => {
+              // Normalize source by removing @ prefix
+              const normalizedSource = source.replace(/^@/, '').toLowerCase();
+              // Check if it's a provider or gateway, prefer provider config
+              const providerConfig = PROVIDER_CONFIG[normalizedSource];
+              const gatewayConfig = GATEWAY_CONFIG[normalizedSource];
+              const config = providerConfig || gatewayConfig || {
+                name: normalizedSource,
                 color: 'bg-gray-500'
               };
               return (
                 <Badge
-                  key={gateway}
+                  key={source}
                   className={`${config.color} text-white text-[10px] px-1.5 py-0 h-5 flex items-center gap-0.5`}
                   variant="secondary"
                 >
-                  {config.icon}
+                  {gatewayConfig?.icon}
                   {config.name}
                 </Badge>
               );
             })}
-            {gateways.length > 3 && (
+            {allSources.length > 4 && (
               <Badge
                 className="bg-gray-500 text-white text-[10px] px-1.5 py-0 h-5"
                 variant="secondary"
               >
-                +{gateways.length - 3}
+                +{allSources.length - 4} more
               </Badge>
             )}
           </div>
@@ -167,12 +228,18 @@ const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
         {/* Bottom metadata row */}
         <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground border-t pt-3">
           <span className="flex items-center gap-1">
-            By <span className="font-medium text-foreground">{model.provider_slug}</span>
+            By <span className="font-medium text-foreground">{model.provider_slug?.replace(/^@/, '') || 'Unknown'}</span>
           </span>
           <span className="font-medium">{contextK > 0 ? `${contextK}M Tokens` : '0M Tokens'}</span>
           <span className="font-medium">{contextK > 0 ? `${contextK}K Context` : '0K Context'}</span>
-          <span className="font-medium">${inputCost}/M Input</span>
-          <span className="font-medium">${outputCost}/M Output</span>
+          {hasPricing ? (
+            <>
+              <span className="font-medium">${inputCost}/M Input</span>
+              <span className="font-medium">${outputCost}/M Output</span>
+            </>
+          ) : (
+            <span className="font-medium text-amber-600">Contact for pricing</span>
+          )}
         </div>
       </Card>
     </Link>
@@ -186,6 +253,86 @@ export default function ModelsClient({
   initialModels: Model[];
   isLoadingMore?: boolean;
 }) {
+  // Initialize CSS variable for header positioning and update when banner visibility changes
+  React.useEffect(() => {
+    const updateHeaderPosition = () => {
+      const bannerElement = document.querySelector('[data-onboarding-banner]');
+      const spacer = document.querySelector('[data-header-spacer]');
+      const container = document.querySelector('[data-models-container]');
+      
+      if (bannerElement) {
+        const bannerHeight = bannerElement.getBoundingClientRect().height;
+        const headerTop = 65 + bannerHeight;
+        document.documentElement.style.setProperty('--models-header-top', `${headerTop}px`);
+        
+        // Update header element directly
+        const header = document.querySelector('[data-models-header]');
+        if (header) {
+          (header as HTMLElement).style.top = `${headerTop}px`;
+        }
+        
+        // Update container margin
+        if (container) {
+          (container as HTMLElement).style.marginTop = `-${headerTop}px`;
+        }
+        
+        // Update models list margin - add more space when banner is visible
+        const modelsList = document.querySelector('[data-models-list]');
+        if (modelsList) {
+          (modelsList as HTMLElement).style.marginTop = '140px';
+        }
+        
+        // Update spacer
+        if (spacer) {
+          (spacer as HTMLElement).style.height = `${headerTop}px`;
+        }
+      } else {
+        document.documentElement.style.setProperty('--models-header-top', '65px');
+        
+        // Update header element directly
+        const header = document.querySelector('[data-models-header]');
+        if (header) {
+          (header as HTMLElement).style.top = '65px';
+        }
+        
+        // Update container margin - use negative margin to pull content up but keep header visible
+        if (container) {
+          (container as HTMLElement).style.marginTop = '-50px';
+        }
+        
+        // Update models list margin - keep normal spacing when banner is closed
+        const modelsList = document.querySelector('[data-models-list]');
+        if (modelsList) {
+          (modelsList as HTMLElement).style.marginTop = '80px';
+        }
+        
+        // Update spacer
+        if (spacer) {
+          (spacer as HTMLElement).style.height = '65px';
+        }
+      }
+    };
+
+    // Initial update with delay to ensure banner is rendered
+    setTimeout(updateHeaderPosition, 50);
+
+    // Watch for banner visibility changes
+    const observer = new MutationObserver(() => {
+      setTimeout(updateHeaderPosition, 50);
+    });
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class']
+    });
+
+    // Also check periodically in case banner renders after initial check
+    const interval = setInterval(updateHeaderPosition, 200);
+    
+    return () => {
+      observer.disconnect();
+      clearInterval(interval);
+    };
+  }, []);
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -277,8 +424,9 @@ export default function ModelsClient({
   const [selectedGateways, setSelectedGateways] = useState<string[]>(searchParams.get('gateways')?.split(',').filter(Boolean) || []);
   const [selectedModelSeries, setSelectedModelSeries] = useState<string[]>(searchParams.get('modelSeries')?.split(',').filter(Boolean) || []);
   const [pricingFilter, setPricingFilter] = useState<'all' | 'free' | 'paid'>(searchParams.get('pricing') as 'all' | 'free' | 'paid' || 'all');
-  const [sortBy, setSortBy] = useState(searchParams.get('sortBy') || 'tokens-desc');
+  const [sortBy, setSortBy] = useState(searchParams.get('sortBy') || 'popular');
   const [releaseDateFilter, setReleaseDateFilter] = useState<string>(searchParams.get('releaseDate') || 'all');
+  const [privacyFilter, setPrivacyFilter] = useState<'all' | 'private' | 'public'>(searchParams.get('privacy') as 'all' | 'private' | 'public' || 'all');
 
   // Mark explore task as complete in onboarding when page loads
   useEffect(() => {
@@ -325,12 +473,13 @@ export default function ModelsClient({
     if (selectedGateways.length > 0) params.set('gateways', selectedGateways.join(','));
     if (selectedModelSeries.length > 0) params.set('modelSeries', selectedModelSeries.join(','));
     if (pricingFilter !== 'all') params.set('pricing', pricingFilter);
-    if (sortBy !== 'tokens-desc') params.set('sortBy', sortBy);
+    if (privacyFilter !== 'all') params.set('privacy', privacyFilter);
+    if (sortBy !== 'popular') params.set('sortBy', sortBy);
     if (releaseDateFilter !== 'all') params.set('releaseDate', releaseDateFilter);
 
     const queryString = params.toString();
     router.replace(queryString ? `?${queryString}` : '/models', { scroll: false });
-  }, [searchTerm, selectedInputFormats, selectedOutputFormats, contextLengthRange, promptPricingRange, selectedParameters, selectedDevelopers, selectedGateways, selectedModelSeries, pricingFilter, sortBy, releaseDateFilter, router]);
+  }, [searchTerm, selectedInputFormats, selectedOutputFormats, contextLengthRange, promptPricingRange, selectedParameters, selectedDevelopers, selectedGateways, selectedModelSeries, pricingFilter, privacyFilter, sortBy, releaseDateFilter, router]);
 
   const handleCheckboxChange = (setter: React.Dispatch<React.SetStateAction<string[]>>) => (value: string, checked: boolean) => {
     setter(prev => checked ? [...prev, value] : prev.filter(v => v !== value));
@@ -365,7 +514,8 @@ export default function ModelsClient({
     setSelectedGateways([]);
     setSelectedModelSeries([]);
     setPricingFilter('all');
-    setSortBy('tokens-desc');
+    setPrivacyFilter('all');
+    setSortBy('popular');
     setReleaseDateFilter('all');
   };
 
@@ -374,7 +524,7 @@ export default function ModelsClient({
     contextLengthRange[0] !== 0 || contextLengthRange[1] !== 1024 ||
     promptPricingRange[0] !== 0 || promptPricingRange[1] !== 10 ||
     selectedParameters.length > 0 ||
-    selectedDevelopers.length > 0 || selectedGateways.length > 0 || selectedModelSeries.length > 0 || pricingFilter !== 'all' || sortBy !== 'tokens-desc' || releaseDateFilter !== 'all';
+    selectedDevelopers.length > 0 || selectedGateways.length > 0 || selectedModelSeries.length > 0 || pricingFilter !== 'all' || privacyFilter !== 'all' || sortBy !== 'popular' || releaseDateFilter !== 'all';
 
   // Calculate search matches separately from other filters
   const searchFilteredModels = useMemo(() => {
@@ -422,6 +572,11 @@ export default function ModelsClient({
       const seriesMatch = selectedModelSeries.length === 0 || selectedModelSeries.includes(getModelSeries(model));
       const pricingMatch = pricingFilter === 'all' || (pricingFilter === 'free' && isFree) || (pricingFilter === 'paid' && !isFree);
 
+      // Privacy filter
+      const privacyMatch = privacyFilter === 'all' ||
+        (privacyFilter === 'private' && model.is_private === true) ||
+        (privacyFilter === 'public' && (model.is_private === false || model.is_private === undefined));
+
       // Release date filter
       const now = Date.now() / 1000; // Convert to Unix timestamp
       const created = model.created || 0;
@@ -436,13 +591,21 @@ export default function ModelsClient({
         releaseDateMatch = created > 0 && created >= now - (365 * 24 * 60 * 60);
       }
 
-      return inputFormatMatch && outputFormatMatch && contextMatch && priceMatch && parameterMatch && developerMatch && gatewayMatch && seriesMatch && pricingMatch && releaseDateMatch;
+      return inputFormatMatch && outputFormatMatch && contextMatch && priceMatch && parameterMatch && developerMatch && gatewayMatch && seriesMatch && pricingMatch && privacyMatch && releaseDateMatch;
     });
 
     // Then sort the filtered results
     const sorted = [...filtered];
     sorted.sort((a, b) => {
         switch (sortBy) {
+            case 'popular':
+                // Sort by number of gateways (more gateways = more popular)
+                const aGateways = (a.source_gateways && a.source_gateways.length > 0) ? a.source_gateways.length : (a.source_gateway ? 1 : 0);
+                const bGateways = (b.source_gateways && b.source_gateways.length > 0) ? b.source_gateways.length : (b.source_gateway ? 1 : 0);
+                return bGateways - aGateways;
+            case 'newest':
+                // Sort by creation date (newest first)
+                return (b.created || 0) - (a.created || 0);
             case 'tokens-desc':
                 return b.context_length - a.context_length;
             case 'tokens-asc':
@@ -459,7 +622,7 @@ export default function ModelsClient({
     const endTime = performance.now();
     console.log(`[Models] Filtering took ${(endTime - startTime).toFixed(2)}ms (${sorted.length} results)`);
     return sorted;
-  }, [searchFilteredModels, selectedInputFormats, selectedOutputFormats, contextLengthRange, promptPricingRange, selectedParameters, selectedDevelopers, selectedGateways, selectedModelSeries, pricingFilter, sortBy, getModelSeries]);
+  }, [searchFilteredModels, selectedInputFormats, selectedOutputFormats, contextLengthRange, promptPricingRange, selectedParameters, selectedDevelopers, selectedGateways, selectedModelSeries, pricingFilter, privacyFilter, sortBy, releaseDateFilter, getModelSeries]);
 
   // Visible models for infinite scroll
   const visibleModels = useMemo(() => {
@@ -471,7 +634,7 @@ export default function ModelsClient({
   // Reset visible count when filters change
   useEffect(() => {
     setVisibleCount(24);
-  }, [searchTerm, selectedInputFormats, selectedOutputFormats, contextLengthRange, promptPricingRange, selectedParameters, selectedDevelopers, selectedGateways, selectedModelSeries, pricingFilter, sortBy, releaseDateFilter]);
+  }, [searchTerm, selectedInputFormats, selectedOutputFormats, contextLengthRange, promptPricingRange, selectedParameters, selectedDevelopers, selectedGateways, selectedModelSeries, pricingFilter, privacyFilter, sortBy, releaseDateFilter]);
 
   // Intersection Observer for infinite scroll
   useEffect(() => {
@@ -526,6 +689,19 @@ export default function ModelsClient({
       }
     });
     return { free: freeCount, paid: paidCount, all: deduplicatedModels.length };
+  }, [deduplicatedModels]);
+
+  const privacyCounts = useMemo(() => {
+    let privateCount = 0;
+    let publicCount = 0;
+    deduplicatedModels.forEach(m => {
+      if (m.is_private === true) {
+        privateCount++;
+      } else {
+        publicCount++;
+      }
+    });
+    return { private: privateCount, public: publicCount, all: deduplicatedModels.length };
   }, [deduplicatedModels]);
 
   const allParametersWithCounts = useMemo(() => {
@@ -588,7 +764,7 @@ export default function ModelsClient({
     // Define all known gateways that should appear in the filter
     // This ensures all gateways are visible even if they have 0 models currently
     // Excludes 'portkey' as it's deprecated (use individual Portkey SDK providers instead)
-    const allKnownGateways = ['featherless', 'openrouter', 'groq', 'together', 'fireworks', 'chutes', 'deepinfra', 'google', 'cerebras', 'nebius', 'xai', 'novita', 'huggingface', 'aimo', 'near', 'fal', 'vercel-ai-gateway'];
+    const allKnownGateways = ['featherless', 'openrouter', 'groq', 'together', 'fireworks', 'chutes', 'deepinfra', 'google', 'cerebras', 'nebius', 'xai', 'novita', 'huggingface', 'aimo', 'near', 'fal', 'vercel-ai-gateway', 'helicone'];
 
     // Log gateway counts for debugging
     const gatewayStats = allKnownGateways.map(g => ({
@@ -633,12 +809,12 @@ export default function ModelsClient({
 
   return (
     <SidebarProvider>
-      <div className="relative flex w-full h-full justify-center overflow-hidden">
+      <div className="relative flex w-full justify-center">
         <Sidebar
           variant="sidebar"
           collapsible="offcanvas"
         >
-          <SidebarContent className="p-4 overflow-y-auto">
+          <SidebarContent className="p-4 pb-20 overflow-y-auto">
             <SidebarGroup>
               <SidebarGroupLabel>Input Formats</SidebarGroupLabel>
               <div className="flex flex-col gap-2">
@@ -646,7 +822,9 @@ export default function ModelsClient({
                   const icon = item.value.toLowerCase() === 'text' ? <BookText className="w-4 h-4"/> :
                                item.value.toLowerCase() === 'image' ? <ImageIcon className="w-4 h-4"/> :
                                item.value.toLowerCase() === 'file' ? <FileText className="w-4 h-4"/> :
-                               item.value.toLowerCase() === 'audio' ? <Music className="w-4 h-4"/> : null;
+                               item.value.toLowerCase() === 'audio' ? <Music className="w-4 h-4"/> :
+                               item.value.toLowerCase() === 'video' ? <Video className="w-4 h-4"/> :
+                               item.value.toLowerCase() === '3d' ? <Box className="w-4 h-4"/> : null;
                   return (
                     <div key={item.value} className="flex items-center justify-between space-x-2">
                       <div className="flex items-center space-x-2 flex-1 min-w-0">
@@ -673,7 +851,9 @@ export default function ModelsClient({
                   const icon = item.value.toLowerCase() === 'text' ? <BookText className="w-4 h-4"/> :
                                item.value.toLowerCase() === 'image' ? <ImageIcon className="w-4 h-4"/> :
                                item.value.toLowerCase() === 'file' ? <FileText className="w-4 h-4"/> :
-                               item.value.toLowerCase() === 'audio' ? <Music className="w-4 h-4"/> : null;
+                               item.value.toLowerCase() === 'audio' ? <Music className="w-4 h-4"/> :
+                               item.value.toLowerCase() === 'video' ? <Video className="w-4 h-4"/> :
+                               item.value.toLowerCase() === '3d' ? <Box className="w-4 h-4"/> : null;
                   return (
                     <div key={item.value} className="flex items-center justify-between space-x-2">
                       <div className="flex items-center space-x-2 flex-1 min-w-0">
@@ -703,6 +883,20 @@ export default function ModelsClient({
                   <SelectItem value="all">All models ({pricingCounts.all})</SelectItem>
                   <SelectItem value="free">Free only ({pricingCounts.free})</SelectItem>
                   <SelectItem value="paid">Paid only ({pricingCounts.paid})</SelectItem>
+                </SelectContent>
+              </Select>
+            </SidebarGroup>
+
+            <SidebarGroup>
+              <SidebarGroupLabel>Privacy</SidebarGroupLabel>
+              <Select value={privacyFilter} onValueChange={(value: 'all' | 'private' | 'public') => setPrivacyFilter(value)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="All models" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All models ({privacyCounts.all})</SelectItem>
+                  <SelectItem value="private">Private only ({privacyCounts.private})</SelectItem>
+                  <SelectItem value="public">Public only ({privacyCounts.public})</SelectItem>
                 </SelectContent>
               </Select>
             </SidebarGroup>
@@ -757,29 +951,71 @@ export default function ModelsClient({
           </SidebarContent>
         </Sidebar>
 
-        <SidebarInset className="flex-1 overflow-y-auto overflow-x-hidden h-full flex flex-col">
-          <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8 pb-24 overflow-x-hidden">
-          <div className="sticky top-0 z-40 bg-background border-b flex flex-col gap-3 mb-6 w-full -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-4">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 w-full">
-              <div className="flex items-center gap-3">
-                  <SidebarTrigger className="lg:hidden" />
-                  <h1 className="text-2xl font-bold">Models</h1>
-                  {isLoadingMore && (
-                    <Badge variant="secondary" className="text-xs animate-pulse">
-                      Loading more...
-                    </Badge>
-                  )}
+        <SidebarInset className="flex-1 overflow-x-hidden flex flex-col">
+          <div data-models-container className="w-full pb-24 overflow-x-hidden -mt-[115px] has-onboarding-banner:-mt-[115px]">
+          <div data-models-header className="sticky z-25 bg-background border-b flex flex-col gap-3 w-full px-4 sm:px-6 lg:px-8 pt-3 pb-3 top-[65px] has-onboarding-banner:top-[125px]" style={{ transition: 'top 0.3s ease' }}>
+            <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 w-full">
+              <div className="flex items-center gap-3 flex-1 min-w-0 w-full lg:w-auto">
+                <SidebarTrigger className="lg:hidden" />
+                <h1 className="text-2xl font-bold whitespace-nowrap">Models</h1>
+                {isLoadingMore && (
+                  <Badge variant="secondary" className="text-xs animate-pulse">
+                    Loading more...
+                  </Badge>
+                )}
+                <div className="relative flex-1 max-w-md ml-auto lg:ml-4">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Filter models"
+                    className="pl-9 bg-input"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                </div>
               </div>
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3 flex-shrink-0 w-full lg:w-auto justify-between lg:justify-end">
                 <span className={`text-sm whitespace-nowrap ${isLoadingModels || isLoadingMore ? 'shimmer-text' : 'text-muted-foreground'}`}>
                   {isLoadingModels || isLoadingMore
                     ? `${deduplicatedModels.length} models available,  loading...`
                     : `${filteredModels.length} / ${deduplicatedModels.length} models`
                   }
                 </span>
-                {hasActiveFilters && (
-                  <Button variant="ghost" size="sm" onClick={resetFilters}>Clear All Filters</Button>
-                )}
+                <div className="flex items-center gap-2">
+                  {hasActiveFilters && (
+                    <Button variant="ghost" size="sm" onClick={resetFilters} className="whitespace-nowrap">Clear All Filters</Button>
+                  )}
+                  <Select value={sortBy} onValueChange={setSortBy}>
+                    <SelectTrigger className="w-[180px] h-9">
+                      <SelectValue placeholder="Sort" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="popular">Popular</SelectItem>
+                      <SelectItem value="newest">Newest</SelectItem>
+                      <SelectItem value="tokens-desc">Tokens (High to Low)</SelectItem>
+                      <SelectItem value="tokens-asc">Tokens (Low to High)</SelectItem>
+                      <SelectItem value="price-desc">Price (High to Low)</SelectItem>
+                      <SelectItem value="price-asc">Price (Low to High)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <div className="hidden lg:flex items-center gap-1 bg-muted p-1 rounded-md">
+                    <Button
+                      variant={layout === 'grid' ? 'secondary' : 'ghost'}
+                      size="icon"
+                      onClick={() => setLayout('grid')}
+                      className="h-8 w-8"
+                    >
+                      <LayoutGrid className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant={layout === 'list' ? 'secondary' : 'ghost'}
+                      size="icon"
+                      onClick={() => setLayout('list')}
+                      className="h-8 w-8"
+                    >
+                      <LayoutList className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -805,6 +1041,14 @@ export default function ModelsClient({
                 <Badge variant="secondary" className="gap-1">
                   {pricingFilter === 'free' ? 'Free only' : 'Paid only'}
                   <button onClick={() => setPricingFilter('all')} className="ml-1 hover:bg-muted rounded-sm">
+                    <X className="h-3 w-3" />
+                  </button>
+                </Badge>
+              )}
+              {privacyFilter !== 'all' && (
+                <Badge variant="secondary" className="gap-1">
+                  {privacyFilter === 'private' ? 'Private only' : 'Public only'}
+                  <button onClick={() => setPrivacyFilter('all')} className="ml-1 hover:bg-muted rounded-sm">
                     <X className="h-3 w-3" />
                   </button>
                 </Badge>
@@ -871,45 +1115,7 @@ export default function ModelsClient({
             </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-4 mb-6">
-              <div className="relative w-full">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                  placeholder="Filter models"
-                  className="pl-9 bg-input"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-              />
-              </div>
-              <Select value={sortBy} onValueChange={setSortBy}>
-              <SelectTrigger className="w-full sm:w-[180px]">
-                  <SelectValue placeholder="Sort" />
-              </SelectTrigger>
-              <SelectContent>
-                  <SelectItem value="tokens-desc">Tokens (High to Low)</SelectItem>
-                  <SelectItem value="tokens-asc">Tokens (Low to High)</SelectItem>
-                  <SelectItem value="price-desc">Price (High to Low)</SelectItem>
-                  <SelectItem value="price-asc">Price (Low to High)</SelectItem>
-              </SelectContent>
-              </Select>
-              <div className="flex items-center gap-1 bg-muted p-1 rounded-md">
-              <Button
-                  variant={layout === 'grid' ? 'secondary' : 'ghost'}
-                  size="icon"
-                  onClick={() => setLayout('grid')}
-              >
-                  <LayoutGrid className="w-5 h-5" />
-              </Button>
-              <Button
-                  variant={layout === 'list' ? 'secondary' : 'ghost'}
-                  size="icon"
-                  onClick={() => setLayout('list')}
-              >
-                  <LayoutList className="w-5 h-5" />
-              </Button>
-              </div>
-          </div>
-
+          <div data-models-list className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 mt-20 has-onboarding-banner:mt-40" style={{ transition: 'margin-top 0.3s ease' }}>
           <div
             className={
               layout === 'grid'
@@ -960,6 +1166,7 @@ export default function ModelsClient({
               </div>
             </div>
           )}
+          </div>
           </div>
         </SidebarInset>
       </div>

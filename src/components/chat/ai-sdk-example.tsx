@@ -260,7 +260,7 @@ export function AISDKChatExample() {
  *
  * 2. Request Routing:
  *    - Use useGatewayRouter().isAISDK(modelId)
- *    - Route to /api/chat/ai-sdk or /api/chat/completions
+ *    - Route to /api/chat/ai-sdk or /v1/chat/completions
  *    - Set enable_thinking: supportsThinking
  *
  * 3. Stream Handling:

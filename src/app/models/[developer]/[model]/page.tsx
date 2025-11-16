@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend } from 'recharts';
 import { format } from 'date-fns';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { Maximize, Copy, Check } from 'lucide-react';
+import { Maximize, Copy, Check, Lock } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { providerData } from '@/lib/provider-data';
 import { generateChartData, generateStatsTable } from '@/lib/data';
@@ -32,12 +32,13 @@ interface Model {
   pricing: {
     prompt: string;
     completion: string;
-  };
+  } | null;
   architecture: {
     input_modalities: string[];
   };
   supported_parameters: string[];
   provider_slug: string;
+  is_private?: boolean; // Indicates if model is on a private network (e.g., NEAR)
 }
 
 const Section = ({ title, description, children, className }: { title: string, description?: string, children: React.ReactNode, className?: string }) => (
@@ -171,10 +172,132 @@ export default function ModelProfilePage() {
     const [selectedLanguage, setSelectedLanguage] = useState<'curl' | 'python' | 'openai-python' | 'typescript' | 'openai-typescript'>('curl');
     const [copiedStates, setCopiedStates] = useState<Record<string, boolean>>({});
     const [apiKey, setApiKey] = useState('gw_live_YOUR_API_KEY_HERE');
+    const [selectedProvider, setSelectedProvider] = useState<string>('gatewayz');
+    const [selectedPlaygroundProvider, setSelectedPlaygroundProvider] = useState<string>('gatewayz');
 
-    // Handle catch-all route - params.name will be an array like ['x-ai', 'grok-4-fast']
-    const nameParam = params.name as string | string[];
-    let modelId = Array.isArray(nameParam) ? nameParam.join('/') : nameParam;
+    // Provider configurations for API calls
+    const providerConfigs: Record<string, {
+        name: string;
+        baseUrl: string;
+        requiresApiKey: boolean;
+        apiKeyPlaceholder: string;
+        modelIdFormat?: (modelId: string) => string;
+    }> = {
+        gatewayz: {
+            name: 'Gatewayz (Unified)',
+            baseUrl: 'https://api.gatewayz.ai/v1',
+            requiresApiKey: true,
+            apiKeyPlaceholder: apiKey,
+        },
+        openrouter: {
+            name: 'OpenRouter',
+            baseUrl: 'https://openrouter.ai/api/v1',
+            requiresApiKey: true,
+            apiKeyPlaceholder: 'sk-or-v1-...',
+        },
+        groq: {
+            name: 'Groq',
+            baseUrl: 'https://api.groq.com/openai/v1',
+            requiresApiKey: true,
+            apiKeyPlaceholder: 'gsk_...',
+        },
+        together: {
+            name: 'Together AI',
+            baseUrl: 'https://api.together.xyz/v1',
+            requiresApiKey: true,
+            apiKeyPlaceholder: '...',
+        },
+        fireworks: {
+            name: 'Fireworks',
+            baseUrl: 'https://api.fireworks.ai/inference/v1',
+            requiresApiKey: true,
+            apiKeyPlaceholder: 'fw_...',
+        },
+        deepinfra: {
+            name: 'DeepInfra',
+            baseUrl: 'https://api.deepinfra.com/v1/openai',
+            requiresApiKey: true,
+            apiKeyPlaceholder: '...',
+        },
+        google: {
+            name: 'Google AI',
+            baseUrl: 'https://generativelanguage.googleapis.com/v1',
+            requiresApiKey: true,
+            apiKeyPlaceholder: 'AIza...',
+        },
+        cerebras: {
+            name: 'Cerebras',
+            baseUrl: 'https://api.cerebras.ai/v1',
+            requiresApiKey: true,
+            apiKeyPlaceholder: 'csk-...',
+        },
+        xai: {
+            name: 'xAI',
+            baseUrl: 'https://api.x.ai/v1',
+            requiresApiKey: true,
+            apiKeyPlaceholder: 'xai-...',
+        },
+        huggingface: {
+            name: 'Hugging Face',
+            baseUrl: 'https://api-inference.huggingface.co/models',
+            requiresApiKey: true,
+            apiKeyPlaceholder: 'hf_...',
+        },
+        near: {
+            name: 'NEAR Protocol',
+            baseUrl: 'https://api.near.ai/v1',
+            requiresApiKey: true,
+            apiKeyPlaceholder: 'near_...',
+        },
+        nebius: {
+            name: 'Nebius AI Studio',
+            baseUrl: 'https://api.studio.nebius.ai/v1',
+            requiresApiKey: true,
+            apiKeyPlaceholder: '...',
+        },
+        featherless: {
+            name: 'Featherless',
+            baseUrl: 'https://api.featherless.ai/v1',
+            requiresApiKey: true,
+            apiKeyPlaceholder: '...',
+        },
+        chutes: {
+            name: 'Chutes',
+            baseUrl: 'https://api.chutes.ai/v1',
+            requiresApiKey: true,
+            apiKeyPlaceholder: '...',
+        },
+        portkey: {
+            name: 'Portkey',
+            baseUrl: 'https://api.portkey.ai/v1',
+            requiresApiKey: true,
+            apiKeyPlaceholder: '...',
+        },
+        novita: {
+            name: 'Novita AI',
+            baseUrl: 'https://api.novita.ai/v3/openai',
+            requiresApiKey: true,
+            apiKeyPlaceholder: '...',
+        },
+        aimo: {
+            name: 'AIMO Network',
+            baseUrl: 'https://api.aimo.network/v1',
+            requiresApiKey: true,
+            apiKeyPlaceholder: '...',
+        },
+        fal: {
+            name: 'FAL AI',
+            baseUrl: 'https://fal.run/fal-ai',
+            requiresApiKey: true,
+            apiKeyPlaceholder: '...',
+        },
+    };
+
+    // Handle new route structure - params.developer and params.model
+    const developer = (params.developer as string)?.toLowerCase() || '';
+    const modelNameParam = (params.model as string) || '';
+    // Store the URL-safe model name for searching
+    let modelId = `${developer}/${modelNameParam}`;
     // Decode URL-encoded characters (e.g., %40 -> @)
     modelId = decodeURIComponent(modelId);
 
@@ -186,6 +309,72 @@ export default function ModelProfilePage() {
         }
     }, []);
 
+    // Select default provider based on lowest cost or latency
+    useEffect(() => {
+        if (modelProviders.length > 0 && model) {
+            // For models with provider-specific prefixes (near/, aimo/, etc.),
+            // prefer using their native gateway if available
+            const modelIdLower = model.id.toLowerCase();
+            let preferredGateway: string | null = null;
+
+            if (modelIdLower.startsWith('near/') && modelProviders.includes('near')) {
+                preferredGateway = 'near';
+            } else if (modelIdLower.startsWith('aimo/') && modelProviders.includes('aimo')) {
+                preferredGateway = 'aimo';
+            } else if (modelIdLower.startsWith('huggingface/') && modelProviders.includes('huggingface')) {
+                preferredGateway = 'huggingface';
+            }
+
+            if (preferredGateway) {
+                setSelectedProvider(preferredGateway);
+                setSelectedPlaygroundProvider(preferredGateway);
+                return;
+            }
+
+            // Get provider performance data if available
+            const modelProviderData = providerData[model.name] || [];
+
+            if (modelProviderData.length > 0) {
+                // Find provider with lowest total cost (input + output)
+                let bestProvider = modelProviderData[0];
+                for (const provider of modelProviderData) {
+                    const currentCost = provider.inputCost + provider.outputCost;
+                    const bestCost = bestProvider.inputCost + bestProvider.outputCost;
+
+                    // Use cost as primary criteria, latency as tiebreaker
+                    if (currentCost < bestCost ||
+                        (currentCost === bestCost && provider.latency && bestProvider.latency && provider.latency < bestProvider.latency)) {
+                        bestProvider = provider;
+                    }
+                }
+
+                // Map provider name to gateway slug
+                const providerNameToGateway: Record<string, string> = {
+                    'DeepInfra': 'deepinfra',
+                    'Nebius AI Studio': 'nebius',
+                    'Fireworks': 'fireworks',
+                    'Together AI': 'together',
+                    'Groq': 'groq',
+                    'Google': 'google',
+                    'Anthropic': 'gatewayz',
+                    'AWS Bedrock': 'gatewayz',
+                    'OpenRouter': 'openrouter',
+                    'Cerebras': 'cerebras',
+                    'xAI': 'xai',
+                    'Hugging Face': 'huggingface',
+                };
+
+                const gateway = providerNameToGateway[bestProvider.name] || modelProviders[0];
+                setSelectedProvider(gateway);
+                setSelectedPlaygroundProvider(gateway);
+            } else {
+                // No performance data, default to first available provider
+                setSelectedProvider(modelProviders[0]);
+                setSelectedPlaygroundProvider(modelProviders[0]);
+            }
+        }
+    }, [modelProviders, model]);
+
     useEffect(() => {
         const CACHE_KEY = 'gatewayz_models_cache_v4_all_gateways';
         const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
@@ -193,13 +382,19 @@ export default function ModelProfilePage() {
 
         // Load static data immediately for instant page render (only if found)
         const staticModelsTransformed = staticModels.map(transformStaticModel);
+        const normalizeForUrl = (str: string): string => {
+            return str.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+        };
+        const urlNormalizedSearchName = normalizeForUrl(modelNameParam);
+
         let staticFoundModel = staticModelsTransformed.find((m: Model) => m.id === modelId);
 
-        // If not found by full ID, try matching by name (for AIMO models)
+        // If not found by full ID, try matching by name using URL normalization
         if (!staticFoundModel) {
             staticFoundModel = staticModelsTransformed.find((m: Model) => {
-                const modelNamePart = m.id.includes(':') ? m.id.split(':')[1] : m.id;
-                return modelNamePart === modelId || m.id.split('/').pop() === modelId;
+                const modelNamePart = m.id.split('/').pop() || '';
+                const urlNormalizedDataName = normalizeForUrl(modelNamePart);
+                return urlNormalizedDataName === urlNormalizedSearchName && m.provider_slug?.toLowerCase() === developer;
             });
         }
 
@@ -226,11 +421,12 @@ export default function ModelProfilePage() {
                                 setAllModels(models);
                                 let foundModel = models.find((m: Model) => m.id === modelId);
 
-                                // If not found by full ID, try matching by name (for AIMO models)
+                                // If not found by full ID, try matching by name using URL normalization
                                 if (!foundModel) {
                                     foundModel = models.find((m: Model) => {
-                                        const modelNamePart = m.id.includes(':') ? m.id.split(':')[1] : m.id;
-                                        return modelNamePart === modelId || m.id.split('/').pop() === modelId;
+                                        const modelNamePart = m.id.split('/').pop() || '';
+                                        const urlNormalizedDataName = normalizeForUrl(modelNamePart);
+                                        return urlNormalizedDataName === urlNormalizedSearchName && m.provider_slug?.toLowerCase() === developer;
                                     });
                                 }
 
@@ -250,82 +446,91 @@ export default function ModelProfilePage() {
 
                 // Fetch from all gateways to get all models via frontend API proxy
                 // Add timeout to prevent hanging
-                const fetchWithTimeout = (url: string, timeout = 10000) => {
+                const fetchWithTimeout = (url: string, timeout = 5000) => {
                     return Promise.race([
-                        fetch(url),
+                        fetch(url, {
+                            signal: AbortSignal.timeout(timeout)
+                        }).catch(err => {
+                            // Handle both fetch errors and timeout errors
+                            console.warn(`Fetch timeout or error for ${url}:`, err.message);
+                            return null as any;
+                        }),
                         new Promise<Response>((_, reject) =>
                             setTimeout(() => reject(new Error('Request timeout')), timeout)
                         )
-                    ]);
+                    ]).catch(err => {
+                        console.warn(`Timeout wrapper error for ${url}:`, err.message);
+                        return null as any;
+                    });
                 };
 
                 console.log(`[ModelProfilePage] Fetching from all gateway APIs...`);
                 const [openrouterRes, portkeyRes, featherlessRes, chutesRes, fireworksRes, togetherRes, groqRes, deepinfraRes, googleRes, cerebrasRes, nebiusRes, xaiRes, novitaRes, huggingfaceRes, aimoRes, nearRes, falRes] = await Promise.allSettled([
-                    fetchWithTimeout(`/api/models?gateway=openrouter`).catch(err => {
+                    fetchWithTimeout(`/api/models?gateway=openrouter`, 5000).catch(err => {
                         console.error('OpenRouter fetch error:', err);
                         return null;
                     }),
-                    fetchWithTimeout(`/api/models?gateway=portkey`).catch(err => {
+                    fetchWithTimeout(`/api/models?gateway=portkey`, 5000).catch(err => {
                         console.error('Portkey fetch error:', err);
                         return null;
                     }),
-                    fetchWithTimeout(`/api/models?gateway=featherless`).catch(err => {
+                    fetchWithTimeout(`/api/models?gateway=featherless`, 5000).catch(err => {
                         console.error('Featherless fetch error:', err);
                         return null;
                     }),
-                    fetchWithTimeout(`/api/models?gateway=chutes`).catch(err => {
+                    fetchWithTimeout(`/api/models?gateway=chutes`, 5000).catch(err => {
                         console.error('Chutes fetch error:', err);
                         return null;
                     }),
-                    fetchWithTimeout(`/api/models?gateway=fireworks`).catch(err => {
+                    fetchWithTimeout(`/api/models?gateway=fireworks`, 5000).catch(err => {
                         console.error('Fireworks fetch error:', err);
                         return null;
                     }),
-                    fetchWithTimeout(`/api/models?gateway=together`).catch(err => {
+                    fetchWithTimeout(`/api/models?gateway=together`, 5000).catch(err => {
                         console.error('Together fetch error:', err);
                         return null;
                     }),
-                    fetchWithTimeout(`/api/models?gateway=groq`).catch(err => {
+                    fetchWithTimeout(`/api/models?gateway=groq`, 5000).catch(err => {
                         console.error('Groq fetch error:', err);
                         return null;
                     }),
-                    fetchWithTimeout(`/api/models?gateway=deepinfra`).catch(err => {
+                    fetchWithTimeout(`/api/models?gateway=deepinfra`, 5000).catch(err => {
                         console.error('DeepInfra fetch error:', err);
                         return null;
                     }),
-                    fetchWithTimeout(`/api/models?gateway=google`).catch(err => {
+                    fetchWithTimeout(`/api/models?gateway=google`, 5000).catch(err => {
                         console.error('Google fetch error:', err);
                         return null;
                     }),
-                    fetchWithTimeout(`/api/models?gateway=cerebras`).catch(err => {
+                    fetchWithTimeout(`/api/models?gateway=cerebras`, 5000).catch(err => {
                         console.error('Cerebras fetch error:', err);
                         return null;
                     }),
-                    fetchWithTimeout(`/api/models?gateway=nebius`).catch(err => {
+                    fetchWithTimeout(`/api/models?gateway=nebius`, 5000).catch(err => {
                         console.error('Nebius fetch error:', err);
                         return null;
                     }),
-                    fetchWithTimeout(`/api/models?gateway=xai`).catch(err => {
+                    fetchWithTimeout(`/api/models?gateway=xai`, 5000).catch(err => {
                         console.error('xAI fetch error:', err);
                         return null;
                     }),
-                    fetchWithTimeout(`/api/models?gateway=novita`).catch(err => {
+                    fetchWithTimeout(`/api/models?gateway=novita`, 5000).catch(err => {
                         console.error('Novita fetch error:', err);
                         return null;
                     }),
-                    fetchWithTimeout(`/api/models?gateway=huggingface`, 70000).catch(err => {
+                    fetchWithTimeout(`/api/models?gateway=huggingface`, 15000).catch(err => {
                         console.error('HuggingFace fetch error:', err);
                         return null;
                     }),
-                    fetchWithTimeout(`/api/models?gateway=aimo`, 70000).catch(err => {
+                    fetchWithTimeout(`/api/models?gateway=aimo`, 15000).catch(err => {
                         console.error('AIMO fetch error:', err);
                         return null;
                     }),
-                    fetchWithTimeout(`/api/models?gateway=near`, 70000).catch(err => {
+                    fetchWithTimeout(`/api/models?gateway=near`, 15000).catch(err => {
                         console.error('NEAR fetch error:', err);
                         return null;
                     }),
-                    fetchWithTimeout(`/api/models?gateway=fal`, 70000).catch(err => {
+                    fetchWithTimeout(`/api/models?gateway=fal`, 15000).catch(err => {
                         console.error('FAL fetch error:', err);
                         return null;
                     })
@@ -353,6 +558,11 @@ export default function ModelProfilePage() {
                 const getData = async (result: PromiseSettledResult<Response | null>) => {
                     if (result.status === 'fulfilled' && result.value) {
                         try {
+                            // Check if response is ok before parsing
+                            if (!result.value.ok) {
+                                console.warn(`Gateway response not ok: ${result.value.status} ${result.value.statusText}`);
+                                return [];
+                            }
                             const data = await result.value.json();
                             console.log(`Gateway data parsed, models count:`, data.data?.length || 0);
                             return data.data || [];
@@ -361,7 +571,11 @@ export default function ModelProfilePage() {
                             return [];
                         }
                     }
-                    console.log('Gateway fetch was not successful:', result.status);
+                    if (result.status === 'rejected') {
+                        console.warn('Gateway fetch rejected:', result.reason);
+                    } else {
+                        console.log('Gateway fetch returned null or undefined');
+                    }
                     return [];
                 };
 
@@ -449,12 +663,12 @@ export default function ModelProfilePage() {
                     // Find model by ID or by name (for AIMO models where URL uses just the model name)
                     let foundModel = models.find((m: Model) => m.id === modelId);
 
-                    // If not found by full ID, try matching by the part after the colon (for AIMO models)
+                    // If not found by full ID, try matching by name using URL normalization
                     if (!foundModel) {
                         foundModel = models.find((m: Model) => {
-                            // For AIMO models (providerId:model-name), extract the model name
-                            const modelNamePart = m.id.includes(':') ? m.id.split(':')[1] : m.id;
-                            return modelNamePart === modelId || m.id.split('/').pop() === modelId;
+                            const modelNamePart = m.id.split('/').pop() || '';
+                            const urlNormalizedDataName = normalizeForUrl(modelNamePart);
+                            return urlNormalizedDataName === urlNormalizedSearchName && m.provider_slug?.toLowerCase() === developer;
                         });
                     }
 
@@ -472,28 +686,35 @@ export default function ModelProfilePage() {
                     const providers: string[] = [];
                     const modelIdLower = modelId.toLowerCase();
 
+                    // Helper function to normalize model names for URL matching
+                    // Converts spaces, dots, underscores, and hyphens to hyphens
+                    const normalizeForUrl = (str: string): string => {
+                        return str.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+                    };
+
                     // Helper function to check if model exists in gateway data
                     const hasModel = (data: Model[], gateway: string) => {
                         const found = data.some((m: Model) => {
+                            // Extract just the model name part (after /)
+                            const modelNamePart = m.id.split('/').pop()?.toLowerCase() || '';
+                            const urlNormalizedSearchName = normalizeForUrl(modelNameParam);
+                            const urlNormalizedDataName = normalizeForUrl(modelNamePart);
+
                             // Check exact match (case-insensitive)
                             if (m.id.toLowerCase() === modelIdLower) return true;
 
+                            // Check if the model name parts match after URL normalization
+                            // This handles: "GPT-4o mini" -> "gpt-4o-mini" matching
+                            if (urlNormalizedDataName === urlNormalizedSearchName && m.provider_slug?.toLowerCase() === developer) return true;
+
                             // For AIMO models, check if the model name part matches
-                            const modelNamePart = m.id.includes(':') ? m.id.split(':')[1].toLowerCase() : m.id.toLowerCase();
-                            if (modelNamePart === modelIdLower) return true;
+                            const aimoModelNamePart = m.id.includes(':') ? m.id.split(':')[1].toLowerCase() : m.id.toLowerCase();
+                            if (aimoModelNamePart === modelIdLower) return true;
 
                             // Check if IDs match after normalization (handle different separators)
                             const normalizedModelId = modelIdLower.replace(/[_\-\/]/g, '');
                             const normalizedDataId = m.id.toLowerCase().replace(/[_\-\/]/g, '');
                             if (normalizedModelId === normalizedDataId) return true;
-
-                            // Check if the model name matches (as a fallback)
-                            // Note: model may not be defined yet in this context, so we skip this check
-                            // if (m.name && m.name.toLowerCase() === model?.name?.toLowerCase()) return true;
-
-                            // Check if the last part of the ID matches (for provider/model format)
-                            const lastPart = m.id.split('/').pop()?.toLowerCase();
-                            if (lastPart === modelIdLower) return true;
 
                             return false;
                         });
@@ -651,8 +872,18 @@ export default function ModelProfilePage() {
                             )}
                         </div>
                         <div className="flex items-center gap-2 flex-wrap mt-3">
-                            <Badge className="bg-black text-white hover:bg-gray-800">Free</Badge>
-                            <Badge variant="secondary">Multi-Lingual</Badge>
+                            {model.pricing && parseFloat(model.pricing.prompt) === 0 && parseFloat(model.pricing.completion) === 0 && (
+                                <Badge className="bg-black text-white hover:bg-gray-800">Free</Badge>
+                            )}
+                            {model.is_private && (
+                                <Badge className="bg-amber-500 text-white hover:bg-amber-600 flex items-center gap-1">
+                                    <Lock className="w-3 h-3" />
+                                    Private
+                                </Badge>
+                            )}
+                            {model.description && (model.description.toLowerCase().includes('multilingual') || model.description.toLowerCase().includes('multi-lingual')) && (
+                                <Badge variant="secondary">Multi-Lingual</Badge>
+                            )}
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -706,11 +937,38 @@ export default function ModelProfilePage() {
                                 Test {model.name} directly in your browser. Messages are not saved to your chat history.
                             </p>
                         </div>
+
+                        {/* Provider Selector */}
+                        <div className="mb-4">
+                            <label className="text-sm font-medium mb-2 block">Select Provider</label>
+                            <select
+                                value={selectedPlaygroundProvider}
+                                onChange={(e) => setSelectedPlaygroundProvider(e.target.value)}
+                                className="w-full max-w-md px-4 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                            >
+                                <option value="gatewayz">Gatewayz (Unified - Recommended)</option>
+                                {modelProviders.length > 0 && modelProviders.map(provider => {
+                                    const config = providerConfigs[provider];
+                                    if (!config) return null;
+                                    return (
+                                        <option key={provider} value={provider}>
+                                            {config.name}
+                                        </option>
+                                    );
+                                })}
+                            </select>
+                            {selectedPlaygroundProvider !== 'gatewayz' && (
+                                <p className="text-sm text-muted-foreground mt-2">
+                                    ⚠️ Using {providerConfigs[selectedPlaygroundProvider]?.name} directly. Make sure you have configured your API key.
+                                </p>
+                            )}
+                        </div>
+
                         <Card className="flex-1 p-4 overflow-hidden flex flex-col">
                             <InlineChat
                                 modelId={model.id}
                                 modelName={model.name}
-                                gateway={modelProviders.length > 0 ? modelProviders[0] : undefined}
+                                gateway={selectedPlaygroundProvider !== 'gatewayz' ? selectedPlaygroundProvider : undefined}
                             />
                         </Card>
                     </div>
@@ -723,6 +981,32 @@ export default function ModelProfilePage() {
                             <p className="text-muted-foreground">
                                 Call this model with a few lines of code using the Gatewayz API
                             </p>
+                        </div>
+
+                        {/* Provider Selector */}
+                        <div className="mb-4">
+                            <label className="text-sm font-medium mb-2 block">Select Provider</label>
+                            <select
+                                value={selectedProvider}
+                                onChange={(e) => setSelectedProvider(e.target.value)}
+                                className="w-full max-w-md px-4 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                            >
+                                <option value="gatewayz">Gatewayz (Unified - Recommended)</option>
+                                {modelProviders.length > 0 && modelProviders.map(provider => {
+                                    const config = providerConfigs[provider];
+                                    if (!config) return null;
+                                    return (
+                                        <option key={provider} value={provider}>
+                                            {config.name}
+                                        </option>
+                                    );
+                                })}
+                            </select>
+                            {selectedProvider !== 'gatewayz' && (
+                                <p className="text-sm text-muted-foreground mt-2">
+                                    ⚠️ Using {providerConfigs[selectedProvider]?.name} directly requires a separate API key from that provider.
+                                </p>
+                            )}
                         </div>
 
                         {/* Language Selector */}
@@ -782,10 +1066,15 @@ export default function ModelProfilePage() {
                         {/* Code Example */}
                         <div className="mb-6">
                             {(() => {
+                                // Get provider config
+                                const providerConfig = providerConfigs[selectedProvider] || providerConfigs.gatewayz;
+                                const baseUrl = providerConfig.baseUrl;
+                                const currentApiKey = providerConfig.apiKeyPlaceholder;
+
                                 const codeExamples = {
-                                    curl: `curl -X POST https://api.gatewayz.ai/v1/chat/completions \\
+                                    curl: `curl -X POST ${baseUrl}/chat/completions \\
   -H "Content-Type: application/json" \\
-  -H "Authorization: Bearer ${apiKey}" \\
+  -H "Authorization: Bearer ${currentApiKey}" \\
   -d '{
     "model": "${model.id}",
     "messages": [
@@ -799,9 +1088,9 @@ export default function ModelProfilePage() {
 import json
 
 response = requests.post(
-    url="https://api.gatewayz.ai/v1/chat/completions",
+    url="${baseUrl}/chat/completions",
     headers={
-        "Authorization": "Bearer ${apiKey}",
+        "Authorization": "Bearer ${currentApiKey}",
         "Content-Type": "application/json"
     },
     data=json.dumps({
@@ -819,8 +1108,8 @@ print(response.json())`,
                                     'openai-python': `from openai import OpenAI
 
 client = OpenAI(
-    base_url="https://api.gatewayz.ai/v1",
-    api_key="${apiKey}"
+    base_url="${baseUrl}",
+    api_key="${currentApiKey}"
 )
 
 completion = client.chat.completions.create(
@@ -831,10 +1120,10 @@ completion = client.chat.completions.create(
 )
 
 print(completion.choices[0].message.content)`,
-                                    typescript: `fetch("https://api.gatewayz.ai/v1/chat/completions", {
+                                    typescript: `fetch("${baseUrl}/chat/completions", {
   method: "POST",
   headers: {
-    "Authorization": "Bearer ${apiKey}",
+    "Authorization": "Bearer ${currentApiKey}",
     "Content-Type": "application/json"
   },
   body: JSON.stringify({
@@ -850,8 +1139,8 @@ print(completion.choices[0].message.content)`,
                                     'openai-typescript': `import OpenAI from 'openai';
 
 const client = new OpenAI({
-  apiKey: "${apiKey}",
-  baseURL: "https://api.gatewayz.ai/v1"
+  apiKey: "${currentApiKey}",
+  baseURL: "${baseUrl}"
 });
 
 const response = await client.chat.completions.create({
@@ -947,6 +1236,7 @@ console.log(response.choices[0].message.content);`
                         ) : modelProviders.length > 0 ? (
                             <div className="space-y-4">
                                 {modelProviders.map(provider => {
+                                    const isRecommended = provider === selectedProvider;
                                     const providerNames: Record<string, string> = {
                                         openrouter: 'OpenRouter',
                                         portkey: 'Portkey',
@@ -956,15 +1246,15 @@ console.log(response.choices[0].message.content);`
                                         together: 'Together AI',
                                         groq: 'Groq',
                                         deepinfra: 'DeepInfra',
-                                        google: 'Google',
+                                        google: 'Google AI',
                                         cerebras: 'Cerebras',
-                                        nebius: 'Nebius',
+                                        nebius: 'Nebius AI Studio',
                                         xai: 'xAI',
-                                        novita: 'Novita',
+                                        novita: 'Novita AI',
                                         huggingface: 'Hugging Face',
                                         aimo: 'AIMO Network',
-                                        near: 'NEAR',
-                                        fal: 'FAL'
+                                        near: 'NEAR Protocol',
+                                        fal: 'FAL AI'
                                     };
                                     const providerLogos: Record<string, string> = {
                                         openrouter: '/openrouter-logo.svg',
@@ -987,7 +1277,7 @@ console.log(response.choices[0].message.content);`
                                     };
 
                                     return (
-                                        <Card key={provider} className="p-6">
+                                        <Card key={provider} className={`p-6 ${isRecommended ? 'ring-2 ring-primary' : ''}`}>
                                             <div className="flex items-center gap-4 mb-4">
                                                 <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center border">
                                                     <img
@@ -1000,9 +1290,18 @@ console.log(response.choices[0].message.content);`
                                                         }}
                                                     />
                                                 </div>
-                                                <div>
-                                                    <h3 className="text-lg font-semibold">{providerNames[provider]}</h3>
-                                                    <p className="text-sm text-muted-foreground">Gateway Provider</p>
+                                                <div className="flex-1">
+                                                    <div className="flex items-center gap-2">
+                                                        <h3 className="text-lg font-semibold">{providerNames[provider]}</h3>
+                                                        {isRecommended && (
+                                                            <Badge className="bg-primary text-primary-foreground">
+                                                                Recommended
+                                                            </Badge>
+                                                        )}
+                                                    </div>
+                                                    <p className="text-sm text-muted-foreground">
+                                                        {isRecommended ? 'Lowest cost/latency option' : 'Gateway Provider'}
+                                                    </p>
                                                 </div>
                                             </div>
                                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

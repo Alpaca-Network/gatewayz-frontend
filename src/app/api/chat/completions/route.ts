@@ -266,19 +266,26 @@ export async function POST(request: NextRequest) {
       messageCount: body.messages?.length || 0,
     });
 
-    const apiKey = request.headers.get('authorization');
-    console.log('[API Proxy] API key present:', !!apiKey);
-    if (apiKey) {
-      const keyPrefix = apiKey.substring(0, 15);
-      console.log('[API Proxy] API key prefix:', keyPrefix);
-      console.log('[API Proxy] Is temp key?', apiKey.includes('gw_temp_'));
-      console.log('[API Proxy] Is live key?', apiKey.includes('gw_live_'));
+    // Normalize @provider format model IDs (e.g., @google/models/gemini-pro → google/gemini-pro)
+    const originalModel = body.model;
+    const normalizedModel = normalizeModelId(body.model);
+    if (originalModel !== normalizedModel) {
+      console.log('[API Completions] Normalized model ID from', originalModel, 'to', normalizedModel);
     }
+    body.model = normalizedModel;
+
+    console.log('Chat completions API route - Request:', {
+      model: body.model,
+      hasMessages: !!body.messages,
+      messageCount: body.messages?.length || 0,
+      stream: body.stream,
+      hasApiKey: !!apiKey,
+    });
 
     if (!apiKey) {
-      return new Response(
-        JSON.stringify({ error: 'No authorization header provided' }),
-        { status: 401, headers: { 'Content-Type': 'application/json' } }
+      return NextResponse.json(
+        { error: 'API key required' },
+        { status: 401 }
       );
     }
 
@@ -286,10 +293,11 @@ export async function POST(request: NextRequest) {
     const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
     const targetUrl = new URL(`${apiUrl}/v1/chat/completions`);
 
-    // Forward any query parameters (e.g., session_id)
-    request.nextUrl.searchParams.forEach((value, key) => {
-      targetUrl.searchParams.append(key, value);
-    });
+    // Build the backend URL with session_id if provided
+    let url = `${API_BASE_URL}/v1/chat/completions`;
+    if (sessionId) {
+      url += `?session_id=${sessionId}`;
+    }
 
     // Use a 120 second timeout for streaming requests (models can be slow to start)
     // Use a 30 second timeout for non-streaming requests
@@ -300,10 +308,12 @@ export async function POST(request: NextRequest) {
       targetUrl: targetUrl.toString(),
     });
 
-    // For streaming requests, bypass Braintrust to avoid interference with the stream
-    if (body.stream) {
-      console.log('[API Proxy] Handling streaming request directly (bypassing Braintrust)');
-      console.log('[API Proxy] Target URL:', targetUrl.toString());
+    // Forward the request to the backend
+    const backendRequestBody: any = {
+      model: body.model,
+      messages: body.messages,
+      stream: body.stream,
+    };
 
       // Retry logic for streaming requests
       const maxRetries = 3;
@@ -506,23 +516,30 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Handle streaming response
-    if ('stream' in result) {
-      return new Response(result.stream, {
-        status: result.status,
+    // For streaming responses, forward the stream directly
+    if (body.stream) {
+      console.log('Chat completions API route - Streaming response...');
+
+      // OPTIMIZATION: Return streaming response with optimized Edge Runtime headers
+      // Connection pooling and low buffering for fast response
+      return new NextResponse(response!.body, {
+        status: 200,
         headers: {
           'Content-Type': 'text/event-stream',
-          'Cache-Control': 'no-cache',
-          'Connection': 'keep-alive',
+          'Cache-Control': 'no-cache, no-transform',
+          'X-Accel-Buffering': 'no',
+          'Connection': 'keep-alive', // Maintain connection for streaming
+          'Transfer-Encoding': 'chunked', // Enable chunked encoding for responsiveness
+          'X-Content-Type-Options': 'nosniff', // Security header
         },
       });
     }
 
-    // Fallback error
-    return new Response(
-      JSON.stringify({ error: 'Unexpected response format' }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
-    );
+    // For non-streaming responses, parse and return JSON
+    const data = await response!.json();
+    console.log('Chat completions API route - Success!');
+
+    return NextResponse.json(data);
   } catch (error) {
     profiler.markStage(requestId, 'error_occurred', {
       errorName: error instanceof Error ? error.name : 'UnknownError',

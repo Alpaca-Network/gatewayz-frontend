@@ -32,7 +32,7 @@ export function UserNav({ user }: UserNavProps) {
   const { logout } = usePrivy();
   const { toast } = useToast();
   const router = useRouter();
-  const { tier, tierInfo } = useTier();
+  const { tier, tierInfo, userData } = useTier();
 
   const handleSignOut = async () => {
     try {
@@ -112,7 +112,7 @@ export function UserNav({ user }: UserNavProps) {
                     ? 'bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100'
                     : 'bg-purple-100 dark:bg-purple-900 text-purple-900 dark:text-purple-100'
                 }`}>
-                  {tier.toUpperCase()}
+                  {userData?.tier_display_name || tier.toUpperCase()}
                 </div>
               )}
             </div>

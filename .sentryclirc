@@ -1,0 +1,6 @@
+[auth]
+token=
+[defaults]
+url=https://sentry.io/
+org=alpaca-network
+project=javascript-nextjs

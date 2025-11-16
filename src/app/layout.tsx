@@ -11,9 +11,12 @@ import { TrialCreditsNotice } from '@/components/dialogs/trial-credits-notice';
 import { Analytics } from '@vercel/analytics/next';
 import { SpeedInsights } from '@vercel/speed-insights/next';
 import { Inter } from 'next/font/google';
-import { ReactScanProvider } from '@/components/providers/react-scan-provider';
 import { GoogleAnalytics } from '@/components/analytics/google-analytics';
-// import { GTMLoader } from '@/components/analytics/gtm-loader'; // Temporarily disabled due to layout router issues
+import { SessionInitializer } from '@/components/SessionInitializer';
+import { PreviewHostnameRestorer } from '@/components/auth/preview-hostname-restorer';
+import { GTMLoader } from '@/components/analytics/gtm-loader';
+import { ErrorSuppressor } from '@/components/error-suppressor';
+import { AnalyticsProvidersWrapper } from '@/components/providers/analytics-providers-wrapper';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -27,6 +30,7 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 5,
+  viewportFit: 'cover',
 };
 
 export const metadata: Metadata = {
@@ -72,27 +76,34 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning className="overflow-x-hidden h-full">
+    <html lang="en" suppressHydrationWarning className="scroll-smooth">
       <body className={`${inter.className} antialiased bg-background min-h-screen flex flex-col`} suppressHydrationWarning>
+        <ErrorSuppressor />
         <GoogleAnalytics />
         <ThemeProvider
           defaultTheme="system"
           storageKey="ui-theme"
         >
-          <ReactScanProvider />
-          <PrivyProviderWrapper className="flex flex-col min-h-screen">
-            {/* <GTMLoader /> Temporarily disabled due to layout router issues */}
-            <AppHeader />
-            <OnboardingBanner />
-            <main className="flex-1 flex flex-col">
-              {children}
-            </main>
-            <Toaster />
-            <AppFooter />
-            <WelcomeDialog />
-            <TrialCreditsNotice />
-            <Analytics />
-            <SpeedInsights />
+          {/* Preview hostname restoration - handles Vercel preview OAuth redirects */}
+          <PreviewHostnameRestorer />
+          <PrivyProviderWrapper>
+            <AnalyticsProvidersWrapper>
+              {/* Session transfer from main domain - handles automatic authentication */}
+              <SessionInitializer />
+              <GTMLoader />
+              <AppHeader />
+              <OnboardingBanner />
+              <div data-header-spacer aria-hidden="true" className="flex-shrink-0 h-[65px] has-onboarding-banner:h-[115px]" style={{ transition: 'height 0.3s ease' }} />
+              <main className="flex-1 flex flex-col w-full overflow-x-hidden">
+                {children}
+              </main>
+              <Toaster />
+              <AppFooter />
+              <WelcomeDialog />
+              <TrialCreditsNotice />
+              <Analytics />
+              <SpeedInsights />
+            </AnalyticsProvidersWrapper>
           </PrivyProviderWrapper>
         </ThemeProvider>
       </body>

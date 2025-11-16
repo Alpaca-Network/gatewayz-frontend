@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/card';
 import { Send, Loader2 } from 'lucide-react';
 import { getApiKey, getUserData } from '@/lib/api';
 import { streamChatResponse } from '@/lib/streaming';
+import { normalizeModelId } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -85,25 +86,36 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
     let inThinking = false;
 
     try {
-      // Call the backend API directly to avoid Vercel's 60-second timeout
-      // CORS headers are configured in vercel.json to allow beta.gatewayz.ai
+      // Call the backend API through Next.js API route (which proxies to backend)
+      // This avoids CORS issues and allows for proper error handling
       const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
+
+      // Build URL - use Next.js API route when in browser
       const url = typeof window !== 'undefined'
         ? '/api/chat/completions'
         : `${apiBaseUrl}/v1/chat/completions`;
 
+      // Normalize model ID to handle different formats from various gateway APIs
+      const normalizedModelId = normalizeModelId(modelId);
+
       console.log('[InlineChat] Sending message to model:', modelId);
+      console.log('[InlineChat] Normalized model ID:', normalizedModelId);
       console.log('[InlineChat] Gateway:', gateway || 'not specified');
       console.log('[InlineChat] Using API endpoint:', url);
 
-      const requestBody = {
-        model: modelId,
-        ...(gateway && { gateway }), // Add gateway if provided
+      const requestBody: Record<string, unknown> = {
+        model: normalizedModelId,
         messages: [...messages, userMessage].map(m => ({ role: m.role, content: m.content })),
         stream: true,
         temperature: 0.7,
         max_tokens: 8000  // Increased for reasoning models like DeepSeek
       };
+
+      // Add gateway parameter to request body if specified (important for models like NEAR, Cerebras, etc.)
+      if (gateway) {
+        requestBody.gateway = gateway;
+      }
+
       // Use the streaming utility with proper error handling and retries
       for await (const chunk of streamChatResponse(url, apiKey, requestBody)) {
         // Enhanced logging to see what data we're receiving

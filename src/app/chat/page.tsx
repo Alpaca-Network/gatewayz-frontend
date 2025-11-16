@@ -50,11 +50,13 @@ import { getApiKey, getUserData, saveApiKey, saveUserData, type UserData } from 
 import { ChatHistoryAPI, ChatSession as ApiChatSession, ChatMessage as ApiChatMessage, handleApiError } from '@/lib/chat-history';
 import { ChatStreamHandler } from '@/lib/chat-stream-handler';
 import { Copy, Share2, RotateCcw } from 'lucide-react';
-import { usePrivy } from '@privy-io/react-auth';
+import { useAuth } from '@/hooks/use-auth';
 import { streamChatResponse } from '@/lib/streaming';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { logAnalyticsEvent } from '@/lib/analytics';
+import { useEagerModelPreload } from '@/hooks/useEagerModelPreload';
+import { useRecentlyUsedModels } from '@/hooks/useRecentlyUsedModels';
 
 // Lazy load ModelSelect for better initial load performance
 // Reduces initial bundle by ~100KB and defers expensive model processing
@@ -475,7 +477,12 @@ const apiHelpers = {
     }
 };
 
-const ModelSuggestionCard = ({ title, icon: Icon }: { title: string, icon: React.ElementType }) => (
+interface ModelSuggestionCardProps {
+    title: string;
+    icon: React.ElementType;
+}
+
+const ModelSuggestionCard = ({ title, icon: Icon }: ModelSuggestionCardProps) => (
     <Card className="hover:border-primary cursor-pointer">
         <CardContent className="p-4">
             <h3 className="text-sm font-semibold">{title}</h3>
@@ -488,7 +495,13 @@ const ModelSuggestionCard = ({ title, icon: Icon }: { title: string, icon: React
     </Card>
 );
 
-const ExamplePrompt = ({ title, subtitle, onClick }: { title: string, subtitle: string, onClick?: () => void }) => (
+interface ExamplePromptProps {
+    title: string;
+    subtitle: string;
+    onClick?: () => void;
+}
+
+const ExamplePrompt = ({ title, subtitle, onClick }: ExamplePromptProps) => (
     <Card
         className="hover:border-primary cursor-pointer p-4 text-left bg-muted/30 dark:bg-muted/20 transition-colors rounded-xl border-border"
         onClick={onClick}
@@ -776,15 +789,17 @@ const VirtualSessionList = ({
     );
 };
 
-const ChatSidebar = ({ sessions, activeSessionId, switchToSession, createNewChat, onDeleteSession, onRenameSession, onClose }: {
-    sessions: ChatSession[],
-    activeSessionId: string | null,
-    switchToSession: (id: string) => void,
-    createNewChat: () => void,
-    onDeleteSession: (sessionId: string) => void,
-    onRenameSession: (sessionId: string, newTitle: string) => void,
-    onClose?: () => void
-}) => {
+interface ChatSidebarProps {
+    sessions: ChatSession[];
+    activeSessionId: string | null;
+    switchToSession: (id: string) => void;
+    createNewChat: () => void;
+    onDeleteSession: (sessionId: string) => void;
+    onRenameSession: (sessionId: string, newTitle: string) => void;
+    onClose?: () => void;
+}
+
+const ChatSidebar = ({ sessions, activeSessionId, switchToSession, createNewChat, onDeleteSession, onRenameSession, onClose }: ChatSidebarProps) => {
 
     // Memoize the grouped sessions to avoid expensive O(n) computation on every render
     const groupedSessions = useMemo(() => {
@@ -875,8 +890,12 @@ const fixLatexSyntax = (content: string): string => {
     return content;
 };
 
+interface ThinkingLoaderProps {
+    modelName: string | undefined;
+}
+
 // Exciting loading component for when AI is thinking
-const ThinkingLoader = ({ modelName }: { modelName: string | undefined }) => {
+const ThinkingLoader = ({ modelName }: ThinkingLoaderProps) => {
     return (
         <div className="flex items-start gap-3 animate-in fade-in duration-500">
             <div className="flex flex-col gap-1 items-start max-w-[85%]">
@@ -922,7 +941,12 @@ const getReasoningSource = (model?: string) => {
     return aiSdkSignatures.some(signature => normalized.includes(signature)) ? 'ai-sdk' : 'gatewayz';
 };
 
-const ChatMessage = ({ message, modelName }: { message: Message, modelName: string | undefined}) => {
+interface ChatMessageProps {
+    message: Message;
+    modelName: string | undefined;
+}
+
+const ChatMessage = ({ message, modelName }: ChatMessageProps) => {
     const isUser = message.role === 'user';
     const processedContent = fixLatexSyntax(message.content);
     const reasoningSource = getReasoningSource(message.model);
@@ -959,7 +983,7 @@ const ChatMessage = ({ message, modelName }: { message: Message, modelName: stri
                         className="w-full"
                     />
                 )}
-                <div className={`rounded-lg p-3 ${isUser ? 'bg-blue-600 text-white' : 'bg-muted/30 dark:bg-muted/20 border border-border'} ${message.isStreaming ? 'streaming-message' : ''}`}>
+                <div className={`rounded-lg p-3 ${isUser ? 'bg-blue-600 text-white' : ''} ${message.isStreaming ? 'streaming-message' : ''}`}>
                      {!isUser && <p className="text-xs font-semibold mb-1">{modelName}</p>}
                     <div className={`text-sm prose prose-sm max-w-none ${isUser ? 'text-white prose-invert' : 'dark:prose-invert'}`}>
                         {isUser ? (
@@ -994,10 +1018,42 @@ const ChatMessage = ({ message, modelName }: { message: Message, modelName: stri
 
 const ChatSkeleton = () => (
   <div className="flex items-start gap-3">
-    <Avatar className="w-8 h-8"><AvatarFallback><Bot/></AvatarFallback></Avatar>
-    <div className="flex flex-col gap-2 w-full max-w-md">
-        <Skeleton className="h-4 w-24" />
-        <Skeleton className="h-10 w-full" />
+    {/* Animated arrow icon */}
+    <div className="mt-1 flex-shrink-0">
+      <svg
+        className="w-5 h-5 text-blue-500"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path
+          d="M5 12h14M12 5l7 7-7 7"
+          className="animate-pulse"
+          style={{ animationDuration: '1.5s' }}
+        />
+      </svg>
+      <style jsx>{`
+        @keyframes slideArrow {
+          0%, 100% {
+            transform: translateX(0);
+            opacity: 0.6;
+          }
+          50% {
+            transform: translateX(4px);
+            opacity: 1;
+          }
+        }
+      `}</style>
+    </div>
+
+    {/* Skeleton loading bars */}
+    <div className="flex flex-col gap-3 w-full max-w-2xl">
+      <Skeleton className="h-3 w-full rounded-full" />
+      <Skeleton className="h-3 w-full rounded-full" />
+      <Skeleton className="h-3 w-2/3 rounded-full" />
     </div>
   </div>
 );
@@ -1099,8 +1155,15 @@ const devWarn = (...args: any[]) => {
 
 function ChatPageContent() {
     const searchParams = useSearchParams();
-    const { login, authenticated, ready } = usePrivy();
-    
+    const { login, isAuthenticated, loading: authLoading } = useAuth();
+
+    // Eager preload models in the background for instant access
+    // This runs on component mount and preloads the first 50 models
+    useEagerModelPreload();
+
+    // Track recently used models for quick access
+    const { recentModels, addRecentModel } = useRecentlyUsedModels();
+
     // All hooks must be declared before any conditional returns
     const [hasApiKey, setHasApiKey] = useState(false);
     const [message, setMessage] = useState('');
@@ -1117,12 +1180,12 @@ function ChatPageContent() {
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const [editedTitle, setEditedTitle] = useState('');
     const [selectedModel, setSelectedModel] = useState<ModelOption | null>({
-        value: '@cerebras/qwen-3-32b',
+        value: 'qwen/qwen3-32b',
         label: 'Qwen 3 32B',
         category: 'Free',
-        sourceGateway: 'cerebras',
+        sourceGateway: 'openrouter',
         developer: 'Qwen',
-        speedTier: 'ultra-fast'
+        speedTier: 'fast'
     });
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
     const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
@@ -1194,6 +1257,9 @@ function ChatPageContent() {
 
     // Track if we're currently creating a session to prevent race conditions
     const creatingSessionRef = useRef(false);
+
+    // Track if auto-send has already been triggered to prevent duplicate sends
+    const autoSendTriggeredRef = useRef(false);
 
     // Trigger for forcing session reload after API key becomes available
     const [authReady, setAuthReady] = useState(false);
@@ -1331,32 +1397,44 @@ function ChatPageContent() {
                         } else {
                             console.warn('Model not found in cache:', modelParam);
                             // Fallback: create basic model option from parameter
+                            // Extract gateway from model ID (e.g., 'google/gemini-pro' -> 'google')
+                            const extractedGateway = modelParam.includes('/')
+                                ? modelParam.split('/')[0]
+                                : (modelParam.includes('openrouter') ? 'openrouter' : 'unknown');
                             setSelectedModel({
                                 value: modelParam,
                                 label: modelParam.split('/').pop() || modelParam,
                                 category: 'Unknown',
-                                sourceGateway: modelParam.includes('openrouter') ? 'openrouter' : 'unknown'
+                                sourceGateway: extractedGateway
                             });
                         }
                     }
                 } catch (e) {
                     console.error('Failed to parse model cache:', e);
                     // Fallback: create basic model option
+                    // Extract gateway from model ID (e.g., 'google/gemini-pro' -> 'google')
+                    const extractedGateway = modelParam.includes('/')
+                        ? modelParam.split('/')[0]
+                        : 'unknown';
                     setSelectedModel({
                         value: modelParam,
                         label: modelParam.split('/').pop() || modelParam,
                         category: 'Unknown',
-                        sourceGateway: 'unknown'
+                        sourceGateway: extractedGateway
                     });
                 }
             } else {
                 // No cache available, create basic model option and let ModelSelect load in background
                 console.log('No cache available, using fallback model option');
+                // Extract gateway from model ID (e.g., 'google/gemini-pro' -> 'google')
+                const extractedGateway = modelParam.includes('/')
+                    ? modelParam.split('/')[0]
+                    : 'unknown';
                 setSelectedModel({
                     value: modelParam,
                     label: modelParam.split('/').pop() || modelParam,
                     category: 'Unknown',
-                    sourceGateway: 'unknown'
+                    sourceGateway: extractedGateway
                 });
             }
         }
@@ -1385,15 +1463,20 @@ function ChatPageContent() {
     }, [sessions, activeSessionId]);
 
     // Filter and deduplicate messages to prevent unsent messages from appearing in history
-    // Messages are deduplicated by checking for consecutive duplicates (same role + content)
-    const messages = ((activeSession?.messages || []).filter(msg => msg && msg.role) as Message[]).reduce((acc, msg, idx, arr) => {
-        // Skip if this is a duplicate of the previous message (same role and content)
-        if (idx > 0) {
-            const prevMsg = arr[idx - 1];
-            if (prevMsg && prevMsg.role === msg.role && prevMsg.content === msg.content) {
-                console.warn('[MessageDedup] Skipping duplicate message:', { role: msg.role, contentLength: msg.content.length });
-                return acc;
-            }
+    // Messages are deduplicated by checking for any duplicate (same role + content anywhere in history)
+    const messages = ((activeSession?.messages || []).filter(msg => msg && msg.role) as Message[]).reduce((acc, msg) => {
+        // Skip if this message already exists in accumulated messages
+        const isDuplicate = acc.some(m =>
+            m.role === msg.role &&
+            m.content === msg.content &&
+            m.image === msg.image &&
+            m.video === msg.video &&
+            m.audio === msg.audio
+        );
+
+        if (isDuplicate) {
+            console.warn('[MessageDedup] Skipping duplicate message:', { role: msg.role, contentLength: msg.content.length });
+            return acc;
         }
         return [...acc, msg];
     }, [] as Message[]);
@@ -1410,7 +1493,8 @@ function ChatPageContent() {
             loading,
             creatingSession: creatingSessionRef.current,
             isStreamingResponse,
-            hasPendingMessage: !!pendingMessage
+            hasPendingMessage: !!pendingMessage,
+            autoSendTriggered: autoSendTriggeredRef.current
         });
 
         // If we have a pending message, let the pending message handler deal with it
@@ -1442,10 +1526,12 @@ function ChatPageContent() {
             selectedModel &&
             !loading &&
             !creatingSessionRef.current &&
-            !isStreamingResponse
+            !isStreamingResponse &&
+            !autoSendTriggeredRef.current
         ) {
             console.log('[AutoSend] All conditions met! Sending message now...');
-            setShouldAutoSend(false); // Reset flag to prevent re-sending
+            autoSendTriggeredRef.current = true; // Mark as triggered to prevent re-sending
+            setShouldAutoSend(false); // Reset flag
             handleSendMessage();
         }
     }, [shouldAutoSend, activeSessionId, message, selectedModel, loading, isStreamingResponse, pendingMessage]);
@@ -1455,11 +1541,11 @@ function ChatPageContent() {
         const apiKey = getApiKey();
         const userData = getUserData();
         setHasApiKey(!!(apiKey && userData?.privy_user_id));
-    }, [ready, authenticated]);
+    }, [authLoading, isAuthenticated]);
 
     // Check for referral bonus notification flag
     useEffect(() => {
-        if (!ready || !(authenticated || hasApiKey) || typeof window === 'undefined') return;
+        if (authLoading || !(isAuthenticated || hasApiKey) || typeof window === 'undefined') return;
 
         // Check if we should show referral bonus notification
         const showReferralBonus = localStorage.getItem('gatewayz_show_referral_bonus');
@@ -1476,13 +1562,13 @@ function ChatPageContent() {
                 });
             }, 1000); // Delay to allow page to settle
         }
-    }, [ready, authenticated, hasApiKey, toast]);
+    }, [authLoading, isAuthenticated, hasApiKey, toast]);
 
     // Send pending message after authentication completes
     useEffect(() => {
         if (!pendingMessage) return;
-        if (!ready) return;
-        if (!authenticated && !hasApiKey) return;
+        if (authLoading) return;
+        if (!isAuthenticated && !hasApiKey) return;
 
         const apiKey = getApiKey();
         const userData = getUserData();
@@ -1529,7 +1615,7 @@ function ChatPageContent() {
             }
         }, 100);
 
-    }, [pendingMessage, ready, authenticated, hasApiKey, activeSessionId]);
+    }, [pendingMessage, authLoading, isAuthenticated, hasApiKey, activeSessionId]);
 
     useEffect(() => {
         // Optimized: Load sessions in parallel with auth, don't wait for ready state
@@ -1567,41 +1653,15 @@ function ChatPageContent() {
                         b.updatedAt.getTime() - a.updatedAt.getTime()
                     )[0];
 
-                    if (mostRecentSession && mostRecentSession.apiSessionId) {
-                        console.log('[loadSessions] Setting most recent session as active:', mostRecentSession.id);
-
-                        // Set active session ID immediately
+                    // If there are existing sessions, load the most recent one
+                    // Otherwise, create a new chat session
+                    if (mostRecentSession) {
+                        console.log('[loadSessions] Loaded sessions, switching to most recent:', mostRecentSession.id);
                         setActiveSessionId(mostRecentSession.id);
-
-                        // Load messages for the active session
-                        setLoadingMessages(true);
-                        try {
-                            const messages = await apiHelpers.loadSessionMessages(
-                                mostRecentSession.id,
-                                mostRecentSession.apiSessionId
-                            );
-
-                            if (!isMounted) return;
-
-                            console.log('[loadSessions] Loaded messages:', messages.length);
-
-                            // Update the session with loaded messages
-                            setSessions(prev => prev.map(s =>
-                                s.id === mostRecentSession.id ? { ...s, messages } : s
-                            ));
-
-                            // Mark session as loaded
-                            setLoadedSessionIds(prev => new Set(prev).add(mostRecentSession.id));
-                        } catch (error) {
-                            console.error('[loadSessions] Failed to load messages:', error);
-                        } finally {
-                            if (isMounted) {
-                                setLoadingMessages(false);
-                            }
-                        }
                     } else {
-                        // No sessions exist, create a new chat
-                        createNewChat();
+                        console.log('[loadSessions] No existing sessions, creating new chat');
+                        // Auto-create first chat session when no sessions exist
+                        await createNewChat();
                     }
                 } catch (error) {
                     console.error('[loadSessions] Failed to load sessions:', error);
@@ -1620,11 +1680,11 @@ function ChatPageContent() {
         }
 
         // If no API key yet, wait for authentication to complete
-        if (!ready) {
+        if (authLoading) {
             return;
         }
 
-        if (!authenticated && !hasApiKey) {
+        if (!isAuthenticated && !hasApiKey) {
             return;
         }
 
@@ -1645,7 +1705,7 @@ function ChatPageContent() {
             setTimeout(() => clearInterval(checkInterval), 10000);
             return () => clearInterval(checkInterval);
         }
-    }, [ready, authenticated, hasApiKey, authReady]);
+    }, [authLoading, isAuthenticated, hasApiKey]);
 
     // Handle rate limit countdown timer
     useEffect(() => {
@@ -1701,6 +1761,9 @@ function ChatPageContent() {
             message_count: session.messages.length
         });
 
+        // Reset auto-send flag when switching sessions
+        autoSendTriggeredRef.current = false;
+
         // Set active session immediately for UI responsiveness
         setActiveSessionId(sessionId);
 
@@ -1749,6 +1812,7 @@ function ChatPageContent() {
 
         if (existingNewChat) {
             // If there's already a new chat, just switch to it
+            autoSendTriggeredRef.current = false; // Reset auto-send flag for new chat
             switchToSession(existingNewChat.id);
             return existingNewChat;
         }
@@ -1769,6 +1833,9 @@ function ChatPageContent() {
 
             // Then update the sessions list
             setSessions(prev => [newSession, ...prev]);
+
+            // Reset auto-send flag for new chat
+            autoSendTriggeredRef.current = false;
 
             return newSession;
         } catch (error) {
@@ -1935,7 +2002,7 @@ function ChatPageContent() {
                     console.log(`Image optimized: ${(originalSize / 1024).toFixed(1)}KB → ${(optimizedSize / 1024).toFixed(1)}KB (${savings}% reduction)`);
 
                     resolve(optimizedBase64);
-                };
+                }
                 img.onerror = () => reject(new Error('Failed to load image'));
                 img.src = event.target?.result as string;
             };
@@ -2105,6 +2172,8 @@ function ChatPageContent() {
                 category: model.category,
                 gateway: model.sourceGateway
             });
+            // Track model as recently used for instant access next time
+            addRecentModel(model);
         }
         setSelectedModel(model);
 
@@ -2122,9 +2191,9 @@ function ChatPageContent() {
         }
     };
 
-    const handleSendMessage = async () => {
-        // Prevent sending if user hasn't actually typed anything
-        if (!userHasTyped) {
+    const handleSendMessage = async (retryCount = 0) => {
+        // Check if there's actually a message to send
+        if (!message.trim()) {
             return;
         }
 
@@ -2149,8 +2218,9 @@ function ChatPageContent() {
             }
         }
 
-        if (!apiKey || !userData || typeof userData.privy_user_id !== 'string') {
-            console.log('[Auth] User not authenticated - queuing message and triggering login');
+        // Only require API key for sending messages - Privy user data is optional for history
+        if (!apiKey) {
+            console.log('[Auth] No API key - queuing message and triggering login');
 
             // Queue the message to be sent after authentication
             setPendingMessage({
@@ -2168,8 +2238,10 @@ function ChatPageContent() {
                 variant: 'default'
             });
 
-            // Auto-trigger login
-            login();
+            // Auto-trigger login only if not already authenticated via Privy
+            if (!isAuthenticated) {
+                login();
+            }
             return;
         }
 
@@ -2182,12 +2254,13 @@ function ChatPageContent() {
             return;
         }
 
-        // Check if session exists - if not, don't auto-create, just show error
+        // Check if session exists - if not, auto-create silently
         const trimmedMessage = message.trim();
         let currentSessionId = activeSessionId;
         if (!currentSessionId) {
-            console.log('[Session] No active session - queuing send until session ready');
+            console.log('[Session] No active session - creating and queuing send');
 
+            // Queue the message to be sent after session is ready
             setPendingMessage({
                 message: trimmedMessage,
                 model: selectedModel,
@@ -2196,15 +2269,23 @@ function ChatPageContent() {
                 audio: selectedAudio
             });
 
+            // Create new session silently (no toast)
             if (!creatingSessionRef.current) {
-                await createNewChat();
+                try {
+                    const newSession = await createNewChat();
+                    if (newSession) {
+                        console.log('[Session] Chat session created successfully:', newSession.id);
+                        // Session will trigger pendingMessage effect automatically
+                    }
+                } catch (error) {
+                    console.error('[Session] Failed to create chat session:', error);
+                    toast({
+                        title: "Error",
+                        description: "Failed to create chat session. Please try again.",
+                        variant: 'destructive'
+                    });
+                }
             }
-
-            toast({
-                title: "Setting up chat...",
-                description: "We're preparing your chat session. Your message will send automatically.",
-                variant: 'default'
-            });
             return;
         }
 
@@ -2214,14 +2295,14 @@ function ChatPageContent() {
         const userVideo = selectedVideo;
         const userAudio = selectedAudio;
 
-        // Check if the last message is identical to prevent duplicate user messages from being added
-        const lastMessage = messages[messages.length - 1];
-        const isDuplicateMessage = lastMessage &&
-            lastMessage.role === 'user' &&
-            lastMessage.content === userMessage &&
-            lastMessage.image === (userImage || undefined) &&
-            lastMessage.video === (userVideo || undefined) &&
-            lastMessage.audio === (userAudio || undefined);
+        // Check if this exact message already exists in history to prevent duplicate user messages
+        const isDuplicateMessage = messages.some(msg =>
+            msg.role === 'user' &&
+            msg.content === userMessage &&
+            msg.image === (userImage || undefined) &&
+            msg.video === (userVideo || undefined) &&
+            msg.audio === (userAudio || undefined)
+        );
 
         if (isDuplicateMessage) {
             console.warn('[MessageDedup] Attempted to add duplicate message, aborting send:', { content: userMessage.substring(0, 50) });
@@ -2298,7 +2379,7 @@ function ChatPageContent() {
             });
 
             // Auth is already checked at the beginning of handleSendMessage
-            const privyUserId = userData.privy_user_id;
+            const privyUserId = userData?.privy_user_id;
 
             // Call backend API directly with privy_user_id and session_id query parameters
             const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
@@ -2318,43 +2399,46 @@ function ChatPageContent() {
                 messagesCount: currentSession?.messages?.length || 0
             });
 
-            // OPTIMIZATION: Save the user message to the backend before streaming
-            // This ensures the backend has the user message before processing the stream
-            // which prevents race conditions where the API can't find the context
-            if (currentSession?.apiSessionId) {
-                try {
-                    devLog('🔄 Attempting to save user message to backend:', {
-                        sessionId: currentSession.apiSessionId,
-                        content: userMessage.substring(0, 100) + '...',
-                        model: selectedModel.value,
-                        hasImage: !!userImage,
-                        apiKey: apiKey ? `${apiKey.substring(0, 10)}...` : 'NO_API_KEY',
-                        privyUserId: userData.privy_user_id
-                    });
+            // OPTIMIZATION: Save the user message to the backend asynchronously
+            // Don't block the streaming request - send both in parallel
+            // The message is already in the UI optimistically
+            if (currentSession?.apiSessionId && userData) {
+                const saveUserMessage = async () => {
+                    try {
+                        devLog('🔄 Attempting to save user message to backend:', {
+                            sessionId: currentSession.apiSessionId,
+                            content: userMessage.substring(0, 100) + '...',
+                            model: selectedModel.value,
+                            hasImage: !!userImage,
+                            apiKey: apiKey ? `${apiKey.substring(0, 10)}...` : 'NO_API_KEY',
+                            privyUserId: userData.privy_user_id
+                        });
 
-                    const chatAPI = new ChatHistoryAPI(apiKey, undefined, userData.privy_user_id);
-                    if (currentSession.apiSessionId) {
-                        const result = await chatAPI.saveMessage(
-                            currentSession.apiSessionId,
-                            'user',
-                            userMessage,
-                            selectedModel.value,
-                            undefined // Token count not calculated yet
-                        );
-                        devLog('✅ User message saved to backend successfully:', result);
+                        const chatAPI = new ChatHistoryAPI(apiKey, undefined, userData.privy_user_id);
+                        if (currentSession.apiSessionId) {
+                            const result = await chatAPI.saveMessage(
+                                currentSession.apiSessionId,
+                                'user',
+                                userMessage,
+                                selectedModel.value,
+                                undefined // Token count not calculated yet
+                            );
+                            devLog('✅ User message saved to backend successfully:', result);
+                        }
+                    } catch (error) {
+                        devError('❌ Failed to save user message to backend:', error);
+                        devError('Error details:', {
+                            message: error instanceof Error ? error.message : String(error),
+                            stack: error instanceof Error ? error.stack : undefined,
+                            sessionId: currentSession.apiSessionId,
+                            hasApiKey: !!apiKey,
+                            hasPrivyUserId: !!userData?.privy_user_id
+                        });
+                        // Don't throw - the message is already in the UI optimistically
                     }
-                } catch (error) {
-                    devError('❌ Failed to save user message to backend:', error);
-                    devError('Error details:', {
-                        message: error instanceof Error ? error.message : String(error),
-                        stack: error instanceof Error ? error.stack : undefined,
-                        sessionId: currentSession.apiSessionId,
-                        hasApiKey: !!apiKey,
-                        hasPrivyUserId: !!userData.privy_user_id
-                    });
-                    // Don't throw - let the stream request proceed anyway
-                    // The message is already in the UI optimistically
-                }
+                };
+                // Start saving in background - don't await
+                saveUserMessage();
             } else {
                 devWarn('⚠️ Cannot save user message - no API session ID:', {
                     currentSession,
@@ -2363,12 +2447,14 @@ function ChatPageContent() {
                 });
             }
 
+            // Build URL with session_id query parameter (gateway goes in request body)
             const sessionIdParam = currentSession?.apiSessionId ? `?session_id=${currentSession.apiSessionId}` : '';
             const url = `/api/chat/completions${sessionIdParam}`;
 
             console.log('Sending chat request to:', url);
             console.log('API Key:', apiKey.substring(0, 10) + '...');
             console.log('Model:', selectedModel.value);
+            console.log('Gateway:', selectedModel.sourceGateway);
             console.log('Session ID:', currentSession?.apiSessionId || 'none');
 
             // Prepare message content with image, video, and audio if present
@@ -2530,18 +2616,23 @@ function ChatPageContent() {
                     requestBody.portkey_provider = portkeyProvider;
                 }
 
+                // Add gateway parameter if specified (important for models like NEAR, Cerebras, etc.)
+                if (selectedModel.sourceGateway) {
+                    requestBody.gateway = selectedModel.sourceGateway;
+                }
+
                 // Session ID is already in the URL query parameter, no need to add it to the body
 
                 console.log('📨 Request body prepared:', {
                     model: requestBody.model,
+                    gateway: requestBody.gateway,
                     hasPortkeyProvider: !!requestBody.portkey_provider,
                     stream: requestBody.stream,
                     messagesLength: requestBody.messages?.length || 0,
                     url: url
                 });
 
-                // Use ChatStreamHandler to properly manage streaming state and avoid ReferenceErrors
-                const streamHandler = new ChatStreamHandler();
+                // Reset the existing streamHandler (declared at top of try block)
                 streamHandler.reset();
 
                 console.log('🌊 Starting to stream response...');
@@ -2679,7 +2770,7 @@ function ChatPageContent() {
 
                 // OPTIMIZATION: Save the assistant's response to the backend asynchronously
                 // This allows the UI to be responsive immediately after streaming completes
-                if (currentSession?.apiSessionId && finalContent) {
+                if (currentSession?.apiSessionId && finalContent && userData) {
                     // Fire and forget - save in background
                     const saveAssistantMessage = async () => {
                         try {
@@ -2719,7 +2810,7 @@ function ChatPageContent() {
                                 stack: error instanceof Error ? error.stack : undefined,
                                 sessionId: currentSession.apiSessionId,
                                 hasApiKey: !!apiKey,
-                                hasPrivyUserId: !!userData.privy_user_id
+                                hasPrivyUserId: !!userData?.privy_user_id
                             });
                         }
                     };
@@ -2737,10 +2828,10 @@ function ChatPageContent() {
                 // Update session title in API if this is the first message
                 // Note: Messages are automatically saved by the backend when session_id is passed
                 // The title was already updated locally in updatedSessions (line 1326)
-                if (isFirstMessage && currentSession?.apiSessionId && newTitle) {
+                if (isFirstMessage && currentSession?.apiSessionId && newTitle && userData) {
                     try {
                         if (apiKey) {
-                            const chatAPI = new ChatHistoryAPI(apiKey, undefined, userData.privy_user_id);
+                            const chatAPI = new ChatHistoryAPI(apiKey, undefined, userData?.privy_user_id);
                             console.log('Updating session title in API:', { oldTitle: 'Untitled Chat', newTitle, sessionId: currentSession.apiSessionId });
                             await chatAPI.updateSession(currentSession.apiSessionId, newTitle);
                         }
@@ -2864,12 +2955,12 @@ function ChatPageContent() {
                     const fallbackModel = fallbackModels.find(fm => fm.value !== selectedModel.value);
 
                     if (fallbackModel) {
-                        console.log(`Model ${selectedModel.value} failed with 500 error, attempting fallback to ${fallbackModel.value}`);
+                        console.log(`Model ${selectedModel.value} failed with 500 error, attempting fallback to ${fallbackModel.value} (retry ${retryCount + 1}/${maxRetries})`);
 
                         // Show a toast notification about the fallback
                         toast({
                             title: "Model Unavailable",
-                            description: `${selectedModel.label} is temporarily unavailable. Switched to ${fallbackModel.label}.`,
+                            description: `${selectedModel.label} is temporarily unavailable. Switched to ${fallbackModel.label}. (Attempt ${retryCount + 1}/${maxRetries})`,
                             variant: 'default'
                         });
 
@@ -2889,14 +2980,15 @@ function ChatPageContent() {
                         }));
 
                         // Retry the request with the fallback model by recursively calling handleSendMessage
+                        // Pass retryCount + 1 to track the number of retries
                         // Wait a short moment before retrying
                         setTimeout(() => {
                             // Re-populate the message field with the original user message
                             setMessage(userMessage);
                             setUserHasTyped(true);
                             userHasTypedRef.current = true;
-                            // Trigger send
-                            handleSendMessage();
+                            // Trigger send with incremented retry count
+                            handleSendMessage(retryCount + 1);
                         }, 500);
 
                         return; // Exit early to prevent showing error message
@@ -2972,7 +3064,7 @@ function ChatPageContent() {
     };
 
   // Show login screen if not authenticated
-  if (!ready) {
+  if (authLoading) {
     return (
       <div className="flex h-[calc(100dvh-130px)] bg-background items-center justify-center">
         <div className="flex flex-col items-center gap-4">
@@ -2984,7 +3076,7 @@ function ChatPageContent() {
   }
 
   // Check if user is authenticated via Privy OR has a valid API key in localStorage
-  if (!authenticated && !hasApiKey) {
+  if (!isAuthenticated && !hasApiKey) {
     return (
       <div className="flex h-[calc(100dvh-130px)] bg-background items-center justify-center">
         <div className="flex flex-col items-center gap-6 max-w-md text-center p-6">
@@ -3010,7 +3102,7 @@ function ChatPageContent() {
   return (
     <>
       <FreeModelsBanner />
-      <div className="flex h-screen max-h-[calc(100dvh-200px)] has-onboarding-banner:max-h-[calc(100dvh-280px)] bg-background overflow-hidden">
+      <div data-chat-container className="flex h-[calc(100vh-130px)] has-onboarding-banner:h-[calc(100vh-192px)] bg-background overflow-hidden">
         {/* Left Sidebar - Desktop Only */}
         <div className="hidden lg:flex w-56 xl:w-72 border-r flex-shrink-0 overflow-hidden">
           <ChatSidebar
@@ -3038,34 +3130,34 @@ function ChatPageContent() {
       />
 
         {/* Mobile Header - Compact and Touch-Friendly */}
-        <header className="relative z-10 w-full bg-background/95 backdrop-blur-sm border-b border-border/50 lg:border-none lg:bg-transparent">
-          {/* Mobile Layout - Optimized for Touch */}
-          <div className="flex lg:hidden flex-col gap-2 p-3">
-            {/* Top Row: Menu + Title + Actions */}
-            <div className="flex items-center gap-2 w-full">
-              <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
-                <SheetTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-9 w-9 flex-shrink-0">
-                    <Menu className="h-5 w-5" />
-                  </Button>
-                </SheetTrigger>
-                <SheetContent side="left" className="w-[280px] sm:w-[320px] p-0 pt-12 overflow-hidden">
-                  <SheetHeader className="sr-only">
-                    <SheetTitle>Chat Sidebar</SheetTitle>
-                  </SheetHeader>
-                  <ChatSidebar
-                    sessions={sessions}
-                    activeSessionId={activeSessionId}
-                    switchToSession={switchToSession}
-                    createNewChat={createNewChat}
-                    onDeleteSession={handleDeleteSession}
-                    onRenameSession={handleRenameSession}
-                    onClose={() => setMobileSidebarOpen(false)}
-                  />
-                </SheetContent>
-              </Sheet>
-              
-            <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
+        <header className="sticky top-0 z-[50] w-full bg-background/95 border-b border-border/50 lg:relative lg:border-none lg:bg-transparent">
+          {/* Mobile Layout - Single Row on Mobile */}
+          <div className="flex lg:hidden items-center gap-2 p-3 w-full">
+            {/* Menu Button */}
+            <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
+              <SheetTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-9 w-9 flex-shrink-0">
+                  <Menu className="h-5 w-5" />
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="left" className="w-[280px] sm:w-[320px] p-0 pt-12 overflow-hidden">
+                <SheetHeader className="sr-only">
+                  <SheetTitle>Chat Sidebar</SheetTitle>
+                </SheetHeader>
+                <ChatSidebar
+                  sessions={sessions}
+                  activeSessionId={activeSessionId}
+                  switchToSession={switchToSession}
+                  createNewChat={createNewChat}
+                  onDeleteSession={handleDeleteSession}
+                  onRenameSession={handleRenameSession}
+                  onClose={() => setMobileSidebarOpen(false)}
+                />
+              </SheetContent>
+            </Sheet>
+
+            {/* Title - Hidden on very small screens, shown on sm and up */}
+            <div className="min-w-0 flex-1">
               {isEditingTitle ? (
                 <Input
                   type="text"
@@ -3088,31 +3180,30 @@ function ChatPageContent() {
                     }
                   }}
                   autoFocus
-                    className="text-base font-semibold h-auto px-2 py-1 min-w-0 flex-1"
+                  className="text-sm font-semibold h-auto px-2 py-1 min-w-0"
                 />
               ) : (
-                  <h1 className="text-base font-semibold truncate min-w-0 flex-1">{activeSession?.title || 'Untitled Chat'}</h1>
-                )}
-              </div>
-
-              {/* Edit Title Button - Only show when not editing */}
-              {!isEditingTitle && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                  className="h-8 w-8 flex-shrink-0"
-                    onClick={() => {
-                      setEditedTitle(activeSession?.title || '');
-                      setIsEditingTitle(true);
-                    }}
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </Button>
+                <h1 className="text-sm font-semibold truncate">{activeSession?.title || 'Untitled Chat'}</h1>
               )}
             </div>
 
-            {/* Model Selector Row */}
-            <div className="w-full">
+            {/* Edit Title Button */}
+            {!isEditingTitle && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 flex-shrink-0"
+                onClick={() => {
+                  setEditedTitle(activeSession?.title || '');
+                  setIsEditingTitle(true);
+                }}
+              >
+                <Pencil className="h-4 w-4" />
+              </Button>
+            )}
+
+            {/* Model Selector */}
+            <div className="flex-shrink-0">
               <ModelSelect selectedModel={selectedModel} onSelectModel={handleModelSelect} />
             </div>
           </div>
@@ -3228,7 +3319,7 @@ function ChatPageContent() {
                       ) : showThinkingLoader ? (
                         <ThinkingLoader modelName={getModelDisplayName(msg.model)} />
                       ) : (
-                        <div className="rounded-lg p-2.5 sm:p-3 bg-muted/30 dark:bg-muted/20 border border-border max-w-full w-full">
+                        <div className="rounded-lg p-2.5 sm:p-3 max-w-full w-full">
                           <div className="flex items-center justify-between mb-2">
                             <p className="text-xs font-semibold text-muted-foreground truncate">{getModelDisplayName(msg.model)}</p>
                             {msg.isStreaming && (
@@ -3321,7 +3412,7 @@ function ChatPageContent() {
           )}
 
           {/* Message input area - Mobile optimized */}
-          <div className="w-full p-3 sm:p-4 lg:p-6 max-w-4xl mx-auto flex-shrink-0 bg-background/95 backdrop-blur-sm border-t border-border/50 lg:border-none lg:bg-transparent">
+          <div className="w-full p-3 sm:p-4 lg:p-6 max-w-4xl mx-auto flex-shrink-0 bg-background/95 border-t border-border/50 lg:border-none lg:bg-transparent">
             <div className="w-full">
               <div className="relative">
                 {/* Image preview - Mobile responsive */}
@@ -3422,7 +3513,7 @@ function ChatPageContent() {
                       size="icon"
                       className="h-8 w-8 rounded-lg touch-manipulation"
                       onClick={() => fileInputRef.current?.click()}
-                      disabled={!ready || (!authenticated && !hasApiKey)}
+                      disabled={authLoading || (!isAuthenticated && !hasApiKey)}
                       title="Upload an image"
                     >
                       <ImageIcon className="h-5 w-5" />
@@ -3435,7 +3526,7 @@ function ChatPageContent() {
                       size="icon"
                       className="h-8 w-8 rounded-lg"
                       onClick={() => videoInputRef.current?.click()}
-                      disabled={!ready || (!authenticated && !hasApiKey)}
+                      disabled={authLoading || (!isAuthenticated && !hasApiKey)}
                       title="Upload a video"
                     >
                       <VideoIcon className="h-5 w-5" />
@@ -3448,7 +3539,7 @@ function ChatPageContent() {
                       size="icon"
                       className="h-8 w-8 rounded-lg"
                       onClick={() => audioInputRef.current?.click()}
-                      disabled={!ready || (!authenticated && !hasApiKey)}
+                      disabled={authLoading || (!isAuthenticated && !hasApiKey)}
                       title="Upload audio"
                     >
                       <AudioIcon className="h-5 w-5" />
@@ -3456,7 +3547,7 @@ function ChatPageContent() {
                   )}
                   <Input
                     ref={messageInputRef}
-                    placeholder={!ready ? "Authenticating..." : (!authenticated && !hasApiKey) ? "Please log in..." : getPlaceholderText()}
+                    placeholder={authLoading ? "Authenticating..." : (!isAuthenticated && !hasApiKey) ? "Please log in..." : getPlaceholderText()}
                     value={message}
                     onChange={(e) => {
                       setMessage(e.target.value);
@@ -3480,29 +3571,31 @@ function ChatPageContent() {
                       setUserHasTyped(true);
                       userHasTypedRef.current = true;
                     }}
-                    disabled={!ready || (!authenticated && !hasApiKey)}
+                    disabled={authLoading || (!isAuthenticated && !hasApiKey)}
                     autoComplete="off"
                     className="border-0 bg-transparent focus-visible:ring-0 text-sm sm:text-base text-foreground flex-1 min-w-0"
                   />
-                  {(!ready || (!authenticated && !hasApiKey) || isStreamingResponse) && (
-                    <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground flex-shrink-0" />
-                  )}
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={handleSendMessage}
-                    disabled={loading || isStreamingResponse || !message.trim() || !ready || (!authenticated && !hasApiKey)}
-                    className="h-8 w-8 sm:h-7 sm:w-7 bg-primary hover:bg-primary/90 text-primary-foreground touch-manipulation flex-shrink-0"
-                    title={!ready
-                      ? "Waiting for authentication..."
-                      : (!authenticated && !hasApiKey)
-                        ? "Please log in"
-                        : isStreamingResponse
-                          ? "Please wait for the current response to finish"
-                          : "Send message"}
-                  >
-                     <Send className="h-4 w-4 sm:h-5 sm:w-5" />
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    {(authLoading || (!isAuthenticated && !hasApiKey) || isStreamingResponse) && (
+                      <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground flex-shrink-0" />
+                    )}
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => handleSendMessage()}
+                      disabled={loading || isStreamingResponse || !message.trim() || (!isAuthenticated && !hasApiKey)}
+                      className="h-8 w-8 sm:h-7 sm:w-7 bg-primary hover:bg-primary/90 text-primary-foreground touch-manipulation flex-shrink-0"
+                      title={authLoading
+                        ? "Waiting for authentication..."
+                        : (!isAuthenticated && !hasApiKey)
+                          ? "Please log in"
+                          : isStreamingResponse
+                            ? "Please wait for the current response to finish"
+                            : "Send message"}
+                    >
+                       <Send className="h-4 w-4 sm:h-5 sm:w-5" />
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>

@@ -100,25 +100,66 @@ export async function* streamChatResponse(
   retryCount = 0,
   maxRetries = 5
 ): AsyncGenerator<StreamChunk> {
-  // Client-side timeout for the fetch request (2 minutes for streaming)
+  // Client-side timeout for the fetch request (5 minutes for streaming)
+  // Increased from 2 minutes to accommodate reasoning models and slower providers
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 120000);
+  const timeoutId = setTimeout(() => controller.abort(), 300000);
 
   try {
     devLog('[Streaming] Initiating fetch request to:', url);
     devLog('[Streaming] Request body:', requestBody);
     devLog('[Streaming] API Key prefix:', apiKey.substring(0, 20) + '...');
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-        'Accept': 'text/event-stream',
-      },
-      body: JSON.stringify(requestBody),
-      signal: controller.signal,
-    });
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+          'Accept': 'text/event-stream',
+        },
+        body: JSON.stringify(requestBody),
+        signal: controller.signal,
+      });
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+
+      // Handle network errors with retry logic
+      if (fetchError instanceof TypeError ||
+          (fetchError instanceof Error && (
+            fetchError.message.includes('fetch') ||
+            fetchError.message.includes('network') ||
+            fetchError.message.includes('ECONNREFUSED') ||
+            fetchError.message.includes('ECONNRESET') ||
+            fetchError.message.includes('ETIMEDOUT')
+          ))) {
+
+        if (retryCount < maxRetries) {
+          // Exponential backoff: 2s, 4s, 8s, 16s, 32s
+          const waitTime = Math.min(2000 * Math.pow(2, retryCount), 32000);
+          const jitter = Math.floor(Math.random() * 1000);
+          const totalWaitTime = waitTime + jitter;
+
+          devLog(`Network error detected, retrying in ${totalWaitTime}ms (attempt ${retryCount + 1}/${maxRetries})...`);
+          devError('Network error details:', fetchError);
+
+          await sleep(totalWaitTime);
+
+          // Recursive retry
+          yield* streamChatResponse(url, apiKey, requestBody, retryCount + 1, maxRetries);
+          return;
+        }
+
+        // Max retries exceeded
+        throw new Error(
+          `Network connection failed after ${maxRetries} attempts. Please check your internet connection and try again.`
+        );
+      }
+
+      // Re-throw non-network errors
+      throw fetchError;
+    }
 
     clearTimeout(timeoutId);
 
@@ -574,6 +615,18 @@ export async function* streamChatResponse(
     }
 
     yield { done: true };
+  } catch (error) {
+    clearTimeout(timeoutId);
+
+    // Handle abort/timeout errors
+    if (error instanceof Error) {
+      if (error.name === 'AbortError') {
+        throw new Error('Request timed out after 5 minutes. The model may be overloaded or unavailable. Please try again.');
+      }
+    }
+
+    // Re-throw other errors
+    throw error;
   } finally {
     devLog('[Streaming] Stream reader released');
     reader.releaseLock();
@@ -581,10 +634,10 @@ export async function* streamChatResponse(
   } catch (error) {
     clearTimeout(timeoutId);
 
-    // Handle abort/timeout errors
+    // Handle abort/timeout errors from main try
     if (error instanceof Error) {
       if (error.name === 'AbortError') {
-        throw new Error('Request timed out after 2 minutes. The model may be overloaded or unavailable. Please try again.');
+        throw new Error('Request timed out after 5 minutes. The model may be overloaded or unavailable. Please try again.');
       }
     }
 

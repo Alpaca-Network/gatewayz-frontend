@@ -8,6 +8,7 @@ const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
 
 // Transform static models data to backend format
 function transformModel(model: any, gateway: string) {
+  const resolvedGateway = gateway === 'all' ? 'openrouter' : gateway;
   return {
     id: `${model.developer}/${model.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
     name: model.name,
@@ -23,7 +24,10 @@ function transformModel(model: any, gateway: string) {
     },
     supported_parameters: model.supportedParameters,
     provider_slug: model.developer,
-    source_gateway: gateway === 'all' ? 'openrouter' : gateway // Set gateway source for filtering
+    provider_slugs: [model.developer], // NEW: Track provider as array for consistent display
+    source_gateway: resolvedGateway, // Keep for backwards compatibility
+    source_gateways: [resolvedGateway], // NEW: Track gateway as array for consistent display
+    is_private: model.is_private // Preserve is_private field if present
   };
 }
 
@@ -59,6 +63,8 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
     'near',
     'fal',
     'vercel-ai-gateway', // Vercel AI Gateway
+    'helicone', // Helicone AI Gateway - will be skipped if backend unavailable
+    'alpaca', // Alpaca Network
     'all'
   ];
   if (!validGateways.includes(gateway)) {
@@ -88,7 +94,9 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
         'aimo',
         'near',
         'fal',
-        'vercel-ai-gateway'
+        'vercel-ai-gateway',
+        'helicone',
+        'alpaca'
       ];
 
       const results = await Promise.all(
@@ -99,22 +107,85 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
       const combinedModels = results.flat();
 
       // Create a normalized key for deduplication
-      // This handles cases where the same model has different IDs from different gateways
+      // This handles cases where the same model has different IDs from different gateways/providers
       const modelMap = new Map<string, any>();
 
       for (const model of combinedModels) {
         // Normalize the model name: remove prefixes, lowercase, remove special chars, handle versioning
-        const normalizedName = (model.name || '')
+        let normalizedName = (model.name || '')
           .toLowerCase()
           .replace(/^(google:|openai:|meta:|anthropic:|models\/)/i, '') // Remove provider prefixes
           .replace(/\s+/g, '-') // Replace spaces with hyphens
           .replace(/[^\w-]/g, ''); // Remove special characters except hyphens
 
-        // Use normalized name + provider slug as dedup key
-        const dedupKey = `${normalizedName}:::${model.provider_slug || 'unknown'}`;
+        // Also normalize based on canonical_slug or id if available, as a fallback
+        // This handles cases where the model name differs slightly but they're the same model
+        // The backend returns inconsistent canonical_slugs (e.g., "gemini-2.5-pro" vs "google/gemini-2.5-pro")
+        // We normalize by removing ALL provider prefixes to ensure proper deduplication
+        let canonicalSlug = (model.canonical_slug || model.id || '').toLowerCase();
 
-        // Keep the first occurrence (usually from higher-priority gateways like openrouter)
-        if (!modelMap.has(dedupKey)) {
+        // Remove provider prefixes (some models have them, others don't)
+        canonicalSlug = canonicalSlug
+          .replace(/^(aimo\/|google\/|openai\/|meta\/|anthropic\/|models\/|mistralai\/|xai\/)/i, '')
+          .replace(/\s+/g, '-')
+          .replace(/[^\w-]/g, '');
+
+        // Use canonical slug if it's more specific, otherwise use normalized name
+        // Prefer canonical_slug as it's designed to be a unique identifier
+        const dedupKey = canonicalSlug || normalizedName;
+
+        // Merge models from multiple gateways AND providers
+        if (modelMap.has(dedupKey)) {
+          const existing = modelMap.get(dedupKey);
+
+          // Merge source_gateways arrays
+          const existingGateways = Array.isArray(existing.source_gateways)
+            ? existing.source_gateways
+            : (existing.source_gateway ? [existing.source_gateway] : []);
+
+          const newGateways = Array.isArray(model.source_gateways)
+            ? model.source_gateways
+            : (model.source_gateway ? [model.source_gateway] : []);
+
+          // Combine and deduplicate gateways
+          const combinedGateways = Array.from(new Set([...existingGateways, ...newGateways]));
+
+          // NEW: Track multiple providers for the same model
+          const existingProviders = Array.isArray(existing.provider_slugs)
+            ? existing.provider_slugs
+            : (existing.provider_slug ? [existing.provider_slug] : []);
+
+          const newProviders = model.provider_slug ? [model.provider_slug] : [];
+          const combinedProviders = Array.from(new Set([...existingProviders, ...newProviders]));
+
+          // Calculate data completeness score (models with more metadata are preferred)
+          const existingScore = (existing.description ? 1 : 0) +
+                                (existing.pricing?.prompt ? 1 : 0) +
+                                (existing.context_length > 0 ? 1 : 0) +
+                                (existing.architecture?.input_modalities?.length || 0);
+
+          const newScore = (model.description ? 1 : 0) +
+                           (model.pricing?.prompt ? 1 : 0) +
+                           (model.context_length > 0 ? 1 : 0) +
+                           (model.architecture?.input_modalities?.length || 0);
+
+          // Keep the model with more complete data, but always preserve all gateways and providers
+          const mergedModel = newScore > existingScore ? model : existing;
+          mergedModel.source_gateways = combinedGateways;
+          mergedModel.provider_slugs = combinedProviders;
+
+          modelMap.set(dedupKey, mergedModel);
+        } else {
+          // First occurrence - ensure source_gateways is an array
+          if (!Array.isArray(model.source_gateways) && model.source_gateway) {
+            model.source_gateways = [model.source_gateway];
+          } else if (!model.source_gateways) {
+            model.source_gateways = [];
+          }
+
+          // NEW: Initialize provider_slugs array
+          model.provider_slugs = model.provider_slug ? [model.provider_slug] : [];
+
           modelMap.set(dedupKey, model);
         }
       }
@@ -165,12 +236,31 @@ function buildHeaders(gateway: string): Record<string, string> {
   return headers;
 }
 
+// Helper function to normalize model fields for consistent tag display
+function normalizeModel(model: any, gateway: string): any {
+  return {
+    ...model,
+    // Ensure source_gateways is always an array
+    source_gateways: Array.isArray(model.source_gateways)
+      ? model.source_gateways
+      : (model.source_gateway ? [model.source_gateway] : [gateway]),
+    // Ensure provider_slugs is always an array
+    provider_slugs: Array.isArray(model.provider_slugs)
+      ? model.provider_slugs
+      : (model.provider_slug ? [model.provider_slug] : []),
+    // Keep singular fields for backwards compatibility
+    source_gateway: model.source_gateway || gateway,
+    provider_slug: model.provider_slug || 'unknown'
+  };
+}
+
 // Helper function to fetch models from a specific gateway
 async function fetchModelsFromGateway(gateway: string, limit?: number): Promise<any[]> {
   const allModels: any[] = [];
   const requestLimit = limit || 50000; // Request up to 50k models per page (backend limit)
   const FAST_GATEWAYS = ['openrouter', 'groq', 'together', 'fireworks', 'vercel-ai-gateway'];
-  const timeoutMs = FAST_GATEWAYS.includes(gateway) ? 3000 : 5000;
+  // Optimized timeouts: reduce from 5000ms to 3500ms for slow gateways to speed up parallel requests
+  const timeoutMs = FAST_GATEWAYS.includes(gateway) ? 2500 : 3500;
 
   let offset = 0;
   let hasMore = true;
@@ -193,12 +283,15 @@ async function fetchModelsFromGateway(gateway: string, limit?: number): Promise<
       // Try both endpoints in parallel, use first successful response
       const response = await Promise.race(
         urls.map(url =>
-          fetch(url, {
-            method: 'GET',
-            headers,
-            next: { revalidate: 300 },
-            signal: AbortSignal.timeout(timeoutMs)
-          })
+fetch(url, {
+             method: 'GET',
+             headers,
+             next: {
+               revalidate: 300,
+               tags: [`models:gateway:${gateway}`, 'models:all']
+             },
+             signal: AbortSignal.timeout(timeoutMs)
+           })
         )
       );
 
@@ -206,7 +299,9 @@ async function fetchModelsFromGateway(gateway: string, limit?: number): Promise<
         const data = await response.json();
 
         if (data.data && Array.isArray(data.data) && data.data.length > 0) {
-          allModels.push(...data.data);
+          // Normalize each model to ensure provider_slugs and source_gateways are arrays
+          const normalizedModels = data.data.map((model: any) => normalizeModel(model, gateway));
+          allModels.push(...normalizedModels);
           console.log(`[Models] Fetched ${data.data.length} models for gateway: ${gateway} (offset: ${offset})`);
 
           const isFiveHundred = data.data.length === 500 && gateway === 'huggingface';
@@ -239,67 +334,69 @@ function getStaticFallbackModels(gateway: string): any[] {
   console.warn(`[Models] No models fetched from API for ${gateway}, falling back to static data (${models.length} models)`);
   let transformedModels;
 
-  if (gateway === 'all') {
-    // Distribute all models across different gateways
-    const allGateways = [
-      'openrouter',
-      'portkey',
-      'featherless',
-      'chutes',
-      'fireworks',
-      'together',
-      'groq',
-      'deepinfra',
-      'google',
-      'cerebras',
-      'nebius',
-      'xai',
-      'novita',
-      'huggingface',
-      'aimo',
-      'near',
-      'fal',
-      'vercel-ai-gateway'
-    ];
-    const modelsPerGateway = Math.ceil(models.length / allGateways.length);
+  // Map developers to their preferred gateways
+  const developerToGateway: Record<string, string> = {
+    'alpaca-network': 'alpaca',
+    'near': 'near',
+    // Add more mappings as needed
+  };
 
-    transformedModels = models.map((model, index) => {
-      const gatewayIndex = Math.floor(index / modelsPerGateway);
-      const assignedGateway = allGateways[Math.min(gatewayIndex, allGateways.length - 1)];
+  if (gateway === 'all') {
+    // Assign models to gateways based on their developer field if possible
+    transformedModels = models.map((model) => {
+      // Check if this developer has a specific gateway mapping
+      const assignedGateway = developerToGateway[model.developer] || 'openrouter';
       return transformModel(model, assignedGateway);
     });
   } else {
-    // Get models for specific gateway
-    const allGateways = [
-      'openrouter',
-      'portkey',
-      'featherless',
-      'chutes',
-      'fireworks',
-      'together',
-      'groq',
-      'deepinfra',
-      'google',
-      'cerebras',
-      'nebius',
-      'xai',
-      'novita',
-      'huggingface',
-      'aimo',
-      'near',
-      'fal',
-      'vercel-ai-gateway'
-    ];
-    const modelsPerGateway = Math.ceil(models.length / allGateways.length);
+    // Get models for specific gateway by filtering by developer field
+    // This maps gateway names to their corresponding developer identifiers
+    const gatewayToDeveloper: Record<string, string> = {
+      'alpaca': 'alpaca-network',
+      'near': 'near',
+      // Add more mappings as needed for other gateways
+    };
+
     let gatewayModels;
 
-    const gatewayIndex = allGateways.indexOf(gateway);
-    if (gatewayIndex !== -1) {
-      const startIndex = gatewayIndex * modelsPerGateway;
-      const endIndex = gatewayIndex === allGateways.length - 1 ? models.length : (gatewayIndex + 1) * modelsPerGateway;
-      gatewayModels = models.slice(startIndex, endIndex);
+    // If we have a specific developer mapping, filter by developer field
+    if (gatewayToDeveloper[gateway]) {
+      const developerName = gatewayToDeveloper[gateway];
+      gatewayModels = models.filter(m => m.developer === developerName);
     } else {
-      gatewayModels = models; // Default to all models for unknown gateways
+      // For gateways without specific mappings, distribute models evenly as before
+      const allGateways = [
+        'openrouter',
+        'portkey',
+        'featherless',
+        'chutes',
+        'fireworks',
+        'together',
+        'groq',
+        'deepinfra',
+        'google',
+        'cerebras',
+        'nebius',
+        'xai',
+        'novita',
+        'huggingface',
+        'aimo',
+        'near',
+        'fal',
+        'vercel-ai-gateway',
+        'helicone',
+        'alpaca'
+      ];
+      const modelsPerGateway = Math.ceil(models.length / allGateways.length);
+
+      const gatewayIndex = allGateways.indexOf(gateway);
+      if (gatewayIndex !== -1) {
+        const startIndex = gatewayIndex * modelsPerGateway;
+        const endIndex = gatewayIndex === allGateways.length - 1 ? models.length : (gatewayIndex + 1) * modelsPerGateway;
+        gatewayModels = models.slice(startIndex, endIndex);
+      } else {
+        gatewayModels = models; // Default to all models for unknown gateways
+      }
     }
 
     transformedModels = gatewayModels.map(m => transformModel(m, gateway));

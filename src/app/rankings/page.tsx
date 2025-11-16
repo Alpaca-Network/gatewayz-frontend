@@ -134,8 +134,8 @@ export default function RankingsPage() {
   }, [selectedTimeRangeForApps, apps])
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="mx-auto max-w-screen-2xl px-4 sm:px-6 lg:px-8 py-8">
+    <div className="min-h-screen bg-background" style={{ marginTop: '-65px' }}>
+      <div data-page-content className="mx-auto max-w-screen-2xl px-4 sm:px-6 lg:px-8 py-8 pt-32 has-onboarding-banner:pt-40" style={{ transition: 'padding-top 0.3s ease' }}>
         {/* Header */}
         <header className="text-center mb-8">
           <h1 className="text-2xl lg:text-4xl font-bold tracking-tight">LLM Rankings</h1>
@@ -278,7 +278,7 @@ export default function RankingsPage() {
 
                     {/* Top Provider - hidden on mobile, 3 columns on desktop */}
                     <div className="hidden lg:flex lg:col-span-3 items-center">
-                      <span className="text-xs">{model.provider || 'OpenRouter'}</span>
+                      <span className="text-xs">{(model.provider?.replace(/^@/, '') || 'OpenRouter')}</span>
                     </div>
 
                     {/* Tokens Generated - 3 columns on mobile and desktop */}

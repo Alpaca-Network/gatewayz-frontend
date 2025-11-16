@@ -16,9 +16,24 @@ export type Model = {
   requiredTier?: UserTier;
   speedTier?: 'ultra-fast' | 'fast' | 'medium' | 'slow'; // Response speed indicator
   avgLatencyMs?: number; // Average time-to-first-token in milliseconds
+  is_private?: boolean; // Indicates if model is on a private network (e.g., NEAR)
 };
 
 export const models: Model[] = [
+  {
+    name: 'gpt-5.1',
+    isFree: false,
+    tokens: '200B+ tokens',
+    category: 'Multimodal',
+    description: 'GPT-5.1 is the latest frontier-grade model in the GPT-5 series, offering stronger general-purpose reasoning, improved instruction adherence, and a more natural conversational style compared to GPT-5. It uses adaptive reasoning to allocate computation dynamically, responding quickly to simple queries while spending more depth on complex tasks. The model produces clearer, more grounded explanations with reduced jargon, making it easier to follow even on technical or multi-step problems.',
+    developer: 'openai',
+    context: 400,
+    inputCost: 1.25,
+    outputCost: 10,
+    modalities: ['Text', 'Image', 'File'],
+    series: 'GPT',
+    supportedParameters: ['frequency_penalty', 'logit_bias', 'logprobs', 'max_tokens', 'presence_penalty', 'reasoning', 'response_format', 'seed', 'stop', 'tools', 'tool_choice', 'temperature', 'top_p'],
+  },
   {
     name: 'GPT-4o mini',
     isFree: false,
@@ -89,7 +104,21 @@ export const models: Model[] = [
     series: 'Kimi',
     supportedParameters: ['temperature', 'top_p'],
   },
-   {
+  {
+    name: 'Google: Gemini 2.0 Flash',
+    isFree: false,
+    tokens: '18.5B tokens',
+    category: 'Multimodal',
+    description: 'Fast and efficient Gemini model optimized for speed and performance with multimodal capabilities.',
+    developer: 'google',
+    context: 1024,
+    inputCost: 0.075,
+    outputCost: 0.3,
+    modalities: ['Text', 'Image', 'File'],
+    series: 'Gemini',
+    supportedParameters: ['tools', 'temperature', 'top_p'],
+  },
+  {
     name: 'Google: Gemini 2.1 Pro',
     isFree: false,
     tokens: '19.5B tokens',
@@ -144,5 +173,21 @@ export const models: Model[] = [
     modalities: ['Text'],
     series: 'Other',
     supportedParameters: ['temperature', 'top_p'],
+  },
+  {
+    name: 'deepseek-v3-1',
+    isFree: false,
+    tokens: '671B tokens',
+    category: 'Reasoning',
+    description: 'DeepSeek V3 is a powerful Mixture-of-Experts model with 671B total parameters and 37B activated per token. Features multi-head latent attention and DeepSeekMoE architecture for enhanced performance and efficiency.',
+    developer: 'alpaca-network',
+    context: 64,
+    inputCost: 0.27,
+    outputCost: 1.10,
+    modalities: ['Text'],
+    series: 'DeepSeek',
+    supportedParameters: ['temperature', 'top_p', 'max_tokens'],
+    speedTier: 'fast',
+    is_private: true,
   }
 ];

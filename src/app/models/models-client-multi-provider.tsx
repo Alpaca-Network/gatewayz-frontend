@@ -24,7 +24,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { Slider } from "@/components/ui/slider";
-import { BookText, Bot, ChevronDown, ChevronUp, FileText, ImageIcon, LayoutGrid, LayoutList, Music, Search, Sliders as SlidersIcon, X, Zap } from 'lucide-react';
+import { BookText, Bot, ChevronDown, ChevronUp, FileText, ImageIcon, LayoutGrid, LayoutList, Lock, Music, Search, Sliders as SlidersIcon, X, Zap } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 import { stringToColor } from '@/lib/utils';
@@ -48,6 +48,7 @@ interface Model {
   source_gateways?: string[]; // Updated to array
   source_gateway?: string; // Keep for backwards compatibility
   created?: number;
+  is_private?: boolean; // Indicates if model is on a private network (e.g., NEAR)
 }
 
 // Gateway display configuration
@@ -71,9 +72,10 @@ const GATEWAY_CONFIG: Record<string, { name: string; color: string; icon?: React
 };
 
 const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
-  const isFree = parseFloat(model.pricing?.prompt || '0') === 0 && parseFloat(model.pricing?.completion || '0') === 0;
-  const inputCost = (parseFloat(model.pricing?.prompt || '0') * 1000000).toFixed(2);
-  const outputCost = (parseFloat(model.pricing?.completion || '0') * 1000000).toFixed(2);
+  const hasPricing = model.pricing !== null && model.pricing !== undefined;
+  const isFree = hasPricing && parseFloat(model.pricing?.prompt || '0') === 0 && parseFloat(model.pricing?.completion || '0') === 0;
+  const inputCost = hasPricing ? (parseFloat(model.pricing?.prompt || '0') * 1000000).toFixed(2) : null;
+  const outputCost = hasPricing ? (parseFloat(model.pricing?.completion || '0') * 1000000).toFixed(2) : null;
   const contextK = model.context_length > 0 ? Math.round(model.context_length / 1000) : 0;
 
   // Determine if model is multi-lingual (simple heuristic - can be improved)
@@ -85,10 +87,8 @@ const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
   // Get gateways - support both old and new format
   const gateways = model.source_gateways || (model.source_gateway ? [model.source_gateway] : []);
 
-  // Preserve literal slash in URL (e.g., "provider/model-name")
-  const modelUrl = model.id.includes('/')
-    ? `/models/${model.id}`
-    : `/models/${encodeURIComponent(model.id)}`;
+  // Encode model ID to handle special characters like parentheses in model names
+  const modelUrl = `/models/${encodeURIComponent(model.id)}`;
 
   return (
     <Link href={modelUrl} className="h-full block">
@@ -102,6 +102,12 @@ const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
             {isFree && (
               <Badge className="bg-black text-white hover:bg-black/90 text-xs px-2 py-0.5">
                 Free
+              </Badge>
+            )}
+            {model.is_private && (
+              <Badge className="bg-amber-500 text-white hover:bg-amber-600 text-xs px-2 py-0.5 flex items-center gap-1">
+                <Lock className="w-3 h-3" />
+                Private
               </Badge>
             )}
             {isMultiLingual && (
@@ -121,8 +127,10 @@ const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
         {gateways.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mb-3">
             {gateways.slice(0, 3).map((gateway) => {
-              const config = GATEWAY_CONFIG[gateway.toLowerCase()] || {
-                name: gateway,
+              // Normalize gateway by removing @ prefix
+              const normalizedGateway = gateway.replace(/^@/, '').toLowerCase();
+              const config = GATEWAY_CONFIG[normalizedGateway] || {
+                name: normalizedGateway,
                 color: 'bg-gray-500'
               };
               return (
@@ -150,12 +158,18 @@ const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
         {/* Bottom metadata row */}
         <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground border-t pt-3">
           <span className="flex items-center gap-1">
-            By <span className="font-medium text-foreground">{model.provider_slug}</span>
+            By <span className="font-medium text-foreground">{model.provider_slug?.replace(/^@/, '') || 'Unknown'}</span>
           </span>
           <span className="font-medium">{contextK > 0 ? `${contextK}M Tokens` : '0M Tokens'}</span>
           <span className="font-medium">{contextK > 0 ? `${contextK}K Context` : '0K Context'}</span>
-          <span className="font-medium">${inputCost}/M Input</span>
-          <span className="font-medium">${outputCost}/M Output</span>
+          {hasPricing ? (
+            <>
+              <span className="font-medium">${inputCost}/M Input</span>
+              <span className="font-medium">${outputCost}/M Output</span>
+            </>
+          ) : (
+            <span className="font-medium text-amber-600">Contact for pricing</span>
+          )}
         </div>
       </Card>
     </Link>

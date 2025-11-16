@@ -206,7 +206,7 @@ cat > "$CONFIG_FILE" <<EOF
         "google/gemini-2.5-flash",
         "google/gemini-2.0-flash",
         "deepseek/deepseek-v3.1",
-        "deepseek/deepseek-v3-0324"
+        "deepseek/deepseek-chat-v3.1"
       ]
     }
   ],

@@ -10,6 +10,7 @@ import Link from 'next/link';
 export function CreditsDisplay() {
   const [credits, setCredits] = useState<number | null>(null);
   const [tier, setTier] = useState<UserTier | undefined>(undefined);
+  const [tierDisplayName, setTierDisplayName] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     const updateCredits = () => {
@@ -47,6 +48,14 @@ export function CreditsDisplay() {
           }
           return prevTier;
         });
+
+        // Update tier display name
+        setTierDisplayName(prevDisplayName => {
+          if (prevDisplayName !== userData.tier_display_name) {
+            return userData.tier_display_name;
+          }
+          return prevDisplayName;
+        });
       } else {
         if (process.env.NODE_ENV === 'development') {
           console.log('[CreditsDisplay] No credits found in userData');
@@ -79,7 +88,8 @@ export function CreditsDisplay() {
 
   // Show plan name for PRO and MAX users
   const showPlanName = tier === 'pro' || tier === 'max';
-  const planName = tier === 'pro' ? 'PRO' : tier === 'max' ? 'MAX' : '';
+  // Use tier_display_name from backend, fallback to uppercase tier
+  const planName = tierDisplayName || (tier === 'pro' ? 'PRO' : tier === 'max' ? 'MAX' : '');
 
   // Remove excessive render logging - this was causing console spam
 
