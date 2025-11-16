@@ -187,11 +187,8 @@ export function GatewayzAuthProvider({
 
       try {
         const credits = Math.floor(authData.credits ?? 0);
-        if (credits <= 10) {
-          return;
-        }
-
-        if (authData.is_new_user) {
+        // Skip upgrade if insufficient credits or new user
+        if (credits <= 10 || authData.is_new_user) {
           return;
         }
 
@@ -201,13 +198,20 @@ export function GatewayzAuthProvider({
 
         upgradeAttemptedRef.current = true;
 
+        // Use timeout for API key fetch to prevent hanging
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+
         const response = await fetch("/api/user/api-keys", {
           method: "GET",
           headers: {
             Authorization: `Bearer ${currentKey}`,
             "Content-Type": "application/json",
           },
+          signal: controller.signal,
         });
+
+        clearTimeout(timeoutId);
 
         if (!response.ok) {
           console.log("[Auth] Unable to fetch upgraded API keys:", response.status);
@@ -218,23 +222,29 @@ export function GatewayzAuthProvider({
         const keys: Array<{ api_key?: string; is_primary?: boolean; environment_tag?: string }> =
           Array.isArray(data?.keys) ? data.keys : [];
 
-        const preferredKey =
-          keys.find(
-            (key) =>
-              typeof key.api_key === "string" &&
-              !key.api_key.startsWith(TEMP_API_KEY_PREFIX) &&
-              key.environment_tag === "live" &&
-              key.is_primary
-          ) ||
-          keys.find(
-            (key) =>
-              typeof key.api_key === "string" &&
-              !key.api_key.startsWith(TEMP_API_KEY_PREFIX) &&
-              key.environment_tag === "live"
-          ) ||
-          keys.find(
-            (key) => typeof key.api_key === "string" && !key.api_key.startsWith(TEMP_API_KEY_PREFIX)
-          );
+        // Find preferred key with better short-circuit logic
+        let preferredKey: { api_key?: string; is_primary?: boolean; environment_tag?: string } | undefined;
+
+        for (const key of keys) {
+          if (
+            typeof key.api_key === "string" &&
+            !key.api_key.startsWith(TEMP_API_KEY_PREFIX)
+          ) {
+            // Primary preference: live environment + primary key
+            if (key.environment_tag === "live" && key.is_primary) {
+              preferredKey = key;
+              break;
+            }
+            // Secondary preference: live environment (any key)
+            if (key.environment_tag === "live" && !preferredKey) {
+              preferredKey = key;
+            }
+            // Fallback: any non-temp key
+            if (!preferredKey) {
+              preferredKey = key;
+            }
+          }
+        }
 
         if (!preferredKey || !preferredKey.api_key) {
           console.log("[Auth] No upgraded API key found in response");
@@ -434,11 +444,31 @@ export function GatewayzAuthProvider({
       setError(null);
 
       try {
-        const token = await getAccessToken();
+        // Get token with timeout to prevent hanging
+        const tokenPromise = getAccessToken();
+        let token: string | null = null;
+
+        try {
+          // Add a reasonable timeout (3 seconds) for token retrieval
+          token = await Promise.race([
+            tokenPromise,
+            new Promise<null>((_, reject) =>
+              setTimeout(() => reject(new Error("Token retrieval timeout")), 3000)
+            )
+          ]);
+        } catch (tokenErr) {
+          console.warn("[Auth] Failed to get token:", tokenErr);
+          token = null; // Continue without token, let backend decide
+        }
+
         console.log("[Auth] Token retrieved:", token ? `${token.substring(0, 20)}...` : "null");
 
         const authBody = buildAuthRequestBody(user, token, userData);
         console.log("Sending auth body to backend:", authBody);
+
+        // Use fetch with timeout for backend call
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
 
         const response = await fetch("/api/auth", {
           method: "POST",
@@ -446,8 +476,10 @@ export function GatewayzAuthProvider({
             "Content-Type": "application/json",
           },
           body: JSON.stringify(authBody),
+          signal: controller.signal,
         });
 
+        clearTimeout(timeoutId);
         const rawResponseText = await response.text();
 
         if (!response.ok) {
@@ -553,6 +585,14 @@ export function GatewayzAuthProvider({
     };
   }, [syncWithBackend]);
 
+  // Memoize login/logout to avoid inline function recreation
+  const login = useCallback(() => privyLogin(), [privyLogin]);
+  const logout = useCallback(async () => {
+    clearStoredCredentials();
+    await privyLogout();
+    setStatus("unauthenticated");
+  }, [clearStoredCredentials, privyLogout]);
+
   const contextValue = useMemo<GatewayzAuthContextValue>(
     () => ({
       status,
@@ -562,23 +602,18 @@ export function GatewayzAuthProvider({
       privyReady,
       privyAuthenticated: authenticated,
       error,
-      login: () => privyLogin(),
-      logout: async () => {
-        clearStoredCredentials();
-        await privyLogout();
-        setStatus("unauthenticated");
-      },
+      login,
+      logout,
       refresh: (options) => syncWithBackend(options),
       redirectToBeta: enableBetaRedirect ? redirectToBetaIfEnabled : undefined,
     }),
     [
       apiKey,
       authenticated,
-      clearStoredCredentials,
       enableBetaRedirect,
       error,
-      privyLogin,
-      privyLogout,
+      login,
+      logout,
       privyReady,
       redirectToBetaIfEnabled,
       status,
