@@ -308,12 +308,10 @@ export async function POST(request: NextRequest) {
       targetUrl: targetUrl.toString(),
     });
 
-    // Forward the request to the backend
-    const backendRequestBody: any = {
-      model: body.model,
-      messages: body.messages,
-      stream: body.stream,
-    };
+    // For streaming requests, bypass Braintrust to avoid interference with the stream
+    if (body.stream) {
+      console.log('[API Proxy] Handling streaming request directly (bypassing Braintrust)');
+      console.log('[API Proxy] Target URL:', targetUrl.toString());
 
       // Retry logic for streaming requests
       const maxRetries = 3;
@@ -494,6 +492,9 @@ export async function POST(request: NextRequest) {
           throw fetchError;
         }
       }
+      
+      // Should never reach here, but TypeScript needs it
+      throw new Error('Unexpected error in streaming request handling');
     }
 
     // For non-streaming requests, use Braintrust tracing
@@ -516,30 +517,17 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // For streaming responses, forward the stream directly
-    if (body.stream) {
-      console.log('Chat completions API route - Streaming response...');
-
-      // OPTIMIZATION: Return streaming response with optimized Edge Runtime headers
-      // Connection pooling and low buffering for fast response
-      return new NextResponse(response!.body, {
-        status: 200,
+    // Handle streaming response from processCompletion
+    if ('stream' in result) {
+      return new Response(result.stream, {
+        status: result.status,
         headers: {
           'Content-Type': 'text/event-stream',
-          'Cache-Control': 'no-cache, no-transform',
-          'X-Accel-Buffering': 'no',
-          'Connection': 'keep-alive', // Maintain connection for streaming
-          'Transfer-Encoding': 'chunked', // Enable chunked encoding for responsiveness
-          'X-Content-Type-Options': 'nosniff', // Security header
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
         },
       });
     }
-
-    // For non-streaming responses, parse and return JSON
-    const data = await response!.json();
-    console.log('Chat completions API route - Success!');
-
-    return NextResponse.json(data);
   } catch (error) {
     profiler.markStage(requestId, 'error_occurred', {
       errorName: error instanceof Error ? error.name : 'UnknownError',
