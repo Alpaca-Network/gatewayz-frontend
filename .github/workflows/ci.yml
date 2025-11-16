@@ -161,6 +161,33 @@ jobs:
           path: playwright-report/
           retention-days: 30
 
+  # Trigger Codex on CI failure
+  trigger-codex-on-failure:
+    name: Trigger Codex on Failure
+    runs-on: ubuntu-latest
+    needs: [test, lint, typecheck, build]
+    if: failure()
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Trigger Codex
+        run: |
+          # Prepare context for Codex
+          FAILED_JOBS=""
+          [[ "${{ needs.test.result }}" == "failure" ]] && FAILED_JOBS="${FAILED_JOBS}test "
+          [[ "${{ needs.lint.result }}" == "failure" ]] && FAILED_JOBS="${FAILED_JOBS}lint "
+          [[ "${{ needs.typecheck.result }}" == "failure" ]] && FAILED_JOBS="${FAILED_JOBS}typecheck "
+          [[ "${{ needs.build.result }}" == "failure" ]] && FAILED_JOBS="${FAILED_JOBS}build "
+
+          echo "Failed jobs: $FAILED_JOBS"
+          echo "Branch: ${{ github.ref }}"
+          echo "Commit: ${{ github.sha }}"
+          echo "Trigger: Codex will analyze and fix CI failures"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   # Summary job that all other jobs depend on - useful for branch protection rules
   ci-success:
     name: CI Success
