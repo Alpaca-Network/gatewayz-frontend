@@ -115,7 +115,7 @@ export function SessionInitializer() {
       });
 
       if (token && userId) {
-        console.log("[SessionInit] Session transfer params detected", { action });
+        console.log("[SessionInit] Session transfer params detected", { action: currentAction });
 
         // Store token for persistence
         storeSessionTransferToken(token, userId);
