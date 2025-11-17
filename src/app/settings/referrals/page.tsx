@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -123,8 +123,14 @@ function ReferralsPageContent() {
   });
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const hasInitialized = useRef(false);
 
   useEffect(() => {
+    if (hasInitialized.current) {
+      return;
+    }
+    hasInitialized.current = true;
+
     const fetchReferralData = async () => {
       setLoading(true);
 
@@ -228,7 +234,7 @@ function ReferralsPageContent() {
     };
 
     fetchReferralData();
-  }, [toast]);
+  }, []);
 
   const copyToClipboard = async (text: string, label: string) => {
     try {
