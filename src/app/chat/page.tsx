@@ -46,7 +46,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format, isToday, isYesterday, formatDistanceToNow } from 'date-fns';
-import { getApiKey, getUserData, saveApiKey, saveUserData, type UserData } from '@/lib/api';
+import { AUTH_REFRESH_EVENT, getApiKey, getUserData, saveApiKey, saveUserData, type UserData } from '@/lib/api';
 import { ChatHistoryAPI, ChatSession as ApiChatSession, ChatMessage as ApiChatMessage, handleApiError } from '@/lib/chat-history';
 import { ChatStreamHandler } from '@/lib/chat-stream-handler';
 import { Copy, Share2, RotateCcw } from 'lucide-react';
@@ -1544,9 +1544,36 @@ function ChatPageContent() {
 
     // Check for API key in localStorage as fallback authentication
     useEffect(() => {
-        const apiKey = getApiKey();
-        const userData = getUserData();
-        setHasApiKey(!!(apiKey && userData?.privy_user_id));
+        const updateApiKeyState = () => {
+            const apiKey = getApiKey();
+            setHasApiKey(!!apiKey);
+        };
+
+        updateApiKeyState();
+
+        if (typeof window === 'undefined') {
+            return;
+        }
+
+        const handleStorageChange = (event: StorageEvent) => {
+            if (!event.key || event.key === 'gatewayz_api_key') {
+                updateApiKeyState();
+            }
+        };
+
+        const handleAuthRefresh = () => updateApiKeyState();
+
+        window.addEventListener('storage', handleStorageChange);
+        window.addEventListener(AUTH_REFRESH_EVENT as unknown as string, handleAuthRefresh as EventListener);
+
+        // Poll as a fallback for same-tab updates since the storage event doesn't fire
+        const pollInterval = window.setInterval(updateApiKeyState, 1500);
+
+        return () => {
+            window.removeEventListener('storage', handleStorageChange);
+            window.removeEventListener(AUTH_REFRESH_EVENT as unknown as string, handleAuthRefresh as EventListener);
+            clearInterval(pollInterval);
+        };
     }, [authLoading, isAuthenticated]);
 
     // Check for referral bonus notification flag
@@ -1577,10 +1604,9 @@ function ChatPageContent() {
         if (!isAuthenticated && !hasApiKey) return;
 
         const apiKey = getApiKey();
-        const userData = getUserData();
 
         // Wait for API key to be available
-        if (!apiKey || !userData?.privy_user_id) {
+        if (!apiKey) {
             console.log('[Pending Message] Waiting for API key to be available...');
             return;
         }
@@ -1703,15 +1729,18 @@ function ChatPageContent() {
                 if (key && data?.privy_user_id) {
                     clearInterval(checkInterval);
                     // Trigger auth ready state to force effect to re-run
-                    setAuthReady(true);
+                    setAuthReady(prev => !prev);
                 }
             }, 100);
 
             // Clean up after 10 seconds
-            setTimeout(() => clearInterval(checkInterval), 10000);
-            return () => clearInterval(checkInterval);
+            const timeoutId = window.setTimeout(() => clearInterval(checkInterval), 10000);
+            return () => {
+                clearInterval(checkInterval);
+                clearTimeout(timeoutId);
+            };
         }
-    }, [authLoading, isAuthenticated, hasApiKey, searchParams]);
+    }, [authLoading, isAuthenticated, hasApiKey, searchParams, authReady]);
 
     // Handle rate limit countdown timer
     useEffect(() => {
