@@ -1261,6 +1261,9 @@ function ChatPageContent() {
     // Track if auto-send has already been triggered to prevent duplicate sends
     const autoSendTriggeredRef = useRef(false);
 
+    // Store handleSendMessage ref to avoid closure staling in effects
+    const handleSendMessageRef = useRef<() => Promise<void>>();
+
     // Trigger for forcing session reload after API key becomes available
     const [authReady, setAuthReady] = useState(false);
 
@@ -1532,7 +1535,10 @@ function ChatPageContent() {
             console.log('[AutoSend] All conditions met! Sending message now...');
             autoSendTriggeredRef.current = true; // Mark as triggered to prevent re-sending
             setShouldAutoSend(false); // Reset flag
-            handleSendMessage();
+            // Use ref to avoid dependency on handleSendMessage which is defined later
+            if (handleSendMessageRef.current) {
+                handleSendMessageRef.current();
+            }
         }
     }, [shouldAutoSend, activeSessionId, message, selectedModel, loading, isStreamingResponse, pendingMessage]);
 
@@ -1562,7 +1568,7 @@ function ChatPageContent() {
                 });
             }, 1000); // Delay to allow page to settle
         }
-    }, [authLoading, isAuthenticated, hasApiKey, toast]);
+    }, [authLoading, isAuthenticated, hasApiKey]);
 
     // Send pending message after authentication completes
     useEffect(() => {
@@ -1705,7 +1711,7 @@ function ChatPageContent() {
             setTimeout(() => clearInterval(checkInterval), 10000);
             return () => clearInterval(checkInterval);
         }
-    }, [authLoading, isAuthenticated, hasApiKey]);
+    }, [authLoading, isAuthenticated, hasApiKey, searchParams]);
 
     // Handle rate limit countdown timer
     useEffect(() => {
@@ -3061,6 +3067,11 @@ function ChatPageContent() {
             setLoading(false);
         }
     };
+
+    // Update the ref whenever handleSendMessage changes (for use in effects that can't list it as dependency)
+    useEffect(() => {
+        handleSendMessageRef.current = handleSendMessage;
+    }, [handleSendMessage]);
 
   // Show login screen if not authenticated
   if (authLoading) {
