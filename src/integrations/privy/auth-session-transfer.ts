@@ -16,12 +16,14 @@ const SESSION_TRANSFER_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
  * @param userId - Gatewayz user ID
  * @param betaDomain - Beta domain URL (default: https://beta.gatewayz.ai)
  * @param returnUrl - Optional URL to return to after auth on beta domain
+ * @param action - Optional action parameter (e.g., 'signin', 'freetrial')
  */
 export function redirectToBetaWithSession(
   token: string,
   userId: string | number,
   betaDomain: string = 'https://beta.gatewayz.ai',
-  returnUrl?: string
+  returnUrl?: string,
+  action?: string
 ): void {
   const params = new URLSearchParams();
   params.append('token', token);
@@ -31,10 +33,15 @@ export function redirectToBetaWithSession(
     params.append('returnUrl', returnUrl);
   }
 
+  if (action) {
+    params.append('action', action);
+  }
+
   const redirectUrl = `${betaDomain}?${params.toString()}`;
   console.log('[SessionTransfer] Redirecting to beta with session:', {
     domain: betaDomain,
     hasReturnUrl: !!returnUrl,
+    action: action || undefined,
   });
 
   // Use location.href for a hard redirect
