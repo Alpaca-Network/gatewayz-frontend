@@ -374,6 +374,9 @@ The {self.app_name} Team
                 logger.warning("❌ Resend API key not configured, skipping email notification")
                 return False
 
+            # Ensure API key is set before each send (in case it changed)
+            resend.api_key = self.resend_api_key
+
             # Use Resend SDK
             logger.info("Sending email via Resend SDK...")
             response = resend.Emails.send(
