@@ -4,8 +4,48 @@
     "builder": "NIXPACKS"
   },
   "deploy": {
-    "startCommand": "uvicorn src.main:app --host 0.0.0.0 --port $PORT",
+    "startCommand": "uvicorn src.main:app --host 0.0.0.0 --port $PORT --workers 1",
     "restartPolicyType": "ON_FAILURE",
-    "restartPolicyMaxRetries": 10
+    "restartPolicyMaxRetries": 10,
+    "healthchecks": {
+      "liveness": {
+        "enabled": true,
+        "interval": 30,
+        "timeout": 10,
+        "initialDelay": 30,
+        "path": "/health"
+      },
+      "readiness": {
+        "enabled": true,
+        "interval": 10,
+        "timeout": 5,
+        "initialDelay": 10,
+        "path": "/health"
+      }
+    },
+    "environments": {
+      "production": {
+        "replicas": 1,
+        "healthChecks": {
+          "liveness": {
+            "enabled": true,
+            "interval": 30,
+            "timeout": 10,
+            "initialDelay": 60
+          }
+        }
+      },
+      "staging": {
+        "replicas": 1,
+        "healthChecks": {
+          "liveness": {
+            "enabled": true,
+            "interval": 30,
+            "timeout": 10,
+            "initialDelay": 30
+          }
+        }
+      }
+    }
   }
 }

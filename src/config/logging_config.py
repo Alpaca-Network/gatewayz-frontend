@@ -13,7 +13,7 @@ Features:
 
 import logging
 import sys
-from typing import Dict, Any, Optional
+from typing import Any, Optional
 
 from src.config.config import Config
 
@@ -28,7 +28,7 @@ class LokiLogHandler(logging.Handler):
     to Loki via HTTP API.
     """
 
-    def __init__(self, loki_url: str, tags: Dict[str, str]):
+    def __init__(self, loki_url: str, tags: dict[str, str]):
         super().__init__()
         self.loki_url = loki_url
         self.tags = tags

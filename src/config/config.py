@@ -147,7 +147,7 @@ class Config:
     )
 
     @classmethod
-    def get_portkey_virtual_key(cls, provider: Optional[str] = None) -> Optional[str]:
+    def get_portkey_virtual_key(cls, provider: str | None = None) -> str | None:
         """
         Resolve Portkey virtual key for a provider.
 

@@ -17,6 +17,7 @@ from src.services.bug_fix_generator import (
     get_bug_fix_generator,
     BugFix,
 )
+from src.services.autonomous_monitor import get_autonomous_monitor
 
 logger = logging.getLogger(__name__)
 
@@ -28,13 +29,34 @@ async def monitor_health():
     """Check if error monitoring is enabled."""
     try:
         monitor = await get_error_monitor()
+        autonomous_monitor = get_autonomous_monitor()
         return {
             "status": "healthy",
             "monitoring_enabled": monitor.loki_enabled,
             "error_patterns_tracked": len(monitor.error_patterns),
+            "autonomous_monitoring": {
+                "enabled": autonomous_monitor.enabled,
+                "running": autonomous_monitor.is_running,
+                "auto_fix": autonomous_monitor.auto_fix_enabled,
+            },
         }
     except Exception as e:
         logger.error(f"Health check failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/autonomous/status")
+async def autonomous_monitor_status():
+    """Get autonomous monitoring status."""
+    try:
+        monitor = get_autonomous_monitor()
+        status = await monitor.get_status()
+        return {
+            "status": "ok",
+            "monitor": status,
+        }
+    except Exception as e:
+        logger.error(f"Error getting autonomous monitor status: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

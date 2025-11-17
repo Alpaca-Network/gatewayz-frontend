@@ -308,7 +308,7 @@ class DatabaseConfig:
 
 
 # Global database configuration instance
-_db_config: Optional[DatabaseConfig] = None
+_db_config: DatabaseConfig | None = None
 
 
 def get_db_config() -> DatabaseConfig:

@@ -16,7 +16,7 @@ from uuid import uuid4
 
 import httpx
 
-from src.config.config import ANTHROPIC_API_KEY, GITHUB_TOKEN
+from src.config.config import Config
 from src.services.error_monitor import ErrorPattern, ErrorCategory
 
 logger = logging.getLogger(__name__)
@@ -61,8 +61,8 @@ class BugFixGenerator:
     """Generates bug fixes using Claude API."""
 
     def __init__(self, github_token: Optional[str] = None):
-        self.anthropic_key = ANTHROPIC_API_KEY
-        self.github_token = github_token or GITHUB_TOKEN
+        self.anthropic_key = Config.ANTHROPIC_API_KEY
+        self.github_token = github_token or Config.GITHUB_TOKEN
         self.anthropic_url = "https://api.anthropic.com/v1"
         self.session: Optional[httpx.AsyncClient] = None
         self.generated_fixes: Dict[str, BugFix] = {}

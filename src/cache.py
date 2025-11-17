@@ -269,7 +269,7 @@ def clear_modelz_cache():
 
 def is_cache_fresh(cache: dict) -> bool:
     """Check if cache is within fresh TTL
-    
+
     Note: Only checks timestamp, not data value. This allows empty lists []
     to be treated as valid cached values (representing "no models found").
     """
@@ -281,7 +281,7 @@ def is_cache_fresh(cache: dict) -> bool:
 
 def is_cache_stale_but_usable(cache: dict) -> bool:
     """Check if cache is stale but within stale-while-revalidate window
-    
+
     Note: Only checks timestamp, not data value. This allows empty lists []
     to be treated as valid cached values (representing "no models found").
     """

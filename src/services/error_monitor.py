@@ -17,12 +17,7 @@ from urllib.parse import urlencode
 
 import httpx
 
-from src.config.config import (
-    LOKI_PUSH_URL,
-    LOKI_ENABLED,
-    SUPABASE_URL,
-    SUPABASE_KEY,
-)
+from src.config.config import Config
 
 logger = logging.getLogger(__name__)
 
@@ -93,8 +88,8 @@ class ErrorMonitor:
     def __init__(self):
         self.session: Optional[httpx.AsyncClient] = None
         self.error_patterns: Dict[str, ErrorPattern] = {}
-        self.loki_enabled = LOKI_ENABLED
-        self.loki_url = LOKI_PUSH_URL
+        self.loki_enabled = Config.LOKI_ENABLED
+        self.loki_url = Config.LOKI_PUSH_URL
 
     async def __aenter__(self):
         self.session = httpx.AsyncClient(timeout=10.0)
