@@ -83,7 +83,21 @@ export function cleanupSessionTransferParams(): void {
   }
 
   // Replace current history entry to remove transfer params from URL
-  window.history.replaceState({}, document.title, window.location.pathname);
+  // Use replaceState to avoid creating a new history entry
+  try {
+    window.history.replaceState({}, document.title, window.location.pathname);
+    console.log('[SessionTransfer] URL parameters cleaned up from history');
+  } catch (error) {
+    console.warn('[SessionTransfer] Failed to cleanup URL parameters:', error);
+    // Fallback: try again with just pathname
+    try {
+      const url = new URL(window.location.href);
+      url.search = '';
+      window.history.replaceState({}, document.title, url.toString());
+    } catch (fallbackError) {
+      console.error('[SessionTransfer] Failed to cleanup URL even with fallback:', fallbackError);
+    }
+  }
 }
 
 /**

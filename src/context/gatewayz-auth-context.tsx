@@ -428,13 +428,19 @@ export function GatewayzAuthProvider({
         return;
       }
 
+      // Prevent concurrent syncs unless force is explicitly set
       if (syncInFlightRef.current) {
         if (!options?.force) {
+          console.log("[Auth] Sync already in flight, skipping duplicate sync");
           return;
         }
+        // If force is true, we still want to proceed but warn about it
+        console.log("[Auth] Force refresh requested while sync in flight, allowing");
       }
 
+      // Skip if we've already synced with this Privy user and have valid credentials
       if (!options?.force && lastSyncedPrivyIdRef.current === user.id && apiKey) {
+        console.log("[Auth] Already synced with this Privy user, skipping sync");
         setStatus("authenticated");
         return;
       }

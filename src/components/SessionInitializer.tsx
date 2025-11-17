@@ -98,8 +98,10 @@ export function SessionInitializer() {
     } catch (e) {
       // If we can't get session params, just continue with initialization
       // Errors during actual initialization will be caught below
+      console.error("[SessionInit] Error checking session transfer params:", e);
     }
 
+    // Mark as initialized BEFORE async operations to prevent duplicate initialization
     initializedRef.current = true;
 
     async function initializeSession() {
@@ -144,9 +146,14 @@ export function SessionInitializer() {
               subscription_end_date: userData.subscription_end_date,
             };
 
-            saveUserData(userDataToSave);
-            setCachedUserData(token, userDataToSave);
-            console.log("[SessionInit] User data saved to localStorage");
+            try {
+              saveUserData(userDataToSave);
+              setCachedUserData(token, userDataToSave);
+              console.log("[SessionInit] User data saved to localStorage");
+            } catch (saveError) {
+              console.error("[SessionInit] Failed to save user data to localStorage:", saveError);
+              // Continue anyway - API key is already saved, auth will sync
+            }
           }
           // Always trigger refresh, whether user data was fetched or not
           refresh({ force: true }).catch((error) => {
@@ -169,11 +176,13 @@ export function SessionInitializer() {
       }
 
       // Check for stored session transfer token (fallback)
+      // Only use if we don't already have a valid API key
+      const existingApiKey = localStorage.getItem("gatewayz_api_key");
       const { token: storedToken, userId: storedUserId } =
         getStoredSessionTransferToken();
 
-      if (storedToken && storedUserId && !localStorage.getItem("gatewayz_api_key")) {
-        console.log("[SessionInit] Using stored session transfer token");
+      if (storedToken && storedUserId && !existingApiKey) {
+        console.log("[SessionInit] Using stored session transfer token from sessionStorage");
 
         // Restore API key from sessionStorage
         saveApiKey(storedToken);
@@ -196,9 +205,14 @@ export function SessionInitializer() {
               subscription_end_date: userData.subscription_end_date,
             };
 
-            saveUserData(userDataToSave);
-            setCachedUserData(storedToken, userDataToSave);
-            console.log("[SessionInit] User data saved to localStorage (stored token)");
+            try {
+              saveUserData(userDataToSave);
+              setCachedUserData(storedToken, userDataToSave);
+              console.log("[SessionInit] User data saved to localStorage (stored token)");
+            } catch (saveError) {
+              console.error("[SessionInit] Failed to save user data from stored token:", saveError);
+              // Continue anyway - API key is already saved, auth will sync
+            }
           }
           // Always trigger refresh after user data fetch attempt
           refresh({ force: true }).catch((error) => {
