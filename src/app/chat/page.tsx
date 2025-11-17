@@ -3014,15 +3014,23 @@ function ChatPageContent() {
                 let toastTitle = "Error";
                 let toastDescription = errorMessage;
 
-                // Handle API key validation errors (403)
-                if (errorMessage.includes('API key') || errorMessage.includes('403')) {
-                    toastTitle = "Session Expired";
-                    toastDescription = "Your session has expired. Please refresh the page and log in again.";
-                }
+                // Check rate limit FIRST - it may contain "API key" in the message
                 // Handle rate limit errors (429)
-                else if (errorMessage.includes('Rate limit') || errorMessage.includes('429')) {
+                if (errorMessage.includes('Rate limit') || errorMessage.includes('429') || errorMessage.includes('Burst limit')) {
                     toastTitle = "Rate Limit Reached";
                     toastDescription = "You've exceeded the limit of 100 requests per minute (burst of 20). Please wait a moment before trying again.";
+                    setRateLimitCountdown(60); // Start 60 second countdown
+                }
+                // Handle API key validation errors (401/403) - but NOT if it's a rate limit error
+                else if (
+                    (errorMessage.includes('Unauthorized') || 
+                     errorMessage.includes('401') ||
+                     errorMessage.includes('Invalid') ||
+                     (errorMessage.includes('API key') && !errorMessage.includes('rate limit'))) ||
+                    errorMessage.includes('403')
+                ) {
+                    toastTitle = "Session Expired";
+                    toastDescription = "Your session has expired. Please refresh the page and log in again.";
                 }
 
                 toast({
