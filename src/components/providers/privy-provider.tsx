@@ -68,6 +68,15 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
             },
           },
           defaultChain: base,
+          email: {
+            // Enable email verification with code delivery
+            verifyEmailOnSignup: true,
+          },
+          externalWallets: {
+            solana: {
+              enabled: false,
+            },
+          },
         }}
       >
         <PreviewHostnameInterceptor />

@@ -10,6 +10,10 @@ export const privyConfig = {
     },
     // Configure login methods
     loginMethods: ['email', 'google', 'github'],
+    // Enable email verification with code delivery
+    email: {
+      verifyEmailOnSignup: true,
+    },
   },
 };
 
