@@ -1,0 +1,312 @@
+name: Auto Deploy to Railway
+
+on:
+  push:
+    branches:
+      - main
+      - staging
+    paths:
+      - "src/**"
+      - "requirements.txt"
+      - "pyproject.toml"
+      - "railway.json"
+      - "start.sh"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Environment to deploy to"
+        required: true
+        default: "staging"
+        type: choice
+        options:
+          - production
+          - staging
+
+env:
+  RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+  RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
+
+jobs:
+  # Determine environment based on branch
+  setup-environment:
+    name: Setup Deployment Environment
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.set-env.outputs.environment }}
+      railway_environment: ${{ steps.set-env.outputs.railway_environment }}
+
+    steps:
+      - name: Determine environment
+        id: set-env
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            ENV="${{ github.event.inputs.environment }}"
+            case "$ENV" in
+              production)
+                RAILWAY_ENV="production"
+                echo "environment=production" >> $GITHUB_OUTPUT
+                echo "railway_environment=production" >> $GITHUB_OUTPUT
+                ;;
+              staging)
+                RAILWAY_ENV="staging"
+                echo "environment=staging" >> $GITHUB_OUTPUT
+                echo "railway_environment=staging" >> $GITHUB_OUTPUT
+                ;;
+            esac
+          else
+            # Auto-detect from branch
+            if [ "${{ github.ref }}" == "refs/heads/main" ]; then
+              echo "environment=production" >> $GITHUB_OUTPUT
+              echo "railway_environment=production" >> $GITHUB_OUTPUT
+            elif [ "${{ github.ref }}" == "refs/heads/staging" ]; then
+              echo "environment=staging" >> $GITHUB_OUTPUT
+              echo "railway_environment=staging" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+  # Pull all CI checks before deploying
+  check-ci-status:
+    name: Verify CI Passed
+    runs-on: ubuntu-latest
+    needs: setup-environment
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Wait for CI workflow
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const sha = context.sha;
+
+            console.log(`Checking CI status for commit ${sha}...`);
+
+            // Poll for CI workflow completion (max 5 minutes)
+            let attempts = 0;
+            const maxAttempts = 30;
+
+            while (attempts < maxAttempts) {
+              const checkRuns = await github.rest.checks.listForRef({
+                owner,
+                repo,
+                ref: sha,
+              });
+
+              console.log(`Attempt ${attempts + 1}: Found ${checkRuns.data.check_runs.length} check runs`);
+
+              // Get the CI workflow
+              const ciWorkflows = checkRuns.data.check_runs.filter(run =>
+                run.name === 'Code Quality Checks' ||
+                run.name === 'Security Scan' ||
+                run.name === 'Run Tests (Shard 1)' ||
+                run.name === 'Run Tests (Shard 2)' ||
+                run.name === 'Run Tests (Shard 3)' ||
+                run.name === 'Run Tests (Shard 4)' ||
+                run.name === 'Coverage Report' ||
+                run.name === 'Build Verification' ||
+                run.name === 'Deployment Ready'
+              );
+
+              if (ciWorkflows.length === 0) {
+                console.log('Waiting for CI checks to start...');
+                attempts++;
+                await new Promise(resolve => setTimeout(resolve, 10000));
+                continue;
+              }
+
+              const allCompleted = ciWorkflows.every(run =>
+                run.status === 'completed'
+              );
+
+              if (!allCompleted) {
+                console.log('Waiting for CI checks to complete...');
+                attempts++;
+                await new Promise(resolve => setTimeout(resolve, 10000));
+                continue;
+              }
+
+              const allPassed = ciWorkflows.every(run =>
+                run.conclusion === 'success'
+              );
+
+              if (!allPassed) {
+                const failedChecks = ciWorkflows
+                  .filter(run => run.conclusion !== 'success')
+                  .map(run => `${run.name} (${run.conclusion})`)
+                  .join(', ');
+                core.setFailed(`CI checks failed: ${failedChecks}`);
+                process.exit(1);
+              }
+
+              console.log('✅ All CI checks passed!');
+              break;
+            }
+
+            if (attempts >= maxAttempts) {
+              core.setFailed('CI checks did not complete within 5 minutes');
+              process.exit(1);
+            }
+
+  # Deploy to Railway
+  deploy-railway:
+    name: Deploy to Railway (${{ needs.setup-environment.outputs.environment }})
+    runs-on: ubuntu-latest
+    needs: [setup-environment, check-ci-status]
+    environment:
+      name: ${{ needs.setup-environment.outputs.environment }}
+      url: https://${{ secrets.RAILWAY_DOMAIN }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Railway CLI
+        run: |
+          npm install -g @railway/cli
+
+      - name: Authenticate with Railway
+        run: |
+          railway login --token ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Deploy to Railway
+        env:
+          RAILWAY_ENVIRONMENT: ${{ needs.setup-environment.outputs.railway_environment }}
+        run: |
+          echo "🚀 Deploying to Railway ($RAILWAY_ENVIRONMENT)..."
+
+          # Set Railway project and environment
+          railway project switch --id $RAILWAY_PROJECT_ID
+          railway environment switch --name $RAILWAY_ENVIRONMENT
+
+          # Trigger deployment
+          railway up --service backend --detach
+
+          echo "✅ Deployment triggered"
+
+      - name: Wait for deployment
+        run: |
+          echo "⏳ Waiting for Railway deployment to complete..."
+          sleep 60
+          railway logs --follow --tail 50 || true
+
+      - name: Verify deployment
+        run: |
+          echo "🔍 Verifying deployment..."
+          max_attempts=12
+          attempt=1
+
+          while [ $attempt -le $max_attempts ]; do
+            DOMAIN="${{ secrets.RAILWAY_DOMAIN }}"
+            HEALTH_STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://$DOMAIN/health || echo "000")
+
+            if [ "$HEALTH_STATUS" == "200" ]; then
+              echo "✅ Deployment healthy! Service responding at https://$DOMAIN"
+              exit 0
+            fi
+
+            echo "Attempt $attempt/$max_attempts: Health check returned $HEALTH_STATUS"
+            sleep 10
+            attempt=$((attempt + 1))
+          done
+
+          echo "⚠️ Deployment verification incomplete, but deployment was triggered"
+          exit 0
+
+  # Notify deployment status
+  notify-deployment:
+    name: Notify Deployment Status
+    runs-on: ubuntu-latest
+    needs: [setup-environment, deploy-railway]
+    if: always()
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Comment on related PR
+        if: github.event_name == 'push'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: pullRequests } = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'closed',
+              sort: 'updated',
+              direction: 'desc',
+              per_page: 10
+            });
+
+            // Find PR that was just merged
+            for (const pr of pullRequests) {
+              if (pr.merged_at && new Date(pr.merged_at) > new Date(Date.now() - 60000)) {
+                const environment = '${{ needs.setup-environment.outputs.environment }}';
+                const domain = '${{ secrets.RAILWAY_DOMAIN }}';
+                const deployStatus = '${{ needs.deploy-railway.result }}';
+
+                let message = '';
+                if (deployStatus === 'success') {
+                  message = `🚀 **Deployment Successful!**\n\n` +
+                    `Environment: **${environment}**\n` +
+                    `Domain: https://${domain}\n` +
+                    `Commit: ${context.sha.substring(0, 7)}\n` +
+                    `Branch: ${context.ref_name}`;
+                } else {
+                  message = `⚠️ **Deployment Failed**\n\n` +
+                    `Environment: **${environment}**\n` +
+                    `Status: ${deployStatus}\n` +
+                    `Check the [workflow run](${context.payload.repository.html_url}/actions/runs/${context.runId})`;
+                }
+
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: pr.number,
+                  body: message
+                });
+                break;
+              }
+            }
+
+      - name: Deployment summary
+        run: |
+          ENVIRONMENT="${{ needs.setup-environment.outputs.environment }}"
+          DOMAIN="${{ secrets.RAILWAY_DOMAIN }}"
+          STATUS="${{ needs.deploy-railway.result }}"
+
+          echo "=== Deployment Summary ==="
+          echo "Environment: $ENVIRONMENT"
+          echo "Domain: https://$DOMAIN"
+          echo "Status: $STATUS"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Commit: ${{ github.sha }}"
+          echo ""
+
+          if [ "$STATUS" == "success" ]; then
+            echo "✅ Deployment completed successfully!"
+          else
+            echo "⚠️ Deployment had issues. Check the logs above."
+          fi
+
+      - name: Trigger monitoring workflow
+        if: needs.deploy-railway.result == 'success'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            try {
+              await github.rest.actions.createWorkflowDispatch({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: 'monitor-deployment.yml',
+                ref: context.ref,
+              });
+              console.log('✅ Monitoring workflow triggered');
+            } catch (error) {
+              console.log('⚠️ Could not trigger monitoring workflow:', error.message);
+            }

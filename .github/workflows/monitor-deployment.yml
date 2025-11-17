@@ -1,0 +1,192 @@
+name: Monitor Deployment Health
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/15 * * * *'  # Every 15 minutes
+
+env:
+  RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+  RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
+
+jobs:
+  monitor-health:
+    name: Check Deployment Health
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: |
+          npm install -g @railway/cli
+
+      - name: Authenticate with Railway
+        run: |
+          railway login --token ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Check production health
+        id: prod-health
+        continue-on-error: true
+        run: |
+          echo "Checking production deployment..."
+          railway project switch --id $RAILWAY_PROJECT_ID
+          railway environment switch --name production
+
+          DOMAIN="${{ secrets.RAILWAY_DOMAIN }}"
+          HEALTH_RESPONSE=$(curl -s -w "\n%{http_code}" https://$DOMAIN/health || echo "error\n000")
+
+          HTTP_CODE=$(echo "$HEALTH_RESPONSE" | tail -1)
+          BODY=$(echo "$HEALTH_RESPONSE" | head -n -1)
+
+          echo "HTTP Status: $HTTP_CODE"
+          echo "Response: $BODY"
+
+          if [ "$HTTP_CODE" == "200" ]; then
+            echo "health_status=healthy" >> $GITHUB_OUTPUT
+            echo "✅ Production deployment is healthy"
+          else
+            echo "health_status=unhealthy" >> $GITHUB_OUTPUT
+            echo "⚠️ Production deployment returned HTTP $HTTP_CODE"
+            exit 1
+          fi
+
+      - name: Get deployment logs
+        if: steps.prod-health.outcome == 'failure'
+        run: |
+          echo "Fetching recent deployment logs..."
+          railway project switch --id $RAILWAY_PROJECT_ID
+          railway environment switch --name production
+          railway logs --tail 100 || true
+
+      - name: Create issue if health check fails
+        if: steps.prod-health.outcome == 'failure'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = '🚨 Production Deployment Health Check Failed';
+            const body = `
+            ## Deployment Health Check Alert
+
+            **Status**: UNHEALTHY
+
+            **Environment**: Production
+
+            **Time**: ${new Date().toISOString()}
+
+            **Check**: Health endpoint at https://${{ secrets.RAILWAY_DOMAIN }}/health returned non-200 status
+
+            ### Actions
+            - [ ] Check Railway dashboard for errors
+            - [ ] Review recent logs
+            - [ ] Trigger manual redeploy if needed
+            - [ ] Investigate root cause
+
+            **Next Steps**:
+            1. View [Railway Dashboard](https://railway.app)
+            2. Check container logs
+            3. Verify database connectivity
+            4. Check environment variables
+
+            [View Workflow Run](${context.payload.repository.html_url}/actions/runs/${context.runId})
+            `;
+
+            // Check if issue already exists
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: ['deployment-alert']
+            });
+
+            const existingIssue = issues.find(issue => issue.title.includes('Production Deployment Health Check Failed'));
+
+            if (!existingIssue) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: ['deployment-alert', 'urgent']
+              });
+              console.log('✅ Created health check failure issue');
+            } else {
+              console.log('ℹ️ Health check failure issue already exists');
+            }
+
+      - name: Check staging health
+        id: staging-health
+        continue-on-error: true
+        run: |
+          echo "Checking staging deployment..."
+          railway project switch --id $RAILWAY_PROJECT_ID
+          railway environment switch --name staging
+
+          # Staging domain (adjust if different)
+          STAGING_DOMAIN="staging-${{ secrets.RAILWAY_DOMAIN }}"
+
+          HEALTH_RESPONSE=$(curl -s -w "\n%{http_code}" https://$STAGING_DOMAIN/health || echo "error\n000")
+
+          HTTP_CODE=$(echo "$HEALTH_RESPONSE" | tail -1)
+
+          if [ "$HTTP_CODE" == "200" ]; then
+            echo "health_status=healthy" >> $GITHUB_OUTPUT
+            echo "✅ Staging deployment is healthy"
+          else
+            echo "health_status=unhealthy" >> $GITHUB_OUTPUT
+            echo "⚠️ Staging deployment returned HTTP $HTTP_CODE"
+          fi
+
+  # Collect metrics
+  collect-metrics:
+    name: Collect Deployment Metrics
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: |
+          npm install -g @railway/cli
+
+      - name: Authenticate with Railway
+        run: |
+          railway login --token ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Collect production metrics
+        continue-on-error: true
+        run: |
+          railway project switch --id $RAILWAY_PROJECT_ID
+          railway environment switch --name production
+
+          echo "📊 Production Metrics"
+          echo "=================="
+          railway metrics || echo "Metrics not available via CLI"
+
+          # Alternative: Get container info
+          railway service list || true
+
+      - name: Generate deployment report
+        run: |
+          echo "## Deployment Health Report" > deployment-report.md
+          echo "" >> deployment-report.md
+          echo "**Generated**: $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> deployment-report.md
+          echo "" >> deployment-report.md
+          echo "### Environment Status" >> deployment-report.md
+          echo "- Production: ${{ needs.monitor-health.outputs.prod_health_status || 'unknown' }}" >> deployment-report.md
+          echo "- Staging: ${{ needs.monitor-health.outputs.staging_health_status || 'unknown' }}" >> deployment-report.md
+          echo "" >> deployment-report.md
+          echo "### Quick Links" >> deployment-report.md
+          echo "- [Railway Dashboard](https://railway.app)" >> deployment-report.md
+          echo "- [Production Domain](https://${{ secrets.RAILWAY_DOMAIN }})" >> deployment-report.md
+          echo "- [Health Check](https://${{ secrets.RAILWAY_DOMAIN }}/health)" >> deployment-report.md
+
+      - name: Upload report as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-report
+          path: deployment-report.md
+          retention-days: 7
