@@ -172,7 +172,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Trigger Codex
+      - name: Fetch PR comments and CI context
+        id: fetch-context
         run: |
           # Prepare context for Codex
           FAILED_JOBS=""
@@ -182,9 +183,49 @@ jobs:
           [[ "${{ needs.build.result }}" == "failure" ]] && FAILED_JOBS="${FAILED_JOBS}build "
 
           echo "Failed jobs: $FAILED_JOBS"
+          echo "FAILED_JOBS=$FAILED_JOBS" >> $GITHUB_OUTPUT
+
+          # Fetch PR comments if this is a pull request
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "--- PR Comments and Suggestions ---" >> $GITHUB_OUTPUT
+            gh pr view ${{ github.event.pull_request.number }} --json comments --jq '.comments[] | select(.body | contains("TODO") or contains("FIXME") or contains("suggestion") or contains("⚠")) | .author.login + ": " + .body' >> pr_comments.txt 2>/dev/null || true
+
+            # Also fetch review comments
+            gh pr view ${{ github.event.pull_request.number }} --json reviews --jq '.reviews[] | select(.state | contains("COMMENTED")) | .author.login + " (" + .state + "): " + (.comments[] | .body)' >> pr_comments.txt 2>/dev/null || true
+          fi
+
+          # Display collected context
+          if [ -f pr_comments.txt ]; then
+            echo "--- Relevant Comments Found ---"
+            cat pr_comments.txt
+          fi
+
           echo "Branch: ${{ github.ref }}"
           echo "Commit: ${{ github.sha }}"
           echo "Trigger: Codex will analyze and fix CI failures"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Trigger Codex with context
+        run: |
+          # Codex will use the collected context to:
+          # 1. Analyze which CI jobs failed (test, lint, typecheck, build)
+          # 2. Review any PR comments for specific suggestions or TODOs
+          # 3. Check for review comments with ⚠️ warnings or FIXME markers
+          # 4. Automatically address issues and create fixes
+
+          FAILED_JOBS="${{ steps.fetch-context.outputs.FAILED_JOBS }}"
+
+          echo "📋 CI Failure Context for Codex:"
+          echo "  Branch: ${{ github.ref }}"
+          echo "  Commit: ${{ github.sha }}"
+          echo "  Failed Jobs: $FAILED_JOBS"
+          echo ""
+          echo "🔍 Codex will:"
+          echo "  • Analyze failed job logs and error messages"
+          echo "  • Review PR comments for TODOs, FIXMEs, and suggestions"
+          echo "  • Check for review comments with warnings (⚠️)"
+          echo "  • Automatically fix issues and push changes"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
