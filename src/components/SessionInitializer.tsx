@@ -80,17 +80,33 @@ async function fetchUserDataOptimized(token: string): Promise<UserData | null> {
 
 export function SessionInitializer() {
   const router = useRouter();
-  const { status, refresh, login } = useGatewayzAuth();
+  const { status, refresh, login, privyReady } = useGatewayzAuth();
   const initializedRef = useRef(false);
 
   useEffect(() => {
     // Skip if already initialized to prevent double execution
     if (initializedRef.current) return;
+
+    // Only proceed if Privy is ready and we have an action to process
+    const { action } = getSessionTransferParams();
+    if (action && !privyReady) {
+      console.log("[SessionInit] Privy not ready yet, waiting for Privy to initialize before processing action");
+      return;
+    }
+
     initializedRef.current = true;
 
     async function initializeSession() {
       // Check for URL params from session transfer
-      const { token, userId, returnUrl, action } = getSessionTransferParams();
+      const { token, userId, returnUrl, action: currentAction } = getSessionTransferParams();
+
+      console.log("[SessionInit] Session initialization started", {
+        hasToken: !!token,
+        hasUserId: !!userId,
+        action: currentAction,
+        status,
+        privyReady
+      });
 
       if (token && userId) {
         console.log("[SessionInit] Session transfer params detected", { action });
@@ -195,13 +211,18 @@ export function SessionInitializer() {
 
       // Check for action parameter (from main domain redirects: signin, freetrial)
       if (status === "unauthenticated") {
-        if (action) {
+        if (currentAction) {
           console.log(
             "[SessionInit] Action parameter detected, opening Privy popup",
-            { action }
+            { action: currentAction, status, privyReady }
           );
           cleanupSessionTransferParams();
-          await login();
+          try {
+            await login();
+            console.log("[SessionInit] Login triggered successfully for action:", currentAction);
+          } catch (error) {
+            console.error("[SessionInit] Failed to trigger login for action:", currentAction, error);
+          }
           return;
         }
       }
@@ -216,7 +237,7 @@ export function SessionInitializer() {
     initializeSession().catch((error) => {
       console.error("[SessionInit] Error initializing session:", error);
     });
-  }, [refresh, router, status, login]);
+  }, [refresh, router, status, login, privyReady]);
 
   return null;
 }
