@@ -398,6 +398,7 @@ async def check_single_gateway(
         "success": cache_success,
         "message": cache_msg,
         "model_count": cache_count,
+        "models": cached_models,
     }
 
     if verbose:
