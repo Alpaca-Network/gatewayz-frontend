@@ -88,10 +88,16 @@ export function SessionInitializer() {
     if (initializedRef.current) return;
 
     // Only proceed if Privy is ready and we have an action to process
-    const { action } = getSessionTransferParams();
-    if (action && !privyReady) {
-      console.log("[SessionInit] Privy not ready yet, waiting for Privy to initialize before processing action");
-      return;
+    // Don't mark as initialized if waiting for Privy, so we'll retry when Privy is ready
+    try {
+      const { action } = getSessionTransferParams();
+      if (action && !privyReady) {
+        console.log("[SessionInit] Privy not ready yet, waiting for Privy to initialize before processing action");
+        return; // Don't mark initializedRef.current as true - wait for Privy
+      }
+    } catch (e) {
+      // If we can't get session params, just continue with initialization
+      // Errors during actual initialization will be caught below
     }
 
     initializedRef.current = true;
