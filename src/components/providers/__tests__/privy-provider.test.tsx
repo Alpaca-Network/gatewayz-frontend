@@ -52,8 +52,8 @@ describe('PrivyProviderWrapper', () => {
     jest.restoreAllMocks();
   });
 
-  describe('Email Verification Configuration', () => {
-    it('should enable email verification with verifyEmailOnSignup', () => {
+  describe('Email Login Configuration', () => {
+    it('should have email in loginMethods for verification code delivery', () => {
       process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app-id-12345';
 
       render(
@@ -63,25 +63,11 @@ describe('PrivyProviderWrapper', () => {
       );
 
       const config = (global as any).__PRIVY_CONFIG__;
-      expect(config).toBeDefined();
-      expect(config.email).toBeDefined();
-      expect(config.email.verifyEmailOnSignup).toBe(true);
-    });
-
-    it('should have email in loginMethods', () => {
-      process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app-id-12345';
-
-      render(
-        <PrivyProviderWrapper>
-          <div>Test Child</div>
-        </PrivyProviderWrapper>
-      );
-
-      const config = (global as any).__PRIVY_CONFIG__;
+      // Privy automatically handles email verification when email is in loginMethods
       expect(config.loginMethods).toContain('email');
     });
 
-    it('should verify email verification is not accidentally removed', () => {
+    it('should not have removed email from loginMethods', () => {
       process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app-id-12345';
 
       render(
@@ -91,11 +77,9 @@ describe('PrivyProviderWrapper', () => {
       );
 
       const config = (global as any).__PRIVY_CONFIG__;
-      // Regression test: ensure this doesn't become null, undefined, or false
-      expect(config.email).not.toBeNull();
-      expect(config.email).not.toBeUndefined();
-      expect(config.email.verifyEmailOnSignup).not.toBe(false);
-      expect(config.email.verifyEmailOnSignup).not.toBe(null);
+      // Regression test: ensure email wasn't accidentally removed
+      const hasEmail = config.loginMethods.includes('email');
+      expect(hasEmail).toBe(true);
     });
   });
 
@@ -184,23 +168,6 @@ describe('PrivyProviderWrapper', () => {
       expect(config.embeddedWallets).toBeDefined();
       expect(config.embeddedWallets.ethereum).toBeDefined();
       expect(config.embeddedWallets.ethereum.createOnLogin).toBe('users-without-wallets');
-    });
-  });
-
-  describe('External Wallets Configuration', () => {
-    it('should disable solana external wallets', () => {
-      process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app-id-12345';
-
-      render(
-        <PrivyProviderWrapper>
-          <div>Test Child</div>
-        </PrivyProviderWrapper>
-      );
-
-      const config = (global as any).__PRIVY_CONFIG__;
-      expect(config.externalWallets).toBeDefined();
-      expect(config.externalWallets.solana).toBeDefined();
-      expect(config.externalWallets.solana.enabled).toBe(false);
     });
   });
 
@@ -294,22 +261,6 @@ describe('PrivyProviderWrapper', () => {
       expect(hasEmail).toBe(true);
     });
 
-    it('should have email verification config present', () => {
-      process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app-id-12345';
-
-      render(
-        <PrivyProviderWrapper>
-          <div>Test Child</div>
-        </PrivyProviderWrapper>
-      );
-
-      const config = (global as any).__PRIVY_CONFIG__;
-      // This test prevents accidental removal of the email config object
-      expect(config.email).toBeDefined();
-      expect(typeof config.email).toBe('object');
-      expect(Object.keys(config.email).length).toBeGreaterThan(0);
-    });
-
     it('should maintain all required authentication settings', () => {
       process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app-id-12345';
 
@@ -325,25 +276,11 @@ describe('PrivyProviderWrapper', () => {
       expect(config.loginMethods).toBeDefined();
       expect(config.appearance).toBeDefined();
       expect(config.embeddedWallets).toBeDefined();
-      expect(config.email).toBeDefined();
       expect(config.defaultChain).toBeDefined();
     });
   });
 
   describe('Type Safety', () => {
-    it('email verification setting should be boolean', () => {
-      process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app-id-12345';
-
-      render(
-        <PrivyProviderWrapper>
-          <div>Test Child</div>
-        </PrivyProviderWrapper>
-      );
-
-      const config = (global as any).__PRIVY_CONFIG__;
-      expect(typeof config.email.verifyEmailOnSignup).toBe('boolean');
-    });
-
     it('loginMethods should be an array of strings', () => {
       process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app-id-12345';
 

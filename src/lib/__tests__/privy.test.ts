@@ -25,26 +25,10 @@ describe('privy.ts - Configuration File', () => {
     });
   });
 
-  describe('Email Verification Configuration', () => {
-    it('should have email configuration', () => {
-      expect(privyConfig.config).toHaveProperty('email');
-      expect(privyConfig.config.email).toBeDefined();
-    });
-
-    it('should enable email verification on signup', () => {
-      expect(privyConfig.config.email).toHaveProperty('verifyEmailOnSignup');
-      expect(privyConfig.config.email.verifyEmailOnSignup).toBe(true);
-    });
-
-    it('should have email verification set to boolean true (not truthy value)', () => {
-      expect(privyConfig.config.email.verifyEmailOnSignup).toBe(true);
-      expect(typeof privyConfig.config.email.verifyEmailOnSignup).toBe('boolean');
-    });
-
-    it('should not have email verification accidentally disabled', () => {
-      expect(privyConfig.config.email.verifyEmailOnSignup).not.toBe(false);
-      expect(privyConfig.config.email.verifyEmailOnSignup).not.toBe(null);
-      expect(privyConfig.config.email.verifyEmailOnSignup).not.toBe(undefined);
+  describe('Email Login Method Configuration', () => {
+    it('should ensure email is in loginMethods for verification code delivery', () => {
+      // Privy automatically handles email verification when email is in loginMethods
+      expect(privyConfig.config.loginMethods).toContain('email');
     });
   });
 
@@ -94,36 +78,30 @@ describe('privy.ts - Configuration File', () => {
     });
   });
 
-  describe('Regression Tests - Email Verification', () => {
-    it('should prevent accidental removal of email verification config', () => {
-      // This test catches if someone accidentally removes the email object
-      expect(privyConfig.config.email).not.toBeNull();
-      expect(privyConfig.config.email).not.toBeUndefined();
-      expect(Object.keys(privyConfig.config.email).length).toBeGreaterThan(0);
-    });
-
-    it('should prevent email verification from being set to false', () => {
-      // This test catches if someone changes the boolean value
-      const emailConfig = privyConfig.config.email;
-      for (const key in emailConfig) {
-        if (key === 'verifyEmailOnSignup') {
-          expect(emailConfig[key as keyof typeof emailConfig]).not.toBe(false);
-        }
-      }
-    });
-
+  describe('Regression Tests - Email Login', () => {
     it('should prevent removal of email from loginMethods', () => {
       // This test catches if someone removes email from the login methods array
+      // Email MUST be present for Privy to send verification codes
       const loginMethods = privyConfig.config.loginMethods;
       expect(loginMethods).toContain('email');
-      // Verify it's not replaced with something else
+    });
+
+    it('should prevent accidental modification of loginMethods', () => {
+      // This test catches if someone accidentally modifies the login methods
+      expect(privyConfig.config.loginMethods).toEqual(['email', 'google', 'github']);
+    });
+
+    it('should always have at least email as a login method', () => {
+      // This test ensures email authentication is always available
+      const loginMethods = privyConfig.config.loginMethods;
       expect(loginMethods.length).toBeGreaterThanOrEqual(1);
+      expect(loginMethods).toContain('email');
     });
   });
 
   describe('Configuration Completeness', () => {
     it('should have all critical fields', () => {
-      const requiredFields = ['loginMethods', 'appearance', 'email'];
+      const requiredFields = ['loginMethods', 'appearance'];
       requiredFields.forEach(field => {
         expect(privyConfig.config).toHaveProperty(field);
         expect(privyConfig.config[field as keyof typeof privyConfig.config]).toBeDefined();
@@ -137,10 +115,12 @@ describe('privy.ts - Configuration File', () => {
       expect(appearance).toHaveProperty('logo');
     });
 
-    it('should have properly structured email config', () => {
-      const email = privyConfig.config.email;
-      expect(email).toHaveProperty('verifyEmailOnSignup');
-      expect(typeof email.verifyEmailOnSignup).toBe('boolean');
+    it('should have properly structured loginMethods config', () => {
+      const loginMethods = privyConfig.config.loginMethods;
+      expect(Array.isArray(loginMethods)).toBe(true);
+      expect(loginMethods.length).toBeGreaterThan(0);
+      // Email must be present for verification code delivery
+      expect(loginMethods).toContain('email');
     });
   });
 
@@ -160,10 +140,6 @@ describe('privy.ts - Configuration File', () => {
       expect(typeof appearance.logo).toBe('string');
     });
 
-    it('email config properties should have correct types', () => {
-      const email = privyConfig.config.email;
-      expect(typeof email.verifyEmailOnSignup).toBe('boolean');
-    });
   });
 
   describe('Consistency with Provider', () => {
@@ -171,11 +147,6 @@ describe('privy.ts - Configuration File', () => {
       // This ensures the backup config in privy.ts matches the config in privy-provider.tsx
       // Both should have the same login methods
       expect(privyConfig.config.loginMethods).toEqual(['email', 'google', 'github']);
-    });
-
-    it('should match email configuration with PrivyProviderWrapper', () => {
-      // Both should have the same email verification setting
-      expect(privyConfig.config.email.verifyEmailOnSignup).toBe(true);
     });
 
     it('should match appearance configuration with PrivyProviderWrapper', () => {
@@ -187,11 +158,11 @@ describe('privy.ts - Configuration File', () => {
   });
 
   describe('Future-Proofing', () => {
-    it('should support additional email verification properties if added', () => {
+    it('should support additional properties if added', () => {
       // This test ensures the structure is flexible for future additions
-      const email = privyConfig.config.email;
-      expect(email).toBeDefined();
-      expect(typeof email).toBe('object');
+      const config = privyConfig.config;
+      expect(config).toBeDefined();
+      expect(typeof config).toBe('object');
       // Should be able to add more properties without breaking
     });
 
@@ -200,7 +171,6 @@ describe('privy.ts - Configuration File', () => {
       const config = privyConfig.config;
       expect(config.loginMethods).toBeDefined();
       expect(config.appearance).toBeDefined();
-      expect(config.email).toBeDefined();
     });
   });
 });

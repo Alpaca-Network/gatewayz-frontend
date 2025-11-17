@@ -8,12 +8,8 @@ export const privyConfig = {
       accentColor: '#000000',
       logo: '/logo_black.svg',
     },
-    // Configure login methods
+    // Configure login methods - email verification is handled automatically by Privy
     loginMethods: ['email', 'google', 'github'],
-    // Enable email verification with code delivery
-    email: {
-      verifyEmailOnSignup: true,
-    },
   },
 };
 
