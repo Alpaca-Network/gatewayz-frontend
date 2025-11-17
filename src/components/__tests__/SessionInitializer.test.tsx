@@ -35,6 +35,7 @@ describe('SessionInitializer', () => {
     status: string;
     refresh: jest.Mock;
     login: jest.Mock;
+    privyReady: boolean;
   };
 
   beforeEach(() => {
@@ -62,6 +63,7 @@ describe('SessionInitializer', () => {
       status: 'unauthenticated',
       refresh: jest.fn().mockResolvedValue(undefined),
       login: jest.fn().mockResolvedValue(undefined),
+      privyReady: true,
     };
     (useGatewayzAuth as jest.Mock).mockReturnValue(mockAuthContext);
 
@@ -505,6 +507,32 @@ describe('SessionInitializer', () => {
       await waitFor(() => {
         expect(mockAuthContext.login).not.toHaveBeenCalled();
       });
+    });
+
+    it('should wait for Privy to be ready before processing action', async () => {
+      mockAuthContext.status = 'unauthenticated';
+      mockAuthContext.privyReady = false; // Privy not ready yet
+
+      (sessionTransfer.getSessionTransferParams as jest.Mock).mockReturnValue({
+        token: null,
+        userId: null,
+        returnUrl: null,
+        action: 'freetrial',
+      });
+
+      const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
+
+      render(<SessionInitializer />);
+
+      await waitFor(() => {
+        expect(consoleLogSpy).toHaveBeenCalledWith(
+          expect.stringContaining('[SessionInit] Privy not ready yet')
+        );
+      });
+
+      expect(mockAuthContext.login).not.toHaveBeenCalled();
+
+      consoleLogSpy.mockRestore();
     });
   });
 
