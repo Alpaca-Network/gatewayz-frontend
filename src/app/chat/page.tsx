@@ -1818,27 +1818,54 @@ function ChatPageContent() {
         }
 
         creatingSessionRef.current = true;
+        
+        // Create optimistic session for immediate UI feedback (instead of 1-2s wait)
+        const tempSessionId = `local-${Date.now()}`;
+        const optimisticSession: ChatSession = {
+            id: tempSessionId,
+            title: 'Untitled Chat',
+            startTime: new Date(),
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            userId: 'current-user',
+            messages: []
+        };
+
         try {
-            // Create new session using API helper
-            const newSession = await apiHelpers.createChatSession('Untitled Chat', selectedModel?.value);
+            // Show session immediately (perceived speed improvement: 1-2s → instant)
+            setActiveSessionId(tempSessionId);
+            setSessions(prev => [optimisticSession, ...prev]);
+            autoSendTriggeredRef.current = false; // Reset auto-send flag for new chat
+
+            console.log('[Chat] Optimistic session created, now confirming with backend...');
+
+            // Create session in backend asynchronously
+            const realSession = await apiHelpers.createChatSession('Untitled Chat', selectedModel?.value);
+
+            console.log('[Chat] Backend session confirmed, updating with real data');
 
             // Log analytics event for new chat creation
             logAnalyticsEvent('chat_session_created', {
-                session_id: newSession.id,
+                session_id: realSession.id,
                 model: selectedModel?.value
             });
 
-            // Set active session immediately with the created session object
-            setActiveSessionId(newSession.id);
+            // Replace optimistic session with real session
+            setSessions(prev => 
+                prev.map(session => 
+                    session.id === tempSessionId ? realSession : session
+                )
+            );
+            setActiveSessionId(realSession.id);
 
-            // Then update the sessions list
-            setSessions(prev => [newSession, ...prev]);
-
-            // Reset auto-send flag for new chat
-            autoSendTriggeredRef.current = false;
-
-            return newSession;
+            return realSession;
         } catch (error) {
+            console.error('[Chat] Failed to create session:', error);
+            
+            // Rollback optimistic session on error
+            setSessions(prev => prev.filter(session => session.id !== tempSessionId));
+            setActiveSessionId(null);
+
             toast({
                 title: "Error",
                 description: `Failed to create new chat session: ${error instanceof Error ? error.message : 'Unknown error'}`,
