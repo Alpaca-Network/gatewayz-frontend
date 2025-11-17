@@ -17,6 +17,7 @@ import { PreviewHostnameRestorer } from '@/components/auth/preview-hostname-rest
 import { GTMLoader } from '@/components/analytics/gtm-loader';
 import { ErrorSuppressor } from '@/components/error-suppressor';
 import { AnalyticsProvidersWrapper } from '@/components/providers/analytics-providers-wrapper';
+import { ReferralBonusDialog } from '@/components/dialogs/referral-bonus-dialog';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -101,6 +102,7 @@ export default function RootLayout({
               <AppFooter />
               <WelcomeDialog />
               <TrialCreditsNotice />
+              <ReferralBonusDialog />
               <Analytics />
               <SpeedInsights />
             </AnalyticsProvidersWrapper>
