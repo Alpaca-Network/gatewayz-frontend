@@ -387,7 +387,11 @@ export function GatewayzAuthProvider({
   const handleAuthSuccessAsync = useCallback(
     async (authData: AuthResponse, isNewUserExpected: boolean) => {
       handleAuthSuccess(authData, isNewUserExpected);
-      await upgradeApiKeyIfNeeded(authData);
+      // Fire and forget the API key upgrade - don't await it
+      // This prevents blocking login completion on a secondary operation
+      upgradeApiKeyIfNeeded(authData).catch((error) => {
+        console.log("[Auth] Background API key upgrade failed (non-blocking):", error);
+      });
     },
     [handleAuthSuccess, upgradeApiKeyIfNeeded]
   );
