@@ -121,7 +121,9 @@ CREATE TABLE IF NOT EXISTS "public"."api_keys_new" (
     "last_used_at" timestamp with time zone,
     "created_at" timestamp with time zone DEFAULT "now"(),
     "updated_at" timestamp with time zone DEFAULT "now"(),
-    "encrypted_key" "text"
+    "encrypted_key" "text",
+    "key_version" integer,
+    "last4" "text"
 );
 
 
