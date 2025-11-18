@@ -464,7 +464,11 @@ export async function POST(request: NextRequest) {
           console.log('[API Proxy] Returning streaming response to client');
           profiler.endRequest(requestId);
           console.log(`[API Proxy] Request ${requestId} complete. Total time: ${(performance.now() - requestStartTime).toFixed(2)}ms`);
-          
+
+          // Calculate timing metrics for performance tracking
+          const totalTime = performance.now() - requestStartTime;
+          const backendTime = backendResponseTime; // Time it took for backend to respond
+
           return new Response(response.body, {
             status: response.status,
             headers: {
@@ -472,7 +476,9 @@ export async function POST(request: NextRequest) {
               'Cache-Control': 'no-cache',
               'Connection': 'keep-alive',
               'X-Request-ID': requestId,
-              'X-Response-Time': `${(performance.now() - requestStartTime).toFixed(2)}ms`,
+              'X-Response-Time': `${totalTime.toFixed(2)}ms`,
+              'X-Backend-Time': `${backendTime.toFixed(2)}ms`,
+              'X-Network-Time': `${(totalTime - backendTime).toFixed(2)}ms`,
             },
           });
         } catch (fetchError) {

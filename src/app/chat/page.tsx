@@ -46,9 +46,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format, isToday, isYesterday, formatDistanceToNow } from 'date-fns';
-import { AUTH_REFRESH_EVENT, getApiKey, getUserData, saveApiKey, saveUserData, type UserData } from '@/lib/api';
+import { getApiKey, getUserData, saveApiKey, saveUserData, type UserData } from '@/lib/api';
 import { ChatHistoryAPI, ChatSession as ApiChatSession, ChatMessage as ApiChatMessage, handleApiError } from '@/lib/chat-history';
-import { MessageQueue, type QueuedMessage } from '@/lib/message-queue';
 import { ChatStreamHandler } from '@/lib/chat-stream-handler';
 import { Copy, Share2, RotateCcw } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
@@ -58,6 +57,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { logAnalyticsEvent } from '@/lib/analytics';
 import { useEagerModelPreload } from '@/hooks/useEagerModelPreload';
 import { useRecentlyUsedModels } from '@/hooks/useRecentlyUsedModels';
+import { chatPerformanceTracker } from '@/lib/chat-performance-tracker';
 
 // Lazy load ModelSelect for better initial load performance
 // Reduces initial bundle by ~100KB and defers expensive model processing
@@ -136,6 +136,15 @@ const MarkdownRenderer = ({ children, className }: { children: string; className
 // Only needed for models with reasoning capabilities (~10% of usage)
 const ReasoningDisplay = dynamic(() => import('@/components/chat/reasoning-display').then(mod => ({ default: mod.ReasoningDisplay })), {
     loading: () => <div className="animate-pulse bg-muted/30 h-12 rounded-md w-full"></div>,
+    ssr: false
+});
+
+// Lazy load Performance Monitor for development/debugging
+const PerformanceMonitor = dynamic(() => import('@/components/chat/performance-monitor').then(mod => ({ default: mod.PerformanceMonitor })), {
+    ssr: false
+});
+
+const PerformanceMonitorToggle = dynamic(() => import('@/components/chat/performance-monitor').then(mod => ({ default: mod.PerformanceMonitorToggle })), {
     ssr: false
 });
 
@@ -1258,7 +1267,6 @@ function ChatPageContent() {
 
     // Track if we're currently creating a session to prevent race conditions
     const creatingSessionRef = useRef(false);
-    const createSessionPromiseRef = useRef<Promise<ChatSession | null> | null>(null);
 
     // Track if auto-send has already been triggered to prevent duplicate sends
     const autoSendTriggeredRef = useRef(false);
@@ -1272,11 +1280,8 @@ function ChatPageContent() {
     // Queue message to be sent after authentication completes
     const [pendingMessage, setPendingMessage] = useState<{message: string, model: ModelOption | null, image?: string | null, video?: string | null, audio?: string | null} | null>(null);
 
-    // Message queue to prevent duplicate sends and race conditions
-    const messageQueueRef = useRef<MessageQueue | null>(null);
-    if (!messageQueueRef.current) {
-        messageQueueRef.current = new MessageQueue();
-    }
+    // Performance monitor state
+    const [perfMonitorOpen, setPerfMonitorOpen] = useState(false);
 
     // Test backend connectivity function
     const testBackendConnectivity = async () => {
@@ -1552,36 +1557,9 @@ function ChatPageContent() {
 
     // Check for API key in localStorage as fallback authentication
     useEffect(() => {
-        const updateApiKeyState = () => {
-            const apiKey = getApiKey();
-            setHasApiKey(!!apiKey);
-        };
-
-        updateApiKeyState();
-
-        if (typeof window === 'undefined') {
-            return;
-        }
-
-        const handleStorageChange = (event: StorageEvent) => {
-            if (!event.key || event.key === 'gatewayz_api_key') {
-                updateApiKeyState();
-            }
-        };
-
-        const handleAuthRefresh = () => updateApiKeyState();
-
-        window.addEventListener('storage', handleStorageChange);
-        window.addEventListener(AUTH_REFRESH_EVENT as unknown as string, handleAuthRefresh as EventListener);
-
-        // Poll as a fallback for same-tab updates since the storage event doesn't fire
-        const pollInterval = window.setInterval(updateApiKeyState, 1500);
-
-        return () => {
-            window.removeEventListener('storage', handleStorageChange);
-            window.removeEventListener(AUTH_REFRESH_EVENT as unknown as string, handleAuthRefresh as EventListener);
-            clearInterval(pollInterval);
-        };
+        const apiKey = getApiKey();
+        const userData = getUserData();
+        setHasApiKey(!!(apiKey && userData?.privy_user_id));
     }, [authLoading, isAuthenticated]);
 
     // Check for referral bonus notification flag
@@ -1612,9 +1590,10 @@ function ChatPageContent() {
         if (!isAuthenticated && !hasApiKey) return;
 
         const apiKey = getApiKey();
+        const userData = getUserData();
 
         // Wait for API key to be available
-        if (!apiKey) {
+        if (!apiKey || !userData?.privy_user_id) {
             console.log('[Pending Message] Waiting for API key to be available...');
             return;
         }
@@ -1737,18 +1716,15 @@ function ChatPageContent() {
                 if (key && data?.privy_user_id) {
                     clearInterval(checkInterval);
                     // Trigger auth ready state to force effect to re-run
-                    setAuthReady(prev => !prev);
+                    setAuthReady(true);
                 }
             }, 100);
 
             // Clean up after 10 seconds
-            const timeoutId = window.setTimeout(() => clearInterval(checkInterval), 10000);
-            return () => {
-                clearInterval(checkInterval);
-                clearTimeout(timeoutId);
-            };
+            setTimeout(() => clearInterval(checkInterval), 10000);
+            return () => clearInterval(checkInterval);
         }
-    }, [authLoading, isAuthenticated, hasApiKey, searchParams, authReady]);
+    }, [authLoading, isAuthenticated, hasApiKey, searchParams]);
 
     // Handle rate limit countdown timer
     useEffect(() => {
@@ -1842,10 +1818,9 @@ function ChatPageContent() {
     };
 
     const createNewChat = async () => {
-        // Return existing promise if session creation is already in progress
-        if (createSessionPromiseRef.current) {
-            console.log('[createNewChat] Session creation already in progress, returning existing promise');
-            return createSessionPromiseRef.current;
+        // Prevent duplicate session creation
+        if (creatingSessionRef.current) {
+            return null;
         }
 
         // Check if there's already a new/empty chat session
@@ -1861,78 +1836,37 @@ function ChatPageContent() {
             return existingNewChat;
         }
 
-        // Create promise for session creation with optimistic UI
-        const createPromise = (async () => {
-            // Atomic check-and-set
-            const wasCreating = creatingSessionRef.current;
-            creatingSessionRef.current = true;
+        creatingSessionRef.current = true;
+        try {
+            // Create new session using API helper
+            const newSession = await apiHelpers.createChatSession('Untitled Chat', selectedModel?.value);
 
-            if (wasCreating) {
-                console.log('[createNewChat] Race condition detected, another creation in progress');
-                return null;
-            }
+            // Log analytics event for new chat creation
+            logAnalyticsEvent('chat_session_created', {
+                session_id: newSession.id,
+                model: selectedModel?.value
+            });
 
-            // Create optimistic session for immediate UI feedback (instead of 1-2s wait)
-            const tempSessionId = `local-${Date.now()}`;
-            const optimisticSession: ChatSession = {
-                id: tempSessionId,
-                title: 'Untitled Chat',
-                startTime: new Date(),
-                createdAt: new Date(),
-                updatedAt: new Date(),
-                userId: 'current-user',
-                messages: []
-            };
+            // Set active session immediately with the created session object
+            setActiveSessionId(newSession.id);
 
-            try {
-                // Show session immediately (perceived speed improvement: 1-2s → instant)
-                setActiveSessionId(tempSessionId);
-                setSessions(prev => [optimisticSession, ...prev]);
-                autoSendTriggeredRef.current = false; // Reset auto-send flag for new chat
+            // Then update the sessions list
+            setSessions(prev => [newSession, ...prev]);
 
-                console.log('[Chat] Optimistic session created, now confirming with backend...');
+            // Reset auto-send flag for new chat
+            autoSendTriggeredRef.current = false;
 
-                // Create session in backend asynchronously
-                const realSession = await apiHelpers.createChatSession('Untitled Chat', selectedModel?.value);
-
-                console.log('[Chat] Backend session confirmed, updating with real data');
-
-                // Log analytics event for new chat creation
-                logAnalyticsEvent('chat_session_created', {
-                    session_id: realSession.id,
-                    model: selectedModel?.value
-                });
-
-                // Replace optimistic session with real session
-                setSessions(prev => 
-                    prev.map(session => 
-                        session.id === tempSessionId ? realSession : session
-                    )
-                );
-                setActiveSessionId(realSession.id);
-
-                return realSession;
-            } catch (error) {
-                console.error('[Chat] Failed to create session:', error);
-                
-                // Rollback optimistic session on error
-                setSessions(prev => prev.filter(session => session.id !== tempSessionId));
-                setActiveSessionId(null);
-
-                toast({
-                    title: "Error",
-                    description: `Failed to create new chat session: ${error instanceof Error ? error.message : 'Unknown error'}`,
-                    variant: 'destructive'
-                });
-                return null;
-            } finally {
-                creatingSessionRef.current = false;
-                createSessionPromiseRef.current = null;
-            }
-        })();
-
-        createSessionPromiseRef.current = createPromise;
-        return createPromise;
+            return newSession;
+        } catch (error) {
+            toast({
+                title: "Error",
+                description: `Failed to create new chat session: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                variant: 'destructive'
+            });
+            return null;
+        } finally {
+            creatingSessionRef.current = false;
+        }
     };
 
     const handleExamplePromptClick = (promptText: string) => {
@@ -2722,6 +2656,20 @@ function ChatPageContent() {
 
                 console.log('🌊 Starting to stream response...');
 
+                // Start performance tracking
+                const performanceMessageId = `msg-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+                chatPerformanceTracker.startTracking({
+                    messageId: performanceMessageId,
+                    model: modelValue,
+                    gateway: selectedModel.sourceGateway,
+                    messageLength: typeof messageContent === 'string' ? messageContent.length : JSON.stringify(messageContent).length,
+                    hasImage: !!userImage,
+                    hasVideo: !!userVideo,
+                    hasAudio: !!userAudio,
+                    sessionId: currentSessionId,
+                    isFirstMessage: isFirstMessage
+                });
+
                 // Log analytics event for message sent
                 logAnalyticsEvent('chat_message_sent', {
                     model: modelValue,
@@ -2775,10 +2723,29 @@ function ChatPageContent() {
                         isDone: chunk.done,
                         status: chunk.status
                     });
+
+                    // Handle performance tracking chunks
+                    if (chunk.status === 'timing_info' && chunk.timingMetadata) {
+                        // Record timing metadata from API headers
+                        if (chunk.timingMetadata.backendTimeMs) {
+                            chatPerformanceTracker.markBackendProcessing(chunk.timingMetadata.backendTimeMs, performanceMessageId);
+                        }
+                        if (chunk.timingMetadata.networkTimeMs) {
+                            chatPerformanceTracker.markNetworkLatency(chunk.timingMetadata.networkTimeMs, performanceMessageId);
+                        }
+                        continue; // Don't process as content
+                    }
+
+                    if (chunk.status === 'first_token') {
+                        // Mark when first token arrived (TTFT)
+                        chatPerformanceTracker.markFirstToken(performanceMessageId);
+                    }
+
                     if (chunk.status === 'rate_limit_retry') {
                         const waitSeconds = Math.max(1, Math.ceil((chunk.retryAfterMs ?? 0) / 1000));
                         setRateLimitCountdown(waitSeconds);
                         devLog(`Rate limit reached. Retrying in ${waitSeconds} seconds...`);
+                        chatPerformanceTracker.incrementRetry(performanceMessageId);
                         continue;
                     }
 
@@ -2852,6 +2819,17 @@ function ChatPageContent() {
                 const finalContent = streamHandler.getFinalContent();
                 const finalReasoning = streamHandler.getFinalReasoning();
                 devLog({finalContent, finalReasoning, chunkCount: streamHandler.state.chunkCount});
+
+                // Mark streaming complete for performance tracking
+                chatPerformanceTracker.markStreamComplete(finalContent.length, performanceMessageId);
+
+                // Log performance summary in development
+                if (process.env.NODE_ENV === 'development') {
+                    chatPerformanceTracker.logSummary(performanceMessageId);
+                }
+
+                // Clean up old metrics to prevent memory leaks
+                chatPerformanceTracker.clearOldMetrics(50);
 
                 // OPTIMIZATION: Save the assistant's response to the backend asynchronously
                 // This allows the UI to be responsive immediately after streaming completes
@@ -2943,6 +2921,10 @@ function ChatPageContent() {
                 }
 
             } catch (streamError) {
+                // Record error in performance tracker
+                const errorType = streamError instanceof Error ? streamError.name : 'UnknownError';
+                chatPerformanceTracker.recordError(errorType, performanceMessageId);
+
                 // Clean up any pending timeouts to prevent ReferenceErrors
                 if (streamHandler) {
                     streamHandler.cleanup();
@@ -3099,23 +3081,15 @@ function ChatPageContent() {
                 let toastTitle = "Error";
                 let toastDescription = errorMessage;
 
-                // Check rate limit FIRST - it may contain "API key" in the message
-                // Handle rate limit errors (429)
-                if (errorMessage.includes('Rate limit') || errorMessage.includes('429') || errorMessage.includes('Burst limit')) {
-                    toastTitle = "Rate Limit Reached";
-                    toastDescription = "You've exceeded the limit of 100 requests per minute (burst of 20). Please wait a moment before trying again.";
-                    setRateLimitCountdown(60); // Start 60 second countdown
-                }
-                // Handle API key validation errors (401/403) - but NOT if it's a rate limit error
-                else if (
-                    (errorMessage.includes('Unauthorized') || 
-                     errorMessage.includes('401') ||
-                     errorMessage.includes('Invalid') ||
-                     (errorMessage.includes('API key') && !errorMessage.includes('rate limit'))) ||
-                    errorMessage.includes('403')
-                ) {
+                // Handle API key validation errors (403)
+                if (errorMessage.includes('API key') || errorMessage.includes('403')) {
                     toastTitle = "Session Expired";
                     toastDescription = "Your session has expired. Please refresh the page and log in again.";
+                }
+                // Handle rate limit errors (429)
+                else if (errorMessage.includes('Rate limit') || errorMessage.includes('429')) {
+                    toastTitle = "Rate Limit Reached";
+                    toastDescription = "You've exceeded the limit of 100 requests per minute (burst of 20). Please wait a moment before trying again.";
                 }
 
                 toast({
@@ -3700,6 +3674,21 @@ function ChatPageContent() {
         </div>
       </main>
     </div>
+
+    {/* Performance Monitor - Only in development */}
+    {process.env.NODE_ENV === 'development' && (
+      <>
+        <PerformanceMonitor
+          isOpen={perfMonitorOpen}
+          onClose={() => setPerfMonitorOpen(false)}
+        />
+        {!perfMonitorOpen && (
+          <PerformanceMonitorToggle
+            onClick={() => setPerfMonitorOpen(true)}
+          />
+        )}
+      </>
+    )}
     </>
   );
 }
