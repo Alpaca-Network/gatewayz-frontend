@@ -129,6 +129,12 @@ export const processAuthResponse = (response: AuthResponse): void => {
     credits_type: typeof response.credits,
   });
 
+  // Validate API key is not empty or invalid
+  if (!response.api_key || typeof response.api_key !== 'string' || response.api_key.trim().length === 0) {
+    console.warn('[Auth] Missing or invalid API key in auth response, not storing credentials');
+    return;
+  }
+
   if (response.api_key) {
     saveApiKey(response.api_key);
     console.log('API key saved to localStorage');

@@ -127,7 +127,7 @@ export class ChatHistoryAPI {
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new Event('gatewayz:refresh-auth'));
         }
-        throw new Error('Authentication failed. Please login again.');
+        throw new Error('Your session has expired or your API key is invalid. Please log in again.');
       }
 
       if (!response.ok) {
