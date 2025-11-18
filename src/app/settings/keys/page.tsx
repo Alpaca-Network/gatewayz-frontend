@@ -201,8 +201,53 @@ export default function ApiKeysPage() {
       );
 
       if (response.ok) {
-        const data = await response.json();
-        setApiKeys(data.keys || []);
+        // Read response text first, then parse to avoid consuming body twice
+        const responseText = await response.text();
+        let data;
+        try {
+          data = JSON.parse(responseText);
+          console.log('[API Keys] Response received:', {
+            type: typeof data,
+            isArray: Array.isArray(data),
+            hasKeys: data && typeof data === 'object' && 'keys' in data,
+            keysCount: data && typeof data === 'object' && 'keys' in data ? data.keys?.length : 'N/A',
+            dataKeys: data && typeof data === 'object' ? Object.keys(data) : 'N/A'
+          });
+        } catch (parseError) {
+          console.error('[API Keys] Failed to parse response as JSON:', parseError);
+          console.error('[API Keys] Response text:', responseText.substring(0, 500));
+          throw new Error('Failed to parse API keys response');
+        }
+        
+        // Handle different response formats from backend
+        let keys: ApiKey[] = [];
+        if (Array.isArray(data)) {
+          // Backend returns array directly
+          keys = data;
+          console.log('[API Keys] Received array format, keys count:', keys.length);
+        } else if (data && typeof data === 'object' && 'keys' in data) {
+          // Backend returns { keys: [...] } or { status: "success", keys: [...] }
+          keys = Array.isArray(data.keys) ? data.keys : [];
+          console.log('[API Keys] Received object with keys property, keys count:', keys.length, 'Raw keys:', data.keys);
+        } else if (data && typeof data === 'object') {
+          // Try to find any array property
+          const arrayProps = Object.values(data).filter(Array.isArray);
+          if (arrayProps.length > 0) {
+            keys = arrayProps[0] as ApiKey[];
+            console.log('[API Keys] Found array in response object, keys count:', keys.length);
+          } else {
+            console.warn('[API Keys] Unexpected response format:', Object.keys(data), 'Response:', JSON.stringify(data).substring(0, 200));
+          }
+        } else {
+          console.warn('[API Keys] Unexpected response type:', typeof data, 'Response:', JSON.stringify(data).substring(0, 200));
+        }
+        
+        console.log('[API Keys] Final keys array length:', keys.length, 'Setting API keys...');
+        setApiKeys(keys);
+        
+        if (keys.length === 0) {
+          console.warn('[API Keys] No keys found in response. Full response:', JSON.stringify(data, null, 2));
+        }
       } else if (response.status === 403) {
         // Permission denied - show primary key from localStorage as fallback
         console.log('Insufficient permissions - showing primary API key from localStorage');

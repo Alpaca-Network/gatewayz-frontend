@@ -1861,7 +1861,7 @@ function ChatPageContent() {
             return existingNewChat;
         }
 
-        // Create promise for session creation
+        // Create promise for session creation with optimistic UI
         const createPromise = (async () => {
             // Atomic check-and-set
             const wasCreating = creatingSessionRef.current;
@@ -1872,27 +1872,53 @@ function ChatPageContent() {
                 return null;
             }
 
+            // Create optimistic session for immediate UI feedback (instead of 1-2s wait)
+            const tempSessionId = `local-${Date.now()}`;
+            const optimisticSession: ChatSession = {
+                id: tempSessionId,
+                title: 'Untitled Chat',
+                startTime: new Date(),
+                createdAt: new Date(),
+                updatedAt: new Date(),
+                userId: 'current-user',
+                messages: []
+            };
+
             try {
-                // Create new session using API helper
-                const newSession = await apiHelpers.createChatSession('Untitled Chat', selectedModel?.value);
+                // Show session immediately (perceived speed improvement: 1-2s → instant)
+                setActiveSessionId(tempSessionId);
+                setSessions(prev => [optimisticSession, ...prev]);
+                autoSendTriggeredRef.current = false; // Reset auto-send flag for new chat
+
+                console.log('[Chat] Optimistic session created, now confirming with backend...');
+
+                // Create session in backend asynchronously
+                const realSession = await apiHelpers.createChatSession('Untitled Chat', selectedModel?.value);
+
+                console.log('[Chat] Backend session confirmed, updating with real data');
 
                 // Log analytics event for new chat creation
                 logAnalyticsEvent('chat_session_created', {
-                    session_id: newSession.id,
+                    session_id: realSession.id,
                     model: selectedModel?.value
                 });
 
-                // Set active session immediately with the created session object
-                setActiveSessionId(newSession.id);
+                // Replace optimistic session with real session
+                setSessions(prev => 
+                    prev.map(session => 
+                        session.id === tempSessionId ? realSession : session
+                    )
+                );
+                setActiveSessionId(realSession.id);
 
-                // Then update the sessions list
-                setSessions(prev => [newSession, ...prev]);
-
-                // Reset auto-send flag for new chat
-                autoSendTriggeredRef.current = false;
-
-                return newSession;
+                return realSession;
             } catch (error) {
+                console.error('[Chat] Failed to create session:', error);
+                
+                // Rollback optimistic session on error
+                setSessions(prev => prev.filter(session => session.id !== tempSessionId));
+                setActiveSessionId(null);
+
                 toast({
                     title: "Error",
                     description: `Failed to create new chat session: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -3073,15 +3099,23 @@ function ChatPageContent() {
                 let toastTitle = "Error";
                 let toastDescription = errorMessage;
 
-                // Handle API key validation errors (403)
-                if (errorMessage.includes('API key') || errorMessage.includes('403')) {
-                    toastTitle = "Session Expired";
-                    toastDescription = "Your session has expired. Please refresh the page and log in again.";
-                }
+                // Check rate limit FIRST - it may contain "API key" in the message
                 // Handle rate limit errors (429)
-                else if (errorMessage.includes('Rate limit') || errorMessage.includes('429')) {
+                if (errorMessage.includes('Rate limit') || errorMessage.includes('429') || errorMessage.includes('Burst limit')) {
                     toastTitle = "Rate Limit Reached";
                     toastDescription = "You've exceeded the limit of 100 requests per minute (burst of 20). Please wait a moment before trying again.";
+                    setRateLimitCountdown(60); // Start 60 second countdown
+                }
+                // Handle API key validation errors (401/403) - but NOT if it's a rate limit error
+                else if (
+                    (errorMessage.includes('Unauthorized') || 
+                     errorMessage.includes('401') ||
+                     errorMessage.includes('Invalid') ||
+                     (errorMessage.includes('API key') && !errorMessage.includes('rate limit'))) ||
+                    errorMessage.includes('403')
+                ) {
+                    toastTitle = "Session Expired";
+                    toastDescription = "Your session has expired. Please refresh the page and log in again.";
                 }
 
                 toast({

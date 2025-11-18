@@ -95,7 +95,7 @@ const processCompletion = wrapTraced(
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': apiKey,
+              'Authorization': `Bearer ${apiKey}`,
             },
             body: JSON.stringify(body),
             signal: abortController.signal,
@@ -356,7 +356,7 @@ export async function POST(request: NextRequest) {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': apiKey,
+              'Authorization': `Bearer ${apiKey}`,
               'Accept': 'text/event-stream',
             },
             body: JSON.stringify(body),
