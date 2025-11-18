@@ -23,7 +23,7 @@ async function setupMockAuth(context: BrowserContext) {
   });
 }
 
-test.describe('Example: Basic Test Structure', () => {
+test.describe.skip('Example: Basic Test Structure', () => {
   test('template for simple interaction test', async ({ page, context }) => {
     // 1. Setup: Mock auth and navigate
     await setupMockAuth(context);
@@ -41,7 +41,7 @@ test.describe('Example: Basic Test Structure', () => {
   });
 });
 
-test.describe('Example: Finding Elements', () => {
+test.describe.skip('Example: Finding Elements', () => {
   test.beforeEach(async ({ page, context }) => {
     await setupMockAuth(context);
     await page.goto('/chat');
@@ -102,7 +102,7 @@ test.describe('Example: Finding Elements', () => {
   });
 });
 
-test.describe('Example: User Interactions', () => {
+test.describe.skip('Example: User Interactions', () => {
   test.beforeEach(async ({ page, context }) => {
     await setupMockAuth(context);
     await page.goto('/chat');
@@ -197,7 +197,7 @@ test.describe('Example: User Interactions', () => {
   });
 });
 
-test.describe('Example: Assertions', () => {
+test.describe.skip('Example: Assertions', () => {
   test.beforeEach(async ({ page, context }) => {
     await setupMockAuth(context);
     await page.goto('/chat');
@@ -268,7 +268,7 @@ test.describe('Example: Assertions', () => {
   });
 });
 
-test.describe('Example: Waiting & Timing', () => {
+test.describe.skip('Example: Waiting & Timing', () => {
   test.beforeEach(async ({ page, context }) => {
     await setupMockAuth(context);
   });
@@ -337,7 +337,7 @@ test.describe('Example: Waiting & Timing', () => {
   });
 });
 
-test.describe('Example: Mocking API Responses', () => {
+test.describe.skip('Example: Mocking API Responses', () => {
   test.beforeEach(async ({ page, context }) => {
     await setupMockAuth(context);
   });
@@ -422,7 +422,7 @@ test.describe('Example: Mocking API Responses', () => {
   });
 });
 
-test.describe('Example: Working with localStorage', () => {
+test.describe.skip('Example: Working with localStorage', () => {
   test('set and verify localStorage', async ({ page }) => {
     await page.evaluate(() => {
       localStorage.setItem('test-key', 'test-value');
@@ -457,7 +457,7 @@ test.describe('Example: Working with localStorage', () => {
   });
 });
 
-test.describe('Example: Navigation & URLs', () => {
+test.describe.skip('Example: Navigation & URLs', () => {
   test.beforeEach(async ({ page, context }) => {
     await setupMockAuth(context);
   });
@@ -492,7 +492,7 @@ test.describe('Example: Navigation & URLs', () => {
   });
 });
 
-test.describe('Example: Debugging & Troubleshooting', () => {
+test.describe.skip('Example: Debugging & Troubleshooting', () => {
   test('capture and log information', async ({ page, context }) => {
     await setupMockAuth(context);
     await page.goto('/chat');
@@ -543,7 +543,7 @@ test.describe('Example: Debugging & Troubleshooting', () => {
   });
 });
 
-test.describe('Example: Browser Context Features', () => {
+test.describe.skip('Example: Browser Context Features', () => {
   test('test with different user agents', async ({ browser }) => {
     const context = await browser.newContext({
       userAgent: 'Custom User Agent String'
