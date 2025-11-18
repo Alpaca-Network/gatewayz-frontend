@@ -14,8 +14,12 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   // Opt out of parallel tests on CI
   workers: process.env.CI ? 1 : undefined,
+  // Timeout for each test
+  timeout: 30 * 1000,
   // Reporter to use
-  reporter: process.env.CI ? 'github' : 'html',
+  reporter: process.env.CI
+    ? [['github'], ['html', { outputFolder: 'playwright-report' }]]
+    : 'html',
 
   use: {
     // Base URL to use in actions like `await page.goto('/')`
@@ -24,6 +28,8 @@ export default defineConfig({
     trace: 'on-first-retry',
     // Screenshot on failure
     screenshot: 'only-on-failure',
+    // Video on failure (useful for debugging)
+    video: 'retain-on-failure',
   },
 
   // Configure projects for major browsers
@@ -32,6 +38,15 @@ export default defineConfig({
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
     },
+    // Optional: Add Firefox and WebKit for broader browser coverage
+    // {
+    //   name: 'firefox',
+    //   use: { ...devices['Desktop Firefox'] },
+    // },
+    // {
+    //   name: 'webkit',
+    //   use: { ...devices['Desktop Safari'] },
+    // },
   ],
 
   // Run your local dev server before starting the tests
