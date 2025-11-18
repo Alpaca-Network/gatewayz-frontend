@@ -51,8 +51,33 @@ export const saveApiKey = (apiKey: string): void => {
 export const getApiKey = (): string | null => {
   if (typeof window !== 'undefined') {
     const apiKey = localStorage.getItem(API_KEY_STORAGE_KEY);
-    return apiKey;
+    // Return null if key is empty string or falsy
+    return apiKey && apiKey.trim().length > 0 ? apiKey : null;
   }
+  return null;
+};
+
+/**
+ * Get API key with retry logic for cases where localStorage hasn't synced yet
+ * Useful during rapid auth transitions
+ */
+export const getApiKeyWithRetry = async (maxRetries: number = 3): Promise<string | null> => {
+  for (let i = 0; i < maxRetries; i++) {
+    const key = getApiKey();
+    if (key) {
+      console.log(`[getApiKeyWithRetry] Found API key on attempt ${i + 1}`);
+      return key;
+    }
+
+    // Wait before retrying (exponential backoff)
+    if (i < maxRetries - 1) {
+      const delayMs = 100 * Math.pow(2, i);
+      console.log(`[getApiKeyWithRetry] Retrying in ${delayMs}ms (attempt ${i + 1}/${maxRetries})`);
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+  }
+
+  console.warn('[getApiKeyWithRetry] Failed to retrieve API key after', maxRetries, 'attempts');
   return null;
 };
 

@@ -1,6 +1,7 @@
 // Chat History API Types and Interfaces
 import { API_BASE_URL } from './config';
 import { TIMEOUT_CONFIG, createTimeoutController, withTimeoutAndRetry } from './timeout-config';
+import { getUserData } from './api';
 
 export interface ChatMessage {
   id: number;
@@ -74,7 +75,24 @@ export class ChatHistoryAPI {
   constructor(apiKey: string, baseUrl?: string, privyUserId?: string) {
     this.apiKey = apiKey;
     this.baseUrl = baseUrl || `${API_BASE_URL}/v1/chat`;
-    this.privyUserId = privyUserId;
+
+    // If Privy ID not provided, try to get from user data
+    if (!privyUserId) {
+      try {
+        const userData = getUserData();
+        this.privyUserId = userData?.privy_user_id;
+      } catch (error) {
+        console.warn('[ChatHistoryAPI] Failed to retrieve Privy user ID from user data:', error);
+      }
+    } else {
+      this.privyUserId = privyUserId;
+    }
+
+    if (this.privyUserId) {
+      console.log('[ChatHistoryAPI] Initialized with Privy user ID');
+    } else {
+      console.warn('[ChatHistoryAPI] No Privy user ID available');
+    }
   }
 
   /**
