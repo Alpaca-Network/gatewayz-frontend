@@ -1,5 +1,6 @@
 // Chat History API Types and Interfaces
 import { API_BASE_URL } from './config';
+import { TIMEOUT_CONFIG, createTimeoutController, withTimeoutAndRetry } from './timeout-config';
 
 export interface ChatMessage {
   id: number;
@@ -84,10 +85,11 @@ export class ChatHistoryAPI {
     method: string,
     endpoint: string,
     body: any = null,
-    timeout: number = 30000 // 30 second default timeout
+    timeout?: number
   ): Promise<ApiResponse<T>> {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    // Use unified timeout configuration
+    const timeoutMs = timeout || TIMEOUT_CONFIG.api.default;
+    const { controller, timeoutId } = createTimeoutController(timeoutMs);
 
     const config: RequestInit = {
       method,
@@ -118,6 +120,16 @@ export class ChatHistoryAPI {
       const response = await fetch(url, config);
       clearTimeout(timeoutId);
 
+      // Handle 401 specifically - invalid API key
+      if (response.status === 401) {
+        console.error('ChatHistoryAPI - Authentication failed (401), API key may be invalid');
+        // Dispatch auth refresh event to trigger re-authentication
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('gatewayz:refresh-auth'));
+        }
+        throw new Error('Authentication failed. Please login again.');
+      }
+
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.detail || `HTTP ${response.status}: ${response.statusText}`);
@@ -127,8 +139,8 @@ export class ChatHistoryAPI {
     } catch (error) {
       clearTimeout(timeoutId);
       if (error instanceof Error && error.name === 'AbortError') {
-        console.error('ChatHistoryAPI - Request timed out after', timeout, 'ms');
-        throw new Error(`Request timed out after ${timeout / 1000} seconds. Please try again.`);
+        console.error('ChatHistoryAPI - Request timed out after', timeoutMs, 'ms');
+        throw new Error(`Request timed out after ${timeoutMs / 1000} seconds. Please try again.`);
       }
       throw error;
     }
@@ -138,10 +150,10 @@ export class ChatHistoryAPI {
    * Creates a new chat session
    */
   async createSession(title?: string, model?: string): Promise<ChatSession> {
-    const result = await this.makeRequest<ChatSession>('POST', '/sessions', { 
+    const result = await this.makeRequest<ChatSession>('POST', '/sessions', {
       title: title || `Chat ${new Date().toLocaleString()}`,
       model: model || 'openai/gpt-3.5-turbo'
-    });
+    }, TIMEOUT_CONFIG.chat.sessionCreate);
     return result.data!;
   }
 
@@ -279,11 +291,8 @@ export class ChatHistoryAPI {
     model?: string,
     tokens?: number
   ): Promise<ChatMessage> {
-    const controller = new AbortController();
-    // OPTIMIZATION: Reduced timeout from 30s to 5s
-    // Message saves are fire-and-forget and shouldn't block UI
-    const timeout = 5000;
-    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    // Use unified timeout configuration for message saves
+    const { controller, timeoutId } = createTimeoutController(TIMEOUT_CONFIG.chat.messagesSave);
 
     let url = `${this.baseUrl}/sessions/${sessionId}/messages`;
 
@@ -322,9 +331,9 @@ export class ChatHistoryAPI {
     } catch (error) {
       clearTimeout(timeoutId);
       if (error instanceof Error && error.name === 'AbortError') {
-        console.error('ChatHistoryAPI.saveMessage - Request timed out after', timeout, 'ms');
-        // Don't throw on timeout - message is already in UI optimistically
-        return { id: 0, session_id: sessionId, role, content, created_at: new Date().toISOString() };
+        console.error('ChatHistoryAPI.saveMessage - Request timed out after', TIMEOUT_CONFIG.chat.messagesSave, 'ms');
+        // Throw the error properly instead of returning fake success
+        throw new Error(`Failed to save message: Request timed out after ${TIMEOUT_CONFIG.chat.messagesSave / 1000} seconds`);
       }
       throw error;
     }

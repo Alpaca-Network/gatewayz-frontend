@@ -48,6 +48,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { format, isToday, isYesterday, formatDistanceToNow } from 'date-fns';
 import { getApiKey, getUserData, saveApiKey, saveUserData, type UserData } from '@/lib/api';
 import { ChatHistoryAPI, ChatSession as ApiChatSession, ChatMessage as ApiChatMessage, handleApiError } from '@/lib/chat-history';
+import { MessageQueue, type QueuedMessage } from '@/lib/message-queue';
 import { ChatStreamHandler } from '@/lib/chat-stream-handler';
 import { Copy, Share2, RotateCcw } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
@@ -1257,6 +1258,7 @@ function ChatPageContent() {
 
     // Track if we're currently creating a session to prevent race conditions
     const creatingSessionRef = useRef(false);
+    const createSessionPromiseRef = useRef<Promise<ChatSession | null> | null>(null);
 
     // Track if auto-send has already been triggered to prevent duplicate sends
     const autoSendTriggeredRef = useRef(false);
@@ -1269,6 +1271,12 @@ function ChatPageContent() {
 
     // Queue message to be sent after authentication completes
     const [pendingMessage, setPendingMessage] = useState<{message: string, model: ModelOption | null, image?: string | null, video?: string | null, audio?: string | null} | null>(null);
+
+    // Message queue to prevent duplicate sends and race conditions
+    const messageQueueRef = useRef<MessageQueue | null>(null);
+    if (!messageQueueRef.current) {
+        messageQueueRef.current = new MessageQueue();
+    }
 
     // Test backend connectivity function
     const testBackendConnectivity = async () => {
@@ -1805,9 +1813,10 @@ function ChatPageContent() {
     };
 
     const createNewChat = async () => {
-        // Prevent duplicate session creation
-        if (creatingSessionRef.current) {
-            return null;
+        // Return existing promise if session creation is already in progress
+        if (createSessionPromiseRef.current) {
+            console.log('[createNewChat] Session creation already in progress, returning existing promise');
+            return createSessionPromiseRef.current;
         }
 
         // Check if there's already a new/empty chat session
@@ -1823,37 +1832,52 @@ function ChatPageContent() {
             return existingNewChat;
         }
 
-        creatingSessionRef.current = true;
-        try {
-            // Create new session using API helper
-            const newSession = await apiHelpers.createChatSession('Untitled Chat', selectedModel?.value);
+        // Create promise for session creation
+        const createPromise = (async () => {
+            // Atomic check-and-set
+            const wasCreating = creatingSessionRef.current;
+            creatingSessionRef.current = true;
 
-            // Log analytics event for new chat creation
-            logAnalyticsEvent('chat_session_created', {
-                session_id: newSession.id,
-                model: selectedModel?.value
-            });
+            if (wasCreating) {
+                console.log('[createNewChat] Race condition detected, another creation in progress');
+                return null;
+            }
 
-            // Set active session immediately with the created session object
-            setActiveSessionId(newSession.id);
+            try {
+                // Create new session using API helper
+                const newSession = await apiHelpers.createChatSession('Untitled Chat', selectedModel?.value);
 
-            // Then update the sessions list
-            setSessions(prev => [newSession, ...prev]);
+                // Log analytics event for new chat creation
+                logAnalyticsEvent('chat_session_created', {
+                    session_id: newSession.id,
+                    model: selectedModel?.value
+                });
 
-            // Reset auto-send flag for new chat
-            autoSendTriggeredRef.current = false;
+                // Set active session immediately with the created session object
+                setActiveSessionId(newSession.id);
 
-            return newSession;
-        } catch (error) {
-            toast({
-                title: "Error",
-                description: `Failed to create new chat session: ${error instanceof Error ? error.message : 'Unknown error'}`,
-                variant: 'destructive'
-            });
-            return null;
-        } finally {
-            creatingSessionRef.current = false;
-        }
+                // Then update the sessions list
+                setSessions(prev => [newSession, ...prev]);
+
+                // Reset auto-send flag for new chat
+                autoSendTriggeredRef.current = false;
+
+                return newSession;
+            } catch (error) {
+                toast({
+                    title: "Error",
+                    description: `Failed to create new chat session: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                    variant: 'destructive'
+                });
+                return null;
+            } finally {
+                creatingSessionRef.current = false;
+                createSessionPromiseRef.current = null;
+            }
+        })();
+
+        createSessionPromiseRef.current = createPromise;
+        return createPromise;
     };
 
     const handleExamplePromptClick = (promptText: string) => {

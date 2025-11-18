@@ -4,19 +4,39 @@ describe('auth-session-transfer - Edge Cases and URL Cleanup', () => {
   const originalLocation = window.location;
 
   beforeEach(() => {
-    // Setup window.location mock properly
-    delete (window as any).location;
-    (window as any).location = {
+    // Mock window.location with a simple object that doesn't trigger navigation
+    const mockLocation = {
       href: 'https://beta.gatewayz.ai',
       search: '',
       pathname: '/',
+      origin: 'https://beta.gatewayz.ai',
       toString: () => 'https://beta.gatewayz.ai'
     };
+
+    // Delete and redefine to avoid navigation issues
+    try {
+      delete (window as any).location;
+      (window as any).location = mockLocation;
+    } catch {
+      // If delete fails, just override
+      Object.defineProperty(window, 'location', {
+        value: mockLocation,
+        writable: true,
+        configurable: true
+      });
+    }
+
     window.history.replaceState = jest.fn();
   });
 
   afterEach(() => {
-    (window as any).location = originalLocation;
+    // Restore original location if possible
+    try {
+      delete (window as any).location;
+      (window as any).location = originalLocation;
+    } catch {
+      // If we can't restore, at least reset to a valid state
+    }
   });
 
   describe('cleanupSessionTransferParams - Error Handling', () => {
@@ -206,11 +226,16 @@ describe('auth-session-transfer - Edge Cases and URL Cleanup', () => {
       const token = 'test-token';
       const userId = '123';
 
-      sessionTransfer.storeSessionTransferToken(token, userId);
-
-      // Simulate very old timestamp
+      // Store with very old timestamp
       const veryOldTimestamp = Date.now() - 20 * 60 * 1000; // 20 minutes ago
-      sessionStorage.setItem('gatewayz_session_transfer_timestamp', String(veryOldTimestamp));
+      const sessionData = {
+        token,
+        userId,
+        timestamp: veryOldTimestamp,
+        origin: 'https://beta.gatewayz.ai',
+        fingerprint: 'test-fingerprint'
+      };
+      sessionStorage.setItem('gatewayz_session_transfer_token', JSON.stringify(sessionData));
 
       const retrieved = sessionTransfer.getStoredSessionTransferToken();
       expect(retrieved.token).toBeNull();
@@ -227,11 +252,16 @@ describe('auth-session-transfer - Edge Cases and URL Cleanup', () => {
       const token = 'test-token';
       const userId = '123';
 
-      sessionTransfer.storeSessionTransferToken(token, userId);
-
-      // Set timestamp to exactly 10 minutes ago
+      // Store with exactly 10 minutes ago timestamp
       const tenMinutesAgo = Date.now() - 10 * 60 * 1000;
-      sessionStorage.setItem('gatewayz_session_transfer_timestamp', String(tenMinutesAgo));
+      const sessionData = {
+        token,
+        userId,
+        timestamp: tenMinutesAgo,
+        origin: 'https://beta.gatewayz.ai',
+        fingerprint: 'test-fingerprint'
+      };
+      sessionStorage.setItem('gatewayz_session_transfer_token', JSON.stringify(sessionData));
 
       const retrieved = sessionTransfer.getStoredSessionTransferToken();
       // At exactly 10 minutes, should be considered expired
@@ -260,30 +290,25 @@ describe('auth-session-transfer - Edge Cases and URL Cleanup', () => {
     });
 
     it('should handle invalid timestamp format', () => {
-      const token = 'test-token';
-      const userId = '123';
-
-      sessionStorage.setItem('gatewayz_session_transfer_token', token);
-      sessionStorage.setItem('gatewayz_session_transfer_user_id', userId);
-      sessionStorage.setItem('gatewayz_session_transfer_timestamp', 'invalid-timestamp');
+      // Store raw string (invalid format)
+      sessionStorage.setItem('gatewayz_session_transfer_token', 'test-token');
 
       const retrieved = sessionTransfer.getStoredSessionTransferToken();
-      // Should be treated as present but unparseable, so token remains
-      expect(retrieved.token).toBe(token);
+      // Invalid JSON should return null
+      expect(retrieved.token).toBeNull();
+      expect(retrieved.userId).toBeNull();
     });
 
     it('should handle missing timestamp (no expiry check)', () => {
-      const token = 'test-token';
-      const userId = '123';
-
-      sessionStorage.setItem('gatewayz_session_transfer_token', token);
-      sessionStorage.setItem('gatewayz_session_transfer_user_id', userId);
+      // Store raw strings in old format (should fail to parse)
+      sessionStorage.setItem('gatewayz_session_transfer_token', 'test-token');
+      sessionStorage.setItem('gatewayz_session_transfer_user_id', '123');
       // No timestamp set
 
       const retrieved = sessionTransfer.getStoredSessionTransferToken();
-      // Should still return token since no expiry check
-      expect(retrieved.token).toBe(token);
-      expect(retrieved.userId).toBe(userId);
+      // Invalid JSON format should return null
+      expect(retrieved.token).toBeNull();
+      expect(retrieved.userId).toBeNull();
     });
   });
 
@@ -330,11 +355,16 @@ describe('auth-session-transfer - Edge Cases and URL Cleanup', () => {
     });
 
     it('should return false for expired token', () => {
-      sessionTransfer.storeSessionTransferToken('token', '123');
-
-      // Expire the token
+      // Store with expired timestamp
       const veryOldTimestamp = Date.now() - 20 * 60 * 1000;
-      sessionStorage.setItem('gatewayz_session_transfer_timestamp', String(veryOldTimestamp));
+      const sessionData = {
+        token: 'token',
+        userId: '123',
+        timestamp: veryOldTimestamp,
+        origin: 'https://beta.gatewayz.ai',
+        fingerprint: 'test-fingerprint'
+      };
+      sessionStorage.setItem('gatewayz_session_transfer_token', JSON.stringify(sessionData));
 
       expect(sessionTransfer.isSessionTransferTokenValid()).toBe(false);
     });
