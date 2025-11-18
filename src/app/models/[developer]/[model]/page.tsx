@@ -142,8 +142,15 @@ type TabType = 'Playground' | 'Use Model' | 'Providers' | 'Activity' | 'Apps';
 
 // Transform static model to API format
 function transformStaticModel(staticModel: typeof staticModels[0]): Model {
+    // Normalize model name for URL-safe ID
+    // e.g., "Anthropic: Claude 3.5 Sonnet" -> "claude-35-sonnet"
+    // Split by colon to extract the actual model name part (remove provider prefix like "Anthropic: ")
+    const nameParts = staticModel.name.split(':');
+    const modelNamePart = nameParts.length > 1 ? nameParts[1].trim() : staticModel.name;
+    const normalizedName = modelNamePart.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+
     return {
-        id: `${staticModel.developer}/${staticModel.name}`,
+        id: `${staticModel.developer}/${normalizedName}`,
         name: staticModel.name,
         description: staticModel.description,
         context_length: staticModel.context * 1000,
