@@ -236,6 +236,16 @@ _alpaca_network = _safe_import_provider("alpaca_network", [
 make_alpaca_network_request_openai = _alpaca_network.get("make_alpaca_network_request_openai")
 process_alpaca_network_response = _alpaca_network.get("process_alpaca_network_response")
 make_alpaca_network_request_openai_stream = _alpaca_network.get("make_alpaca_network_request_openai_stream")
+
+_alibaba_cloud = _safe_import_provider("alibaba_cloud", [
+    "make_alibaba_cloud_request_openai",
+    "process_alibaba_cloud_response",
+    "make_alibaba_cloud_request_openai_stream",
+])
+make_alibaba_cloud_request_openai = _alibaba_cloud.get("make_alibaba_cloud_request_openai")
+process_alibaba_cloud_response = _alibaba_cloud.get("process_alibaba_cloud_response")
+make_alibaba_cloud_request_openai_stream = _alibaba_cloud.get("make_alibaba_cloud_request_openai_stream")
+
 from src.services.model_transformations import detect_provider_from_model_id, transform_model_id
 from src.services.provider_failover import (
     build_provider_failover_chain,
@@ -1016,6 +1026,13 @@ async def chat_completions(
                             request_model,
                             **optional,
                         )
+                    elif attempt_provider == "alibaba-cloud":
+                        stream = await _to_thread(
+                            make_alibaba_cloud_request_openai_stream,
+                            messages,
+                            request_model,
+                            **optional,
+                        )
                     else:
                         stream = await _to_thread(
                             make_openrouter_request_openai_stream,
@@ -1239,6 +1256,17 @@ async def chat_completions(
                         timeout=request_timeout,
                     )
                     processed = await _to_thread(process_alpaca_network_response, resp_raw)
+                elif attempt_provider == "alibaba-cloud":
+                    resp_raw = await asyncio.wait_for(
+                        _to_thread(
+                            make_alibaba_cloud_request_openai,
+                            messages,
+                            request_model,
+                            **optional,
+                        ),
+                        timeout=request_timeout,
+                    )
+                    processed = await _to_thread(process_alibaba_cloud_response, resp_raw)
                 else:
                     resp_raw = await asyncio.wait_for(
                         _to_thread(
