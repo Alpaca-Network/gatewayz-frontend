@@ -298,6 +298,12 @@ export default function ModelProfilePage() {
             requiresApiKey: true,
             apiKeyPlaceholder: '...',
         },
+        alibaba: {
+            name: 'Alibaba Cloud',
+            baseUrl: 'https://dashscope.aliyuncs.com/api/v1',
+            requiresApiKey: true,
+            apiKeyPlaceholder: 'sk-...',
+        },
     };
 
     // Handle new route structure - params.developer and params.model
@@ -472,7 +478,7 @@ export default function ModelProfilePage() {
                 };
 
                 console.log(`[ModelProfilePage] Fetching from all gateway APIs...`);
-                const [openrouterRes, portkeyRes, featherlessRes, chutesRes, fireworksRes, togetherRes, groqRes, deepinfraRes, googleRes, cerebrasRes, nebiusRes, xaiRes, novitaRes, huggingfaceRes, aimoRes, nearRes, falRes] = await Promise.allSettled([
+                const [openrouterRes, portkeyRes, featherlessRes, chutesRes, fireworksRes, togetherRes, groqRes, deepinfraRes, googleRes, cerebrasRes, nebiusRes, xaiRes, novitaRes, huggingfaceRes, aimoRes, nearRes, falRes, alibabaRes] = await Promise.allSettled([
                     fetchWithTimeout(`/api/models?gateway=openrouter`, 5000).catch(err => {
                         console.error('OpenRouter fetch error:', err);
                         return null;
@@ -540,6 +546,10 @@ export default function ModelProfilePage() {
                     fetchWithTimeout(`/api/models?gateway=fal`, 15000).catch(err => {
                         console.error('FAL fetch error:', err);
                         return null;
+                    }),
+                    fetchWithTimeout(`/api/models?gateway=alibaba`, 5000).catch(err => {
+                        console.error('Alibaba fetch error:', err);
+                        return null;
                     })
                 ]);
                 console.log(`[ModelProfilePage] Gateway API responses:`, {
@@ -559,7 +569,8 @@ export default function ModelProfilePage() {
                     huggingface: huggingfaceRes?.status,
                     aimo: aimoRes?.status,
                     near: nearRes?.status,
-                    fal: falRes?.status
+                    fal: falRes?.status,
+                    alibaba: alibabaRes?.status
                 });
 
                 const getData = async (result: PromiseSettledResult<Response | null>) => {
@@ -586,7 +597,7 @@ export default function ModelProfilePage() {
                     return [];
                 };
 
-                const [openrouterData, portkeyData, featherlessData, chutesData, fireworksData, togetherData, groqData, deepinfraData, googleData, cerebrasData, nebiusData, xaiData, novitaData, huggingfaceData, aimoData, nearData, falData] = await Promise.all([
+                const [openrouterData, portkeyData, featherlessData, chutesData, fireworksData, togetherData, groqData, deepinfraData, googleData, cerebrasData, nebiusData, xaiData, novitaData, huggingfaceData, aimoData, nearData, falData, alibabaData] = await Promise.all([
                     getData(openrouterRes),
                     getData(portkeyRes),
                     getData(featherlessRes),
@@ -603,7 +614,8 @@ export default function ModelProfilePage() {
                     getData(huggingfaceRes),
                     getData(aimoRes),
                     getData(nearRes),
-                    getData(falRes)
+                    getData(falRes),
+                    getData(alibabaRes)
                 ]);
 
                 // Combine models from all gateways
@@ -624,7 +636,8 @@ export default function ModelProfilePage() {
                     ...huggingfaceData,
                     ...aimoData,
                     ...nearData,
-                    ...falData
+                    ...falData,
+                    ...alibabaData
                 ];
 
                 // Deduplicate models by ID - keep the first occurrence
@@ -748,6 +761,7 @@ export default function ModelProfilePage() {
                     if (hasModel(aimoData, 'aimo')) providers.push('aimo');
                     if (hasModel(nearData, 'near')) providers.push('near');
                     if (hasModel(falData, 'fal')) providers.push('fal');
+                    if (hasModel(alibabaData, 'alibaba')) providers.push('alibaba');
 
                     console.log(`Model ${modelId} available in gateways:`, providers);
                     setModelProviders(providers);

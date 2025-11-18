@@ -65,6 +65,7 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
     'vercel-ai-gateway', // Vercel AI Gateway
     'helicone', // Helicone AI Gateway - will be skipped if backend unavailable
     'alpaca', // Alpaca Network
+    'alibaba', // Alibaba Cloud
     'all'
   ];
   if (!validGateways.includes(gateway)) {
@@ -96,7 +97,8 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
         'fal',
         'vercel-ai-gateway',
         'helicone',
-        'alpaca'
+        'alpaca',
+        'alibaba'
       ];
 
       const results = await Promise.all(
@@ -233,6 +235,11 @@ function buildHeaders(gateway: string): Record<string, string> {
     headers['Authorization'] = `Bearer ${nearApiKey}`;
   }
 
+  const alibabaApiKey = process.env.NEXT_PUBLIC_ALIBABA_API_KEY || process.env.ALIBABA_API_KEY;
+  if (gateway === 'alibaba' && alibabaApiKey) {
+    headers['Authorization'] = `Bearer ${alibabaApiKey}`;
+  }
+
   return headers;
 }
 
@@ -338,6 +345,7 @@ function getStaticFallbackModels(gateway: string): any[] {
   const developerToGateway: Record<string, string> = {
     'alpaca-network': 'alpaca',
     'near': 'near',
+    'alibaba': 'alibaba',
     // Add more mappings as needed
   };
 
@@ -354,6 +362,7 @@ function getStaticFallbackModels(gateway: string): any[] {
     const gatewayToDeveloper: Record<string, string> = {
       'alpaca': 'alpaca-network',
       'near': 'near',
+      'alibaba': 'alibaba',
       // Add more mappings as needed for other gateways
     };
 
@@ -385,7 +394,8 @@ function getStaticFallbackModels(gateway: string): any[] {
         'fal',
         'vercel-ai-gateway',
         'helicone',
-        'alpaca'
+        'alpaca',
+        'alibaba'
       ];
       const modelsPerGateway = Math.ceil(models.length / allGateways.length);
 
