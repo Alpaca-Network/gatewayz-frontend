@@ -244,11 +244,18 @@ describe('auth-session-transfer', () => {
       const token = 'test-api-key-123';
       const userId = '12345';
 
+      jest.spyOn(Date, 'now').mockReturnValue(1000000);
       storeSessionTransferToken(token, userId);
 
-      expect(sessionStorage.getItem('gatewayz_session_transfer_token')).toBe(token);
-      expect(sessionStorage.getItem('gatewayz_session_transfer_user_id')).toBe(userId);
-      expect(sessionStorage.getItem('gatewayz_session_transfer_timestamp')).toBe('1000000');
+      const stored = sessionStorage.getItem('gatewayz_session_transfer_token');
+      expect(stored).toBeTruthy();
+
+      const sessionData = JSON.parse(stored!);
+      expect(sessionData.token).toBe(token);
+      expect(sessionData.userId).toBe(userId);
+      expect(sessionData.timestamp).toBe(1000000);
+      expect(sessionData.origin).toBe('http://localhost');
+      expect(sessionData.fingerprint).toBeTruthy();
     });
 
     it('should convert numeric userId to string', () => {
@@ -257,15 +264,23 @@ describe('auth-session-transfer', () => {
 
       storeSessionTransferToken(token, userId);
 
-      expect(sessionStorage.getItem('gatewayz_session_transfer_user_id')).toBe('12345');
+      const stored = sessionStorage.getItem('gatewayz_session_transfer_token');
+      expect(stored).toBeTruthy();
+
+      const sessionData = JSON.parse(stored!);
+      expect(sessionData.userId).toBe('12345');
     });
 
     it('should overwrite existing values', () => {
       storeSessionTransferToken('old-token', '111');
       storeSessionTransferToken('new-token', '222');
 
-      expect(sessionStorage.getItem('gatewayz_session_transfer_token')).toBe('new-token');
-      expect(sessionStorage.getItem('gatewayz_session_transfer_user_id')).toBe('222');
+      const stored = sessionStorage.getItem('gatewayz_session_transfer_token');
+      expect(stored).toBeTruthy();
+
+      const sessionData = JSON.parse(stored!);
+      expect(sessionData.token).toBe('new-token');
+      expect(sessionData.userId).toBe('222');
     });
 
     it('should do nothing in SSR environment', () => {
@@ -286,9 +301,15 @@ describe('auth-session-transfer', () => {
       const token = 'test-api-key-123';
       const userId = '12345';
 
-      sessionStorage.setItem('gatewayz_session_transfer_token', token);
-      sessionStorage.setItem('gatewayz_session_transfer_user_id', userId);
-      sessionStorage.setItem('gatewayz_session_transfer_timestamp', '1000000');
+      // Store in new JSON format
+      const sessionData = {
+        token,
+        userId,
+        timestamp: 1000000,
+        origin: 'http://localhost',
+        fingerprint: 'test-fingerprint'
+      };
+      sessionStorage.setItem('gatewayz_session_transfer_token', JSON.stringify(sessionData));
 
       // Mock current time as 2 minutes later (within 10-minute expiry)
       jest.spyOn(Date, 'now').mockReturnValue(1000000 + 2 * 60 * 1000);
@@ -302,9 +323,15 @@ describe('auth-session-transfer', () => {
       const token = 'test-api-key-123';
       const userId = '12345';
 
-      sessionStorage.setItem('gatewayz_session_transfer_token', token);
-      sessionStorage.setItem('gatewayz_session_transfer_user_id', userId);
-      sessionStorage.setItem('gatewayz_session_transfer_timestamp', '1000000');
+      // Store in new JSON format
+      const sessionData = {
+        token,
+        userId,
+        timestamp: 1000000,
+        origin: 'http://localhost',
+        fingerprint: 'test-fingerprint'
+      };
+      sessionStorage.setItem('gatewayz_session_transfer_token', JSON.stringify(sessionData));
 
       // Mock current time as 11 minutes later (past 10-minute expiry)
       jest.spyOn(Date, 'now').mockReturnValue(1000000 + 11 * 60 * 1000);
@@ -320,7 +347,13 @@ describe('auth-session-transfer', () => {
     });
 
     it('should return null when token is missing', () => {
-      sessionStorage.setItem('gatewayz_session_transfer_user_id', '12345');
+      // Store invalid JSON without token
+      const sessionData = {
+        userId: '12345',
+        timestamp: Date.now(),
+        origin: 'http://localhost'
+      };
+      sessionStorage.setItem('gatewayz_session_transfer_token', JSON.stringify(sessionData));
 
       const result = getStoredSessionTransferToken();
 
@@ -328,24 +361,36 @@ describe('auth-session-transfer', () => {
     });
 
     it('should return null when userId is missing', () => {
-      sessionStorage.setItem('gatewayz_session_transfer_token', 'test-token');
+      // Store invalid JSON without userId
+      const sessionData = {
+        token: 'test-token',
+        timestamp: Date.now(),
+        origin: 'http://localhost'
+      };
+      sessionStorage.setItem('gatewayz_session_transfer_token', JSON.stringify(sessionData));
 
       const result = getStoredSessionTransferToken();
 
       expect(result).toEqual({ token: null, userId: null });
     });
 
-    it('should return token when timestamp is missing (no expiry check)', () => {
+    it('should return null when origin mismatches', () => {
       const token = 'test-api-key-123';
       const userId = '12345';
 
-      sessionStorage.setItem('gatewayz_session_transfer_token', token);
-      sessionStorage.setItem('gatewayz_session_transfer_user_id', userId);
-      // No timestamp stored
+      // Store with different origin
+      const sessionData = {
+        token,
+        userId,
+        timestamp: Date.now(),
+        origin: 'http://different-origin.com',
+        fingerprint: 'test-fingerprint'
+      };
+      sessionStorage.setItem('gatewayz_session_transfer_token', JSON.stringify(sessionData));
 
       const result = getStoredSessionTransferToken();
 
-      expect(result).toEqual({ token, userId });
+      expect(result).toEqual({ token: null, userId: null });
     });
 
     it('should return null in SSR environment', () => {
@@ -363,9 +408,15 @@ describe('auth-session-transfer', () => {
       const token = 'test-api-key-123';
       const userId = '12345';
 
-      sessionStorage.setItem('gatewayz_session_transfer_token', token);
-      sessionStorage.setItem('gatewayz_session_transfer_user_id', userId);
-      sessionStorage.setItem('gatewayz_session_transfer_timestamp', '1000000');
+      // Store in new JSON format
+      const sessionData = {
+        token,
+        userId,
+        timestamp: 1000000,
+        origin: 'http://localhost',
+        fingerprint: 'test-fingerprint'
+      };
+      sessionStorage.setItem('gatewayz_session_transfer_token', JSON.stringify(sessionData));
 
       // Exactly 10 minutes later
       jest.spyOn(Date, 'now').mockReturnValue(1000000 + 10 * 60 * 1000);
@@ -380,9 +431,15 @@ describe('auth-session-transfer', () => {
       const token = 'test-api-key-123';
       const userId = '12345';
 
-      sessionStorage.setItem('gatewayz_session_transfer_token', token);
-      sessionStorage.setItem('gatewayz_session_transfer_user_id', userId);
-      sessionStorage.setItem('gatewayz_session_transfer_timestamp', '1000000');
+      // Store in new JSON format
+      const sessionData = {
+        token,
+        userId,
+        timestamp: 1000000,
+        origin: 'http://localhost',
+        fingerprint: 'test-fingerprint'
+      };
+      sessionStorage.setItem('gatewayz_session_transfer_token', JSON.stringify(sessionData));
 
       // 10 minutes + 1ms later
       jest.spyOn(Date, 'now').mockReturnValue(1000000 + 10 * 60 * 1000 + 1);
@@ -432,9 +489,15 @@ describe('auth-session-transfer', () => {
 
   describe('isSessionTransferTokenValid', () => {
     it('should return true when valid token exists', () => {
-      sessionStorage.setItem('gatewayz_session_transfer_token', 'test-token');
-      sessionStorage.setItem('gatewayz_session_transfer_user_id', '12345');
-      sessionStorage.setItem('gatewayz_session_transfer_timestamp', '1000000');
+      // Store in new JSON format
+      const sessionData = {
+        token: 'test-token',
+        userId: '12345',
+        timestamp: 1000000,
+        origin: 'http://localhost',
+        fingerprint: 'test-fingerprint'
+      };
+      sessionStorage.setItem('gatewayz_session_transfer_token', JSON.stringify(sessionData));
 
       // Mock current time within expiry
       jest.spyOn(Date, 'now').mockReturnValue(1000000 + 5 * 60 * 1000);

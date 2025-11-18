@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Menu } from "lucide-react";
 import Link from "next/link";
@@ -33,6 +33,31 @@ export function AppHeader() {
   const { toast } = useToast();
   const walletAddress = useMemo(() => getWalletAddress(user), [user]);
   const isAuthenticating = status === "authenticating";
+  const authToastShownRef = useRef(false);
+
+  // Show toast when authentication starts and completes
+  useEffect(() => {
+    if (status === "authenticating" && !authToastShownRef.current) {
+      authToastShownRef.current = true;
+      toast({
+        title: "Signing in...",
+        description: "Connecting to your account",
+      });
+    } else if (status === "authenticated") {
+      authToastShownRef.current = false;
+      toast({
+        title: "Signed in successfully",
+        description: "Welcome back!",
+      });
+    } else if (status === "error") {
+      authToastShownRef.current = false;
+      toast({
+        title: "Sign in failed",
+        description: "Please try again",
+        variant: "destructive",
+      });
+    }
+  }, [status, toast]);
 
   const formatAddress = (address: string) => {
     if (!address) return '';

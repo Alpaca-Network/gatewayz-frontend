@@ -156,8 +156,10 @@ export function GatewayzAuthProvider({
   const [error, setError] = useState<string | null>(null);
 
   const syncInFlightRef = useRef(false);
+  const syncPromiseRef = useRef<Promise<void> | null>(null);
   const lastSyncedPrivyIdRef = useRef<string | null>(null);
   const upgradeAttemptedRef = useRef(false);
+  const upgradePromiseRef = useRef<Promise<void> | null>(null);
   const betaRedirectAttemptedRef = useRef(false);
 
   const updateStateFromStorage = useCallback(() => {
@@ -187,54 +189,74 @@ export function GatewayzAuthProvider({
 
       try {
         const credits = Math.floor(authData.credits ?? 0);
-        if (credits <= 10) {
+        // Skip upgrade if insufficient credits or new user
+        if (credits <= 10 || authData.is_new_user) {
           return;
         }
 
-        if (authData.is_new_user) {
-          return;
+        // Return existing upgrade promise if already in progress
+        if (upgradePromiseRef.current) {
+          console.log("[Auth] Upgrade already in progress, returning existing promise");
+          return upgradePromiseRef.current;
         }
 
+        // Atomic check-and-set for upgrade attempt
         if (upgradeAttemptedRef.current) {
           return;
         }
 
         upgradeAttemptedRef.current = true;
 
-        const response = await fetch("/api/user/api-keys", {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${currentKey}`,
-            "Content-Type": "application/json",
-          },
-        });
+        // Create and store the upgrade promise
+        const upgradePromise = (async () => {
+          try {
+            // Use timeout for API key fetch to prevent hanging
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
 
-        if (!response.ok) {
-          console.log("[Auth] Unable to fetch upgraded API keys:", response.status);
-          return;
+            const response = await fetch("/api/user/api-keys", {
+              method: "GET",
+              headers: {
+                Authorization: `Bearer ${currentKey}`,
+                "Content-Type": "application/json",
+              },
+              signal: controller.signal,
+            });
+
+            clearTimeout(timeoutId);
+
+            if (!response.ok) {
+              console.log("[Auth] Unable to fetch upgraded API keys:", response.status);
+              return;
+            }
+
+            const data = await response.json();
+            const keys: Array<{ api_key?: string; is_primary?: boolean; environment_tag?: string }> =
+              Array.isArray(data?.keys) ? data.keys : [];
+
+        // Find preferred key with better short-circuit logic
+        let preferredKey: { api_key?: string; is_primary?: boolean; environment_tag?: string } | undefined;
+
+        for (const key of keys) {
+          if (
+            typeof key.api_key === "string" &&
+            !key.api_key.startsWith(TEMP_API_KEY_PREFIX)
+          ) {
+            // Primary preference: live environment + primary key
+            if (key.environment_tag === "live" && key.is_primary) {
+              preferredKey = key;
+              break;
+            }
+            // Secondary preference: live environment (any key)
+            if (key.environment_tag === "live" && !preferredKey) {
+              preferredKey = key;
+            }
+            // Fallback: any non-temp key
+            if (!preferredKey) {
+              preferredKey = key;
+            }
+          }
         }
-
-        const data = await response.json();
-        const keys: Array<{ api_key?: string; is_primary?: boolean; environment_tag?: string }> =
-          Array.isArray(data?.keys) ? data.keys : [];
-
-        const preferredKey =
-          keys.find(
-            (key) =>
-              typeof key.api_key === "string" &&
-              !key.api_key.startsWith(TEMP_API_KEY_PREFIX) &&
-              key.environment_tag === "live" &&
-              key.is_primary
-          ) ||
-          keys.find(
-            (key) =>
-              typeof key.api_key === "string" &&
-              !key.api_key.startsWith(TEMP_API_KEY_PREFIX) &&
-              key.environment_tag === "live"
-          ) ||
-          keys.find(
-            (key) => typeof key.api_key === "string" && !key.api_key.startsWith(TEMP_API_KEY_PREFIX)
-          );
 
         if (!preferredKey || !preferredKey.api_key) {
           console.log("[Auth] No upgraded API key found in response");
@@ -274,10 +296,23 @@ export function GatewayzAuthProvider({
           });
         }
 
-        updateStateFromStorage();
+            updateStateFromStorage();
+          } catch (error) {
+            console.log("[Auth] Failed to upgrade API key after payment", error);
+            upgradeAttemptedRef.current = false;
+            throw error;
+          } finally {
+            // Clear the promise reference when done
+            upgradePromiseRef.current = null;
+          }
+        })();
+
+        upgradePromiseRef.current = upgradePromise;
+        await upgradePromise;
       } catch (error) {
         console.log("[Auth] Failed to upgrade API key after payment", error);
         upgradeAttemptedRef.current = false;
+        upgradePromiseRef.current = null;
       }
     },
     [updateStateFromStorage]
@@ -352,7 +387,11 @@ export function GatewayzAuthProvider({
   const handleAuthSuccessAsync = useCallback(
     async (authData: AuthResponse, isNewUserExpected: boolean) => {
       handleAuthSuccess(authData, isNewUserExpected);
-      await upgradeApiKeyIfNeeded(authData);
+      // Fire and forget the API key upgrade - don't await it
+      // This prevents blocking login completion on a secondary operation
+      upgradeApiKeyIfNeeded(authData).catch((error) => {
+        console.log("[Auth] Background API key upgrade failed (non-blocking):", error);
+      });
     },
     [handleAuthSuccess, upgradeApiKeyIfNeeded]
   );
@@ -415,30 +454,63 @@ export function GatewayzAuthProvider({
       if (!authenticated || !user) {
         clearStoredCredentials();
         setStatus(privyReady ? "unauthenticated" : "idle");
+        syncPromiseRef.current = null;
         return;
       }
 
-      if (syncInFlightRef.current) {
-        if (!options?.force) {
-          return;
-        }
-      }
-
+      // Skip if we've already synced with this Privy user and have valid credentials
       if (!options?.force && lastSyncedPrivyIdRef.current === user.id && apiKey) {
+        console.log("[Auth] Already synced with this Privy user, skipping sync");
         setStatus("authenticated");
         return;
       }
 
-      syncInFlightRef.current = true;
-      setStatus("authenticating");
-      setError(null);
+      // Return existing sync promise if already in progress
+      if (syncPromiseRef.current && !options?.force) {
+        console.log("[Auth] Sync already in flight, returning existing promise");
+        return syncPromiseRef.current;
+      }
+
+      // Create new sync promise
+      const syncPromise = (async () => {
+        // Atomic check-and-set
+        const wasInFlight = syncInFlightRef.current;
+        syncInFlightRef.current = true;
+
+        if (wasInFlight && !options?.force) {
+          console.log("[Auth] Sync already in flight (race detected), skipping");
+          return;
+        }
+
+        setStatus("authenticating");
+        setError(null);
 
       try {
-        const token = await getAccessToken();
+        // Get token with timeout to prevent hanging
+        const tokenPromise = getAccessToken();
+        let token: string | null = null;
+
+        try {
+          // Add a reasonable timeout (3 seconds) for token retrieval
+          token = await Promise.race([
+            tokenPromise,
+            new Promise<null>((_, reject) =>
+              setTimeout(() => reject(new Error("Token retrieval timeout")), 3000)
+            )
+          ]);
+        } catch (tokenErr) {
+          console.warn("[Auth] Failed to get token:", tokenErr);
+          token = null; // Continue without token, let backend decide
+        }
+
         console.log("[Auth] Token retrieved:", token ? `${token.substring(0, 20)}...` : "null");
 
         const authBody = buildAuthRequestBody(user, token, userData);
         console.log("Sending auth body to backend:", authBody);
+
+        // Use fetch with timeout for backend call
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
 
         const response = await fetch("/api/auth", {
           method: "POST",
@@ -446,8 +518,10 @@ export function GatewayzAuthProvider({
             "Content-Type": "application/json",
           },
           body: JSON.stringify(authBody),
+          signal: controller.signal,
         });
 
+        clearTimeout(timeoutId);
         const rawResponseText = await response.text();
 
         if (!response.ok) {
@@ -495,15 +569,20 @@ export function GatewayzAuthProvider({
           authData,
           (authBody as { is_new_user?: boolean }).is_new_user ?? false
         );
-      } catch (err) {
-        console.error("[Auth] Error during backend sync:", err);
-        clearStoredCredentials();
-        setStatus("error");
-        setError(err instanceof Error ? err.message : "Authentication failed");
-        onAuthError?.({ raw: err });
-      } finally {
-        syncInFlightRef.current = false;
-      }
+        } catch (err) {
+          console.error("[Auth] Error during backend sync:", err);
+          clearStoredCredentials();
+          setStatus("error");
+          setError(err instanceof Error ? err.message : "Authentication failed");
+          onAuthError?.({ raw: err });
+        } finally {
+          syncInFlightRef.current = false;
+          syncPromiseRef.current = null;
+        }
+      })();
+
+      syncPromiseRef.current = syncPromise;
+      return syncPromise;
     },
     [
       apiKey,
@@ -553,6 +632,14 @@ export function GatewayzAuthProvider({
     };
   }, [syncWithBackend]);
 
+  // Memoize login/logout to avoid inline function recreation
+  const login = useCallback(() => privyLogin(), [privyLogin]);
+  const logout = useCallback(async () => {
+    clearStoredCredentials();
+    await privyLogout();
+    setStatus("unauthenticated");
+  }, [clearStoredCredentials, privyLogout]);
+
   const contextValue = useMemo<GatewayzAuthContextValue>(
     () => ({
       status,
@@ -562,23 +649,18 @@ export function GatewayzAuthProvider({
       privyReady,
       privyAuthenticated: authenticated,
       error,
-      login: () => privyLogin(),
-      logout: async () => {
-        clearStoredCredentials();
-        await privyLogout();
-        setStatus("unauthenticated");
-      },
+      login,
+      logout,
       refresh: (options) => syncWithBackend(options),
       redirectToBeta: enableBetaRedirect ? redirectToBetaIfEnabled : undefined,
     }),
     [
       apiKey,
       authenticated,
-      clearStoredCredentials,
       enableBetaRedirect,
       error,
-      privyLogin,
-      privyLogout,
+      login,
+      logout,
       privyReady,
       redirectToBetaIfEnabled,
       status,

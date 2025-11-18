@@ -9,8 +9,6 @@ Sentry.init({
   // Setting this option to true will print useful information to the console while you're setting up Sentry.
   debug: false,
 
-  // Enable experimental logs
-  _experiments: {
-    enableLogs: true,
-  },
+  // Enable logs
+  enableLogs: true,
 });

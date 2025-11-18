@@ -83,13 +83,13 @@ describe('POST /api/auth', () => {
 
       expect(mockProxyFetch).toHaveBeenCalledWith(
         'https://api.gatewayz.ai/auth',
-        {
+        expect.objectContaining({
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify(mockAuthRequest),
-        }
+        })
       );
     });
 

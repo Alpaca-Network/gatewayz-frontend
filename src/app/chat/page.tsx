@@ -46,8 +46,9 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format, isToday, isYesterday, formatDistanceToNow } from 'date-fns';
-import { getApiKey, getUserData, saveApiKey, saveUserData, type UserData } from '@/lib/api';
+import { AUTH_REFRESH_EVENT, getApiKey, getUserData, saveApiKey, saveUserData, type UserData } from '@/lib/api';
 import { ChatHistoryAPI, ChatSession as ApiChatSession, ChatMessage as ApiChatMessage, handleApiError } from '@/lib/chat-history';
+import { MessageQueue, type QueuedMessage } from '@/lib/message-queue';
 import { ChatStreamHandler } from '@/lib/chat-stream-handler';
 import { Copy, Share2, RotateCcw } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
@@ -1257,15 +1258,25 @@ function ChatPageContent() {
 
     // Track if we're currently creating a session to prevent race conditions
     const creatingSessionRef = useRef(false);
+    const createSessionPromiseRef = useRef<Promise<ChatSession | null> | null>(null);
 
     // Track if auto-send has already been triggered to prevent duplicate sends
     const autoSendTriggeredRef = useRef(false);
+
+    // Store handleSendMessage ref to avoid closure staling in effects
+    const handleSendMessageRef = useRef<() => Promise<void>>();
 
     // Trigger for forcing session reload after API key becomes available
     const [authReady, setAuthReady] = useState(false);
 
     // Queue message to be sent after authentication completes
     const [pendingMessage, setPendingMessage] = useState<{message: string, model: ModelOption | null, image?: string | null, video?: string | null, audio?: string | null} | null>(null);
+
+    // Message queue to prevent duplicate sends and race conditions
+    const messageQueueRef = useRef<MessageQueue | null>(null);
+    if (!messageQueueRef.current) {
+        messageQueueRef.current = new MessageQueue();
+    }
 
     // Test backend connectivity function
     const testBackendConnectivity = async () => {
@@ -1532,15 +1543,45 @@ function ChatPageContent() {
             console.log('[AutoSend] All conditions met! Sending message now...');
             autoSendTriggeredRef.current = true; // Mark as triggered to prevent re-sending
             setShouldAutoSend(false); // Reset flag
-            handleSendMessage();
+            // Use ref to avoid dependency on handleSendMessage which is defined later
+            if (handleSendMessageRef.current) {
+                handleSendMessageRef.current();
+            }
         }
     }, [shouldAutoSend, activeSessionId, message, selectedModel, loading, isStreamingResponse, pendingMessage]);
 
     // Check for API key in localStorage as fallback authentication
     useEffect(() => {
-        const apiKey = getApiKey();
-        const userData = getUserData();
-        setHasApiKey(!!(apiKey && userData?.privy_user_id));
+        const updateApiKeyState = () => {
+            const apiKey = getApiKey();
+            setHasApiKey(!!apiKey);
+        };
+
+        updateApiKeyState();
+
+        if (typeof window === 'undefined') {
+            return;
+        }
+
+        const handleStorageChange = (event: StorageEvent) => {
+            if (!event.key || event.key === 'gatewayz_api_key') {
+                updateApiKeyState();
+            }
+        };
+
+        const handleAuthRefresh = () => updateApiKeyState();
+
+        window.addEventListener('storage', handleStorageChange);
+        window.addEventListener(AUTH_REFRESH_EVENT as unknown as string, handleAuthRefresh as EventListener);
+
+        // Poll as a fallback for same-tab updates since the storage event doesn't fire
+        const pollInterval = window.setInterval(updateApiKeyState, 1500);
+
+        return () => {
+            window.removeEventListener('storage', handleStorageChange);
+            window.removeEventListener(AUTH_REFRESH_EVENT as unknown as string, handleAuthRefresh as EventListener);
+            clearInterval(pollInterval);
+        };
     }, [authLoading, isAuthenticated]);
 
     // Check for referral bonus notification flag
@@ -1562,7 +1603,7 @@ function ChatPageContent() {
                 });
             }, 1000); // Delay to allow page to settle
         }
-    }, [authLoading, isAuthenticated, hasApiKey, toast]);
+    }, [authLoading, isAuthenticated, hasApiKey]);
 
     // Send pending message after authentication completes
     useEffect(() => {
@@ -1571,10 +1612,9 @@ function ChatPageContent() {
         if (!isAuthenticated && !hasApiKey) return;
 
         const apiKey = getApiKey();
-        const userData = getUserData();
 
         // Wait for API key to be available
-        if (!apiKey || !userData?.privy_user_id) {
+        if (!apiKey) {
             console.log('[Pending Message] Waiting for API key to be available...');
             return;
         }
@@ -1697,15 +1737,18 @@ function ChatPageContent() {
                 if (key && data?.privy_user_id) {
                     clearInterval(checkInterval);
                     // Trigger auth ready state to force effect to re-run
-                    setAuthReady(true);
+                    setAuthReady(prev => !prev);
                 }
             }, 100);
 
             // Clean up after 10 seconds
-            setTimeout(() => clearInterval(checkInterval), 10000);
-            return () => clearInterval(checkInterval);
+            const timeoutId = window.setTimeout(() => clearInterval(checkInterval), 10000);
+            return () => {
+                clearInterval(checkInterval);
+                clearTimeout(timeoutId);
+            };
         }
-    }, [authLoading, isAuthenticated, hasApiKey]);
+    }, [authLoading, isAuthenticated, hasApiKey, searchParams, authReady]);
 
     // Handle rate limit countdown timer
     useEffect(() => {
@@ -1799,9 +1842,10 @@ function ChatPageContent() {
     };
 
     const createNewChat = async () => {
-        // Prevent duplicate session creation
-        if (creatingSessionRef.current) {
-            return null;
+        // Return existing promise if session creation is already in progress
+        if (createSessionPromiseRef.current) {
+            console.log('[createNewChat] Session creation already in progress, returning existing promise');
+            return createSessionPromiseRef.current;
         }
 
         // Check if there's already a new/empty chat session
@@ -1817,64 +1861,78 @@ function ChatPageContent() {
             return existingNewChat;
         }
 
-        creatingSessionRef.current = true;
-        
-        // Create optimistic session for immediate UI feedback (instead of 1-2s wait)
-        const tempSessionId = `local-${Date.now()}`;
-        const optimisticSession: ChatSession = {
-            id: tempSessionId,
-            title: 'Untitled Chat',
-            startTime: new Date(),
-            createdAt: new Date(),
-            updatedAt: new Date(),
-            userId: 'current-user',
-            messages: []
-        };
+        // Create promise for session creation with optimistic UI
+        const createPromise = (async () => {
+            // Atomic check-and-set
+            const wasCreating = creatingSessionRef.current;
+            creatingSessionRef.current = true;
 
-        try {
-            // Show session immediately (perceived speed improvement: 1-2s → instant)
-            setActiveSessionId(tempSessionId);
-            setSessions(prev => [optimisticSession, ...prev]);
-            autoSendTriggeredRef.current = false; // Reset auto-send flag for new chat
+            if (wasCreating) {
+                console.log('[createNewChat] Race condition detected, another creation in progress');
+                return null;
+            }
 
-            console.log('[Chat] Optimistic session created, now confirming with backend...');
+            // Create optimistic session for immediate UI feedback (instead of 1-2s wait)
+            const tempSessionId = `local-${Date.now()}`;
+            const optimisticSession: ChatSession = {
+                id: tempSessionId,
+                title: 'Untitled Chat',
+                startTime: new Date(),
+                createdAt: new Date(),
+                updatedAt: new Date(),
+                userId: 'current-user',
+                messages: []
+            };
 
-            // Create session in backend asynchronously
-            const realSession = await apiHelpers.createChatSession('Untitled Chat', selectedModel?.value);
+            try {
+                // Show session immediately (perceived speed improvement: 1-2s → instant)
+                setActiveSessionId(tempSessionId);
+                setSessions(prev => [optimisticSession, ...prev]);
+                autoSendTriggeredRef.current = false; // Reset auto-send flag for new chat
 
-            console.log('[Chat] Backend session confirmed, updating with real data');
+                console.log('[Chat] Optimistic session created, now confirming with backend...');
 
-            // Log analytics event for new chat creation
-            logAnalyticsEvent('chat_session_created', {
-                session_id: realSession.id,
-                model: selectedModel?.value
-            });
+                // Create session in backend asynchronously
+                const realSession = await apiHelpers.createChatSession('Untitled Chat', selectedModel?.value);
 
-            // Replace optimistic session with real session
-            setSessions(prev => 
-                prev.map(session => 
-                    session.id === tempSessionId ? realSession : session
-                )
-            );
-            setActiveSessionId(realSession.id);
+                console.log('[Chat] Backend session confirmed, updating with real data');
 
-            return realSession;
-        } catch (error) {
-            console.error('[Chat] Failed to create session:', error);
-            
-            // Rollback optimistic session on error
-            setSessions(prev => prev.filter(session => session.id !== tempSessionId));
-            setActiveSessionId(null);
+                // Log analytics event for new chat creation
+                logAnalyticsEvent('chat_session_created', {
+                    session_id: realSession.id,
+                    model: selectedModel?.value
+                });
 
-            toast({
-                title: "Error",
-                description: `Failed to create new chat session: ${error instanceof Error ? error.message : 'Unknown error'}`,
-                variant: 'destructive'
-            });
-            return null;
-        } finally {
-            creatingSessionRef.current = false;
-        }
+                // Replace optimistic session with real session
+                setSessions(prev => 
+                    prev.map(session => 
+                        session.id === tempSessionId ? realSession : session
+                    )
+                );
+                setActiveSessionId(realSession.id);
+
+                return realSession;
+            } catch (error) {
+                console.error('[Chat] Failed to create session:', error);
+                
+                // Rollback optimistic session on error
+                setSessions(prev => prev.filter(session => session.id !== tempSessionId));
+                setActiveSessionId(null);
+
+                toast({
+                    title: "Error",
+                    description: `Failed to create new chat session: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                    variant: 'destructive'
+                });
+                return null;
+            } finally {
+                creatingSessionRef.current = false;
+                createSessionPromiseRef.current = null;
+            }
+        })();
+
+        createSessionPromiseRef.current = createPromise;
+        return createPromise;
     };
 
     const handleExamplePromptClick = (promptText: string) => {
@@ -3096,6 +3154,11 @@ function ChatPageContent() {
             setLoading(false);
         }
     };
+
+    // Update the ref whenever handleSendMessage changes (for use in effects that can't list it as dependency)
+    useEffect(() => {
+        handleSendMessageRef.current = handleSendMessage;
+    }, [handleSendMessage]);
 
   // Show login screen if not authenticated
   if (authLoading) {

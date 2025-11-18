@@ -122,7 +122,8 @@ jobs:
     name: E2E Tests (Playwright)
     runs-on: ubuntu-latest
     # Only run E2E tests on main branches and PRs to avoid excessive test runs
-    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/develop'
+    timeout-minutes: 30
 
     steps:
       - name: Checkout code
@@ -145,13 +146,28 @@ jobs:
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps chromium
 
+      - name: Build application for E2E tests
+        run: pnpm build
+        env:
+          NEXT_PUBLIC_PRIVY_APP_ID: ${{ secrets.NEXT_PUBLIC_PRIVY_APP_ID || 'test-privy-app-id' }}
+          NEXT_PUBLIC_API_BASE_URL: ${{ secrets.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai' }}
+          NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || 'pk_test_dummy' }}
+
+      - name: Start application for E2E tests
+        run: pnpm start &
+        env:
+          NEXT_PUBLIC_PRIVY_APP_ID: ${{ secrets.NEXT_PUBLIC_PRIVY_APP_ID || 'test-privy-app-id' }}
+          NEXT_PUBLIC_API_BASE_URL: ${{ secrets.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai' }}
+          NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || 'pk_test_dummy' }}
+
+      - name: Wait for server to be ready
+        run: npx wait-on http://localhost:3000 --timeout 60000
+
       - name: Run Playwright tests
         run: pnpm exec playwright test
         env:
           CI: true
-          NEXT_PUBLIC_PRIVY_APP_ID: ${{ secrets.NEXT_PUBLIC_PRIVY_APP_ID || 'test-privy-app-id' }}
-          NEXT_PUBLIC_API_BASE_URL: ${{ secrets.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai' }}
-          NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || 'pk_test_dummy' }}
+          PLAYWRIGHT_BASE_URL: http://localhost:3000
 
       - name: Upload Playwright report
         if: always()
@@ -161,11 +177,88 @@ jobs:
           path: playwright-report/
           retention-days: 30
 
+      - name: Upload Playwright test videos (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-test-videos
+          path: test-results/
+          retention-days: 7
+
+  # Trigger Codex on CI failure
+  trigger-codex-on-failure:
+    name: Trigger Codex on Failure
+    runs-on: ubuntu-latest
+    needs: [test, lint, typecheck, build, e2e]
+    if: failure()
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Fetch PR comments and CI context
+        id: fetch-context
+        run: |
+          # Prepare context for Codex
+          FAILED_JOBS=""
+          [[ "${{ needs.test.result }}" == "failure" ]] && FAILED_JOBS="${FAILED_JOBS}test "
+          [[ "${{ needs.lint.result }}" == "failure" ]] && FAILED_JOBS="${FAILED_JOBS}lint "
+          [[ "${{ needs.typecheck.result }}" == "failure" ]] && FAILED_JOBS="${FAILED_JOBS}typecheck "
+          [[ "${{ needs.build.result }}" == "failure" ]] && FAILED_JOBS="${FAILED_JOBS}build "
+          [[ "${{ needs.e2e.result }}" == "failure" ]] && FAILED_JOBS="${FAILED_JOBS}e2e "
+
+          echo "Failed jobs: $FAILED_JOBS"
+          echo "FAILED_JOBS=$FAILED_JOBS" >> $GITHUB_OUTPUT
+
+          # Fetch PR comments if this is a pull request
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "--- PR Comments and Suggestions ---" >> $GITHUB_OUTPUT
+            gh pr view ${{ github.event.pull_request.number }} --json comments --jq '.comments[] | select(.body | contains("TODO") or contains("FIXME") or contains("suggestion") or contains("⚠")) | .author.login + ": " + .body' >> pr_comments.txt 2>/dev/null || true
+
+            # Also fetch review comments
+            gh pr view ${{ github.event.pull_request.number }} --json reviews --jq '.reviews[] | select(.state | contains("COMMENTED")) | .author.login + " (" + .state + "): " + (.comments[] | .body)' >> pr_comments.txt 2>/dev/null || true
+          fi
+
+          # Display collected context
+          if [ -f pr_comments.txt ]; then
+            echo "--- Relevant Comments Found ---"
+            cat pr_comments.txt
+          fi
+
+          echo "Branch: ${{ github.ref }}"
+          echo "Commit: ${{ github.sha }}"
+          echo "Trigger: Codex will analyze and fix CI failures"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Trigger Codex with context
+        run: |
+          # Codex will use the collected context to:
+          # 1. Analyze which CI jobs failed (test, lint, typecheck, build)
+          # 2. Review any PR comments for specific suggestions or TODOs
+          # 3. Check for review comments with ⚠️ warnings or FIXME markers
+          # 4. Automatically address issues and create fixes
+
+          FAILED_JOBS="${{ steps.fetch-context.outputs.FAILED_JOBS }}"
+
+          echo "📋 CI Failure Context for Codex:"
+          echo "  Branch: ${{ github.ref }}"
+          echo "  Commit: ${{ github.sha }}"
+          echo "  Failed Jobs: $FAILED_JOBS"
+          echo ""
+          echo "🔍 Codex will:"
+          echo "  • Analyze failed job logs and error messages"
+          echo "  • Review PR comments for TODOs, FIXMEs, and suggestions"
+          echo "  • Check for review comments with warnings (⚠️)"
+          echo "  • Automatically fix issues and push changes"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   # Summary job that all other jobs depend on - useful for branch protection rules
   ci-success:
     name: CI Success
     runs-on: ubuntu-latest
-    needs: [test, lint, typecheck, build]
+    needs: [test, lint, typecheck, build, e2e]
     if: always()
 
     steps:
@@ -174,7 +267,8 @@ jobs:
           if [[ "${{ needs.test.result }}" == "failure" ]] || \
              [[ "${{ needs.lint.result }}" == "failure" ]] || \
              [[ "${{ needs.typecheck.result }}" == "failure" ]] || \
-             [[ "${{ needs.build.result }}" == "failure" ]]; then
+             [[ "${{ needs.build.result }}" == "failure" ]] || \
+             [[ "${{ needs.e2e.result }}" == "failure" ]]; then
             echo "One or more CI jobs failed"
             exit 1
           fi
