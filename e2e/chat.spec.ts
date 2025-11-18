@@ -40,7 +40,7 @@ test('Chat testing suite is ready (placeholder)', async ({ page }) => {
   await expect(page).toHaveURL('/');
 });
 
-test.skip.describe('Chat Page - Basic Functionality', () => {
+test.describe.skip('Chat Page - Basic Functionality', () => {
   test.beforeEach(async ({ page, context }) => {
     // Setup mock authentication before each test
     await setupMockAuth(context);
@@ -98,7 +98,7 @@ test.skip.describe('Chat Page - Basic Functionality', () => {
   });
 });
 
-test.skip.describe('Chat Message Input', () => {
+test.describe.skip('Chat Message Input', () => {
   test.beforeEach(async ({ page, context }) => {
     await setupMockAuth(context);
     await page.goto('/chat');
@@ -163,7 +163,7 @@ test.skip.describe('Chat Message Input', () => {
   });
 });
 
-test.skip.describe('Chat Model Selection', () => {
+test.describe.skip('Chat Model Selection', () => {
   test.beforeEach(async ({ page, context }) => {
     await setupMockAuth(context);
     await page.goto('/chat');
@@ -208,7 +208,7 @@ test.skip.describe('Chat Model Selection', () => {
   });
 });
 
-test.skip.describe('Chat Session Management', () => {
+test.describe.skip('Chat Session Management', () => {
   test.beforeEach(async ({ page, context }) => {
     await setupMockAuth(context);
     await page.goto('/chat');
@@ -267,7 +267,7 @@ test.skip.describe('Chat Session Management', () => {
   });
 });
 
-test.skip.describe('Chat Messages Display', () => {
+test.describe.skip('Chat Messages Display', () => {
   test.beforeEach(async ({ page, context }) => {
     await setupMockAuth(context);
     await page.goto('/chat');
@@ -316,7 +316,7 @@ test.skip.describe('Chat Messages Display', () => {
   });
 });
 
-test.skip.describe('Chat Error Handling', () => {
+test.describe.skip('Chat Error Handling', () => {
   test.beforeEach(async ({ page, context }) => {
     await setupMockAuth(context);
   });
@@ -370,7 +370,7 @@ test.skip.describe('Chat Error Handling', () => {
   });
 });
 
-test.skip.describe('Chat Interactions', () => {
+test.describe.skip('Chat Interactions', () => {
   test.beforeEach(async ({ page, context }) => {
     await setupMockAuth(context);
     await page.goto('/chat');
@@ -418,7 +418,7 @@ test.skip.describe('Chat Interactions', () => {
   });
 });
 
-test.skip.describe('Chat Performance', () => {
+test.describe.skip('Chat Performance', () => {
   test.beforeEach(async ({ page, context }) => {
     await setupMockAuth(context);
   });
@@ -492,7 +492,7 @@ test.skip.describe('Chat Performance', () => {
   });
 });
 
-test.skip.describe('Chat Accessibility', () => {
+test.describe.skip('Chat Accessibility', () => {
   test.beforeEach(async ({ page, context }) => {
     await setupMockAuth(context);
     await page.goto('/chat');

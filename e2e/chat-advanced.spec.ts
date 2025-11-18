@@ -35,7 +35,7 @@ async function mockChatResponse(page: Page, response: string) {
   });
 }
 
-test.skip.describe('Chat Message Sending Flow', () => {
+test.describe.skip('Chat Message Sending Flow', () => {
   test.beforeEach(async ({ page, context }) => {
     await setupMockAuth(context);
     await page.goto('/chat');
@@ -108,7 +108,7 @@ test.skip.describe('Chat Message Sending Flow', () => {
   });
 });
 
-test.skip.describe('Chat Model Switching', () => {
+test.describe.skip('Chat Model Switching', () => {
   test.beforeEach(async ({ page, context }) => {
     await setupMockAuth(context);
     await page.goto('/chat');
@@ -161,7 +161,7 @@ test.skip.describe('Chat Model Switching', () => {
   });
 });
 
-test.skip.describe('Chat Session Persistence', () => {
+test.describe.skip('Chat Session Persistence', () => {
   test.beforeEach(async ({ page, context }) => {
     await setupMockAuth(context);
   });
@@ -232,7 +232,7 @@ test.skip.describe('Chat Session Persistence', () => {
   });
 });
 
-test.skip.describe('Chat History Management', () => {
+test.describe.skip('Chat History Management', () => {
   test.beforeEach(async ({ page, context }) => {
     await setupMockAuth(context);
   });
@@ -322,7 +322,7 @@ test.skip.describe('Chat History Management', () => {
   });
 });
 
-test.skip.describe('Chat API Integration', () => {
+test.describe.skip('Chat API Integration', () => {
   test.beforeEach(async ({ page, context }) => {
     await setupMockAuth(context);
   });
@@ -402,7 +402,7 @@ test.skip.describe('Chat API Integration', () => {
   });
 });
 
-test.skip.describe('Chat Edge Cases', () => {
+test.describe.skip('Chat Edge Cases', () => {
   test.beforeEach(async ({ page, context }) => {
     await setupMockAuth(context);
   });
@@ -489,7 +489,7 @@ test.skip.describe('Chat Edge Cases', () => {
   });
 });
 
-test.skip.describe('Chat User Experience', () => {
+test.describe.skip('Chat User Experience', () => {
   test.beforeEach(async ({ page, context }) => {
     await setupMockAuth(context);
   });
