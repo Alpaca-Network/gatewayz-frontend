@@ -301,10 +301,9 @@ export async function POST(request: NextRequest) {
     const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
     const targetUrl = new URL(`${apiUrl}/v1/chat/completions`);
 
-    // Build the backend URL with session_id if provided
-    let url = `${API_BASE_URL}/v1/chat/completions`;
+    // Add session_id to the backend URL if provided
     if (sessionId) {
-      url += `?session_id=${sessionId}`;
+      targetUrl.searchParams.set('session_id', sessionId);
     }
 
     // Use a 120 second timeout for streaming requests (models can be slow to start)
