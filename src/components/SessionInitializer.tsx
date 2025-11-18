@@ -155,14 +155,15 @@ export function SessionInitializer() {
               // Continue anyway - API key is already saved, auth will sync
             }
           }
-          // Always trigger refresh, whether user data was fetched or not
-          refresh({ force: true }).catch((error) => {
+          // Refresh auth context to update state from localStorage
+          // This is a normal refresh (not forced) to leverage existing deduplication
+          refresh().catch((error) => {
             console.error("[SessionInit] Error refreshing auth after user data fetch:", error);
           });
         }).catch((error) => {
           console.error("[SessionInit] Unexpected error during session init:", error);
           // Still trigger refresh even if something unexpected happens
-          refresh({ force: true }).catch((err) => {
+          refresh().catch((err) => {
             console.error("[SessionInit] Error refreshing auth after error:", err);
           });
         });
@@ -214,14 +215,15 @@ export function SessionInitializer() {
               // Continue anyway - API key is already saved, auth will sync
             }
           }
-          // Always trigger refresh after user data fetch attempt
-          refresh({ force: true }).catch((error) => {
+          // Refresh auth context to update state from localStorage
+          // This is a normal refresh (not forced) to leverage existing deduplication
+          refresh().catch((error) => {
             console.error("[SessionInit] Error refreshing auth after stored token fetch:", error);
           });
         }).catch((error) => {
           console.error("[SessionInit] Error fetching user data from stored token:", error);
           // Still trigger refresh on error
-          refresh({ force: true }).catch((err) => {
+          refresh().catch((err) => {
             console.error("[SessionInit] Error refreshing auth after stored token error:", err);
           });
         });

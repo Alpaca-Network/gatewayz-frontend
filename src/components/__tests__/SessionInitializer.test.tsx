@@ -145,7 +145,7 @@ describe('SessionInitializer', () => {
       expect(sessionTransfer.cleanupSessionTransferParams).toHaveBeenCalled();
 
       // Verify auth refresh was triggered
-      expect(mockAuthContext.refresh).toHaveBeenCalledWith({ force: true });
+      expect(mockAuthContext.refresh).toHaveBeenCalledWith();
     });
 
     it('should redirect to returnUrl when provided', async () => {
@@ -224,7 +224,7 @@ describe('SessionInitializer', () => {
 
       // Wait for async refresh to be called (refresh is now non-blocking)
       await waitFor(() => {
-        expect(mockAuthContext.refresh).toHaveBeenCalledWith({ force: true });
+        expect(mockAuthContext.refresh).toHaveBeenCalledWith();
       });
 
       consoleErrorSpy.mockRestore();
@@ -263,7 +263,7 @@ describe('SessionInitializer', () => {
 
       // Wait for async refresh to be called (refresh is now non-blocking)
       await waitFor(() => {
-        expect(mockAuthContext.refresh).toHaveBeenCalledWith({ force: true });
+        expect(mockAuthContext.refresh).toHaveBeenCalledWith();
       });
 
       consoleErrorSpy.mockRestore();
@@ -415,7 +415,7 @@ describe('SessionInitializer', () => {
       });
 
       // Verify auth refresh was triggered
-      expect(mockAuthContext.refresh).toHaveBeenCalledWith({ force: true });
+      expect(mockAuthContext.refresh).toHaveBeenCalledWith();
     });
 
     it('should NOT use stored token if localStorage already has API key', async () => {
@@ -698,8 +698,8 @@ describe('SessionInitializer', () => {
         expect(api.saveApiKey).toHaveBeenCalledWith(mockToken);
       });
 
-      // Should still trigger refresh despite error
-      expect(mockAuthContext.refresh).toHaveBeenCalledWith({ force: true });
+      // Should still trigger refresh (using normal refresh to leverage deduplication)
+      expect(mockAuthContext.refresh).toHaveBeenCalledWith();
 
       Storage.prototype.getItem = originalGetItem;
       consoleErrorSpy.mockRestore();
@@ -749,8 +749,8 @@ describe('SessionInitializer', () => {
         );
       });
 
-      // Should still trigger refresh
-      expect(mockAuthContext.refresh).toHaveBeenCalledWith({ force: true });
+      // Should still trigger refresh (using normal refresh to leverage deduplication)
+      expect(mockAuthContext.refresh).toHaveBeenCalledWith();
 
       consoleErrorSpy.mockRestore();
     });
@@ -782,10 +782,10 @@ describe('SessionInitializer', () => {
         expect(api.saveApiKey).toHaveBeenCalledWith(mockToken);
       });
 
-      // Eventually should trigger refresh despite timeout
+      // Eventually should trigger refresh despite timeout (using normal refresh to leverage deduplication)
       await waitFor(
         () => {
-          expect(mockAuthContext.refresh).toHaveBeenCalledWith({ force: true });
+          expect(mockAuthContext.refresh).toHaveBeenCalledWith();
         },
         { timeout: 5000 }
       );
