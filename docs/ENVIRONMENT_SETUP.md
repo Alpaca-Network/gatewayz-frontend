@@ -4,6 +4,8 @@
 
 This guide explains how to configure environment variables for the Gatewayz backend in different environments.
 
+> **⚠️ Important**: If you're unable to create API keys, see the [API Key Setup Guide](./API_KEY_SETUP.md) for step-by-step instructions on configuring `KEY_HASH_SALT`.
+
 ## Local Development
 
 ### 1. Copy the example file
@@ -11,6 +13,21 @@ This guide explains how to configure environment variables for the Gatewayz back
 ```bash
 cp .env.example .env
 ```
+
+### 1.5. Setup API Key Security (Required for API Key Creation)
+
+Before running the server, you must configure `KEY_HASH_SALT` for API key creation:
+
+```bash
+# Automated setup (recommended):
+python scripts/setup_encryption_keys.py --output .env
+
+# OR manual setup:
+python -c "import secrets; print('KEY_HASH_SALT=' + secrets.token_hex(32))"
+# Copy the output and add it to your .env file
+```
+
+This is **required** for API key creation to work. See [API Key Setup Guide](./API_KEY_SETUP.md) for details.
 
 ### 2. Required Variables
 

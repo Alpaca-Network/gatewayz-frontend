@@ -130,6 +130,28 @@ def create_api_key(
             encrypted_token, key_version = encrypt_api_key(api_key)
             api_key_hash = sha256_key_hash(api_key)
             api_key_last4 = last4(api_key)
+        except RuntimeError as hash_error:
+            # KEY_HASH_SALT is required - fail fast with clear error message
+            if "KEY_HASH_SALT" in str(hash_error):
+                error_msg = (
+                    "API key creation requires KEY_HASH_SALT environment variable. "
+                    "Generate a 16+ character random salt:\n"
+                    "  python -c \"import secrets; print('KEY_HASH_SALT=' + secrets.token_hex(32))\"\n"
+                    "Then set it in your environment variables."
+                )
+                logger.error(error_msg)
+                raise ValueError(error_msg) from hash_error
+            # Encryption keys are optional - log warning and continue
+            logger.warning(
+                "Encryption unavailable; proceeding without encrypted fields: %s",
+                sanitize_for_logging(str(hash_error)),
+            )
+            encrypted_token, key_version, api_key_hash, api_key_last4 = (
+                None,
+                None,
+                None,
+                (api_key[-4:] if api_key else None),
+            )
         except Exception as enc_e:
             logger.warning(
                 "Encryption unavailable or failed; proceeding without encrypted fields: %s",
