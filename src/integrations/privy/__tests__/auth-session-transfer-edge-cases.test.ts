@@ -4,19 +4,39 @@ describe('auth-session-transfer - Edge Cases and URL Cleanup', () => {
   const originalLocation = window.location;
 
   beforeEach(() => {
-    // Setup window.location mock properly
-    delete (window as any).location;
-    (window as any).location = {
+    // Mock window.location with a simple object that doesn't trigger navigation
+    const mockLocation = {
       href: 'https://beta.gatewayz.ai',
       search: '',
       pathname: '/',
+      origin: 'https://beta.gatewayz.ai',
       toString: () => 'https://beta.gatewayz.ai'
     };
+
+    // Delete and redefine to avoid navigation issues
+    try {
+      delete (window as any).location;
+      (window as any).location = mockLocation;
+    } catch {
+      // If delete fails, just override
+      Object.defineProperty(window, 'location', {
+        value: mockLocation,
+        writable: true,
+        configurable: true
+      });
+    }
+
     window.history.replaceState = jest.fn();
   });
 
   afterEach(() => {
-    (window as any).location = originalLocation;
+    // Restore original location if possible
+    try {
+      delete (window as any).location;
+      (window as any).location = originalLocation;
+    } catch {
+      // If we can't restore, at least reset to a valid state
+    }
   });
 
   describe('cleanupSessionTransferParams - Error Handling', () => {
