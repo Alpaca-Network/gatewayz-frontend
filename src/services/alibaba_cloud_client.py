@@ -41,34 +41,52 @@ def make_alibaba_cloud_request_openai(messages, model, **kwargs):
 def process_alibaba_cloud_response(response):
     """Process Alibaba Cloud response to extract relevant data"""
     try:
+        # Validate response has expected structure
+        if not hasattr(response, "choices") or not response.choices:
+            logger.error("Response missing 'choices' attribute")
+            raise ValueError("Invalid Alibaba Cloud response format: missing choices")
+
         choices = []
         for choice in response.choices:
-            msg = extract_message_with_tools(choice.message)
+            # Extract message with fallback for different response formats
+            if hasattr(choice, "message"):
+                msg = extract_message_with_tools(choice.message)
+            else:
+                logger.warning("Choice missing 'message' attribute, creating default")
+                msg = {"role": "assistant", "content": ""}
+
+            finish_reason = getattr(choice, "finish_reason", "stop")
+            choice_index = getattr(choice, "index", 0)
 
             choices.append(
                 {
-                    "index": choice.index,
+                    "index": choice_index,
                     "message": msg,
-                    "finish_reason": choice.finish_reason,
+                    "finish_reason": finish_reason,
                 }
             )
 
-        return {
-            "id": response.id,
-            "object": response.object,
-            "created": response.created,
-            "model": response.model,
+        # Build response with safe attribute access
+        result = {
+            "id": getattr(response, "id", "unknown"),
+            "object": getattr(response, "object", "chat.completion"),
+            "created": getattr(response, "created", 0),
+            "model": getattr(response, "model", "unknown"),
             "choices": choices,
-            "usage": (
-                {
-                    "prompt_tokens": response.usage.prompt_tokens,
-                    "completion_tokens": response.usage.completion_tokens,
-                    "total_tokens": response.usage.total_tokens,
-                }
-                if response.usage
-                else {}
-            ),
         }
+
+        # Handle usage data safely
+        if hasattr(response, "usage") and response.usage:
+            result["usage"] = {
+                "prompt_tokens": getattr(response.usage, "prompt_tokens", 0),
+                "completion_tokens": getattr(response.usage, "completion_tokens", 0),
+                "total_tokens": getattr(response.usage, "total_tokens", 0),
+            }
+        else:
+            result["usage"] = {}
+
+        logger.debug(f"Processed Alibaba Cloud response: {result}")
+        return result
     except Exception as e:
         logger.error(f"Failed to process Alibaba Cloud response: {e}")
         raise
@@ -85,3 +103,22 @@ def make_alibaba_cloud_request_openai_stream(messages, model, **kwargs):
     except Exception as e:
         logger.error(f"Alibaba Cloud streaming request failed: {e}")
         raise
+
+
+def validate_stream_chunk(chunk):
+    """Validate and ensure Alibaba Cloud stream chunk has required attributes"""
+    try:
+        # DashScope returns OpenAI-compatible format, but ensure attributes exist
+        if not hasattr(chunk, "choices") or not chunk.choices:
+            logger.warning("Stream chunk missing 'choices' attribute")
+            return False
+
+        for choice in chunk.choices:
+            if not hasattr(choice, "delta"):
+                logger.warning("Choice missing 'delta' attribute")
+                return False
+
+        return True
+    except Exception as e:
+        logger.error(f"Error validating stream chunk: {e}")
+        return False
