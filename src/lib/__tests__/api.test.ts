@@ -382,7 +382,7 @@ describe('api utilities', () => {
       expect(global.fetch).not.toHaveBeenCalled();
     });
 
-    it('should clear credentials on 401 response', async () => {
+    it('should NOT immediately clear credentials on 401 response', async () => {
       localStorage.setItem('gatewayz_api_key', 'invalid-api-key');
       localStorage.setItem('gatewayz_user_data', JSON.stringify({ user_id: 123 }));
 
@@ -392,8 +392,9 @@ describe('api utilities', () => {
       const response = await makeAuthenticatedRequest('/api/test');
 
       expect(response.status).toBe(401);
-      expect(localStorage.getItem('gatewayz_api_key')).toBeNull();
-      expect(localStorage.getItem('gatewayz_user_data')).toBeNull();
+      // Credentials should NOT be cleared - the auth context should handle recovery
+      expect(localStorage.getItem('gatewayz_api_key')).toBe('invalid-api-key');
+      expect(JSON.parse(localStorage.getItem('gatewayz_user_data') || '{}')).toHaveProperty('user_id', 123);
     });
 
     it('should NOT clear credentials on other error statuses', async () => {
@@ -789,7 +790,7 @@ describe('api utilities', () => {
       window.removeEventListener(AUTH_REFRESH_EVENT, eventListener);
     });
 
-    it('should handle 401 and require re-authentication', async () => {
+    it('should handle 401 and dispatch refresh event', async () => {
       // Setup authenticated state
       saveApiKey('valid-key');
       saveUserData({
@@ -802,20 +803,24 @@ describe('api utilities', () => {
         credits: 100,
       });
 
+      // Setup event listener to verify refresh event is dispatched
+      const eventListener = jest.fn();
+      window.addEventListener(AUTH_REFRESH_EVENT, eventListener);
+
       // API returns 401
       const mockResponse = { status: 401, ok: false };
       (global.fetch as jest.Mock).mockResolvedValue(mockResponse);
 
       await makeAuthenticatedRequest('/api/test');
 
-      // Credentials should be cleared
-      expect(getApiKey()).toBeNull();
-      expect(getUserData()).toBeNull();
+      // Credentials should NOT be immediately cleared
+      expect(getApiKey()).toBe('valid-key');
+      expect(getUserData()).toHaveProperty('user_id', 12345);
 
-      // Next request should fail (no API key)
-      await expect(makeAuthenticatedRequest('/api/test')).rejects.toThrow(
-        'No API key found'
-      );
+      // Refresh event should have been dispatched
+      expect(eventListener).toHaveBeenCalled();
+
+      window.removeEventListener(AUTH_REFRESH_EVENT, eventListener);
     });
   });
 });
