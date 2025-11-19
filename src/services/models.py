@@ -3031,7 +3031,8 @@ def enhance_model_with_provider_info(openrouter_model: dict, providers_data: lis
                 if domain.startswith("www."):
                     domain = domain[4:]
                 model_logo_url = f"https://www.google.com/s2/favicons?domain={domain}&sz=128"
-                logger.info(f"Generated model_logo_url: {model_logo_url}")
+                # Use debug logging instead of info to avoid Railway rate limiting
+                logger.debug(f"Generated model_logo_url: {model_logo_url}")
             except Exception as e:
                 logger.warning(f"Failed to parse provider_site_url '{provider_site_url}': {e}")
                 # Fallback to old method
@@ -3041,7 +3042,7 @@ def enhance_model_with_provider_info(openrouter_model: dict, providers_data: lis
                 if clean_url.startswith("www."):
                     clean_url = clean_url[4:]
                 model_logo_url = f"https://www.google.com/s2/favicons?domain={clean_url}&sz=128"
-                logger.info(f"Generated model_logo_url (fallback): {model_logo_url}")
+                logger.debug(f"Generated model_logo_url (fallback): {model_logo_url}")
 
         # Add provider information to model
         enhanced_model = {

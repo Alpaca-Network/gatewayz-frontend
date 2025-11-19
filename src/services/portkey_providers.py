@@ -775,22 +775,33 @@ def fetch_models_from_google_vertex():
         List of normalized model dictionaries, or None if fetch fails
     """
     try:
-        import google.auth
-        from google.auth.transport.requests import Request
-        from google.cloud import aiplatform
-        from google.oauth2.service_account import Credentials
+        try:
+            import google.auth
+            from google.auth.transport.requests import Request
+            from google.cloud import aiplatform
+            from google.oauth2.service_account import Credentials
+        except ImportError as ie:
+            logger.warning(
+                f"Google Vertex AI SDK not fully available (likely missing system dependencies like libstdc++.so.6): {ie}. "
+                "Falling back to hardcoded Google Vertex AI models."
+            )
+            # Continue with hardcoded models instead of failing
+            aiplatform = None
 
         from src.config import Config
 
         logger.info("Fetching models from Google Vertex AI Model Registry")
 
-        # Initialize Vertex AI using ADC (Application Default Credentials)
-        # This ensures consistent credential handling across all Google Vertex AI calls
-        from src.services.google_vertex_client import initialize_vertex_ai
+        if aiplatform is not None:
+            # Initialize Vertex AI using ADC (Application Default Credentials)
+            # This ensures consistent credential handling across all Google Vertex AI calls
+            from src.services.google_vertex_client import initialize_vertex_ai
 
-        # This will use ADC and handle temp file creation for GOOGLE_VERTEX_CREDENTIALS_JSON
-        initialize_vertex_ai()
-        logger.info("✓ Successfully initialized Vertex AI Model Registry with ADC")
+            # This will use ADC and handle temp file creation for GOOGLE_VERTEX_CREDENTIALS_JSON
+            initialize_vertex_ai()
+            logger.info("✓ Successfully initialized Vertex AI Model Registry with ADC")
+        else:
+            logger.info("Using hardcoded Google Vertex AI models (SDK unavailable)")
 
         # Common Google Vertex AI models
         # These are the officially supported and generally available models in Vertex AI

@@ -15,6 +15,12 @@ logger = logging.getLogger(__name__)
 MODEL_PROVIDER_OVERRIDES = {
     "katanemo/arch-router-1.5b": "huggingface",
     "zai-org/glm-4.6-fp8": "near",
+    # Llama models are better served through OpenRouter, Featherless, or HuggingFace
+    # rather than directly through Cerebras which doesn't have native Llama models
+    "cerebras/llama-3.3-70b": "openrouter",
+    "cerebras/llama-3.3-70b-instruct": "openrouter",
+    "cerebras/llama-3.1-70b": "openrouter",
+    "cerebras/llama-3.1-70b-instruct": "openrouter",
 }
 
 # Gemini model name constants to reduce duplication
