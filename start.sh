@@ -24,6 +24,10 @@ else
     echo "✅ Correct versions already installed"
 fi
 
+# Set PYTHONPATH to include src directory
+export PYTHONPATH="${PYTHONPATH}:${PWD}/src"
+
 # Start the application
 echo "🚀 Starting Gatewayz API..."
-exec uvicorn src.main:app --host 0.0.0.0 --port ${PORT:-8000}
+# Note: No --reload to avoid Prometheus metric duplication
+exec uvicorn src.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1

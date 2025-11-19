@@ -1,0 +1,6 @@
+[console_scripts]
+slowest-tests=pytest_split.cli:list_slowest_tests
+
+[pytest11]
+pytest-split=pytest_split.plugin
+
