@@ -2766,6 +2766,9 @@ def fetch_specific_model(provider_name: str, model_name: str, gateway: str = Non
             if "openrouter" not in candidate_gateways:
                 candidate_gateways.append("openrouter")
 
+            if "huggingface" not in candidate_gateways:
+                candidate_gateways.append("huggingface")
+
         fetchers = {
             "openrouter": fetch_specific_model_from_openrouter,
             "portkey": fetch_specific_model_from_portkey,
