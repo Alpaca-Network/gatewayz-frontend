@@ -488,72 +488,72 @@ export default function ApiKeysPage() {
               <DialogTrigger asChild>
                 <Button className="bg-primary text-primary-foreground hover:bg-primary/90 h-10 sm:h-12 px-6 sm:px-10 text-sm sm:text-base w-full sm:w-auto">Generate API Key</Button>
               </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px]">
-              <DialogHeader>
-                <DialogTitle>Create a Key</DialogTitle>
-              </DialogHeader>
-              <div className="grid gap-4 py-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="name" className="flex items-center gap-1">
-                    Name <Info className="h-3 w-3 text-muted-foreground" />
-                  </Label>
-                  <Input
-                    id="name"
-                    placeholder='e.g. "Chatbot Key"'
-                    value={keyName}
-                    onChange={(e) => setKeyName(e.target.value)}
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="credit-limit" className="flex items-center gap-1">
-                    Request limit (optional) <Info className="h-3 w-3 text-muted-foreground" />
-                  </Label>
-                  <Input
-                    id="credit-limit"
-                    type="number"
-                    placeholder="Leave blank for unlimited"
-                    value={creditLimit}
-                    onChange={(e) => setCreditLimit(e.target.value)}
-                  />
-                </div>
+              <DialogContent className="sm:max-w-[425px]">
+                <DialogHeader>
+                  <DialogTitle>Create a Key</DialogTitle>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="name" className="flex items-center gap-1">
+                      Name <Info className="h-3 w-3 text-muted-foreground" />
+                    </Label>
+                    <Input
+                      id="name"
+                      placeholder='e.g. "Chatbot Key"'
+                      value={keyName}
+                      onChange={(e) => setKeyName(e.target.value)}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="credit-limit" className="flex items-center gap-1">
+                      Request limit (optional) <Info className="h-3 w-3 text-muted-foreground" />
+                    </Label>
+                    <Input
+                      id="credit-limit"
+                      type="number"
+                      placeholder="Leave blank for unlimited"
+                      value={creditLimit}
+                      onChange={(e) => setCreditLimit(e.target.value)}
+                    />
+                  </div>
 
-                <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-                  <CollapsibleTrigger className="flex justify-between items-center w-full text-sm font-medium">
-                    Advanced Settings
-                    <ChevronDown className={`h-4 w-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="pt-4 space-y-4">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="byok-usage" className="flex items-center gap-1">
-                        Include BYOK usage in limit <Info className="h-3 w-3 text-muted-foreground" />
-                      </Label>
-                      <Switch
-                        id="byok-usage"
-                        checked={includeBYOK}
-                        onCheckedChange={setIncludeBYOK}
-                      />
-                    </div>
-                     <p className="text-xs text-muted-foreground p-2 bg-muted rounded-md">
-                       If enabled, this key&apos;s limit will apply to the sum of its BYOK usage and GatewayZ usage.
-                     </p>
-                  </CollapsibleContent>
-                </Collapsible>
-              </div>
-              <DialogFooter>
+                  <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+                    <CollapsibleTrigger className="flex justify-between items-center w-full text-sm font-medium">
+                      Advanced Settings
+                      <ChevronDown className={`h-4 w-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="pt-4 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="byok-usage" className="flex items-center gap-1">
+                          Include BYOK usage in limit <Info className="h-3 w-3 text-muted-foreground" />
+                        </Label>
+                        <Switch
+                          id="byok-usage"
+                          checked={includeBYOK}
+                          onCheckedChange={setIncludeBYOK}
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground p-2 bg-muted rounded-md">
+                        If enabled, this key&apos;s limit will apply to the sum of its BYOK usage and GatewayZ usage.
+                      </p>
+                    </CollapsibleContent>
+                  </Collapsible>
+                </div>
+                <DialogFooter>
                   <DialogClose asChild>
                     <Button type="button" variant="secondary" disabled={creating}>
                       Cancel
                     </Button>
                   </DialogClose>
-                <Button
-                  type="submit"
-                  onClick={handleCreateKey}
-                  disabled={creating}
-                >
-                  {creating ? "Creating..." : "Create"}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
+                  <Button
+                    type="submit"
+                    onClick={handleCreateKey}
+                    disabled={creating}
+                  >
+                    {creating ? "Creating..." : "Create"}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
             </Dialog>
           )}
         </div>
