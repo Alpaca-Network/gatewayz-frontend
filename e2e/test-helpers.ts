@@ -207,8 +207,8 @@ export async function getPerformanceMetrics(page: Page) {
     return {
       domContentLoaded: navigation?.domContentLoadedEventEnd - navigation?.domContentLoadedEventStart,
       loadComplete: navigation?.loadEventEnd - navigation?.loadEventStart,
-      firstPaint: (performance.getEntriesByName('first-paint')[0] as PerformanceEntryList)?.startTime,
-      firstContentfulPaint: (performance.getEntriesByName('first-contentful-paint')[0] as PerformanceEntryList)?.startTime,
+      firstPaint: (performance.getEntriesByName('first-paint')[0] as PerformanceEntry)?.startTime,
+      firstContentfulPaint: (performance.getEntriesByName('first-contentful-paint')[0] as PerformanceEntry)?.startTime,
       largestContentfulPaint: performance.getEntriesByName('largest-contentful-paint').pop()?.startTime,
     };
   }).catch(() => null);
@@ -223,18 +223,20 @@ export async function simulateNetworkConditions(
 ) {
   const client = await page.context().newCDPSession(page);
 
-  const speeds = {
+  const speeds: Record<string, { downloadThroughput?: number; uploadThroughput?: number; latency?: number; offline?: boolean }> = {
     'slow-4g': { downloadThroughput: 50000 / 8, uploadThroughput: 50000 / 8, latency: 2000 },
     'fast-3g': { downloadThroughput: 1.6 * 1000 * 1000 / 8, uploadThroughput: 750000 / 8, latency: 100 },
     'offline': { offline: true },
   };
 
+  const speedConfig = speeds[type];
+
   await client.send('Network.enable');
   await client.send('Network.emulateNetworkConditions', {
     offline: type === 'offline',
-    downloadThroughput: speeds[type as keyof typeof speeds]?.downloadThroughput || -1,
-    uploadThroughput: speeds[type as keyof typeof speeds]?.uploadThroughput || -1,
-    latency: speeds[type as keyof typeof speeds]?.latency || 0,
+    downloadThroughput: speedConfig?.downloadThroughput ?? -1,
+    uploadThroughput: speedConfig?.uploadThroughput ?? -1,
+    latency: speedConfig?.latency ?? 0,
   });
 }
 
