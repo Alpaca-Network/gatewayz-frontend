@@ -135,10 +135,15 @@ export const makeAuthenticatedRequest = async (
 
   const response = await fetch(endpoint, requestOptions);
 
-  // If we get a 401, the API key is invalid - clear it
+  // If we get a 401, DO NOT immediately clear the API key
+  // The 401 could be a temporary backend issue, not an actual session expiry
+  // Let the calling code decide whether to refresh or logout
   if (response.status === 401) {
-    console.warn('API key is invalid (401), clearing stored credentials');
-    removeApiKey();
+    console.warn('API key may be invalid (401 received), dispatching refresh event');
+    // Dispatch refresh event to let auth context handle re-authentication
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event(AUTH_REFRESH_EVENT));
+    }
   }
 
   return response;

@@ -1,7 +1,7 @@
 // Chat History API Types and Interfaces
 import { API_BASE_URL } from './config';
 import { TIMEOUT_CONFIG, createTimeoutController, withTimeoutAndRetry } from './timeout-config';
-import { getUserData } from './api';
+import { getUserData, AUTH_REFRESH_EVENT } from './api';
 
 export interface ChatMessage {
   id: number;
@@ -138,14 +138,15 @@ export class ChatHistoryAPI {
       const response = await fetch(url, config);
       clearTimeout(timeoutId);
 
-      // Handle 401 specifically - invalid API key
+      // Handle 401 specifically - may indicate invalid API key or temporary backend issue
       if (response.status === 401) {
-        console.error('ChatHistoryAPI - Authentication failed (401), API key may be invalid');
-        // Dispatch auth refresh event to trigger re-authentication
+        console.error('ChatHistoryAPI - Authentication failed (401), API key may be invalid or expired');
+        // Dispatch auth refresh event to trigger re-authentication attempt
+        // This allows the auth context to try refreshing before clearing credentials
         if (typeof window !== 'undefined') {
-          window.dispatchEvent(new Event('gatewayz:refresh-auth'));
+          window.dispatchEvent(new Event(AUTH_REFRESH_EVENT));
         }
-        throw new Error('Your session has expired or your API key is invalid. Please log in again.');
+        throw new Error('Session authentication failed. Attempting to refresh...');
       }
 
       if (!response.ok) {

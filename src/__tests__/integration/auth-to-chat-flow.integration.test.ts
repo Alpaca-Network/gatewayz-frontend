@@ -12,6 +12,7 @@ import {
   getUserData,
   processAuthResponse,
   makeAuthenticatedRequest,
+  AUTH_REFRESH_EVENT,
   type AuthResponse,
   type UserData,
 } from '@/lib/api';
@@ -114,6 +115,10 @@ describe('Auth to Chat Flow - Integration Tests', () => {
         credits: 100,
       });
 
+      // Setup event listener to verify refresh event is dispatched
+      const eventListener = jest.fn();
+      window.addEventListener(AUTH_REFRESH_EVENT, eventListener);
+
       // API returns 401
       mockFetch.mockResolvedValueOnce({
         ok: false,
@@ -129,12 +134,16 @@ describe('Auth to Chat Flow - Integration Tests', () => {
 
       // Should throw auth error with improved message
       await expect(chatAPI.getSessions()).rejects.toThrow(
-        'Your session has expired or your API key is invalid'
+        'Session authentication failed. Attempting to refresh...'
       );
 
       // Verify credentials NOT cleared by chat API (context should handle)
-      // (The context/provider should handle 401 and trigger re-auth)
-      expect(getApiKey()).toBe('invalid-key'); // Still there, context will clear
+      expect(getApiKey()).toBe('invalid-key'); // Still there, auth context will refresh
+
+      // Verify refresh event was dispatched
+      expect(eventListener).toHaveBeenCalled();
+
+      window.removeEventListener(AUTH_REFRESH_EVENT, eventListener);
     });
 
     it('should handle missing API key gracefully', async () => {
@@ -285,7 +294,7 @@ describe('Auth to Chat Flow - Integration Tests', () => {
   });
 
   describe('Reauthentication on 401 Flow', () => {
-    it('should clear credentials when API returns 401', async () => {
+    it('should NOT immediately clear credentials when API returns 401', async () => {
       // Setup authenticated state
       saveApiKey('old-key');
       saveUserData({
@@ -298,6 +307,10 @@ describe('Auth to Chat Flow - Integration Tests', () => {
         credits: 100,
       });
 
+      // Setup event listener to verify refresh event is dispatched
+      const eventListener = jest.fn();
+      window.addEventListener(AUTH_REFRESH_EVENT, eventListener);
+
       // Try to make authenticated request
       mockFetch.mockResolvedValueOnce({
         ok: false,
@@ -309,12 +322,17 @@ describe('Auth to Chat Flow - Integration Tests', () => {
       // Verify 401 response
       expect(response.status).toBe(401);
 
-      // Credentials should be cleared by makeAuthenticatedRequest
-      expect(getApiKey()).toBeNull();
-      expect(getUserData()).toBeNull();
+      // Credentials should NOT be immediately cleared - let auth context handle it
+      expect(getApiKey()).toBe('old-key');
+      expect(getUserData()).toHaveProperty('user_id', 12345);
+
+      // Refresh event should have been dispatched
+      expect(eventListener).toHaveBeenCalled();
+
+      window.removeEventListener(AUTH_REFRESH_EVENT, eventListener);
     });
 
-    it('should support re-login after 401 logout', async () => {
+    it('should support re-login after 401 with credentials preserved', async () => {
       // First login
       let authResponse: AuthResponse = {
         success: true,
@@ -332,10 +350,21 @@ describe('Auth to Chat Flow - Integration Tests', () => {
       processAuthResponse(authResponse);
       expect(getApiKey()).toBe('key-1');
 
-      // Simulate 401 and logout
+      // Setup event listener to verify refresh event is dispatched
+      const eventListener = jest.fn();
+      window.addEventListener(AUTH_REFRESH_EVENT, eventListener);
+
+      // Simulate 401 - credentials should be preserved
       mockFetch.mockResolvedValueOnce({ status: 401, ok: false });
       await makeAuthenticatedRequest('/api/test');
-      expect(getApiKey()).toBeNull();
+
+      // Credentials should NOT be immediately cleared
+      expect(getApiKey()).toBe('key-1');
+
+      // Refresh event should have been dispatched
+      expect(eventListener).toHaveBeenCalled();
+
+      window.removeEventListener(AUTH_REFRESH_EVENT, eventListener);
 
       // Second login (different user)
       authResponse = {
