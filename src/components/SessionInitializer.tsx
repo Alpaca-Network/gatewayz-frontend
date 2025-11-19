@@ -74,7 +74,7 @@ async function fetchUserDataOptimized(token: string): Promise<UserData | null> {
       return null;
     }
   } catch (error) {
-    console.error("[SessionInit] Error fetching user data:", error instanceof Error ? error.message : String(error));
+    console.error("[SessionInit] Error fetching user data:", error);
     // Return null on timeout or network error - context will handle it
     return null;
   }
