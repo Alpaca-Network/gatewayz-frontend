@@ -58,6 +58,34 @@ export const normalizeModelId = (modelId: string): string => {
 };
 
 /**
+ * Normalize a string to be URL-safe for model names
+ * Converts special characters to hyphens while preserving meaningful separators
+ * Examples:
+ * - "4.5" → "4-5" (dots become hyphens)
+ * - "Claude 3.5 Sonnet" → "claude-35-sonnet" (spaces and dots become hyphens)
+ * - "GPT-4o mini" → "gpt-4o-mini" (existing hyphens preserved, spaces become hyphens)
+ * - "LLaMA 3.1 405B" → "llama-31-405b" (version numbers formatted correctly)
+ */
+export const normalizeToUrlSafe = (str: string): string => {
+  if (!str) return '';
+
+  return str
+    .toLowerCase()
+    .split('')
+    .map((char) => {
+      // Keep alphanumeric characters as-is
+      if (/[a-z0-9]/.test(char)) return char;
+      // Convert any other character to hyphen
+      return '-';
+    })
+    .join('')
+    // Replace multiple consecutive hyphens with a single hyphen
+    .replace(/-+/g, '-')
+    // Remove leading/trailing hyphens
+    .replace(/^-+|-+$/g, '');
+};
+
+/**
  * Generate a model URL in the format /models/[developer]/[model]
  * Handles various model ID formats:
  * - "openai/gpt-5.1" → "/models/openai/gpt-5-1"
@@ -70,7 +98,7 @@ export const getModelUrl = (modelId: string, providerSlug?: string): string => {
   // Handle provider:model format (e.g., "aimo:model-name")
   if (modelId.includes(':')) {
     const [provider, model] = modelId.split(':');
-    const urlSafeName = model.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    const urlSafeName = normalizeToUrlSafe(model);
     return `/models/${provider.toLowerCase()}/${urlSafeName}`;
   }
 
@@ -78,13 +106,13 @@ export const getModelUrl = (modelId: string, providerSlug?: string): string => {
   if (modelId.includes('/')) {
     const [provider, ...modelParts] = modelId.split('/');
     const model = modelParts.join('/'); // In case there are multiple slashes
-    const urlSafeName = model.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    const urlSafeName = normalizeToUrlSafe(model);
     return `/models/${provider.toLowerCase()}/${urlSafeName}`;
   }
 
   // Fallback: just the model ID (should rarely happen)
   if (providerSlug) {
-    const urlSafeName = modelId.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    const urlSafeName = normalizeToUrlSafe(modelId);
     return `/models/${providerSlug.toLowerCase()}/${urlSafeName}`;
   }
 

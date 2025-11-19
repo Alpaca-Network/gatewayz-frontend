@@ -15,7 +15,7 @@ import { providerData } from '@/lib/provider-data';
 import { generateChartData, generateStatsTable } from '@/lib/data';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import ReactMarkdown from "react-markdown";
-import { cn } from '@/lib/utils';
+import { cn, normalizeToUrlSafe } from '@/lib/utils';
 import { API_BASE_URL } from '@/lib/config';
 import { models as staticModels } from '@/lib/models-data';
 import { getApiKey } from '@/lib/api';
@@ -147,7 +147,7 @@ function transformStaticModel(staticModel: typeof staticModels[0]): Model {
     // Split by colon to extract the actual model name part (remove provider prefix like "Anthropic: ")
     const nameParts = staticModel.name.split(':');
     const modelNamePart = nameParts.length > 1 ? nameParts[1].trim() : staticModel.name;
-    const normalizedName = modelNamePart.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    const normalizedName = normalizeToUrlSafe(modelNamePart);
 
     return {
         id: `${staticModel.developer}/${normalizedName}`,
