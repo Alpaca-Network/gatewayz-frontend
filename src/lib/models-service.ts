@@ -140,14 +140,17 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
         if (modelMap.has(dedupKey)) {
           const existing = modelMap.get(dedupKey);
 
-          // Merge source_gateways arrays
+          // Normalize gateway values for deduplication
+          const normalizeGatewayValue = (gw: string) => gw === 'hug' ? 'huggingface' : gw;
+
+          // Merge source_gateways arrays with normalized values
           const existingGateways = Array.isArray(existing.source_gateways)
-            ? existing.source_gateways
-            : (existing.source_gateway ? [existing.source_gateway] : []);
+            ? existing.source_gateways.map(normalizeGatewayValue)
+            : (existing.source_gateway ? [normalizeGatewayValue(existing.source_gateway)] : []);
 
           const newGateways = Array.isArray(model.source_gateways)
-            ? model.source_gateways
-            : (model.source_gateway ? [model.source_gateway] : []);
+            ? model.source_gateways.map(normalizeGatewayValue)
+            : (model.source_gateway ? [normalizeGatewayValue(model.source_gateway)] : []);
 
           // Combine and deduplicate gateways
           const combinedGateways = Array.from(new Set([...existingGateways, ...newGateways]));
@@ -245,18 +248,24 @@ function buildHeaders(gateway: string): Record<string, string> {
 
 // Helper function to normalize model fields for consistent tag display
 function normalizeModel(model: any, gateway: string): any {
+  // Normalize gateway values - convert 'hug' to 'huggingface' for consistency
+  const normalizeGatewayValue = (gw: string) => gw === 'hug' ? 'huggingface' : gw;
+
+  // Get normalized gateway from source_gateway or use the provided gateway parameter
+  const primaryGateway = normalizeGatewayValue(model.source_gateway || gateway);
+
   return {
     ...model,
-    // Ensure source_gateways is always an array
+    // Ensure source_gateways is always an array with normalized values
     source_gateways: Array.isArray(model.source_gateways)
-      ? model.source_gateways
-      : (model.source_gateway ? [model.source_gateway] : [gateway]),
+      ? model.source_gateways.map(normalizeGatewayValue)
+      : (model.source_gateway ? [primaryGateway] : [normalizeGatewayValue(gateway)]),
     // Ensure provider_slugs is always an array
     provider_slugs: Array.isArray(model.provider_slugs)
       ? model.provider_slugs
       : (model.provider_slug ? [model.provider_slug] : []),
     // Keep singular fields for backwards compatibility
-    source_gateway: model.source_gateway || gateway,
+    source_gateway: primaryGateway,
     provider_slug: model.provider_slug || 'unknown'
   };
 }
