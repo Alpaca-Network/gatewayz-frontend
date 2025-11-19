@@ -6,6 +6,7 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
+from src.cache import initialize_fal_cache_from_catalog
 from src.services.autonomous_monitor import get_autonomous_monitor, initialize_autonomous_monitor
 from src.services.connection_pool import clear_connection_pools, get_pool_stats
 from src.services.model_availability import availability_service
@@ -40,6 +41,13 @@ async def lifespan(app):
         logger.info(f"✅ All critical environment variables validated")
 
     try:
+        # Initialize Fal.ai model cache from static catalog
+        try:
+            initialize_fal_cache_from_catalog()
+            logger.info("Fal.ai model cache initialized from catalog")
+        except Exception as e:
+            logger.warning(f"Fal.ai cache initialization warning: {e}")
+
         # Initialize Tempo/OpenTelemetry OTLP tracing
         try:
             init_tempo_otlp()

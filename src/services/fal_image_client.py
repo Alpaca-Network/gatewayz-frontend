@@ -14,6 +14,13 @@ logger = logging.getLogger(__name__)
 # Cache for Fal.ai models catalog
 _fal_models_cache: Optional[List[Dict[str, Any]]] = None
 
+# Fal.ai API configuration
+FAL_API_BASE = "https://fal.run"
+FAL_QUEUE_API_BASE = "https://queue.fal.run"
+FAL_REQUEST_TIMEOUT = 120.0  # seconds
+FAL_QUEUE_POLL_INTERVAL = 1.0  # seconds
+FAL_QUEUE_MAX_WAIT = 300.0  # 5 minutes
+
 
 def load_fal_models_catalog() -> List[Dict[str, Any]]:
     """Load Fal.ai models catalog from the static JSON file
@@ -85,6 +92,145 @@ def validate_fal_model(model_id: str) -> bool:
     return any(model.get("id") == model_id for model in all_models)
 
 
+def _parse_image_size(size: str) -> tuple[int, int]:
+    """Parse size string to width and height
+
+    Args:
+        size: Size string in format "WIDTHxHEIGHT"
+
+    Returns:
+        Tuple of (width, height)
+    """
+    try:
+        width, height = map(int, size.lower().split("x"))
+        return width, height
+    except (ValueError, AttributeError):
+        return 1024, 1024  # Default size
+
+
+def _get_fal_image_size_param(size: str) -> dict | str:
+    """Convert standard size to Fal.ai image_size parameter
+
+    Fal.ai supports both named presets and custom dimensions
+
+    Args:
+        size: Size string in format "WIDTHxHEIGHT"
+
+    Returns:
+        Either a preset name (str) or custom dimensions dict
+    """
+    # Map standard sizes to Fal.ai preset names
+    size_mapping = {
+        "512x512": "square",
+        "1024x1024": "square_hd",
+        "768x1024": "portrait_4_3",
+        "576x1024": "portrait_16_9",
+        "1024x768": "landscape_4_3",
+        "1024x576": "landscape_16_9",
+    }
+
+    if size in size_mapping:
+        return size_mapping[size]
+
+    # For custom sizes, return width and height dict
+    width, height = _parse_image_size(size)
+    return {"width": width, "height": height}
+
+
+def _build_fal_payload(
+    prompt: str,
+    size: str,
+    n: int,
+    **kwargs,
+) -> Dict[str, Any]:
+    """Build Fal.ai request payload
+
+    Args:
+        prompt: Text description
+        size: Image size
+        n: Number of images
+        **kwargs: Additional parameters
+
+    Returns:
+        Request payload for Fal.ai API
+    """
+    payload = {
+        "prompt": prompt,
+        "num_images": n,
+        "image_size": _get_fal_image_size_param(size),
+    }
+
+    # Fal.ai model-specific parameters that can be passed through
+    fal_params = [
+        "negative_prompt",
+        "num_inference_steps",
+        "seed",
+        "guidance_scale",
+        "sync_mode",
+        "enable_safety_checker",
+        "expand_prompt",
+        "format",
+    ]
+
+    for param in fal_params:
+        if param in kwargs:
+            payload[param] = kwargs[param]
+
+    return payload
+
+
+def _extract_images_from_response(fal_response: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Extract images from Fal.ai response in OpenAI format
+
+    Fal.ai responses vary by model type. This function handles:
+    - Direct image URLs in "images" field
+    - Other response formats common to video/3D models
+
+    Args:
+        fal_response: Raw response from Fal.ai API
+
+    Returns:
+        List of image objects in OpenAI format
+    """
+    data = []
+
+    if "images" in fal_response:
+        # Standard image generation response
+        for img in fal_response["images"]:
+            if isinstance(img, dict):
+                data.append({
+                    "url": img.get("url"),
+                    "b64_json": None,
+                })
+            elif isinstance(img, str):
+                # Sometimes Fal returns just URLs
+                data.append({
+                    "url": img,
+                    "b64_json": None,
+                })
+    elif "image" in fal_response:
+        # Single image response
+        img = fal_response["image"]
+        if isinstance(img, dict):
+            data.append({
+                "url": img.get("url"),
+                "b64_json": None,
+            })
+        elif isinstance(img, str):
+            data.append({
+                "url": img,
+                "b64_json": None,
+            })
+    elif "url" in fal_response:
+        # Direct URL response
+        data.append({
+            "url": fal_response["url"],
+            "b64_json": None,
+        })
+
+    return data
+
+
 def make_fal_image_request(
     prompt: str,
     model: str = "fal-ai/stable-diffusion-v15",
@@ -145,85 +291,59 @@ def make_fal_image_request(
 
     Returns:
         Dict containing generated content in OpenAI-compatible format
+
+    Raises:
+        ValueError: If API key is not configured
+        httpx.HTTPStatusError: If API request fails
     """
+    if not Config.FAL_API_KEY:
+        logger.error("FAL_API_KEY not configured")
+        raise ValueError(
+            "Fal.ai API key not configured. Please set FAL_API_KEY environment variable"
+        )
+
+    api_url = f"{FAL_API_BASE}/{model}"
+    headers = {
+        "Authorization": f"Key {Config.FAL_API_KEY}",
+        "Content-Type": "application/json",
+    }
+
     try:
-        if not Config.FAL_API_KEY:
-            raise ValueError(
-                "Fal.ai API key not configured. Please set FAL_API_KEY environment variable"
-            )
+        logger.info(f"Making Fal.ai request to {api_url} for model {model}")
+        logger.debug(f"Request parameters: prompt={prompt[:50]}..., size={size}, n={n}")
 
-        # Fal.ai direct API endpoint (synchronous)
-        api_url = f"https://fal.run/{model}"
+        # Build request payload
+        payload = _build_fal_payload(prompt, size, n, **kwargs)
 
-        headers = {"Authorization": f"Key {Config.FAL_API_KEY}", "Content-Type": "application/json"}
-
-        # Parse size to width and height for Fal.ai
-        try:
-            width, height = map(int, size.split("x"))
-        except (ValueError, AttributeError):
-            width, height = 1024, 1024  # Default size
-
-        # Map standard size strings to Fal.ai image_size format
-        size_mapping = {
-            "512x512": "square",
-            "1024x1024": "square_hd",
-            "768x1024": "portrait_4_3",
-            "576x1024": "portrait_16_9",
-            "1024x768": "landscape_4_3",
-            "1024x576": "landscape_16_9",
-        }
-
-        # Build Fal.ai request payload
-        payload = {"prompt": prompt, "num_images": n}
-
-        # Add image size - use mapping or custom dimensions
-        if size in size_mapping:
-            payload["image_size"] = size_mapping[size]
-        else:
-            payload["image_size"] = {"width": width, "height": height}
-
-        # Add optional Fal.ai-specific parameters from kwargs
-        fal_params = [
-            "negative_prompt",
-            "num_inference_steps",
-            "seed",
-            "guidance_scale",
-            "sync_mode",
-            "enable_safety_checker",
-            "expand_prompt",
-            "format",
-        ]
-
-        for param in fal_params:
-            if param in kwargs:
-                payload[param] = kwargs[param]
-
-        logger.info(f"Submitting image generation request to Fal.ai with model {model}")
-
-        # Submit request to Fal.ai direct API using sync client
-        with httpx.Client() as client:
-            response = client.post(api_url, headers=headers, json=payload, timeout=120.0)
+        # Submit request using context manager for proper resource cleanup
+        with httpx.Client(timeout=FAL_REQUEST_TIMEOUT) as client:
+            response = client.post(api_url, headers=headers, json=payload)
             response.raise_for_status()
-
             fal_response = response.json()
 
-        logger.info(f"Fal.ai request completed for model {model}")
+        logger.info(f"Fal.ai request completed successfully for model {model}")
 
-        # Convert Fal.ai response to OpenAI-compatible format
-        data = []
-        if "images" in fal_response:
-            for img in fal_response["images"]:
-                data.append(
-                    {"url": img.get("url"), "b64_json": None}  # Fal.ai returns URLs by default
-                )
+        # Extract images from response
+        data = _extract_images_from_response(fal_response)
 
-        return {"created": int(time.time()), "data": data, "provider": "fal", "model": model}
+        if not data:
+            logger.warning(f"Fal.ai response contained no images: {fal_response}")
+
+        return {
+            "created": int(time.time()),
+            "data": data,
+            "provider": "fal",
+            "model": model,
+        }
 
     except httpx.HTTPStatusError as e:
         logger.error(
-            f"Fal.ai image generation HTTP error: {e.response.status_code} - {e.response.text}"
+            f"Fal.ai HTTP {e.response.status_code} error for model {model}: {e.response.text}"
         )
         raise
+    except httpx.RequestError as e:
+        logger.error(f"Fal.ai request error for model {model}: {e}")
+        raise
     except Exception as e:
-        logger.error(f"Fal.ai image generation request failed: {e}")
+        logger.error(f"Fal.ai request failed for model {model}: {e}", exc_info=True)
         raise
