@@ -63,7 +63,12 @@ _provider_import_errors = {}
 
 # Helper function to safely import provider clients
 def _safe_import_provider(provider_name, imports_list):
-    """Safely import provider functions with error logging"""
+    """Safely import provider functions with error logging
+
+    Returns a dict with either:
+    - Real functions if import succeeds
+    - Sentinel functions that raise HTTPException if used
+    """
     try:
         module_path = f"src.services.{provider_name}_client"
         module = __import__(module_path, fromlist=imports_list)
@@ -79,20 +84,24 @@ def _safe_import_provider(provider_name, imports_list):
         logging.getLogger(__name__).error(error_msg)
         _provider_import_errors[provider_name] = str(e)
 
-        # Return error-raising stubs instead of silent None returns
-        def create_error_stub(prov_name, error_details):
-            async def error_stub(*args, **kwargs):
-                raise ImportError(
-                    f"Provider '{prov_name}' failed to import during startup: {error_details}. "
-                    "This provider is currently unavailable. Check logs for details."
+        # Return sentinel functions that raise informative errors when called
+        def make_error_raiser(prov_name, func_name, error):
+            async def async_error(*args, **kwargs):
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"Provider '{prov_name}' is unavailable: {func_name} failed to load. Error: {str(error)[:100]}"
                 )
 
-            return error_stub
+            def sync_error(*args, **kwargs):
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"Provider '{prov_name}' is unavailable: {func_name} failed to load. Error: {str(error)[:100]}"
+                )
 
-        return {
-            import_name: create_error_stub(provider_name, str(e)) for import_name in imports_list
-        }
+            # Return the sync version by default (async handling is done elsewhere)
+            return sync_error
 
+        return {import_name: make_error_raiser(provider_name, import_name, e) for import_name in imports_list}
 
 # Load all provider clients
 _openrouter = _safe_import_provider(

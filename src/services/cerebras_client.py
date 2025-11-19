@@ -7,9 +7,6 @@ Falls back to OpenAI SDK with custom base URL if the official SDK is not availab
 
 import logging
 
-from src.config import Config
-from src.services.anthropic_transformer import extract_message_with_tools
-
 # Initialize logging
 logger = logging.getLogger(__name__)
 
@@ -22,6 +19,9 @@ def get_cerebras_client():
     Base URL (for OpenAI SDK fallback): https://api.cerebras.ai/v1
     """
     try:
+        # Lazy import to avoid circular dependencies
+        from src.config import Config
+
         if not Config.CEREBRAS_API_KEY:
             raise ValueError("Cerebras API key not configured")
 
@@ -103,6 +103,9 @@ def process_cerebras_response(response):
         Standardized response dictionary
     """
     try:
+        # Lazy import to avoid circular dependencies
+        from src.services.anthropic_transformer import extract_message_with_tools
+
         choices = []
         for choice in response.choices:
             msg = extract_message_with_tools(choice.message)
