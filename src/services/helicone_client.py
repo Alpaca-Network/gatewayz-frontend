@@ -1,5 +1,7 @@
 import logging
+
 from openai import OpenAI
+
 from src.config import Config
 from src.services.anthropic_transformer import extract_message_with_tools
 
@@ -79,11 +81,13 @@ def process_helicone_response(response):
         for choice in response.choices:
             msg = extract_message_with_tools(choice.message)
 
-            choices.append({
-                "index": choice.index,
-                "message": msg,
-                "finish_reason": choice.finish_reason,
-            })
+            choices.append(
+                {
+                    "index": choice.index,
+                    "message": msg,
+                    "finish_reason": choice.finish_reason,
+                }
+            )
 
         return {
             "id": response.id,
@@ -120,6 +124,7 @@ def fetch_model_pricing_from_helicone(model_id: str):
     """
     try:
         import httpx
+
         from src.services.models import _is_building_catalog
 
         # If we're building the catalog, return None to avoid circular dependency

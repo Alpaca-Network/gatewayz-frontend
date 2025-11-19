@@ -9,10 +9,10 @@ import logging
 import time
 from collections import defaultdict, deque
 from dataclasses import dataclass
+from typing import Optional
 
 from src.db.rate_limits import get_rate_limit_config, update_rate_limit_config
 
-from typing import Optional
 logger = logging.getLogger(__name__)
 
 
@@ -25,7 +25,11 @@ def _calculate_burst_window_description(config: "RateLimitConfig") -> str:
 
 
 def _populate_rate_limit_headers(
-    result: "RateLimitResult", config: "RateLimitConfig", request_limit: int, token_limit: int, reset_time: Optional[int] = None
+    result: "RateLimitResult",
+    config: "RateLimitConfig",
+    request_limit: int,
+    token_limit: int,
+    reset_time: Optional[int] = None,
 ) -> None:
     """Populate rate limit header fields in the result object.
 
@@ -118,7 +122,13 @@ class InMemoryRateLimiter:
                     remaining_requests=0,
                     remaining_tokens=0,
                 )
-                _populate_rate_limit_headers(result, config, config.requests_per_minute, config.tokens_per_minute, int(current_time) + 60)
+                _populate_rate_limit_headers(
+                    result,
+                    config,
+                    config.requests_per_minute,
+                    config.tokens_per_minute,
+                    int(current_time) + 60,
+                )
                 return result
 
             # Check request rate limits
@@ -153,7 +163,13 @@ class InMemoryRateLimiter:
                 remaining_tokens=remaining_tokens,
                 reset_time=int(current_time + config.window_size_seconds),
             )
-            _populate_rate_limit_headers(result, config, config.requests_per_minute, config.tokens_per_minute, int(current_time + config.window_size_seconds))
+            _populate_rate_limit_headers(
+                result,
+                config,
+                config.requests_per_minute,
+                config.tokens_per_minute,
+                int(current_time + config.window_size_seconds),
+            )
             return result
 
     async def release_concurrent_request(self, api_key: str):
@@ -215,11 +231,23 @@ class InMemoryRateLimiter:
                 retry_after=60,
                 remaining_requests=0,
             )
-            _populate_rate_limit_headers(result, config, config.requests_per_minute, config.tokens_per_minute, int(current_time) + 60)
+            _populate_rate_limit_headers(
+                result,
+                config,
+                config.requests_per_minute,
+                config.tokens_per_minute,
+                int(current_time) + 60,
+            )
             return result
 
         result = RateLimitResult(allowed=True)
-        _populate_rate_limit_headers(result, config, config.requests_per_minute, config.tokens_per_minute, int(current_time) + 60)
+        _populate_rate_limit_headers(
+            result,
+            config,
+            config.requests_per_minute,
+            config.tokens_per_minute,
+            int(current_time) + 60,
+        )
         return result
 
     async def _check_token_limits(
@@ -235,11 +263,23 @@ class InMemoryRateLimiter:
                 retry_after=60,
                 remaining_tokens=0,
             )
-            _populate_rate_limit_headers(result, config, config.requests_per_minute, config.tokens_per_minute, int(current_time) + 60)
+            _populate_rate_limit_headers(
+                result,
+                config,
+                config.requests_per_minute,
+                config.tokens_per_minute,
+                int(current_time) + 60,
+            )
             return result
 
         result = RateLimitResult(allowed=True)
-        _populate_rate_limit_headers(result, config, config.requests_per_minute, config.tokens_per_minute, int(current_time) + 60)
+        _populate_rate_limit_headers(
+            result,
+            config,
+            config.requests_per_minute,
+            config.tokens_per_minute,
+            int(current_time) + 60,
+        )
         return result
 
 

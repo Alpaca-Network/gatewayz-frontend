@@ -6,11 +6,10 @@ CRUD operations for payment records in Supabase
 
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Any, Optional, Dict, List
+from typing import Any, Dict, List, Optional
 
 from src.config.supabase_config import get_supabase_client
 
-from typing import Optional
 logger = logging.getLogger(__name__)
 
 
@@ -310,7 +309,10 @@ def update_payment_metadata(payment_id: int, metadata: Dict[str, Any]) -> Option
         existing_metadata = payment.get("metadata", {})
         updated_metadata = {**existing_metadata, **metadata}
 
-        update_data = {"metadata": updated_metadata, "updated_at": datetime.now(timezone.utc).isoformat()}
+        update_data = {
+            "metadata": updated_metadata,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
 
         result = client.table("payments").update(update_data).eq("id", payment_id).execute()
 

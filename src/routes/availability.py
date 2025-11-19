@@ -7,14 +7,13 @@ circuit breakers, and reliability features.
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, Optional, Dict, List
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from src.security.deps import get_api_key
 from src.services.model_availability import ModelAvailability, availability_service
 
-from typing import Optional
 logger = logging.getLogger(__name__)
 router = APIRouter()
 

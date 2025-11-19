@@ -18,9 +18,7 @@ def get_anannas_client():
         if not Config.ANANNAS_API_KEY:
             raise ValueError("Anannas API key not configured")
 
-        return OpenAI(
-            base_url="https://api.anannas.ai/v1", api_key=Config.ANANNAS_API_KEY
-        )
+        return OpenAI(base_url="https://api.anannas.ai/v1", api_key=Config.ANANNAS_API_KEY)
     except Exception as e:
         logger.error(f"Failed to initialize Anannas client: {e}")
         raise
@@ -69,11 +67,13 @@ def process_anannas_response(response):
         for choice in response.choices:
             msg = extract_message_with_tools(choice.message)
 
-            choices.append({
-                "index": choice.index,
-                "message": msg,
-                "finish_reason": choice.finish_reason,
-            })
+            choices.append(
+                {
+                    "index": choice.index,
+                    "message": msg,
+                    "finish_reason": choice.finish_reason,
+                }
+            )
 
         return {
             "id": response.id,

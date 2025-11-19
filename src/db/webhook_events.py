@@ -50,7 +50,7 @@ def record_processed_event(
     event_id: str,
     event_type: str,
     user_id: int | None = None,
-    metadata: dict[str, Any] | None = None
+    metadata: dict[str, Any] | None = None,
 ) -> bool:
     """
     Record that a webhook event has been processed
@@ -67,13 +67,19 @@ def record_processed_event(
     try:
         client = get_supabase_client()
 
-        result = client.table("stripe_webhook_events").insert({
-            "event_id": event_id,
-            "event_type": event_type,
-            "user_id": user_id,
-            "metadata": metadata or {},
-            "processed_at": datetime.now(timezone.utc).isoformat(),
-        }).execute()
+        result = (
+            client.table("stripe_webhook_events")
+            .insert(
+                {
+                    "event_id": event_id,
+                    "event_type": event_type,
+                    "user_id": user_id,
+                    "metadata": metadata or {},
+                    "processed_at": datetime.now(timezone.utc).isoformat(),
+                }
+            )
+            .execute()
+        )
 
         if result.data:
             logger.info(f"Recorded processed webhook event: {event_id} ({event_type})")
@@ -101,10 +107,7 @@ def get_processed_event(event_id: str) -> dict[str, Any] | None:
         client = get_supabase_client()
 
         result = (
-            client.table("stripe_webhook_events")
-            .select("*")
-            .eq("event_id", event_id)
-            .execute()
+            client.table("stripe_webhook_events").select("*").eq("event_id", event_id).execute()
         )
 
         if result.data:
@@ -135,10 +138,7 @@ def cleanup_old_events(days: int = 90) -> int:
 
         # Delete old events
         result = (
-            client.table("stripe_webhook_events")
-            .delete()
-            .lt("created_at", cutoff_dt)
-            .execute()
+            client.table("stripe_webhook_events").delete().lt("created_at", cutoff_dt).execute()
         )
 
         count = len(result.data) if result.data else 0

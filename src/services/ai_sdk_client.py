@@ -13,7 +13,9 @@ Vercel AI Gateway: https://vercel.com/ai-gateway
 """
 
 import logging
+
 from openai import OpenAI
+
 from src.config import Config
 
 # Initialize logging
@@ -67,10 +69,7 @@ def get_ai_sdk_client():
 
         # Use Vercel AI Gateway as the endpoint for AI SDK requests
         # The gateway provides OpenAI-compatible API for unified model access
-        return OpenAI(
-            base_url="https://ai-gateway.vercel.sh/v1",
-            api_key=api_key
-        )
+        return OpenAI(base_url="https://ai-gateway.vercel.sh/v1", api_key=api_key)
     except Exception as e:
         logger.error(f"Failed to initialize AI SDK client: {e}")
         raise

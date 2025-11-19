@@ -1,35 +1,32 @@
 import json
 import logging
-from typing import Any, Optional, Dict, List
-
-from fastapi import APIRouter, Query, Response
 from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
 
-from fastapi import HTTPException
+from fastapi import APIRouter, HTTPException, Query, Response
 
-from src.services.models import (
-    get_cached_models,
-    enhance_model_with_provider_info,
-    get_model_count_by_provider,
-    enhance_model_with_huggingface_data,
-    fetch_specific_model,
-)
-from src.services.providers import get_cached_providers, enhance_providers_with_logos_and_sites
 from src.db.gateway_analytics import (
-    get_provider_stats,
-    get_gateway_stats,
-    get_trending_models,
     get_all_gateways_summary,
+    get_gateway_stats,
+    get_provider_stats,
     get_top_models_by_provider,
+    get_trending_models,
+)
+from src.services.models import (
+    enhance_model_with_huggingface_data,
+    enhance_model_with_provider_info,
+    fetch_specific_model,
+    get_cached_models,
+    get_model_count_by_provider,
 )
 from src.services.modelz_client import (
-    fetch_modelz_tokens,
-    get_modelz_model_ids,
     check_model_exists_on_modelz,
+    fetch_modelz_tokens,
     get_modelz_model_details,
+    get_modelz_model_ids,
 )
+from src.services.providers import enhance_providers_with_logos_and_sites, get_cached_providers
 from src.utils.security_validators import sanitize_for_logging
-
 
 # Initialize logging
 logger = logging.getLogger(__name__)
@@ -336,7 +333,8 @@ async def get_providers(
 async def get_models(
     provider: Optional[str] = Query(None, description="Filter models by provider"),
     is_private: Optional[bool] = Query(
-        None, description="Filter by private models: true=private only, false=non-private only, null=all models"
+        None,
+        description="Filter by private models: true=private only, false=non-private only, null=all models",
     ),
     limit: Optional[int] = Query(None, description=DESC_LIMIT_NUMBER_OF_RESULTS),
     offset: Optional[int] = Query(0, description=DESC_OFFSET_FOR_PAGINATION),
@@ -683,7 +681,9 @@ async def get_models(
 
         if gateway_value in ("vercel-ai-gateway", "all"):
             models_for_providers = vercel_ai_gateway_models if gateway_value == "all" else models
-            vercel_providers = derive_providers_from_models(models_for_providers, "vercel-ai-gateway")
+            vercel_providers = derive_providers_from_models(
+                models_for_providers, "vercel-ai-gateway"
+            )
             annotated_vercel = annotate_provider_sources(vercel_providers, "vercel-ai-gateway")
             provider_groups.append(annotated_vercel)
 
@@ -710,9 +710,7 @@ async def get_models(
             if is_private:
                 # Only show private models (Near AI models)
                 models = [m for m in models if m.get("is_private") is True]
-                logger.info(
-                    f"Filtered for private models only: {original_count} -> {len(models)}"
-                )
+                logger.info(f"Filtered for private models only: {original_count} -> {len(models)}")
             else:
                 # Only show non-private models
                 models = [m for m in models if not m.get("is_private")]
@@ -776,7 +774,6 @@ async def get_models(
             "groq": "Groq catalog",
             "fireworks": "Fireworks catalog",
             "together": "Together catalog",
-
             "cerebras": "Cerebras catalog",
             "nebius": "Nebius catalog",
             "xai": "Xai catalog",
@@ -905,7 +902,7 @@ async def get_specific_model(
                 derived_providers = derive_portkey_providers(gateway_models)
                 annotated_providers = annotate_provider_sources(derived_providers, detected_gateway)
                 provider_groups.append(annotated_providers)
-        
+
         # Handle gateways that use derive_providers_from_models
         if detected_gateway in [
             "cerebras",
@@ -1610,7 +1607,8 @@ async def batch_compare_models(
 async def get_all_models(
     provider: Optional[str] = Query(None, description="Filter models by provider"),
     is_private: Optional[bool] = Query(
-        None, description="Filter by private models: true=private only, false=non-private only, null=all models"
+        None,
+        description="Filter by private models: true=private only, false=non-private only, null=all models",
     ),
     limit: Optional[int] = Query(
         50, description=f"{DESC_LIMIT_NUMBER_OF_RESULTS} (default: 50 for fast load)"
@@ -1738,7 +1736,8 @@ async def search_models(
         None, description="Filter by modality: text, image, audio, video, multimodal"
     ),
     is_private: Optional[bool] = Query(
-        None, description="Filter by private models: true=private only, false=non-private only, null=all models"
+        None,
+        description="Filter by private models: true=private only, false=non-private only, null=all models",
     ),
     min_context: Optional[int] = Query(None, description="Minimum context window size (tokens)"),
     max_context: Optional[int] = Query(None, description="Maximum context window size (tokens)"),
@@ -1849,14 +1848,10 @@ async def search_models(
         if is_private is not None:
             if is_private:
                 # Only show private models (Near AI models)
-                filtered_models = [
-                    m for m in filtered_models if m.get("is_private") is True
-                ]
+                filtered_models = [m for m in filtered_models if m.get("is_private") is True]
             else:
                 # Only show non-private models
-                filtered_models = [
-                    m for m in filtered_models if not m.get("is_private")
-                ]
+                filtered_models = [m for m in filtered_models if not m.get("is_private")]
 
         # Context window filters
         if min_context is not None:

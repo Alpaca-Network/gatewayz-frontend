@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from src.cache import _huggingface_cache, _models_cache, _provider_cache
 from src.config import Config
+from src.db.credit_transactions import get_all_transactions, get_transaction_summary
 from src.db.rate_limits import get_user_rate_limits, set_user_rate_limits
 from src.db.trials import get_trial_analytics
 from src.db.users import (
@@ -15,7 +16,6 @@ from src.db.users import (
     get_all_users,
     get_user,
 )
-from src.db.credit_transactions import get_all_transactions, get_transaction_summary
 from src.enhanced_notification_service import enhanced_notification_service
 from src.schemas import (
     AddCreditsRequest,
@@ -258,7 +258,9 @@ async def admin_huggingface_cache_status(admin_user: dict = Depends(require_admi
     try:
         cache_age = None
         if _huggingface_cache["timestamp"]:
-            cache_age = (datetime.now(timezone.utc) - _huggingface_cache["timestamp"]).total_seconds()
+            cache_age = (
+                datetime.now(timezone.utc) - _huggingface_cache["timestamp"]
+            ).total_seconds()
 
         return {
             "huggingface_cache": {

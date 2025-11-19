@@ -1,21 +1,19 @@
 import logging
-
 from datetime import datetime, timedelta, timezone
 
-from fastapi import Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+import src.db.credit_transactions as credit_transactions_module
 import src.db.rate_limits as rate_limits_module
 import src.db.users as users_module
-import src.db.credit_transactions as credit_transactions_module
+import src.services.trial_validation as trial_module
 from src.schemas import (
-    UserProfileResponse,
-    DeleteAccountResponse,
-    UserProfileUpdate,
     DeleteAccountRequest,
+    DeleteAccountResponse,
+    UserProfileResponse,
+    UserProfileUpdate,
 )
 from src.security.deps import get_api_key
-from fastapi import APIRouter
-import src.services.trial_validation as trial_module
 from src.utils.security_validators import sanitize_for_logging
 
 # Initialize logging
@@ -170,7 +168,9 @@ async def user_get_rate_limits(api_key: str = Depends(get_api_key)):
                     + timedelta(minutes=1),
                     "hour": datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
                     + timedelta(hours=1),
-                    "day": datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+                    "day": datetime.now(timezone.utc).replace(
+                        hour=0, minute=0, second=0, microsecond=0
+                    )
                     + timedelta(days=1),
                 },
             }
@@ -190,7 +190,8 @@ async def user_get_rate_limits(api_key: str = Depends(get_api_key)):
             },
             "current_usage": current_usage,
             "reset_times": {
-                "minute": datetime.now(timezone.utc).replace(second=0, microsecond=0) + timedelta(minutes=1),
+                "minute": datetime.now(timezone.utc).replace(second=0, microsecond=0)
+                + timedelta(minutes=1),
                 "hour": datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
                 + timedelta(hours=1),
                 "day": datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)

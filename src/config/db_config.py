@@ -4,10 +4,10 @@ Database Configuration
 PostgreSQL connection management for Docker-based database
 """
 
-from typing import Optional
 import logging
 import os
 from contextlib import contextmanager
+from typing import Optional
 
 # Conditional imports
 try:
@@ -22,7 +22,9 @@ except ImportError:
     extras = None
     # Note: This is expected in Supabase deployments where PostgreSQL client
     # connections are handled via PostgREST API rather than direct psycopg2
-    logging.debug("psycopg2 not installed. Direct PostgreSQL features will use Supabase PostgREST API.")
+    logging.debug(
+        "psycopg2 not installed. Direct PostgreSQL features will use Supabase PostgREST API."
+    )
 
 logger = logging.getLogger(__name__)
 

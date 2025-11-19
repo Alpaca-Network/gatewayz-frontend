@@ -2,13 +2,12 @@ import json
 import logging
 import time
 from pathlib import Path
-from typing import Any, Optional, Dict, List
+from typing import Any, Dict, List, Optional
 
 import httpx
 
 from src.config import Config
 
-from typing import Optional
 # Initialize logging
 logger = logging.getLogger(__name__)
 
@@ -156,10 +155,7 @@ def make_fal_image_request(
         # Fal.ai direct API endpoint (synchronous)
         api_url = f"https://fal.run/{model}"
 
-        headers = {
-            "Authorization": f"Key {Config.FAL_API_KEY}",
-            "Content-Type": "application/json"
-        }
+        headers = {"Authorization": f"Key {Config.FAL_API_KEY}", "Content-Type": "application/json"}
 
         # Parse size to width and height for Fal.ai
         try:

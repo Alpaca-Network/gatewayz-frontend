@@ -342,7 +342,6 @@ def _filter_portkey_models_by_patterns(patterns: list, provider_name: str):
         return None
 
 
-
 def fetch_models_from_cerebras():
     """
     Fetch models from Cerebras using their official SDK.

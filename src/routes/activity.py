@@ -4,14 +4,13 @@ Endpoints for retrieving user activity statistics and logs
 """
 
 import logging
-from typing import Any, Optional, Dict
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from src.db.activity import get_user_activity_log, get_user_activity_stats
 from src.security.deps import get_current_user
 
-from typing import Optional
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/user/activity", tags=["Activity"])

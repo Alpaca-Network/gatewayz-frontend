@@ -25,14 +25,13 @@ router = APIRouter()
 # Background task functions for non-blocking operations
 # ISSUE FIX #6: Improved background task error handling with better logging
 
+
 def _send_welcome_email_background(user_id: str, username: str, email: str, credits: float):
     """Send welcome email in background for existing users"""
     try:
         logger.info(f"Background task: Sending welcome email to user {user_id}")
         if not email or "@" not in email:
-            logger.warning(
-                f"Background task: Invalid email '{email}' for user {user_id}, skipping"
-            )
+            logger.warning(f"Background task: Invalid email '{email}' for user {user_id}, skipping")
             return
 
         success = notif_module.enhanced_notification_service.send_welcome_email_if_needed(
@@ -41,7 +40,9 @@ def _send_welcome_email_background(user_id: str, username: str, email: str, cred
         if success:
             logger.info(f"Background task: Welcome email sent successfully to user {user_id}")
         else:
-            logger.warning(f"Background task: Welcome email service returned false for user {user_id}")
+            logger.warning(
+                f"Background task: Welcome email service returned false for user {user_id}"
+            )
     except Exception as e:
         logger.error(
             f"Background task: Failed to send welcome email to existing user {user_id}: {e}",
@@ -69,14 +70,18 @@ def _send_new_user_welcome_email_background(
                 from src.db.users import mark_welcome_email_sent
 
                 mark_welcome_email_sent(user_id)
-                logger.info(f"Background task: Welcome email sent and marked for new user {user_id}")
+                logger.info(
+                    f"Background task: Welcome email sent and marked for new user {user_id}"
+                )
             except Exception as mark_error:
                 logger.error(
                     f"Background task: Failed to mark welcome email as sent for user {user_id}: "
                     f"{mark_error}"
                 )
         else:
-            logger.warning(f"Background task: Welcome email service returned false for new user {user_id}")
+            logger.warning(
+                f"Background task: Welcome email service returned false for new user {user_id}"
+            )
     except Exception as e:
         logger.error(
             f"Background task: Failed to send welcome email for new user {user_id}: {e}",
@@ -93,7 +98,9 @@ def _log_auth_activity_background(
         try:
             user_id_int = int(user_id) if isinstance(user_id, str) else user_id
         except (ValueError, TypeError) as conv_error:
-            logger.error(f"Background task: Failed to convert user_id '{user_id}' to int: {conv_error}")
+            logger.error(
+                f"Background task: Failed to convert user_id '{user_id}' to int: {conv_error}"
+            )
             return
 
         log_activity(
@@ -129,7 +136,9 @@ def _log_registration_activity_background(user_id: str, metadata: dict):
         try:
             user_id_int = int(user_id) if isinstance(user_id, str) else user_id
         except (ValueError, TypeError) as conv_error:
-            logger.error(f"Background task: Failed to convert user_id '{user_id}' to int: {conv_error}")
+            logger.error(
+                f"Background task: Failed to convert user_id '{user_id}' to int: {conv_error}"
+            )
             return
 
         log_activity(
@@ -287,7 +296,9 @@ async def privy_auth(request: PrivyAuthRequest, background_tasks: BackgroundTask
                     sorted_keys = sorted(
                         all_keys_result.data,
                         key=lambda k: (
-                            not k.get("is_primary", False),  # False sorts before True (primary first)
+                            not k.get(
+                                "is_primary", False
+                            ),  # False sorts before True (primary first)
                             k.get("created_at", ""),  # Then by creation date
                         ),
                     )
@@ -468,9 +479,7 @@ async def privy_auth(request: PrivyAuthRequest, background_tasks: BackgroundTask
                         f"with username {username}"
                     )
                 except Exception as fallback_error:
-                    logger.error(
-                        f"Fallback user creation failed: {fallback_error}", exc_info=True
-                    )
+                    logger.error(f"Fallback user creation failed: {fallback_error}", exc_info=True)
                     raise HTTPException(
                         status_code=500, detail="Failed to create user account"
                     ) from fallback_error
@@ -617,7 +626,9 @@ async def register_user(request: UserRegistrationRequest):
         try:
             # Convert auth_method enum to string for create_enhanced_user
             auth_method_str = (
-                request.auth_method.value if hasattr(request.auth_method, "value") else str(request.auth_method)
+                request.auth_method.value
+                if hasattr(request.auth_method, "value")
+                else str(request.auth_method)
             )
             user_data = users_module.create_enhanced_user(
                 username=request.username,

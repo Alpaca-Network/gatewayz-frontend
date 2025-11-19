@@ -26,7 +26,7 @@ def get_model_pricing(model_id: str) -> Dict[str, float]:
     """
     try:
         # Import here to avoid circular imports
-        from src.services.models import get_cached_models, _is_building_catalog
+        from src.services.models import _is_building_catalog, get_cached_models
 
         # If we're building the catalog, return default pricing to avoid circular dependency
         if _is_building_catalog():

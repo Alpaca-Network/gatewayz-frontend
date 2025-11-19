@@ -1,11 +1,10 @@
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Any, Optional, Dict, List
+from typing import Any, Dict, List, Optional
 
 from src.config.supabase_config import get_supabase_client
 from src.db.users import get_user
 
-from typing import Optional
 logger = logging.getLogger(__name__)
 
 
@@ -113,12 +112,19 @@ def check_rate_limit(api_key: str, tokens_used: int = 0) -> Dict[str, Any]:
             day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
             # Get current usage for all windows
-            usage_result = client.table("rate_limit_usage").select("*").eq("api_key", api_key).execute()
+            usage_result = (
+                client.table("rate_limit_usage").select("*").eq("api_key", api_key).execute()
+            )
             usage_records = usage_result.data
         except Exception as table_error:
             # If table doesn't exist, allow the request but log the issue
-            logger.warning(f"rate_limit_usage table not accessible during rate limit check: {table_error}")
-            return {"allowed": True, "reason": "Rate limit check unavailable - table migration pending"}
+            logger.warning(
+                f"rate_limit_usage table not accessible during rate limit check: {table_error}"
+            )
+            return {
+                "allowed": True,
+                "reason": "Rate limit check unavailable - table migration pending",
+            }
 
         # Find current window records
         minute_usage = next(
@@ -215,9 +221,13 @@ def update_rate_limit_usage(api_key: str, tokens_used: int) -> None:
 
         # Calculate window starts
         minute_start = now.replace(second=0, microsecond=0).replace(tzinfo=timezone.utc).isoformat()
-        hour_start = now.replace(minute=0, second=0, microsecond=0).replace(tzinfo=timezone.utc).isoformat()
+        hour_start = (
+            now.replace(minute=0, second=0, microsecond=0).replace(tzinfo=timezone.utc).isoformat()
+        )
         day_start = (
-            now.replace(hour=0, minute=0, second=0, microsecond=0).replace(tzinfo=timezone.utc).isoformat()
+            now.replace(hour=0, minute=0, second=0, microsecond=0)
+            .replace(tzinfo=timezone.utc)
+            .isoformat()
         )
 
         # Check if this is a new API key (gw_ prefix)
@@ -301,7 +311,9 @@ def update_rate_limit_usage(api_key: str, tokens_used: int) -> None:
                         f"Failed to update rate limit usage for {window_data['window_type']}: {e}"
                     )
         else:
-            logger.info("Skipping rate limit usage update - table not available. Migration may be pending.")
+            logger.info(
+                "Skipping rate limit usage update - table not available. Migration may be pending."
+            )
 
         # If this is a new key, also update the api_keys_new table
         if is_new_key:

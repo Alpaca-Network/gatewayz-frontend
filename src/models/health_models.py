@@ -4,11 +4,11 @@ Data models for health monitoring and availability status
 
 from datetime import datetime
 from enum import Enum
+from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
 
-from typing import Optional, List
 class HealthStatus(str, Enum):
     """Health status enumeration"""
 
@@ -38,7 +38,9 @@ class ModelHealthResponse(BaseModel):
     provider: str = Field(..., description="Provider name")
     gateway: str = Field(..., description="Gateway name")
     status: HealthStatus = Field(..., description="Current health status")
-    response_time_ms: Optional[float] = Field(None, description="Last response time in milliseconds")
+    response_time_ms: Optional[float] = Field(
+        None, description="Last response time in milliseconds"
+    )
     success_rate: float = Field(0.0, description="Success rate percentage (0-100)")
     last_checked: Optional[datetime] = Field(None, description="Last health check timestamp")
     last_success: Optional[datetime] = Field(None, description="Last successful request timestamp")
@@ -120,7 +122,9 @@ class HealthCheckRequest(BaseModel):
     """Request to perform health check"""
 
     models: Optional[List[str]] = Field(None, description="Specific models to check (optional)")
-    providers: Optional[List[str]] = Field(None, description="Specific providers to check (optional)")
+    providers: Optional[List[str]] = Field(
+        None, description="Specific providers to check (optional)"
+    )
     gateways: Optional[List[str]] = Field(None, description="Specific gateways to check (optional)")
     force_refresh: bool = Field(False, description="Force immediate health check")
 

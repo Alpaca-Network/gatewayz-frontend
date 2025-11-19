@@ -7,11 +7,11 @@ Monitors errors continuously and generates fixes without manual intervention.
 
 import asyncio
 import logging
-from typing import Optional
 from datetime import datetime, timedelta
+from typing import Optional
 
-from src.services.error_monitor import get_error_monitor, ErrorMonitor
-from src.services.bug_fix_generator import get_bug_fix_generator, BugFixGenerator
+from src.services.bug_fix_generator import BugFixGenerator, get_bug_fix_generator
+from src.services.error_monitor import ErrorMonitor, get_error_monitor
 
 logger = logging.getLogger(__name__)
 
@@ -151,11 +151,7 @@ class AutonomousMonitor:
                 self.error_monitor.store_error_pattern(pattern)
 
             # Get critical errors
-            critical = [
-                p
-                for p in patterns
-                if p.severity.value in ["critical", "high"]
-            ]
+            critical = [p for p in patterns if p.severity.value in ["critical", "high"]]
 
             if critical:
                 logger.warning(f"Found {len(critical)} critical/high errors")
@@ -214,11 +210,7 @@ class AutonomousMonitor:
             "scan_interval": self.scan_interval,
             "last_scan": self.last_scan.isoformat() if self.last_scan else None,
             "errors_since_last_fix": self.errors_since_last_fix,
-            "total_patterns": (
-                len(self.error_monitor.error_patterns)
-                if self.error_monitor
-                else 0
-            ),
+            "total_patterns": (len(self.error_monitor.error_patterns) if self.error_monitor else 0),
         }
 
 

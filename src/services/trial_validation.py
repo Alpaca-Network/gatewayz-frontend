@@ -45,7 +45,12 @@ def validate_trial_access(api_key: str) -> Dict[str, Any]:
             logger.info(
                 f"API key not found in api_keys_new, checking legacy users table: {api_key[:20]}..."
             )
-            legacy_result = client.table("users").select("subscription_status, trial_expires_at").eq("api_key", api_key).execute()
+            legacy_result = (
+                client.table("users")
+                .select("subscription_status, trial_expires_at")
+                .eq("api_key", api_key)
+                .execute()
+            )
 
             if not legacy_result.data:
                 return {"is_valid": False, "is_trial": False, "error": "API key not found"}
@@ -181,12 +186,7 @@ def track_trial_usage(api_key: str, tokens_used: int, requests_used: int = 1) ->
             logger.info(
                 f"API key not found in api_keys_new, checking legacy users table for usage tracking: {api_key[:20]}..."
             )
-            legacy_result = (
-                client.table("users")
-                .select("id")
-                .eq("api_key", api_key)
-                .execute()
-            )
+            legacy_result = client.table("users").select("id").eq("api_key", api_key).execute()
 
             if not legacy_result.data:
                 logger.warning(

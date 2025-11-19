@@ -4,14 +4,13 @@ Modelz API client for fetching model token data and filtering models.
 
 import logging
 import time
-from typing import Any, Optional, Dict, List
+from typing import Any, Dict, List, Optional
 
 import httpx
 from fastapi import HTTPException
 
 from src.cache import clear_modelz_cache, get_modelz_cache
 
-from typing import Optional
 logger = logging.getLogger(__name__)
 
 MODELZ_BASE_URL = "https://backend.alpacanetwork.ai"
@@ -180,7 +179,9 @@ async def check_model_exists_on_modelz(
     return model_id in model_ids
 
 
-async def get_modelz_model_details(model_id: str, use_cache: bool = True) -> Optional[Dict[str, Any]]:
+async def get_modelz_model_details(
+    model_id: str, use_cache: bool = True
+) -> Optional[Dict[str, Any]]:
     """
     Get detailed information about a specific model from Modelz.
 

@@ -8,9 +8,8 @@ fast-track high-priority chat completion requests for improved streaming perform
 import logging
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import Any, Optional, Dict, List
+from typing import Any, Dict, List, Optional
 
-from typing import Optional
 logger = logging.getLogger(__name__)
 
 

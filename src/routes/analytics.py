@@ -4,7 +4,7 @@ Server-side endpoint for logging analytics events to Statsig and PostHog
 """
 
 import logging
-from typing import Any, Optional, Dict, List
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -13,7 +13,6 @@ from src.security.deps import get_current_user
 from src.services.posthog_service import posthog_service
 from src.services.statsig_service import statsig_service
 
-from typing import Optional
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/v1/analytics", tags=["analytics"])
@@ -31,7 +30,9 @@ class AnalyticsEvent(BaseModel):
 
 
 @router.post("/events")
-async def log_event(event: AnalyticsEvent, current_user: Optional[dict] = Depends(get_current_user)):
+async def log_event(
+    event: AnalyticsEvent, current_user: Optional[dict] = Depends(get_current_user)
+):
     """
     Log an analytics event to both Statsig and PostHog via backend
 

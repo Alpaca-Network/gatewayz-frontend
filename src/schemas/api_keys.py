@@ -1,9 +1,9 @@
 from datetime import datetime
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel
 
 
-from typing import Optional, Dict, List
 class CreateApiKeyRequest(BaseModel):
     key_name: str
     environment_tag: str = "live"

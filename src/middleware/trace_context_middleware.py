@@ -12,7 +12,7 @@ from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 
-from src.config.opentelemetry_config import get_current_trace_id, get_current_span_id
+from src.config.opentelemetry_config import get_current_span_id, get_current_trace_id
 
 logger = logging.getLogger(__name__)
 
@@ -66,10 +66,7 @@ class TraceContextMiddleware(BaseHTTPMiddleware):
             log_extra["span_id"] = span_id
 
         # Log request with trace context
-        logger.info(
-            f"{request.method} {request.url.path}",
-            extra=log_extra
-        )
+        logger.info(f"{request.method} {request.url.path}", extra=log_extra)
 
         # Process request
         try:
@@ -87,7 +84,7 @@ class TraceContextMiddleware(BaseHTTPMiddleware):
                 extra={
                     **log_extra,
                     "status_code": response.status_code,
-                }
+                },
             )
 
             return response
@@ -97,6 +94,6 @@ class TraceContextMiddleware(BaseHTTPMiddleware):
             logger.error(
                 f"{request.method} {request.url.path} - Error: {str(e)}",
                 extra=log_extra,
-                exc_info=True
+                exc_info=True,
             )
             raise

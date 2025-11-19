@@ -90,7 +90,9 @@ def build_jwt_assertion(
         jwt_assertion = f"{signing_input.decode('utf-8')}.{signature_encoded}"
 
         logger.info(f"JWT assertion built successfully (length: {len(jwt_assertion)} chars)")
-        logger.debug(f"JWT claims - iss: {service_account_email}, scope: {scope}, exp: {now + expiry_seconds}")
+        logger.debug(
+            f"JWT claims - iss: {service_account_email}, scope: {scope}, exp: {now + expiry_seconds}"
+        )
 
         return jwt_assertion
 

@@ -35,10 +35,7 @@ def get_cerebras_client():
             logger.info("Cerebras SDK not available, using OpenAI SDK with Cerebras base URL")
             from openai import OpenAI
 
-            return OpenAI(
-                base_url="https://api.cerebras.ai/v1",
-                api_key=Config.CEREBRAS_API_KEY
-            )
+            return OpenAI(base_url="https://api.cerebras.ai/v1", api_key=Config.CEREBRAS_API_KEY)
     except Exception as e:
         logger.error(f"Failed to initialize Cerebras client: {e}")
         raise
@@ -61,11 +58,7 @@ def make_cerebras_request_openai(messages, model, **kwargs):
         # Log request for debugging
         logger.debug(f"Cerebras request - model: {model}, messages: {len(messages)}")
 
-        response = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            **kwargs
-        )
+        response = client.chat.completions.create(model=model, messages=messages, **kwargs)
 
         return response
     except Exception as e:
@@ -91,10 +84,7 @@ def make_cerebras_request_openai_stream(messages, model, **kwargs):
         logger.debug(f"Cerebras streaming request - model: {model}, messages: {len(messages)}")
 
         stream = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            stream=True,
-            **kwargs
+            model=model, messages=messages, stream=True, **kwargs
         )
 
         return stream
@@ -117,11 +107,13 @@ def process_cerebras_response(response):
         for choice in response.choices:
             msg = extract_message_with_tools(choice.message)
 
-            choices.append({
-                "index": choice.index,
-                "message": msg,
-                "finish_reason": choice.finish_reason,
-            })
+            choices.append(
+                {
+                    "index": choice.index,
+                    "message": msg,
+                    "finish_reason": choice.finish_reason,
+                }
+            )
 
         return {
             "id": response.id,

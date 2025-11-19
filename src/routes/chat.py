@@ -1,14 +1,14 @@
-import logging
 import asyncio
-import time
 import json
+import logging
+import time
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import StreamingResponse, JSONResponse
-import httpx
-
-from typing import Optional
 from contextvars import ContextVar
+from typing import Optional
+
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from src.utils.performance_tracker import PerformanceTracker
 
@@ -43,20 +43,23 @@ except ImportError:
         return MockSpan()
 
 
+import importlib
+
+import src.db.activity as activity_module
 import src.db.api_keys as api_keys_module
+import src.db.chat_history as chat_history_module
 import src.db.plans as plans_module
 import src.db.rate_limits as rate_limits_module
 import src.db.users as users_module
-import src.db.chat_history as chat_history_module
-import src.db.activity as activity_module
+from src.config import Config
 from src.schemas import ProxyRequest, ResponseRequest
 from src.security.deps import get_api_key
-from src.config import Config
 from src.utils.rate_limit_headers import get_rate_limit_headers
-import importlib
+
 # Import provider clients with graceful error handling
 # This prevents a single provider's import failure from breaking the entire chat endpoint
 _provider_import_errors = {}
+
 
 # Helper function to safely import provider clients
 def _safe_import_provider(provider_name, imports_list):
@@ -70,9 +73,12 @@ def _safe_import_provider(provider_name, imports_list):
         logging.getLogger(__name__).debug(f"✓ Loaded {provider_name} provider client")
         return result
     except Exception as e:
-        error_msg = f"⚠  Failed to load {provider_name} provider client: {type(e).__name__}: {str(e)}"
+        error_msg = (
+            f"⚠  Failed to load {provider_name} provider client: {type(e).__name__}: {str(e)}"
+        )
         logging.getLogger(__name__).error(error_msg)
         _provider_import_errors[provider_name] = str(e)
+
         # Return error-raising stubs instead of silent None returns
         def create_error_stub(prov_name, error_details):
             async def error_stub(*args, **kwargs):
@@ -80,181 +86,250 @@ def _safe_import_provider(provider_name, imports_list):
                     f"Provider '{prov_name}' failed to import during startup: {error_details}. "
                     "This provider is currently unavailable. Check logs for details."
                 )
+
             return error_stub
-        return {import_name: create_error_stub(provider_name, str(e)) for import_name in imports_list}
+
+        return {
+            import_name: create_error_stub(provider_name, str(e)) for import_name in imports_list
+        }
+
 
 # Load all provider clients
-_openrouter = _safe_import_provider("openrouter", [
-    "make_openrouter_request_openai",
-    "process_openrouter_response",
-    "make_openrouter_request_openai_stream",
-])
+_openrouter = _safe_import_provider(
+    "openrouter",
+    [
+        "make_openrouter_request_openai",
+        "process_openrouter_response",
+        "make_openrouter_request_openai_stream",
+    ],
+)
 make_openrouter_request_openai = _openrouter.get("make_openrouter_request_openai")
 process_openrouter_response = _openrouter.get("process_openrouter_response")
 make_openrouter_request_openai_stream = _openrouter.get("make_openrouter_request_openai_stream")
 
-_portkey = _safe_import_provider("portkey", [
-    "make_portkey_request_openai",
-    "process_portkey_response",
-    "make_portkey_request_openai_stream",
-])
+_portkey = _safe_import_provider(
+    "portkey",
+    [
+        "make_portkey_request_openai",
+        "process_portkey_response",
+        "make_portkey_request_openai_stream",
+    ],
+)
 make_portkey_request_openai = _portkey.get("make_portkey_request_openai")
 process_portkey_response = _portkey.get("process_portkey_response")
 make_portkey_request_openai_stream = _portkey.get("make_portkey_request_openai_stream")
 
-_featherless = _safe_import_provider("featherless", [
-    "make_featherless_request_openai",
-    "process_featherless_response",
-    "make_featherless_request_openai_stream",
-])
+_featherless = _safe_import_provider(
+    "featherless",
+    [
+        "make_featherless_request_openai",
+        "process_featherless_response",
+        "make_featherless_request_openai_stream",
+    ],
+)
 make_featherless_request_openai = _featherless.get("make_featherless_request_openai")
 process_featherless_response = _featherless.get("process_featherless_response")
 make_featherless_request_openai_stream = _featherless.get("make_featherless_request_openai_stream")
 
-_fireworks = _safe_import_provider("fireworks", [
-    "make_fireworks_request_openai",
-    "process_fireworks_response",
-    "make_fireworks_request_openai_stream",
-])
+_fireworks = _safe_import_provider(
+    "fireworks",
+    [
+        "make_fireworks_request_openai",
+        "process_fireworks_response",
+        "make_fireworks_request_openai_stream",
+    ],
+)
 make_fireworks_request_openai = _fireworks.get("make_fireworks_request_openai")
 process_fireworks_response = _fireworks.get("process_fireworks_response")
 make_fireworks_request_openai_stream = _fireworks.get("make_fireworks_request_openai_stream")
 
-_together = _safe_import_provider("together", [
-    "make_together_request_openai",
-    "process_together_response",
-    "make_together_request_openai_stream",
-])
+_together = _safe_import_provider(
+    "together",
+    [
+        "make_together_request_openai",
+        "process_together_response",
+        "make_together_request_openai_stream",
+    ],
+)
 make_together_request_openai = _together.get("make_together_request_openai")
 process_together_response = _together.get("process_together_response")
 make_together_request_openai_stream = _together.get("make_together_request_openai_stream")
 
-_huggingface = _safe_import_provider("huggingface", [
-    "make_huggingface_request_openai",
-    "process_huggingface_response",
-    "make_huggingface_request_openai_stream",
-])
+_huggingface = _safe_import_provider(
+    "huggingface",
+    [
+        "make_huggingface_request_openai",
+        "process_huggingface_response",
+        "make_huggingface_request_openai_stream",
+    ],
+)
 make_huggingface_request_openai = _huggingface.get("make_huggingface_request_openai")
 process_huggingface_response = _huggingface.get("process_huggingface_response")
 make_huggingface_request_openai_stream = _huggingface.get("make_huggingface_request_openai_stream")
 
-_aimo = _safe_import_provider("aimo", [
-    "make_aimo_request_openai",
-    "process_aimo_response",
-    "make_aimo_request_openai_stream",
-])
+_aimo = _safe_import_provider(
+    "aimo",
+    [
+        "make_aimo_request_openai",
+        "process_aimo_response",
+        "make_aimo_request_openai_stream",
+    ],
+)
 make_aimo_request_openai = _aimo.get("make_aimo_request_openai")
 process_aimo_response = _aimo.get("process_aimo_response")
 make_aimo_request_openai_stream = _aimo.get("make_aimo_request_openai_stream")
 
-_xai = _safe_import_provider("xai", [
-    "make_xai_request_openai",
-    "process_xai_response",
-    "make_xai_request_openai_stream",
-])
+_xai = _safe_import_provider(
+    "xai",
+    [
+        "make_xai_request_openai",
+        "process_xai_response",
+        "make_xai_request_openai_stream",
+    ],
+)
 make_xai_request_openai = _xai.get("make_xai_request_openai")
 process_xai_response = _xai.get("process_xai_response")
 make_xai_request_openai_stream = _xai.get("make_xai_request_openai_stream")
 
-_cerebras = _safe_import_provider("cerebras", [
-    "make_cerebras_request_openai",
-    "process_cerebras_response",
-    "make_cerebras_request_openai_stream",
-])
+_cerebras = _safe_import_provider(
+    "cerebras",
+    [
+        "make_cerebras_request_openai",
+        "process_cerebras_response",
+        "make_cerebras_request_openai_stream",
+    ],
+)
 make_cerebras_request_openai = _cerebras.get("make_cerebras_request_openai")
 process_cerebras_response = _cerebras.get("process_cerebras_response")
 make_cerebras_request_openai_stream = _cerebras.get("make_cerebras_request_openai_stream")
 
-_chutes = _safe_import_provider("chutes", [
-    "make_chutes_request_openai",
-    "process_chutes_response",
-    "make_chutes_request_openai_stream",
-])
+_chutes = _safe_import_provider(
+    "chutes",
+    [
+        "make_chutes_request_openai",
+        "process_chutes_response",
+        "make_chutes_request_openai_stream",
+    ],
+)
 make_chutes_request_openai = _chutes.get("make_chutes_request_openai")
 process_chutes_response = _chutes.get("process_chutes_response")
 make_chutes_request_openai_stream = _chutes.get("make_chutes_request_openai_stream")
 
-_google_vertex = _safe_import_provider("google_vertex", [
-    "make_google_vertex_request_openai",
-    "process_google_vertex_response",
-    "make_google_vertex_request_openai_stream",
-])
+_google_vertex = _safe_import_provider(
+    "google_vertex",
+    [
+        "make_google_vertex_request_openai",
+        "process_google_vertex_response",
+        "make_google_vertex_request_openai_stream",
+    ],
+)
 make_google_vertex_request_openai = _google_vertex.get("make_google_vertex_request_openai")
 process_google_vertex_response = _google_vertex.get("process_google_vertex_response")
-make_google_vertex_request_openai_stream = _google_vertex.get("make_google_vertex_request_openai_stream")
+make_google_vertex_request_openai_stream = _google_vertex.get(
+    "make_google_vertex_request_openai_stream"
+)
 
-_near = _safe_import_provider("near", [
-    "make_near_request_openai",
-    "process_near_response",
-    "make_near_request_openai_stream",
-])
+_near = _safe_import_provider(
+    "near",
+    [
+        "make_near_request_openai",
+        "process_near_response",
+        "make_near_request_openai_stream",
+    ],
+)
 make_near_request_openai = _near.get("make_near_request_openai")
 process_near_response = _near.get("process_near_response")
 make_near_request_openai_stream = _near.get("make_near_request_openai_stream")
 
-_vercel_ai_gateway = _safe_import_provider("vercel_ai_gateway", [
-    "make_vercel_ai_gateway_request_openai",
-    "process_vercel_ai_gateway_response",
-    "make_vercel_ai_gateway_request_openai_stream",
-])
-make_vercel_ai_gateway_request_openai = _vercel_ai_gateway.get("make_vercel_ai_gateway_request_openai")
+_vercel_ai_gateway = _safe_import_provider(
+    "vercel_ai_gateway",
+    [
+        "make_vercel_ai_gateway_request_openai",
+        "process_vercel_ai_gateway_response",
+        "make_vercel_ai_gateway_request_openai_stream",
+    ],
+)
+make_vercel_ai_gateway_request_openai = _vercel_ai_gateway.get(
+    "make_vercel_ai_gateway_request_openai"
+)
 process_vercel_ai_gateway_response = _vercel_ai_gateway.get("process_vercel_ai_gateway_response")
-make_vercel_ai_gateway_request_openai_stream = _vercel_ai_gateway.get("make_vercel_ai_gateway_request_openai_stream")
+make_vercel_ai_gateway_request_openai_stream = _vercel_ai_gateway.get(
+    "make_vercel_ai_gateway_request_openai_stream"
+)
 
-_helicone = _safe_import_provider("helicone", [
-    "make_helicone_request_openai",
-    "process_helicone_response",
-    "make_helicone_request_openai_stream",
-])
+_helicone = _safe_import_provider(
+    "helicone",
+    [
+        "make_helicone_request_openai",
+        "process_helicone_response",
+        "make_helicone_request_openai_stream",
+    ],
+)
 make_helicone_request_openai = _helicone.get("make_helicone_request_openai")
 process_helicone_response = _helicone.get("process_helicone_response")
 make_helicone_request_openai_stream = _helicone.get("make_helicone_request_openai_stream")
 
-_aihubmix = _safe_import_provider("aihubmix", [
-    "make_aihubmix_request_openai",
-    "process_aihubmix_response",
-    "make_aihubmix_request_openai_stream",
-])
+_aihubmix = _safe_import_provider(
+    "aihubmix",
+    [
+        "make_aihubmix_request_openai",
+        "process_aihubmix_response",
+        "make_aihubmix_request_openai_stream",
+    ],
+)
 make_aihubmix_request_openai = _aihubmix.get("make_aihubmix_request_openai")
 process_aihubmix_response = _aihubmix.get("process_aihubmix_response")
 make_aihubmix_request_openai_stream = _aihubmix.get("make_aihubmix_request_openai_stream")
 
-_anannas = _safe_import_provider("anannas", [
-    "make_anannas_request_openai",
-    "process_anannas_response",
-    "make_anannas_request_openai_stream",
-])
+_anannas = _safe_import_provider(
+    "anannas",
+    [
+        "make_anannas_request_openai",
+        "process_anannas_response",
+        "make_anannas_request_openai_stream",
+    ],
+)
 make_anannas_request_openai = _anannas.get("make_anannas_request_openai")
 process_anannas_response = _anannas.get("process_anannas_response")
 make_anannas_request_openai_stream = _anannas.get("make_anannas_request_openai_stream")
 
-_alpaca_network = _safe_import_provider("alpaca_network", [
-    "make_alpaca_network_request_openai",
-    "process_alpaca_network_response",
-    "make_alpaca_network_request_openai_stream",
-])
+_alpaca_network = _safe_import_provider(
+    "alpaca_network",
+    [
+        "make_alpaca_network_request_openai",
+        "process_alpaca_network_response",
+        "make_alpaca_network_request_openai_stream",
+    ],
+)
 make_alpaca_network_request_openai = _alpaca_network.get("make_alpaca_network_request_openai")
 process_alpaca_network_response = _alpaca_network.get("process_alpaca_network_response")
-make_alpaca_network_request_openai_stream = _alpaca_network.get("make_alpaca_network_request_openai_stream")
+make_alpaca_network_request_openai_stream = _alpaca_network.get(
+    "make_alpaca_network_request_openai_stream"
+)
 
-_alibaba_cloud = _safe_import_provider("alibaba_cloud", [
-    "make_alibaba_cloud_request_openai",
-    "process_alibaba_cloud_response",
-    "make_alibaba_cloud_request_openai_stream",
-])
+_alibaba_cloud = _safe_import_provider(
+    "alibaba_cloud",
+    [
+        "make_alibaba_cloud_request_openai",
+        "process_alibaba_cloud_response",
+        "make_alibaba_cloud_request_openai_stream",
+    ],
+)
 make_alibaba_cloud_request_openai = _alibaba_cloud.get("make_alibaba_cloud_request_openai")
 process_alibaba_cloud_response = _alibaba_cloud.get("process_alibaba_cloud_response")
-make_alibaba_cloud_request_openai_stream = _alibaba_cloud.get("make_alibaba_cloud_request_openai_stream")
+make_alibaba_cloud_request_openai_stream = _alibaba_cloud.get(
+    "make_alibaba_cloud_request_openai_stream"
+)
 
+import src.services.rate_limiting as rate_limiting_service
+import src.services.trial_validation as trial_module
 from src.services.model_transformations import detect_provider_from_model_id, transform_model_id
+from src.services.pricing import calculate_cost
 from src.services.provider_failover import (
     build_provider_failover_chain,
     map_provider_error,
     should_failover,
 )
-import src.services.rate_limiting as rate_limiting_service
-import src.services.trial_validation as trial_module
-from src.services.pricing import calculate_cost
 from src.utils.security_validators import sanitize_for_logging
 
 
@@ -697,6 +772,7 @@ async def stream_generator(
 # Log route registration for debugging
 logger.info("📍 Registering /v1/chat/completions endpoint")
 
+
 @router.post("/v1/chat/completions", tags=["chat"])
 @traced(name="chat_completions", type="llm")
 async def chat_completions(
@@ -721,7 +797,7 @@ async def chat_completions(
         request_id,
         mask_key(api_key),
         req.model,
-        extra={"request_id": request_id}
+        extra={"request_id": request_id},
     )
 
     # Start Braintrust span for this request
@@ -797,6 +873,7 @@ async def chat_completions(
 
         # Allow disabling rate limiting for testing (DEV ONLY)
         import os
+
         disable_rate_limiting = os.getenv("DISABLE_RATE_LIMITING", "false").lower() == "true"
 
         # Initialize rate limit variables
@@ -946,7 +1023,7 @@ async def chat_completions(
 
             provider_chain = build_provider_failover_chain(provider)
             model = original_model
-        
+
         # Diagnostic logging for tools parameter
         if "tools" in optional:
             logger.info(
@@ -1218,7 +1295,9 @@ async def chat_completions(
                     processed = await _to_thread(process_xai_response, resp_raw)
                 elif attempt_provider == "cerebras":
                     resp_raw = await asyncio.wait_for(
-                        _to_thread(make_cerebras_request_openai, messages, request_model, **optional),
+                        _to_thread(
+                            make_cerebras_request_openai, messages, request_model, **optional
+                        ),
                         timeout=request_timeout,
                     )
                     processed = await _to_thread(process_cerebras_response, resp_raw)
@@ -1581,12 +1660,11 @@ async def chat_completions(
     except Exception as e:
         logger.exception(
             f"[{request_id}] Unhandled server error: {type(e).__name__}",
-            extra={"request_id": request_id, "error_type": type(e).__name__}
+            extra={"request_id": request_id, "error_type": type(e).__name__},
         )
         # Don't leak internal details, but include request ID for support
         raise HTTPException(
-            status_code=500,
-            detail=f"Internal server error (request ID: {request_id})"
+            status_code=500, detail=f"Internal server error (request ID: {request_id})"
         )
 
 
@@ -1851,7 +1929,7 @@ async def unified_responses(
 
         provider_chain = build_provider_failover_chain(provider)
         model = original_model
-        
+
         # Diagnostic logging for tools parameter
         if "tools" in optional:
             logger.info(
@@ -2101,7 +2179,9 @@ async def unified_responses(
                     processed = await _to_thread(process_xai_response, resp_raw)
                 elif attempt_provider == "cerebras":
                     resp_raw = await asyncio.wait_for(
-                        _to_thread(make_cerebras_request_openai, messages, request_model, **optional),
+                        _to_thread(
+                            make_cerebras_request_openai, messages, request_model, **optional
+                        ),
                         timeout=request_timeout,
                     )
                     processed = await _to_thread(process_cerebras_response, resp_raw)

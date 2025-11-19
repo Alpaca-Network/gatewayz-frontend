@@ -1,14 +1,13 @@
 import logging
 import secrets
 from datetime import datetime, timedelta, timezone
-from typing import Any, Optional, Dict, List
+from typing import Any, Dict, List, Optional
 
 from src.config.supabase_config import get_supabase_client
 from src.db.plans import check_plan_entitlements
 from src.utils.crypto import encrypt_api_key, last4, sha256_key_hash
 from src.utils.security_validators import sanitize_for_logging
 
-from typing import Optional
 logger = logging.getLogger(__name__)
 
 
@@ -567,9 +566,7 @@ def get_api_key_usage_stats(api_key: str) -> Dict[str, Any]:
         usage_percentage = None
 
         if key_data.get("max_requests"):
-            requests_remaining = max(
-                0, key_data["max_requests"] - key_data.get("requests_used", 0)
-            )
+            requests_remaining = max(0, key_data["max_requests"] - key_data.get("requests_used", 0))
             usage_percentage = _pct(key_data.get("requests_used", 0), key_data["max_requests"])
 
         return {
@@ -742,7 +739,8 @@ def validate_api_key_permissions(api_key: str, required_permission: str, resourc
 
         if not key_result.data:
             logger.warning(
-                "API key not found in api_keys_new table: %s", sanitize_for_logging(api_key[:10] + "...")
+                "API key not found in api_keys_new table: %s",
+                sanitize_for_logging(api_key[:10] + "..."),
             )
             return False
         else:

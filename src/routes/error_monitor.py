@@ -7,17 +7,17 @@ Provides API endpoints for viewing errors, generating fixes, and tracking status
 import logging
 from typing import List
 
-from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 
-from src.services.error_monitor import (
-    get_error_monitor,
-    ErrorPattern,
-)
-from src.services.bug_fix_generator import (
-    get_bug_fix_generator,
-    BugFix,
-)
 from src.services.autonomous_monitor import get_autonomous_monitor
+from src.services.bug_fix_generator import (
+    BugFix,
+    get_bug_fix_generator,
+)
+from src.services.error_monitor import (
+    ErrorPattern,
+    get_error_monitor,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -158,9 +158,7 @@ async def generate_fix_for_error(
 
         # Generate fix in background if create_pr is True
         if create_pr:
-            background_tasks.add_task(
-                generator.process_error, error_pattern, create_pr=True
-            )
+            background_tasks.add_task(generator.process_error, error_pattern, create_pr=True)
             return {
                 "status": "processing",
                 "message": "Fix generation started in background",
@@ -353,9 +351,7 @@ async def scan_for_errors(
             "status": "scanned",
             "errors_found": len(patterns),
             "hours": hours,
-            "critical_errors": sum(
-                1 for p in patterns if p.severity.value in ["critical", "high"]
-            ),
+            "critical_errors": sum(1 for p in patterns if p.severity.value in ["critical", "high"]),
         }
 
         # Auto-fix if requested

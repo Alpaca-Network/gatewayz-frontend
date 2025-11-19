@@ -5,11 +5,10 @@ Provides functions to analyze usage across different gateways and providers
 
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Any, Optional, Dict, List
+from typing import Any, Dict, List, Optional
 
 from src.config.supabase_config import get_supabase_client
 
-from typing import Optional
 logger = logging.getLogger(__name__)
 
 
@@ -144,7 +143,10 @@ def get_gateway_stats(
 
 
 def get_trending_models(
-    gateway: Optional[str] = "all", time_range: str = "24h", limit: int = 10, sort_by: str = "requests"
+    gateway: Optional[str] = "all",
+    time_range: str = "24h",
+    limit: int = 10,
+    sort_by: str = "requests",
 ) -> List[Dict[str, Any]]:
     """
     Get trending models based on usage
@@ -239,7 +241,9 @@ def get_trending_models(
         return []
 
 
-def get_all_gateways_summary(time_range: str = "24h", user_id: Optional[int] = None) -> Dict[str, Any]:
+def get_all_gateways_summary(
+    time_range: str = "24h", user_id: Optional[int] = None
+) -> Dict[str, Any]:
     """
     Get summary statistics for all gateways
 

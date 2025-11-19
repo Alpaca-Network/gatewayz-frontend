@@ -7,14 +7,14 @@ with the next available provider.
 """
 
 import logging
-from typing import Optional, Any, Callable, Dict, List
 from collections import defaultdict
 from datetime import datetime, timedelta
+from typing import Any, Callable, Dict, List, Optional
 
 from src.services.multi_provider_registry import (
-    get_registry,
-    ProviderConfig,
     MultiProviderModel,
+    ProviderConfig,
+    get_registry,
 )
 
 logger = logging.getLogger(__name__)
@@ -183,12 +183,11 @@ class ProviderSelector:
             model_id=model_id,
             exclude_provider=primary.name,
         )
-        providers_to_try.extend(fallbacks[:max_retries - 1])
+        providers_to_try.extend(fallbacks[: max_retries - 1])
 
         # Filter out providers that are circuit-broken
         providers_to_try = [
-            p for p in providers_to_try
-            if self.health_tracker.is_available(model_id, p.name)
+            p for p in providers_to_try if self.health_tracker.is_available(model_id, p.name)
         ]
 
         if not providers_to_try:

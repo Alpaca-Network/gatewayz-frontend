@@ -6,11 +6,10 @@ Unified Pydantic models for payment integrations (Stripe, subscriptions, credits
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, Optional, Dict, List
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
-from typing import Optional
 # ==================== Enums ====================
 
 
@@ -403,7 +402,9 @@ class CreateSubscriptionCheckoutRequest(BaseModel):
     mode: str = Field(
         default="subscription", description="Checkout mode (subscription, payment, or setup)"
     )
-    metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Additional metadata")
+    metadata: Optional[Dict[str, Any]] = Field(
+        default_factory=dict, description="Additional metadata"
+    )
 
     @field_validator("mode")
     @classmethod

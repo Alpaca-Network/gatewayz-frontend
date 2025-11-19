@@ -13,6 +13,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
+
 logger = logging.getLogger(__name__)
 
 
@@ -170,9 +171,7 @@ class ModelHealthMonitor:
 
             for model, result in zip(batch, results):
                 if isinstance(result, Exception):
-                    logger.error(
-                        "Health check failed for model %s: %s", model.get("id"), result
-                    )
+                    logger.error("Health check failed for model %s: %s", model.get("id"), result)
                     continue
 
                 if result:

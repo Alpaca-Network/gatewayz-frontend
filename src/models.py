@@ -1,9 +1,8 @@
-from typing import Literal, Optional, List
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel
 
 
-from typing import Optional
 class ImageGenerationRequest(BaseModel):
     """Request model for image generation"""
 

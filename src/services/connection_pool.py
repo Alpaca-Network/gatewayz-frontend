@@ -7,13 +7,13 @@ keepalive, and optimized timeout settings to improve chat streaming performance.
 
 import logging
 from threading import Lock
+from typing import Dict, Optional
 
 import httpx
 from openai import AsyncOpenAI, OpenAI
 
 from src.config import Config
 
-from typing import Dict, Optional
 logger = logging.getLogger(__name__)
 
 # Global connection pool instances

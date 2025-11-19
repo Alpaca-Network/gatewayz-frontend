@@ -44,11 +44,13 @@ def process_openrouter_response(response):
         for choice in response.choices:
             msg = extract_message_with_tools(choice.message)
 
-            choices.append({
-                "index": choice.index,
-                "message": msg,
-                "finish_reason": choice.finish_reason,
-            })
+            choices.append(
+                {
+                    "index": choice.index,
+                    "message": msg,
+                    "finish_reason": choice.finish_reason,
+                }
+            )
 
         return {
             "id": response.id,

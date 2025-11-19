@@ -10,7 +10,7 @@ import os
 from contextlib import redirect_stdout
 from datetime import date, datetime, timezone
 from html import escape
-from typing import Any, Optional, Dict, List
+from typing import Any, Dict, List, Optional
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query
@@ -41,21 +41,24 @@ from src.services.models import (
     fetch_models_from_portkey,
     fetch_models_from_together,
 )
+from src.services.modelz_client import get_modelz_cache_status as get_modelz_cache_status_func
+from src.services.modelz_client import refresh_modelz_cache
 from src.services.portkey_providers import (
     fetch_models_from_cerebras,
     fetch_models_from_nebius,
     fetch_models_from_novita,
     fetch_models_from_xai,
 )
-from src.services.modelz_client import get_modelz_cache_status as get_modelz_cache_status_func
-from src.services.modelz_client import refresh_modelz_cache
 from src.services.pricing_lookup import get_model_pricing, refresh_pricing_cache
 
 # Initialize logging
 logger = logging.getLogger(__name__)
 
 try:
-    from src.services.gateway_health_service import GATEWAY_CONFIG, run_comprehensive_check  # type: ignore
+    from src.services.gateway_health_service import (  # type: ignore
+        GATEWAY_CONFIG,
+        run_comprehensive_check,
+    )
 except Exception as e:  # pragma: no cover - optional dependency for dashboard
     logger.warning(f"Failed to import gateway_health_service: {e}")
     run_comprehensive_check = None  # type: ignore
@@ -312,19 +315,19 @@ def _render_gateway_dashboard(results: Dict[str, Any], log_output: str, auto_fix
             final_status = "unhealthy"
 
         # Make badges clickable for refresh actions
-        endpoint_badge_html = f'''
+        endpoint_badge_html = f"""
         <div class="clickable-badge" onclick="event.stopPropagation(); refreshEndpoint('{escape(gateway_id)}', this)">
             {status_badge(endpoint_status)}
             <div class="details">{escape(endpoint_details)}</div>
         </div>
-        '''
+        """
 
-        cache_badge_html = f'''
+        cache_badge_html = f"""
         <div class="clickable-badge" onclick="event.stopPropagation(); refreshCache('{escape(gateway_id)}', this)">
             {status_badge(cache_status)}
             <div class="details">{escape(cache_details)}</div>
         </div>
-        '''
+        """
 
         auto_fix_attempted = data.get("auto_fix_attempted")
         auto_fix_successful = data.get("auto_fix_successful")
@@ -1649,7 +1652,11 @@ async def gateway_health_dashboard_data(
                 gateway_data["models"] = models
                 gateway_data["models_metadata"] = {
                     "count": len(models),
-                    "last_updated": _normalize_timestamp(timestamp).isoformat() if _normalize_timestamp(timestamp) else None,
+                    "last_updated": (
+                        _normalize_timestamp(timestamp).isoformat()
+                        if _normalize_timestamp(timestamp)
+                        else None
+                    ),
                 }
             else:
                 gateway_data["models"] = []

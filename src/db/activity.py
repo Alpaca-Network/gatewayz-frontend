@@ -5,11 +5,10 @@ Handles logging and retrieval of user API activity
 
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Any, Optional, Dict, List
+from typing import Any, Dict, List, Optional
 
 from src.config.supabase_config import get_supabase_client
 
-from typing import Optional
 logger = logging.getLogger(__name__)
 
 
@@ -80,7 +79,10 @@ def log_activity(
 
 
 def get_user_activity_stats(
-    user_id: int, from_date: Optional[str] = None, to_date: Optional[str] = None, days: Optional[int] = None
+    user_id: int,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    days: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
     Get aggregated activity statistics for a user

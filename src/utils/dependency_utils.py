@@ -11,7 +11,6 @@ from typing import Any, Optional
 from fastapi import Request
 
 
-from typing import Optional
 async def execute_override(override: Callable[..., Any], request: Optional[Request] = None) -> Any:
     """
     Execute a patched override function, handling optional request parameter and awaiting results.

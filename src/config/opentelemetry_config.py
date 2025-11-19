@@ -20,7 +20,12 @@ from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExport
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.instrumentation.requests import RequestsInstrumentor
-from opentelemetry.sdk.resources import Resource, SERVICE_NAME, SERVICE_VERSION, DEPLOYMENT_ENVIRONMENT
+from opentelemetry.sdk.resources import (
+    DEPLOYMENT_ENVIRONMENT,
+    SERVICE_NAME,
+    SERVICE_VERSION,
+    Resource,
+)
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
 
@@ -63,13 +68,15 @@ class OpenTelemetryConfig:
             logger.info("🔭 Initializing OpenTelemetry tracing...")
 
             # Create resource with service metadata
-            resource = Resource.create({
-                SERVICE_NAME: Config.OTEL_SERVICE_NAME,
-                SERVICE_VERSION: "2.0.3",
-                DEPLOYMENT_ENVIRONMENT: Config.APP_ENV,
-                "service.namespace": "gatewayz",
-                "telemetry.sdk.language": "python",
-            })
+            resource = Resource.create(
+                {
+                    SERVICE_NAME: Config.OTEL_SERVICE_NAME,
+                    SERVICE_VERSION: "2.0.3",
+                    DEPLOYMENT_ENVIRONMENT: Config.APP_ENV,
+                    "service.namespace": "gatewayz",
+                    "telemetry.sdk.language": "python",
+                }
+            )
 
             # Create tracer provider
             cls._tracer_provider = TracerProvider(resource=resource)
@@ -84,15 +91,11 @@ class OpenTelemetryConfig:
             )
 
             # Add span processor for exporting traces
-            cls._tracer_provider.add_span_processor(
-                BatchSpanProcessor(otlp_exporter)
-            )
+            cls._tracer_provider.add_span_processor(BatchSpanProcessor(otlp_exporter))
 
             # In development, also log traces to console
             if Config.IS_DEVELOPMENT:
-                cls._tracer_provider.add_span_processor(
-                    BatchSpanProcessor(ConsoleSpanExporter())
-                )
+                cls._tracer_provider.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))
                 logger.info("   Console trace export enabled (development mode)")
 
             # Set global tracer provider
@@ -183,7 +186,7 @@ def get_current_trace_id() -> Optional[str]:
         span = trace.get_current_span()
         span_context = span.get_span_context()
         if span_context.is_valid:
-            return format(span_context.trace_id, '032x')
+            return format(span_context.trace_id, "032x")
     except Exception:
         pass
     return None
@@ -200,7 +203,7 @@ def get_current_span_id() -> Optional[str]:
         span = trace.get_current_span()
         span_context = span.get_span_context()
         if span_context.is_valid:
-            return format(span_context.span_id, '016x')
+            return format(span_context.span_id, "016x")
     except Exception:
         pass
     return None

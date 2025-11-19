@@ -31,11 +31,7 @@ def make_alibaba_cloud_request_openai(messages, model, **kwargs):
     """Make request to Alibaba Cloud using OpenAI-compatible API"""
     try:
         client = get_alibaba_cloud_client()
-        response = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            **kwargs
-        )
+        response = client.chat.completions.create(model=model, messages=messages, **kwargs)
         return response
     except Exception as e:
         logger.error(f"Alibaba Cloud request failed: {e}")
@@ -49,11 +45,13 @@ def process_alibaba_cloud_response(response):
         for choice in response.choices:
             msg = extract_message_with_tools(choice.message)
 
-            choices.append({
-                "index": choice.index,
-                "message": msg,
-                "finish_reason": choice.finish_reason,
-            })
+            choices.append(
+                {
+                    "index": choice.index,
+                    "message": msg,
+                    "finish_reason": choice.finish_reason,
+                }
+            )
 
         return {
             "id": response.id,
@@ -81,10 +79,7 @@ def make_alibaba_cloud_request_openai_stream(messages, model, **kwargs):
     try:
         client = get_alibaba_cloud_client()
         stream = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            stream=True,
-            **kwargs
+            model=model, messages=messages, stream=True, **kwargs
         )
         return stream
     except Exception as e:

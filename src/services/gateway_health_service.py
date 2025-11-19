@@ -381,7 +381,9 @@ async def check_single_gateway(
         return gateway_result
 
     # Test 1: Direct endpoint test (async)
-    endpoint_success, endpoint_msg, endpoint_count = await test_gateway_endpoint(gateway_name, config)
+    endpoint_success, endpoint_msg, endpoint_count = await test_gateway_endpoint(
+        gateway_name, config
+    )
     gateway_result["endpoint_test"] = {
         "success": endpoint_success,
         "message": endpoint_msg,
@@ -475,7 +477,9 @@ async def run_comprehensive_check(
 
     # Wait for all checks to complete with a timeout
     try:
-        gateway_results = await asyncio.wait_for(asyncio.gather(*tasks, return_exceptions=True), timeout=60.0)
+        gateway_results = await asyncio.wait_for(
+            asyncio.gather(*tasks, return_exceptions=True), timeout=60.0
+        )
     except asyncio.TimeoutError:
         logger.error("Gateway health check timed out after 60 seconds")
         # Return partial results

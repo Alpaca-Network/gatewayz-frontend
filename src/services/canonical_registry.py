@@ -7,15 +7,15 @@ dynamic, registry-driven provider selection and failover.
 """
 
 import logging
-from typing import List, Dict, Optional, Any, Set
-from dataclasses import dataclass, field
 from collections import defaultdict
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, Set
 
-from src.services.multi_provider_registry import MultiProviderModel, ProviderConfig, get_registry
 from src.services.models import (
-    get_cached_models,
     get_all_models_parallel,
+    get_cached_models,
 )
+from src.services.multi_provider_registry import MultiProviderModel, ProviderConfig, get_registry
 from src.utils.security_validators import sanitize_for_logging
 
 logger = logging.getLogger(__name__)
@@ -75,26 +75,36 @@ class CanonicalModel:
             return
 
         pricing_data = {
-            "input": {"min": float('inf'), "max": 0, "providers": []},
-            "output": {"min": float('inf'), "max": 0, "providers": []}
+            "input": {"min": float("inf"), "max": 0, "providers": []},
+            "output": {"min": float("inf"), "max": 0, "providers": []},
         }
 
         for provider in self.providers:
             if provider.cost_per_1k_input is not None:
-                pricing_data["input"]["min"] = min(pricing_data["input"]["min"], provider.cost_per_1k_input)
-                pricing_data["input"]["max"] = max(pricing_data["input"]["max"], provider.cost_per_1k_input)
+                pricing_data["input"]["min"] = min(
+                    pricing_data["input"]["min"], provider.cost_per_1k_input
+                )
+                pricing_data["input"]["max"] = max(
+                    pricing_data["input"]["max"], provider.cost_per_1k_input
+                )
                 pricing_data["input"]["providers"].append(provider.name)
 
             if provider.cost_per_1k_output is not None:
-                pricing_data["output"]["min"] = min(pricing_data["output"]["min"], provider.cost_per_1k_output)
-                pricing_data["output"]["max"] = max(pricing_data["output"]["max"], provider.cost_per_1k_output)
+                pricing_data["output"]["min"] = min(
+                    pricing_data["output"]["min"], provider.cost_per_1k_output
+                )
+                pricing_data["output"]["max"] = max(
+                    pricing_data["output"]["max"], provider.cost_per_1k_output
+                )
                 pricing_data["output"]["providers"].append(provider.name)
 
         # Set aggregated data
         if pricing_data["input"]["providers"]:
             self.best_pricing = {
                 "input": pricing_data["input"]["min"],
-                "output": pricing_data["output"]["min"] if pricing_data["output"]["providers"] else None,
+                "output": (
+                    pricing_data["output"]["min"] if pricing_data["output"]["providers"] else None
+                ),
             }
             self.pricing_range = pricing_data
 
@@ -188,7 +198,7 @@ class CanonicalModelRegistry:
             except Exception as e:
                 logger.error(
                     f"Failed to create canonical model for '{logical_id}': {sanitize_for_logging(str(e))}",
-                    exc_info=True
+                    exc_info=True,
                 )
 
         logger.info(f"Created {len(self._canonical_models)} canonical models")
@@ -203,19 +213,27 @@ class CanonicalModelRegistry:
 
         # Remove provider prefixes
         prefixes = [
-            "anthropic/", "claude-",
-            "openai/", "gpt-", "chatgpt-",
-            "google/", "vertex/", "gemini-",
-            "anthropic/", "claude-",
-            "meta/", "llama-",
-            "mistral/", "mistralai/",
+            "anthropic/",
+            "claude-",
+            "openai/",
+            "gpt-",
+            "chatgpt-",
+            "google/",
+            "vertex/",
+            "gemini-",
+            "anthropic/",
+            "claude-",
+            "meta/",
+            "llama-",
+            "mistral/",
+            "mistralai/",
             # Add more patterns as needed
         ]
 
         base_name = model_id
         for prefix in prefixes:
             if base_name.startswith(prefix):
-                base_name = base_name[len(prefix):]
+                base_name = base_name[len(prefix) :]
 
         # Handle specific model families
         model_mapping = {
@@ -269,11 +287,17 @@ class CanonicalModelRegistry:
         canonical = CanonicalModel(
             id=logical_id,
             name=primary_variant.get("name", logical_id),
-            description=primary_variant.get("description", f"Model {logical_id} available on multiple providers"),
+            description=primary_variant.get(
+                "description", f"Model {logical_id} available on multiple providers"
+            ),
             context_length=primary_variant.get("context_length"),
             modality=primary_variant.get("architecture", {}).get("modality", "text->text"),
-            input_modalities=primary_variant.get("architecture", {}).get("input_modalities", ["text"]),
-            output_modalities=primary_variant.get("architecture", {}).get("output_modalities", ["text"]),
+            input_modalities=primary_variant.get("architecture", {}).get(
+                "input_modalities", ["text"]
+            ),
+            output_modalities=primary_variant.get("architecture", {}).get(
+                "output_modalities", ["text"]
+            ),
             tokenizer=primary_variant.get("architecture", {}).get("tokenizer"),
             instruct_type=primary_variant.get("architecture", {}).get("instruct_type"),
             supported_parameters=primary_variant.get("supported_parameters", []),
@@ -307,12 +331,12 @@ class CanonicalModelRegistry:
 
         # Determine priority based on provider reliability/routing
         priority_map = {
-            "openrouter": 1,      # Highest priority - main router
-            "google-vertex": 2,   # Fast, reliable
-            "together": 3,        # Good coverage
-            "fireworks": 4,       # Solid provider
-            "featherless": 5,     # Many models
-            "deepinfra": 6,       # Good performance
+            "openrouter": 1,  # Highest priority - main router
+            "google-vertex": 2,  # Fast, reliable
+            "together": 3,  # Good coverage
+            "fireworks": 4,  # Solid provider
+            "featherless": 5,  # Many models
+            "deepinfra": 6,  # Good performance
             # Add more priorities as needed
         }
 
@@ -380,9 +404,11 @@ class CanonicalModelRegistry:
         results = []
 
         for model in self._canonical_models.values():
-            if (query in model.id.lower() or
-                query in model.name.lower() or
-                (model.description and query in model.description.lower())):
+            if (
+                query in model.id.lower()
+                or query in model.name.lower()
+                or (model.description and query in model.description.lower())
+            ):
                 results.append(model)
                 if len(results) >= limit:
                     break

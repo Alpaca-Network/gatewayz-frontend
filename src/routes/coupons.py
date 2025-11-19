@@ -2,8 +2,8 @@
 API routes for coupon system
 """
 
-from typing import Optional, List
 import logging
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse

@@ -2,7 +2,7 @@
 Utilities for converting rate limit results to HTTP headers
 """
 
-from typing import Dict, Optional, Any
+from typing import Any, Dict, Optional
 
 
 def get_rate_limit_headers(rate_limit_result: Any) -> Dict[str, str]:

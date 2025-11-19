@@ -3,56 +3,56 @@ Anthropic Messages API endpoint
 Compatible with Claude API: https://docs.claude.com/en/api/messages
 """
 
-from typing import Optional
-import logging
 import asyncio
+import importlib
+import logging
 import time
+from typing import Optional
+
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
-from src.utils.performance_tracker import PerformanceTracker
-from src.utils.rate_limit_headers import get_rate_limit_headers
-
+import src.db.activity as activity_module
 import src.db.api_keys as api_keys_module
+import src.db.chat_history as chat_history_module
 import src.db.plans as plans_module
 import src.db.rate_limits as rate_limits_module
 import src.db.users as users_module
-import src.db.chat_history as chat_history_module
-import src.db.activity as activity_module
+import src.services.rate_limiting as rate_limiting_service
+import src.services.trial_validation as trial_module
+from src.config import Config
 from src.schemas import MessagesRequest
 from src.security.deps import get_api_key
-from src.services.openrouter_client import (
-    make_openrouter_request_openai,
-    process_openrouter_response,
+from src.services.anthropic_transformer import (
+    extract_text_from_content,
+    transform_anthropic_to_openai,
+    transform_openai_to_anthropic,
 )
-from src.services.portkey_client import make_portkey_request_openai, process_portkey_response
 from src.services.featherless_client import (
     make_featherless_request_openai,
     process_featherless_response,
 )
 from src.services.fireworks_client import make_fireworks_request_openai, process_fireworks_response
-from src.services.together_client import make_together_request_openai, process_together_response
 from src.services.huggingface_client import (
     make_huggingface_request_openai,
     process_huggingface_response,
 )
 from src.services.model_transformations import detect_provider_from_model_id, transform_model_id
+from src.services.openrouter_client import (
+    make_openrouter_request_openai,
+    process_openrouter_response,
+)
+from src.services.portkey_client import make_portkey_request_openai, process_portkey_response
+from src.services.pricing import calculate_cost
 from src.services.provider_failover import (
     build_provider_failover_chain,
     map_provider_error,
     should_failover,
 )
-import src.services.rate_limiting as rate_limiting_service
-import src.services.trial_validation as trial_module
-from src.services.pricing import calculate_cost
-from src.config import Config
-import importlib
-from src.services.anthropic_transformer import (
-    transform_anthropic_to_openai,
-    transform_openai_to_anthropic,
-    extract_text_from_content,
-)
+from src.services.together_client import make_together_request_openai, process_together_response
+from src.utils.performance_tracker import PerformanceTracker
+from src.utils.rate_limit_headers import get_rate_limit_headers
 from src.utils.security_validators import sanitize_for_logging
 
 logger = logging.getLogger(__name__)

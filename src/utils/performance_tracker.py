@@ -14,11 +14,11 @@ from contextlib import contextmanager
 from typing import Optional
 
 from src.services.prometheus_metrics import (
+    record_stage_percentage,
     track_backend_ttfb,
-    track_streaming_duration,
     track_frontend_processing,
     track_request_stage,
-    record_stage_percentage,
+    track_streaming_duration,
 )
 
 logger = logging.getLogger(__name__)
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 class PerformanceTracker:
     """
     Tracks performance metrics for request processing stages.
-    
+
     Usage:
         tracker = PerformanceTracker(endpoint="/v1/chat/completions")
         with tracker.stage("request_parsing"):
@@ -140,7 +140,7 @@ class PerformanceTracker:
 def track_request_stages(endpoint: str):
     """
     Simplified context manager for tracking request stages.
-    
+
     Usage:
         with track_request_stages("/v1/chat/completions") as tracker:
             with tracker.stage("request_parsing"):
@@ -154,4 +154,3 @@ def track_request_stages(endpoint: str):
         yield tracker
     finally:
         tracker.record_percentages()
-

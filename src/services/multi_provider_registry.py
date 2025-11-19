@@ -1,8 +1,8 @@
 """Multi-provider model registry and canonical catalog support."""
 
 import logging
-from typing import List, Optional, Dict, Any, Iterable
 from dataclasses import dataclass, field
+from typing import Any, Dict, Iterable, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,9 @@ class ProviderConfig:
     cost_per_1k_output: Optional[float] = None  # Cost in credits per 1k output tokens
     enabled: bool = True  # Whether this provider is currently enabled
     max_tokens: Optional[int] = None  # Max tokens supported by this provider
-    features: List[str] = field(default_factory=list)  # Supported features (e.g., "streaming", "function_calling")
+    features: List[str] = field(
+        default_factory=list
+    )  # Supported features (e.g., "streaming", "function_calling")
 
     def __post_init__(self):
         """Validate the configuration"""
@@ -176,8 +178,7 @@ class MultiProviderRegistry:
         """Register a multi-provider model"""
         self._models[model.id] = model
         logger.info(
-            f"Registered multi-provider model: {model.id} with "
-            f"{len(model.providers)} providers"
+            f"Registered multi-provider model: {model.id} with " f"{len(model.providers)} providers"
         )
 
         # Also register canonical representation for compatibility
@@ -293,9 +294,7 @@ class MultiProviderRegistry:
         slug_candidates.append(provider.native_model_id)
 
         resolved_id = (
-            canonical_id
-            or provider.metadata.get("canonical_slug")
-            or provider.native_model_id
+            canonical_id or provider.metadata.get("canonical_slug") or provider.native_model_id
         )
 
         existing_id = self._resolve_canonical_id(slug_candidates, [resolved_id])
@@ -359,8 +358,7 @@ class MultiProviderRegistry:
         # Filter by required features
         if required_features:
             candidates = [
-                p for p in candidates
-                if all(feature in p.features for feature in required_features)
+                p for p in candidates if all(feature in p.features for feature in required_features)
             ]
             if not candidates:
                 logger.warning(
@@ -371,22 +369,19 @@ class MultiProviderRegistry:
         # Filter by cost
         if max_cost is not None:
             candidates = [
-                p for p in candidates
+                p
+                for p in candidates
                 if p.cost_per_1k_input is None or p.cost_per_1k_input <= max_cost
             ]
             if not candidates:
-                logger.warning(
-                    f"No providers for {model_id} within cost limit: {max_cost}"
-                )
+                logger.warning(f"No providers for {model_id} within cost limit: {max_cost}")
                 return None
 
         # If preferred provider specified and available, use it
         if preferred_provider:
             for provider in candidates:
                 if provider.name == preferred_provider:
-                    logger.info(
-                        f"Selected preferred provider {preferred_provider} for {model_id}"
-                    )
+                    logger.info(f"Selected preferred provider {preferred_provider} for {model_id}")
                     return provider
             logger.warning(
                 f"Preferred provider {preferred_provider} not available for {model_id}, "

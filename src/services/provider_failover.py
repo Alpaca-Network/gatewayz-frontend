@@ -2,11 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from typing import Dict, List, Optional
 
 import httpx
 from fastapi import HTTPException
-
-from typing import Optional, Dict, List
 
 logger = logging.getLogger(__name__)
 # OpenAI Python SDK raises its own exception hierarchy which we need to
@@ -46,7 +45,11 @@ FAILOVER_STATUS_CODES = {401, 403, 404, 502, 503, 504}
 
 
 def build_provider_failover_chain(initial_provider: Optional[str]) -> List[str]:
-    """Return the provider attempt order starting with the initial provider."""
+    """Return the provider attempt order starting with the initial provider.
+
+    Always includes all eligible providers in the failover chain.
+    Provider availability checks happen at request time, not at chain building time.
+    """
     provider = (initial_provider or "").lower()
 
     if provider not in FALLBACK_ELIGIBLE_PROVIDERS:
@@ -59,6 +62,11 @@ def build_provider_failover_chain(initial_provider: Optional[str]) -> List[str]:
     for candidate in FALLBACK_PROVIDER_PRIORITY:
         if candidate not in chain:
             chain.append(candidate)
+
+    # Always include openrouter as ultimate fallback if nothing else is available
+    if not chain or (len(chain) == 1 and chain[0] == provider and provider != "openrouter"):
+        if "openrouter" not in chain:
+            chain.append("openrouter")
 
     return chain
 
@@ -202,7 +210,9 @@ def map_provider_error(
             )
         if 400 <= status < 500:
             # Extract error details from response
-            error_detail = f"Provider '{provider}' rejected request for model '{model}' (HTTP {status})"
+            error_detail = (
+                f"Provider '{provider}' rejected request for model '{model}' (HTTP {status})"
+            )
             try:
                 response_body = exc.response.text[:500] if exc.response.text else "No response body"
                 error_detail += f" | Response: {response_body}"

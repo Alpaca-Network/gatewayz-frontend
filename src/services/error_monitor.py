@@ -9,10 +9,10 @@ import asyncio
 import json
 import logging
 import re
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List, Optional
 from urllib.parse import urlencode
 
 import httpx
@@ -108,9 +108,7 @@ class ErrorMonitor:
         if self.session:
             await self.session.aclose()
 
-    async def fetch_recent_errors(
-        self, hours: int = 1, limit: int = 100
-    ) -> List[Dict[str, Any]]:
+    async def fetch_recent_errors(self, hours: int = 1, limit: int = 100) -> List[Dict[str, Any]]:
         """
         Fetch recent errors from Loki.
 
@@ -194,8 +192,7 @@ class ErrorMonitor:
 
         # Database errors
         if any(
-            term in full_text
-            for term in ["supabase", "postgresql", "database", "connection pool"]
+            term in full_text for term in ["supabase", "postgresql", "database", "connection pool"]
         ):
             return ErrorCategory.DATABASE_ERROR, ErrorSeverity.CRITICAL
 
@@ -316,9 +313,7 @@ class ErrorMonitor:
 
         return False, None
 
-    async def analyze_errors(
-        self, raw_errors: List[Dict[str, Any]]
-    ) -> List[ErrorPattern]:
+    async def analyze_errors(self, raw_errors: List[Dict[str, Any]]) -> List[ErrorPattern]:
         """Analyze raw errors and return structured error patterns."""
         error_patterns = []
 
@@ -343,9 +338,7 @@ class ErrorMonitor:
 
         # Filter to critical and high severity
         critical = [
-            p
-            for p in patterns
-            if p.severity in [ErrorSeverity.CRITICAL, ErrorSeverity.HIGH]
+            p for p in patterns if p.severity in [ErrorSeverity.CRITICAL, ErrorSeverity.HIGH]
         ]
 
         return sorted(critical, key=lambda p: p.count, reverse=True)

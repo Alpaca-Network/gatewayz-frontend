@@ -246,7 +246,9 @@ def enhance_providers_with_logos_and_sites(providers: list) -> list:
                 except Exception as e:
                     logger.warning(f"Failed to parse site_url '{site_url}': {e}")
                     # Fallback to old method
-                    clean_url = site_url.replace("https://", "").replace("http://", "").split("/")[0]
+                    clean_url = (
+                        site_url.replace("https://", "").replace("http://", "").split("/")[0]
+                    )
                     if clean_url.startswith("www."):
                         clean_url = clean_url[4:]
                     logo_url = f"https://www.google.com/s2/favicons?domain={clean_url}&sz=128"

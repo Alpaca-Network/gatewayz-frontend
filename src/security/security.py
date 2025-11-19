@@ -11,13 +11,12 @@ import logging
 import os
 import secrets
 from datetime import datetime, timezone
-from typing import Any, Optional, Dict, List
+from typing import Any, Dict, List, Optional
 
 from cryptography.fernet import Fernet
 
 from src.config import Config
 
-from typing import Optional
 logger = logging.getLogger(__name__)
 
 
@@ -337,9 +336,9 @@ def _validate_key_constraints(
 
     # 6. Update last used timestamp
     try:
-        client.table(table_name).update({"last_used_at": datetime.now(timezone.utc).isoformat()}).eq(
-            "id", key_id
-        ).execute()
+        client.table(table_name).update(
+            {"last_used_at": datetime.now(timezone.utc).isoformat()}
+        ).eq("id", key_id).execute()
     except Exception as e:
         logger.warning(f"Failed to update last_used_at for key {key_id}: {e}")
 

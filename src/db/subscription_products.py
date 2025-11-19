@@ -97,10 +97,7 @@ def get_subscription_product(product_id: str) -> dict[str, Any] | None:
         client = get_supabase_client()
 
         result = (
-            client.table("subscription_products")
-            .select("*")
-            .eq("product_id", product_id)
-            .execute()
+            client.table("subscription_products").select("*").eq("product_id", product_id).execute()
         )
 
         if result.data:
@@ -143,7 +140,7 @@ def add_subscription_product(
     display_name: str,
     credits_per_month: float,
     description: str | None = None,
-    is_active: bool = True
+    is_active: bool = True,
 ) -> bool:
     """
     Add a new subscription product configuration
@@ -162,14 +159,20 @@ def add_subscription_product(
     try:
         client = get_supabase_client()
 
-        result = client.table("subscription_products").insert({
-            "product_id": product_id,
-            "tier": tier,
-            "display_name": display_name,
-            "credits_per_month": credits_per_month,
-            "description": description,
-            "is_active": is_active,
-        }).execute()
+        result = (
+            client.table("subscription_products")
+            .insert(
+                {
+                    "product_id": product_id,
+                    "tier": tier,
+                    "display_name": display_name,
+                    "credits_per_month": credits_per_month,
+                    "description": description,
+                    "is_active": is_active,
+                }
+            )
+            .execute()
+        )
 
         if result.data:
             logger.info(f"Added subscription product: {product_id} ({tier})")
@@ -189,7 +192,7 @@ def update_subscription_product(
     display_name: str | None = None,
     credits_per_month: float | None = None,
     description: str | None = None,
-    is_active: bool | None = None
+    is_active: bool | None = None,
 ) -> bool:
     """
     Update an existing subscription product configuration

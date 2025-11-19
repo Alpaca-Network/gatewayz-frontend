@@ -4,7 +4,7 @@ Dependency injection functions for authentication and authorization
 """
 
 import logging
-from typing import Any, Optional, Dict, List
+from typing import Any, Dict, List, Optional
 
 from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -12,7 +12,6 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from src.db.users import get_user
 from src.security.security import audit_logger, validate_api_key_security
 
-from typing import Optional
 logger = logging.getLogger(__name__)
 
 # HTTP Bearer security scheme with auto_error=False to allow custom error handling

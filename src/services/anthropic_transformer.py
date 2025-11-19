@@ -5,7 +5,7 @@ Converts between Anthropic Messages API format and OpenAI Chat Completions forma
 
 import json
 import time
-from typing import Any, Optional, Dict, List, Union
+from typing import Any, Dict, List, Optional, Union
 
 
 def extract_message_with_tools(choice_message: Any) -> Dict[str, Any]:
@@ -32,8 +32,8 @@ def extract_message_with_tools(choice_message: Any) -> Dict[str, Any]:
     else:
         role = choice_message.role
         content = choice_message.content
-        tool_calls = getattr(choice_message, 'tool_calls', None)
-        function_call = getattr(choice_message, 'function_call', None)
+        tool_calls = getattr(choice_message, "tool_calls", None)
+        function_call = getattr(choice_message, "function_call", None)
 
     # Build message dict with available fields
     msg = {"role": role, "content": content}
@@ -216,12 +216,14 @@ def transform_openai_to_anthropic(
                     tool_args = {}
 
             # Add tool_use content block in Anthropic format
-            content_blocks.append({
-                "type": "tool_use",
-                "id": tool_id,
-                "name": tool_name,
-                "input": tool_args,
-            })
+            content_blocks.append(
+                {
+                    "type": "tool_use",
+                    "id": tool_id,
+                    "name": tool_name,
+                    "input": tool_args,
+                }
+            )
 
     # Add text content if present and non-empty (only if no tool_calls or in addition to them)
     # When tool_calls are present, content is typically None/empty, but we still check

@@ -11,14 +11,13 @@ from collections import defaultdict, deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
-from typing import Any, Optional, Dict
+from typing import Any, Dict, Optional
 
 import redis
 
 from src.db.rate_limits import get_rate_limit_config, update_rate_limit_config
 from src.services.rate_limiting_fallback import get_fallback_rate_limit_manager
 
-from typing import Optional
 logger = logging.getLogger(__name__)
 
 
@@ -46,7 +45,11 @@ def _populate_rate_limit_headers(
     result.ratelimit_limit_tokens = token_limit
     # Safely convert reset_time to Unix timestamp
     if result.reset_time:
-        reset_timestamp = int(result.reset_time.timestamp()) if hasattr(result.reset_time, 'timestamp') else int(result.reset_time)
+        reset_timestamp = (
+            int(result.reset_time.timestamp())
+            if hasattr(result.reset_time, "timestamp")
+            else int(result.reset_time)
+        )
     else:
         reset_timestamp = int(time.time()) + 60
     result.ratelimit_reset_requests = reset_timestamp
@@ -133,7 +136,9 @@ class SlidingWindowRateLimiter:
                     reason="Concurrency limit exceeded",
                     concurrency_remaining=0,
                 )
-                _populate_rate_limit_headers(result, config, config.requests_per_minute, config.tokens_per_minute)
+                _populate_rate_limit_headers(
+                    result, config, config.requests_per_minute, config.tokens_per_minute
+                )
                 return result
 
             # Check burst limit
@@ -143,12 +148,15 @@ class SlidingWindowRateLimiter:
                     allowed=False,
                     remaining_requests=0,
                     remaining_tokens=0,
-                    reset_time=datetime.now(timezone.utc) + timedelta(seconds=burst_check["retry_after"]),
+                    reset_time=datetime.now(timezone.utc)
+                    + timedelta(seconds=burst_check["retry_after"]),
                     retry_after=burst_check["retry_after"],
                     reason="Burst limit exceeded",
                     burst_remaining=burst_check["remaining"],
                 )
-                _populate_rate_limit_headers(result, config, config.requests_per_minute, config.tokens_per_minute)
+                _populate_rate_limit_headers(
+                    result, config, config.requests_per_minute, config.tokens_per_minute
+                )
                 return result
 
             # Check sliding window limits
@@ -164,13 +172,15 @@ class SlidingWindowRateLimiter:
                     burst_remaining=burst_check["remaining"],
                     concurrency_remaining=concurrency_check["remaining"],
                 )
-                _populate_rate_limit_headers(result, config, config.requests_per_minute, config.tokens_per_minute)
+                _populate_rate_limit_headers(
+                    result, config, config.requests_per_minute, config.tokens_per_minute
+                )
                 return result
 
             # All checks passed
             # Use the fallback rate limiting system
             result = await self.fallback_manager.check_rate_limit(
-                api_key=api_key, config=config, tokens_used=tokens_used
+                api_key=api_key, tokens_used=tokens_used
             )
 
             # Convert fallback result to our format
@@ -188,7 +198,9 @@ class SlidingWindowRateLimiter:
                 burst_remaining=0,  # Not tracked in fallback system
                 concurrency_remaining=0,  # Not tracked in fallback system
             )
-            _populate_rate_limit_headers(limit_result, config, config.requests_per_minute, config.tokens_per_minute)
+            _populate_rate_limit_headers(
+                limit_result, config, config.requests_per_minute, config.tokens_per_minute
+            )
             return limit_result
 
         except Exception as e:
@@ -201,7 +213,9 @@ class SlidingWindowRateLimiter:
                 reset_time=datetime.now(timezone.utc) + timedelta(minutes=1),
                 reason="Rate limit check failed, allowing request",
             )
-            _populate_rate_limit_headers(result, config, config.requests_per_minute, config.tokens_per_minute)
+            _populate_rate_limit_headers(
+                result, config, config.requests_per_minute, config.tokens_per_minute
+            )
             return result
 
     async def _check_concurrency_limit(

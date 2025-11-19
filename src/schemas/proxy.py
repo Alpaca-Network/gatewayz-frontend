@@ -140,7 +140,9 @@ class AnthropicMessage(BaseModel):
 
     @field_validator("content")
     @classmethod
-    def validate_content(cls, content: Union[str, List[ContentBlock]]) -> Union[str, List[ContentBlock]]:
+    def validate_content(
+        cls, content: Union[str, List[ContentBlock]]
+    ) -> Union[str, List[ContentBlock]]:
         if isinstance(content, str):
             if not content.strip():
                 raise ValueError("Message content must be a non-empty string.")

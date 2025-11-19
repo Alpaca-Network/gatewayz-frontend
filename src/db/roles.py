@@ -5,11 +5,10 @@ Handles user roles and permissions
 
 import logging
 from datetime import datetime
-from typing import Any, Optional, Dict, List
+from typing import Any, Dict, List, Optional
 
 from src.config.supabase_config import get_supabase_client
 
-from typing import Optional
 logger = logging.getLogger(__name__)
 
 

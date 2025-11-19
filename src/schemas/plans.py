@@ -1,11 +1,11 @@
 from datetime import datetime
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
 from src.schemas.common import PlanType, SubscriptionStatus
 
 
-from typing import Optional, Dict, List
 class PlanResponse(BaseModel):
     id: int
     name: str

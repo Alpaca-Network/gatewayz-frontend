@@ -10,9 +10,8 @@ import json
 import logging
 import time
 from dataclasses import dataclass
-from typing import Any, Optional, Dict, List
+from typing import Any, Dict, List, Optional
 
-from typing import Optional
 logger = logging.getLogger(__name__)
 
 # Try to import Redis for distributed caching

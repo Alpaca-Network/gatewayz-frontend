@@ -12,9 +12,8 @@ Each provider is accessed individually to:
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, Optional, Dict, List
+from typing import Any, Dict, List, Optional
 
-from typing import Optional
 try:
     from portkey_ai import Portkey
 except ImportError:
@@ -26,7 +25,6 @@ logger = logging.getLogger(__name__)
 
 # Provider configurations
 PROVIDERS = {
-
     "cerebras": {
         "name": "Cerebras",
         "provider_slug": "cerebras",

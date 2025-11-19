@@ -7,11 +7,11 @@ Redis client configuration and utilities for caching and rate limiting.
 
 import logging
 import os
+from typing import Optional
 
 import redis
 from redis.exceptions import ConnectionError, RedisError
 
-from typing import Optional
 logger = logging.getLogger(__name__)
 
 # Redis configuration

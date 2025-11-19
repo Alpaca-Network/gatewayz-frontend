@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -8,7 +9,6 @@ from src.db.users import get_user
 from src.db_security import get_audit_logs
 from src.security.deps import get_api_key
 
-from typing import Optional
 # Initialize logging
 logger = logging.getLogger(__name__)
 

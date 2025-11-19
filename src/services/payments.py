@@ -12,9 +12,9 @@ from typing import Any, Dict
 import stripe
 
 from src.db.payments import create_payment, get_payment_by_stripe_intent, update_payment_status
+from src.db.subscription_products import get_credits_from_tier, get_tier_from_product_id
 from src.db.users import add_credits_to_user, get_user_by_id
 from src.db.webhook_events import is_event_processed, record_processed_event
-from src.db.subscription_products import get_tier_from_product_id, get_credits_from_tier
 from src.schemas.payments import (
     CheckoutSessionResponse,
     CreateCheckoutSessionRequest,
@@ -340,7 +340,7 @@ class StripeService:
                 event_id=event["id"],
                 event_type=event["type"],
                 user_id=user_id,
-                metadata={"stripe_account": event.get("account")}
+                metadata={"stripe_account": event.get("account")},
             )
 
             # One-time payment events
@@ -843,17 +843,21 @@ class StripeService:
             client = get_supabase_client()
 
             # Downgrade to basic tier immediately to prevent unauthorized access
-            client.table("users").update({
-                "subscription_status": "past_due",
-                "tier": "basic",  # Downgrade tier on payment failure
-                "updated_at": datetime.now(timezone.utc).isoformat()
-            }).eq("id", user_id).execute()
+            client.table("users").update(
+                {
+                    "subscription_status": "past_due",
+                    "tier": "basic",  # Downgrade tier on payment failure
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                }
+            ).eq("id", user_id).execute()
 
             # Also update API keys to reflect downgrade
-            client.table("api_keys_new").update({
-                "subscription_status": "past_due",
-                "subscription_plan": "basic",
-            }).eq("user_id", user_id).execute()
+            client.table("api_keys_new").update(
+                {
+                    "subscription_status": "past_due",
+                    "subscription_plan": "basic",
+                }
+            ).eq("user_id", user_id).execute()
 
             logger.info(
                 f"User {user_id} subscription marked as past_due and downgraded to basic tier due to failed payment"

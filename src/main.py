@@ -7,15 +7,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from prometheus_client import generate_latest, REGISTRY, CollectorRegistry
+from prometheus_client import REGISTRY, CollectorRegistry, generate_latest
 
 from src.config import Config
+
+# Initialize logging with Loki integration
+from src.config.logging_config import configure_logging
 from src.constants import FRONTEND_BETA_URL, FRONTEND_STAGING_URL
 from src.services.startup import lifespan
 from src.utils.validators import ensure_api_key_like, ensure_non_empty_string
 
-# Initialize logging with Loki integration
-from src.config.logging_config import configure_logging
 configure_logging()
 logger = logging.getLogger(__name__)
 
@@ -117,12 +118,14 @@ def create_app() -> FastAPI:
     # Add observability middleware for automatic metrics collection
     # This should be added after CORS/compression but before route handlers
     from src.middleware.observability_middleware import ObservabilityMiddleware
+
     app.add_middleware(ObservabilityMiddleware)
     logger.info("  📊 Observability middleware enabled (automatic metrics tracking)")
 
     # Add trace context middleware for log-to-trace correlation
     # This should be added after observability middleware
     from src.middleware.trace_context_middleware import TraceContextMiddleware
+
     app.add_middleware(TraceContextMiddleware)
     logger.info("  🔗 Trace context middleware enabled (log-to-trace correlation)")
 
@@ -133,11 +136,12 @@ def create_app() -> FastAPI:
     logger.info("Setting up Prometheus metrics...")
 
     # Import metrics module to initialize all metrics
-    from src.services import prometheus_metrics  # noqa: F401
+    from fastapi.responses import Response
 
     # Add Prometheus metrics endpoint
     from prometheus_client import generate_latest
-    from fastapi.responses import Response
+
+    from src.services import prometheus_metrics  # noqa: F401
 
     @app.get("/metrics", tags=["monitoring"], include_in_schema=False)
     async def metrics():
@@ -249,6 +253,7 @@ def create_app() -> FastAPI:
             logger.error(error_msg)
             logger.error(f"       Error: {str(e)}")
             import traceback
+
             logger.error(f"       Traceback:\n{traceback.format_exc()}")
             failed_count += 1
 
@@ -288,6 +293,7 @@ def create_app() -> FastAPI:
             # Initialize OpenTelemetry tracing
             try:
                 from src.config.opentelemetry_config import OpenTelemetryConfig
+
                 OpenTelemetryConfig.initialize()
                 OpenTelemetryConfig.instrument_fastapi(app)
             except Exception as otel_e:
@@ -300,8 +306,12 @@ def create_app() -> FastAPI:
 
             # Warn if admin key is missing in production (don't fail startup)
             if Config.IS_PRODUCTION and not os.environ.get("ADMIN_API_KEY"):
-                logger.warning("  [WARN] ADMIN_API_KEY is not set in production. Admin endpoints will be inaccessible.")
-                logger.warning("        Set ADMIN_API_KEY environment variable to enable admin functionality.")
+                logger.warning(
+                    "  [WARN] ADMIN_API_KEY is not set in production. Admin endpoints will be inaccessible."
+                )
+                logger.warning(
+                    "        Set ADMIN_API_KEY environment variable to enable admin functionality."
+                )
 
             # Initialize database
             try:
@@ -402,6 +412,7 @@ def create_app() -> FastAPI:
         # Shutdown OpenTelemetry
         try:
             from src.config.opentelemetry_config import OpenTelemetryConfig
+
             OpenTelemetryConfig.shutdown()
         except Exception as e:
             logger.warning(f"    OpenTelemetry shutdown warning: {e}")

@@ -37,6 +37,7 @@ _vertexai = None
 _GenerativeModel = None
 _MessageToDict = None
 
+
 def _ensure_vertex_imports():
     """Ensure Vertex AI SDK is imported. Raises ImportError if SDK not available."""
     global _vertexai, _GenerativeModel
@@ -44,6 +45,7 @@ def _ensure_vertex_imports():
         try:
             import vertexai
             from vertexai.generative_models import GenerativeModel
+
             _vertexai = vertexai
             _GenerativeModel = GenerativeModel
             logger.debug("Successfully imported Vertex AI SDK")
@@ -62,6 +64,7 @@ def _ensure_protobuf_imports():
     if _MessageToDict is None:
         try:
             from google.protobuf.json_format import MessageToDict
+
             _MessageToDict = MessageToDict
             logger.debug("Successfully imported MessageToDict from protobuf")
         except ImportError as e:
@@ -109,13 +112,17 @@ def initialize_vertex_ai():
 
         # Handle GOOGLE_VERTEX_CREDENTIALS_JSON if provided (for serverless environments)
         # If raw JSON is provided, write it to a temp file and set GOOGLE_APPLICATION_CREDENTIALS
-        if os.environ.get("GOOGLE_VERTEX_CREDENTIALS_JSON") and not os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
+        if os.environ.get("GOOGLE_VERTEX_CREDENTIALS_JSON") and not os.environ.get(
+            "GOOGLE_APPLICATION_CREDENTIALS"
+        ):
             logger.info("GOOGLE_VERTEX_CREDENTIALS_JSON detected - writing to temp file for ADC")
             try:
                 creds_json = os.environ.get("GOOGLE_VERTEX_CREDENTIALS_JSON")
 
                 # Create a temporary file that persists for the application lifetime
-                temp_creds_file = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
+                temp_creds_file = tempfile.NamedTemporaryFile(
+                    mode="w", suffix=".json", delete=False
+                )
                 temp_creds_file.write(creds_json)
                 temp_creds_file.close()
 
@@ -127,10 +134,7 @@ def initialize_vertex_ai():
 
         # Initialize Vertex AI - DO NOT pass credentials parameter
         # The library will automatically find them from the environment
-        vertexai.init(
-            project=Config.GOOGLE_PROJECT_ID,
-            location=Config.GOOGLE_VERTEX_LOCATION
-        )
+        vertexai.init(project=Config.GOOGLE_PROJECT_ID, location=Config.GOOGLE_VERTEX_LOCATION)
 
         logger.info(f"✓ Successfully initialized Vertex AI for project: {Config.GOOGLE_PROJECT_ID}")
 
@@ -229,7 +233,9 @@ def make_google_vertex_request_openai(
         # Step 5: Extract tools from kwargs (if provided)
         tools = kwargs.get("tools")
         if tools:
-            logger.info(f"Tools parameter detected: {len(tools) if isinstance(tools, list) else 0} tools")
+            logger.info(
+                f"Tools parameter detected: {len(tools) if isinstance(tools, list) else 0} tools"
+            )
             logger.warning(
                 "Google Vertex AI function calling support requires transformation from OpenAI format to Gemini format. "
                 "Currently, tools are extracted but not yet transformed. Function calling may not work correctly."
@@ -263,8 +269,7 @@ def make_google_vertex_request_openai(
         try:
             logger.info("Calling GenerativeModel.generate_content()")
             response = gemini_model.generate_content(
-                prompt,
-                generation_config=generation_config if generation_config else None
+                prompt, generation_config=generation_config if generation_config else None
             )
             logger.info("Received response from Vertex AI")
             logger.debug(f"Response: {response}")
@@ -300,22 +305,22 @@ def _process_google_vertex_sdk_response(response: Any, model: str) -> dict:
         logger.debug(f"Processing SDK response: {response}")
 
         # Extract text from the response
-        text_content = response.text if hasattr(response, 'text') else ""
+        text_content = response.text if hasattr(response, "text") else ""
         logger.info(f"Extracted text content length: {len(text_content)} characters")
 
         # Extract usage metadata if available
         prompt_tokens = 0
         completion_tokens = 0
-        if hasattr(response, 'usage_metadata'):
+        if hasattr(response, "usage_metadata"):
             usage = response.usage_metadata
-            prompt_tokens = getattr(usage, 'prompt_token_count', 0)
-            completion_tokens = getattr(usage, 'candidates_token_count', 0)
+            prompt_tokens = getattr(usage, "prompt_token_count", 0)
+            completion_tokens = getattr(usage, "candidates_token_count", 0)
 
         # Extract finish reason
         finish_reason = "stop"  # Default
-        if hasattr(response, 'candidates') and response.candidates:
+        if hasattr(response, "candidates") and response.candidates:
             candidate = response.candidates[0]
-            if hasattr(candidate, 'finish_reason'):
+            if hasattr(candidate, "finish_reason"):
                 finish_reason_value = candidate.finish_reason
                 # Map Vertex AI finish reasons to OpenAI format
                 finish_reason_map = {
@@ -335,10 +340,7 @@ def _process_google_vertex_sdk_response(response: Any, model: str) -> dict:
             "choices": [
                 {
                     "index": 0,
-                    "message": {
-                        "role": "assistant",
-                        "content": text_content
-                    },
+                    "message": {"role": "assistant", "content": text_content},
                     "finish_reason": finish_reason,
                 }
             ],
@@ -489,23 +491,23 @@ def _build_vertex_content(messages: list) -> list:
 
 def _normalize_vertex_candidate_to_openai(candidate: dict, model: str) -> dict:
     """Convert a Vertex AI candidate to OpenAI-compatible format
-    
-    This shared helper function normalizes response data from both protobuf 
+
+    This shared helper function normalizes response data from both protobuf
     and REST API formats to avoid code duplication.
-    
+
     Args:
         candidate: Candidate object from Vertex AI response
         model: Model name used
-        
+
     Returns:
         OpenAI-compatible response dictionary
     """
     logger.debug(f"Normalizing candidate: {json.dumps(candidate, indent=2, default=str)}")
-    
+
     # Extract content from candidate
     content_parts = candidate.get("content", {}).get("parts", [])
     logger.debug(f"Content parts count: {len(content_parts)}")
-    
+
     # Extract text from parts
     text_content = ""
     tool_calls = []
@@ -515,14 +517,16 @@ def _normalize_vertex_candidate_to_openai(candidate: dict, model: str) -> dict:
         # Check for tool use in parts (function calling)
         if "functionCall" in part:
             tool_call = part["functionCall"]
-            tool_calls.append({
-                "id": f"call_{int(time.time() * 1000)}",
-                "type": "function",
-                "function": {
-                    "name": tool_call.get("name", "unknown"),
-                    "arguments": json.dumps(tool_call.get("args", {}))
+            tool_calls.append(
+                {
+                    "id": f"call_{int(time.time() * 1000)}",
+                    "type": "function",
+                    "function": {
+                        "name": tool_call.get("name", "unknown"),
+                        "arguments": json.dumps(tool_call.get("args", {})),
+                    },
                 }
-            })
+            )
 
     logger.info(f"Extracted text content length: {len(text_content)} characters")
 
@@ -610,7 +614,7 @@ def _process_google_vertex_response(response: Any, model: str) -> dict:
             raise ValueError("No candidates in Vertex AI prediction")
 
         candidate = candidates[0]
-        
+
         # Use shared normalization function
         return _normalize_vertex_candidate_to_openai(candidate, model)
 
@@ -663,11 +667,11 @@ def _process_google_vertex_rest_response(response_data: dict, model: str) -> dic
 
         # Get the first candidate
         candidate = candidates[0]
-        
+
         # Merge top-level usage metadata into candidate for consistency with shared function
         if "usageMetadata" in response_data and "usageMetadata" not in candidate:
             candidate["usageMetadata"] = response_data["usageMetadata"]
-        
+
         # Use shared normalization function
         return _normalize_vertex_candidate_to_openai(candidate, model)
 
@@ -698,7 +702,7 @@ def diagnose_google_vertex_credentials() -> dict:
         "location": Config.GOOGLE_VERTEX_LOCATION,
         "initialization_successful": False,
         "error": None,
-        "steps": []
+        "steps": [],
     }
 
     # Step 1: Check configuration
@@ -744,7 +748,9 @@ def diagnose_google_vertex_credentials() -> dict:
             except Exception:
                 step2["details"] = "Raw JSON credentials detected"
         else:
-            step2["details"] = "No credentials found in GOOGLE_APPLICATION_CREDENTIALS or GOOGLE_VERTEX_CREDENTIALS_JSON. Will try ADC."
+            step2["details"] = (
+                "No credentials found in GOOGLE_APPLICATION_CREDENTIALS or GOOGLE_VERTEX_CREDENTIALS_JSON. Will try ADC."
+            )
             result["credential_source"] = "adc"
             result["credentials_available"] = True  # ADC might still work
             step2["passed"] = True

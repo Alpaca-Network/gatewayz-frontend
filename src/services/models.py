@@ -1,61 +1,61 @@
-import logging
-import json
-from pathlib import Path
 import csv
+import json
+import logging
 import threading
-from typing import Any, Dict, Optional, Union, List
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Union
 from urllib.parse import urlparse
 
-from src.config import Config
+import httpx
+from fastapi import APIRouter
+
 from src.cache import (
-    _huggingface_cache,
-    _models_cache,
-    _portkey_models_cache,
-    _featherless_models_cache,
-    _chutes_models_cache,
-    _groq_models_cache,
-    _fireworks_models_cache,
-    _together_models_cache,
-    _deepinfra_models_cache,
-    _google_vertex_models_cache,
-    _cerebras_models_cache,
-    _nebius_models_cache,
-    _xai_models_cache,
-    _novita_models_cache,
-    _huggingface_models_cache,
-    _aimo_models_cache,
-    _near_models_cache,
-    _fal_models_cache,
-    _vercel_ai_gateway_models_cache,
-    _helicone_models_cache,
-    _anannas_models_cache,
+    _FAL_CACHE_INIT_DEFERRED,
     _aihubmix_models_cache,
+    _aimo_models_cache,
+    _anannas_models_cache,
+    _cerebras_models_cache,
+    _chutes_models_cache,
+    _deepinfra_models_cache,
+    _fal_models_cache,
+    _featherless_models_cache,
+    _fireworks_models_cache,
+    _google_vertex_models_cache,
+    _groq_models_cache,
+    _helicone_models_cache,
+    _huggingface_cache,
+    _huggingface_models_cache,
+    _models_cache,
     _multi_provider_catalog_cache,
+    _near_models_cache,
+    _nebius_models_cache,
+    _novita_models_cache,
+    _portkey_models_cache,
+    _together_models_cache,
+    _vercel_ai_gateway_models_cache,
+    _xai_models_cache,
     is_cache_fresh,
     should_revalidate_in_background,
-    _FAL_CACHE_INIT_DEFERRED,
 )
-from fastapi import APIRouter
-from datetime import datetime, timezone
-from src.services.pricing_lookup import enrich_model_with_pricing
-from src.services.portkey_providers import (
-    fetch_models_from_google_vertex,
-    fetch_models_from_cerebras,
-    fetch_models_from_nebius,
-    fetch_models_from_xai,
-    fetch_models_from_novita,
-)
+from src.config import Config
+from src.services.google_models_config import register_google_models_in_canonical_registry
+from src.services.huggingface_models import fetch_models_from_hug, get_huggingface_model_info
+from src.services.model_transformations import detect_provider_from_model_id
 from src.services.multi_provider_registry import (
     CanonicalModelProvider,
     get_registry,
 )
-from src.services.google_models_config import register_google_models_in_canonical_registry
-from src.services.huggingface_models import fetch_models_from_hug, get_huggingface_model_info
-from src.services.model_transformations import detect_provider_from_model_id
+from src.services.portkey_providers import (
+    fetch_models_from_cerebras,
+    fetch_models_from_google_vertex,
+    fetch_models_from_nebius,
+    fetch_models_from_novita,
+    fetch_models_from_xai,
+)
+from src.services.pricing_lookup import enrich_model_with_pricing
 from src.utils.security_validators import sanitize_for_logging
-
-import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +64,7 @@ logger = logging.getLogger(__name__)
 # across all threads spawned by ThreadPoolExecutor during parallel model fetching
 _building_catalog_lock = threading.Lock()
 _building_catalog_flag = False
+
 
 def _is_building_catalog() -> bool:
     """Check if we're currently building the model catalog
@@ -74,6 +75,7 @@ def _is_building_catalog() -> bool:
     with _building_catalog_lock:
         return _building_catalog_flag
 
+
 def _set_building_catalog(active: bool):
     """Set the building catalog flag
 
@@ -83,6 +85,7 @@ def _set_building_catalog(active: bool):
     global _building_catalog_flag
     with _building_catalog_lock:
         _building_catalog_flag = active
+
 
 # Modality constants to reduce duplication
 MODALITY_TEXT_TO_TEXT = "text->text"
@@ -146,11 +149,7 @@ def _register_canonical_records(provider_slug: str, models: Optional[list]) -> N
             if not isinstance(record, dict):
                 continue
 
-            canonical_id = (
-                record.get("canonical_slug")
-                or record.get("slug")
-                or record.get("id")
-            )
+            canonical_id = record.get("canonical_slug") or record.get("slug") or record.get("id")
 
             if not canonical_id:
                 continue
@@ -158,8 +157,7 @@ def _register_canonical_records(provider_slug: str, models: Optional[list]) -> N
             display_metadata = {
                 "name": record.get("name") or record.get("display_name"),
                 "description": record.get("description"),
-                "context_length": record.get("context_length")
-                or record.get("max_context_length"),
+                "context_length": record.get("context_length") or record.get("max_context_length"),
                 "modalities": _extract_modalities(record),
                 "slug": record.get("slug"),
                 "canonical_slug": record.get("canonical_slug"),
@@ -170,10 +168,8 @@ def _register_canonical_records(provider_slug: str, models: Optional[list]) -> N
 
             pricing = record.get("pricing") or {}
             capabilities = {
-                "context_length": record.get("context_length")
-                or record.get("max_context_length"),
-                "max_output_tokens": record.get("max_tokens")
-                or record.get("max_output_tokens"),
+                "context_length": record.get("context_length") or record.get("max_context_length"),
+                "max_output_tokens": record.get("max_tokens") or record.get("max_output_tokens"),
                 "modalities": _extract_modalities(record),
                 "supported_parameters": record.get("supported_parameters"),
                 "default_parameters": record.get("default_parameters"),
@@ -1709,7 +1705,7 @@ def normalize_aimo_model(aimo_model: dict) -> dict:
     provider_prefixes = ["google/", "openai/", "anthropic/", "meta/", "meta-llama/", "mistralai/"]
     for prefix in provider_prefixes:
         if model_name.lower().startswith(prefix):
-            model_name_normalized = model_name[len(prefix):]
+            model_name_normalized = model_name[len(prefix) :]
             break
 
     # Get provider information (use first provider if multiple)
@@ -1738,7 +1734,9 @@ def normalize_aimo_model(aimo_model: dict) -> dict:
     canonical_slug = model_name_normalized.lower()
 
     display_name = aimo_model.get("display_name") or model_name_normalized.replace("-", " ").title()
-    base_description = f"AIMO Network decentralized model {model_name_normalized} provided by {provider_name}."
+    base_description = (
+        f"AIMO Network decentralized model {model_name_normalized} provided by {provider_name}."
+    )
     description = base_description
 
     context_length = aimo_model.get("context_length", 0)
@@ -1927,15 +1925,28 @@ def normalize_near_model(near_model: dict) -> dict:
 
     # Extract metadata from Near AI API response
     metadata = near_model.get("metadata") or {}
-    display_name = metadata.get("displayName") or near_model.get("display_name") or model_id.replace("-", " ").replace("_", " ").title()
+    display_name = (
+        metadata.get("displayName")
+        or near_model.get("display_name")
+        or model_id.replace("-", " ").replace("_", " ").title()
+    )
     near_model.get("owned_by", "Near Protocol")
 
     # Highlight security features in description
-    base_description = metadata.get("description") or near_model.get("description") or f"Near AI hosted model {model_id}."
+    base_description = (
+        metadata.get("description")
+        or near_model.get("description")
+        or f"Near AI hosted model {model_id}."
+    )
     security_features = " Security: Private AI inference with decentralized execution, cryptographic verification, and on-chain auditing."
     description = f"{base_description}{security_features}"
 
-    context_length = metadata.get("contextLength") or metadata.get("context_length") or near_model.get("context_length") or 0
+    context_length = (
+        metadata.get("contextLength")
+        or metadata.get("context_length")
+        or near_model.get("context_length")
+        or 0
+    )
 
     pricing = {
         "prompt": None,
@@ -2277,7 +2288,6 @@ def get_vercel_model_pricing(model_id: str) -> dict:
         "request": "0",
         "image": "0",
     }
-
 
 
 def fetch_specific_model_from_together(provider_name: str, model_name: str):
@@ -3022,7 +3032,9 @@ def enhance_model_with_provider_info(openrouter_model: dict, providers_data: lis
             except Exception as e:
                 logger.warning(f"Failed to parse provider_site_url '{provider_site_url}': {e}")
                 # Fallback to old method
-                clean_url = provider_site_url.replace("https://", "").replace("http://", "").split("/")[0]
+                clean_url = (
+                    provider_site_url.replace("https://", "").replace("http://", "").split("/")[0]
+                )
                 if clean_url.startswith("www."):
                     clean_url = clean_url[4:]
                 model_logo_url = f"https://www.google.com/s2/favicons?domain={clean_url}&sz=128"
@@ -3073,9 +3085,7 @@ def fetch_models_from_aihubmix():
         logger.info(f"Fetched {len(normalized_models)} models from AiHubMix")
         return _aihubmix_models_cache["data"]
     except Exception as e:
-        logger.error(
-            "Failed to fetch models from AiHubMix: %s", sanitize_for_logging(str(e))
-        )
+        logger.error("Failed to fetch models from AiHubMix: %s", sanitize_for_logging(str(e)))
         return []
 
 
@@ -3191,7 +3201,9 @@ def normalize_helicone_model(model) -> Optional[dict]:
         provider_slug = "google"
 
     # Get description - Helicone doesn't provide this, so we create one
-    description = getattr(model, "description", None) or "Model available through Helicone AI Gateway"
+    description = (
+        getattr(model, "description", None) or "Model available through Helicone AI Gateway"
+    )
 
     # Get context length if available
     context_length = getattr(model, "context_length", 4096)
@@ -3311,9 +3323,7 @@ def fetch_models_from_anannas():
         logger.info(f"Fetched {len(normalized_models)} models from Anannas")
         return _anannas_models_cache["data"]
     except Exception as e:
-        logger.error(
-            "Failed to fetch models from Anannas: %s", sanitize_for_logging(str(e))
-        )
+        logger.error("Failed to fetch models from Anannas: %s", sanitize_for_logging(str(e)))
         return []
 
 

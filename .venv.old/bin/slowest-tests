@@ -1,7 +1,0 @@
-#!/Users/arminrad/Desktop/Alpaca-Network/Gatewayz/gatewayz-backend/.venv/bin/python3
-import sys
-from pytest_split.cli import list_slowest_tests
-if __name__ == '__main__':
-    if sys.argv[0].endswith('.exe'):
-        sys.argv[0] = sys.argv[0][:-4]
-    sys.exit(list_slowest_tests())

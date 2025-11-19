@@ -1,10 +1,9 @@
 from datetime import datetime
-from typing import Any, Optional, Dict, List
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
 
 
-from typing import Optional
 class UsageMetrics(BaseModel):
     total_requests: int
     total_tokens: int

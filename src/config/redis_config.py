@@ -6,11 +6,11 @@ Handles Redis connection and configuration for rate limiting and caching.
 
 import logging
 import os
+from typing import Optional
 
 import redis
 from redis.connection import ConnectionPool
 
-from typing import Optional
 logger = logging.getLogger(__name__)
 
 

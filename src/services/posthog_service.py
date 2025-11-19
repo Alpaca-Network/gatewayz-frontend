@@ -5,7 +5,7 @@ Server-side PostHog integration to avoid ad-blocker issues
 
 import logging
 import os
-from typing import Any, Optional, Dict
+from typing import Any, Dict, Optional
 
 from posthog import Posthog
 

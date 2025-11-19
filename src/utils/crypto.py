@@ -1,6 +1,6 @@
-from typing import Dict
 import hashlib
 import os
+from typing import Dict
 
 try:
     from cryptography.fernet import Fernet, InvalidToken  # type: ignore

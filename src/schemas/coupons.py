@@ -4,11 +4,11 @@ Pydantic schemas for coupon system
 
 from datetime import datetime
 from enum import Enum
+from typing import List, Optional
 
 from pydantic import BaseModel, Field, validator
 
 
-from typing import Optional, List
 class CouponScope(str, Enum):
     """Coupon scope types"""
 
@@ -46,7 +46,9 @@ class CreateCouponRequest(BaseModel):
     max_uses: int = Field(..., gt=0, description="Maximum number of redemptions")
     valid_until: datetime = Field(..., description="Expiration date")
     coupon_type: CouponType = Field(CouponType.PROMOTIONAL, description="Type of coupon")
-    assigned_to_user_id: Optional[int] = Field(None, description="User ID for user-specific coupons")
+    assigned_to_user_id: Optional[int] = Field(
+        None, description="User ID for user-specific coupons"
+    )
     description: Optional[str] = Field(None, max_length=500, description="Internal description")
     valid_from: Optional[datetime] = Field(None, description="Start date (defaults to now)")
 

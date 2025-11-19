@@ -11,10 +11,11 @@ Endpoint: POST /api/chat/ai-sdk
 import asyncio
 import json
 import logging
+from typing import List, Optional
+
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
-from typing import Optional, List
 
 from src.config import Config
 from src.services.ai_sdk_client import (
@@ -211,15 +212,11 @@ async def _handle_ai_sdk_stream(request: AISDKChatRequest):
             # Stream response chunks
             for chunk in stream:
                 if chunk.choices and len(chunk.choices) > 0:
-                    delta = getattr(chunk.choices[0], 'delta', None)
-                    if delta and hasattr(delta, 'content') and delta.content:
+                    delta = getattr(chunk.choices[0], "delta", None)
+                    if delta and hasattr(delta, "content") and delta.content:
                         # Format as SSE (Server-Sent Events)
                         data = {
-                            "choices": [
-                                {
-                                    "delta": {"role": "assistant", "content": delta.content}
-                                }
-                            ]
+                            "choices": [{"delta": {"role": "assistant", "content": delta.content}}]
                         }
                         yield f"data: {json.dumps(data)}\n\n"
 

@@ -9,10 +9,10 @@ import logging
 from typing import List
 
 from src.services.multi_provider_registry import (
+    CanonicalModelProvider,
     MultiProviderModel,
     ProviderConfig,
     get_registry,
-    CanonicalModelProvider,
 )
 
 logger = logging.getLogger(__name__)
@@ -313,8 +313,7 @@ def initialize_google_models() -> None:
     for model in models:
         registry.register_model(model)
         logger.debug(
-            f"Registered {model.id} with providers: "
-            f"{[p.name for p in model.providers]}"
+            f"Registered {model.id} with providers: " f"{[p.name for p in model.providers]}"
         )
 
     logger.info(
@@ -337,11 +336,13 @@ def register_google_models_in_canonical_registry() -> None:
             "context_length": model.context_length,
             "modalities": model.modalities,
             "canonical_slug": model.id,
-            "aliases": list({
-                model.id,
-                f"google/{model.id}",
-                f"google-vertex/{model.id}",
-            }),
+            "aliases": list(
+                {
+                    model.id,
+                    f"google/{model.id}",
+                    f"google-vertex/{model.id}",
+                }
+            ),
         }
 
         for provider in model.providers:

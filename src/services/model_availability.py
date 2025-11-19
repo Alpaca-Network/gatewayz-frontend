@@ -14,9 +14,8 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Optional, Dict, List
+from typing import Any, Dict, List, Optional
 
-from typing import Optional
 logger = logging.getLogger(__name__)
 
 
@@ -282,7 +281,9 @@ class ModelAvailabilityService:
             return False
 
         # Check maintenance
-        if availability.maintenance_until and availability.maintenance_until > datetime.now(timezone.utc):
+        if availability.maintenance_until and availability.maintenance_until > datetime.now(
+            timezone.utc
+        ):
             return False
 
         return availability.status == AvailabilityStatus.AVAILABLE

@@ -6,16 +6,16 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
+from src.services.autonomous_monitor import get_autonomous_monitor, initialize_autonomous_monitor
 from src.services.connection_pool import clear_connection_pools, get_pool_stats
 from src.services.model_availability import availability_service
 from src.services.model_health_monitor import health_monitor
-from src.services.response_cache import get_cache
 from src.services.prometheus_remote_write import (
     init_prometheus_remote_write,
     shutdown_prometheus_remote_write,
 )
+from src.services.response_cache import get_cache
 from src.services.tempo_otlp import init_tempo_otlp, init_tempo_otlp_fastapi
-from src.services.autonomous_monitor import initialize_autonomous_monitor, get_autonomous_monitor
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +30,7 @@ async def lifespan(app):
 
     # Validate critical environment variables at runtime startup
     from src.config import Config
+
     is_valid, missing_vars = Config.validate_critical_env_vars()
     if not is_valid:
         logger.error(f"❌ CRITICAL: Missing required environment variables: {missing_vars}")
@@ -72,12 +73,10 @@ async def lifespan(app):
 
         # Initialize autonomous error monitoring
         try:
-            error_monitoring_enabled = os.environ.get(
-                "ERROR_MONITORING_ENABLED", "true"
-            ).lower() == "true"
-            auto_fix_enabled = os.environ.get(
-                "AUTO_FIX_ENABLED", "true"
-            ).lower() == "true"
+            error_monitoring_enabled = (
+                os.environ.get("ERROR_MONITORING_ENABLED", "true").lower() == "true"
+            )
+            auto_fix_enabled = os.environ.get("AUTO_FIX_ENABLED", "true").lower() == "true"
             scan_interval = int(os.environ.get("ERROR_MONITOR_INTERVAL", "300"))
 
             if error_monitoring_enabled:

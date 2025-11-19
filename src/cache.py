@@ -347,7 +347,9 @@ def initialize_featherless_cache_from_catalog():
             # No export available - initialize empty to enable lazy loading via API
             _featherless_models_cache["data"] = []
             _featherless_models_cache["timestamp"] = None
-            logger.debug("Featherless cache initialized empty - will load from API on first request")
+            logger.debug(
+                "Featherless cache initialized empty - will load from API on first request"
+            )
 
     except (ImportError, OSError) as error:
         # Log failure but continue - initialize empty cache for lazy loading

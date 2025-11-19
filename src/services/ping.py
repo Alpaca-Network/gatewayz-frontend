@@ -59,7 +59,11 @@ class PingService:
                 if count is None:
                     count = 0
 
-            return {"message": "pong", "count": count, "timestamp": datetime.now(timezone.utc).isoformat()}
+            return {
+                "message": "pong",
+                "count": count,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
 
         except Exception as e:
             logger.error(f"Error handling ping: {e}")
@@ -114,7 +118,11 @@ class PingService:
 
         except Exception as e:
             logger.error(f"Error getting ping statistics: {e}")
-            return {"total_pings": 0, "error": str(e), "timestamp": datetime.now(timezone.utc).isoformat()}
+            return {
+                "total_pings": 0,
+                "error": str(e),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
 
     def reset_counter(self) -> Dict[str, Any]:
         """
@@ -139,7 +147,11 @@ class PingService:
 
         except Exception as e:
             logger.error(f"Error resetting counter: {e}")
-            return {"success": False, "error": str(e), "timestamp": datetime.now(timezone.utc).isoformat()}
+            return {
+                "success": False,
+                "error": str(e),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
 
     def _sync_to_database(self):
         """

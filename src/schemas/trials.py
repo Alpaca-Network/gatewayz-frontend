@@ -5,14 +5,13 @@ Pydantic models for free trial management
 """
 
 from datetime import datetime
-from typing import Any, Optional, Dict, List
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
 from src.schemas.common import SubscriptionStatus
 
 
-from typing import Optional
 class TrialStatus(BaseModel):
     """Trial status model"""
 

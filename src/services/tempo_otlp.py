@@ -40,9 +40,11 @@ def init_tempo_otlp():
         )
 
         # Create resource with service name for Tempo filtering
-        resource = Resource.create({
-            "service.name": Config.OTEL_SERVICE_NAME,
-        })
+        resource = Resource.create(
+            {
+                "service.name": Config.OTEL_SERVICE_NAME,
+            }
+        )
 
         # Create tracer provider with resource
         trace_provider = TracerProvider(resource=resource)
