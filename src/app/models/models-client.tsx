@@ -382,7 +382,6 @@ export default function ModelsClient({
       }
 
       if (seen.has(model.id)) {
-        console.warn(`Duplicate model ID found: ${model.id}`);
         return false;
       }
       seen.add(model.id);
