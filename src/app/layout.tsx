@@ -1,4 +1,5 @@
 import type {Metadata, Viewport} from 'next';
+import Script from 'next/script';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 import { AppHeader } from '@/components/layout/app-header';
@@ -98,6 +99,12 @@ export default function RootLayout({
               <main className="flex-1 flex flex-col w-full overflow-x-hidden">
                 {children}
               </main>
+              <Script
+                id="keak-script"
+                src="https://zzontar2hsjaawcn.public.blob.vercel-storage.com/scripts/domain-542-httpsgatewayz.ai.js"
+                data-domain="542"
+                strategy="afterInteractive"
+              />
               <Toaster />
               <AppFooter />
               <WelcomeDialog />
