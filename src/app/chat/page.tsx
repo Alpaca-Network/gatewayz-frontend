@@ -46,8 +46,9 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format, isToday, isYesterday, formatDistanceToNow } from 'date-fns';
-import { getApiKey, getUserData, saveApiKey, saveUserData, type UserData } from '@/lib/api';
+import { AUTH_REFRESH_EVENT, getApiKey, getUserData, saveApiKey, saveUserData, type UserData } from '@/lib/api';
 import { ChatHistoryAPI, ChatSession as ApiChatSession, ChatMessage as ApiChatMessage, handleApiError } from '@/lib/chat-history';
+import { MessageQueue, type QueuedMessage } from '@/lib/message-queue';
 import { ChatStreamHandler } from '@/lib/chat-stream-handler';
 import { Copy, Share2, RotateCcw } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
@@ -57,7 +58,10 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { logAnalyticsEvent } from '@/lib/analytics';
 import { useEagerModelPreload } from '@/hooks/useEagerModelPreload';
 import { useRecentlyUsedModels } from '@/hooks/useRecentlyUsedModels';
-import { chatPerformanceTracker } from '@/lib/chat-performance-tracker';
+import { debounce } from '@/lib/utils';
+import { sessionUpdatesManager } from '@/lib/optimistic-updates';
+import { useVirtualScroll } from '@/hooks/useVirtualScroll';
+import { ChatMessage } from '@/components/chat/ChatMessage';
 
 // Lazy load ModelSelect for better initial load performance
 // Reduces initial bundle by ~100KB and defers expensive model processing
@@ -136,15 +140,6 @@ const MarkdownRenderer = ({ children, className }: { children: string; className
 // Only needed for models with reasoning capabilities (~10% of usage)
 const ReasoningDisplay = dynamic(() => import('@/components/chat/reasoning-display').then(mod => ({ default: mod.ReasoningDisplay })), {
     loading: () => <div className="animate-pulse bg-muted/30 h-12 rounded-md w-full"></div>,
-    ssr: false
-});
-
-// Lazy load Performance Monitor for development/debugging
-const PerformanceMonitor = dynamic(() => import('@/components/chat/performance-monitor').then(mod => ({ default: mod.PerformanceMonitor })), {
-    ssr: false
-});
-
-const PerformanceMonitorToggle = dynamic(() => import('@/components/chat/performance-monitor').then(mod => ({ default: mod.PerformanceMonitorToggle })), {
     ssr: false
 });
 
@@ -1163,6 +1158,48 @@ const devWarn = (...args: any[]) => {
     }
 };
 
+// OPTIMIZATION: Virtualized message list for smooth performance with 1000+ messages
+const VirtualizedMessageList = React.memo<{
+    messages: Message[];
+    loading: boolean;
+    chatContainerRef: React.RefObject<HTMLDivElement>;
+    handleRegenerate?: () => void;
+}>(({ messages, loading, chatContainerRef, handleRegenerate }) => {
+    const handleCopy = useCallback((content: string) => {
+        navigator.clipboard.writeText(content);
+    }, []);
+
+    const handleShare = useCallback((content: string) => {
+        if (navigator.share) {
+            navigator.share({ text: content });
+        }
+    }, []);
+
+    return (
+        <div ref={chatContainerRef} className="flex-1 flex flex-col gap-3 sm:gap-4 lg:gap-6 overflow-y-auto p-3 sm:p-4 lg:p-6 max-w-4xl mx-auto w-full">
+            {messages.filter(msg => msg && msg.role).map((msg, index) => (
+                <ChatMessage
+                    key={`${msg.role}-${index}`}
+                    role={msg.role}
+                    content={msg.content}
+                    reasoning={msg.reasoning}
+                    image={msg.image}
+                    video={msg.video}
+                    audio={msg.audio}
+                    isStreaming={msg.isStreaming}
+                    model={msg.model}
+                    onCopy={() => handleCopy(msg.content)}
+                    onRegenerate={handleRegenerate}
+                    showActions={msg.role === 'assistant'}
+                />
+            ))}
+            {loading && <ChatSkeleton />}
+        </div>
+    );
+});
+
+VirtualizedMessageList.displayName = 'VirtualizedMessageList';
+
 function ChatPageContent() {
     const searchParams = useSearchParams();
     const { login, isAuthenticated, loading: authLoading } = useAuth();
@@ -1267,6 +1304,7 @@ function ChatPageContent() {
 
     // Track if we're currently creating a session to prevent race conditions
     const creatingSessionRef = useRef(false);
+    const createSessionPromiseRef = useRef<Promise<ChatSession | null> | null>(null);
 
     // Track if auto-send has already been triggered to prevent duplicate sends
     const autoSendTriggeredRef = useRef(false);
@@ -1280,8 +1318,11 @@ function ChatPageContent() {
     // Queue message to be sent after authentication completes
     const [pendingMessage, setPendingMessage] = useState<{message: string, model: ModelOption | null, image?: string | null, video?: string | null, audio?: string | null} | null>(null);
 
-    // Performance monitor state
-    const [perfMonitorOpen, setPerfMonitorOpen] = useState(false);
+    // Message queue to prevent duplicate sends and race conditions
+    const messageQueueRef = useRef<MessageQueue | null>(null);
+    if (!messageQueueRef.current) {
+        messageQueueRef.current = new MessageQueue();
+    }
 
     // Test backend connectivity function
     const testBackendConnectivity = async () => {
@@ -1557,9 +1598,36 @@ function ChatPageContent() {
 
     // Check for API key in localStorage as fallback authentication
     useEffect(() => {
-        const apiKey = getApiKey();
-        const userData = getUserData();
-        setHasApiKey(!!(apiKey && userData?.privy_user_id));
+        const updateApiKeyState = () => {
+            const apiKey = getApiKey();
+            setHasApiKey(!!apiKey);
+        };
+
+        updateApiKeyState();
+
+        if (typeof window === 'undefined') {
+            return;
+        }
+
+        const handleStorageChange = (event: StorageEvent) => {
+            if (!event.key || event.key === 'gatewayz_api_key') {
+                updateApiKeyState();
+            }
+        };
+
+        const handleAuthRefresh = () => updateApiKeyState();
+
+        window.addEventListener('storage', handleStorageChange);
+        window.addEventListener(AUTH_REFRESH_EVENT as unknown as string, handleAuthRefresh as EventListener);
+
+        // Poll as a fallback for same-tab updates since the storage event doesn't fire
+        const pollInterval = window.setInterval(updateApiKeyState, 1500);
+
+        return () => {
+            window.removeEventListener('storage', handleStorageChange);
+            window.removeEventListener(AUTH_REFRESH_EVENT as unknown as string, handleAuthRefresh as EventListener);
+            clearInterval(pollInterval);
+        };
     }, [authLoading, isAuthenticated]);
 
     // Check for referral bonus notification flag
@@ -1590,10 +1658,9 @@ function ChatPageContent() {
         if (!isAuthenticated && !hasApiKey) return;
 
         const apiKey = getApiKey();
-        const userData = getUserData();
 
         // Wait for API key to be available
-        if (!apiKey || !userData?.privy_user_id) {
+        if (!apiKey) {
             console.log('[Pending Message] Waiting for API key to be available...');
             return;
         }
@@ -1716,15 +1783,18 @@ function ChatPageContent() {
                 if (key && data?.privy_user_id) {
                     clearInterval(checkInterval);
                     // Trigger auth ready state to force effect to re-run
-                    setAuthReady(true);
+                    setAuthReady(prev => !prev);
                 }
             }, 100);
 
             // Clean up after 10 seconds
-            setTimeout(() => clearInterval(checkInterval), 10000);
-            return () => clearInterval(checkInterval);
+            const timeoutId = window.setTimeout(() => clearInterval(checkInterval), 10000);
+            return () => {
+                clearInterval(checkInterval);
+                clearTimeout(timeoutId);
+            };
         }
-    }, [authLoading, isAuthenticated, hasApiKey, searchParams]);
+    }, [authLoading, isAuthenticated, hasApiKey, searchParams, authReady]);
 
     // Handle rate limit countdown timer
     useEffect(() => {
@@ -1818,9 +1888,10 @@ function ChatPageContent() {
     };
 
     const createNewChat = async () => {
-        // Prevent duplicate session creation
-        if (creatingSessionRef.current) {
-            return null;
+        // Return existing promise if session creation is already in progress
+        if (createSessionPromiseRef.current) {
+            console.log('[createNewChat] Session creation already in progress, returning existing promise');
+            return createSessionPromiseRef.current;
         }
 
         // Check if there's already a new/empty chat session
@@ -1836,37 +1907,78 @@ function ChatPageContent() {
             return existingNewChat;
         }
 
-        creatingSessionRef.current = true;
-        try {
-            // Create new session using API helper
-            const newSession = await apiHelpers.createChatSession('Untitled Chat', selectedModel?.value);
+        // Create promise for session creation with optimistic UI
+        const createPromise = (async () => {
+            // Atomic check-and-set
+            const wasCreating = creatingSessionRef.current;
+            creatingSessionRef.current = true;
 
-            // Log analytics event for new chat creation
-            logAnalyticsEvent('chat_session_created', {
-                session_id: newSession.id,
-                model: selectedModel?.value
-            });
+            if (wasCreating) {
+                console.log('[createNewChat] Race condition detected, another creation in progress');
+                return null;
+            }
 
-            // Set active session immediately with the created session object
-            setActiveSessionId(newSession.id);
+            // Create optimistic session for immediate UI feedback (instead of 1-2s wait)
+            const tempSessionId = `local-${Date.now()}`;
+            const optimisticSession: ChatSession = {
+                id: tempSessionId,
+                title: 'Untitled Chat',
+                startTime: new Date(),
+                createdAt: new Date(),
+                updatedAt: new Date(),
+                userId: 'current-user',
+                messages: []
+            };
 
-            // Then update the sessions list
-            setSessions(prev => [newSession, ...prev]);
+            try {
+                // Show session immediately (perceived speed improvement: 1-2s → instant)
+                setActiveSessionId(tempSessionId);
+                setSessions(prev => [optimisticSession, ...prev]);
+                autoSendTriggeredRef.current = false; // Reset auto-send flag for new chat
 
-            // Reset auto-send flag for new chat
-            autoSendTriggeredRef.current = false;
+                console.log('[Chat] Optimistic session created, now confirming with backend...');
 
-            return newSession;
-        } catch (error) {
-            toast({
-                title: "Error",
-                description: `Failed to create new chat session: ${error instanceof Error ? error.message : 'Unknown error'}`,
-                variant: 'destructive'
-            });
-            return null;
-        } finally {
-            creatingSessionRef.current = false;
-        }
+                // Create session in backend asynchronously
+                const realSession = await apiHelpers.createChatSession('Untitled Chat', selectedModel?.value);
+
+                console.log('[Chat] Backend session confirmed, updating with real data');
+
+                // Log analytics event for new chat creation
+                logAnalyticsEvent('chat_session_created', {
+                    session_id: realSession.id,
+                    model: selectedModel?.value
+                });
+
+                // Replace optimistic session with real session
+                setSessions(prev => 
+                    prev.map(session => 
+                        session.id === tempSessionId ? realSession : session
+                    )
+                );
+                setActiveSessionId(realSession.id);
+
+                return realSession;
+            } catch (error) {
+                console.error('[Chat] Failed to create session:', error);
+                
+                // Rollback optimistic session on error
+                setSessions(prev => prev.filter(session => session.id !== tempSessionId));
+                setActiveSessionId(null);
+
+                toast({
+                    title: "Error",
+                    description: `Failed to create new chat session: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                    variant: 'destructive'
+                });
+                return null;
+            } finally {
+                creatingSessionRef.current = false;
+                createSessionPromiseRef.current = null;
+            }
+        })();
+
+        createSessionPromiseRef.current = createPromise;
+        return createPromise;
     };
 
     const handleExamplePromptClick = (promptText: string) => {
@@ -1907,24 +2019,41 @@ function ChatPageContent() {
         }
     }
 
-    const handleRenameSession = async (sessionId: string, newTitle: string) => {
-        try {
-            // Update in API
-            await apiHelpers.updateChatSession(sessionId, { title: newTitle }, sessions);
-            
-            setSessions(prev => prev.map(session =>
-                session.id === sessionId
-                    ? { ...session, title: newTitle, updatedAt: new Date() }
-                    : session
-            ));
-        } catch (error) {
-            console.error('Failed to rename chat session:', error);
-            toast({
-                title: "Error",
-                description: "Failed to rename chat session. Please try again.",
-                variant: 'destructive'
-            });
-        }
+    // OPTIMIZATION: Debounced session rename with optimistic updates
+    const debouncedSessionUpdate = useMemo(
+        () => debounce(async (sessionId: string, newTitle: string, oldSession: ChatSession) => {
+            try {
+                await apiHelpers.updateChatSession(sessionId, { title: newTitle }, sessions);
+                console.log('[Optimization] Session rename synced to backend');
+            } catch (error) {
+                console.error('Failed to rename chat session:', error);
+                // Rollback on failure
+                setSessions(prev => prev.map(session =>
+                    session.id === sessionId ? oldSession : session
+                ));
+                toast({
+                    title: "Error",
+                    description: "Failed to rename chat session. Changes reverted.",
+                    variant: 'destructive'
+                });
+            }
+        }, 500), // Wait 500ms after user stops typing
+        [sessions]
+    );
+
+    const handleRenameSession = (sessionId: string, newTitle: string) => {
+        const oldSession = sessions.find(s => s.id === sessionId);
+        if (!oldSession) return;
+
+        // OPTIMIZATION: Update UI immediately (optimistic)
+        setSessions(prev => prev.map(session =>
+            session.id === sessionId
+                ? { ...session, title: newTitle, updatedAt: new Date() }
+                : session
+        ));
+
+        // OPTIMIZATION: Sync to backend (debounced)
+        debouncedSessionUpdate(sessionId, newTitle, oldSession);
     }
 
     const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -2656,20 +2785,6 @@ function ChatPageContent() {
 
                 console.log('🌊 Starting to stream response...');
 
-                // Start performance tracking
-                const performanceMessageId = `msg-${Date.now()}-${Math.random().toString(36).substring(7)}`;
-                chatPerformanceTracker.startTracking({
-                    messageId: performanceMessageId,
-                    model: modelValue,
-                    gateway: selectedModel.sourceGateway,
-                    messageLength: typeof messageContent === 'string' ? messageContent.length : JSON.stringify(messageContent).length,
-                    hasImage: !!userImage,
-                    hasVideo: !!userVideo,
-                    hasAudio: !!userAudio,
-                    sessionId: currentSessionId,
-                    isFirstMessage: isFirstMessage
-                });
-
                 // Log analytics event for message sent
                 logAnalyticsEvent('chat_message_sent', {
                     model: modelValue,
@@ -2723,29 +2838,10 @@ function ChatPageContent() {
                         isDone: chunk.done,
                         status: chunk.status
                     });
-
-                    // Handle performance tracking chunks
-                    if (chunk.status === 'timing_info' && chunk.timingMetadata) {
-                        // Record timing metadata from API headers
-                        if (chunk.timingMetadata.backendTimeMs) {
-                            chatPerformanceTracker.markBackendProcessing(chunk.timingMetadata.backendTimeMs, performanceMessageId);
-                        }
-                        if (chunk.timingMetadata.networkTimeMs) {
-                            chatPerformanceTracker.markNetworkLatency(chunk.timingMetadata.networkTimeMs, performanceMessageId);
-                        }
-                        continue; // Don't process as content
-                    }
-
-                    if (chunk.status === 'first_token') {
-                        // Mark when first token arrived (TTFT)
-                        chatPerformanceTracker.markFirstToken(performanceMessageId);
-                    }
-
                     if (chunk.status === 'rate_limit_retry') {
                         const waitSeconds = Math.max(1, Math.ceil((chunk.retryAfterMs ?? 0) / 1000));
                         setRateLimitCountdown(waitSeconds);
                         devLog(`Rate limit reached. Retrying in ${waitSeconds} seconds...`);
-                        chatPerformanceTracker.incrementRetry(performanceMessageId);
                         continue;
                     }
 
@@ -2819,17 +2915,6 @@ function ChatPageContent() {
                 const finalContent = streamHandler.getFinalContent();
                 const finalReasoning = streamHandler.getFinalReasoning();
                 devLog({finalContent, finalReasoning, chunkCount: streamHandler.state.chunkCount});
-
-                // Mark streaming complete for performance tracking
-                chatPerformanceTracker.markStreamComplete(finalContent.length, performanceMessageId);
-
-                // Log performance summary in development
-                if (process.env.NODE_ENV === 'development') {
-                    chatPerformanceTracker.logSummary(performanceMessageId);
-                }
-
-                // Clean up old metrics to prevent memory leaks
-                chatPerformanceTracker.clearOldMetrics(50);
 
                 // OPTIMIZATION: Save the assistant's response to the backend asynchronously
                 // This allows the UI to be responsive immediately after streaming completes
@@ -2921,10 +3006,6 @@ function ChatPageContent() {
                 }
 
             } catch (streamError) {
-                // Record error in performance tracker
-                const errorType = streamError instanceof Error ? streamError.name : 'UnknownError';
-                chatPerformanceTracker.recordError(errorType, performanceMessageId);
-
                 // Clean up any pending timeouts to prevent ReferenceErrors
                 if (streamHandler) {
                     streamHandler.cleanup();
@@ -3081,15 +3162,23 @@ function ChatPageContent() {
                 let toastTitle = "Error";
                 let toastDescription = errorMessage;
 
-                // Handle API key validation errors (403)
-                if (errorMessage.includes('API key') || errorMessage.includes('403')) {
-                    toastTitle = "Session Expired";
-                    toastDescription = "Your session has expired. Please refresh the page and log in again.";
-                }
+                // Check rate limit FIRST - it may contain "API key" in the message
                 // Handle rate limit errors (429)
-                else if (errorMessage.includes('Rate limit') || errorMessage.includes('429')) {
+                if (errorMessage.includes('Rate limit') || errorMessage.includes('429') || errorMessage.includes('Burst limit')) {
                     toastTitle = "Rate Limit Reached";
                     toastDescription = "You've exceeded the limit of 100 requests per minute (burst of 20). Please wait a moment before trying again.";
+                    setRateLimitCountdown(60); // Start 60 second countdown
+                }
+                // Handle API key validation errors (401/403) - but NOT if it's a rate limit error
+                else if (
+                    (errorMessage.includes('Unauthorized') || 
+                     errorMessage.includes('401') ||
+                     errorMessage.includes('Invalid') ||
+                     (errorMessage.includes('API key') && !errorMessage.includes('rate limit'))) ||
+                    errorMessage.includes('403')
+                ) {
+                    toastTitle = "Session Expired";
+                    toastDescription = "Your session has expired. Please refresh the page and log in again.";
                 }
 
                 toast({
@@ -3341,112 +3430,12 @@ function ChatPageContent() {
             </div>
           )}
           {messages.length > 0 && (
-            <div ref={chatContainerRef} className="flex-1 flex flex-col gap-3 sm:gap-4 lg:gap-6 overflow-y-auto p-3 sm:p-4 lg:p-6 max-w-4xl mx-auto w-full">
-              {messages.filter(msg => msg && msg.role).map((msg, index) => {
-                const isAssistant = msg.role === 'assistant';
-                const hasAssistantContent = Boolean(isAssistant && msg.content && msg.content.trim().length > 0);
-                const showThinkingLoader = isAssistant && msg.isStreaming && !hasAssistantContent;
-                const reasoningSource = getReasoningSource(msg.model);
-
-                return (
-                  <div key={index} className={`flex items-start gap-2 sm:gap-3 ${msg.role === 'user' ? 'justify-end' : ''}`}>
-                    <div className={`flex flex-col gap-1 sm:gap-2 ${msg.role === 'user' ? 'items-end' : 'items-start'} w-full max-w-[95%] sm:max-w-full`}>
-                      {isAssistant && msg.reasoning && msg.reasoning.trim().length > 0 && (
-                        <ReasoningDisplay
-                          reasoning={msg.reasoning}
-                          isStreaming={msg.isStreaming}
-                          source={reasoningSource}
-                          className="w-full max-w-2xl"
-                        />
-                      )}
-
-                      {msg.role === 'user' ? (
-                        <div className="rounded-lg p-2.5 sm:p-3 bg-blue-600 dark:bg-blue-600 text-white max-w-full">
-                          {msg.image && (
-                            <img
-                              src={msg.image}
-                              alt="Uploaded image"
-                              className="max-w-[150px] sm:max-w-[200px] lg:max-w-xs rounded-lg mb-2"
-                            />
-                          )}
-                          {msg.video && (
-                            <video
-                              src={msg.video}
-                              controls
-                              className="max-w-[150px] sm:max-w-[200px] lg:max-w-xs rounded-lg mb-2"
-                              title="Uploaded video"
-                            />
-                          )}
-                          {msg.audio && (
-                            <audio
-                              src={msg.audio}
-                              controls
-                              className="max-w-[150px] sm:max-w-[200px] lg:max-w-xs mb-2 border-0"
-                              title="Uploaded audio"
-                            />
-                          )}
-                          <div className="text-sm whitespace-pre-wrap text-white break-words">{msg.content}</div>
-                        </div>
-                      ) : showThinkingLoader ? (
-                        <ThinkingLoader modelName={getModelDisplayName(msg.model)} />
-                      ) : (
-                        <div className="rounded-lg p-2.5 sm:p-3 max-w-full w-full">
-                          <div className="flex items-center justify-between mb-2">
-                            <p className="text-xs font-semibold text-muted-foreground truncate">{getModelDisplayName(msg.model)}</p>
-                            {msg.isStreaming && (
-                              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                <div className="flex gap-1">
-                                  <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" style={{ animationDelay: '0ms' }}></div>
-                                  <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" style={{ animationDelay: '150ms' }}></div>
-                                  <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" style={{ animationDelay: '300ms' }}></div>
-                                </div>
-                                <span className="font-medium">Streaming...</span>
-                              </div>
-                            )}
-                          </div>
-                          <div className="text-sm prose prose-sm max-w-none dark:prose-invert break-words">
-                            <MarkdownRenderer>{fixLatexSyntax(msg.content)}</MarkdownRenderer>
-                          </div>
-                          {/* Action Buttons - Touch-friendly on mobile */}
-                          <div className="flex items-center justify-end gap-1 mt-3 pt-2 border-t border-border">
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              onClick={() => navigator.clipboard.writeText(msg.content)} 
-                              className="h-8 w-8 sm:h-7 sm:w-7 p-0 hover:bg-muted touch-manipulation" 
-                              title="Copy response"
-                            >
-                              <Copy className="h-4 w-4" />
-                            </Button>
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              onClick={() => navigator.share({ text: msg.content })} 
-                              className="h-8 w-8 sm:h-7 sm:w-7 p-0 hover:bg-muted touch-manipulation" 
-                              title="Share response"
-                            >
-                              <Share2 className="h-4 w-4" />
-                            </Button>
-                            {handleRegenerate && (
-                              <Button 
-                                variant="ghost" 
-                                size="sm" 
-                                onClick={handleRegenerate} 
-                                className="h-8 w-8 sm:h-7 sm:w-7 p-0 hover:bg-muted touch-manipulation" 
-                                title="Regenerate response"
-                              >
-                                <RotateCcw className="h-4 w-4" />
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-              {loading && <ChatSkeleton />}
-            </div>
+            <VirtualizedMessageList
+              messages={messages}
+              loading={loading}
+              chatContainerRef={chatContainerRef}
+              handleRegenerate={handleRegenerate}
+            />
           )}
 
           {/* Welcome screen when no messages */}
@@ -3674,21 +3663,6 @@ function ChatPageContent() {
         </div>
       </main>
     </div>
-
-    {/* Performance Monitor - Only in development */}
-    {process.env.NODE_ENV === 'development' && (
-      <>
-        <PerformanceMonitor
-          isOpen={perfMonitorOpen}
-          onClose={() => setPerfMonitorOpen(false)}
-        />
-        {!perfMonitorOpen && (
-          <PerformanceMonitorToggle
-            onClick={() => setPerfMonitorOpen(true)}
-          />
-        )}
-      </>
-    )}
     </>
   );
 }

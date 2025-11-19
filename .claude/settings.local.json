@@ -31,7 +31,8 @@
       "Bash(mkdir:*)",
       "Bash(chmod:*)",
       "Bash(./refactor-api-routes.sh)",
-      "Bash(npm run build)"
+      "Bash(npm run build)",
+      "Bash(npx tsc:*)"
     ],
     "deny": [],
     "ask": []

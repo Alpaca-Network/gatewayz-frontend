@@ -90,3 +90,53 @@ export const getModelUrl = (modelId: string, providerSlug?: string): string => {
 
   return `/models`;
 };
+
+/**
+ * Debounce function - delays execution until after wait time has elapsed
+ * Perfect for reducing API calls on rapid user input (e.g., session title updates)
+ */
+export function debounce<T extends (...args: any[]) => any>(
+  func: T,
+  wait: number
+): (...args: Parameters<T>) => void {
+  let timeout: NodeJS.Timeout | null = null;
+
+  return function executedFunction(...args: Parameters<T>) {
+    const later = () => {
+      timeout = null;
+      func(...args);
+    };
+
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+    timeout = setTimeout(later, wait);
+  };
+}
+
+/**
+ * Throttle function - limits execution to once per wait time
+ * Perfect for scroll handlers and frequent events
+ */
+export function throttle<T extends (...args: any[]) => any>(
+  func: T,
+  wait: number
+): (...args: Parameters<T>) => void {
+  let timeout: NodeJS.Timeout | null = null;
+  let lastRan: number = 0;
+
+  return function executedFunction(...args: Parameters<T>) {
+    if (!lastRan) {
+      func(...args);
+      lastRan = Date.now();
+    } else {
+      if (timeout) clearTimeout(timeout);
+      timeout = setTimeout(() => {
+        if (Date.now() - lastRan >= wait) {
+          func(...args);
+          lastRan = Date.now();
+        }
+      }, wait - (Date.now() - lastRan));
+    }
+  };
+}
