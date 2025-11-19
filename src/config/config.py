@@ -92,6 +92,11 @@ class Config:
     # Alibaba Cloud Configuration
     ALIBABA_CLOUD_API_KEY = os.environ.get("ALIBABA_CLOUD_API_KEY")
 
+    # Clarifai Configuration
+    CLARIFAI_API_KEY = os.environ.get("CLARIFAI_API_KEY")
+    CLARIFAI_USER_ID = os.environ.get("CLARIFAI_USER_ID")
+    CLARIFAI_APP_ID = os.environ.get("CLARIFAI_APP_ID")
+
     # Google Vertex AI Configuration (for image generation)
     GOOGLE_PROJECT_ID = os.environ.get("GOOGLE_PROJECT_ID", "gatewayz-468519")
     GOOGLE_VERTEX_LOCATION = os.environ.get("GOOGLE_VERTEX_LOCATION", "us-central1")

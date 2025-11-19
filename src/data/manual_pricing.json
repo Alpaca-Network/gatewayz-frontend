@@ -190,8 +190,66 @@
       "context_length": 128000
     }
   },
+  "clarifai": {
+    "claude-3-opus": {
+      "prompt": "15.00",
+      "completion": "75.00",
+      "request": "0",
+      "image": "0",
+      "context_length": 200000
+    },
+    "claude-3.5-sonnet": {
+      "prompt": "3.00",
+      "completion": "15.00",
+      "request": "0",
+      "image": "0",
+      "context_length": 200000
+    },
+    "gpt-4": {
+      "prompt": "30.00",
+      "completion": "60.00",
+      "request": "0",
+      "image": "0",
+      "context_length": 128000
+    },
+    "gpt-4-turbo": {
+      "prompt": "10.00",
+      "completion": "30.00",
+      "request": "0",
+      "image": "0",
+      "context_length": 128000
+    },
+    "llama-3.1-70b-instruct": {
+      "prompt": "0.35",
+      "completion": "0.35",
+      "request": "0",
+      "image": "0",
+      "context_length": 131072
+    },
+    "llama-3-70b-instruct": {
+      "prompt": "0.35",
+      "completion": "0.35",
+      "request": "0",
+      "image": "0",
+      "context_length": 8192
+    },
+    "mistral-7b-instruct": {
+      "prompt": "0.14",
+      "completion": "0.14",
+      "request": "0",
+      "image": "0",
+      "context_length": 32768
+    },
+    "mixtral-8x7b-instruct": {
+      "prompt": "0.64",
+      "completion": "0.64",
+      "request": "0",
+      "image": "0",
+      "context_length": 32768
+    }
+  },
   "_metadata": {
-    "last_updated": "2025-11-18",
+    "last_updated": "2025-11-19",
     "note": "Manual pricing data for providers that don't expose pricing via API. Near AI and Alibaba Cloud pricing are now fetched dynamically from API but kept here as fallback.",
     "sources": [
       "https://deepinfra.com/pricing",
@@ -199,7 +257,8 @@
       "https://chutes.ai/pricing",
       "https://console.anyscale.com/services (Alpaca Network via Anyscale)",
       "https://cloud-api.near.ai/v1/model/list (Near AI - dynamic API)",
-      "https://www.alibabacloud.com/help/en/model-studio/models (Alibaba Cloud / DashScope)"
+      "https://www.alibabacloud.com/help/en/model-studio/models (Alibaba Cloud / DashScope)",
+      "https://docs.clarifai.com (Clarifai - based on underlying model provider pricing)"
     ],
     "currency": "USD",
     "units": "per 1M tokens (unless specified otherwise)"

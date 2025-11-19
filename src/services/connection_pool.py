@@ -319,3 +319,16 @@ def get_chutes_pooled_client() -> OpenAI:
         base_url="https://llm.chutes.ai/v1",
         api_key=Config.CHUTES_API_KEY,
     )
+
+
+def get_clarifai_pooled_client() -> OpenAI:
+    """Get pooled client for Clarifai."""
+    if not Config.CLARIFAI_API_KEY:
+        raise ValueError("Clarifai API key not configured")
+
+    return get_pooled_client(
+        provider="clarifai",
+        base_url="https://api.clarifai.com/v1",
+        api_key=Config.CLARIFAI_API_KEY,
+        default_headers={"X-Clarifai-PAT": Config.CLARIFAI_API_KEY},
+    )

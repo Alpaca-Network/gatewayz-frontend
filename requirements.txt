@@ -22,6 +22,7 @@ google-auth>=2.0.0
 # Provider SDKs
 cerebras-cloud-sdk>=1.0.0
 xai-sdk>=0.1.0
+clarifai>=10.0.0
 
 # Analytics
 statsig-python-core==0.10.2

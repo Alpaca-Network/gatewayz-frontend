@@ -321,6 +321,18 @@ make_alibaba_cloud_request_openai_stream = _alibaba_cloud.get(
     "make_alibaba_cloud_request_openai_stream"
 )
 
+_clarifai = _safe_import_provider(
+    "clarifai",
+    [
+        "make_clarifai_request_openai",
+        "process_clarifai_response",
+        "make_clarifai_request_openai_stream",
+    ],
+)
+make_clarifai_request_openai = _clarifai.get("make_clarifai_request_openai")
+process_clarifai_response = _clarifai.get("process_clarifai_response")
+make_clarifai_request_openai_stream = _clarifai.get("make_clarifai_request_openai_stream")
+
 import src.services.rate_limiting as rate_limiting_service
 import src.services.trial_validation as trial_module
 from src.services.model_transformations import detect_provider_from_model_id, transform_model_id
@@ -1151,6 +1163,13 @@ async def chat_completions(
                             request_model,
                             **optional,
                         )
+                    elif attempt_provider == "clarifai":
+                        stream = await _to_thread(
+                            make_clarifai_request_openai_stream,
+                            messages,
+                            request_model,
+                            **optional,
+                        )
                     else:
                         stream = await _to_thread(
                             make_openrouter_request_openai_stream,
@@ -1387,6 +1406,17 @@ async def chat_completions(
                         timeout=request_timeout,
                     )
                     processed = await _to_thread(process_alibaba_cloud_response, resp_raw)
+                elif attempt_provider == "clarifai":
+                    resp_raw = await asyncio.wait_for(
+                        _to_thread(
+                            make_clarifai_request_openai,
+                            messages,
+                            request_model,
+                            **optional,
+                        ),
+                        timeout=request_timeout,
+                    )
+                    processed = await _to_thread(process_clarifai_response, resp_raw)
                 else:
                     resp_raw = await asyncio.wait_for(
                         _to_thread(

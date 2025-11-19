@@ -552,6 +552,30 @@ def get_model_id_mapping(provider: str) -> Dict[str, str]:
             "qwen-max-latest": "qwen-max",
             "qwen-plus-latest": "qwen-plus",
         },
+        "clarifai": {
+            # Clarifai supports many models through its unified API
+            # Most models pass through directly using their standard naming
+            # Anthropic models
+            "anthropic/claude-3-opus": "claude-3-opus",
+            "anthropic/claude-3.5-sonnet": "claude-3.5-sonnet",
+            "claude-3-opus": "claude-3-opus",
+            "claude-3.5-sonnet": "claude-3.5-sonnet",
+            # OpenAI models
+            "openai/gpt-4": "gpt-4",
+            "openai/gpt-4-turbo": "gpt-4-turbo",
+            "gpt-4": "gpt-4",
+            "gpt-4-turbo": "gpt-4-turbo",
+            # Meta Llama models
+            "meta-llama/llama-3.1-70b": "llama-3.1-70b-instruct",
+            "meta-llama/llama-3-70b": "llama-3-70b-instruct",
+            "llama-3.1-70b": "llama-3.1-70b-instruct",
+            "llama-3-70b": "llama-3-70b-instruct",
+            # Mistral models
+            "mistralai/mistral-7b": "mistral-7b-instruct",
+            "mistralai/mixtral-8x7b": "mixtral-8x7b-instruct",
+            "mistral-7b": "mistral-7b-instruct",
+            "mixtral-8x7b": "mixtral-8x7b-instruct",
+        },
     }
 
     return mappings.get(provider, {})
