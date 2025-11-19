@@ -76,7 +76,8 @@ const GATEWAY_CONFIG: Record<string, { name: string; color: string; icon?: React
   fal: { name: 'Fal', color: 'bg-emerald-600' },
   'vercel-ai-gateway': { name: 'Vercel AI', color: 'bg-slate-900' },
   helicone: { name: 'Helicone', color: 'bg-indigo-600' },
-  alpaca: { name: 'Alpaca Network', color: 'bg-green-700' }
+  alpaca: { name: 'Alpaca Network', color: 'bg-green-700' },
+  clarifai: { name: 'Clarifai', color: 'bg-purple-600' }
 };
 
 // Provider display configuration (for providers that differ from gateway names)
