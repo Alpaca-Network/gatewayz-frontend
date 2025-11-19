@@ -42,7 +42,7 @@ async function fetchUserDataOptimized(token: string): Promise<UserData | null> {
   }
 
   try {
-    console.log("[SessionInit] Fetching user data from backend");
+    console.log("[SessionInit] Fetching user data from backend with token:", token.substring(0, 20) + "...");
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout for user fetch
 
@@ -62,17 +62,19 @@ async function fetchUserDataOptimized(token: string): Promise<UserData | null> {
         user_id: userData.user_id,
         credits: userData.credits,
         tier: userData.tier,
+        email: userData.email,
       });
 
       // Cache the result for fast re-access
       setCachedUserData(token, userData);
       return userData;
     } else {
-      console.error("[SessionInit] Failed to fetch user data:", userResponse.status);
+      const responseText = await userResponse.text().catch(() => "(unable to read response)");
+      console.error("[SessionInit] Failed to fetch user data. Status:", userResponse.status, "Response:", responseText.substring(0, 200));
       return null;
     }
   } catch (error) {
-    console.error("[SessionInit] Error fetching user data:", error);
+    console.error("[SessionInit] Error fetching user data:", error instanceof Error ? error.message : String(error));
     // Return null on timeout or network error - context will handle it
     return null;
   }
@@ -110,6 +112,7 @@ export function SessionInitializer() {
 
       console.log("[SessionInit] Session initialization started", {
         hasToken: !!token,
+        tokenPreview: token ? token.substring(0, 20) + "..." : "none",
         hasUserId: !!userId,
         action: currentAction,
         status,

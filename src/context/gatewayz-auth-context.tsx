@@ -506,7 +506,12 @@ export function GatewayzAuthProvider({
         console.log("[Auth] Token retrieved:", token ? `${token.substring(0, 20)}...` : "null");
 
         const authBody = buildAuthRequestBody(user, token, userData);
-        console.log("Sending auth body to backend:", authBody);
+        console.log("[Auth] Sending auth body to backend:", {
+          has_privy_user_id: !!authBody.privy_user_id,
+          has_token: !!authBody.token,
+          is_new_user: authBody.is_new_user,
+          auto_create_api_key: authBody.auto_create_api_key,
+        });
 
         // Use fetch with timeout for backend call
         const controller = new AbortController();
@@ -525,11 +530,12 @@ export function GatewayzAuthProvider({
         const rawResponseText = await response.text();
 
         if (!response.ok) {
-          console.log("[Auth] Backend auth failed:", response.status, rawResponseText);
+          console.error("[Auth] Backend auth failed with status", response.status);
+          console.error("[Auth] Response text:", rawResponseText.substring(0, 500));
           clearStoredCredentials();
           setStatus("error");
           const authError: AuthError = { status: response.status, message: rawResponseText };
-          setError(authError.message ?? "Authentication failed");
+          setError(authError.message ?? `Authentication failed: ${response.status}`);
           onAuthError?.(authError);
           return;
         }
@@ -538,10 +544,12 @@ export function GatewayzAuthProvider({
         try {
           authData = JSON.parse(rawResponseText) as AuthResponse;
         } catch (parseError) {
-          console.error("[Auth] Failed to parse auth response JSON:", parseError, rawResponseText);
+          console.error("[Auth] Failed to parse auth response JSON");
+          console.error("[Auth] Parse error:", parseError instanceof Error ? parseError.message : String(parseError));
+          console.error("[Auth] Response was:", rawResponseText.substring(0, 500));
           clearStoredCredentials();
           setStatus("error");
-          setError("Authentication failed");
+          setError("Authentication failed: Invalid response format");
           onAuthError?.({ raw: parseError });
           return;
         }
@@ -553,12 +561,14 @@ export function GatewayzAuthProvider({
             null;
 
           if (fallbackApiKey) {
+            console.log("[Auth] Found API key in alternative field, using it");
             authData = { ...authData, api_key: fallbackApiKey };
           } else {
-            console.warn("[Auth] Backend auth response missing api_key field:", authData);
+            console.error("[Auth] Backend auth response missing api_key field");
+            console.error("[Auth] Response data was:", JSON.stringify(authData, null, 2).substring(0, 500));
             clearStoredCredentials();
             setStatus("error");
-            setError("Authentication failed");
+            setError("Authentication failed: No API key in response");
             onAuthError?.({ message: "Missing API key in auth response" });
             return;
           }
