@@ -200,6 +200,7 @@ describe('SessionInitializer', () => {
       (global.fetch as jest.Mock).mockResolvedValue({
         ok: false,
         status: 401,
+        text: jest.fn().mockResolvedValue('Unauthorized'),
       });
 
       const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
@@ -207,9 +208,12 @@ describe('SessionInitializer', () => {
       render(<SessionInitializer />);
 
       await waitFor(() => {
+        // Check that error was logged with status code and response details
         expect(consoleErrorSpy).toHaveBeenCalledWith(
-          expect.stringContaining('[SessionInit] Failed to fetch user data:'),
-          401
+          '[SessionInit] Failed to fetch user data. Status:',
+          401,
+          'Response:',
+          expect.stringContaining('Unauthorized')
         );
       });
 
