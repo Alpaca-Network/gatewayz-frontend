@@ -9,13 +9,13 @@ from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from prometheus_client import generate_latest, REGISTRY, CollectorRegistry
 
-from config import Config
-from constants import FRONTEND_BETA_URL, FRONTEND_STAGING_URL
-from services.startup import lifespan
-from utils.validators import ensure_api_key_like, ensure_non_empty_string
+from src.config import Config
+from src.constants import FRONTEND_BETA_URL, FRONTEND_STAGING_URL
+from src.services.startup import lifespan
+from src.utils.validators import ensure_api_key_like, ensure_non_empty_string
 
 # Initialize logging with Loki integration
-from config.logging_config import configure_logging
+from src.config.logging_config import configure_logging
 configure_logging()
 logger = logging.getLogger(__name__)
 
@@ -116,13 +116,13 @@ def create_app() -> FastAPI:
 
     # Add observability middleware for automatic metrics collection
     # This should be added after CORS/compression but before route handlers
-    from middleware.observability_middleware import ObservabilityMiddleware
+    from src.middleware.observability_middleware import ObservabilityMiddleware
     app.add_middleware(ObservabilityMiddleware)
     logger.info("  📊 Observability middleware enabled (automatic metrics tracking)")
 
     # Add trace context middleware for log-to-trace correlation
     # This should be added after observability middleware
-    from middleware.trace_context_middleware import TraceContextMiddleware
+    from src.middleware.trace_context_middleware import TraceContextMiddleware
     app.add_middleware(TraceContextMiddleware)
     logger.info("  🔗 Trace context middleware enabled (log-to-trace correlation)")
 
@@ -133,7 +133,7 @@ def create_app() -> FastAPI:
     logger.info("Setting up Prometheus metrics...")
 
     # Import metrics module to initialize all metrics
-    from services import prometheus_metrics  # noqa: F401
+    from src.services import prometheus_metrics  # noqa: F401
 
     # Add Prometheus metrics endpoint
     from prometheus_client import generate_latest
@@ -287,7 +287,7 @@ def create_app() -> FastAPI:
         try:
             # Initialize OpenTelemetry tracing
             try:
-                from config.opentelemetry_config import OpenTelemetryConfig
+                from src.config.opentelemetry_config import OpenTelemetryConfig
                 OpenTelemetryConfig.initialize()
                 OpenTelemetryConfig.instrument_fastapi(app)
             except Exception as otel_e:
@@ -306,7 +306,7 @@ def create_app() -> FastAPI:
             # Initialize database
             try:
                 logger.info("    Initializing database...")
-                from config.supabase_config import init_db
+                from src.config.supabase_config import init_db
 
                 init_db()
                 logger.info("   Database initialized")
@@ -316,8 +316,8 @@ def create_app() -> FastAPI:
 
             # Set default admin user
             try:
-                from config.supabase_config import get_supabase_client
-                from db.roles import UserRole, update_user_role
+                from src.config.supabase_config import get_supabase_client
+                from src.db.roles import UserRole, update_user_role
 
                 ADMIN_EMAIL = Config.ADMIN_EMAIL
 
@@ -351,13 +351,13 @@ def create_app() -> FastAPI:
                 logger.info("   Initializing analytics services...")
 
                 # Initialize Statsig
-                from services.statsig_service import statsig_service
+                from src.services.statsig_service import statsig_service
 
                 await statsig_service.initialize()
                 logger.info("   Statsig analytics initialized")
 
                 # Initialize PostHog
-                from services.posthog_service import posthog_service
+                from src.services.posthog_service import posthog_service
 
                 posthog_service.initialize()
                 logger.info("   PostHog analytics initialized")
@@ -377,7 +377,7 @@ def create_app() -> FastAPI:
             # Warm model caches on startup
             try:
                 logger.info("  🔥 Warming model caches...")
-                from services.models import get_cached_models
+                from src.services.models import get_cached_models
 
                 # Warm critical provider caches
                 get_cached_models("hug")
@@ -401,14 +401,14 @@ def create_app() -> FastAPI:
 
         # Shutdown OpenTelemetry
         try:
-            from config.opentelemetry_config import OpenTelemetryConfig
+            from src.config.opentelemetry_config import OpenTelemetryConfig
             OpenTelemetryConfig.shutdown()
         except Exception as e:
             logger.warning(f"    OpenTelemetry shutdown warning: {e}")
 
         # Shutdown analytics services gracefully
         try:
-            from services.statsig_service import statsig_service
+            from src.services.statsig_service import statsig_service
 
             await statsig_service.shutdown()
             logger.info("   Statsig shutdown complete")
@@ -416,7 +416,7 @@ def create_app() -> FastAPI:
             logger.warning(f"    Statsig shutdown warning: {e}")
 
         try:
-            from services.posthog_service import posthog_service
+            from src.services.posthog_service import posthog_service
 
             posthog_service.shutdown()
             logger.info("   PostHog shutdown complete")

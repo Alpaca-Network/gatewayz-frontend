@@ -44,26 +44,29 @@ def test_get_openrouter_client_success(monkeypatch, mod):
     monkeypatch.setattr(mod.Config, "OPENROUTER_SITE_URL", "https://gatewayz.example")
     monkeypatch.setattr(mod.Config, "OPENROUTER_SITE_NAME", "Gatewayz")
 
-    # Patch OpenAI class used inside the module
-    fake_instances = []
+    # Create a fake client with expected properties for OpenRouter
+    fake_client = FakeOpenAI(
+        base_url="https://openrouter.ai/api/v1",
+        api_key="sk-or-123",
+        default_headers={
+            "HTTP-Referer": "https://gatewayz.example",
+            "X-TitleSection": "Gatewayz"
+        }
+    )
 
-    def _fake_openai(**kwargs):
-        inst = FakeOpenAI(**kwargs)
-        fake_instances.append(inst)
-        return inst
-
-    # Because in the module it’s imported as: from openai import OpenAI
-    monkeypatch.setattr(mod, "OpenAI", _fake_openai)
+    # Patch the connection pool function to return our fake client
+    monkeypatch.setattr(mod, "get_openrouter_pooled_client", lambda: fake_client)
 
     # Act
     client = mod.get_openrouter_client()
 
     # Assert
     assert isinstance(client, FakeOpenAI)
-    assert fake_instances[0].base_url == "https://openrouter.ai/api/v1"
-    assert fake_instances[0].api_key == "sk-or-123"
+    assert client is fake_client
+    assert client.base_url == "https://openrouter.ai/api/v1"
+    assert client.api_key == "sk-or-123"
     # headers
-    hdrs = fake_instances[0].default_headers
+    hdrs = client.default_headers
     assert hdrs["HTTP-Referer"] == "https://gatewayz.example"
     assert hdrs["X-TitleSection"] == "Gatewayz"
 

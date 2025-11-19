@@ -69,17 +69,14 @@ class TestGetFeatherlessClient:
         """Test successful client initialization"""
         from src.services.featherless_client import get_featherless_client
 
-        with patch('src.services.featherless_client.OpenAI') as mock_openai:
-            mock_client = Mock()
-            mock_openai.return_value = mock_client
+        mock_client = Mock()
+        with patch('src.services.featherless_client.get_featherless_pooled_client') as mock_get_pooled:
+            mock_get_pooled.return_value = mock_client
 
             client = get_featherless_client()
 
-            assert client is not None
-            mock_openai.assert_called_once_with(
-                base_url="https://api.featherless.ai/v1",
-                api_key="test_featherless_key_123"
-            )
+            assert client is mock_client
+            mock_get_pooled.assert_called_once()
 
     def test_get_featherless_client_missing_key(self):
         """Test client initialization with missing API key"""

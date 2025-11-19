@@ -518,8 +518,10 @@ def get_model_id_mapping(provider: str) -> Dict[str, str]:
             # Qwen 3 series
             "qwen/qwen-3-30b": "qwen-3-30b-a3b-instruct",
             "qwen/qwen-3-80b": "qwen-3-80b-a3b-instruct",
+            "qwen/qwen3-32b": "qwen-3-32b-a3b-instruct",
             "qwen3-30b": "qwen-3-30b-a3b-instruct",
             "qwen3-80b": "qwen-3-80b-a3b-instruct",
+            "qwen3-32b": "qwen-3-32b-a3b-instruct",
 
             # Qwen 2.5 series
             "qwen/qwen-2.5-72b": "qwen-2.5-72b-instruct",
