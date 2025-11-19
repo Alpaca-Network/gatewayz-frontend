@@ -56,8 +56,8 @@ class ResponseCache:
     def __init__(
         self,
         redis_url: Optional[str] = None,
-        default_ttl: int = 1800,  # 30 minutes
-        max_cache_size: int = 10000,
+        default_ttl: int = 3600,  # OPTIMIZED: 60 minutes (was 30)
+        max_cache_size: int = 20000,  # OPTIMIZED: 20k entries (was 10k)
     ):
         """
         Initialize response cache.
@@ -272,7 +272,7 @@ class ResponseCache:
         stream: bool = False,
     ) -> bool:
         """
-        Determine if a request should be cached.
+        Determine if a request should be cached (OPTIMIZED: more aggressive caching).
 
         Args:
             messages: Chat messages
@@ -286,12 +286,14 @@ class ResponseCache:
         if stream:
             return False
 
-        # Don't cache high-temperature requests (non-deterministic)
-        if temperature > 0.8:
+        # OPTIMIZED: More aggressive temperature threshold (1.0 instead of 0.8)
+        # Still cache reasonably deterministic responses
+        if temperature > 1.0:
             return False
 
-        # Don't cache very long conversations (not reusable)
-        if len(messages) > 20:
+        # OPTIMIZED: Allow longer conversations (50 instead of 20)
+        # Many use cases have longer context
+        if len(messages) > 50:
             return False
 
         # Don't cache system/assistant messages only
@@ -360,7 +362,7 @@ _cache: Optional[ResponseCache] = None
 
 def get_cache(
     redis_url: Optional[str] = None,
-    default_ttl: int = 1800,
+    default_ttl: int = 3600,  # OPTIMIZED: 60 minutes (was 30)
 ) -> ResponseCache:
     """
     Get or create global cache instance.
