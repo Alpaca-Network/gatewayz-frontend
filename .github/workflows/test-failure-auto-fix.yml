@@ -1,0 +1,315 @@
+name: Test Failure Auto-Fix
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - "feature/**"
+      - "fix/**"
+  pull_request:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: write
+  pull-requests: write
+  checks: write
+  issues: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      tests_failed: ${{ steps.test-results.outputs.tests_failed }}
+      failed_tests: ${{ steps.test-results.outputs.failed_tests }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: 'pip'
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio pytest-timeout pytest-cov
+
+      - name: Run tests with detailed output
+        id: test-results
+        run: |
+          set +e  # Don't exit on test failure
+
+          # Run tests and capture output
+          pytest tests/ -v --tb=short --co -q > /tmp/test_list.txt 2>&1
+          TEST_COUNT=$(wc -l < /tmp/test_list.txt)
+
+          # Run actual tests
+          pytest tests/ -v --tb=short -x 2>&1 | tee /tmp/test_output.txt
+          TEST_EXIT_CODE=$?
+
+          # Parse failure info
+          if [ $TEST_EXIT_CODE -ne 0 ]; then
+            echo "tests_failed=true" >> $GITHUB_OUTPUT
+
+            # Extract failed test name
+            FAILED_TEST=$(grep "FAILED\|ERROR" /tmp/test_output.txt | head -1 | sed 's/^.*\(tests\/[^ ]*\).*/\1/')
+            echo "failed_tests=$FAILED_TEST" >> $GITHUB_OUTPUT
+
+            # Save full output for Codex
+            cat /tmp/test_output.txt > test_failures.txt
+          else
+            echo "tests_failed=false" >> $GITHUB_OUTPUT
+            echo "failed_tests=" >> $GITHUB_OUTPUT
+          fi
+
+          exit $TEST_EXIT_CODE
+
+      - name: Upload test failures
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-failures
+          path: test_failures.txt
+          if-no-files-found: ignore
+
+  auto-fix:
+    needs: test
+    if: needs.test.outputs.tests_failed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Download test failures
+        uses: actions/download-artifact@v4
+        with:
+          name: test-failures
+
+      - name: Run Codex Auto-Fix
+        uses: anthropics/claude-code-action@8a1c4371755898f67cd97006ba7c97702d5fc4bf  # v1.0.16
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          use_commit_signing: false
+          claude_args: "--max-turns 12"
+          prompt: |
+            The CI tests are failing. Your task is to analyze the test failures and fix the bugs.
+
+            **Failed Test Output** (read test_failures.txt):
+            - File: test_failures.txt
+            - Contains: Full pytest output with failed tests
+
+            **Your Mission:**
+            1. **Analyze** the test failures from test_failures.txt
+            2. **Identify** the root causes in the source code
+            3. **Implement** fixes to make tests pass
+            4. **Verify** the fixes are correct
+
+            **Fix Implementation Guide:**
+
+            1. **Read test output** to understand what failed:
+               - Extract the failing test name (e.g., "tests/routes/test_chat.py::test_chat_completions")
+               - Read the error message to understand what went wrong
+               - Look at the assertion or exception details
+
+            2. **Locate the bug** in source code:
+               - Look at the test file to understand what it's testing
+               - Find the corresponding implementation in src/
+               - Identify the bug or missing code
+
+            3. **Fix the bug**:
+               - Apply the minimal fix needed to make the test pass
+               - Don't add unnecessary features
+               - Maintain code quality and style
+
+            4. **Common bug patterns to look for:**
+               - Missing error handling
+               - Incorrect return values
+               - Type mismatches
+               - Missing imports or attributes
+               - Logic errors in conditions
+               - Missing validation
+               - Off-by-one errors
+               - Incorrect async/await usage
+
+            5. **Priority order for fixes:**
+               - Import errors (easiest)
+               - Type errors (medium)
+               - Logic errors (harder)
+               - Integration issues (hardest)
+
+            **Output Format:**
+            - Make specific file edits to fix the failing tests
+            - Write code that directly addresses the test failure
+            - Include brief explanations of why changes were made
+            - Focus on minimal, targeted fixes
+
+            **After Fixing:**
+            - The system will automatically re-run tests
+            - If tests still fail, you may be called again
+            - Commit messages will be auto-generated
+
+            **DO:**
+            - Read test files to understand requirements
+            - Check existing code patterns for consistency
+            - Add proper error handling
+            - Include type hints where appropriate
+            - Follow the codebase's style (100 char lines, Black formatted)
+
+            **DON'T:**
+            - Add new features beyond fixing the test
+            - Break other tests with your changes
+            - Leave debugging code or print statements
+            - Ignore error cases
+            - Create unnecessary intermediate files
+
+      - name: Set git config for commits
+        run: |
+          git config user.name "Codex Auto-Fix Bot"
+          git config user.email "codex-autofix@anthropic.com"
+
+      - name: Commit fixes if Codex made changes
+        id: commit
+        run: |
+          set +e
+
+          # Check if there are changes
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "No changes to commit"
+            echo "changes_made=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "changes_made=true" >> $GITHUB_OUTPUT
+
+          # Stage all changes
+          git add -A
+
+          # Create commit message
+          FAILED_TESTS=$(git diff --cached --name-only | grep "test" | head -5 || echo "tests")
+          git commit -m "fix: auto-fix failing tests
+
+Auto-fixed failing tests using Codex analysis.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Codex <noreply@anthropic.com>"
+
+          echo "✅ Committed auto-fixes"
+
+      - name: Re-run tests to verify fixes
+        if: steps.commit.outputs.changes_made == 'true'
+        id: verify
+        run: |
+          set +e
+
+          python -m pip install --upgrade pip
+          pip install -q -r requirements.txt pytest pytest-asyncio pytest-timeout
+
+          # Run tests again
+          pytest tests/ -v --tb=short -x 2>&1 | tee /tmp/verify_output.txt
+          VERIFY_EXIT_CODE=$?
+
+          if [ $VERIFY_EXIT_CODE -eq 0 ]; then
+            echo "Tests now PASS! ✅"
+            echo "verify_success=true" >> $GITHUB_OUTPUT
+          else
+            echo "Tests still failing, may need additional fixes"
+            echo "verify_success=false" >> $GITHUB_OUTPUT
+
+            # Save for next iteration
+            cat /tmp/verify_output.txt > test_failures.txt
+          fi
+
+          exit 0  # Don't fail this job
+
+      - name: Push fixes to branch
+        if: steps.commit.outputs.changes_made == 'true'
+        run: |
+          # Only push if we have a branch to push to
+          if [ "${{ github.event_name }}" == "push" ] || [ "${{ github.event_name }}" == "pull_request" ]; then
+            git push origin HEAD:${{ github.head_ref || github.ref_name }}
+          fi
+
+      - name: Create issue if fixes still needed
+        if: steps.verify.outputs.verify_success == 'false' && github.event_name == 'push'
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
+        with:
+          script: |
+            try {
+              const issue = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: '🔧 Tests Still Failing - Needs Review',
+                body: `Codex attempted to auto-fix failing tests, but some are still failing.
+
+**Workflow Run:** ${context.runId}
+
+**Next Steps:**
+1. Review the workflow run logs
+2. Check the auto-fixes that were committed
+3. Manually debug remaining failures
+4. Re-run the workflow or commit fixes
+
+**Artifacts:**
+- Test failure details available in workflow artifacts`,
+                labels: ['bug', 'auto-fix', 'needs-review'],
+              });
+
+              console.log(`Created issue #${issue.data.number}`);
+            } catch (error) {
+              console.error('Failed to create issue:', error);
+            }
+
+      - name: Comment on PR with results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
+        with:
+          script: |
+            const verify_success = '${{ steps.verify.outputs.verify_success }}' === 'true';
+            const changes_made = '${{ steps.commit.outputs.changes_made }}' === 'true';
+
+            let comment = '## 🔧 Codex Auto-Fix Results\n\n';
+
+            if (!changes_made) {
+              comment += '✅ Tests passed on first run - no fixes needed!\n';
+            } else if (verify_success) {
+              comment += '✅ **All tests now pass!**\n\n';
+              comment += 'Codex successfully identified and fixed the failing tests.\n\n';
+              comment += 'Fixes have been committed and pushed to this PR.\n';
+            } else {
+              comment += '⚠️ **Some tests still failing after auto-fix**\n\n';
+              comment += 'Codex attempted fixes but additional debugging may be needed.\n\n';
+              comment += 'Check the workflow run for details: ' + context.runId + '\n';
+            }
+
+            try {
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: comment
+              });
+              console.log('PR comment posted successfully');
+            } catch (error) {
+              console.error('Failed to post PR comment:', error);
+            }
