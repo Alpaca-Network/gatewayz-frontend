@@ -1,4 +1,4 @@
-#!/usr/bin/.env python3
+#!/usr/bin/env python3
 """
 Utility to reset welcome_email_sent field for users who should receive welcome emails
 """

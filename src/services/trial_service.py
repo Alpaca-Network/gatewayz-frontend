@@ -1,4 +1,4 @@
-#!/usr/bin/.env python3
+#!/usr/bin/env python3
 """
 Trial Management Service
 Handles free trial logic, expiration, and conversion to paid subscriptions

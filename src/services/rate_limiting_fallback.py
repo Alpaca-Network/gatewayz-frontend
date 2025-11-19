@@ -1,4 +1,4 @@
-#!/usr/bin/.env python3
+#!/usr/bin/env python3
 """
 Fallback Rate Limiting System
 Works without Redis using in-memory storage

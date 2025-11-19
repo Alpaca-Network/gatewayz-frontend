@@ -1,4 +1,4 @@
-#!/usr/bin/.env python3
+#!/usr/bin/env python3
 """
 Simplified Trial Validation
 Direct trial validation without complex service layer

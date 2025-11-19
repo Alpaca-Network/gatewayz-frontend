@@ -1,4 +1,4 @@
-#!/usr/bin/.env python3
+#!/usr/bin/env python3
 """
 Notification Service
 Handles low balance notifications, trial expiry alerts, and user communication

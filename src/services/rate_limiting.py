@@ -1,4 +1,4 @@
-#!/usr/bin/.env python3
+#!/usr/bin/env python3
 """
 Advanced Rate Limiting Module
 Implements sliding-window rate limiting, burst controls, and configurable limits per key.

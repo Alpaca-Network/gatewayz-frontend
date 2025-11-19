@@ -1,4 +1,4 @@
-#!/usr/bin/.env python3
+#!/usr/bin/env python3
 """
 Enhanced Notification Service with Professional Email Templates
 Adds welcome emails, password reset, usage reports, and more

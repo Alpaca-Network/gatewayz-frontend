@@ -1,4 +1,4 @@
-#!/usr/bin/.env python3
+#!/usr/bin/env python3
 """
 Enhanced Database Functions with Advanced Security
 Implements secure key storage, audit logging, and advanced security features.
