@@ -681,6 +681,198 @@ For implementation details, see:
 
 ---
 
+---
+
+## Claude Code Task Management Workflow
+
+### Overview
+
+The project includes a comprehensive Claude Code infrastructure system with skills auto-activation, hooks automation, dev docs workflow, specialized agents, and slash commands. See `.claude/README.md` for complete details.
+
+### Starting Large Tasks
+
+When beginning any feature or large task:
+
+1. **Enter Plan Mode** or use `/dev-docs [feature description]`
+   - Agent researches the codebase
+   - Creates comprehensive plan with phases, risks, timeline
+   - Generates three supporting documents
+
+2. **Review the Plan**
+   - Read plan.md carefully
+   - Look for any issues or missing pieces
+   - Catch mistakes early before implementation
+
+3. **Create Task Files**
+   - Approve the plan
+   - Run `/create-dev-docs`
+   - Generates three files in `/dev/active/[task-name]/`:
+     - `[task-name]-plan.md` - Implementation plan
+     - `[task-name]-context.md` - Key context and decisions
+     - `[task-name]-tasks.md` - Checklist of all tasks
+
+4. **Implement Section by Section**
+   - Don't try to do everything at once
+   - Implement one or two phases at a time
+   - Review code between sections: `/code-review`
+
+5. **Update Documentation**
+   - Mark tasks complete immediately as you finish them
+   - Update context file with relevant decisions
+   - This prevents context loss during long implementations
+
+### Continuing Tasks
+
+When continuing work on a feature:
+
+1. **Check `/dev/active/`** for existing tasks
+2. **Read all three files** before proceeding:
+   - plan.md - Refresh implementation plan
+   - context.md - Review key decisions and what's been done
+   - tasks.md - See what's completed vs remaining
+3. **Update files as you work** - Keep context fresh
+4. **Before compacting**: Run `/dev-docs-update` to update docs with progress
+
+### Skills System
+
+Skills auto-activate based on:
+- **Keywords in your prompt**: "component", "API", "test", etc.
+- **Files you're editing**: Relevant skill loads automatically
+- **Intent patterns**: Detects what you're trying to do
+
+**You don't need to manually invoke skills** - the hook system handles it automatically!
+
+### Quality Checks
+
+Automated checks run after each Claude response:
+
+1. **Build Checker**
+   - Runs `pnpm typecheck`
+   - Catches TypeScript errors immediately
+   - Shows errors or recommends `/build-and-fix`
+
+2. **Error Handling Reminder**
+   - Gentle reminder for risky code patterns
+   - Suggests error handling improvements
+   - Non-blocking awareness system
+
+### Code Reviews
+
+Use `/code-review` regularly during implementation to catch:
+- Best practice violations
+- Security issues
+- Performance problems
+- Inconsistent patterns
+- Missing error handling
+
+### Testing
+
+For comprehensive testing:
+- `/test-unit` - Run Jest unit tests
+- `/test-e2e` - Run Playwright E2E tests
+- `/test-api [route]` - Test specific API routes
+
+### Build Validation
+
+When build fails or has errors:
+```
+/build-and-fix
+```
+
+Automatically fixes:
+- TypeScript compilation errors
+- Import path issues
+- Type mismatches
+- Unused variables
+
+### Key Commands
+
+**Planning**:
+- `/dev-docs [description]` - Create strategic plan
+- `/dev-docs-update` - Update docs before compaction
+- `/create-dev-docs` - Generate task files
+
+**Quality & Review**:
+- `/code-review` - Review code architecture
+- `/build-and-fix` - Fix all TypeScript errors
+
+**Testing**:
+- `/test-unit` - Run unit tests
+- `/test-e2e` - Run E2E tests
+- `/test-api [route]` - Test API route
+
+**Research**:
+- `/route-research [feature]` - Map affected API routes
+
+### Dev Docs Structure
+
+```
+dev/
+├── active/
+│   ├── [task-name]/
+│   │   ├── [task-name]-plan.md      # Implementation plan
+│   │   ├── [task-name]-context.md   # Key context and decisions
+│   │   └── [task-name]-tasks.md     # Task checklist
+│   └── [other-task]/
+└── completed/
+    └── (archived tasks)
+```
+
+### Sample Workflow
+
+```
+1. /dev-docs Add dark mode support
+   → Agent researches and creates plan
+
+2. Review plan.md, approve approach
+
+3. /create-dev-docs
+   → Generates three files in dev/active/dark-mode/
+
+4. Implement Phase 1
+   → Skill for "theme" or "styling" auto-activates
+   → Error checker runs after each response
+   → Update tasks.md as you complete items
+
+5. /code-review
+   → Review Phase 1 code
+
+6. /test-unit
+   → Run tests
+
+7. Before compacting: /dev-docs-update
+   → Updates context with progress
+
+8. Compact conversation
+
+9. New session: "continue"
+   → Read dev docs files
+   → Continue from where you left off
+```
+
+### Best Practices
+
+✅ **DO**:
+- Use `/dev-docs` to plan features
+- Review plans before implementing
+- Run `/code-review` before pushing
+- Use `/build-and-fix` regularly
+- Keep dev docs updated
+- Let skills activate naturally
+- Trust the error checker
+- Test with `/test-*` commands
+
+❌ **DON'T**:
+- Ignore TypeScript errors
+- Skip code reviews
+- Leave dev docs stale
+- Try to fix everything at once
+- Push without testing
+- Manually activate skills
+- Ignore error handling reminders
+
+---
+
 ## Additional Resources
 
 - [Next.js Documentation](https://nextjs.org/docs)
@@ -691,3 +883,4 @@ For implementation details, see:
 - **BETA_TEAM_QUICK_START.md** - Session transfer quick start guide
 - **BETA_AUTH_TRANSFER.md** - Complete session transfer documentation
 - **IMPLEMENTATION_VERIFICATION.md** - Architecture verification
+- **.claude/README.md** - Claude Code infrastructure documentation
