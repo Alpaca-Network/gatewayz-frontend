@@ -32,13 +32,16 @@ export async function GET(request: NextRequest) {
           );
         }
 
-        const data = await getModelsForGateway(gateway, limit ? parseInt(limit) : undefined);
+        const result = await getModelsForGateway(gateway, limit ? parseInt(limit) : undefined);
+
+        // Extract the models array from the result
+        const models = result.data || [];
 
         // Add success metrics to span
-        span.setAttribute('models_count', Array.isArray(data) ? data.length : 0);
+        span.setAttribute('models_count', Array.isArray(models) ? models.length : 0);
         span.setAttribute('status', 'success');
 
-        return NextResponse.json(data);
+        return NextResponse.json({ data: models });
       } catch (error) {
         console.error('Error fetching models:', error);
 
