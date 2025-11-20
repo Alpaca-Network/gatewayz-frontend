@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, lazy, Suspense, useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
@@ -169,6 +169,18 @@ function transformStaticModel(staticModel: typeof staticModels[0]): Model {
 
 export default function ModelProfilePage() {
     const params = useParams();
+    const router = useRouter();
+
+    // Extract and normalize developer and model name
+    const developer = (params.developer as string)?.toLowerCase() || '';
+    const modelNameParam = (params.model as string) || '';
+
+    // Redirect alibaba models to qwen
+    useEffect(() => {
+        if (developer === 'alibaba') {
+            router.replace(`/models/qwen/${modelNameParam}`);
+        }
+    }, [developer, modelNameParam, router]);
 
     // State declarations
     const [model, setModel] = useState<Model | null>(null);
@@ -375,9 +387,6 @@ export default function ModelProfilePage() {
         },
     };
 
-    // Handle new route structure - params.developer and params.model
-    const developer = (params.developer as string)?.toLowerCase() || '';
-    const modelNameParam = (params.model as string) || '';
     // Store the URL-safe model name for searching
     let modelId = `${developer}/${modelNameParam}`;
     // Decode URL-encoded characters (e.g., %40 -> @)
@@ -405,6 +414,13 @@ export default function ModelProfilePage() {
                 preferredGateway = 'aimo';
             } else if (modelIdLower.startsWith('huggingface/') && modelProviders.includes('huggingface')) {
                 preferredGateway = 'huggingface';
+            } else if (modelIdLower.startsWith('alibaba/')) {
+                // For Alibaba models, prefer alibaba gateway if available, otherwise use openrouter
+                if (modelProviders.includes('alibaba')) {
+                    preferredGateway = 'alibaba';
+                } else if (modelProviders.includes('openrouter')) {
+                    preferredGateway = 'openrouter';
+                }
             }
 
             if (preferredGateway) {
