@@ -1181,11 +1181,11 @@ function ChatPageContent() {
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const [editedTitle, setEditedTitle] = useState('');
     const [selectedModel, setSelectedModel] = useState<ModelOption | null>({
-        value: 'qwen/qwen3-32b',
-        label: 'Qwen 3 32B',
-        category: 'Free',
-        sourceGateway: 'openrouter',
-        developer: 'Qwen',
+        value: 'katanemo/Arch-Router-1.5B',
+        label: 'Arch-Router-1.5B',
+        category: 'Router',
+        sourceGateway: 'huggingface',
+        developer: 'Katanemo',
         speedTier: 'fast'
     });
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
