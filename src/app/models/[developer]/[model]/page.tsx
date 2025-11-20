@@ -474,7 +474,10 @@ export default function ModelProfilePage() {
         // If not found by full ID, try matching by name using URL normalization
         if (!staticFoundModel) {
             staticFoundModel = staticModelsTransformed.find((m: Model) => {
-                const modelNamePart = m.id.split('/').pop() || '';
+                const idParts = m.id.split('/');
+                // For multi-segment IDs like "fal-ai/flux-pro/v1.1-ultra", get everything after the first segment
+                // For single-segment IDs like "openai/gpt-4", get everything after the first segment
+                const modelNamePart = idParts.length > 2 ? idParts.slice(1).join('/') : idParts.pop() || '';
                 const urlNormalizedDataName = normalizeForUrl(modelNamePart);
                 return urlNormalizedDataName === urlNormalizedSearchName && m.provider_slug?.toLowerCase() === developer;
             });
@@ -506,7 +509,10 @@ export default function ModelProfilePage() {
                                 // If not found by full ID, try matching by name using URL normalization
                                 if (!foundModel) {
                                     foundModel = models.find((m: Model) => {
-                                        const modelNamePart = m.id.split('/').pop() || '';
+                                        const idParts = m.id.split('/');
+                                        // For multi-segment IDs like "fal-ai/flux-pro/v1.1-ultra", get everything after the first segment
+                                        // For single-segment IDs like "openai/gpt-4", get everything after the first segment
+                                        const modelNamePart = idParts.length > 2 ? idParts.slice(1).join('/') : idParts.pop() || '';
                                         const urlNormalizedDataName = normalizeForUrl(modelNamePart);
                                         return urlNormalizedDataName === urlNormalizedSearchName && m.provider_slug?.toLowerCase() === developer;
                                     });
@@ -755,7 +761,10 @@ export default function ModelProfilePage() {
                     // If not found by full ID, try matching by name using URL normalization
                     if (!foundModel) {
                         foundModel = models.find((m: Model) => {
-                            const modelNamePart = m.id.split('/').pop() || '';
+                            const idParts = m.id.split('/');
+                            // For multi-segment IDs like "fal-ai/flux-pro/v1.1-ultra", get everything after the first segment
+                            // For single-segment IDs like "openai/gpt-4", get everything after the first segment
+                            const modelNamePart = idParts.length > 2 ? idParts.slice(1).join('/') : idParts.pop() || '';
                             const urlNormalizedDataName = normalizeForUrl(modelNamePart);
                             return urlNormalizedDataName === urlNormalizedSearchName && m.provider_slug?.toLowerCase() === developer;
                         });
@@ -784,8 +793,9 @@ export default function ModelProfilePage() {
                     // Helper function to check if model exists in gateway data
                     const hasModel = (data: Model[], gateway: string) => {
                         const found = data.some((m: Model) => {
-                            // Extract just the model name part (after /)
-                            const modelNamePart = m.id.split('/').pop()?.toLowerCase() || '';
+                            // For multi-segment IDs like "fal-ai/flux-pro/v1.1-ultra", get everything after the first segment
+                            const idParts = m.id.split('/');
+                            const modelNamePart = idParts.length > 2 ? idParts.slice(1).join('/').toLowerCase() : (idParts.pop()?.toLowerCase() || '');
                             const urlNormalizedSearchName = normalizeForUrl(modelNameParam);
                             const urlNormalizedDataName = normalizeForUrl(modelNamePart);
 
@@ -793,7 +803,7 @@ export default function ModelProfilePage() {
                             if (m.id.toLowerCase() === modelIdLower) return true;
 
                             // Check if the model name parts match after URL normalization
-                            // This handles: "GPT-4o mini" -> "gpt-4o-mini" matching
+                            // This handles: "GPT-4o mini" -> "gpt-4o-mini" matching and "fal-ai/flux-pro/v1.1-ultra" -> "flux-pro-v1-1-ultra"
                             if (urlNormalizedDataName === urlNormalizedSearchName && m.provider_slug?.toLowerCase() === developer) return true;
 
                             // For AIMO models, check if the model name part matches
