@@ -614,13 +614,30 @@ export function GatewayzAuthProvider({
       return;
     }
 
-    if (!authenticated || !user) {
-      clearStoredCredentials();
-      setStatus("unauthenticated");
+    // If Privy user is authenticated, always sync with backend
+    if (authenticated && user) {
+      syncWithBackend();
       return;
     }
 
-    syncWithBackend();
+    // If Privy session is not authenticated, but we have cached credentials,
+    // keep them - don't clear. The user may have a valid gatewayz session
+    // even if their Privy session expired.
+    if (!authenticated || !user) {
+      const storedKey = getApiKey();
+      const storedUser = getUserData();
+
+      // If we have valid cached credentials, stay authenticated
+      if (storedKey && storedUser && storedUser.user_id && storedUser.email) {
+        console.log("[Auth] Privy not authenticated but cached credentials found - maintaining session");
+        setStatus("authenticated");
+      } else {
+        // Only clear if we truly have no session
+        clearStoredCredentials();
+        setStatus("unauthenticated");
+      }
+      return;
+    }
   }, [authenticated, clearStoredCredentials, privyReady, syncWithBackend, user]);
 
   useEffect(() => {
