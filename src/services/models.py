@@ -15,6 +15,7 @@ from src.cache import (
     _FAL_CACHE_INIT_DEFERRED,
     _aihubmix_models_cache,
     _aimo_models_cache,
+    _alibaba_models_cache,
     _anannas_models_cache,
     _cerebras_models_cache,
     _chutes_models_cache,
@@ -411,6 +412,7 @@ def get_all_models_parallel():
             "helicone",
             "anannas",
             "aihubmix",
+            "alibaba",
         ]
 
         # Use ThreadPoolExecutor to fetch all gateways in parallel
@@ -467,6 +469,7 @@ def get_all_models_sequential():
     helicone_models = get_cached_models("helicone") or []
     anannas_models = get_cached_models("anannas") or []
     aihubmix_models = get_cached_models("aihubmix") or []
+    alibaba_models = get_cached_models("alibaba") or []
     return (
         openrouter_models
         + featherless_models
@@ -486,6 +489,7 @@ def get_all_models_sequential():
         + helicone_models
         + anannas_models
         + aihubmix_models
+        + alibaba_models
     )
 
 
@@ -710,6 +714,14 @@ def get_cached_models(gateway: str = "openrouter"):
                 return cached
             result = fetch_models_from_aihubmix()
             _register_canonical_records("aihubmix", result)
+            return result
+
+        if gateway == "alibaba":
+            cached = _fresh_cached_models(_alibaba_models_cache, "alibaba")
+            if cached is not None:
+                return cached
+            result = fetch_models_from_alibaba()
+            _register_canonical_records("alibaba", result)
             return result
 
         if gateway == "all":
@@ -3186,4 +3198,83 @@ def normalize_anannas_model(model) -> Optional[dict]:
         }
     except Exception as e:
         logger.error("Failed to normalize Anannas model: %s", sanitize_for_logging(str(e)))
+        return None
+
+
+def fetch_models_from_alibaba():
+    """Fetch models from Alibaba Cloud (DashScope) via OpenAI-compatible API
+
+    Alibaba Cloud provides access to Qwen models through a unified OpenAI-compatible endpoint.
+    """
+    try:
+        # Check if API key is configured
+        if not Config.ALIBABA_CLOUD_API_KEY:
+            logger.warning("Alibaba Cloud API key not configured - skipping model fetch")
+            return []
+
+        from src.services.alibaba_cloud_client import get_alibaba_cloud_client
+
+        client = get_alibaba_cloud_client()
+        response = client.models.list()
+
+        if not response or not hasattr(response, "data"):
+            logger.warning("No models returned from Alibaba Cloud")
+            return []
+
+        # Normalize models
+        normalized_models = [normalize_alibaba_model(model) for model in response.data if model]
+
+        _alibaba_models_cache["data"] = normalized_models
+        _alibaba_models_cache["timestamp"] = datetime.now(timezone.utc)
+
+        logger.info(f"Fetched {len(normalized_models)} models from Alibaba Cloud")
+        return _alibaba_models_cache["data"]
+    except Exception as e:
+        logger.error("Failed to fetch models from Alibaba Cloud: %s", sanitize_for_logging(str(e)))
+        return []
+
+
+def normalize_alibaba_model(model) -> Optional[dict]:
+    """Normalize Alibaba Cloud model to catalog schema
+
+    Alibaba models use OpenAI-compatible naming conventions.
+    """
+    model_id = getattr(model, "id", None)
+    if not model_id:
+        logger.warning("Alibaba Cloud model missing 'id': %s", sanitize_for_logging(str(model)))
+        return None
+
+    try:
+        return {
+            "id": model_id,
+            "slug": f"alibaba/{model_id}",
+            "canonical_slug": f"alibaba/{model_id}",
+            "hugging_face_id": None,
+            "name": getattr(model, "name", model_id),
+            "created": getattr(model, "created_at", None),
+            "description": getattr(model, "description", f"Model from Alibaba Cloud"),
+            "context_length": getattr(model, "context_length", 4096),
+            "architecture": {
+                "modality": MODALITY_TEXT_TO_TEXT,
+                "input_modalities": ["text"],
+                "output_modalities": ["text"],
+                "instruct_type": "chat",
+            },
+            "pricing": {
+                "prompt": "0",
+                "completion": "0",
+                "request": "0",
+                "image": "0",
+            },
+            "top_provider": None,
+            "per_request_limits": None,
+            "supported_parameters": [],
+            "default_parameters": {},
+            "provider_slug": "alibaba",
+            "provider_site_url": "https://dashscope.aliyun.com",
+            "model_logo_url": None,
+            "source_gateway": "alibaba",
+        }
+    except Exception as e:
+        logger.error("Failed to normalize Alibaba Cloud model: %s", sanitize_for_logging(str(e)))
         return None
