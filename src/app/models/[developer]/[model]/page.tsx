@@ -11,6 +11,7 @@ import { format } from 'date-fns';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Maximize, Copy, Check, Lock } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { providerData } from '@/lib/provider-data';
 import { generateChartData, generateStatsTable } from '@/lib/data';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -961,23 +962,24 @@ export default function ModelProfilePage() {
 
                         {/* Provider Selector */}
                         <div className="mb-4">
-                            <label className="text-sm font-medium mb-2 block">Select Provider</label>
-                            <select
-                                value={selectedPlaygroundProvider}
-                                onChange={(e) => setSelectedPlaygroundProvider(e.target.value)}
-                                className="w-full max-w-md px-4 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                            >
-                                <option value="gatewayz">Gatewayz (Unified - Recommended)</option>
-                                {modelProviders.length > 0 && modelProviders.map(provider => {
-                                    const config = providerConfigs[provider];
-                                    if (!config) return null;
-                                    return (
-                                        <option key={provider} value={provider}>
-                                            {config.name}
-                                        </option>
-                                    );
-                                })}
-                            </select>
+                            <label className="text-sm font-medium mb-2 block">Select Gateway</label>
+                            <Select value={selectedPlaygroundProvider} onValueChange={setSelectedPlaygroundProvider}>
+                                <SelectTrigger className="w-full max-w-md">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="gatewayz">Gatewayz (Unified - Recommended)</SelectItem>
+                                    {modelProviders.length > 0 && modelProviders.map(provider => {
+                                        const config = providerConfigs[provider];
+                                        if (!config) return null;
+                                        return (
+                                            <SelectItem key={provider} value={provider}>
+                                                {config.name}
+                                            </SelectItem>
+                                        );
+                                    })}
+                                </SelectContent>
+                            </Select>
                             {selectedPlaygroundProvider !== 'gatewayz' && (
                                 <p className="text-sm text-muted-foreground mt-2">
                                     ⚠️ Using {providerConfigs[selectedPlaygroundProvider]?.name} directly. Make sure you have configured your API key.
@@ -1004,25 +1006,26 @@ export default function ModelProfilePage() {
                             </p>
                         </div>
 
-                        {/* Provider Selector */}
+                        {/* Gateway Selector */}
                         <div className="mb-4">
-                            <label className="text-sm font-medium mb-2 block">Select Provider</label>
-                            <select
-                                value={selectedProvider}
-                                onChange={(e) => setSelectedProvider(e.target.value)}
-                                className="w-full max-w-md px-4 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                            >
-                                <option value="gatewayz">Gatewayz (Unified - Recommended)</option>
-                                {modelProviders.length > 0 && modelProviders.map(provider => {
-                                    const config = providerConfigs[provider];
-                                    if (!config) return null;
-                                    return (
-                                        <option key={provider} value={provider}>
-                                            {config.name}
-                                        </option>
-                                    );
-                                })}
-                            </select>
+                            <label className="text-sm font-medium mb-2 block">Select Gateway</label>
+                            <Select value={selectedProvider} onValueChange={setSelectedProvider}>
+                                <SelectTrigger className="w-full max-w-md">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="gatewayz">Gatewayz (Unified - Recommended)</SelectItem>
+                                    {modelProviders.length > 0 && modelProviders.map(provider => {
+                                        const config = providerConfigs[provider];
+                                        if (!config) return null;
+                                        return (
+                                            <SelectItem key={provider} value={provider}>
+                                                {config.name}
+                                            </SelectItem>
+                                        );
+                                    })}
+                                </SelectContent>
+                            </Select>
                             {selectedProvider !== 'gatewayz' && (
                                 <p className="text-sm text-muted-foreground mt-2">
                                     ⚠️ Using {providerConfigs[selectedProvider]?.name} directly requires a separate API key from that provider.
