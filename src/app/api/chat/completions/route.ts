@@ -306,9 +306,9 @@ export async function POST(request: NextRequest) {
       targetUrl.searchParams.set('session_id', sessionId);
     }
 
-    // Use a 120 second timeout for streaming requests (models can be slow to start)
-    // Use a 30 second timeout for non-streaming requests
-    timeoutMs = body.stream ? 120000 : 30000;
+    // Use a 180 second timeout for streaming requests (models can be slow to start, especially with reasoning)
+    // Use a 60 second timeout for non-streaming requests
+    timeoutMs = body.stream ? 180000 : 60000;
     
     profiler.markStage(requestId, 'timeout_configured', {
       timeoutMs,
@@ -378,6 +378,13 @@ export async function POST(request: NextRequest) {
           console.log('[API Proxy] Response ok:', response.ok);
           console.log('[API Proxy] Content-Type:', response.headers.get('content-type'));
           console.log('[API Proxy] Response body exists:', !!response.body);
+          console.log('[API Proxy] Response body readable:', response.body?.locked === false);
+          console.log('[API Proxy] Response headers:', {
+            contentType: response.headers.get('content-type'),
+            transferEncoding: response.headers.get('transfer-encoding'),
+            contentLength: response.headers.get('content-length'),
+            connection: response.headers.get('connection'),
+          });
 
           // Handle rate limit errors with retry
           if (response.status === 429) {
@@ -460,12 +467,36 @@ export async function POST(request: NextRequest) {
             );
           }
 
+          // Verify body is readable
+          if (response.body.locked) {
+            console.error('[API Proxy] Response body is locked (already being read)');
+            return new Response(
+              JSON.stringify({ error: 'Response stream locked - unable to read' }),
+              { status: 500, headers: { 'Content-Type': 'application/json' } }
+            );
+          }
+
+          // For streaming responses, we need to ensure the response is properly formatted
+          // Wrap the stream to add debugging and ensure proper SSE format
+          const wrappedStream = response.body.pipeThrough(
+            new TransformStream({
+              async transform(chunk, controller) {
+                // Log chunk for debugging
+                const text = new TextDecoder().decode(chunk);
+                if (text.length > 0) {
+                  console.log('[API Proxy] Chunk received from backend:', text.substring(0, 200));
+                }
+                controller.enqueue(chunk);
+              },
+            })
+          );
+
           profiler.markStage(requestId, 'stream_response_ready');
           console.log('[API Proxy] Returning streaming response to client');
           profiler.endRequest(requestId);
           console.log(`[API Proxy] Request ${requestId} complete. Total time: ${(performance.now() - requestStartTime).toFixed(2)}ms`);
-          
-          return new Response(response.body, {
+
+          return new Response(wrappedStream, {
             status: response.status,
             headers: {
               'Content-Type': 'text/event-stream',
@@ -557,10 +588,13 @@ export async function POST(request: NextRequest) {
 
     if (errorDetails.name === 'TimeoutError' || errorDetails.message.includes('timeout') || errorDetails.message.includes('timed out')) {
       status = 504;
-      details = `Request to backend API timed out after ${timeoutMs / 1000} seconds. The model may be overloaded or starting up. Please try again in a moment.`;
+      details = `Request to backend API timed out after ${timeoutMs / 1000} seconds. The model may be overloaded, starting up, or experiencing issues. Try a different model or wait a moment and try again.`;
     } else if (errorDetails.message.includes('fetch') || errorDetails.message.includes('network') || errorDetails.name === 'TypeError') {
       status = 502;
-      details = 'Could not connect to backend API. The service may be temporarily unavailable.';
+      details = 'Could not connect to backend API. The service may be temporarily unavailable. Please check your internet connection.';
+    } else if (errorDetails.message.includes('AbortError')) {
+      status = 504;
+      details = `Request was aborted after ${timeoutMs / 1000} seconds. This usually means the model is taking too long to respond. Try again with a simpler prompt or a faster model.`;
     }
 
     return new Response(
