@@ -29,14 +29,38 @@ from src.services.anthropic_transformer import (
     transform_anthropic_to_openai,
     transform_openai_to_anthropic,
 )
+from src.services.aihubmix_client import (
+    make_aihubmix_request_openai,
+    process_aihubmix_response,
+)
+from src.services.alibaba_cloud_client import (
+    make_alibaba_cloud_request_openai,
+    process_alibaba_cloud_response,
+)
+from src.services.anannas_client import (
+    make_anannas_request_openai,
+    process_anannas_response,
+)
+from src.services.cerebras_client import (
+    make_cerebras_request_openai,
+    process_cerebras_response,
+)
 from src.services.featherless_client import (
     make_featherless_request_openai,
     process_featherless_response,
 )
 from src.services.fireworks_client import make_fireworks_request_openai, process_fireworks_response
+from src.services.google_vertex_client import (
+    make_google_vertex_request_openai,
+    process_google_vertex_response,
+)
 from src.services.huggingface_client import (
     make_huggingface_request_openai,
     process_huggingface_response,
+)
+from src.services.vercel_ai_gateway_client import (
+    make_vercel_ai_gateway_request_openai,
+    process_vercel_ai_gateway_response,
 )
 from src.services.model_transformations import detect_provider_from_model_id, transform_model_id
 from src.services.openrouter_client import (
@@ -409,7 +433,40 @@ async def anthropic_messages(
 
             http_exc = None
             try:
-                if attempt_provider == "featherless":
+                if attempt_provider == "aihubmix":
+                    resp_raw = await asyncio.wait_for(
+                        _to_thread(
+                            make_aihubmix_request_openai,
+                            openai_messages,
+                            request_model,
+                            **openai_params,
+                        ),
+                        timeout=request_timeout,
+                    )
+                    processed = await _to_thread(process_aihubmix_response, resp_raw)
+                elif attempt_provider == "alibaba-cloud":
+                    resp_raw = await asyncio.wait_for(
+                        _to_thread(
+                            make_alibaba_cloud_request_openai,
+                            openai_messages,
+                            request_model,
+                            **openai_params,
+                        ),
+                        timeout=request_timeout,
+                    )
+                    processed = await _to_thread(process_alibaba_cloud_response, resp_raw)
+                elif attempt_provider == "anannas":
+                    resp_raw = await asyncio.wait_for(
+                        _to_thread(
+                            make_anannas_request_openai,
+                            openai_messages,
+                            request_model,
+                            **openai_params,
+                        ),
+                        timeout=request_timeout,
+                    )
+                    processed = await _to_thread(process_anannas_response, resp_raw)
+                elif attempt_provider == "featherless":
                     resp_raw = await asyncio.wait_for(
                         _to_thread(
                             make_featherless_request_openai,
@@ -453,6 +510,39 @@ async def anthropic_messages(
                         timeout=request_timeout,
                     )
                     processed = await _to_thread(process_huggingface_response, resp_raw)
+                elif attempt_provider == "cerebras":
+                    resp_raw = await asyncio.wait_for(
+                        _to_thread(
+                            make_cerebras_request_openai,
+                            openai_messages,
+                            request_model,
+                            **openai_params,
+                        ),
+                        timeout=request_timeout,
+                    )
+                    processed = await _to_thread(process_cerebras_response, resp_raw)
+                elif attempt_provider == "google-vertex":
+                    resp_raw = await asyncio.wait_for(
+                        _to_thread(
+                            make_google_vertex_request_openai,
+                            openai_messages,
+                            request_model,
+                            **openai_params,
+                        ),
+                        timeout=request_timeout,
+                    )
+                    processed = await _to_thread(process_google_vertex_response, resp_raw)
+                elif attempt_provider == "vercel-ai-gateway":
+                    resp_raw = await asyncio.wait_for(
+                        _to_thread(
+                            make_vercel_ai_gateway_request_openai,
+                            openai_messages,
+                            request_model,
+                            **openai_params,
+                        ),
+                        timeout=request_timeout,
+                    )
+                    processed = await _to_thread(process_vercel_ai_gateway_response, resp_raw)
                 else:
                     resp_raw = await asyncio.wait_for(
                         _to_thread(
