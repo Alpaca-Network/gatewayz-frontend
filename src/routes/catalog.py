@@ -2264,4 +2264,246 @@ async def check_model_on_modelz(
         raise
     except Exception as e:
         logger.error(f"Unexpected error in check_model_on_modelz: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to check model on Modelz: {str(e)}")
+
+
+# HuggingFace Hub SDK Discovery Endpoints
+@router.get("/v1/huggingface/discovery", tags=["huggingface-discovery"])
+async def discover_huggingface_models(
+    task: Optional[str] = Query(
+        "text-generation",
+        description="Filter by task type (e.g., 'text-generation', 'text2text-generation', 'conversational')",
+    ),
+    sort: str = Query("likes", description="Sort by: 'likes' or 'downloads'"),
+    limit: int = Query(50, description="Number of models to return", ge=1, le=500),
+):
+    """
+    Discover HuggingFace models using the official Hub SDK.
+
+    This endpoint provides advanced model discovery with filtering by task type
+    and sorting by popularity metrics (likes/downloads). Great for exploring
+    available models on HuggingFace Hub.
+
+    Uses the official huggingface_hub SDK for direct API access to Hub metadata.
+    """
+    try:
+        from src.services.huggingface_hub_service import list_huggingface_models
+
+        logger.info(f"Discovering HuggingFace models: task={task}, sort={sort}, limit={limit}")
+
+        models = list_huggingface_models(
+            task=task,
+            sort=sort,
+            limit=limit,
+        )
+
+        if not models:
+            logger.warning(f"No HuggingFace models found for task={task}")
+            return {
+                "models": [],
+                "count": 0,
+                "source": "huggingface-hub",
+                "task": task,
+                "sort": sort,
+            }
+
+        return {
+            "models": models,
+            "count": len(models),
+            "source": "huggingface-hub",
+            "task": task,
+            "sort": sort,
+        }
+
+    except Exception as e:
+        logger.error(f"Error discovering HuggingFace models: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to discover HuggingFace models: {str(e)}",
+        )
+
+
+@router.get("/v1/huggingface/search", tags=["huggingface-discovery"])
+async def search_huggingface_models_endpoint(
+    q: str = Query(..., description="Search query (model name, description, etc.)", min_length=1),
+    task: Optional[str] = Query(None, description="Optional task filter"),
+    limit: int = Query(20, description="Number of results to return", ge=1, le=100),
+):
+    """
+    Search for HuggingFace models by query.
+
+    Searches across model names, descriptions, and other metadata.
+    Uses the official huggingface_hub SDK.
+    """
+    try:
+        from src.services.huggingface_hub_service import search_models_by_query
+
+        logger.info(f"Searching HuggingFace models: q='{q}', task={task}, limit={limit}")
+
+        models = search_models_by_query(
+            query=q,
+            task=task,
+            limit=limit,
+        )
+
+        return {
+            "query": q,
+            "models": models,
+            "count": len(models),
+            "source": "huggingface-hub",
+        }
+
+    except Exception as e:
+        logger.error(f"Error searching HuggingFace models: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to search HuggingFace models: {str(e)}",
+        )
+
+
+@router.get("/v1/huggingface/models/{model_id:path}/details", tags=["huggingface-discovery"])
+async def get_huggingface_model_details_endpoint(
+    model_id: str,
+):
+    """
+    Get detailed information about a specific HuggingFace model.
+
+    Returns comprehensive metadata including model card, library info, and metrics.
+    Uses the official huggingface_hub SDK for direct Hub access.
+    """
+    try:
+        from src.services.huggingface_hub_service import get_model_details
+
+        logger.info(f"Fetching details for HuggingFace model: {model_id}")
+
+        model_info = get_model_details(model_id)
+
+        if not model_info:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Model not found: {model_id}",
+            )
+
+        return {
+            "model": model_info,
+            "source": "huggingface-hub",
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching model details: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch model details: {str(e)}",
+        )
+
+
+@router.get("/v1/huggingface/models/{model_id:path}/card", tags=["huggingface-discovery"])
+async def get_huggingface_model_card_endpoint(
+    model_id: str,
+):
+    """
+    Retrieve the model card (README) for a HuggingFace model.
+
+    The model card contains documentation, usage instructions, and metadata
+    about the model in Markdown format.
+    """
+    try:
+        from src.services.huggingface_hub_service import get_model_card
+
+        logger.info(f"Fetching model card for: {model_id}")
+
+        card_content = get_model_card(model_id)
+
+        if not card_content:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Model card not found for: {model_id}",
+            )
+
+        return {
+            "model_id": model_id,
+            "card": card_content,
+            "source": "huggingface-hub",
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching model card: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch model card: {str(e)}",
+        )
+
+
+@router.get("/v1/huggingface/author/{author}/models", tags=["huggingface-discovery"])
+async def list_author_models_endpoint(
+    author: str,
+    limit: int = Query(50, description="Number of models to return", ge=1, le=500),
+):
+    """
+    List all models from a specific HuggingFace author or organization.
+
+    Returns all public models published by the specified author/org.
+    """
+    try:
+        from src.services.huggingface_hub_service import list_models_by_author
+
+        logger.info(f"Listing models from author: {author}, limit={limit}")
+
+        models = list_models_by_author(author=author, limit=limit)
+
+        return {
+            "author": author,
+            "models": models,
+            "count": len(models),
+            "source": "huggingface-hub",
+        }
+
+    except Exception as e:
+        logger.error(f"Error listing author models: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to list author models: {str(e)}",
+        )
+
+
+@router.get("/v1/huggingface/models/{model_id:path}/files", tags=["huggingface-discovery"])
+async def get_model_files_endpoint(
+    model_id: str,
+):
+    """
+    Get information about all files in a HuggingFace model repository.
+
+    Returns a list of files with sizes and metadata, useful for understanding
+    what's available in the model repository.
+    """
+    try:
+        from src.services.huggingface_hub_service import get_model_files
+
+        logger.info(f"Fetching files for model: {model_id}")
+
+        files = get_model_files(model_id)
+
+        if files is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Model not found: {model_id}",
+            )
+
+        return {
+            "model_id": model_id,
+            "files": files,
+            "count": len(files) if files else 0,
+            "source": "huggingface-hub",
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching model files: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch model files: {str(e)}",
+        )

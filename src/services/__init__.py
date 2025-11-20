@@ -4,7 +4,7 @@ import sys
 
 
 def __getattr__(name):
-    if name == "rate_limiting":
+    if name in ("rate_limiting", "huggingface_hub_service"):
         # Import the module dynamically to avoid circular reference
         import importlib
 
