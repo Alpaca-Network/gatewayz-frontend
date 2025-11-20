@@ -130,7 +130,7 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
 
         // Remove provider prefixes (some models have them, others don't)
         canonicalSlug = canonicalSlug
-          .replace(/^(aimo\/|google\/|openai\/|meta\/|anthropic\/|models\/|mistralai\/|xai\/)/i, '')
+          .replace(/^(aimo\/|google\/|openai\/|meta\/|anthropic\/|models\/|mistralai\/|xai\/|fal-ai\/|fal\/|bria\/)/i, '')
           .replace(/\s+/g, '-')
           .replace(/[^\w-]/g, '');
 
