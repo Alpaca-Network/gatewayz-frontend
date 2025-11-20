@@ -427,7 +427,7 @@ test.describe('Models - Accessibility', () => {
     await page.goto('/models');
     await page.waitForLoadState('networkidle');
 
-    const content = await page.content().toLowerCase();
+    const content = (await page.content()).toLowerCase();
 
     // Should use semantic elements
     const hasSemanticElements =
