@@ -1181,12 +1181,12 @@ function ChatPageContent() {
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const [editedTitle, setEditedTitle] = useState('');
     const [selectedModel, setSelectedModel] = useState<ModelOption | null>({
-        value: 'katanemo/Arch-Router-1.5B',
-        label: 'Arch-Router-1.5B',
+        value: 'openrouter/auto',
+        label: 'Alpaca Router',
         category: 'Router',
-        sourceGateway: 'huggingface',
-        developer: 'Katanemo',
-        speedTier: 'fast'
+        sourceGateway: 'openrouter',
+        developer: 'Alpaca',
+        modalities: ['Text', 'Image', 'File', 'Audio', 'Video']
     });
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
     const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
