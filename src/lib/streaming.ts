@@ -327,10 +327,34 @@ export async function* streamChatResponse(
   devLog('[Streaming] Stream reader obtained successfully');
   devLog('[Streaming] Starting to read stream...');
 
+  // Per-chunk timeout to detect stalled streams (30 seconds)
+  // This resets on each chunk and prevents hanging if backend stops sending
+  const chunkTimeoutMs = 30000;
+  let chunkTimeoutId: NodeJS.Timeout | null = null;
+
+  const resetChunkTimeout = () => {
+    if (chunkTimeoutId) {
+      clearTimeout(chunkTimeoutId);
+    }
+    chunkTimeoutId = setTimeout(() => {
+      devError('[Streaming] Stream chunk timeout - no data received for 30 seconds');
+      reader.cancel('Stream timeout: No data received for 30 seconds');
+    }, chunkTimeoutMs);
+  };
+
   try {
     while (true) {
       devLog(`[Streaming] About to read chunk ${chunkCount + 1}...`);
+      resetChunkTimeout(); // Start chunk timeout before reading
+
       const { done, value } = await reader.read();
+
+      // Clear the chunk timeout when we receive data
+      if (chunkTimeoutId) {
+        clearTimeout(chunkTimeoutId);
+        chunkTimeoutId = null;
+      }
+
       devLog(`[Streaming] Read completed. Done: ${done}, Has value: ${!!value}, Value length: ${value?.length || 0}`);
 
       if (done) {
@@ -628,6 +652,10 @@ export async function* streamChatResponse(
     // Re-throw other errors
     throw error;
   } finally {
+    // Clean up chunk timeout
+    if (chunkTimeoutId) {
+      clearTimeout(chunkTimeoutId);
+    }
     devLog('[Streaming] Stream reader released');
     reader.releaseLock();
   }
