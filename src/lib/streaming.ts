@@ -634,7 +634,7 @@ export async function* streamChatResponse(
   } catch (error) {
     clearTimeout(timeoutId);
 
-    // Handle abort/timeout errors from main try
+    // Handle abort/timeout errors from outer try block
     if (error instanceof Error) {
       if (error.name === 'AbortError') {
         throw new Error('Request timed out after 5 minutes. The model may be overloaded or unavailable. Please try again.');
