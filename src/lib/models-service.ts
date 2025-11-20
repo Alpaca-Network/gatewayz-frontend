@@ -327,7 +327,7 @@ fetch(url, {
           allModels.push(...normalizedModels);
           console.log(`[Models] Fetched ${data.data.length} models for gateway: ${gateway} (offset: ${offset})`);
 
-          const isFiveHundred = data.data.length === 500 && gateway === 'huggingface';
+          const isFiveHundred = data.data.length === 500 && (gateway === 'huggingface' || gateway === 'featherless');
           const hasReachedLimit = limit && allModels.length >= limit;
           const gotFewerThanRequested = data.data.length < requestLimit && !isFiveHundred;
 
