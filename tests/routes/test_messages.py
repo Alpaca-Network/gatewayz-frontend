@@ -805,8 +805,8 @@ class TestMessagesEndpointFailover:
         mock_deduct_credits,
         mock_calculate_cost,
         mock_build_chain,
-        mock_process_response,
-        mock_make_request,
+        mock_process_openrouter_response,
+        mock_make_openrouter_request,
         mock_rate_limit_mgr,
         mock_validate_trial,
         mock_enforce_plan,
@@ -837,12 +837,14 @@ class TestMessagesEndpointFailover:
         mock_rate_limit_mgr.return_value = rate_limit_mgr_instance
 
         # First provider fails, second succeeds
-        mock_build_chain.return_value = ['openrouter', 'featherless']
-        mock_make_request.side_effect = [
-            Exception("Provider error"),  # First attempt fails
-            mock_openai_response  # Second attempt succeeds
+        # Note: When Config.IS_TESTING=True and provider=portkey, the code uses make_openrouter_request_openai
+        # So both attempts will call make_openrouter_request_openai (first fails, second succeeds)
+        mock_build_chain.return_value = ['openrouter', 'portkey']
+        mock_make_openrouter_request.side_effect = [
+            Exception("Provider error"),  # First attempt (openrouter) fails
+            mock_openai_response  # Second attempt (portkey using mocked openrouter path) succeeds
         ]
-        mock_process_response.return_value = mock_openai_response
+        mock_process_openrouter_response.return_value = mock_openai_response
         mock_calculate_cost.return_value = 0.01
 
         # Execute
