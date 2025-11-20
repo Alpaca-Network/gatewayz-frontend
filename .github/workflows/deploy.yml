@@ -170,9 +170,10 @@ jobs:
         run: |
           npm install -g @railway/cli
 
-      - name: Authenticate with Railway
-        run: |
-          railway login
+      - name: Auth with Railway
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway whoami
 
       - name: Deploy to Railway
         env:
