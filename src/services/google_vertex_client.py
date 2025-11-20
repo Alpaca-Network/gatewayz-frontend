@@ -795,3 +795,13 @@ def diagnose_google_vertex_credentials() -> dict:
         result["error"] = "Configuration issues: " + "; ".join(issues)
 
     return result
+
+
+def fetch_models_from_google_vertex():
+    """Fetch models from Google Vertex AI API
+
+    Google Vertex AI does not provide a public API to list available models.
+    Returns None to indicate no dynamic model listing is available.
+    """
+    logger.info("Google Vertex AI does not provide a public model listing API")
+    return None

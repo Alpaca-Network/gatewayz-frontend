@@ -26,13 +26,6 @@ _multi_provider_catalog_cache = {
     "stale_ttl": 1800,
 }
 
-_portkey_models_cache = {
-    "data": None,
-    "timestamp": None,
-    "ttl": 1800,  # 30 minute TTL for Portkey catalog
-    "stale_ttl": 3600,
-}
-
 _featherless_models_cache = {
     "data": None,
     "timestamp": None,
@@ -186,7 +179,6 @@ def get_models_cache(gateway: str):
     """Get cache for a specific gateway"""
     cache_map = {
         "openrouter": _models_cache,
-        "portkey": _portkey_models_cache,
         "featherless": _featherless_models_cache,
         "deepinfra": _deepinfra_models_cache,
         "chutes": _chutes_models_cache,
@@ -221,7 +213,6 @@ def clear_models_cache(gateway: str):
     """Clear cache for a specific gateway"""
     cache_map = {
         "openrouter": _models_cache,
-        "portkey": _portkey_models_cache,
         "featherless": _featherless_models_cache,
         "deepinfra": _deepinfra_models_cache,
         "chutes": _chutes_models_cache,

@@ -261,3 +261,32 @@ def enhance_providers_with_logos_and_sites(providers: list) -> list:
     except Exception as e:
         logger.error(f"Error enhancing providers with logos and sites: {e}")
         return providers
+
+
+# Import fetch_models functions from their respective client modules
+def fetch_models_from_cerebras():
+    """Fetch models from Cerebras client"""
+    from src.services.cerebras_client import fetch_models_from_cerebras as _fetch
+
+    return _fetch()
+
+
+def fetch_models_from_xai():
+    """Fetch models from xAI client"""
+    from src.services.xai_client import fetch_models_from_xai as _fetch
+
+    return _fetch()
+
+
+def fetch_models_from_nebius():
+    """Fetch models from Nebius client"""
+    from src.services.nebius_client import fetch_models_from_nebius as _fetch
+
+    return _fetch()
+
+
+def fetch_models_from_novita():
+    """Fetch models from Novita client"""
+    from src.services.novita_client import fetch_models_from_novita as _fetch
+
+    return _fetch()

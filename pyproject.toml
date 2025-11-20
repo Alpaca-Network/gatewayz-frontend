@@ -30,7 +30,6 @@ dependencies = [
     "openai==1.44.0",
     "resend==0.8.0",
     "stripe==13.0.1",
-    "portkey-ai>=2.0.0",
 
     # Provider SDKs (lightweight)
     "cerebras-cloud-sdk>=1.0.0",

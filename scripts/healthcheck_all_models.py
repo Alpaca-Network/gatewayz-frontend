@@ -33,7 +33,6 @@ from src.services.models import get_cached_models
 from src.config import Config
 from src.cache import (
     _models_cache,
-    _portkey_models_cache,
     _featherless_models_cache,
     _chutes_models_cache,
     _groq_models_cache,
@@ -70,15 +69,6 @@ GATEWAY_CONFIG = {
         'cache': _models_cache,
         'min_expected_models': 100,
         'header_type': 'bearer'
-    },
-    'portkey': {
-        'name': 'Portkey',
-        'url': 'https://api.portkey.ai/v1/models',
-        'api_key_env': 'PORTKEY_API_KEY',
-        'api_key': Config.PORTKEY_API_KEY,
-        'cache': _portkey_models_cache,
-        'min_expected_models': 10,
-        'header_type': 'portkey'
     },
     'featherless': {
         'name': 'Featherless',
@@ -240,8 +230,6 @@ def build_headers(gateway_config: dict) -> dict:
 
     if header_type == 'bearer':
         return {"Authorization": f"Bearer {api_key}"}
-    elif header_type == 'portkey':
-        return {"x-portkey-api-key": api_key}
     else:
         return {}
 

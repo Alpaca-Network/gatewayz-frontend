@@ -45,7 +45,7 @@ class TestGatewayHealthChecker:
     def test_all_required_gateways_configured(self):
         """Test that all expected gateways are in the configuration"""
         expected_gateways = [
-            'openrouter', 'portkey', 'featherless', 'chutes', 'groq',
+            'openrouter', 'featherless', 'chutes', 'groq',
             'fireworks', 'together', 'deepinfra', 'cerebras',
             'nebius', 'xai', 'novita', 'huggingface', 'aimo', 'near', 'fal'
         ]
@@ -74,18 +74,6 @@ class TestGatewayHealthChecker:
         headers = check_module.build_headers(config)
         assert 'Authorization' in headers
         assert headers['Authorization'] == 'Bearer test-bearer-key'
-
-    @pytest.mark.unit
-    def test_build_headers_portkey(self):
-        """Test header building for Portkey auth"""
-        config = {
-            'api_key': 'test-portkey-key',
-            'header_type': 'portkey'
-        }
-
-        headers = check_module.build_headers(config)
-        assert 'x-portkey-api-key' in headers
-        assert headers['x-portkey-api-key'] == 'test-portkey-key'
 
     @pytest.mark.unit
     def test_build_headers_no_api_key(self):

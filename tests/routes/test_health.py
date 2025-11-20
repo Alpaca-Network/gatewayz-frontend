@@ -78,7 +78,7 @@ def mock_provider_health():
     return [
         ProviderHealthResponse(
             provider="openai",
-            gateway="portkey",
+            gateway="openrouter",
             status=ProviderStatus.ONLINE,
             total_models=10,
             healthy_models=10,
@@ -90,7 +90,7 @@ def mock_provider_health():
         ),
         ProviderHealthResponse(
             provider="anthropic",
-            gateway="portkey",
+            gateway="openrouter",
             status=ProviderStatus.DEGRADED,
             total_models=5,
             healthy_models=4,
@@ -112,7 +112,7 @@ def mock_model_health():
         ModelHealthResponse(
             model_id="gpt-3.5-turbo",
             provider="openai",
-            gateway="portkey",
+            gateway="openrouter",
             status=HealthStatus.HEALTHY,
             response_time_ms=120.0,
             uptime_percentage=99.8,
@@ -210,7 +210,7 @@ class TestProvidersHealth:
         """Filter providers by gateway parameter"""
         mock_get_providers.return_value = mock_provider_health
 
-        response = client.get('/health/providers?gateway=portkey', headers=auth_headers)
+        response = client.get('/health/providers?gateway=openrouter', headers=auth_headers)
 
         if response.status_code == 200:
             data = response.json()

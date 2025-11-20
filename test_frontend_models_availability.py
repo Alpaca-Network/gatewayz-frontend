@@ -39,7 +39,6 @@ def fetch_all_gateway_models(api_base: str = "http://localhost:8000") -> Dict[st
 
     gateways = [
         "openrouter",
-        "portkey",
         "featherless",
         "deepinfra",
         "chutes",

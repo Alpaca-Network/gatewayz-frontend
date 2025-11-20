@@ -38,9 +38,7 @@ class ProxyRequest(BaseModel):
     presence_penalty: Optional[float] = 0.0
     stream: Optional[bool] = False
     tools: Optional[List[dict]] = None  # Function calling tools
-    provider: Optional[str] = None  # Provider selection: "openrouter" or "portkey"
-    portkey_provider: Optional[str] = "openai"  # Sub-provider for Portkey
-    portkey_virtual_key: Optional[str] = None  # Virtual key for Portkey
+    provider: Optional[str] = None  # Provider selection: "openrouter", etc
 
     class Config:
         extra = "allow"
@@ -91,8 +89,6 @@ class ResponseRequest(BaseModel):
     tools: Optional[List[dict]] = None  # Function calling tools
     response_format: Optional[ResponseFormat] = None
     provider: Optional[str] = None
-    portkey_provider: Optional[str] = "openai"
-    portkey_virtual_key: Optional[str] = None
 
     class Config:
         extra = "allow"
@@ -182,8 +178,6 @@ class MessagesRequest(BaseModel):
 
     # Gateway-specific fields (not part of Anthropic API)
     provider: Optional[str] = None
-    portkey_provider: Optional[str] = "openai"
-    portkey_virtual_key: Optional[str] = None
 
     class Config:
         extra = "allow"

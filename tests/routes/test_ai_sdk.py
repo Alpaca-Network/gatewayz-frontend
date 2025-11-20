@@ -13,7 +13,6 @@ os.environ.setdefault('SUPABASE_URL', 'https://test.supabase.co')
 os.environ.setdefault('SUPABASE_KEY', 'test-key')
 os.environ.setdefault('OPENROUTER_API_KEY', 'test-openrouter-key')
 os.environ.setdefault('ENCRYPTION_KEY', 'test-encryption-key-32-bytes-long!')
-os.environ.setdefault('PORTKEY_API_KEY', 'test-portkey-key')
 os.environ.setdefault('AI_SDK_API_KEY', 'test-ai-sdk-key')
 
 from fastapi.testclient import TestClient

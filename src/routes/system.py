@@ -38,12 +38,11 @@ from src.services.models import (
     fetch_models_from_groq,
     fetch_models_from_near,
     fetch_models_from_openrouter,
-    fetch_models_from_portkey,
     fetch_models_from_together,
 )
 from src.services.modelz_client import get_modelz_cache_status as get_modelz_cache_status_func
 from src.services.modelz_client import refresh_modelz_cache
-from src.services.portkey_providers import (
+from src.services.providers import (
     fetch_models_from_cerebras,
     fetch_models_from_nebius,
     fetch_models_from_novita,
@@ -94,7 +93,6 @@ def get_all_gateway_names() -> List[str]:
         "nebius",
         "novita",
         "openrouter",
-        "portkey",
         "together",
         "xai",
     ]
@@ -127,7 +125,6 @@ def get_cacheable_gateways() -> List[str]:
         "nebius": fetch_models_from_nebius,
         "novita": fetch_models_from_novita,
         "openrouter": fetch_models_from_openrouter,
-        "portkey": fetch_models_from_portkey,
         "together": fetch_models_from_together,
         "xai": fetch_models_from_xai,
     }
@@ -158,7 +155,6 @@ def get_fetch_function(gateway: str):
         "nebius": fetch_models_from_nebius,
         "novita": fetch_models_from_novita,
         "openrouter": fetch_models_from_openrouter,
-        "portkey": fetch_models_from_portkey,
         "together": fetch_models_from_together,
         "xai": fetch_models_from_xai,
     }
@@ -1269,7 +1265,7 @@ async def refresh_gateway_cache(
     Force refresh cache for a specific gateway.
 
     **Parameters:**
-    - `gateway`: The gateway to refresh (openrouter, portkey, featherless, etc.)
+    - `gateway`: The gateway to refresh (openrouter, featherless, etc.)
     - `force`: If true, refresh even if cache is still valid
 
     **Example:**
@@ -1445,13 +1441,6 @@ async def check_all_gateways():
                 "url": "https://openrouter.ai/api/v1/models",
                 "api_key": Config.OPENROUTER_API_KEY,
                 "headers": {},
-            },
-            "portkey": {
-                "url": "https://api.portkey.ai/v1/models",
-                "api_key": Config.PORTKEY_API_KEY,
-                "headers": (
-                    {"x-portkey-api-key": Config.PORTKEY_API_KEY} if Config.PORTKEY_API_KEY else {}
-                ),
             },
             "featherless": {
                 "url": "https://api.featherless.ai/v1/models",
@@ -1699,7 +1688,7 @@ async def check_single_gateway(gateway: str):
     Check health status of a specific gateway with detailed diagnostics.
 
     **Parameters:**
-    - `gateway`: Gateway name (openrouter, portkey, featherless, etc.)
+    - `gateway`: Gateway name (openrouter, featherless, etc.)
 
     **Returns detailed health information including:**
     - API connectivity

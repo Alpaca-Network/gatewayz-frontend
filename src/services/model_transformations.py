@@ -103,10 +103,10 @@ def transform_model_id(model_id: str, provider: str, use_multi_provider: bool = 
         logger.debug(f"Model ID already in Fireworks format: {model_id}")
         return model_id
 
-    # If already has Portkey @ prefix, return as-is (already lowercase)
-    # EXCEPT for Google Vertex AI models which may use @google/models/ format
+    # If model starts with @, but is not a Google model, keep as-is
+    # (@ prefix is used by some providers but Portkey has been removed)
     if model_id.startswith("@") and not model_id.startswith("@google/models/"):
-        logger.debug(f"Model ID already in Portkey format: {model_id}")
+        logger.debug(f"Model ID with @ prefix (non-Google): {model_id}")
         return model_id
 
     provider_lower = provider.lower()
@@ -256,11 +256,6 @@ def get_model_id_mapping(provider: str) -> Dict[str, str]:
             "meta-llama/llama-3.3-70b": "meta-llama/Llama-3.3-70B-Instruct",
             "meta-llama/llama-3.1-70b": "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
             "deepseek-ai/deepseek-v3": "deepseek-ai/DeepSeek-V3",
-        },
-        "portkey": {
-            # Portkey uses @ prefix
-            "openai/gpt-4": "@openai/gpt-4",
-            "anthropic/claude-3-opus": "@anthropic/claude-3-opus-20240229",
         },
         "huggingface": {
             # HuggingFace uses org/model format directly
@@ -765,12 +760,14 @@ def detect_provider_from_model_id(model_id: str, preferred_provider: Optional[st
             logger.warning(f"⚠️ Routing {model_id} to openrouter (no Vertex credentials found)")
             return "openrouter"
 
-    # Portkey format is @org/model (must have / to be valid)
-    # Normalize to lowercase for case-insensitive @ prefix detection
-    if normalized_model.startswith("@") and "/" in model_id:
-        # Only Portkey if not a Google format
+    # Note: @ prefix used to indicate Portkey format, but Portkey has been removed
+    # After Portkey removal, @ prefix models are now routed through OpenRouter
+    # which supports multi-provider model format
+    if model_id.startswith("@") and "/" in model_id:
         if not normalized_model.startswith("@google/models/"):
-            return "portkey"
+            # Route @ prefix models (e.g., "@anthropic/claude-3-sonnet") to OpenRouter
+            logger.info(f"Routing @ prefix model {model_id} to openrouter (Portkey removed)")
+            return "openrouter"
 
     # Check all mappings to see if this model exists
     for provider in [
@@ -778,7 +775,6 @@ def detect_provider_from_model_id(model_id: str, preferred_provider: Optional[st
         "openrouter",
         "featherless",
         "together",
-        "portkey",
         "huggingface",
         "hug",
         "chutes",

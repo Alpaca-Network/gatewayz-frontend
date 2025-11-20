@@ -48,7 +48,6 @@ def main():
 
     gateways = [
         "openrouter",
-        "portkey",
         "featherless",
         "deepinfra",
         "chutes",

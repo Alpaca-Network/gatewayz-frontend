@@ -24,12 +24,6 @@ class TestCacheInitialization:
         assert cache_module._models_cache["ttl"] == 3600
         assert cache_module._models_cache["stale_ttl"] == 7200
 
-    def test_portkey_models_cache_initialized(self):
-        """Test Portkey models cache initialization with correct TTL"""
-        assert cache_module._portkey_models_cache is not None
-        assert cache_module._portkey_models_cache["data"] is None
-        assert cache_module._portkey_models_cache["ttl"] == 1800
-        assert cache_module._portkey_models_cache["stale_ttl"] == 3600
 
     def test_provider_cache_initialized(self):
         """Test provider cache is properly initialized"""
@@ -53,7 +47,7 @@ class TestCacheInitialization:
     def test_all_gateway_caches_exist(self):
         """Test all gateway-specific caches are initialized"""
         expected_gateways = [
-            "openrouter", "portkey", "featherless", "deepinfra",
+            "openrouter", "featherless", "deepinfra",
             "chutes", "groq", "fireworks", "together",
             "google-vertex", "cerebras", "nebius", "xai",
             "novita", "huggingface", "aimo", "near",
@@ -77,11 +71,6 @@ class TestGetModelsCacheByGateway:
         cache = cache_module.get_models_cache("openrouter")
         assert cache is cache_module._models_cache
 
-    def test_get_models_cache_portkey(self):
-        """Test retrieving Portkey cache"""
-        cache = cache_module.get_models_cache("portkey")
-        assert cache is cache_module._portkey_models_cache
-        assert cache["ttl"] == 1800
 
     def test_get_models_cache_featherless(self):
         """Test retrieving Featherless cache"""
@@ -155,15 +144,6 @@ class TestClearModelsCacheFunction:
         assert cache_module._models_cache["data"] is None
         assert cache_module._models_cache["timestamp"] is None
 
-    def test_clear_models_cache_portkey(self):
-        """Test clearing Portkey cache"""
-        cache_module._portkey_models_cache["data"] = {"models": []}
-        cache_module._portkey_models_cache["timestamp"] = datetime.now(timezone.utc)
-
-        cache_module.clear_models_cache("portkey")
-
-        assert cache_module._portkey_models_cache["data"] is None
-        assert cache_module._portkey_models_cache["timestamp"] is None
 
     def test_clear_models_cache_case_insensitive(self):
         """Test cache clearing is case insensitive"""
@@ -183,7 +163,7 @@ class TestClearModelsCacheFunction:
     def test_clear_all_gateway_caches(self):
         """Test clearing all gateway caches"""
         gateways = [
-            "openrouter", "portkey", "featherless", "google-vertex",
+            "openrouter", "featherless", "google-vertex",
             "cerebras", "xai", "huggingface", "vercel-ai-gateway"
         ]
 
@@ -658,8 +638,8 @@ class TestCacheIntegration:
         cache_module._models_cache["data"] = ["openrouter_model"]
         cache_module._models_cache["timestamp"] = datetime.now(timezone.utc)
 
-        cache_module._portkey_models_cache["data"] = ["portkey_model"]
-        cache_module._portkey_models_cache["timestamp"] = datetime.now(timezone.utc)
+        cache_module._featherless_models_cache["data"] = ["featherless_model"]
+        cache_module._featherless_models_cache["timestamp"] = datetime.now(timezone.utc)
 
         # Clear only openrouter
         cache_module.clear_models_cache("openrouter")
@@ -667,11 +647,11 @@ class TestCacheIntegration:
         # Verify openrouter cleared
         assert cache_module._models_cache["data"] is None
 
-        # Verify portkey intact
-        assert cache_module._portkey_models_cache["data"] == ["portkey_model"]
+        # Verify featherless intact
+        assert cache_module._featherless_models_cache["data"] == ["featherless_model"]
 
         # Cleanup
-        cache_module.clear_models_cache("portkey")
+        cache_module.clear_models_cache("featherless")
 
     def test_cache_freshness_state_transitions(self):
         """Test cache transitions from fresh to stale to expired"""

@@ -14,7 +14,6 @@ os.environ.setdefault('APP_ENV', 'testing')
 os.environ.setdefault('SUPABASE_URL', 'https://xxxxxxxxxxxxx.supabase.co')
 os.environ.setdefault('SUPABASE_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh4eHh4eHh4eHh4eHgiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTYwMDAwMDAwMCwiZXhwIjoxOTAwMDAwMDAwfQ.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
 os.environ.setdefault('OPENROUTER_API_KEY', 'sk-or-v1-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
-os.environ.setdefault('PORTKEY_API_KEY', 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
 os.environ.setdefault('ADMIN_API_KEY', 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
 os.environ.setdefault('ENCRYPTION_KEY', 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
 os.environ.setdefault('AI_SDK_API_KEY', 'sk-xxx-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
@@ -229,7 +228,6 @@ def mock_env_vars(monkeypatch):
         'SUPABASE_URL': os.getenv('SUPABASE_URL', 'https://test.supabase.co'),
         'SUPABASE_KEY': os.getenv('SUPABASE_KEY', 'test-key'),
         'OPENROUTER_API_KEY': os.getenv('OPENROUTER_API_KEY', 'test-openrouter-key'),
-        'PORTKEY_API_KEY': os.getenv('PORTKEY_API_KEY', 'test-portkey-key'),
         'ENCRYPTION_KEY': os.getenv('ENCRYPTION_KEY', 'test-encryption-key-32-bytes-long!'),
         'ADMIN_API_KEY': os.getenv('ADMIN_API_KEY', 'test-admin-key'),
     }

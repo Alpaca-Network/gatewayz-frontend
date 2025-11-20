@@ -30,14 +30,6 @@ class Config:
     OPENROUTER_SITE_URL = os.environ.get("OPENROUTER_SITE_URL", "https://your-site.com")
     OPENROUTER_SITE_NAME = os.environ.get("OPENROUTER_SITE_NAME", "Openrouter AI Gateway")
 
-    # Portkey Configuration
-    PORTKEY_API_KEY = os.environ.get("PORTKEY_API_KEY")
-    PORTKEY_DEFAULT_VIRTUAL_KEY = os.environ.get("PORTKEY_VIRTUAL_KEY")
-
-    # Provider API Keys (for use with Portkey)
-    PROVIDER_OPENAI_API_KEY = os.environ.get("PROVIDER_OPENAI_API_KEY")
-    PROVIDER_ANTHROPIC_API_KEY = os.environ.get("PROVIDER_ANTHROPIC_API_KEY")
-
     # DeepInfra Configuration (for direct API access)
     DEEPINFRA_API_KEY = os.environ.get("DEEPINFRA_API_KEY")
     XAI_API_KEY = os.environ.get("XAI_API_KEY")
@@ -155,24 +147,6 @@ class Config:
     )
 
     @classmethod
-    def get_portkey_virtual_key(cls, provider: str | None = None) -> str | None:
-        """
-        Resolve Portkey virtual key for a provider.
-
-        Order of precedence:
-        1. Explicit provider-specific env: PORTKEY_VIRTUAL_KEY_<PROVIDER>
-           (provider name uppercased with non-alphanumeric replaced by underscores)
-        2. PORTKEY_VIRTUAL_KEY (generic default)
-        """
-        if not provider:
-            return cls.PORTKEY_DEFAULT_VIRTUAL_KEY
-
-        normalized = "".join(ch if ch.isalnum() else "_" for ch in provider.upper())
-        env_name = f"PORTKEY_VIRTUAL_KEY_{normalized}"
-        provider_specific = os.environ.get(env_name)
-        return provider_specific or cls.PORTKEY_DEFAULT_VIRTUAL_KEY
-
-    @classmethod
     def validate(cls):
         """Validate that all required environment variables are set"""
         # Skip validation in Vercel environment to prevent startup failures
@@ -187,19 +161,16 @@ class Config:
             missing_vars.append("SUPABASE_KEY")
         if not cls.OPENROUTER_API_KEY:
             missing_vars.append("OPENROUTER_API_KEY")
-        if not cls.PORTKEY_API_KEY:
-            missing_vars.append("PORTKEY_API_KEY")
 
         if missing_vars:
             raise RuntimeError(
                 f"Missing required environment variables: {', '.join(missing_vars)}\n"
-                "Please create a ..env file with the following variables:\n"
+                "Please create a .env file with the following variables:\n"
                 "SUPABASE_URL=your_supabase_project_url\n"
                 "SUPABASE_KEY=your_supabase_anon_key\n"
                 "OPENROUTER_API_KEY=your_openrouter_api_key\n"
                 "OPENROUTER_SITE_URL=your_site_url (optional)\n"
-                "OPENROUTER_SITE_NAME=your_site_name (optional)\n"
-                "PORTKEY_API_KEY=your_portkey_api_key"
+                "OPENROUTER_SITE_NAME=your_site_name (optional)"
             )
 
         return True
@@ -227,7 +198,6 @@ class Config:
             "SUPABASE_URL": cls.SUPABASE_URL,
             "SUPABASE_KEY": cls.SUPABASE_KEY,
             "OPENROUTER_API_KEY": cls.OPENROUTER_API_KEY,
-            "PORTKEY_API_KEY": cls.PORTKEY_API_KEY,
         }
 
         missing = [name for name, value in critical_vars.items() if not value]

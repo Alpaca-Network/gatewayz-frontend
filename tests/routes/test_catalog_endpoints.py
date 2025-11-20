@@ -44,16 +44,6 @@ class TestGetProvidersEndpoint:
         response = client.get("/v1/provider?gateway=openrouter")
         assert response.status_code in [200, 503, 500]
 
-    @patch('src.routes.catalog.get_cached_models')
-    def test_get_providers_portkey(self, mock_models):
-        """Test getting Portkey providers"""
-        mock_models.return_value = [
-            {"id": "openai/gpt-4", "provider_slug": "openai"}
-        ]
-
-        response = client.get("/v1/provider?gateway=portkey")
-        assert response.status_code in [200, 503, 500]
-
     @patch('src.routes.catalog.get_cached_providers')
     @patch('src.routes.catalog.get_cached_models')
     def test_get_providers_all_gateways(self, mock_models, mock_providers):
@@ -221,7 +211,6 @@ class TestModelsEndpoint:
             gateway = (gateway or "").lower()
             catalog_by_gateway = {
                 "openrouter": [sample_model],
-                "portkey": [],
                 "featherless": [],
                 "deepinfra": [],
                 "chutes": [],

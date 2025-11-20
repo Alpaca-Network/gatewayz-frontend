@@ -27,7 +27,6 @@ import src.db.plans as plans_module
 import src.db.chat_history as chat_history_module
 import src.db.activity as activity_module
 import src.services.openrouter_client as openrouter_module
-import src.services.portkey_client as portkey_module
 import src.services.vercel_ai_gateway_client as vercel_ai_gateway_module
 import src.services.rate_limiting as rate_limiting_module
 import src.services.trial_validation as trial_module

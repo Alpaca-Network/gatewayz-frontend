@@ -65,11 +65,15 @@ def test_detect_provider_google_vertex_models():
         assert result == expected, f"Expected '{expected}' for {model_id}, got {result}"
 
 
-def test_detect_provider_portkey_models():
-    """Test that Portkey models with @ prefix are correctly detected"""
+def test_detect_provider_at_prefix_models():
+    """Test that models with @ prefix are routed to OpenRouter after Portkey removal
+
+    Previously these were routed to Portkey, but Portkey has been removed.
+    Now these models are detected by OpenRouter model catalog.
+    """
     test_cases = [
-        ("@anthropic/claude-3-sonnet", "portkey"),
-        ("@openai/gpt-4", "portkey"),
+        ("@anthropic/claude-3-sonnet", "openrouter"),
+        ("@openai/gpt-4", "openrouter"),
     ]
 
     for model_id, expected in test_cases:

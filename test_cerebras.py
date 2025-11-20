@@ -10,8 +10,8 @@ import os
 # Add the src directory to the path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
-from src.services.portkey_providers import fetch_models_from_cerebras
-from src.services.portkey_client import make_portkey_request_openai
+from src.services.providers import fetch_models_from_cerebras
+from src.services.cerebras_client import make_cerebras_request_openai
 from src.config import Config
 
 def test_fetch_cerebras_models():
@@ -59,16 +59,16 @@ async def test_cerebras_inference(model_id: str):
     print(f"TEST 2: Testing Inference with model: {model_id}")
     print("=" * 80)
 
-    # Check if Portkey API key is configured
-    if not Config.PORTKEY_API_KEY:
-        print("❌ PORTKEY_API_KEY not configured (needed to access Cerebras via Portkey)")
+    # Check if Cerebras API key is configured
+    if not Config.CEREBRAS_API_KEY:
+        print("❌ CEREBRAS_API_KEY not configured (needed to access Cerebras)")
         return None
 
-    print(f"✓ PORTKEY_API_KEY is configured")
+    print(f"✓ CEREBRAS_API_KEY is configured")
 
     # Prepare request
     request_params = {
-        'model': f"@cerebras/{model_id}",  # Portkey format for Cerebras models
+        'model': model_id,  # Direct model ID for Cerebras
         'messages': [
             {'role': 'system', 'content': 'You are a helpful assistant. Keep responses very brief.'},
             {'role': 'user', 'content': 'Say "Hello from Cerebras!" and nothing else.'},
@@ -83,7 +83,7 @@ async def test_cerebras_inference(model_id: str):
 
     try:
         # Make the request
-        response = await asyncio.to_thread(make_portkey_request_openai, **request_params)
+        response = await asyncio.to_thread(make_cerebras_request_openai, **request_params)
 
         # Validate response
         if not response:

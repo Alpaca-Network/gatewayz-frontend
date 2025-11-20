@@ -80,7 +80,7 @@ def get_pooled_client(
     Get or create a pooled OpenAI client for a specific provider.
 
     Args:
-        provider: Provider name (e.g., 'openrouter', 'portkey')
+        provider: Provider name (e.g., 'openrouter', 'featherless')
         base_url: API base URL
         api_key: API key for authentication
         default_headers: Optional headers to include in all requests
@@ -123,7 +123,7 @@ def get_pooled_async_client(
     Get or create a pooled AsyncOpenAI client for a specific provider.
 
     Args:
-        provider: Provider name (e.g., 'openrouter', 'portkey')
+        provider: Provider name (e.g., 'openrouter', 'featherless')
         base_url: API base URL
         api_key: API key for authentication
         default_headers: Optional headers to include in all requests
@@ -203,36 +203,6 @@ def get_openrouter_pooled_client() -> OpenAI:
             "HTTP-Referer": Config.OPENROUTER_SITE_URL,
             "X-TitleSection": Config.OPENROUTER_SITE_NAME,
         },
-    )
-
-
-def get_portkey_pooled_client(
-    provider: Optional[str] = None,
-    virtual_key: Optional[str] = None,
-) -> OpenAI:
-    """Get pooled client for Portkey."""
-    if not Config.PORTKEY_API_KEY:
-        raise ValueError("Portkey API key not configured")
-
-    headers = {
-        "x-portkey-api-key": Config.PORTKEY_API_KEY,
-    }
-
-    resolved_virtual_key = virtual_key or Config.get_portkey_virtual_key(provider)
-    if resolved_virtual_key:
-        headers["x-portkey-virtual-key"] = resolved_virtual_key
-
-    if provider:
-        headers["x-portkey-provider"] = provider
-
-    # Create unique cache key based on provider/virtual_key combination
-    cache_suffix = f"_{provider}_{virtual_key}" if provider or virtual_key else ""
-
-    return get_pooled_client(
-        provider=f"portkey{cache_suffix}",
-        base_url="https://api.portkey.ai/v1",
-        api_key=Config.PORTKEY_API_KEY,
-        default_headers=headers,
     )
 
 

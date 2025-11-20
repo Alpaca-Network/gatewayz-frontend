@@ -258,31 +258,6 @@ class TestCacheRefresh:
         assert data['action'] == 'not_supported'
         assert 'on-demand' in data['message'].lower()
 
-    @patch('src.routes.system.get_models_cache')
-    @patch('src.routes.system.clear_models_cache')
-    @patch('src.routes.system.fetch_models_from_portkey')
-    def test_refresh_gateway_cache_fetch_error(
-        self,
-        mock_fetch,
-        mock_clear,
-        mock_get_cache,
-        client
-    ):
-        """Test error handling during fetch"""
-        old_cache = {
-            "data": [],
-            "timestamp": datetime.now(timezone.utc).timestamp() - 7200,
-            "ttl": 3600
-        }
-
-        mock_get_cache.return_value = old_cache
-        mock_fetch.side_effect = Exception("Fetch failed")
-
-        response = client.post('/cache/refresh/portkey?force=true')
-
-        assert response.status_code == 500
-        assert 'failed' in response.json()['detail'].lower()
-
 
 # ============================================================
 # TEST CLASS: Cache Clear

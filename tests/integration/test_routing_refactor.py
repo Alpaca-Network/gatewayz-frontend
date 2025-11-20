@@ -365,21 +365,6 @@ class TestProviderSpecificRouting:
         assert response.status_code in [200, 401, 403, 404, 500, 503]
         logger.info(f"OpenRouter routing status: {response.status_code}")
 
-    def test_route_to_portkey(self):
-        """Test explicit routing to Portkey"""
-        response = client.post(
-            "/v1/chat/completions",
-            json={
-                "model": "gpt-4",
-                "messages": [{"role": "user", "content": "Test"}],
-                "provider": "portkey",
-            },
-            headers={"Authorization": "Bearer test-key"},
-        )
-
-        assert response.status_code in [200, 401, 403, 404, 500, 503]
-        logger.info(f"Portkey routing status: {response.status_code}")
-
     def test_route_gemini_model(self):
         """Test routing Google Gemini model"""
         response = client.post(

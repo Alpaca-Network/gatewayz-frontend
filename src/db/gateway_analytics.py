@@ -92,7 +92,7 @@ def get_gateway_stats(
     Get comprehensive statistics for a specific gateway
 
     Args:
-        gateway: Gateway name (e.g., 'openrouter', 'portkey', 'deepinfra')
+        gateway: Gateway name (e.g., 'openrouter', 'featherless', 'deepinfra')
         time_range: Time range: '1h', '24h', '7d', '30d', 'all'
         user_id: Optional user filter
 
@@ -255,7 +255,7 @@ def get_all_gateways_summary(
         Dictionary with statistics for each gateway
     """
     try:
-        gateways = ["openrouter", "portkey", "featherless", "deepinfra", "chutes"]
+        gateways = ["openrouter", "featherless", "deepinfra", "chutes"]
 
         summary = {
             "time_range": time_range,

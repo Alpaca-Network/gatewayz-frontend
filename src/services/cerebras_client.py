@@ -137,3 +137,13 @@ def process_cerebras_response(response):
     except Exception as e:
         logger.error(f"Failed to process Cerebras response: {e}")
         raise
+
+
+def fetch_models_from_cerebras():
+    """Fetch models from Cerebras API
+
+    Cerebras does not provide a public API to list available models.
+    Returns None to indicate no dynamic model listing is available.
+    """
+    logger.info("Cerebras does not provide a public model listing API")
+    return None

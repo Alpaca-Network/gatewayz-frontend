@@ -84,7 +84,7 @@ class TestGetProviderStats:
 
         mock_data = [
             {"provider": "OpenAI", "metadata": {"gateway": "openrouter"}},
-            {"provider": "OpenAI", "metadata": {"gateway": "portkey"}},
+            {"provider": "OpenAI", "metadata": {"gateway": "featherless"}},
         ]
 
         mock_table.select.return_value.gte.return_value.execute.return_value.data = mock_data

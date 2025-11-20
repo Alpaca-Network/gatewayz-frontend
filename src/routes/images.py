@@ -16,7 +16,6 @@ from src.services.fal_image_client import make_fal_image_request
 from src.services.image_generation_client import (
     make_deepinfra_image_request,
     make_google_vertex_image_request,
-    make_portkey_image_request,
     process_image_generation_response,
 )
 from src.utils.performance_tracker import PerformanceTracker
@@ -48,17 +47,14 @@ async def generate_images(req: ImageGenerationRequest, api_key: str = Depends(ge
     }
     ```
 
-    Portkey:
+    DeepInfra/Others:
     ```json
     {
         "prompt": "A serene mountain landscape at sunset",
         "model": "stable-diffusion-3.5-large",
         "size": "1024x1024",
         "n": 1,
-        "quality": "standard",
-        "provider": "portkey",
-        "portkey_provider": "stability-ai",
-        "portkey_virtual_key": "your-virtual-key-id"
+        "quality": "standard"
     }
     ```
 
@@ -168,25 +164,6 @@ async def generate_images(req: ImageGenerationRequest, api_key: str = Depends(ge
                     make_deepinfra_image_request, prompt=prompt, model=model, size=req.size, n=req.n
                 )
                 actual_provider = "deepinfra"
-            elif provider == "portkey":
-                # Portkey request
-                portkey_provider = req.portkey_provider if req.portkey_provider else "stability-ai"
-                portkey_virtual_key = (
-                    req.portkey_virtual_key if hasattr(req, "portkey_virtual_key") else None
-                )
-
-                make_request_func = partial(
-                    make_portkey_image_request,
-                    prompt=prompt,
-                    model=model,
-                    provider=portkey_provider,
-                    virtual_key=portkey_virtual_key,
-                    size=req.size,
-                    n=req.n,
-                    quality=req.quality,
-                    style=req.style,
-                )
-                actual_provider = portkey_provider
             elif provider == "google-vertex":
                 # Google Vertex AI request
                 google_project_id = (
@@ -217,7 +194,7 @@ async def generate_images(req: ImageGenerationRequest, api_key: str = Depends(ge
             else:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Provider '{provider}' is not supported for image generation. Use 'deepinfra', 'portkey', 'google-vertex', or 'fal'",
+                    detail=f"Provider '{provider}' is not supported for image generation. Use 'deepinfra', 'google-vertex', or 'fal'",
                 )
 
             response = await loop.run_in_executor(executor, make_request_func)

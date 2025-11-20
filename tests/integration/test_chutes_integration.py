@@ -2,7 +2,12 @@
 """Test script to verify Chutes.ai integration"""
 
 import sys
-sys.path.insert(0, '/Users/vaughn/Documents/GitHub/gatewayz-backend')
+import os
+from pathlib import Path
+
+# Add project root to path
+project_root = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(project_root))
 
 from src.services.models import get_cached_models
 

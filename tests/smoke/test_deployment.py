@@ -256,16 +256,6 @@ class TestExternalServices:
         except requests.exceptions.RequestException:
             pytest.skip("OpenRouter not reachable (network issue)")
 
-    def test_can_reach_portkey(self):
-        """Test that Portkey is reachable (if configured)"""
-        try:
-            response = requests.get("https://api.portkey.ai/", timeout=10)
-            # Portkey should be reachable (even if it returns an error)
-            assert response.status_code < 600, \
-                "Portkey API should be reachable"
-        except requests.exceptions.RequestException:
-            pytest.skip("Portkey not reachable (network issue)")
-
 
 # ============================================================
 # TEST CLASS: Response Time

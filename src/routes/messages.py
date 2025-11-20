@@ -43,7 +43,6 @@ from src.services.openrouter_client import (
     make_openrouter_request_openai,
     process_openrouter_response,
 )
-from src.services.portkey_client import make_portkey_request_openai, process_portkey_response
 from src.services.pricing import calculate_cost
 from src.services.provider_failover import (
     build_provider_failover_chain,
@@ -166,7 +165,7 @@ async def anthropic_messages(
     Anthropic Messages API endpoint (Claude API compatible).
 
     This endpoint accepts Anthropic-style requests and transforms them to work
-    with OpenAI-compatible providers (OpenRouter, Portkey, Featherless).
+    with OpenAI-compatible providers (OpenRouter, Featherless).
 
     Key differences from OpenAI Chat Completions:
     - Uses 'messages' array but 'system' is a separate parameter
@@ -371,7 +370,6 @@ async def anthropic_messages(
                         "featherless",
                         "fireworks",
                         "together",
-                        "portkey",
                     ]:
                         transformed = transform_model_id(original_model, test_provider)
                         provider_models = get_cached_models(test_provider) or []
@@ -411,42 +409,7 @@ async def anthropic_messages(
 
             http_exc = None
             try:
-                if attempt_provider == "portkey":
-                    if Config.IS_TESTING:
-                        logger.info(
-                            "Messages: using mocked openrouter path for portkey in tests (Config.IS_TESTING=%s)",
-                            Config.IS_TESTING,
-                        )
-                        resp_raw = await asyncio.wait_for(
-                            _to_thread(
-                                make_openrouter_request_openai,
-                                openai_messages,
-                                request_model,
-                                **openai_params,
-                            ),
-                            timeout=request_timeout,
-                        )
-                        processed = await _to_thread(process_openrouter_response, resp_raw)
-                    else:
-                        logger.info(
-                            "Messages: calling real portkey provider (Config.IS_TESTING=%s)",
-                            Config.IS_TESTING,
-                        )
-                        portkey_provider = req.portkey_provider or "anthropic"
-                        portkey_virtual_key = getattr(req, "portkey_virtual_key", None)
-                        resp_raw = await asyncio.wait_for(
-                            _to_thread(
-                                make_portkey_request_openai,
-                                openai_messages,
-                                request_model,
-                                portkey_provider,
-                                portkey_virtual_key,
-                                **openai_params,
-                            ),
-                            timeout=request_timeout,
-                        )
-                        processed = await _to_thread(process_portkey_response, resp_raw)
-                elif attempt_provider == "featherless":
+                if attempt_provider == "featherless":
                     resp_raw = await asyncio.wait_for(
                         _to_thread(
                             make_featherless_request_openai,
@@ -744,8 +707,3 @@ async def anthropic_messages(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-# When running in test mode we reuse OpenRouter client for providers that
-# normally rely on external credentials, so unit tests can stub a single path
-if Config.IS_TESTING:
-    make_portkey_request_openai = make_openrouter_request_openai
-    process_portkey_response = process_openrouter_response

@@ -116,17 +116,6 @@ make_openrouter_request_openai = _openrouter.get("make_openrouter_request_openai
 process_openrouter_response = _openrouter.get("process_openrouter_response")
 make_openrouter_request_openai_stream = _openrouter.get("make_openrouter_request_openai_stream")
 
-_portkey = _safe_import_provider(
-    "portkey",
-    [
-        "make_portkey_request_openai",
-        "process_portkey_response",
-        "make_portkey_request_openai_stream",
-    ],
-)
-make_portkey_request_openai = _portkey.get("make_portkey_request_openai")
-process_portkey_response = _portkey.get("process_portkey_response")
-make_portkey_request_openai_stream = _portkey.get("make_portkey_request_openai_stream")
 
 _featherless = _safe_import_provider(
     "featherless",
@@ -1029,7 +1018,6 @@ async def chat_completions(
                         "featherless",
                         "fireworks",
                         "together",
-                        "portkey",
                         "google-vertex",
                     ]:
                         transformed = transform_model_id(original_model, test_provider)
@@ -1067,18 +1055,7 @@ async def chat_completions(
 
                 request_model = attempt_model
                 try:
-                    if attempt_provider == "portkey":
-                        portkey_provider = req.portkey_provider or "openai"
-                        portkey_virtual_key = getattr(req, "portkey_virtual_key", None)
-                        stream = await _to_thread(
-                            make_portkey_request_openai_stream,
-                            messages,
-                            request_model,
-                            portkey_provider,
-                            portkey_virtual_key,
-                            **optional,
-                        )
-                    elif attempt_provider == "featherless":
+                    if attempt_provider == "featherless":
                         stream = await _to_thread(
                             make_featherless_request_openai_stream,
                             messages,
@@ -1262,22 +1239,7 @@ async def chat_completions(
                 )
 
             try:
-                if attempt_provider == "portkey":
-                    portkey_provider = req.portkey_provider or "openai"
-                    portkey_virtual_key = getattr(req, "portkey_virtual_key", None)
-                    resp_raw = await asyncio.wait_for(
-                        _to_thread(
-                            make_portkey_request_openai,
-                            messages,
-                            request_model,
-                            portkey_provider,
-                            portkey_virtual_key,
-                            **optional,
-                        ),
-                        timeout=request_timeout,
-                    )
-                    processed = await _to_thread(process_portkey_response, resp_raw)
-                elif attempt_provider == "featherless":
+                if attempt_provider == "featherless":
                     resp_raw = await asyncio.wait_for(
                         _to_thread(
                             make_featherless_request_openai, messages, request_model, **optional
@@ -1951,7 +1913,6 @@ async def unified_responses(
                     "featherless",
                     "fireworks",
                     "together",
-                    "portkey",
                     "google-vertex",
                 ]:
                     transformed = transform_model_id(original_model, test_provider)
@@ -1992,18 +1953,7 @@ async def unified_responses(
                 request_model = attempt_model
                 http_exc = None
                 try:
-                    if attempt_provider == "portkey":
-                        portkey_provider = req.portkey_provider or "openai"
-                        portkey_virtual_key = getattr(req, "portkey_virtual_key", None)
-                        stream = await _to_thread(
-                            make_portkey_request_openai_stream,
-                            messages,
-                            request_model,
-                            portkey_provider,
-                            portkey_virtual_key,
-                            **optional,
-                        )
-                    elif attempt_provider == "featherless":
+                    if attempt_provider == "featherless":
                         stream = await _to_thread(
                             make_featherless_request_openai_stream,
                             messages,
@@ -2157,22 +2107,7 @@ async def unified_responses(
 
             http_exc = None
             try:
-                if attempt_provider == "portkey":
-                    portkey_provider = req.portkey_provider or "openai"
-                    portkey_virtual_key = getattr(req, "portkey_virtual_key", None)
-                    resp_raw = await asyncio.wait_for(
-                        _to_thread(
-                            make_portkey_request_openai,
-                            messages,
-                            request_model,
-                            portkey_provider,
-                            portkey_virtual_key,
-                            **optional,
-                        ),
-                        timeout=request_timeout,
-                    )
-                    processed = await _to_thread(process_portkey_response, resp_raw)
-                elif attempt_provider == "featherless":
+                if attempt_provider == "featherless":
                     resp_raw = await asyncio.wait_for(
                         _to_thread(
                             make_featherless_request_openai, messages, request_model, **optional

@@ -13,10 +13,8 @@ class ImageGenerationRequest(BaseModel):
     quality: Optional[Literal["standard", "hd"]] = "standard"
     style: Optional[Literal["natural", "vivid"]] = "natural"
     provider: Optional[str] = (
-        "deepinfra"  # Provider selection: "deepinfra", "portkey", or "google-vertex"
+        "deepinfra"  # Provider selection: "deepinfra" or "google-vertex"
     )
-    portkey_provider: Optional[str] = "stability-ai"  # Sub-provider for Portkey
-    portkey_virtual_key: Optional[str] = None  # Virtual key for Portkey
     google_project_id: Optional[str] = None  # Google Cloud project ID for Vertex AI
     google_location: Optional[str] = None  # Google Cloud region for Vertex AI
     google_endpoint_id: Optional[str] = None  # Vertex AI endpoint ID

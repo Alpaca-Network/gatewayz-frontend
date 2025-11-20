@@ -199,7 +199,6 @@ class ModelHealthMonitor:
             # Get models from different gateways
             gateways = [
                 "openrouter",
-                "portkey",
                 "featherless",
                 "deepinfra",
                 "huggingface",
@@ -313,7 +312,6 @@ class ModelHealthMonitor:
             # Get the appropriate endpoint URL based on gateway
             endpoint_urls = {
                 "openrouter": "https://openrouter.ai/api/v1/chat/completions",
-                "portkey": "https://api.portkey.ai/v1/chat/completions",
                 "featherless": "https://api.featherless.ai/v1/chat/completions",
                 "deepinfra": "https://api.deepinfra.com/v1/openai/chat/completions",
                 "huggingface": "https://api-inference.huggingface.co/models/" + model_id,

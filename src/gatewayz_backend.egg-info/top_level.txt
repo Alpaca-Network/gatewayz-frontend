@@ -9,6 +9,7 @@ db
 db_security
 enhanced_notification_service
 main
+middleware
 models
 redis_config
 routes

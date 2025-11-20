@@ -35,7 +35,7 @@ class ErrorSeverity(str, Enum):
 class ErrorCategory(str, Enum):
     """Error categories for classification."""
 
-    PROVIDER_ERROR = "provider_error"  # OpenRouter, Portkey, etc.
+    PROVIDER_ERROR = "provider_error"  # OpenRouter, Featherless, etc.
     DATABASE_ERROR = "database_error"  # Supabase connectivity
     RATE_LIMIT_ERROR = "rate_limit_error"  # Rate limiting issues
     AUTH_ERROR = "auth_error"  # Authentication failures
@@ -176,7 +176,6 @@ class ErrorMonitor:
             provider in full_text
             for provider in [
                 "openrouter",
-                "portkey",
                 "featherless",
                 "deepinfra",
                 "together",

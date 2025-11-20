@@ -273,8 +273,6 @@ def main():
             "modelz_client",
             "multi_provider_registry",
             "near_client",
-            "portkey_providers",
-            "portkey_sdk",
             "posthog_service",
             "pricing_lookup",
             "professional_email_templates",

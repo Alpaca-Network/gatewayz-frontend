@@ -837,7 +837,7 @@ class TestMessagesEndpointFailover:
         mock_rate_limit_mgr.return_value = rate_limit_mgr_instance
 
         # First provider fails, second succeeds
-        mock_build_chain.return_value = ['openrouter', 'portkey']
+        mock_build_chain.return_value = ['openrouter', 'featherless']
         mock_make_request.side_effect = [
             Exception("Provider error"),  # First attempt fails
             mock_openai_response  # Second attempt succeeds

@@ -246,7 +246,7 @@ def get_preferred_providers_for_priority(
     """
     # Define provider speed/reliability tiers
     tier_1_providers = {"fireworks", "together", "groq"}  # Fastest
-    tier_2_providers = {"openrouter", "portkey", "deepinfra"}  # Fast
+    tier_2_providers = {"openrouter", "deepinfra"}  # Fast
     tier_3_providers = {"featherless", "huggingface"}  # Slower but reliable
 
     ordered = []

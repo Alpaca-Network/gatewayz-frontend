@@ -127,12 +127,14 @@ class TestBuildProviderFailoverChain:
         # Unknown providers should only return themselves (no fallback)
         assert chain == ["custom_provider"]
 
-    def test_chain_with_portkey(self):
-        """Test chain with portkey (not eligible for fallback)"""
-        chain = build_provider_failover_chain("portkey")
+    def test_chain_with_removed_provider(self):
+        """Test chain with removed provider (not eligible for fallback)"""
+        # Portkey has been removed and is no longer a valid provider
+        # Test that unknown providers return only themselves
+        chain = build_provider_failover_chain("unknown_provider")
 
-        # Portkey should only return itself (no fallback chain)
-        assert chain == ["portkey"]
+        # Unknown providers should only return themselves (no fallback chain)
+        assert chain == ["unknown_provider"]
 
     def test_chain_case_insensitive(self):
         """Test chain building is case insensitive"""

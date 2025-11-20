@@ -35,7 +35,7 @@ def test_cerebras_model_normalization():
     print("=" * 80)
 
     try:
-        from src.services.portkey_providers import fetch_models_from_cerebras
+        from src.services.providers import fetch_models_from_cerebras
 
         # Check if API key is set
         api_key = os.getenv("CEREBRAS_API_KEY")

@@ -15,7 +15,6 @@ def test_cerebras_direct():
 
     # Check environment variables
     cerebras_api_key = os.environ.get("CEREBRAS_API_KEY")
-    portkey_api_key = os.environ.get("PORTKEY_API_KEY")
 
     print("\n1. Checking Environment Configuration:")
     print("─" * 80)
@@ -25,12 +24,6 @@ def test_cerebras_direct():
         print("   This is required to fetch models from Cerebras")
     else:
         print(f"✓ CEREBRAS_API_KEY is configured (length: {len(cerebras_api_key)})")
-
-    if not portkey_api_key:
-        print("❌ PORTKEY_API_KEY not configured in environment")
-        print("   This is required for inference via Portkey gateway")
-    else:
-        print(f"✓ PORTKEY_API_KEY is configured (length: {len(portkey_api_key)})")
 
     # Test 1: Fetch models using Cerebras SDK
     print("\n2. Fetching Cerebras Models:")

@@ -103,3 +103,13 @@ def process_xai_response(response):
     except Exception as e:
         logger.error(f"Failed to process xAI response: {e}")
         raise
+
+
+def fetch_models_from_xai():
+    """Fetch models from xAI API
+
+    xAI does not provide a public API to list available models.
+    Returns None to indicate no dynamic model listing is available.
+    """
+    logger.info("xAI does not provide a public model listing API")
+    return None

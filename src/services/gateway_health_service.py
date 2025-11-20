@@ -29,7 +29,6 @@ from src.cache import (
     _near_models_cache,
     _nebius_models_cache,
     _novita_models_cache,
-    _portkey_models_cache,
     _together_models_cache,
     _xai_models_cache,
 )
@@ -47,15 +46,6 @@ GATEWAY_CONFIG = {
         "cache": _models_cache,
         "min_expected_models": 100,
         "header_type": "bearer",
-    },
-    "portkey": {
-        "name": "Portkey",
-        "url": "https://api.portkey.ai/v1/models",
-        "api_key_env": "PORTKEY_API_KEY",
-        "api_key": Config.PORTKEY_API_KEY,
-        "cache": _portkey_models_cache,
-        "min_expected_models": 10,
-        "header_type": "portkey",
     },
     "featherless": {
         "name": "Featherless",
@@ -214,8 +204,6 @@ def build_headers(gateway_config: Dict[str, Any]) -> Dict[str, str]:
 
     if header_type == "bearer":
         return {"Authorization": f"Bearer {api_key}"}
-    elif header_type == "portkey":
-        return {"x-portkey-api-key": api_key}
     elif header_type == "google":
         # Google uses API key as query parameter, not header
         return {}

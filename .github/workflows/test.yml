@@ -43,7 +43,6 @@ jobs:
         echo "SUPABASE_KEY=${{ secrets.SUPABASE_KEY }}" >> $GITHUB_ENV
         echo "OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}" >> $GITHUB_ENV
         echo "ENCRYPTION_KEY=${{ secrets.ENCRYPTION_KEY }}" >> $GITHUB_ENV
-        echo "PORTKEY_API_KEY=${{ secrets.PORTKEY_API_KEY }}" >> $GITHUB_ENV
         echo "RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}" >> $GITHUB_ENV
         echo "ADMIN_API_KEY=${{ secrets.ADMIN_API_KEY }}" >> $GITHUB_ENV
         echo "AI_SDK_API_KEY=${{ secrets.AI_SDK_API_KEY }}" >> $GITHUB_ENV
@@ -92,7 +91,6 @@ jobs:
         echo "SUPABASE_KEY=${{ secrets.SUPABASE_KEY }}" >> $GITHUB_ENV
         echo "OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}" >> $GITHUB_ENV
         echo "ENCRYPTION_KEY=${{ secrets.ENCRYPTION_KEY }}" >> $GITHUB_ENV
-        echo "PORTKEY_API_KEY=${{ secrets.PORTKEY_API_KEY }}" >> $GITHUB_ENV
         echo "RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}" >> $GITHUB_ENV
         echo "ADMIN_API_KEY=${{ secrets.ADMIN_API_KEY }}" >> $GITHUB_ENV
         echo "AI_SDK_API_KEY=${{ secrets.AI_SDK_API_KEY }}" >> $GITHUB_ENV

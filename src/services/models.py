@@ -32,7 +32,6 @@ from src.cache import (
     _near_models_cache,
     _nebius_models_cache,
     _novita_models_cache,
-    _portkey_models_cache,
     _together_models_cache,
     _vercel_ai_gateway_models_cache,
     _xai_models_cache,
@@ -47,13 +46,11 @@ from src.services.multi_provider_registry import (
     CanonicalModelProvider,
     get_registry,
 )
-from src.services.portkey_providers import (
-    fetch_models_from_cerebras,
-    fetch_models_from_google_vertex,
-    fetch_models_from_nebius,
-    fetch_models_from_novita,
-    fetch_models_from_xai,
-)
+from src.services.cerebras_client import fetch_models_from_cerebras
+from src.services.google_vertex_client import fetch_models_from_google_vertex
+from src.services.nebius_client import fetch_models_from_nebius
+from src.services.novita_client import fetch_models_from_novita
+from src.services.xai_client import fetch_models_from_xai
 from src.services.pricing_lookup import enrich_model_with_pricing
 from src.utils.security_validators import sanitize_for_logging
 
@@ -397,7 +394,6 @@ def get_all_models_parallel():
     try:
         gateways = [
             "openrouter",
-            "portkey",
             "featherless",
             "deepinfra",
             "cerebras",
@@ -454,7 +450,6 @@ def get_all_models_parallel():
 def get_all_models_sequential():
     """Fallback sequential fetching (original implementation)"""
     openrouter_models = get_cached_models("openrouter") or []
-    portkey_models = get_cached_models("portkey") or []
     featherless_models = get_cached_models("featherless") or []
     deepinfra_models = get_cached_models("deepinfra") or []
     cerebras_models = get_cached_models("cerebras") or []
@@ -474,7 +469,6 @@ def get_all_models_sequential():
     aihubmix_models = get_cached_models("aihubmix") or []
     return (
         openrouter_models
-        + portkey_models
         + featherless_models
         + deepinfra_models
         + cerebras_models
@@ -525,14 +519,6 @@ def get_cached_models(gateway: str = "openrouter"):
     """Get cached models or fetch from the requested gateway if cache is expired"""
     try:
         gateway = (gateway or "openrouter").lower()
-
-        if gateway == "portkey":
-            cached = _fresh_cached_models(_portkey_models_cache, "portkey")
-            if cached is not None:
-                return cached
-            result = fetch_models_from_portkey()
-            _register_canonical_records("portkey", result)
-            return result
 
         if gateway == "featherless":
             cached = _fresh_cached_models(_featherless_models_cache, "featherless")
@@ -800,56 +786,6 @@ def fetch_models_from_openrouter():
         return None
 
 
-def fetch_models_from_portkey():
-    """Fetch models from Portkey API and normalize to the catalog schema"""
-    try:
-        if not Config.PORTKEY_API_KEY:
-            logger.error("Portkey API key not configured")
-            return None
-
-        headers = {"x-portkey-api-key": Config.PORTKEY_API_KEY, "Content-Type": "application/json"}
-
-        # Portkey API returns all models in a single request (no pagination support)
-        url = "https://api.portkey.ai/v1/models"
-        logger.info("Fetching Portkey models from %s", sanitize_for_logging(str(url)))
-
-        response = httpx.get(url, headers=headers, timeout=20.0)
-        response.raise_for_status()
-
-        payload = response.json()
-        logger.info(
-            f"Portkey API response structure: {json.dumps({k: type(v).__name__ for k, v in payload.items()}, indent=2)}"
-        )
-
-        raw_models = payload.get("data", [])
-        logger.info(f"Fetched {len(raw_models)} models from Portkey")
-
-        # Get OpenRouter models for pricing cross-reference
-        openrouter_models = get_cached_models("openrouter") or []
-
-        normalized_models = [
-            normalize_portkey_model(model, openrouter_models) for model in raw_models if model
-        ]
-
-        _portkey_models_cache["data"] = normalized_models
-        _portkey_models_cache["timestamp"] = datetime.now(timezone.utc)
-
-        logger.info(f"Cached {len(normalized_models)} Portkey models with pricing cross-reference")
-        return _portkey_models_cache["data"]
-    except httpx.HTTPStatusError as e:
-        logger.error(
-            "Portkey HTTP error: %s - %s",
-            e.response.status_code,
-            sanitize_for_logging(e.response.text),
-        )
-        return None
-    except Exception as e:
-        logger.error(
-            "Failed to fetch models from Portkey: %s", sanitize_for_logging(str(e)), exc_info=True
-        )
-        return None
-
-
 def fetch_models_from_deepinfra():
     """Fetch models from DeepInfra API and normalize to the catalog schema"""
     try:
@@ -908,96 +844,6 @@ def fetch_models_from_deepinfra():
             "Failed to fetch models from DeepInfra: %s", sanitize_for_logging(str(e)), exc_info=True
         )
         return None
-
-
-def normalize_portkey_model(portkey_model: dict, openrouter_models: list = None) -> dict:
-    """Normalize Portkey catalog entries to resemble OpenRouter model shape"""
-    slug = (
-        portkey_model.get("slug") or portkey_model.get("canonical_slug") or portkey_model.get("id")
-    )
-    if not slug:
-        return {"source_gateway": "portkey", "raw_portkey": portkey_model or {}}
-
-    provider_slug = slug.split("/")[0] if "/" in slug else slug
-    provider_slug = provider_slug.lstrip("@")
-
-    model_handle = slug.split("/")[-1]
-    display_name = model_handle.replace("-", " ").replace("_", " ").title()
-
-    # Try to find matching OpenRouter model for pricing
-    pricing = None
-    description_suffix = "Pricing data not available from Portkey API."
-
-    if openrouter_models:
-        # Clean up the slug for matching
-        clean_slug = slug.lstrip("@").split(":")[0]  # Remove @ prefix and :free/:extended suffixes
-
-        # Try multiple matching strategies
-        for or_model in openrouter_models:
-            or_slug = or_model.get("id", "")
-            or_slug_clean = or_slug.split(":")[0]
-
-            # Strategy 1: Exact match
-            if or_slug.lower() == slug.lower():
-                pricing = sanitize_pricing(or_model.get("pricing"))
-                description_suffix = "Pricing from OpenRouter (exact match)."
-                break
-
-            # Strategy 2: Match without prefixes/suffixes
-            if or_slug_clean.lower() == clean_slug.lower():
-                pricing = sanitize_pricing(or_model.get("pricing"))
-                description_suffix = "Pricing from OpenRouter (approximate match)."
-                break
-
-            # Strategy 3: Match canonical slug
-            or_canonical = or_model.get("canonical_slug", "")
-            if or_canonical and or_canonical.lower() == clean_slug.lower():
-                pricing = sanitize_pricing(or_model.get("pricing"))
-                description_suffix = "Pricing from OpenRouter (canonical match)."
-                break
-
-    # If no match found, use null
-    if not pricing:
-        pricing = {
-            "prompt": None,
-            "completion": None,
-            "request": None,
-            "image": None,
-            "web_search": None,
-            "internal_reasoning": None,
-        }
-
-    description = f"Portkey catalog entry for {slug}. {description_suffix}"
-
-    architecture = {
-        "modality": MODALITY_TEXT_TO_TEXT,
-        "input_modalities": ["text"],
-        "output_modalities": ["text"],
-        "tokenizer": None,
-        "instruct_type": None,
-    }
-
-    return {
-        "id": slug,
-        "slug": slug,
-        "canonical_slug": slug,
-        "hugging_face_id": None,
-        "name": display_name,
-        "created": None,
-        "description": description,
-        "context_length": 0,
-        "architecture": architecture,
-        "pricing": pricing,
-        "top_provider": None,
-        "per_request_limits": None,
-        "supported_parameters": [],
-        "default_parameters": {},
-        "provider_slug": provider_slug,
-        "provider_site_url": None,
-        "model_logo_url": None,
-        "source_gateway": "portkey",
-        "raw_portkey": portkey_model,
-    }
 
 
 def fetch_models_from_featherless():
@@ -2319,38 +2165,6 @@ def fetch_specific_model_from_together(provider_name: str, model_name: str):
         return None
 
 
-def fetch_specific_model_from_portkey(provider_name: str, model_name: str):
-    """Fetch specific model data from Portkey by searching cached models"""
-    try:
-        # Construct the model ID
-        model_id = f"{provider_name}/{model_name}"
-
-        # First check cache
-        portkey_models = get_cached_models("portkey")
-        if portkey_models:
-            for model in portkey_models:
-                if model.get("id", "").lower() == model_id.lower():
-                    return model
-
-        # If not in cache, try to fetch fresh data
-        fresh_models = fetch_models_from_portkey()
-        if fresh_models:
-            for model in fresh_models:
-                if model.get("id", "").lower() == model_id.lower():
-                    return model
-
-        logger.warning("Model %s not found in Portkey catalog", sanitize_for_logging(model_id))
-        return None
-    except Exception as e:
-        logger.error(
-            "Failed to fetch specific model %s/%s from Portkey: %s",
-            sanitize_for_logging(provider_name),
-            sanitize_for_logging(model_name),
-            sanitize_for_logging(str(e)),
-        )
-        return None
-
-
 def fetch_specific_model_from_featherless(provider_name: str, model_name: str):
     """Fetch specific model data from Featherless by searching cached models"""
     try:
@@ -2671,7 +2485,7 @@ def detect_model_gateway(provider_name: str, model_name: str) -> str:
     """Detect which gateway a model belongs to by searching all caches
 
     Returns:
-        Gateway name: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', 'groq', 'fireworks', 'together', 'cerebras', 'nebius', 'xai', 'novita', 'huggingface', 'fal', 'helicone', 'vercel-ai-gateway', 'aihubmix', 'anannas', 'near', 'aimo', or 'openrouter' (default)
+        Gateway name: 'openrouter', 'featherless', 'deepinfra', 'chutes', 'groq', 'fireworks', 'together', 'cerebras', 'nebius', 'xai', 'novita', 'huggingface', 'fal', 'helicone', 'vercel-ai-gateway', 'aihubmix', 'anannas', 'near', 'aimo', or 'openrouter' (default)
     """
     try:
         model_id = f"{provider_name}/{model_name}".lower()
@@ -2679,7 +2493,6 @@ def detect_model_gateway(provider_name: str, model_name: str) -> str:
         # Check each gateway's cache
         gateways = [
             "openrouter",
-            "portkey",
             "featherless",
             "deepinfra",
             "chutes",
@@ -2771,7 +2584,6 @@ def fetch_specific_model(provider_name: str, model_name: str, gateway: str = Non
 
         fetchers = {
             "openrouter": fetch_specific_model_from_openrouter,
-            "portkey": fetch_specific_model_from_portkey,
             "featherless": fetch_specific_model_from_featherless,
             "deepinfra": fetch_specific_model_from_deepinfra,
             "chutes": fetch_specific_model_from_chutes,

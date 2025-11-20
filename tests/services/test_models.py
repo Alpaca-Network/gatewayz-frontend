@@ -152,11 +152,6 @@ class TestGetCachedModels:
         # Should return list or None
         assert result is None or isinstance(result, list)
 
-    def test_get_cached_models_portkey(self):
-        """Test getting Portkey models from cache"""
-        result = get_cached_models("portkey")
-        assert result is None or isinstance(result, list)
-
     def test_get_cached_models_featherless(self):
         """Test getting Featherless models"""
         result = get_cached_models("featherless")

@@ -15,7 +15,6 @@ os.environ['SUPABASE_URL'] = 'https://test.supabase.co'
 os.environ['SUPABASE_KEY'] = 'test-key'
 os.environ['OPENROUTER_API_KEY'] = 'test-openrouter-key'
 os.environ['ENCRYPTION_KEY'] = 'test-encryption-key-32-bytes-long!'
-os.environ['PORTKEY_API_KEY'] = 'test-portkey-key'
 
 from src.main import app
 

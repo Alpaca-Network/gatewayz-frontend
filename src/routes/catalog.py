@@ -37,12 +37,12 @@ router = APIRouter()
 # Constants for query parameter descriptions (to avoid duplication)
 DESC_INCLUDE_HUGGINGFACE = "Include Hugging Face metrics if available"
 DESC_GATEWAY_AUTO_DETECT = (
-    "Gateway to use: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', "
+    "Gateway to use: 'openrouter', 'featherless', 'deepinfra', 'chutes', "
     "'groq', 'fireworks', 'together', 'cerebras', 'nebius', 'xai', 'novita', "
     "'huggingface' (or 'hug'), 'aimo', 'near', 'fal', 'helicone', 'anannas', 'aihubmix', 'vercel-ai-gateway', or auto-detect if not specified"
 )
 DESC_GATEWAY_WITH_ALL = (
-    "Gateway to use: 'openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', "
+    "Gateway to use: 'openrouter', 'featherless', 'deepinfra', 'chutes', "
     "'groq', 'fireworks', 'together', 'cerebras', 'nebius', 'xai', 'novita', "
     "'huggingface' (or 'hug'), 'aimo', 'near', 'fal', 'helicone', 'anannas', 'aihubmix', 'vercel-ai-gateway', or 'all'"
 )
@@ -71,7 +71,7 @@ def normalize_developer_segment(value: Optional[str]) -> Optional[str]:
     normalized = value.strip()
     if not normalized:
         return None
-    # Remove leading @ that some gateways include (e.g., Portkey)
+    # Remove leading @ that some gateways include
     normalized = normalized.lstrip("@")
     return normalized
 
@@ -96,29 +96,6 @@ def annotate_provider_sources(providers: List[dict], source: str) -> List[dict]:
             entry["source_gateways"].append(source)
         annotated.append(entry)
     return annotated
-
-
-def derive_portkey_providers(models: List[dict]) -> List[dict]:
-    providers: Dict[str, dict] = {}
-    for model in models or []:
-        provider_slug = model.get("provider_slug")
-        if not provider_slug:
-            model_id = model.get("id", "")
-            if "/" in model_id:
-                provider_slug = model_id.split("/")[0]
-        if not provider_slug:
-            continue
-        provider_slug = provider_slug.lstrip("@")
-        if provider_slug not in providers:
-            providers[provider_slug] = {
-                "slug": provider_slug,
-                "site_url": model.get("provider_site_url"),
-                "logo_url": model.get("model_logo_url"),
-                "moderated_by_openrouter": False,
-                "source_gateway": "portkey",
-                "source_gateways": ["portkey"],
-            }
-    return list(providers.values())
 
 
 def derive_providers_from_models(models: List[dict], gateway_name: str) -> List[dict]:
@@ -226,7 +203,6 @@ async def get_providers(
             gateway_value = "hug"
 
         openrouter_models = []
-        portkey_models = []
         provider_groups: List[List[dict]] = []
 
         if gateway_value in ("openrouter", "all"):
@@ -240,12 +216,6 @@ async def get_providers(
             )
             provider_groups.append(enhanced_openrouter)
             openrouter_models = get_cached_models("openrouter") or []
-
-        if gateway_value in ("portkey", "all"):
-            portkey_models = get_cached_models("portkey") or []
-            provider_groups.append(derive_portkey_providers(portkey_models))
-            if gateway_value == "portkey" and not portkey_models:
-                raise HTTPException(status_code=503, detail="Portkey models data unavailable")
 
         # Add support for other gateways
         other_gateways = [
@@ -283,8 +253,6 @@ async def get_providers(
         models_for_counts: List[dict] = []
         if gateway_value in ("openrouter", "all"):
             models_for_counts.extend(openrouter_models)
-        if gateway_value in ("portkey", "all"):
-            models_for_counts.extend(portkey_models)
         # Add models from other gateways for counting
         for gw, models in all_models.items():
             if gateway_value in (gw, "all"):
@@ -360,7 +328,6 @@ async def get_models(
         )
 
         openrouter_models: List[dict] = []
-        portkey_models: List[dict] = []
         featherless_models: List[dict] = []
         deepinfra_models: List[dict] = []
         chutes_models: List[dict] = []
@@ -385,12 +352,6 @@ async def get_models(
             openrouter_models = get_cached_models("openrouter") or []
             if gateway_value == "openrouter" and not openrouter_models:
                 logger.error("No OpenRouter models data available from cache")
-                raise HTTPException(status_code=503, detail=ERROR_MODELS_DATA_UNAVAILABLE)
-
-        if gateway_value in ("portkey", "all"):
-            portkey_models = get_cached_models("portkey") or []
-            if gateway_value == "portkey" and not portkey_models:
-                logger.error("No Portkey models data available from cache")
                 raise HTTPException(status_code=503, detail=ERROR_MODELS_DATA_UNAVAILABLE)
 
         if gateway_value in ("featherless", "all"):
@@ -503,8 +464,6 @@ async def get_models(
 
         if gateway_value == "openrouter":
             models = openrouter_models
-        elif gateway_value == "portkey":
-            models = portkey_models
         elif gateway_value == "featherless":
             models = featherless_models
         elif gateway_value == "deepinfra":
@@ -542,12 +501,9 @@ async def get_models(
         elif gateway_value == "vercel-ai-gateway":
             models = vercel_ai_gateway_models
         else:
-            # For "all" gateway, merge all models but avoid duplicates from Portkey-based providers
-            # Note: cerebras, nebius, xai, novita, hug are filtered FROM Portkey models,
-            # so we DON'T include them separately in the merge to avoid counting them twice
+            # For "all" gateway, merge all models avoiding duplicates
             models = merge_models_by_slug(
                 openrouter_models,
-                portkey_models,
                 featherless_models,
                 deepinfra_models,
                 chutes_models,
@@ -579,13 +535,9 @@ async def get_models(
             )
             provider_groups.append(enhanced_providers)
 
-        if gateway_value in ("portkey", "all"):
-            models_for_providers = portkey_models if gateway_value == "all" else models
-            provider_groups.append(derive_portkey_providers(models_for_providers))
-
         if gateway_value in ("featherless", "all"):
             models_for_providers = featherless_models if gateway_value == "all" else models
-            featherless_providers = derive_portkey_providers(models_for_providers)
+            featherless_providers = derive_providers_from_models(models_for_providers, "featherless")
             annotated_featherless = annotate_provider_sources(featherless_providers, "featherless")
             provider_groups.append(annotated_featherless)
 
@@ -597,25 +549,25 @@ async def get_models(
 
         if gateway_value in ("chutes", "all"):
             models_for_providers = chutes_models if gateway_value == "all" else models
-            chutes_providers = derive_portkey_providers(models_for_providers)
+            chutes_providers = derive_providers_from_models(models_for_providers, "chutes")
             annotated_chutes = annotate_provider_sources(chutes_providers, "chutes")
             provider_groups.append(annotated_chutes)
 
         if gateway_value in ("groq", "all"):
             models_for_providers = groq_models if gateway_value == "all" else models
-            groq_providers = derive_portkey_providers(models_for_providers)
+            groq_providers = derive_providers_from_models(models_for_providers, "groq")
             annotated_groq = annotate_provider_sources(groq_providers, "groq")
             provider_groups.append(annotated_groq)
 
         if gateway_value in ("fireworks", "all"):
             models_for_providers = fireworks_models if gateway_value == "all" else models
-            fireworks_providers = derive_portkey_providers(models_for_providers)
+            fireworks_providers = derive_providers_from_models(models_for_providers, "fireworks")
             annotated_fireworks = annotate_provider_sources(fireworks_providers, "fireworks")
             provider_groups.append(annotated_fireworks)
 
         if gateway_value in ("together", "all"):
             models_for_providers = together_models if gateway_value == "all" else models
-            together_providers = derive_portkey_providers(models_for_providers)
+            together_providers = derive_providers_from_models(models_for_providers, "together")
             annotated_together = annotate_provider_sources(together_providers, "together")
             provider_groups.append(annotated_together)
 
@@ -767,7 +719,6 @@ async def get_models(
 
         note = {
             "openrouter": "OpenRouter catalog",
-            "portkey": "Portkey catalog",
             "featherless": "Featherless catalog",
             "deepinfra": "DeepInfra catalog",
             "chutes": "Chutes.ai catalog",
@@ -785,7 +736,7 @@ async def get_models(
             "anannas": "Anannas catalog",
             "aihubmix": "AiHubMix catalog",
             "vercel-ai-gateway": "Vercel AI Gateway catalog",
-            "all": "Combined OpenRouter, Portkey, Featherless, DeepInfra, Chutes, Groq, Fireworks, Together, Google, Cerebras, Nebius, Xai, Novita, Hugging Face, AIMO, Near AI, Fal.ai, Anannas, AiHubMix, and Vercel AI Gateway catalogs",
+            "all": "Combined OpenRouter, Featherless, DeepInfra, Chutes, Groq, Fireworks, Together, Google, Cerebras, Nebius, Xai, Novita, Hugging Face, AIMO, Near AI, Fal.ai, Anannas, AiHubMix, and Vercel AI Gateway catalogs",
         }.get(gateway_value, "OpenRouter catalog")
 
         result = {
@@ -834,7 +785,6 @@ async def get_specific_model(
 
     This endpoint supports fetching model data from multiple model providers:
     - OpenRouter: Full model endpoint data including performance metrics
-    - Portkey: Model catalog data with cross-referenced pricing
     - Featherless: Model catalog data
     - DeepInfra: Model catalog data from DeepInfra's API
     - Chutes: Model catalog data from Chutes.ai
@@ -846,7 +796,6 @@ async def get_specific_model(
 
     Examples:
         GET /v1/models/openai/gpt-4?gateway=openrouter
-        GET /v1/models/anthropic/claude-3?gateway=portkey
         GET /v1/models/meta-llama/llama-3?gateway=featherless
         GET /v1/models/fal-ai/stable-diffusion-v15?gateway=fal
         GET /v1/models/fal-ai/stable-diffusion-v15 (auto-detects fal gateway)
@@ -888,7 +837,6 @@ async def get_specific_model(
 
         # Add providers from other gateways based on detected gateway
         if detected_gateway in [
-            "portkey",
             "featherless",
             "deepinfra",
             "chutes",
@@ -899,7 +847,7 @@ async def get_specific_model(
             # Get models from the detected gateway to derive providers
             gateway_models = get_cached_models(detected_gateway)
             if gateway_models:
-                derived_providers = derive_portkey_providers(gateway_models)
+                derived_providers = derive_providers_from_models(gateway_models, detected_gateway)
                 annotated_providers = annotate_provider_sources(derived_providers, detected_gateway)
                 provider_groups.append(annotated_providers)
 
@@ -960,7 +908,7 @@ async def get_developer_models(
     limit: Optional[int] = Query(None, description=DESC_LIMIT_NUMBER_OF_RESULTS),
     offset: Optional[int] = Query(0, description=DESC_OFFSET_FOR_PAGINATION),
     include_huggingface: bool = Query(True, description="Include Hugging Face metrics"),
-    gateway: Optional[str] = Query("all", description="Gateway: 'openrouter', 'portkey', or 'all'"),
+    gateway: Optional[str] = Query("all", description="Gateway: 'openrouter' or 'all'"),
 ):
     """
     Get all models from a specific developer/provider (e.g., anthropic, openai, meta)
@@ -970,7 +918,7 @@ async def get_developer_models(
         limit: Maximum number of models to return
         offset: Number of models to skip (for pagination)
         include_huggingface: Whether to include HuggingFace metrics
-        gateway: Which gateway to query ('openrouter', 'portkey', or 'all')
+        gateway: Which gateway to query ('openrouter' or 'all')
 
     Returns:
         JSON response with:
@@ -1093,7 +1041,7 @@ async def get_provider_statistics(
 
     Example:
         GET /catalog/provider/openai/stats?time_range=24h
-        GET /catalog/provider/anthropic/stats?gateway=portkey&time_range=7d
+        GET /catalog/provider/anthropic/stats?gateway=openrouter&time_range=7d
     """
     try:
         logger.info(
@@ -1130,11 +1078,11 @@ async def get_gateway_statistics(
     """
     Get comprehensive statistics for a specific gateway
 
-    This endpoint provides usage statistics for a gateway (e.g., openrouter, portkey, groq, deepinfra).
+    This endpoint provides usage statistics for a gateway (e.g., openrouter, groq, deepinfra).
     **This fixes the "Top Provider: N/A" issue in your UI!**
 
     Args:
-        gateway: Gateway name ('openrouter', 'portkey', 'featherless', 'deepinfra', 'chutes', 'groq', 'helicone', etc.)
+        gateway: Gateway name ('openrouter', 'featherless', 'deepinfra', 'chutes', 'groq', 'helicone', etc.)
         time_range: Time range for statistics
 
     Returns:
@@ -1159,7 +1107,6 @@ async def get_gateway_statistics(
         # Validate gateway
         valid_gateways = [
             "openrouter",
-            "portkey",
             "featherless",
             "deepinfra",
             "chutes",
@@ -1371,7 +1318,7 @@ async def compare_model_across_gateways(
 
     Example:
         GET /catalog/model/openai/gpt-4/compare
-        GET /catalog/model/anthropic/claude-3/compare?gateways=openrouter,portkey
+        GET /catalog/model/anthropic/claude-3/compare?gateways=openrouter,featherless
     """
     try:
         provider_name = normalize_developer_segment(provider_name) or provider_name
@@ -1388,7 +1335,6 @@ async def compare_model_across_gateways(
         else:
             gateway_list = [
                 "openrouter",
-                "portkey",
                 "featherless",
                 "deepinfra",
                 "chutes",
@@ -1534,7 +1480,6 @@ async def batch_compare_models(
                 # Get model from all gateways
                 all_gateways = [
                     "openrouter",
-                    "portkey",
                     "featherless",
                     "groq",
                     "fireworks",
@@ -1716,7 +1661,7 @@ async def get_developer_models_api(
     limit: Optional[int] = Query(None, description=DESC_LIMIT_NUMBER_OF_RESULTS),
     offset: Optional[int] = Query(0, description=DESC_OFFSET_FOR_PAGINATION),
     include_huggingface: bool = Query(True, description="Include Hugging Face metrics"),
-    gateway: Optional[str] = Query("all", description="Gateway: 'openrouter', 'portkey', or 'all'"),
+    gateway: Optional[str] = Query("all", description="Gateway: 'openrouter' or 'all'"),
 ):
     return await get_developer_models(
         developer_name=developer_name,
@@ -1745,7 +1690,7 @@ async def search_models(
     max_price: Optional[float] = Query(None, description="Maximum price per token (USD)"),
     gateway: Optional[str] = Query(
         "all",
-        description="Gateway filter: openrouter, portkey, featherless, deepinfra, chutes, groq, fireworks, together, helicone, aihubmix, vercel-ai-gateway, or all",
+        description="Gateway filter: openrouter, featherless, deepinfra, chutes, groq, fireworks, together, helicone, aihubmix, vercel-ai-gateway, or all",
     ),
     sort_by: str = Query("price", description="Sort by: price, context, popularity, name"),
     order: str = Query("asc", description="Sort order: asc or desc"),
@@ -1780,10 +1725,6 @@ async def search_models(
         if gateway_value in ("openrouter", "all"):
             openrouter_models = get_cached_models("openrouter") or []
             all_models.extend(openrouter_models)
-
-        if gateway_value in ("portkey", "all"):
-            portkey_models = get_cached_models("portkey") or []
-            all_models.extend(portkey_models)
 
         if gateway_value in ("featherless", "all"):
             featherless_models = get_cached_models("featherless") or []

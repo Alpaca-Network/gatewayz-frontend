@@ -36,7 +36,6 @@ logger = logging.getLogger(__name__)
 # All gateways to test
 ALL_GATEWAYS = [
     "openrouter",
-    "portkey",
     "featherless",
     "chutes",
     "groq",
@@ -65,14 +64,6 @@ GATEWAY_CONFIGS = {
         "api_key_env": "OPENROUTER_API_KEY",
         "headers": lambda key: {
             "Authorization": f"Bearer {key}",
-            "Content-Type": "application/json",
-        },
-    },
-    "portkey": {
-        "url": "https://api.portkey.ai/v1/models",
-        "api_key_env": "PORTKEY_API_KEY",
-        "headers": lambda key: {
-            "x-portkey-api-key": key,
             "Content-Type": "application/json",
         },
     },

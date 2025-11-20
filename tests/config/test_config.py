@@ -128,18 +128,6 @@ class TestConfigProviderKeys:
         assert config.Config.OPENROUTER_SITE_URL == "https://your-site.com"
         assert config.Config.OPENROUTER_SITE_NAME == "Openrouter AI Gateway"
 
-    def test_portkey_keys(self, monkeypatch):
-        """Test Portkey configuration"""
-        from src.config import config
-
-        monkeypatch.setenv("PORTKEY_API_KEY", "test_portkey_key")
-        monkeypatch.setenv("PORTKEY_VIRTUAL_KEY", "test_virtual_key")
-        import importlib
-        importlib.reload(config)
-
-        assert config.Config.PORTKEY_API_KEY == "test_portkey_key"
-        assert config.Config.PORTKEY_DEFAULT_VIRTUAL_KEY == "test_virtual_key"
-
     def test_all_provider_keys(self, monkeypatch):
         """Test all provider API keys are loaded"""
         from src.config import config
@@ -310,60 +298,6 @@ class TestConfigMonitoring:
         assert config.Config.OTEL_SERVICE_NAME == "gatewayz-api"
 
 
-class TestConfigPortkeyVirtualKey:
-    """Test get_portkey_virtual_key method"""
-
-    def test_get_portkey_virtual_key_no_provider(self, monkeypatch):
-        """Test get_portkey_virtual_key with no provider specified"""
-        from src.config.config import Config
-
-        monkeypatch.setenv("PORTKEY_VIRTUAL_KEY", "default_key")
-        import importlib
-        import src.config.config as config_mod
-        importlib.reload(config_mod)
-
-        result = config_mod.Config.get_portkey_virtual_key(None)
-        assert result == "default_key"
-
-    def test_get_portkey_virtual_key_with_provider_specific(self, monkeypatch):
-        """Test get_portkey_virtual_key with provider-specific key"""
-        from src.config.config import Config
-
-        monkeypatch.setenv("PORTKEY_VIRTUAL_KEY", "default_key")
-        monkeypatch.setenv("PORTKEY_VIRTUAL_KEY_OPENAI", "openai_specific_key")
-        import importlib
-        import src.config.config as config_mod
-        importlib.reload(config_mod)
-
-        result = config_mod.Config.get_portkey_virtual_key("openai")
-        assert result == "openai_specific_key"
-
-    def test_get_portkey_virtual_key_fallback_to_default(self, monkeypatch):
-        """Test get_portkey_virtual_key falls back to default"""
-        from src.config.config import Config
-
-        monkeypatch.setenv("PORTKEY_VIRTUAL_KEY", "default_key")
-        import importlib
-        import src.config.config as config_mod
-        importlib.reload(config_mod)
-
-        result = config_mod.Config.get_portkey_virtual_key("anthropic")
-        assert result == "default_key"
-
-    def test_get_portkey_virtual_key_normalizes_provider_name(self, monkeypatch):
-        """Test get_portkey_virtual_key normalizes provider names"""
-        from src.config.config import Config
-
-        monkeypatch.setenv("PORTKEY_VIRTUAL_KEY", "default_key")
-        monkeypatch.setenv("PORTKEY_VIRTUAL_KEY_MY_PROVIDER_123", "normalized_key")
-        import importlib
-        import src.config.config as config_mod
-        importlib.reload(config_mod)
-
-        result = config_mod.Config.get_portkey_virtual_key("my-provider.123")
-        assert result == "normalized_key"
-
-
 class TestConfigValidation:
     """Test validate and validate_critical_env_vars methods"""
 
@@ -374,7 +308,6 @@ class TestConfigValidation:
         monkeypatch.setenv("SUPABASE_URL", "https://test.supabase.co")
         monkeypatch.setenv("SUPABASE_KEY", "test_key")
         monkeypatch.setenv("OPENROUTER_API_KEY", "test_openrouter")
-        monkeypatch.setenv("PORTKEY_API_KEY", "test_portkey")
         monkeypatch.delenv("VERCEL", raising=False)
 
         import importlib
@@ -407,7 +340,6 @@ class TestConfigValidation:
         monkeypatch.delenv("SUPABASE_URL", raising=False)
         monkeypatch.setenv("SUPABASE_KEY", "test_key")
         monkeypatch.setenv("OPENROUTER_API_KEY", "test_openrouter")
-        monkeypatch.setenv("PORTKEY_API_KEY", "test_portkey")
 
         import importlib
         import src.config.config as config_mod
@@ -424,7 +356,6 @@ class TestConfigValidation:
         monkeypatch.delenv("SUPABASE_URL", raising=False)
         monkeypatch.delenv("SUPABASE_KEY", raising=False)
         monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
-        monkeypatch.delenv("PORTKEY_API_KEY", raising=False)
 
         import importlib
         import src.config.config as config_mod
@@ -437,7 +368,6 @@ class TestConfigValidation:
         assert "SUPABASE_URL" in error_message
         assert "SUPABASE_KEY" in error_message
         assert "OPENROUTER_API_KEY" in error_message
-        assert "PORTKEY_API_KEY" in error_message
 
     def test_validate_critical_env_vars_success(self, monkeypatch):
         """Test validate_critical_env_vars with all variables present"""
@@ -446,7 +376,6 @@ class TestConfigValidation:
         monkeypatch.setenv("SUPABASE_URL", "https://test.supabase.co")
         monkeypatch.setenv("SUPABASE_KEY", "test_key")
         monkeypatch.setenv("OPENROUTER_API_KEY", "test_openrouter")
-        monkeypatch.setenv("PORTKEY_API_KEY", "test_portkey")
         monkeypatch.delenv("VERCEL", raising=False)
 
         import importlib
@@ -465,7 +394,6 @@ class TestConfigValidation:
         monkeypatch.delenv("SUPABASE_URL", raising=False)
         monkeypatch.setenv("SUPABASE_KEY", "test_key")
         monkeypatch.setenv("OPENROUTER_API_KEY", "test_openrouter")
-        monkeypatch.delenv("PORTKEY_API_KEY", raising=False)
 
         import importlib
         import src.config.config as config_mod
@@ -474,8 +402,7 @@ class TestConfigValidation:
         is_valid, missing = config_mod.Config.validate_critical_env_vars()
         assert is_valid is False
         assert "SUPABASE_URL" in missing
-        assert "PORTKEY_API_KEY" in missing
-        assert len(missing) == 2
+        assert len(missing) == 1
 
     def test_validate_critical_env_vars_skips_in_vercel(self, monkeypatch):
         """Test validate_critical_env_vars skips in Vercel environment"""

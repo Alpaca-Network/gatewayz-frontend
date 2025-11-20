@@ -4,7 +4,6 @@ Comprehensive tests for image generation endpoint
 
 Tests cover:
 - Image generation with DeepInfra
-- Image generation with Portkey
 - Image generation with Fal.ai
 - Authentication and authorization
 - Credit validation and deduction
@@ -61,21 +60,6 @@ def mock_deepinfra_response():
         'data': [
             {
                 'url': 'https://cdn.deepinfra.com/image123.png',
-                'b64_json': None
-            }
-        ]
-    }
-
-
-@pytest.fixture
-def mock_portkey_response():
-    """Sample Portkey image generation response"""
-    return {
-        'created': 1677652288,
-        'data': [
-            {
-                'url': 'https://cdn.portkey.ai/image456.png',
-                'revised_prompt': 'A serene mountain landscape at sunset, photorealistic',
                 'b64_json': None
             }
         ]
@@ -174,56 +158,6 @@ class TestImageGenerationSuccess:
         mock_deduct_credits.assert_called_once_with('test_api_key_12345', 100)
         mock_record_usage.assert_called_once()
         mock_increment_usage.assert_called_once_with('test_api_key_12345')
-
-    @patch('src.routes.images.get_user')
-    @patch('src.routes.images.make_portkey_image_request')
-    @patch('src.routes.images.process_image_generation_response')
-    @patch('src.routes.images.deduct_credits')
-    @patch('src.routes.images.record_usage')
-    @patch('src.routes.images.increment_api_key_usage')
-    def test_generate_image_portkey_success(
-        self,
-        mock_increment_usage,
-        mock_record_usage,
-        mock_deduct_credits,
-        mock_process_response,
-        mock_make_request,
-        mock_get_user,
-        client,
-        mock_user,
-        mock_portkey_response
-    ):
-        """Test successful image generation with Portkey"""
-        # Setup mocks
-        mock_get_user.return_value = mock_user
-        mock_make_request.return_value = mock_portkey_response
-        mock_process_response.return_value = {
-            'created': 1677652288,
-            'data': mock_portkey_response['data'],
-            'provider': 'stability-ai',
-            'model': 'stable-diffusion-3.5-large'
-        }
-
-        request_data = {
-            'prompt': 'A beautiful sunset',
-            'model': 'stable-diffusion-3.5-large',
-            'provider': 'portkey',
-            'portkey_provider': 'stability-ai',
-            'n': 1
-        }
-
-        # Execute
-        response = client.post(
-            '/v1/images/generations',
-            headers={'Authorization': 'Bearer test_api_key_12345'},
-            json=request_data
-        )
-
-        # Verify
-        assert response.status_code == 200
-        data = response.json()
-        assert 'data' in data
-        assert data['provider'] == 'stability-ai'
 
     @patch('src.routes.images.get_user')
     @patch('src.routes.images.make_deepinfra_image_request')
