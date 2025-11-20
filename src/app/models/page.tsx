@@ -21,6 +21,7 @@ interface Model {
   } | null;
   supported_parameters: string[] | null;
   provider_slug: string;
+  source_gateway?: string; // From API, used to populate source_gateways
   source_gateways: string[]; // Changed from source_gateway to array
   created?: number;
 }
@@ -31,7 +32,7 @@ const PRIORITY_GATEWAYS = ['openrouter', 'groq', 'together', 'fireworks', 'verce
 // Slower gateways that can be deferred
 const DEFERRED_GATEWAYS = [
   'featherless', 'chutes', 'deepinfra', 'google', 'cerebras',
-  'nebius', 'xai', 'novita', 'huggingface', 'aimo', 'near', 'fal', 'helicone', 'alpaca'
+  'nebius', 'xai', 'novita', 'huggingface', 'aimo', 'near', 'fal', 'helicone', 'alpaca', 'alibaba', 'clarifai'
 ];
 
 async function getPriorityModels(): Promise<Model[]> {
@@ -96,7 +97,7 @@ async function getPriorityModels(): Promise<Model[]> {
       } else {
         // First occurrence - ensure source_gateways is an array
         if (!model.source_gateways) {
-          model.source_gateways = [];
+          model.source_gateways = model.source_gateway ? [model.source_gateway] : [];
         }
         modelMap.set(dedupKey, model);
       }
@@ -161,7 +162,7 @@ async function getDeferredModels(): Promise<Model[]> {
       } else {
         // First occurrence - ensure source_gateways is an array
         if (!model.source_gateways) {
-          model.source_gateways = [];
+          model.source_gateways = model.source_gateway ? [model.source_gateway] : [];
         }
         modelMap.set(dedupKey, model);
       }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, lazy, Suspense, useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
@@ -11,11 +11,12 @@ import { format } from 'date-fns';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Maximize, Copy, Check, Lock } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { providerData } from '@/lib/provider-data';
 import { generateChartData, generateStatsTable } from '@/lib/data';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import ReactMarkdown from "react-markdown";
-import { cn } from '@/lib/utils';
+import { cn, normalizeToUrlSafe } from '@/lib/utils';
 import { API_BASE_URL } from '@/lib/config';
 import { models as staticModels } from '@/lib/models-data';
 import { getApiKey } from '@/lib/api';
@@ -147,7 +148,7 @@ function transformStaticModel(staticModel: typeof staticModels[0]): Model {
     // Split by colon to extract the actual model name part (remove provider prefix like "Anthropic: ")
     const nameParts = staticModel.name.split(':');
     const modelNamePart = nameParts.length > 1 ? nameParts[1].trim() : staticModel.name;
-    const normalizedName = modelNamePart.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    const normalizedName = normalizeToUrlSafe(modelNamePart);
 
     return {
         id: `${staticModel.developer}/${normalizedName}`,
@@ -168,6 +169,18 @@ function transformStaticModel(staticModel: typeof staticModels[0]): Model {
 
 export default function ModelProfilePage() {
     const params = useParams();
+    const router = useRouter();
+
+    // Extract and normalize developer and model name
+    const developer = (params.developer as string)?.toLowerCase() || '';
+    const modelNameParam = (params.model as string) || '';
+
+    // Redirect alibaba models to qwen
+    useEffect(() => {
+        if (developer === 'alibaba') {
+            router.replace(`/models/qwen/${modelNameParam}`);
+        }
+    }, [developer, modelNameParam, router]);
 
     // State declarations
     const [model, setModel] = useState<Model | null>(null);
@@ -207,24 +220,42 @@ export default function ModelProfilePage() {
             baseUrl: 'https://api.groq.com/openai/v1',
             requiresApiKey: true,
             apiKeyPlaceholder: 'gsk_...',
+            modelIdFormat: (modelId: string) => {
+                // Groq uses the model name without the developer prefix
+                // e.g., 'meta/llama-3.3-70b' → 'llama-3.3-70b'
+                const parts = modelId.split('/');
+                return parts[parts.length - 1];
+            }
         },
         together: {
             name: 'Together AI',
             baseUrl: 'https://api.together.xyz/v1',
             requiresApiKey: true,
             apiKeyPlaceholder: '...',
+            modelIdFormat: (modelId: string) => {
+                // Together AI typically uses the full model ID
+                return modelId;
+            }
         },
         fireworks: {
             name: 'Fireworks',
             baseUrl: 'https://api.fireworks.ai/inference/v1',
             requiresApiKey: true,
             apiKeyPlaceholder: 'fw_...',
+            modelIdFormat: (modelId: string) => {
+                // Fireworks uses the full model ID with developer prefix
+                return modelId;
+            }
         },
         deepinfra: {
             name: 'DeepInfra',
             baseUrl: 'https://api.deepinfra.com/v1/openai',
             requiresApiKey: true,
             apiKeyPlaceholder: '...',
+            modelIdFormat: (modelId: string) => {
+                // DeepInfra uses the full model ID
+                return modelId;
+            }
         },
         google: {
             name: 'Google AI',
@@ -237,42 +268,76 @@ export default function ModelProfilePage() {
             baseUrl: 'https://api.cerebras.ai/v1',
             requiresApiKey: true,
             apiKeyPlaceholder: 'csk-...',
+            modelIdFormat: (modelId: string) => {
+                // Cerebras uses the model name without the developer prefix
+                // e.g., 'cerebras/cpt-llama-3.1-8b' → 'cpt-llama-3.1-8b'
+                const parts = modelId.split('/');
+                return parts[parts.length - 1];
+            }
         },
         xai: {
             name: 'xAI',
             baseUrl: 'https://api.x.ai/v1',
             requiresApiKey: true,
             apiKeyPlaceholder: 'xai-...',
+            modelIdFormat: (modelId: string) => {
+                // xAI uses the model name without the developer prefix
+                // e.g., 'xai/grok-3' → 'grok-3'
+                const parts = modelId.split('/');
+                return parts[parts.length - 1];
+            }
         },
         huggingface: {
             name: 'Hugging Face',
             baseUrl: 'https://api-inference.huggingface.co/models',
             requiresApiKey: true,
             apiKeyPlaceholder: 'hf_...',
+            modelIdFormat: (modelId: string) => {
+                // Hugging Face uses the full model ID (developer/model)
+                return modelId;
+            }
         },
         near: {
             name: 'NEAR Protocol',
             baseUrl: 'https://api.near.ai/v1',
             requiresApiKey: true,
             apiKeyPlaceholder: 'near_...',
+            modelIdFormat: (modelId: string) => {
+                // NEAR Protocol uses the full model ID
+                return modelId;
+            }
         },
         nebius: {
             name: 'Nebius AI Studio',
             baseUrl: 'https://api.studio.nebius.ai/v1',
             requiresApiKey: true,
             apiKeyPlaceholder: '...',
+            modelIdFormat: (modelId: string) => {
+                // Nebius uses the model name without the developer prefix
+                // e.g., 'meta/llama-3.1-70b' → 'llama-3.1-70b'
+                const parts = modelId.split('/');
+                return parts[parts.length - 1];
+            }
         },
         featherless: {
             name: 'Featherless',
             baseUrl: 'https://api.featherless.ai/v1',
             requiresApiKey: true,
             apiKeyPlaceholder: '...',
+            modelIdFormat: (modelId: string) => {
+                // Featherless uses the full model ID with developer prefix
+                return modelId;
+            }
         },
         chutes: {
             name: 'Chutes',
             baseUrl: 'https://api.chutes.ai/v1',
             requiresApiKey: true,
             apiKeyPlaceholder: '...',
+            modelIdFormat: (modelId: string) => {
+                // Chutes uses the full model ID
+                return modelId;
+            }
         },
         portkey: {
             name: 'Portkey',
@@ -285,12 +350,22 @@ export default function ModelProfilePage() {
             baseUrl: 'https://api.novita.ai/v3/openai',
             requiresApiKey: true,
             apiKeyPlaceholder: '...',
+            modelIdFormat: (modelId: string) => {
+                // Novita uses the model name without the developer prefix
+                // e.g., 'meta/llama-3-70b' → 'llama-3-70b'
+                const parts = modelId.split('/');
+                return parts[parts.length - 1];
+            }
         },
         aimo: {
             name: 'AIMO Network',
             baseUrl: 'https://api.aimo.network/v1',
             requiresApiKey: true,
             apiKeyPlaceholder: '...',
+            modelIdFormat: (modelId: string) => {
+                // AIMO uses the full model ID
+                return modelId;
+            }
         },
         fal: {
             name: 'FAL AI',
@@ -303,12 +378,15 @@ export default function ModelProfilePage() {
             baseUrl: 'https://dashscope.aliyuncs.com/api/v1',
             requiresApiKey: true,
             apiKeyPlaceholder: 'sk-...',
+            modelIdFormat: (modelId: string) => {
+                // Alibaba uses the model name without the developer prefix
+                // e.g., 'qwen/qwen-turbo' → 'qwen-turbo'
+                const parts = modelId.split('/');
+                return parts[parts.length - 1];
+            }
         },
     };
 
-    // Handle new route structure - params.developer and params.model
-    const developer = (params.developer as string)?.toLowerCase() || '';
-    const modelNameParam = (params.model as string) || '';
     // Store the URL-safe model name for searching
     let modelId = `${developer}/${modelNameParam}`;
     // Decode URL-encoded characters (e.g., %40 -> @)
@@ -336,6 +414,13 @@ export default function ModelProfilePage() {
                 preferredGateway = 'aimo';
             } else if (modelIdLower.startsWith('huggingface/') && modelProviders.includes('huggingface')) {
                 preferredGateway = 'huggingface';
+            } else if (modelIdLower.startsWith('alibaba/')) {
+                // For Alibaba models, prefer alibaba gateway if available, otherwise use openrouter
+                if (modelProviders.includes('alibaba')) {
+                    preferredGateway = 'alibaba';
+                } else if (modelProviders.includes('openrouter')) {
+                    preferredGateway = 'openrouter';
+                }
             }
 
             if (preferredGateway) {
@@ -405,7 +490,10 @@ export default function ModelProfilePage() {
         // If not found by full ID, try matching by name using URL normalization
         if (!staticFoundModel) {
             staticFoundModel = staticModelsTransformed.find((m: Model) => {
-                const modelNamePart = m.id.split('/').pop() || '';
+                const idParts = m.id.split('/');
+                // For multi-segment IDs like "fal-ai/flux-pro/v1.1-ultra", get everything after the first segment
+                // For single-segment IDs like "openai/gpt-4", get everything after the first segment
+                const modelNamePart = idParts.length > 2 ? idParts.slice(1).join('/') : idParts.pop() || '';
                 const urlNormalizedDataName = normalizeForUrl(modelNamePart);
                 return urlNormalizedDataName === urlNormalizedSearchName && m.provider_slug?.toLowerCase() === developer;
             });
@@ -437,7 +525,10 @@ export default function ModelProfilePage() {
                                 // If not found by full ID, try matching by name using URL normalization
                                 if (!foundModel) {
                                     foundModel = models.find((m: Model) => {
-                                        const modelNamePart = m.id.split('/').pop() || '';
+                                        const idParts = m.id.split('/');
+                                        // For multi-segment IDs like "fal-ai/flux-pro/v1.1-ultra", get everything after the first segment
+                                        // For single-segment IDs like "openai/gpt-4", get everything after the first segment
+                                        const modelNamePart = idParts.length > 2 ? idParts.slice(1).join('/') : idParts.pop() || '';
                                         const urlNormalizedDataName = normalizeForUrl(modelNamePart);
                                         return urlNormalizedDataName === urlNormalizedSearchName && m.provider_slug?.toLowerCase() === developer;
                                     });
@@ -686,7 +777,10 @@ export default function ModelProfilePage() {
                     // If not found by full ID, try matching by name using URL normalization
                     if (!foundModel) {
                         foundModel = models.find((m: Model) => {
-                            const modelNamePart = m.id.split('/').pop() || '';
+                            const idParts = m.id.split('/');
+                            // For multi-segment IDs like "fal-ai/flux-pro/v1.1-ultra", get everything after the first segment
+                            // For single-segment IDs like "openai/gpt-4", get everything after the first segment
+                            const modelNamePart = idParts.length > 2 ? idParts.slice(1).join('/') : idParts.pop() || '';
                             const urlNormalizedDataName = normalizeForUrl(modelNamePart);
                             return urlNormalizedDataName === urlNormalizedSearchName && m.provider_slug?.toLowerCase() === developer;
                         });
@@ -715,8 +809,9 @@ export default function ModelProfilePage() {
                     // Helper function to check if model exists in gateway data
                     const hasModel = (data: Model[], gateway: string) => {
                         const found = data.some((m: Model) => {
-                            // Extract just the model name part (after /)
-                            const modelNamePart = m.id.split('/').pop()?.toLowerCase() || '';
+                            // For multi-segment IDs like "fal-ai/flux-pro/v1.1-ultra", get everything after the first segment
+                            const idParts = m.id.split('/');
+                            const modelNamePart = idParts.length > 2 ? idParts.slice(1).join('/').toLowerCase() : (idParts.pop()?.toLowerCase() || '');
                             const urlNormalizedSearchName = normalizeForUrl(modelNameParam);
                             const urlNormalizedDataName = normalizeForUrl(modelNamePart);
 
@@ -724,7 +819,7 @@ export default function ModelProfilePage() {
                             if (m.id.toLowerCase() === modelIdLower) return true;
 
                             // Check if the model name parts match after URL normalization
-                            // This handles: "GPT-4o mini" -> "gpt-4o-mini" matching
+                            // This handles: "GPT-4o mini" -> "gpt-4o-mini" matching and "fal-ai/flux-pro/v1.1-ultra" -> "flux-pro-v1-1-ultra"
                             if (urlNormalizedDataName === urlNormalizedSearchName && m.provider_slug?.toLowerCase() === developer) return true;
 
                             // For AIMO models, check if the model name part matches
@@ -961,23 +1056,24 @@ export default function ModelProfilePage() {
 
                         {/* Provider Selector */}
                         <div className="mb-4">
-                            <label className="text-sm font-medium mb-2 block">Select Provider</label>
-                            <select
-                                value={selectedPlaygroundProvider}
-                                onChange={(e) => setSelectedPlaygroundProvider(e.target.value)}
-                                className="w-full max-w-md px-4 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                            >
-                                <option value="gatewayz">Gatewayz (Unified - Recommended)</option>
-                                {modelProviders.length > 0 && modelProviders.map(provider => {
-                                    const config = providerConfigs[provider];
-                                    if (!config) return null;
-                                    return (
-                                        <option key={provider} value={provider}>
-                                            {config.name}
-                                        </option>
-                                    );
-                                })}
-                            </select>
+                            <label className="text-sm font-medium mb-2 block">Select Gateway</label>
+                            <Select value={selectedPlaygroundProvider} onValueChange={setSelectedPlaygroundProvider}>
+                                <SelectTrigger className="w-full max-w-md">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="gatewayz">Gatewayz (Unified - Recommended)</SelectItem>
+                                    {modelProviders.length > 0 && modelProviders.map(provider => {
+                                        const config = providerConfigs[provider];
+                                        if (!config) return null;
+                                        return (
+                                            <SelectItem key={provider} value={provider}>
+                                                {config.name}
+                                            </SelectItem>
+                                        );
+                                    })}
+                                </SelectContent>
+                            </Select>
                             {selectedPlaygroundProvider !== 'gatewayz' && (
                                 <p className="text-sm text-muted-foreground mt-2">
                                     ⚠️ Using {providerConfigs[selectedPlaygroundProvider]?.name} directly. Make sure you have configured your API key.
@@ -1004,25 +1100,26 @@ export default function ModelProfilePage() {
                             </p>
                         </div>
 
-                        {/* Provider Selector */}
+                        {/* Gateway Selector */}
                         <div className="mb-4">
-                            <label className="text-sm font-medium mb-2 block">Select Provider</label>
-                            <select
-                                value={selectedProvider}
-                                onChange={(e) => setSelectedProvider(e.target.value)}
-                                className="w-full max-w-md px-4 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                            >
-                                <option value="gatewayz">Gatewayz (Unified - Recommended)</option>
-                                {modelProviders.length > 0 && modelProviders.map(provider => {
-                                    const config = providerConfigs[provider];
-                                    if (!config) return null;
-                                    return (
-                                        <option key={provider} value={provider}>
-                                            {config.name}
-                                        </option>
-                                    );
-                                })}
-                            </select>
+                            <label className="text-sm font-medium mb-2 block">Select Gateway</label>
+                            <Select value={selectedProvider} onValueChange={setSelectedProvider}>
+                                <SelectTrigger className="w-full max-w-md">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="gatewayz">Gatewayz (Unified - Recommended)</SelectItem>
+                                    {modelProviders.length > 0 && modelProviders.map(provider => {
+                                        const config = providerConfigs[provider];
+                                        if (!config) return null;
+                                        return (
+                                            <SelectItem key={provider} value={provider}>
+                                                {config.name}
+                                            </SelectItem>
+                                        );
+                                    })}
+                                </SelectContent>
+                            </Select>
                             {selectedProvider !== 'gatewayz' && (
                                 <p className="text-sm text-muted-foreground mt-2">
                                     ⚠️ Using {providerConfigs[selectedProvider]?.name} directly requires a separate API key from that provider.
@@ -1091,13 +1188,17 @@ export default function ModelProfilePage() {
                                 const providerConfig = providerConfigs[selectedProvider] || providerConfigs.gatewayz;
                                 const baseUrl = providerConfig.baseUrl;
                                 const currentApiKey = providerConfig.apiKeyPlaceholder;
+                                // Format model ID according to provider requirements
+                                const formattedModelId = providerConfig.modelIdFormat
+                                    ? providerConfig.modelIdFormat(model.id)
+                                    : model.id;
 
                                 const codeExamples = {
                                     curl: `curl -X POST ${baseUrl}/chat/completions \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer ${currentApiKey}" \\
   -d '{
-    "model": "${model.id}",
+    "model": "${formattedModelId}",
     "messages": [
       {
         "role": "user",
@@ -1115,7 +1216,7 @@ response = requests.post(
         "Content-Type": "application/json"
     },
     data=json.dumps({
-        "model": "${model.id}",
+        "model": "${formattedModelId}",
         "messages": [
             {
                 "role": "user",
@@ -1134,7 +1235,7 @@ client = OpenAI(
 )
 
 completion = client.chat.completions.create(
-    model="${model.id}",
+    model="${formattedModelId}",
     messages=[
         {"role": "user", "content": "Hello! What can you help me with?"}
     ]
@@ -1148,7 +1249,7 @@ print(completion.choices[0].message.content)`,
     "Content-Type": "application/json"
   },
   body: JSON.stringify({
-    "model": "${model.id}",
+    "model": "${formattedModelId}",
     "messages": [
       {
         "role": "user",
@@ -1165,7 +1266,7 @@ const client = new OpenAI({
 });
 
 const response = await client.chat.completions.create({
-  model: "${model.id}",
+  model: "${formattedModelId}",
   messages: [{ role: "user", content: "Hello! What can you help me with?" }]
 });
 

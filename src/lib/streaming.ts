@@ -107,10 +107,10 @@ export async function* streamChatResponse(
   retryCount = 0,
   maxRetries = 5
 ): AsyncGenerator<StreamChunk> {
-  // Client-side timeout for the fetch request (5 minutes for streaming)
-  // Increased from 2 minutes to accommodate reasoning models and slower providers
+  // Client-side timeout for the fetch request (10 minutes for streaming)
+  // Increased to accommodate reasoning models, slow providers, and models with large context windows
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 300000);
+  const timeoutId = setTimeout(() => controller.abort(), 600000);
 
   try {
     devLog('[Streaming] Initiating fetch request to:', url);
@@ -352,10 +352,34 @@ export async function* streamChatResponse(
   devLog('[Streaming] Stream reader obtained successfully');
   devLog('[Streaming] Starting to read stream...');
 
+  // Per-chunk timeout to detect stalled streams (30 seconds)
+  // This resets on each chunk and prevents hanging if backend stops sending
+  const chunkTimeoutMs = 30000;
+  let chunkTimeoutId: NodeJS.Timeout | null = null;
+
+  const resetChunkTimeout = () => {
+    if (chunkTimeoutId) {
+      clearTimeout(chunkTimeoutId);
+    }
+    chunkTimeoutId = setTimeout(() => {
+      devError('[Streaming] Stream chunk timeout - no data received for 30 seconds');
+      reader.cancel('Stream timeout: No data received for 30 seconds');
+    }, chunkTimeoutMs);
+  };
+
   try {
     while (true) {
       devLog(`[Streaming] About to read chunk ${chunkCount + 1}...`);
+      resetChunkTimeout(); // Start chunk timeout before reading
+
       const { done, value } = await reader.read();
+
+      // Clear the chunk timeout when we receive data
+      if (chunkTimeoutId) {
+        clearTimeout(chunkTimeoutId);
+        chunkTimeoutId = null;
+      }
+
       devLog(`[Streaming] Read completed. Done: ${done}, Has value: ${!!value}, Value length: ${value?.length || 0}`);
 
       if (done) {
@@ -653,23 +677,27 @@ export async function* streamChatResponse(
     // Handle abort/timeout errors
     if (error instanceof Error) {
       if (error.name === 'AbortError') {
-        throw new Error('Request timed out after 5 minutes. The model may be overloaded or unavailable. Please try again.');
+        throw new Error('Request timed out after 10 minutes. The model may be overloaded, unavailable, or generating a very long response. Please try again or select a different model.');
       }
     }
 
     // Re-throw other errors
     throw error;
   } finally {
+    // Clean up chunk timeout
+    if (chunkTimeoutId) {
+      clearTimeout(chunkTimeoutId);
+    }
     devLog('[Streaming] Stream reader released');
     reader.releaseLock();
   }
   } catch (error) {
     clearTimeout(timeoutId);
 
-    // Handle abort/timeout errors from main try
+    // Handle abort/timeout errors from outer try block
     if (error instanceof Error) {
       if (error.name === 'AbortError') {
-        throw new Error('Request timed out after 5 minutes. The model may be overloaded or unavailable. Please try again.');
+        throw new Error('Request timed out after 10 minutes. The model may be overloaded, unavailable, or generating a very long response. Please try again or select a different model.');
       }
     }
 

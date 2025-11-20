@@ -42,7 +42,7 @@ async function fetchUserDataOptimized(token: string): Promise<UserData | null> {
   }
 
   try {
-    console.log("[SessionInit] Fetching user data from backend");
+    console.log("[SessionInit] Fetching user data from backend with token:", token.substring(0, 20) + "...");
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout for user fetch
 
@@ -62,13 +62,15 @@ async function fetchUserDataOptimized(token: string): Promise<UserData | null> {
         user_id: userData.user_id,
         credits: userData.credits,
         tier: userData.tier,
+        email: userData.email,
       });
 
       // Cache the result for fast re-access
       setCachedUserData(token, userData);
       return userData;
     } else {
-      console.error("[SessionInit] Failed to fetch user data:", userResponse.status);
+      const responseText = await userResponse.text().catch(() => "(unable to read response)");
+      console.error("[SessionInit] Failed to fetch user data. Status:", userResponse.status, "Response:", responseText.substring(0, 200));
       return null;
     }
   } catch (error) {
@@ -110,6 +112,7 @@ export function SessionInitializer() {
 
       console.log("[SessionInit] Session initialization started", {
         hasToken: !!token,
+        tokenPreview: token ? token.substring(0, 20) + "..." : "none",
         hasUserId: !!userId,
         action: currentAction,
         status,
@@ -122,14 +125,19 @@ export function SessionInitializer() {
         // Store token for persistence
         storeSessionTransferToken(token, userId);
 
-        // Save API key to localStorage immediately
-        saveApiKey(token);
-
         // Clean up URL immediately to prevent browser history pollution
-        cleanupSessionTransferParams();
+        try {
+          cleanupSessionTransferParams();
+        } catch (cleanupError) {
+          console.warn("[SessionInit] Warning: Failed to cleanup session transfer params:", cleanupError);
+          // Continue anyway - session transfer can still proceed
+        }
 
-        // Fetch user data in background (non-blocking)
+        // Fetch user data and refresh auth (blocking operation for critical session setup)
+        // NOTE: Save API key in promise chain AFTER fetching user data to avoid auth deduplication skip
         fetchUserDataOptimized(token).then((userData) => {
+          // Save API key to localStorage (must happen after userData fetch for proper deduplication)
+          saveApiKey(token);
           if (userData) {
             // Save complete user data to localStorage
             const userDataToSave: UserData = {
@@ -156,14 +164,15 @@ export function SessionInitializer() {
             }
           }
           // Refresh auth context to update state from localStorage
-          // This is a normal refresh (not forced) to leverage existing deduplication
-          refresh().catch((error) => {
+          // IMPORTANT: Wait for refresh to complete to ensure auth state is synced before page content loads
+          return refresh().catch((error) => {
             console.error("[SessionInit] Error refreshing auth after user data fetch:", error);
           });
         }).catch((error) => {
           console.error("[SessionInit] Unexpected error during session init:", error);
           // Still trigger refresh even if something unexpected happens
-          refresh().catch((err) => {
+          // IMPORTANT: Wait for refresh to ensure auth state is properly updated
+          return refresh().catch((err) => {
             console.error("[SessionInit] Error refreshing auth after error:", err);
           });
         });
@@ -185,11 +194,11 @@ export function SessionInitializer() {
       if (storedToken && storedUserId && !existingApiKey) {
         console.log("[SessionInit] Using stored session transfer token from sessionStorage");
 
-        // Restore API key from sessionStorage
-        saveApiKey(storedToken);
-
-        // Fetch user data in background
+        // Fetch user data and refresh auth (blocking operation for critical session setup)
+        // NOTE: Save API key in promise chain AFTER fetching user data to avoid auth deduplication skip
         fetchUserDataOptimized(storedToken).then((userData) => {
+          // Restore API key from sessionStorage (must happen after userData fetch for proper deduplication)
+          saveApiKey(storedToken);
           if (userData) {
             // Save complete user data to localStorage
             const userDataToSave: UserData = {
@@ -216,14 +225,15 @@ export function SessionInitializer() {
             }
           }
           // Refresh auth context to update state from localStorage
-          // This is a normal refresh (not forced) to leverage existing deduplication
-          refresh().catch((error) => {
+          // IMPORTANT: Wait for refresh to complete to ensure auth state is synced
+          return refresh().catch((error) => {
             console.error("[SessionInit] Error refreshing auth after stored token fetch:", error);
           });
         }).catch((error) => {
           console.error("[SessionInit] Error fetching user data from stored token:", error);
           // Still trigger refresh on error
-          refresh().catch((err) => {
+          // IMPORTANT: Wait for refresh to ensure auth state is properly updated
+          return refresh().catch((err) => {
             console.error("[SessionInit] Error refreshing auth after stored token error:", err);
           });
         });

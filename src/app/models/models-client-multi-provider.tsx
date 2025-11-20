@@ -68,7 +68,15 @@ const GATEWAY_CONFIG: Record<string, { name: string; color: string; icon?: React
   xai: { name: 'xAI', color: 'bg-black' },
   novita: { name: 'Novita', color: 'bg-violet-600' },
   huggingface: { name: 'Hugging Face', color: 'bg-yellow-600' },
-  near: { name: 'NEAR', color: 'bg-teal-600' }
+  hug: { name: 'Hugging Face', color: 'bg-yellow-600' }, // Backend uses 'hug' abbreviation
+  aimo: { name: 'AiMo', color: 'bg-pink-600' },
+  near: { name: 'NEAR', color: 'bg-teal-600' },
+  fal: { name: 'Fal', color: 'bg-emerald-600' },
+  'vercel-ai-gateway': { name: 'Vercel AI', color: 'bg-slate-900' },
+  helicone: { name: 'Helicone', color: 'bg-indigo-600' },
+  alpaca: { name: 'Alpaca Network', color: 'bg-green-700' },
+  alibaba: { name: 'Alibaba', color: 'bg-orange-700' },
+  clarifai: { name: 'Clarifai', color: 'bg-purple-600' }
 };
 
 const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {

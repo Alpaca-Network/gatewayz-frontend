@@ -76,7 +76,8 @@ const GATEWAY_CONFIG: Record<string, { name: string; color: string; icon?: React
   fal: { name: 'Fal', color: 'bg-emerald-600' },
   'vercel-ai-gateway': { name: 'Vercel AI', color: 'bg-slate-900' },
   helicone: { name: 'Helicone', color: 'bg-indigo-600' },
-  alpaca: { name: 'Alpaca Network', color: 'bg-green-700' }
+  alpaca: { name: 'Alpaca Network', color: 'bg-green-700' },
+  clarifai: { name: 'Clarifai', color: 'bg-purple-600' }
 };
 
 // Provider display configuration (for providers that differ from gateway names)
@@ -382,7 +383,6 @@ export default function ModelsClient({
       }
 
       if (seen.has(model.id)) {
-        console.warn(`Duplicate model ID found: ${model.id}`);
         return false;
       }
       seen.add(model.id);
@@ -750,7 +750,7 @@ export default function ModelsClient({
     // Define all known gateways that should appear in the filter
     // This ensures all gateways are visible even if they have 0 models currently
     // Excludes 'portkey' as it's deprecated (use individual Portkey SDK providers instead)
-    const allKnownGateways = ['featherless', 'openrouter', 'groq', 'together', 'fireworks', 'chutes', 'deepinfra', 'google', 'cerebras', 'nebius', 'xai', 'novita', 'huggingface', 'aimo', 'near', 'fal', 'vercel-ai-gateway', 'helicone'];
+    const allKnownGateways = ['featherless', 'openrouter', 'groq', 'together', 'fireworks', 'chutes', 'deepinfra', 'google', 'cerebras', 'nebius', 'xai', 'novita', 'huggingface', 'aimo', 'near', 'fal', 'vercel-ai-gateway', 'helicone', 'alibaba', 'alpaca'];
 
     // Log gateway counts for debugging
     const gatewayStats = allKnownGateways.map(g => ({

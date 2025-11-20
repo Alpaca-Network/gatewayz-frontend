@@ -66,6 +66,7 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
     'helicone', // Helicone AI Gateway - will be skipped if backend unavailable
     'alpaca', // Alpaca Network
     'alibaba', // Alibaba Cloud
+    'clarifai', // Clarifai AI Gateway
     'all'
   ];
   if (!validGateways.includes(gateway)) {
@@ -98,7 +99,8 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
         'vercel-ai-gateway',
         'helicone',
         'alpaca',
-        'alibaba'
+        'alibaba',
+        'clarifai'
       ];
 
       const results = await Promise.all(
@@ -128,7 +130,7 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
 
         // Remove provider prefixes (some models have them, others don't)
         canonicalSlug = canonicalSlug
-          .replace(/^(aimo\/|google\/|openai\/|meta\/|anthropic\/|models\/|mistralai\/|xai\/)/i, '')
+          .replace(/^(aimo\/|google\/|openai\/|meta\/|anthropic\/|models\/|mistralai\/|xai\/|fal-ai\/|fal\/|bria\/)/i, '')
           .replace(/\s+/g, '-')
           .replace(/[^\w-]/g, '');
 
@@ -140,14 +142,17 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
         if (modelMap.has(dedupKey)) {
           const existing = modelMap.get(dedupKey);
 
-          // Merge source_gateways arrays
+          // Normalize gateway values for deduplication
+          const normalizeGatewayValue = (gw: string) => gw === 'hug' ? 'huggingface' : gw;
+
+          // Merge source_gateways arrays with normalized values
           const existingGateways = Array.isArray(existing.source_gateways)
-            ? existing.source_gateways
-            : (existing.source_gateway ? [existing.source_gateway] : []);
+            ? existing.source_gateways.map(normalizeGatewayValue)
+            : (existing.source_gateway ? [normalizeGatewayValue(existing.source_gateway)] : []);
 
           const newGateways = Array.isArray(model.source_gateways)
-            ? model.source_gateways
-            : (model.source_gateway ? [model.source_gateway] : []);
+            ? model.source_gateways.map(normalizeGatewayValue)
+            : (model.source_gateway ? [normalizeGatewayValue(model.source_gateway)] : []);
 
           // Combine and deduplicate gateways
           const combinedGateways = Array.from(new Set([...existingGateways, ...newGateways]));
@@ -240,23 +245,34 @@ function buildHeaders(gateway: string): Record<string, string> {
     headers['Authorization'] = `Bearer ${alibabaApiKey}`;
   }
 
+  const clarifaiApiKey = process.env.NEXT_PUBLIC_CLARIFAI_API_KEY || process.env.CLARIFAI_API_KEY;
+  if (gateway === 'clarifai' && clarifaiApiKey) {
+    headers['Authorization'] = `Bearer ${clarifaiApiKey}`;
+  }
+
   return headers;
 }
 
 // Helper function to normalize model fields for consistent tag display
 function normalizeModel(model: any, gateway: string): any {
+  // Normalize gateway values - convert 'hug' to 'huggingface' for consistency
+  const normalizeGatewayValue = (gw: string) => gw === 'hug' ? 'huggingface' : gw;
+
+  // Get normalized gateway from source_gateway or use the provided gateway parameter
+  const primaryGateway = normalizeGatewayValue(model.source_gateway || gateway);
+
   return {
     ...model,
-    // Ensure source_gateways is always an array
+    // Ensure source_gateways is always an array with normalized values
     source_gateways: Array.isArray(model.source_gateways)
-      ? model.source_gateways
-      : (model.source_gateway ? [model.source_gateway] : [gateway]),
+      ? model.source_gateways.map(normalizeGatewayValue)
+      : (model.source_gateway ? [primaryGateway] : [normalizeGatewayValue(gateway)]),
     // Ensure provider_slugs is always an array
     provider_slugs: Array.isArray(model.provider_slugs)
       ? model.provider_slugs
       : (model.provider_slug ? [model.provider_slug] : []),
     // Keep singular fields for backwards compatibility
-    source_gateway: model.source_gateway || gateway,
+    source_gateway: primaryGateway,
     provider_slug: model.provider_slug || 'unknown'
   };
 }
@@ -266,8 +282,8 @@ async function fetchModelsFromGateway(gateway: string, limit?: number): Promise<
   const allModels: any[] = [];
   const requestLimit = limit || 50000; // Request up to 50k models per page (backend limit)
   const FAST_GATEWAYS = ['openrouter', 'groq', 'together', 'fireworks', 'vercel-ai-gateway'];
-  // Optimized timeouts: reduce from 5000ms to 3500ms for slow gateways to speed up parallel requests
-  const timeoutMs = FAST_GATEWAYS.includes(gateway) ? 2500 : 3500;
+  // Increased timeouts to handle slow gateways: 5000ms for fast, 10000ms for slow
+  const timeoutMs = FAST_GATEWAYS.includes(gateway) ? 5000 : 10000;
 
   let offset = 0;
   let hasMore = true;
@@ -311,7 +327,7 @@ fetch(url, {
           allModels.push(...normalizedModels);
           console.log(`[Models] Fetched ${data.data.length} models for gateway: ${gateway} (offset: ${offset})`);
 
-          const isFiveHundred = data.data.length === 500 && gateway === 'huggingface';
+          const isFiveHundred = data.data.length === 500 && (gateway === 'huggingface' || gateway === 'featherless');
           const hasReachedLimit = limit && allModels.length >= limit;
           const gotFewerThanRequested = data.data.length < requestLimit && !isFiveHundred;
 
@@ -395,7 +411,8 @@ function getStaticFallbackModels(gateway: string): any[] {
         'vercel-ai-gateway',
         'helicone',
         'alpaca',
-        'alibaba'
+        'alibaba',
+        'clarifai'
       ];
       const modelsPerGateway = Math.ceil(models.length / allGateways.length);
 

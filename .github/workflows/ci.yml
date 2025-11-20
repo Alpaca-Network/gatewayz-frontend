@@ -189,7 +189,7 @@ jobs:
   trigger-codex-on-failure:
     name: Trigger Codex on Failure
     runs-on: ubuntu-latest
-    needs: [test, lint, typecheck, build, e2e]
+    needs: [test, lint, typecheck, build]
     if: failure()
 
     steps:

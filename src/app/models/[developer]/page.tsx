@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { models as staticModels } from '@/lib/models-data';
 import { Search, ChevronRight, Box } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, normalizeToUrlSafe } from '@/lib/utils';
 
 interface Model {
   name: string;
@@ -152,7 +152,7 @@ export default function DeveloperModelsPage() {
           {filteredModels.map((model) => (
             <Link
               key={model.name}
-              href={`/models/${model.developer.toLowerCase()}/${model.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
+              href={`/models/${model.developer.toLowerCase()}/${normalizeToUrlSafe(model.name)}`}
             >
               <Card className="h-full hover:shadow-lg transition-shadow cursor-pointer">
                 <CardContent className="p-6">
