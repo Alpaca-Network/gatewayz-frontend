@@ -27,10 +27,23 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
   useEffect(() => {
     const rateLimitListener = (event: PromiseRejectionEvent) => {
       const reason = event.reason as { status?: number; message?: string } | undefined;
-      if (reason?.status === 429 || reason?.message?.includes("429")) {
+      const reasonStr = reason?.message ?? String(reason);
+
+      // Handle rate limit errors
+      if (reason?.status === 429 || reasonStr?.includes("429")) {
         console.warn("Caught 429 error globally");
         setShowRateLimit(true);
         event.preventDefault();
+        return;
+      }
+
+      // Suppress non-blocking wallet extension errors
+      if (reasonStr?.includes("chrome.runtime.sendMessage") ||
+          reasonStr?.includes("Extension ID") ||
+          reasonStr?.includes("from a webpage")) {
+        console.warn("[Auth] Suppressing non-blocking wallet extension error:", reasonStr);
+        event.preventDefault();
+        return;
       }
     };
 
