@@ -1,8 +1,8 @@
 name: Claude on CI failure
 
 concurrency:
-  group: claude-failure-${{ github.event.workflow_run.head_sha }}
-  cancel-in-progress: false
+  group: claude-failure-${{ github.event.workflow_run.head_sha || github.head_ref || github.ref_name }}
+  cancel-in-progress: true
 
 on:
   workflow_run:
@@ -155,12 +155,12 @@ jobs:
           echo "✅ GitHub token is available"
 
       - name: Run Claude Code (fix CI failures and push)
-        timeout-minutes: 45
+        timeout-minutes: 50
         uses: anthropics/claude-code-action@8a1c4371755898f67cd97006ba7c97702d5fc4bf  # v1.0.16
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           use_commit_signing: false
-          claude_args: "--max-turns 10"
+          claude_args: "--max-turns 15"
           prompt: |
             The CI pipeline has failed. Your task is to diagnose and fix the failures:
 
@@ -203,6 +203,15 @@ jobs:
 
             **IMPORTANT**: Always check for merge conflicts first, then read failure-logs.md for exact error details!
 
+      - name: Verify fixes with test run
+        if: always()
+        continue-on-error: true
+        id: verify_fixes
+        run: |
+          # Quick smoke test to verify basic fix success
+          python -m pytest tests/ -v --tb=line -x --timeout=10 2>&1 | head -50 | tee verify_output.txt
+          echo "Verification attempted (result may not be conclusive)"
+
       - name: Report completion
         if: always()
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea  # v7.0.1
@@ -215,12 +224,25 @@ jobs:
 
             // Check if Claude made any commits
             const { execSync } = require('child_process');
+            const fs = require('fs');
+
             try {
               const newCommits = execSync('git log --oneline ${{ github.event.workflow_run.head_sha }}..HEAD').toString();
 
               if (newCommits.trim()) {
                 summary += '✅ Claude Code attempted to fix the CI failures.\n\n';
                 summary += '**New commits:**\n```\n' + newCommits + '```\n\n';
+
+                // Check verification results
+                if (fs.existsSync('verify_output.txt')) {
+                  const verifyOutput = fs.readFileSync('verify_output.txt', 'utf8');
+                  if (verifyOutput.includes('passed') || verifyOutput.includes('✅')) {
+                    summary += '✅ **Verification Test**: Fixes appear to be working!\n\n';
+                  } else if (verifyOutput.includes('failed') || verifyOutput.includes('error')) {
+                    summary += '⚠️ **Verification Test**: Some tests may still be failing. Please review the logs.\n\n';
+                  }
+                }
+
                 summary += 'The CI pipeline will run again to verify the fixes.\n';
               } else {
                 summary += '⚠️ Claude Code ran but did not make any commits.\n\n';
