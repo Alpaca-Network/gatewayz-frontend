@@ -11,6 +11,7 @@ import { format } from 'date-fns';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Maximize, Copy, Check, Lock } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { providerData } from '@/lib/provider-data';
 import { generateChartData, generateStatsTable } from '@/lib/data';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -207,24 +208,42 @@ export default function ModelProfilePage() {
             baseUrl: 'https://api.groq.com/openai/v1',
             requiresApiKey: true,
             apiKeyPlaceholder: 'gsk_...',
+            modelIdFormat: (modelId: string) => {
+                // Groq uses the model name without the developer prefix
+                // e.g., 'meta/llama-3.3-70b' → 'llama-3.3-70b'
+                const parts = modelId.split('/');
+                return parts[parts.length - 1];
+            }
         },
         together: {
             name: 'Together AI',
             baseUrl: 'https://api.together.xyz/v1',
             requiresApiKey: true,
             apiKeyPlaceholder: '...',
+            modelIdFormat: (modelId: string) => {
+                // Together AI typically uses the full model ID
+                return modelId;
+            }
         },
         fireworks: {
             name: 'Fireworks',
             baseUrl: 'https://api.fireworks.ai/inference/v1',
             requiresApiKey: true,
             apiKeyPlaceholder: 'fw_...',
+            modelIdFormat: (modelId: string) => {
+                // Fireworks uses the full model ID with developer prefix
+                return modelId;
+            }
         },
         deepinfra: {
             name: 'DeepInfra',
             baseUrl: 'https://api.deepinfra.com/v1/openai',
             requiresApiKey: true,
             apiKeyPlaceholder: '...',
+            modelIdFormat: (modelId: string) => {
+                // DeepInfra uses the full model ID
+                return modelId;
+            }
         },
         google: {
             name: 'Google AI',
@@ -237,42 +256,76 @@ export default function ModelProfilePage() {
             baseUrl: 'https://api.cerebras.ai/v1',
             requiresApiKey: true,
             apiKeyPlaceholder: 'csk-...',
+            modelIdFormat: (modelId: string) => {
+                // Cerebras uses the model name without the developer prefix
+                // e.g., 'cerebras/cpt-llama-3.1-8b' → 'cpt-llama-3.1-8b'
+                const parts = modelId.split('/');
+                return parts[parts.length - 1];
+            }
         },
         xai: {
             name: 'xAI',
             baseUrl: 'https://api.x.ai/v1',
             requiresApiKey: true,
             apiKeyPlaceholder: 'xai-...',
+            modelIdFormat: (modelId: string) => {
+                // xAI uses the model name without the developer prefix
+                // e.g., 'xai/grok-3' → 'grok-3'
+                const parts = modelId.split('/');
+                return parts[parts.length - 1];
+            }
         },
         huggingface: {
             name: 'Hugging Face',
             baseUrl: 'https://api-inference.huggingface.co/models',
             requiresApiKey: true,
             apiKeyPlaceholder: 'hf_...',
+            modelIdFormat: (modelId: string) => {
+                // Hugging Face uses the full model ID (developer/model)
+                return modelId;
+            }
         },
         near: {
             name: 'NEAR Protocol',
             baseUrl: 'https://api.near.ai/v1',
             requiresApiKey: true,
             apiKeyPlaceholder: 'near_...',
+            modelIdFormat: (modelId: string) => {
+                // NEAR Protocol uses the full model ID
+                return modelId;
+            }
         },
         nebius: {
             name: 'Nebius AI Studio',
             baseUrl: 'https://api.studio.nebius.ai/v1',
             requiresApiKey: true,
             apiKeyPlaceholder: '...',
+            modelIdFormat: (modelId: string) => {
+                // Nebius uses the model name without the developer prefix
+                // e.g., 'meta/llama-3.1-70b' → 'llama-3.1-70b'
+                const parts = modelId.split('/');
+                return parts[parts.length - 1];
+            }
         },
         featherless: {
             name: 'Featherless',
             baseUrl: 'https://api.featherless.ai/v1',
             requiresApiKey: true,
             apiKeyPlaceholder: '...',
+            modelIdFormat: (modelId: string) => {
+                // Featherless uses the full model ID with developer prefix
+                return modelId;
+            }
         },
         chutes: {
             name: 'Chutes',
             baseUrl: 'https://api.chutes.ai/v1',
             requiresApiKey: true,
             apiKeyPlaceholder: '...',
+            modelIdFormat: (modelId: string) => {
+                // Chutes uses the full model ID
+                return modelId;
+            }
         },
         portkey: {
             name: 'Portkey',
@@ -285,12 +338,22 @@ export default function ModelProfilePage() {
             baseUrl: 'https://api.novita.ai/v3/openai',
             requiresApiKey: true,
             apiKeyPlaceholder: '...',
+            modelIdFormat: (modelId: string) => {
+                // Novita uses the model name without the developer prefix
+                // e.g., 'meta/llama-3-70b' → 'llama-3-70b'
+                const parts = modelId.split('/');
+                return parts[parts.length - 1];
+            }
         },
         aimo: {
             name: 'AIMO Network',
             baseUrl: 'https://api.aimo.network/v1',
             requiresApiKey: true,
             apiKeyPlaceholder: '...',
+            modelIdFormat: (modelId: string) => {
+                // AIMO uses the full model ID
+                return modelId;
+            }
         },
         fal: {
             name: 'FAL AI',
@@ -303,6 +366,12 @@ export default function ModelProfilePage() {
             baseUrl: 'https://dashscope.aliyuncs.com/api/v1',
             requiresApiKey: true,
             apiKeyPlaceholder: 'sk-...',
+            modelIdFormat: (modelId: string) => {
+                // Alibaba uses the model name without the developer prefix
+                // e.g., 'qwen/qwen-turbo' → 'qwen-turbo'
+                const parts = modelId.split('/');
+                return parts[parts.length - 1];
+            }
         },
     };
 
@@ -961,23 +1030,24 @@ export default function ModelProfilePage() {
 
                         {/* Provider Selector */}
                         <div className="mb-4">
-                            <label className="text-sm font-medium mb-2 block">Select Provider</label>
-                            <select
-                                value={selectedPlaygroundProvider}
-                                onChange={(e) => setSelectedPlaygroundProvider(e.target.value)}
-                                className="w-full max-w-md px-4 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                            >
-                                <option value="gatewayz">Gatewayz (Unified - Recommended)</option>
-                                {modelProviders.length > 0 && modelProviders.map(provider => {
-                                    const config = providerConfigs[provider];
-                                    if (!config) return null;
-                                    return (
-                                        <option key={provider} value={provider}>
-                                            {config.name}
-                                        </option>
-                                    );
-                                })}
-                            </select>
+                            <label className="text-sm font-medium mb-2 block">Select Gateway</label>
+                            <Select value={selectedPlaygroundProvider} onValueChange={setSelectedPlaygroundProvider}>
+                                <SelectTrigger className="w-full max-w-md">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="gatewayz">Gatewayz (Unified - Recommended)</SelectItem>
+                                    {modelProviders.length > 0 && modelProviders.map(provider => {
+                                        const config = providerConfigs[provider];
+                                        if (!config) return null;
+                                        return (
+                                            <SelectItem key={provider} value={provider}>
+                                                {config.name}
+                                            </SelectItem>
+                                        );
+                                    })}
+                                </SelectContent>
+                            </Select>
                             {selectedPlaygroundProvider !== 'gatewayz' && (
                                 <p className="text-sm text-muted-foreground mt-2">
                                     ⚠️ Using {providerConfigs[selectedPlaygroundProvider]?.name} directly. Make sure you have configured your API key.
@@ -1004,25 +1074,26 @@ export default function ModelProfilePage() {
                             </p>
                         </div>
 
-                        {/* Provider Selector */}
+                        {/* Gateway Selector */}
                         <div className="mb-4">
-                            <label className="text-sm font-medium mb-2 block">Select Provider</label>
-                            <select
-                                value={selectedProvider}
-                                onChange={(e) => setSelectedProvider(e.target.value)}
-                                className="w-full max-w-md px-4 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                            >
-                                <option value="gatewayz">Gatewayz (Unified - Recommended)</option>
-                                {modelProviders.length > 0 && modelProviders.map(provider => {
-                                    const config = providerConfigs[provider];
-                                    if (!config) return null;
-                                    return (
-                                        <option key={provider} value={provider}>
-                                            {config.name}
-                                        </option>
-                                    );
-                                })}
-                            </select>
+                            <label className="text-sm font-medium mb-2 block">Select Gateway</label>
+                            <Select value={selectedProvider} onValueChange={setSelectedProvider}>
+                                <SelectTrigger className="w-full max-w-md">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="gatewayz">Gatewayz (Unified - Recommended)</SelectItem>
+                                    {modelProviders.length > 0 && modelProviders.map(provider => {
+                                        const config = providerConfigs[provider];
+                                        if (!config) return null;
+                                        return (
+                                            <SelectItem key={provider} value={provider}>
+                                                {config.name}
+                                            </SelectItem>
+                                        );
+                                    })}
+                                </SelectContent>
+                            </Select>
                             {selectedProvider !== 'gatewayz' && (
                                 <p className="text-sm text-muted-foreground mt-2">
                                     ⚠️ Using {providerConfigs[selectedProvider]?.name} directly requires a separate API key from that provider.
@@ -1091,13 +1162,17 @@ export default function ModelProfilePage() {
                                 const providerConfig = providerConfigs[selectedProvider] || providerConfigs.gatewayz;
                                 const baseUrl = providerConfig.baseUrl;
                                 const currentApiKey = providerConfig.apiKeyPlaceholder;
+                                // Format model ID according to provider requirements
+                                const formattedModelId = providerConfig.modelIdFormat
+                                    ? providerConfig.modelIdFormat(model.id)
+                                    : model.id;
 
                                 const codeExamples = {
                                     curl: `curl -X POST ${baseUrl}/chat/completions \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer ${currentApiKey}" \\
   -d '{
-    "model": "${model.id}",
+    "model": "${formattedModelId}",
     "messages": [
       {
         "role": "user",
@@ -1115,7 +1190,7 @@ response = requests.post(
         "Content-Type": "application/json"
     },
     data=json.dumps({
-        "model": "${model.id}",
+        "model": "${formattedModelId}",
         "messages": [
             {
                 "role": "user",
@@ -1134,7 +1209,7 @@ client = OpenAI(
 )
 
 completion = client.chat.completions.create(
-    model="${model.id}",
+    model="${formattedModelId}",
     messages=[
         {"role": "user", "content": "Hello! What can you help me with?"}
     ]
@@ -1148,7 +1223,7 @@ print(completion.choices[0].message.content)`,
     "Content-Type": "application/json"
   },
   body: JSON.stringify({
-    "model": "${model.id}",
+    "model": "${formattedModelId}",
     "messages": [
       {
         "role": "user",
@@ -1165,7 +1240,7 @@ const client = new OpenAI({
 });
 
 const response = await client.chat.completions.create({
-  model: "${model.id}",
+  model: "${formattedModelId}",
   messages: [{ role: "user", content: "Hello! What can you help me with?" }]
 });
 
