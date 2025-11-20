@@ -126,7 +126,12 @@ export function SessionInitializer() {
         storeSessionTransferToken(token, userId);
 
         // Clean up URL immediately to prevent browser history pollution
-        cleanupSessionTransferParams();
+        try {
+          cleanupSessionTransferParams();
+        } catch (cleanupError) {
+          console.warn("[SessionInit] Warning: Failed to cleanup session transfer params:", cleanupError);
+          // Continue anyway - session transfer can still proceed
+        }
 
         // Fetch user data and refresh auth (blocking operation for critical session setup)
         // NOTE: Save API key in promise chain AFTER fetching user data to avoid auth deduplication skip
