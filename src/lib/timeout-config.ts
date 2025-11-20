@@ -14,10 +14,10 @@ export const TIMEOUT_CONFIG = {
 
   // Chat session timeouts
   chat: {
-    sessionCreate: 10000,    // 10 seconds to create a session
-    sessionUpdate: 10000,    // 10 seconds to update a session
+    sessionCreate: 15000,    // 15 seconds to create a session
+    sessionUpdate: 15000,    // 15 seconds to update a session
     sessionDelete: 30000,    // 30 seconds to delete a session
-    messagesSave: 5000,      // 5 seconds to save a message
+    messagesSave: 10000,     // 10 seconds to save a message (was 5s, too aggressive)
     messagesLoad: 15000,     // 15 seconds to load messages
     sessionsList: 10000,     // 10 seconds to list sessions
   },

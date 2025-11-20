@@ -197,12 +197,11 @@ export class ChatHistoryAPI {
    */
   async updateSession(sessionId: number, title?: string, model?: string): Promise<ChatSession> {
     // OPTIMIZATION: Route through Next.js API with optimized timeout
-    // Reduced timeout from 30s to 10s for quick session updates
-    // These calls should be fast and not block user interactions
+    // Use unified timeout configuration for consistency
     const isClientSide = typeof window !== 'undefined';
     if (isClientSide) {
       const controller = new AbortController();
-      const timeout = 10000; // OPTIMIZATION: Reduced from 30s to 10s
+      const timeout = TIMEOUT_CONFIG.chat.sessionUpdate;
       const timeoutId = setTimeout(() => controller.abort(), timeout);
 
       let url = `/api/chat/sessions/${sessionId}`;
