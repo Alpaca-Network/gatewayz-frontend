@@ -781,10 +781,11 @@ describe('SessionInitializer', () => {
 
       render(<SessionInitializer />);
 
-      // API key should be saved immediately
+      // After the fix, API key is now saved inside the promise chain (not immediately)
+      // So we check that it gets saved after the user data fetch completes
       await waitFor(() => {
         expect(api.saveApiKey).toHaveBeenCalledWith(mockToken);
-      });
+      }, { timeout: 5000 });
 
       // Eventually should trigger refresh despite timeout (using normal refresh to leverage deduplication)
       await waitFor(
@@ -878,19 +879,28 @@ describe('SessionInitializer', () => {
         throw new Error('History API not available');
       });
 
-      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+      const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
 
       render(<SessionInitializer />);
 
-      // Should still save API key even if cleanup fails
+      // Should log warning about cleanup failure
+      await waitFor(() => {
+        expect(consoleWarnSpy).toHaveBeenCalledWith(
+          expect.stringContaining('[SessionInit] Warning: Failed to cleanup session transfer params'),
+          expect.any(Error)
+        );
+      });
+
+      // After the fix, API key is now saved inside the promise chain (not immediately)
+      // So we check that it gets saved after the user data fetch and cleanup attempt
       await waitFor(() => {
         expect(api.saveApiKey).toHaveBeenCalledWith(mockToken);
-      });
+      }, { timeout: 5000 });
 
       // Cleanup was attempted despite the error
       expect(sessionTransfer.cleanupSessionTransferParams).toHaveBeenCalled();
 
-      consoleErrorSpy.mockRestore();
+      consoleWarnSpy.mockRestore();
     });
   });
 
