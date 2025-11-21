@@ -103,6 +103,17 @@ class Config:
 
     # ==================== Monitoring & Observability Configuration ====================
 
+    # Sentry Configuration
+    SENTRY_DSN = os.environ.get("SENTRY_DSN")
+    SENTRY_ENABLED = os.environ.get("SENTRY_ENABLED", "true").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+    SENTRY_ENVIRONMENT = os.environ.get("SENTRY_ENVIRONMENT", APP_ENV)
+    SENTRY_TRACES_SAMPLE_RATE = float(os.environ.get("SENTRY_TRACES_SAMPLE_RATE", "1.0"))
+    SENTRY_PROFILES_SAMPLE_RATE = float(os.environ.get("SENTRY_PROFILES_SAMPLE_RATE", "1.0"))
+
     # Prometheus Configuration
     PROMETHEUS_ENABLED = os.environ.get("PROMETHEUS_ENABLED", "true").lower() in {
         "1",

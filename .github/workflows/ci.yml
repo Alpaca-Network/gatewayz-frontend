@@ -242,7 +242,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: coverage-${{ matrix.shard }}
-          path: coverage.xml
+          path: .coverage
           if-no-files-found: ignore
 
   # Job 3B: Merge coverage reports
@@ -273,7 +273,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           pattern: coverage-*
-          merge-multiple: true
+          path: coverage-artifacts
 
       - name: Merge test output files
         if: always()
@@ -310,10 +310,53 @@ jobs:
 
       - name: Merge coverage reports
         run: |
-          # Combine all coverage files
-          coverage combine || true
-          coverage xml || true
-          coverage report --fail-under=25 || true
+          # Each artifact is downloaded to coverage-artifacts/<artifact-name>/.coverage
+          # We need to rename them to avoid conflicts during combine
+          echo "📊 Merging coverage from all shards..."
+
+          # Create a directory for all coverage files
+          mkdir -p coverage-data
+
+          # Copy and rename each .coverage file from the downloaded artifacts
+          count=1
+          for artifact_dir in coverage-artifacts/coverage-*; do
+            if [ -d "$artifact_dir" ] && [ -f "$artifact_dir/.coverage" ]; then
+              echo "Found coverage file in $artifact_dir"
+              cp "$artifact_dir/.coverage" "coverage-data/.coverage.shard-$count"
+              count=$((count + 1))
+            fi
+          done
+
+          # List what we found
+          echo "Coverage files to merge:"
+          ls -la coverage-data/ || echo "⚠️ No coverage files found"
+
+          # Move coverage files to current directory for combining
+          if [ -d coverage-data ] && [ "$(ls -A coverage-data)" ]; then
+            mv coverage-data/.coverage.* . 2>/dev/null
+
+            # Combine all coverage files into one .coverage file
+            echo "Combining coverage files..."
+            coverage combine --keep || echo "⚠️ Coverage combine had warnings"
+
+            # Generate XML report from combined coverage
+            echo "Generating coverage XML..."
+            coverage xml -o coverage.xml || echo "⚠️ Coverage XML generation had warnings"
+
+            # Display coverage report
+            echo "Coverage Summary:"
+            coverage report --fail-under=25 || echo "⚠️ Coverage below 25% threshold"
+
+            # Verify the coverage.xml was created
+            if [ -f coverage.xml ]; then
+              echo "✅ Coverage XML generated successfully"
+              ls -lh coverage.xml
+            else
+              echo "❌ Error: coverage.xml was not generated"
+            fi
+          else
+            echo "❌ No coverage files found to merge"
+          fi
 
       - name: Check coverage progress
         if: always()
@@ -338,6 +381,7 @@ jobs:
         if: always()
         uses: codecov/codecov-action@v4
         with:
+          token: ${{ secrets.CODECOV_TOKEN }}
           file: ./coverage.xml
           flags: unittests
           name: codecov-gatewayz

@@ -29,6 +29,7 @@ statsig-python-core==0.10.2
 posthog==6.7.8
 braintrust
 prometheus-client==0.21.0
+sentry-sdk[fastapi]>=2.0.0
 
 # OpenTelemetry
 opentelemetry-api>=1.28.0

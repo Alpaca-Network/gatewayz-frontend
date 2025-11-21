@@ -20,6 +20,29 @@ from src.utils.validators import ensure_api_key_like, ensure_non_empty_string
 configure_logging()
 logger = logging.getLogger(__name__)
 
+# Initialize Sentry for error monitoring
+if Config.SENTRY_ENABLED and Config.SENTRY_DSN:
+    import sentry_sdk
+
+    sentry_sdk.init(
+        dsn=Config.SENTRY_DSN,
+        # Add data like request headers and IP for users
+        send_default_pii=True,
+        # Enable sending logs to Sentry
+        enable_logs=True,
+        # Set environment (development, staging, production)
+        environment=Config.SENTRY_ENVIRONMENT,
+        # Set traces_sample_rate to capture transactions for tracing
+        traces_sample_rate=Config.SENTRY_TRACES_SAMPLE_RATE,
+        # Set profiles_sample_rate to capture profiling data
+        profiles_sample_rate=Config.SENTRY_PROFILES_SAMPLE_RATE,
+        # Set profile_lifecycle to "trace" to run profiler during transactions
+        profile_lifecycle="trace",
+    )
+    logger.info(f"✅ Sentry initialized (environment: {Config.SENTRY_ENVIRONMENT})")
+else:
+    logger.info("⏭️  Sentry disabled (SENTRY_ENABLED=false or SENTRY_DSN not set)")
+
 # Constants
 ERROR_INVALID_ADMIN_API_KEY = "Invalid admin API key"
 
@@ -160,6 +183,27 @@ def create_app() -> FastAPI:
         return Response(generate_latest(REGISTRY), media_type="text/plain; charset=utf-8")
 
     logger.info("  [OK] Prometheus metrics endpoint at /metrics")
+
+    # ==================== Sentry Debug Endpoint ====================
+    if Config.SENTRY_ENABLED and Config.SENTRY_DSN:
+        @app.get("/sentry-debug", tags=["monitoring"], include_in_schema=False)
+        async def trigger_sentry_error():
+            """
+            Test endpoint to verify Sentry error tracking is working.
+            This will intentionally trigger a division by zero error.
+            """
+            import sentry_sdk
+
+            # Send test logs to Sentry
+            sentry_sdk.logger.info("Testing Sentry logging integration")
+            sentry_sdk.logger.warning("This is a test warning message")
+            sentry_sdk.logger.error("This is a test error message")
+
+            # Trigger an error to test error tracking
+            division_by_zero = 1 / 0  # This will raise ZeroDivisionError
+            return {"status": "This line will never execute"}
+
+        logger.info("  [OK] Sentry debug endpoint at /sentry-debug")
 
     # ==================== Load All Routes ====================
     logger.info("Loading application routes...")
