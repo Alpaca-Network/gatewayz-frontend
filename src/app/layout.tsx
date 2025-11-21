@@ -1,6 +1,7 @@
 import type {Metadata, Viewport} from 'next';
 import Script from 'next/script';
 import './globals.css';
+import 'katex/dist/katex.min.css';
 import { Toaster } from "@/components/ui/toaster";
 import { AppHeader } from '@/components/layout/app-header';
 import { AppFooter } from '@/components/layout/app-footer';
@@ -79,6 +80,42 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning className="scroll-smooth">
+      <head>
+        <Script
+          id="chrome-runtime-guard"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{
+            __html: `(function () {
+  if (typeof window === 'undefined') return;
+  try {
+    var chromeObj = window.chrome;
+    if (!chromeObj || !chromeObj.runtime) return;
+    if (chromeObj.runtime.__gatewayzPatchedSendMessage) return;
+    var originalSendMessage = chromeObj.runtime.sendMessage;
+    if (typeof originalSendMessage !== 'function') return;
+    chromeObj.runtime.sendMessage = function () {
+      var extensionId = arguments[0];
+      if (typeof extensionId !== 'string') {
+        var maybeCallback = arguments[arguments.length - 1];
+        if (typeof maybeCallback === 'function') {
+          try {
+            maybeCallback(new Error('Extension ID is required when calling chrome.runtime.sendMessage from a webpage.'));
+          } catch (callbackError) {
+            console.warn('[Gatewayz] Failed to notify callback about blocked chrome.runtime.sendMessage call.', callbackError);
+          }
+        }
+        return undefined;
+      }
+      return originalSendMessage.apply(this, arguments);
+    };
+    chromeObj.runtime.__gatewayzPatchedSendMessage = true;
+  } catch (guardError) {
+    console.warn('[Gatewayz] Unable to patch chrome.runtime.sendMessage guard.', guardError);
+  }
+})();`,
+          }}
+        />
+      </head>
       <body className={`${inter.className} antialiased bg-background min-h-screen flex flex-col`} suppressHydrationWarning>
         <ErrorSuppressor />
         <GoogleAnalytics />

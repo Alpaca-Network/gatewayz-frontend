@@ -581,6 +581,23 @@ export function GatewayzAuthProvider({
         );
         } catch (err) {
           console.error("[Auth] Error during backend sync:", err);
+
+          // Check if this is a non-blocking wallet extension error
+          const errorMsg = err instanceof Error ? err.message : String(err);
+          const isWalletExtensionError = errorMsg.includes("chrome.runtime.sendMessage") ||
+                                        errorMsg.includes("runtime.sendMessage") ||
+                                        errorMsg.includes("Extension ID") ||
+                                        errorMsg.includes("from a webpage");
+
+          // If it's just a wallet extension error, don't treat it as auth failure
+          // The user can still authenticate with other methods (email, Google, GitHub)
+          if (isWalletExtensionError) {
+            console.warn("[Auth] Wallet extension error (non-blocking), continuing with authentication");
+            // Revert to authenticating state and retry - Privy will handle gracefully
+            setStatus("authenticating");
+            return;
+          }
+
           clearStoredCredentials();
           setStatus("error");
           setError(err instanceof Error ? err.message : "Authentication failed");
@@ -660,7 +677,22 @@ export function GatewayzAuthProvider({
   }, [syncWithBackend]);
 
   // Memoize login/logout to avoid inline function recreation
-  const login = useCallback(() => privyLogin(), [privyLogin]);
+  const login = useCallback(async () => {
+    try {
+      await privyLogin();
+    } catch (err) {
+      // Suppress wallet extension errors - they don't prevent authentication
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      if (errorMsg.includes("chrome.runtime.sendMessage") ||
+          errorMsg.includes("Extension ID") ||
+          errorMsg.includes("from a webpage")) {
+        console.warn("[Auth] Wallet extension error (suppressed, non-blocking):", errorMsg);
+        return;
+      }
+      // Re-throw actual authentication errors
+      throw err;
+    }
+  }, [privyLogin]);
   const logout = useCallback(async () => {
     clearStoredCredentials();
     await privyLogout();

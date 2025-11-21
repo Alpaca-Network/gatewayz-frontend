@@ -86,21 +86,41 @@ const ReactMarkdown = dynamic(() => import('react-markdown'), {
 
 // Lazy-loaded markdown component with plugins
 const MarkdownRenderer = ({ children, className }: { children: string; className?: string }) => {
-    const [plugins, setPlugins] = React.useState<any>(null);
+    const [plugins, setPlugins] = React.useState<{ remarkPlugins: any[]; rehypePlugins: any[] } | null>(null);
 
     React.useEffect(() => {
-        // Load markdown plugins and KaTeX CSS dynamically
-        Promise.all([
-            import('remark-gfm'),
-            import('remark-math'),
-            import('rehype-katex'),
-            import('katex/dist/katex.min.css')
-        ]).then(([gfm, math, katex]) => {
-            setPlugins({
-                remarkPlugins: [gfm.default, math.default],
-                rehypePlugins: [katex.default]
-            });
-        });
+        let isMounted = true;
+
+        const loadPlugins = async () => {
+            try {
+                const [gfm, math, katex] = await Promise.all([
+                    import('remark-gfm'),
+                    import('remark-math'),
+                    import('rehype-katex')
+                ]);
+
+                if (!isMounted) return;
+
+                setPlugins({
+                    remarkPlugins: [gfm.default, math.default],
+                    rehypePlugins: [katex.default]
+                });
+            } catch (error) {
+                console.error('[MarkdownRenderer] Failed to load markdown plugins', error);
+                if (isMounted) {
+                    setPlugins({
+                        remarkPlugins: [],
+                        rehypePlugins: []
+                    });
+                }
+            }
+        };
+
+        loadPlugins();
+
+        return () => {
+            isMounted = false;
+        };
     }, []);
 
     if (!plugins) {
@@ -727,7 +747,11 @@ const VirtualSessionList = ({
         container.addEventListener('scroll', handleScroll, { passive: true });
         handleScroll(); // Initial calculation
 
-        return () => container.removeEventListener('scroll', handleScroll);
+        return () => {
+            if (container) {
+                container.removeEventListener('scroll', handleScroll);
+            }
+        };
     }, [flatItems.length]);
 
     const totalHeight = flatItems.reduce((height, item) =>
@@ -1227,12 +1251,12 @@ function ChatPageContent() {
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const [editedTitle, setEditedTitle] = useState('');
     const [selectedModel, setSelectedModel] = useState<ModelOption | null>({
-        value: 'katanemo/Arch-Router-1.5B',
-        label: 'Arch-Router-1.5B',
+        value: 'openrouter/auto',
+        label: 'Alpaca Router',
         category: 'Router',
-        sourceGateway: 'huggingface',
-        developer: 'Katanemo',
-        speedTier: 'fast'
+        sourceGateway: 'openrouter',
+        developer: 'Alpaca',
+        modalities: ['Text', 'Image', 'File', 'Audio', 'Video']
     });
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
     const [selectedVideo, setSelectedVideo] = useState<string | null>(null);

@@ -25,17 +25,50 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
   }, []);
 
   useEffect(() => {
+    // Helper function to check if error is a non-blocking wallet extension error
+    const isWalletExtensionError = (errorStr: string): boolean => {
+      return errorStr?.includes("chrome.runtime.sendMessage") ||
+             errorStr?.includes("Extension ID") ||
+             errorStr?.includes("from a webpage") ||
+             errorStr?.includes("runtime.sendMessage");
+    };
+
     const rateLimitListener = (event: PromiseRejectionEvent) => {
       const reason = event.reason as { status?: number; message?: string } | undefined;
-      if (reason?.status === 429 || reason?.message?.includes("429")) {
+      const reasonStr = reason?.message ?? String(reason);
+
+      // Handle rate limit errors
+      if (reason?.status === 429 || reasonStr?.includes("429")) {
         console.warn("Caught 429 error globally");
         setShowRateLimit(true);
         event.preventDefault();
+        return;
+      }
+
+      // Suppress non-blocking wallet extension errors
+      if (isWalletExtensionError(reasonStr)) {
+        console.warn("[Auth] Suppressing non-blocking wallet extension error:", reasonStr);
+        event.preventDefault();
+        return;
+      }
+    };
+
+    // Handle regular errors (not promise rejections) that might be triggered by wallet extensions
+    const errorListener = (event: ErrorEvent) => {
+      if (isWalletExtensionError(event.message)) {
+        console.warn("[Auth] Suppressing wallet extension error:", event.message);
+        event.preventDefault();
+        return false;
       }
     };
 
     window.addEventListener("unhandledrejection", rateLimitListener);
-    return () => window.removeEventListener("unhandledrejection", rateLimitListener);
+    window.addEventListener("error", errorListener);
+
+    return () => {
+      window.removeEventListener("unhandledrejection", rateLimitListener);
+      window.removeEventListener("error", errorListener);
+    };
   }, []);
 
   const handleAuthError = useMemo(
