@@ -585,6 +585,7 @@ export function GatewayzAuthProvider({
           // Check if this is a non-blocking wallet extension error
           const errorMsg = err instanceof Error ? err.message : String(err);
           const isWalletExtensionError = errorMsg.includes("chrome.runtime.sendMessage") ||
+                                        errorMsg.includes("runtime.sendMessage") ||
                                         errorMsg.includes("Extension ID") ||
                                         errorMsg.includes("from a webpage");
 
