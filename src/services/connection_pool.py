@@ -56,6 +56,14 @@ def _get_http_client(
     )
 
 
+def get_http_client(
+    timeout: httpx.Timeout = DEFAULT_TIMEOUT,
+    limits: httpx.Limits = DEFAULT_LIMITS,
+) -> httpx.Client:
+    """Get a pooled HTTP client with connection pooling and keepalive (public API)."""
+    return _get_http_client(timeout=timeout, limits=limits)
+
+
 def _get_async_http_client(
     timeout: httpx.Timeout = DEFAULT_TIMEOUT,
     limits: httpx.Limits = DEFAULT_LIMITS,

@@ -101,6 +101,14 @@ def create_app() -> FastAPI:
     logger.info(f"   Environment: {Config.APP_ENV}")
     logger.info(f"   Allowed Origins: {allowed_origins}")
 
+    # OPTIMIZED: Add trace context middleware first (for distributed tracing)
+    # Middleware order matters! Last added = first executed
+    from src.middleware.trace_context_middleware import TraceContextMiddleware
+
+    app.add_middleware(TraceContextMiddleware)
+    logger.info("  🔗 Trace context middleware enabled (log-to-trace correlation)")
+
+    # Add CORS middleware second (must be early for OPTIONS requests)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=allowed_origins,
@@ -109,25 +117,17 @@ def create_app() -> FastAPI:
         allow_headers=["Content-Type", "Authorization", "Accept", "Origin"],
     )
 
-    # Add GZip compression middleware for model catalog responses
-    # Compress responses larger than 1KB (1000 bytes)
-    # This significantly reduces payload size for large model lists
-    app.add_middleware(GZipMiddleware, minimum_size=1000)
-    logger.info("  🗜  GZip compression middleware enabled (threshold: 1KB)")
-
     # Add observability middleware for automatic metrics collection
-    # This should be added after CORS/compression but before route handlers
     from src.middleware.observability_middleware import ObservabilityMiddleware
 
     app.add_middleware(ObservabilityMiddleware)
     logger.info("  📊 Observability middleware enabled (automatic metrics tracking)")
 
-    # Add trace context middleware for log-to-trace correlation
-    # This should be added after observability middleware
-    from src.middleware.trace_context_middleware import TraceContextMiddleware
-
-    app.add_middleware(TraceContextMiddleware)
-    logger.info("  🔗 Trace context middleware enabled (log-to-trace correlation)")
+    # OPTIMIZED: Add GZip compression last (larger threshold = 10KB for better CPU efficiency)
+    # Only compress large responses (model catalogs, large JSON payloads)
+    # This significantly reduces payload size while avoiding compression overhead for small responses
+    app.add_middleware(GZipMiddleware, minimum_size=10000)
+    logger.info("  🗜  GZip compression middleware enabled (threshold: 10KB, optimized)")
 
     # Security
     HTTPBearer()
@@ -417,17 +417,23 @@ def create_app() -> FastAPI:
             except Exception as analytics_e:
                 logger.warning(f"    Analytics initialization warning: {analytics_e}")
 
-            # Warm model caches on startup
-            try:
-                logger.info("  🔥 Warming model caches...")
-                from src.services.models import get_cached_models
+            # OPTIMIZED: Warm model caches asynchronously (non-blocking startup)
+            async def warm_caches_async():
+                """Background task to warm model caches without blocking startup."""
+                try:
+                    logger.info("  🔥 Warming model caches asynchronously...")
+                    from src.services.models import get_cached_models
 
-                # Warm critical provider caches
-                get_cached_models("hug")
-                logger.info("   HuggingFace models cache warmed")
+                    # Warm critical provider caches
+                    await asyncio.to_thread(get_cached_models, "hug")
+                    logger.info("   ✅ HuggingFace models cache warmed")
 
-            except Exception as cache_e:
-                logger.warning(f"    Cache warming warning: {cache_e}")
+                except Exception as cache_e:
+                    logger.warning(f"    Cache warming warning: {cache_e}")
+
+            # Start cache warming in background (don't block startup)
+            asyncio.create_task(warm_caches_async())
+            logger.info("  🔥 Cache warming started in background (non-blocking)")
 
         except Exception as e:
             logger.error(f"   Startup initialization failed: {e}")

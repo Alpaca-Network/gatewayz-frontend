@@ -1,16 +1,26 @@
 import logging
 
+import httpx
 from openai import OpenAI
 
 from src.config import Config
 from src.services.anthropic_transformer import extract_message_with_tools
+from src.services.connection_pool import get_pooled_client
 
 # Initialize logging
 logger = logging.getLogger(__name__)
 
+# Standard timeout for Vercel AI Gateway
+VERCEL_TIMEOUT = httpx.Timeout(
+    connect=5.0,
+    read=60.0,
+    write=10.0,
+    pool=5.0,
+)
+
 
 def get_vercel_ai_gateway_client():
-    """Get Vercel AI Gateway client using OpenAI-compatible interface
+    """Get Vercel AI Gateway client using OpenAI-compatible interface with connection pooling
 
     Vercel AI Gateway is a unified interface to multiple AI providers with automatic failover,
     caching, and analytics. It provides access to hundreds of models across different providers.
@@ -25,7 +35,13 @@ def get_vercel_ai_gateway_client():
                 "Vercel AI Gateway API key not configured. Please set VERCEL_AI_GATEWAY_API_KEY environment variable."
             )
 
-        return OpenAI(base_url="https://ai-gateway.vercel.sh/v1", api_key=api_key)
+        # Use connection pool with standard timeout
+        return get_pooled_client(
+            provider="vercel-ai-gateway",
+            base_url="https://ai-gateway.vercel.sh/v1",
+            api_key=api_key,
+            timeout=VERCEL_TIMEOUT,
+        )
     except Exception as e:
         logger.error(f"Failed to initialize Vercel AI Gateway client: {e}")
         raise

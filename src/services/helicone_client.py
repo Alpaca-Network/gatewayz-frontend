@@ -1,16 +1,26 @@
 import logging
 
+import httpx
 from openai import OpenAI
 
 from src.config import Config
 from src.services.anthropic_transformer import extract_message_with_tools
+from src.services.connection_pool import get_pooled_client
 
 # Initialize logging
 logger = logging.getLogger(__name__)
 
+# Standard timeout for Helicone
+HELICONE_TIMEOUT = httpx.Timeout(
+    connect=5.0,
+    read=60.0,
+    write=10.0,
+    pool=5.0,
+)
+
 
 def get_helicone_client():
-    """Get Helicone AI Gateway client using OpenAI-compatible interface
+    """Get Helicone AI Gateway client using OpenAI-compatible interface with connection pooling
 
     Helicone AI Gateway is an observability and monitoring platform that provides
     access to multiple AI providers with logging, caching, and analytics capabilities.
@@ -25,13 +35,12 @@ def get_helicone_client():
                 "Helicone AI Gateway API key not configured. Please set HELICONE_API_KEY environment variable."
             )
 
-        # Create client with reasonable timeout (60s for completion requests)
-        # Default timeout for OpenAI is 600s which is too long
-        return OpenAI(
+        # Use connection pool with standard timeout
+        return get_pooled_client(
+            provider="helicone",
             base_url="https://ai-gateway.helicone.ai/v1",
             api_key=api_key,
-            timeout=60.0,
-            max_retries=2,
+            timeout=HELICONE_TIMEOUT,
         )
     except Exception as e:
         logger.error(f"Failed to initialize Helicone AI Gateway client: {e}")

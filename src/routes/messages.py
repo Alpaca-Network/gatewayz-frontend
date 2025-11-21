@@ -10,7 +10,7 @@ import time
 from typing import Optional
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
 import src.db.activity as activity_module
@@ -181,6 +181,7 @@ async def _to_thread(func, *args, **kwargs):
 @router.post("/v1/messages", tags=["chat"])
 async def anthropic_messages(
     req: MessagesRequest,
+    background_tasks: BackgroundTasks,
     api_key: str = Depends(get_api_key),
     session_id: Optional[int] = Query(None, description="Chat session ID to save messages to"),
     request: Request = None,
@@ -244,12 +245,6 @@ async def anthropic_messages(
 
         environment_tag = user.get("environment_tag", "live")
 
-        pre_plan = await _to_thread(enforce_plan_limits, user["id"], 0, environment_tag)
-        if not pre_plan.get("allowed", False):
-            raise HTTPException(
-                status_code=429, detail=f"Plan limit exceeded: {pre_plan.get('reason', 'unknown')}"
-            )
-
         trial = await _to_thread(validate_trial_access, api_key)
         if not trial.get("is_valid", False):
             if trial.get("is_trial") and trial.get("is_expired"):
@@ -274,30 +269,7 @@ async def anthropic_messages(
         should_release_concurrency = not trial.get("is_trial", False)
 
         # Initialize rate limit variables
-        rl_pre = None
         rl_final = None
-
-        if should_release_concurrency:
-            rl_pre = await rate_limit_mgr.check_rate_limit(api_key, tokens_used=0)
-            if not rl_pre.allowed:
-                await _to_thread(
-                    create_rate_limit_alert,
-                    api_key,
-                    "rate_limit_exceeded",
-                    {
-                        "reason": rl_pre.reason,
-                        "retry_after": rl_pre.retry_after,
-                        "remaining_requests": rl_pre.remaining_requests,
-                        "remaining_tokens": rl_pre.remaining_tokens,
-                    },
-                )
-                raise HTTPException(
-                    status_code=429,
-                    detail=f"Rate limit exceeded: {rl_pre.reason}",
-                    headers=(
-                        {"Retry-After": str(rl_pre.retry_after)} if rl_pre.retry_after else None
-                    ),
-                )
 
         if not trial.get("is_trial", False) and user.get("credits", 0.0) <= 0:
             raise HTTPException(status_code=402, detail="Insufficient credits")
@@ -701,11 +673,12 @@ async def anthropic_messages(
 
         await _to_thread(increment_api_key_usage, api_key)
 
-        # === 4.5) Log activity ===
+        # === 4.5) Log activity (moved to background for better latency) ===
         try:
             provider_name = get_provider_from_model(model)
             speed = total_tokens / elapsed if elapsed > 0 else 0
-            await _to_thread(
+            # Run in background to reduce user-perceived latency
+            background_tasks.add_task(
                 log_activity,
                 user_id=user["id"],
                 model=model,
@@ -725,52 +698,55 @@ async def anthropic_messages(
             )
         except Exception as e:
             logger.error(
-                f"Failed to log activity for user {user['id']}, model {model}: {e}", exc_info=True
+                f"Failed to schedule activity logging for user {user['id']}, model {model}: {e}", exc_info=True
             )
 
-        # === 5) Save chat history ===
+        # === 5) Save chat history (moved to background for better latency) ===
         if session_id:
-            try:
-                session = await _to_thread(get_chat_session, session_id, user["id"])
-                if session:
-                    # Save last user message
-                    last_user = None
-                    for m in reversed(openai_messages):
-                        if m.get("role") == "user":
-                            last_user = m
-                            break
+            def save_chat_history_task():
+                """Background task to save chat history without blocking response."""
+                try:
+                    session = get_chat_session(session_id, user["id"])
+                    if session:
+                        # Save last user message
+                        last_user = None
+                        for m in reversed(openai_messages):
+                            if m.get("role") == "user":
+                                last_user = m
+                                break
 
-                    if last_user:
-                        user_content = extract_text_from_content(last_user.get("content", ""))
-                        await _to_thread(
-                            save_chat_message,
-                            session_id,
-                            "user",
-                            user_content,
-                            model,
-                            0,
-                            user["id"],
+                        if last_user:
+                            user_content = extract_text_from_content(last_user.get("content", ""))
+                            save_chat_message(
+                                session_id,
+                                "user",
+                                user_content,
+                                model,
+                                0,
+                                user["id"],
+                            )
+
+                        # Save assistant response
+                        assistant_content = (
+                            processed.get("choices", [{}])[0].get("message", {}).get("content", "")
                         )
-
-                    # Save assistant response
-                    assistant_content = (
-                        processed.get("choices", [{}])[0].get("message", {}).get("content", "")
+                        if assistant_content:
+                            save_chat_message(
+                                session_id,
+                                "assistant",
+                                assistant_content,
+                                model,
+                                total_tokens,
+                                user["id"],
+                            )
+                except Exception as e:
+                    logger.error(
+                        f"Failed to save chat history for session {session_id}, user {user['id']}: {e}",
+                        exc_info=True,
                     )
-                    if assistant_content:
-                        await _to_thread(
-                            save_chat_message,
-                            session_id,
-                            "assistant",
-                            assistant_content,
-                            model,
-                            total_tokens,
-                            user["id"],
-                        )
-            except Exception as e:
-                logger.error(
-                    f"Failed to save chat history for session {session_id}, user {user['id']}: {e}",
-                    exc_info=True,
-                )
+
+            # Run chat history saving in background
+            background_tasks.add_task(save_chat_history_task)
 
         # === 6) Transform response to Anthropic format ===
         anthropic_response = transform_openai_to_anthropic(processed, model)

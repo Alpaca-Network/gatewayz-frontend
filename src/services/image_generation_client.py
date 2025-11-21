@@ -6,9 +6,29 @@ from typing import Any, Dict
 import httpx
 
 from src.config import Config
+from src.services.connection_pool import get_http_client
 
 # Initialize logging
 logger = logging.getLogger(__name__)
+
+# Extended timeout for image generation (images take longer than text)
+IMAGE_TIMEOUT = httpx.Timeout(
+    connect=10.0,
+    read=120.0,  # Image generation can be slow
+    write=10.0,
+    pool=5.0,
+)
+
+# Shared HTTP client for image generation
+_image_http_client = None
+
+
+def get_image_http_client() -> httpx.Client:
+    """Get or create shared HTTP client for image generation."""
+    global _image_http_client
+    if _image_http_client is None:
+        _image_http_client = get_http_client(timeout=IMAGE_TIMEOUT)
+    return _image_http_client
 
 
 def make_deepinfra_image_request(
@@ -43,8 +63,9 @@ def make_deepinfra_image_request(
 
         logger.info(f"Making image generation request to DeepInfra with model {model}")
 
-        # Make request
-        response = httpx.post(url, headers=headers, json=payload, timeout=120.0)
+        # Make request using shared HTTP client
+        client = get_image_http_client()
+        response = client.post(url, headers=headers, json=payload)
         response.raise_for_status()
 
         return response.json()

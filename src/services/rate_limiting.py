@@ -534,7 +534,7 @@ class RateLimitManager:
         self.fallback_manager = get_fallback_rate_limit_manager()
         # OPTIMIZATION: Short-lived cache for rate limit results (15-30ms faster per cached request)
         self._result_cache: Dict[str, tuple[RateLimitResult, float]] = {}
-        self._cache_ttl = 5.0  # Cache results for 5 seconds
+        self._cache_ttl = 15.0  # Cache results for 15 seconds (increased from 5s for better performance)
 
     async def get_key_config(self, api_key: str) -> RateLimitConfig:
         """Get rate limit configuration for a specific API key"""

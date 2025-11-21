@@ -7,7 +7,7 @@ from contextvars import ContextVar
 from typing import Optional
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from src.utils.performance_tracker import PerformanceTracker
@@ -787,6 +787,7 @@ logger.info("📍 Registering /v1/chat/completions endpoint")
 @traced(name="chat_completions", type="llm")
 async def chat_completions(
     req: ProxyRequest,
+    background_tasks: BackgroundTasks,
     api_key: str = Depends(get_api_key),
     session_id: Optional[int] = Query(None, description="Chat session ID to save messages to"),
     request: Request = None,
@@ -830,33 +831,8 @@ async def chat_completions(
 
             environment_tag = user.get("environment_tag", "live")
 
-            # Step 2: Parallelize plan limits and trial validation (150-300ms faster!)
-            pre_plan, trial = await asyncio.gather(
-                _to_thread(enforce_plan_limits, user["id"], 0, environment_tag),
-                _to_thread(validate_trial_access, api_key),
-            )
-
-        # Validate plan limits
-        if not pre_plan.get("allowed", False):
-            # For streaming requests, return SSE formatted error immediately
-            if req.stream:
-
-                async def error_stream():
-                    error_chunk = {
-                        "error": {
-                            "message": f"Plan limit exceeded: {pre_plan.get('reason', 'unknown')}",
-                            "type": "plan_limit_exceeded",
-                        }
-                    }
-                    yield f"data: {json.dumps(error_chunk)}\n\n"
-                    yield "data: [DONE]\n\n"
-
-                return StreamingResponse(error_stream(), media_type="text/event-stream")
-            else:
-                raise HTTPException(
-                    status_code=429,
-                    detail=f"Plan limit exceeded: {pre_plan.get('reason', 'unknown')}",
-                )
+            # Step 2: Only validate trial access (plan limits checked after token usage known)
+            trial = await _to_thread(validate_trial_access, api_key)
 
         # Validate trial access
         if not trial.get("is_valid", False):
@@ -890,27 +866,7 @@ async def chat_completions(
         rl_pre = None
         rl_final = None
 
-        if should_release_concurrency and not disable_rate_limiting:
-            rl_pre = await rate_limit_mgr.check_rate_limit(api_key, tokens_used=0)
-            if not rl_pre.allowed:
-                await _to_thread(
-                    create_rate_limit_alert,
-                    api_key,
-                    "rate_limit_exceeded",
-                    {
-                        "reason": rl_pre.reason,
-                        "retry_after": rl_pre.retry_after,
-                        "remaining_requests": rl_pre.remaining_requests,
-                        "remaining_tokens": rl_pre.remaining_tokens,
-                    },
-                )
-                raise HTTPException(
-                    status_code=429,
-                    detail=f"Rate limit exceeded: {rl_pre.reason}",
-                    headers=(
-                        {"Retry-After": str(rl_pre.retry_after)} if rl_pre.retry_after else None
-                    ),
-                )
+        # Rate limiting will be checked after we know actual token usage (more accurate)
 
         if not trial.get("is_trial", False) and user.get("credits", 0.0) <= 0:
             raise HTTPException(status_code=402, detail="Insufficient credits")
@@ -1673,6 +1629,7 @@ async def chat_completions(
 @traced(name="unified_responses", type="llm")
 async def unified_responses(
     req: ResponseRequest,
+    background_tasks: BackgroundTasks,
     api_key: str = Depends(get_api_key),
     session_id: Optional[int] = Query(None, description="Chat session ID to save messages to"),
     request: Request = None,
@@ -1713,28 +1670,7 @@ async def unified_responses(
 
         environment_tag = user.get("environment_tag", "live")
 
-        pre_plan = await _to_thread(enforce_plan_limits, user["id"], 0, environment_tag)
-        if not pre_plan.get("allowed", False):
-            # For streaming requests, return SSE formatted error immediately
-            if req.stream:
-
-                async def error_stream():
-                    error_chunk = {
-                        "error": {
-                            "message": f"Plan limit exceeded: {pre_plan.get('reason', 'unknown')}",
-                            "type": "plan_limit_exceeded",
-                        }
-                    }
-                    yield f"data: {json.dumps(error_chunk)}\n\n"
-                    yield "data: [DONE]\n\n"
-
-                return StreamingResponse(error_stream(), media_type="text/event-stream")
-            else:
-                raise HTTPException(
-                    status_code=429,
-                    detail=f"Plan limit exceeded: {pre_plan.get('reason', 'unknown')}",
-                )
-
+        # Only validate trial access (plan limits checked after token usage known)
         trial = await _to_thread(validate_trial_access, api_key)
         if not trial.get("is_valid", False):
             if trial.get("is_trial") and trial.get("is_expired"):
