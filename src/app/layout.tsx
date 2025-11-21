@@ -20,6 +20,7 @@ import { GTMLoader } from '@/components/analytics/gtm-loader';
 import { ErrorSuppressor } from '@/components/error-suppressor';
 import { AnalyticsProvidersWrapper } from '@/components/providers/analytics-providers-wrapper';
 import { ReferralBonusDialog } from '@/components/dialogs/referral-bonus-dialog';
+import { SafeStorageShim } from '@/components/safe-storage-shim';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -81,6 +82,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning className="scroll-smooth">
       <body className={`${inter.className} antialiased bg-background min-h-screen flex flex-col`} suppressHydrationWarning>
+        <SafeStorageShim />
         <ErrorSuppressor />
         <GoogleAnalytics />
         <ThemeProvider
