@@ -51,7 +51,7 @@ async def lifespan(app):
         # Initialize Tempo/OpenTelemetry OTLP tracing
         try:
             init_tempo_otlp()
-            init_tempo_otlp_fastapi()
+            init_tempo_otlp_fastapi(app)
             logger.info("Tempo/OTLP tracing initialized")
         except Exception as e:
             logger.warning(f"Tempo/OTLP initialization warning: {e}")

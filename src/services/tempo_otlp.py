@@ -10,7 +10,10 @@ The Railway Grafana stack template comes with Tempo pre-configured to receive:
 """
 
 import logging
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from fastapi import FastAPI
 
 from src.config import Config
 
@@ -72,7 +75,7 @@ def init_tempo_otlp():
         return None
 
 
-def init_tempo_otlp_fastapi():
+def init_tempo_otlp_fastapi(app: Optional["FastAPI"] = None):
     """
     Initialize OpenTelemetry auto-instrumentation for FastAPI.
 
@@ -90,8 +93,12 @@ def init_tempo_otlp_fastapi():
         from opentelemetry.instrumentation.requests import RequestsInstrumentor
 
         # Instrument FastAPI
-        FastAPIInstrumentor.instrument()
-        logger.info("FastAPI instrumentation enabled")
+        if app is not None:
+            FastAPIInstrumentor.instrument_app(app)
+            logger.info("FastAPI instrumentation enabled for app instance")
+        else:
+            FastAPIInstrumentor().instrument()
+            logger.info("FastAPI instrumentation enabled globally")
 
         # Instrument HTTP clients
         HTTPXClientInstrumentor().instrument()
