@@ -24,6 +24,7 @@ dependencies = [
     "python-dotenv==1.0.0",
     "cryptography==41.0.7",
     "email-validator==2.1.0",
+    "PyJWT[crypto]==2.8.0",
 
     # External services
     "requests==2.31.0",
@@ -35,17 +36,13 @@ dependencies = [
     "cerebras-cloud-sdk>=1.0.0",
     "xai-sdk>=0.1.0",
 
-    # Analytics (lightweight)
+    # Analytics and monitoring
     "statsig-python-core==0.10.2",
     "posthog==6.7.8",
     "prometheus-client==0.21.0",
     "sentry-sdk[fastapi]>=2.0.0",
-]
 
-[project.optional-dependencies]
-# Heavy observability dependencies - install only when needed
-observability = [
-    "braintrust",
+    # OpenTelemetry - Core tracing functionality
     "opentelemetry-api>=1.28.0",
     "opentelemetry-sdk>=1.28.0",
     "opentelemetry-instrumentation>=0.49b0",
@@ -55,10 +52,15 @@ observability = [
     "opentelemetry-exporter-otlp>=1.28.0",
 ]
 
-# Heavy Google Cloud dependencies - install only when needed
-google = [
+[project.optional-dependencies]
+# Heavy provider SDKs - install only when needed (Railway, local dev)
+# These are the main culprits for bundle size (especially google-cloud-aiplatform)
+providers = [
     "google-cloud-aiplatform>=1.38.0",
     "google-auth>=2.0.0",
+    "clarifai>=10.0.0",
+    "huggingface-hub>=0.23.0",
+    "braintrust",
 ]
 
 # Test dependencies
@@ -73,9 +75,10 @@ test = [
     "flask-sqlalchemy",
 ]
 
-# Full production dependencies (for Railway, etc.)
+# Full production dependencies (Railway, self-hosted)
+# Includes all optional provider SDKs
 full = [
-    "gatewayz-backend[observability,google]",
+    "gatewayz-backend[providers]",
 ]
 
 # Ruff Configuration (Fast Python Linter)

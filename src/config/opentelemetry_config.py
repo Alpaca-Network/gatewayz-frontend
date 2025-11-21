@@ -9,25 +9,35 @@ Features:
 - HTTPX and Requests library instrumentation
 - Context propagation for distributed tracing
 - Integration with Railway/Grafana observability stack
+
+Note: OpenTelemetry is optional. If not installed, tracing will be gracefully disabled.
 """
 
 import logging
 import os
 from typing import Optional
 
-from opentelemetry import trace
-from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
-from opentelemetry.instrumentation.requests import RequestsInstrumentor
-from opentelemetry.sdk.resources import (
-    DEPLOYMENT_ENVIRONMENT,
-    SERVICE_NAME,
-    SERVICE_VERSION,
-    Resource,
-)
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
+# Try to import OpenTelemetry - it's optional for deployments like Vercel
+try:
+    from opentelemetry import trace
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+    from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+    from opentelemetry.instrumentation.requests import RequestsInstrumentor
+    from opentelemetry.sdk.resources import (
+        DEPLOYMENT_ENVIRONMENT,
+        SERVICE_NAME,
+        SERVICE_VERSION,
+        Resource,
+    )
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
+
+    OPENTELEMETRY_AVAILABLE = True
+except ImportError:
+    OPENTELEMETRY_AVAILABLE = False
+    # Define dummy types for type hints
+    TracerProvider = None  # type: ignore
 
 from src.config.config import Config
 
@@ -59,6 +69,10 @@ class OpenTelemetryConfig:
         if cls._initialized:
             logger.debug("OpenTelemetry already initialized")
             return True
+
+        if not OPENTELEMETRY_AVAILABLE:
+            logger.info("⏭️  OpenTelemetry not available (package not installed)")
+            return False
 
         if not Config.TEMPO_ENABLED:
             logger.info("⏭️  OpenTelemetry tracing disabled (TEMPO_ENABLED=false)")
@@ -128,6 +142,10 @@ class OpenTelemetryConfig:
         Args:
             app: FastAPI application instance to instrument
         """
+        if not OPENTELEMETRY_AVAILABLE:
+            logger.debug("Skipping FastAPI instrumentation (OpenTelemetry not available)")
+            return
+
         if not cls._initialized or not Config.TEMPO_ENABLED:
             logger.debug("Skipping FastAPI instrumentation (tracing not enabled)")
             return
@@ -161,7 +179,7 @@ class OpenTelemetryConfig:
             cls._tracer_provider = None
 
     @classmethod
-    def get_tracer(cls, name: str) -> trace.Tracer:
+    def get_tracer(cls, name: str):
         """
         Get a tracer for creating custom spans.
 
@@ -169,8 +187,10 @@ class OpenTelemetryConfig:
             name: Name of the tracer (typically __name__ of the calling module)
 
         Returns:
-            OpenTelemetry Tracer instance
+            OpenTelemetry Tracer instance, or None if OpenTelemetry is not available
         """
+        if not OPENTELEMETRY_AVAILABLE:
+            return None
         return trace.get_tracer(name)
 
 
@@ -182,6 +202,9 @@ def get_current_trace_id() -> Optional[str]:
     Returns:
         str: Trace ID in hex format (32 characters), or None if no active span
     """
+    if not OPENTELEMETRY_AVAILABLE:
+        return None
+
     try:
         span = trace.get_current_span()
         span_context = span.get_span_context()
@@ -199,6 +222,9 @@ def get_current_span_id() -> Optional[str]:
     Returns:
         str: Span ID in hex format (16 characters), or None if no active span
     """
+    if not OPENTELEMETRY_AVAILABLE:
+        return None
+
     try:
         span = trace.get_current_span()
         span_context = span.get_span_context()
