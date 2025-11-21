@@ -22,10 +22,6 @@ jobs:
         run: |
           npm install -g @railway/cli
 
-      - name: Authenticate with Railway
-        run: |
-          railway login
-
       - name: Check production health
         id: prod-health
         continue-on-error: true
@@ -151,10 +147,6 @@ jobs:
       - name: Install Railway CLI
         run: |
           npm install -g @railway/cli
-
-      - name: Authenticate with Railway
-        run: |
-          railway login
 
       - name: Collect production metrics
         continue-on-error: true
