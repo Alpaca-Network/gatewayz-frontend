@@ -41,6 +41,9 @@ class Config:
     # Featherless.ai Configuration
     FEATHERLESS_API_KEY = os.environ.get("FEATHERLESS_API_KEY")
 
+    # Anthropic / Autonomous Monitoring
+    ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
+
     # Chutes.ai Configuration
     CHUTES_API_KEY = os.environ.get("CHUTES_API_KEY")
 
@@ -100,6 +103,7 @@ class Config:
 
     # Admin Configuration
     ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL")
+    GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
 
     # ==================== Monitoring & Observability Configuration ====================
 
