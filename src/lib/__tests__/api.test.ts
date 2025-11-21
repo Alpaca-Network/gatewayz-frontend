@@ -50,7 +50,7 @@ describe('api utilities', () => {
         expect(localStorage.getItem('gatewayz_api_key')).toBe('new-key');
       });
 
-      it('should do nothing in SSR environment', () => {
+        it('should do nothing in SSR environment', () => {
         const originalWindow = global.window;
         (global as any).window = undefined;
 
@@ -61,6 +61,16 @@ describe('api utilities', () => {
 
         global.window = originalWindow;
       });
+
+        it('should swallow storage errors when setItem throws', () => {
+          const setItemSpy = jest.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+            throw new Error('Access denied');
+          });
+
+          expect(() => saveApiKey('restricted-key')).not.toThrow();
+
+          setItemSpy.mockRestore();
+        });
     });
 
     describe('getApiKey', () => {
@@ -78,7 +88,7 @@ describe('api utilities', () => {
         expect(apiKey).toBeNull();
       });
 
-      it('should return null in SSR environment', () => {
+        it('should return null in SSR environment', () => {
         const originalWindow = global.window;
         (global as any).window = undefined;
 
@@ -88,6 +98,16 @@ describe('api utilities', () => {
 
         global.window = originalWindow;
       });
+
+        it('should return null when storage access throws a SecurityError', () => {
+          const getItemSpy = jest.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+            throw new Error('Access denied');
+          });
+
+          expect(getApiKey()).toBeNull();
+
+          getItemSpy.mockRestore();
+        });
     });
 
     describe('removeApiKey', () => {
@@ -283,12 +303,25 @@ describe('api utilities', () => {
         global.window = originalWindow;
       });
 
-      it('should handle malformed JSON gracefully', () => {
+        it('should handle malformed JSON gracefully', () => {
         localStorage.setItem('gatewayz_user_data', 'invalid-json{');
 
-        expect(() => {
-          getUserData();
-        }).toThrow();
+          const result = getUserData();
+
+          expect(result).toBeNull();
+          expect(localStorage.getItem('gatewayz_user_data')).toBeNull();
+        });
+
+        it('should return null when storage throws during read', () => {
+          const getItemSpy = jest.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+            throw new Error('Access denied');
+          });
+
+          const result = getUserData();
+
+          expect(result).toBeNull();
+
+          getItemSpy.mockRestore();
       });
     });
   });
