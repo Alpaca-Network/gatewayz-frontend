@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { safeLocalStorageGet, safeLocalStorageSet } from "@/lib/safe-storage"
 
 type Theme = "dark" | "light" | "system"
 
@@ -29,11 +30,9 @@ export function ThemeProvider({
   ...props
 }: ThemeProviderProps) {
   const [theme, setTheme] = React.useState<Theme>(() => {
-    if (typeof localStorage !== 'undefined') {
-      return (localStorage.getItem(storageKey) as Theme) || defaultTheme;
-    }
-    return defaultTheme;
-  });
+    const storedTheme = safeLocalStorageGet(storageKey)
+    return (storedTheme as Theme | null) || defaultTheme
+  })
 
   React.useEffect(() => {
     const root = window.document.documentElement
@@ -68,9 +67,9 @@ export function ThemeProvider({
 
   const value = {
     theme,
-    setTheme: (theme: Theme) => {
-      localStorage.setItem(storageKey, theme)
-      setTheme(theme)
+    setTheme: (nextTheme: Theme) => {
+      safeLocalStorageSet(storageKey, nextTheme)
+      setTheme(nextTheme)
     },
   }
 
