@@ -40,15 +40,16 @@ class PostHogService:
                 )
                 return
 
-            # Initialize PostHog client
+            # Initialize PostHog client with exception autocapture enabled
             self.client = Posthog(
                 api_key,
                 host=host,
                 debug=os.getenv("POSTHOG_DEBUG", "false").lower() == "true",
                 sync_mode=False,  # Use async mode for better performance
+                enable_exception_autocapture=True,  # Enable automatic exception tracking
             )
 
-            logger.info(f"PostHog initialized successfully (host: {host})")
+            logger.info(f"PostHog initialized successfully with exception autocapture (host: {host})")
 
         except Exception as e:
             logger.error(f"Failed to initialize PostHog: {e}")
@@ -110,6 +111,37 @@ class PostHogService:
 
         except Exception as e:
             logger.error(f"Failed to identify user '{distinct_id}': {e}")
+
+    def capture_exception(
+        self,
+        exception: Exception,
+        distinct_id: Optional[str] = None,
+        properties: Optional[Dict[str, Any]] = None,
+    ):
+        """
+        Manually capture an exception in PostHog
+
+        Args:
+            exception: The exception object to capture
+            distinct_id: Optional unique identifier for the user
+            properties: Optional additional properties to include
+        """
+        if not self.client:
+            logger.debug(f"PostHog not initialized, skipping exception: {exception}")
+            return
+
+        try:
+            # Use 'system' as default distinct_id if not provided
+            user_id = distinct_id or "system"
+
+            # Capture the exception
+            self.client.capture_exception(
+                exception, distinct_id=user_id, properties=properties or {}
+            )
+            logger.debug(f"Captured exception '{type(exception).__name__}' for user '{user_id}'")
+
+        except Exception as e:
+            logger.error(f"Failed to capture exception in PostHog: {e}")
 
     def flush(self):
         """Flush pending events to PostHog (useful for testing)"""

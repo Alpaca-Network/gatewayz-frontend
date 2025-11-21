@@ -279,6 +279,39 @@ def create_app() -> FastAPI:
     @app.exception_handler(Exception)
     async def global_exception_handler(request: Request, exc: Exception):
         logger.error(f"Unhandled exception: {exc}", exc_info=True)
+
+        # Capture exception in PostHog for error tracking
+        try:
+            from src.services.posthog_service import posthog_service
+
+            # Extract user info from request if available
+            distinct_id = "system"
+            properties = {
+                "path": request.url.path,
+                "method": request.method,
+                "error_type": type(exc).__name__,
+                "error_message": str(exc),
+            }
+
+            # Try to get user ID from request state or headers
+            if hasattr(request.state, "user_id"):
+                distinct_id = request.state.user_id
+            elif "authorization" in request.headers:
+                # Use a hash of the auth header as distinct_id if no user_id available
+                import hashlib
+                auth_hash = hashlib.sha256(
+                    request.headers["authorization"].encode()
+                ).hexdigest()[:16]
+                distinct_id = f"user_{auth_hash}"
+
+            posthog_service.capture_exception(
+                exception=exc,
+                distinct_id=distinct_id,
+                properties=properties
+            )
+        except Exception as posthog_error:
+            logger.warning(f"Failed to capture exception in PostHog: {posthog_error}")
+
         return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
     # ==================== Startup Event ====================
