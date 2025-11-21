@@ -263,6 +263,7 @@ Create a script (optional) to exercise the flow (create session, show balance, e
 - **Invalid signature:** Double-check `STRIPE_WEBHOOK_SECRET` and restart the server after editing `.env`.
 - **Credits not added:** Verify `checkout.session.completed` is selected and your webhook handler processes it; confirm `user_id` metadata is present.
 - **DB errors:** Confirm migrations ran and RLS allows needed operations; check Supabase connection env vars.
+- **PGRST205 “Could not find the table …” errors:** Apply the latest Supabase migrations so the `stripe_webhook_events` table exists and the automatic PostgREST schema reload trigger (`notify_postgrest_schema_reload`) is installed. If you need an immediate fix after running a manual SQL change, execute `NOTIFY pgrst, 'reload schema';` in the Supabase SQL editor to refresh PostgREST’s cache.
 - **Amount rejected:** Stripe requires minimum amounts (e.g., $0.50).
 
 ---
