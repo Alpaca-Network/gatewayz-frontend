@@ -670,6 +670,12 @@ export default function ModelProfilePage() {
                             // Check if response is ok before parsing
                             if (!result.value.ok) {
                                 console.warn(`Gateway response not ok: ${result.value.status} ${result.value.statusText}`);
+                                // Consume the response body to prevent streaming errors when HTML is returned instead of JSON
+                                try {
+                                    await result.value.text();
+                                } catch (consumeError) {
+                                    // Ignore errors when consuming the error response body
+                                }
                                 return [];
                             }
                             const data = await result.value.json();
@@ -1583,5 +1589,7 @@ console.log(response.choices[0].message.content);`
         </TooltipProvider>
     );
 }
+
+    
 
     
