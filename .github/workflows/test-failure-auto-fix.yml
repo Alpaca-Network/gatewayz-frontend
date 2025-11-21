@@ -1,6 +1,13 @@
 name: Codex Test Fixer
 
 on:
+  workflow_dispatch:
+    inputs:
+      test_output_artifact:
+        description: 'Name of artifact containing test output'
+        required: false
+        type: string
+        default: 'test-failures'
   workflow_call:
     inputs:
       test_output_artifact:
