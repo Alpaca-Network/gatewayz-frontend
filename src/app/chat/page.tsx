@@ -3676,6 +3676,8 @@ function ChatPageContent() {
                       if (e.target.value.trim()) {
                         setUserHasTyped(true);
                         userHasTypedRef.current = true;
+                        // Reset auto-send flag when user manually types
+                        autoSendTriggeredRef.current = false;
                       }
                     }}
                     onKeyDown={(e) => {
