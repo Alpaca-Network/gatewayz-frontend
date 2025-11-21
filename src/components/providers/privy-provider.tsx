@@ -25,6 +25,14 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
   }, []);
 
   useEffect(() => {
+    // Helper function to check if error is a non-blocking wallet extension error
+    const isWalletExtensionError = (errorStr: string): boolean => {
+      return errorStr?.includes("chrome.runtime.sendMessage") ||
+             errorStr?.includes("Extension ID") ||
+             errorStr?.includes("from a webpage") ||
+             errorStr?.includes("runtime.sendMessage");
+    };
+
     const rateLimitListener = (event: PromiseRejectionEvent) => {
       const reason = event.reason as { status?: number; message?: string } | undefined;
       const reasonStr = reason?.message ?? String(reason);
@@ -38,17 +46,29 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
       }
 
       // Suppress non-blocking wallet extension errors
-      if (reasonStr?.includes("chrome.runtime.sendMessage") ||
-          reasonStr?.includes("Extension ID") ||
-          reasonStr?.includes("from a webpage")) {
+      if (isWalletExtensionError(reasonStr)) {
         console.warn("[Auth] Suppressing non-blocking wallet extension error:", reasonStr);
         event.preventDefault();
         return;
       }
     };
 
+    // Handle regular errors (not promise rejections) that might be triggered by wallet extensions
+    const errorListener = (event: ErrorEvent) => {
+      if (isWalletExtensionError(event.message)) {
+        console.warn("[Auth] Suppressing wallet extension error:", event.message);
+        event.preventDefault();
+        return false;
+      }
+    };
+
     window.addEventListener("unhandledrejection", rateLimitListener);
-    return () => window.removeEventListener("unhandledrejection", rateLimitListener);
+    window.addEventListener("error", errorListener);
+
+    return () => {
+      window.removeEventListener("unhandledrejection", rateLimitListener);
+      window.removeEventListener("error", errorListener);
+    };
   }, []);
 
   const handleAuthError = useMemo(
