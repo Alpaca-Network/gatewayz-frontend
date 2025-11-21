@@ -723,7 +723,11 @@ const VirtualSessionList = ({
         container.addEventListener('scroll', handleScroll, { passive: true });
         handleScroll(); // Initial calculation
 
-        return () => container.removeEventListener('scroll', handleScroll);
+        return () => {
+            if (container) {
+                container.removeEventListener('scroll', handleScroll);
+            }
+        };
     }, [flatItems.length]);
 
     const totalHeight = flatItems.reduce((height, item) =>
