@@ -437,6 +437,70 @@ ALTER SEQUENCE "public"."payments_id_seq" OWNED BY "public"."payments"."id";
 
 
 
+CREATE TABLE IF NOT EXISTS "public"."stripe_webhook_events" (
+    "event_id" character varying(255) NOT NULL,
+    "event_type" character varying(100) NOT NULL,
+    "processed_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "user_id" integer,
+    "metadata" "jsonb",
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "stripe_webhook_events_pkey" PRIMARY KEY ("event_id")
+);
+
+
+ALTER TABLE "public"."stripe_webhook_events" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."stripe_webhook_events" IS 'Tracks processed Stripe webhook events for idempotency';
+
+
+
+COMMENT ON COLUMN "public"."stripe_webhook_events"."event_id" IS 'Stripe event ID (evt_xxx)';
+
+
+
+COMMENT ON COLUMN "public"."stripe_webhook_events"."event_type" IS 'Stripe event type (e.g., invoice.paid)';
+
+
+
+COMMENT ON COLUMN "public"."stripe_webhook_events"."processed_at" IS 'Timestamp when event was processed';
+
+
+
+COMMENT ON COLUMN "public"."stripe_webhook_events"."user_id" IS 'User ID associated with the event (if applicable)';
+
+
+
+COMMENT ON COLUMN "public"."stripe_webhook_events"."metadata" IS 'Additional event metadata for debugging';
+
+
+
+CREATE INDEX IF NOT EXISTS "idx_webhook_events_event_type" ON "public"."stripe_webhook_events" USING "btree" ("event_type");
+
+
+
+CREATE INDEX IF NOT EXISTS "idx_webhook_events_user_id" ON "public"."stripe_webhook_events" USING "btree" ("user_id");
+
+
+
+CREATE INDEX IF NOT EXISTS "idx_webhook_events_created_at" ON "public"."stripe_webhook_events" USING "btree" ("created_at");
+
+
+
+CREATE OR REPLACE FUNCTION "public"."cleanup_old_webhook_events"() RETURNS "void"
+    LANGUAGE "plpgsql"
+    AS $$
+BEGIN
+    DELETE FROM stripe_webhook_events
+    WHERE created_at < NOW() - INTERVAL '90 days';
+END;
+$$;
+
+
+ALTER FUNCTION "public"."cleanup_old_webhook_events"() OWNER TO "postgres";
+
+
+
 CREATE TABLE IF NOT EXISTS "public"."plans" (
     "id" bigint NOT NULL,
     "name" "text" NOT NULL,
@@ -1296,6 +1360,12 @@ GRANT ALL ON FUNCTION "public"."update_updated_at_column"() TO "service_role";
 
 
 
+GRANT ALL ON FUNCTION "public"."cleanup_old_webhook_events"() TO "anon";
+GRANT ALL ON FUNCTION "public"."cleanup_old_webhook_events"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."cleanup_old_webhook_events"() TO "service_role";
+
+
+
 
 
 
@@ -1416,6 +1486,12 @@ GRANT ALL ON TABLE "public"."payments" TO "service_role";
 GRANT ALL ON SEQUENCE "public"."payments_id_seq" TO "anon";
 GRANT ALL ON SEQUENCE "public"."payments_id_seq" TO "authenticated";
 GRANT ALL ON SEQUENCE "public"."payments_id_seq" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."stripe_webhook_events" TO "anon";
+GRANT ALL ON TABLE "public"."stripe_webhook_events" TO "authenticated";
+GRANT ALL ON TABLE "public"."stripe_webhook_events" TO "service_role";
 
 
 
