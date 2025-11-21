@@ -187,10 +187,11 @@ def create_app() -> FastAPI:
     # ==================== Sentry Debug Endpoint ====================
     if Config.SENTRY_ENABLED and Config.SENTRY_DSN:
         @app.get("/sentry-debug", tags=["monitoring"], include_in_schema=False)
-        async def trigger_sentry_error():
+        async def trigger_sentry_error(raise_exception: bool = False):
             """
             Test endpoint to verify Sentry error tracking is working.
-            This will intentionally trigger a division by zero error.
+            When raise_exception is False (default) it will capture the error with Sentry but return HTTP 200.
+            Pass raise_exception=true to surface the exception for full end-to-end testing.
             """
             import sentry_sdk
 
@@ -199,9 +200,24 @@ def create_app() -> FastAPI:
             sentry_sdk.logger.warning("This is a test warning message")
             sentry_sdk.logger.error("This is a test error message")
 
-            # Trigger an error to test error tracking
-            division_by_zero = 1 / 0  # This will raise ZeroDivisionError
-            return {"status": "This line will never execute"}
+            def _trigger_zero_division() -> None:
+                # Helper to ensure we get a real stack trace for Sentry
+                _ = 1 / 0
+
+            if raise_exception:
+                # Preserve legacy behaviour for explicit testing
+                _trigger_zero_division()
+
+            try:
+                _trigger_zero_division()
+            except ZeroDivisionError as exc:
+                sentry_sdk.capture_exception(exc)
+                event_id = sentry_sdk.last_event_id()
+                return {
+                    "status": "Sentry exception captured",
+                    "event_id": event_id,
+                    "raised_exception": False,
+                }
 
         logger.info("  [OK] Sentry debug endpoint at /sentry-debug")
 
