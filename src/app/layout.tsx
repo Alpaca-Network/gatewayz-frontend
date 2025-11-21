@@ -20,6 +20,7 @@ import { GTMLoader } from '@/components/analytics/gtm-loader';
 import { ErrorSuppressor } from '@/components/error-suppressor';
 import { AnalyticsProvidersWrapper } from '@/components/providers/analytics-providers-wrapper';
 import { ReferralBonusDialog } from '@/components/dialogs/referral-bonus-dialog';
+import { STORAGE_GUARD_SCRIPT } from '@/lib/storage-guard-script';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -117,6 +118,9 @@ export default function RootLayout({
         />
       </head>
       <body className={`${inter.className} antialiased bg-background min-h-screen flex flex-col`} suppressHydrationWarning>
+        <Script id="gatewayz-storage-guard" strategy="beforeInteractive">
+          {STORAGE_GUARD_SCRIPT}
+        </Script>
         <ErrorSuppressor />
         <GoogleAnalytics />
         <ThemeProvider
