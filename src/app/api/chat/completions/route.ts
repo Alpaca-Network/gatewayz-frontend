@@ -496,15 +496,11 @@ export async function POST(request: NextRequest) {
           profiler.endRequest(requestId);
           console.log(`[API Proxy] Request ${requestId} complete. Total time: ${(performance.now() - requestStartTime).toFixed(2)}ms`);
 
-<<<<<<< HEAD
           // Calculate timing metrics for performance tracking
           const totalTime = performance.now() - requestStartTime;
           const backendTime = backendResponseTime; // Time it took for backend to respond
 
-          return new Response(response.body, {
-=======
           return new Response(wrappedStream, {
->>>>>>> refs/remotes/origin/master
             status: response.status,
             headers: {
               'Content-Type': 'text/event-stream',
