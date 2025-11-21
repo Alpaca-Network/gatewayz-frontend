@@ -82,21 +82,41 @@ const ReactMarkdown = dynamic(() => import('react-markdown'), {
 
 // Lazy-loaded markdown component with plugins
 const MarkdownRenderer = ({ children, className }: { children: string; className?: string }) => {
-    const [plugins, setPlugins] = React.useState<any>(null);
+    const [plugins, setPlugins] = React.useState<{ remarkPlugins: any[]; rehypePlugins: any[] } | null>(null);
 
     React.useEffect(() => {
-        // Load markdown plugins and KaTeX CSS dynamically
-        Promise.all([
-            import('remark-gfm'),
-            import('remark-math'),
-            import('rehype-katex'),
-            import('katex/dist/katex.min.css')
-        ]).then(([gfm, math, katex]) => {
-            setPlugins({
-                remarkPlugins: [gfm.default, math.default],
-                rehypePlugins: [katex.default]
-            });
-        });
+        let isMounted = true;
+
+        const loadPlugins = async () => {
+            try {
+                const [gfm, math, katex] = await Promise.all([
+                    import('remark-gfm'),
+                    import('remark-math'),
+                    import('rehype-katex')
+                ]);
+
+                if (!isMounted) return;
+
+                setPlugins({
+                    remarkPlugins: [gfm.default, math.default],
+                    rehypePlugins: [katex.default]
+                });
+            } catch (error) {
+                console.error('[MarkdownRenderer] Failed to load markdown plugins', error);
+                if (isMounted) {
+                    setPlugins({
+                        remarkPlugins: [],
+                        rehypePlugins: []
+                    });
+                }
+            }
+        };
+
+        loadPlugins();
+
+        return () => {
+            isMounted = false;
+        };
     }, []);
 
     if (!plugins) {
