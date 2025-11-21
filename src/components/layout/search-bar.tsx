@@ -1,9 +1,9 @@
 
 "use client";
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Input } from '@/components/ui/input';
-import { Search, Bot } from 'lucide-react';
+import { Bot } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import Link from 'next/link';
 import { models as staticModels } from '@/lib/models-data';
@@ -20,11 +20,21 @@ interface SearchBarProps {
     autoOpenOnFocus?: boolean;
 }
 
+type ModelCache = {
+    data: Model[];
+    timestamp: number;
+};
+
+const MEMORY_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+let inMemoryModelCache: ModelCache | null = null;
+
 export function SearchBar({ autoOpenOnFocus = true }: SearchBarProps) {
     const [open, setOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [allModels, setAllModels] = useState<Model[]>([]);
     const [loading, setLoading] = useState(false);
+    const [shouldFetchModels, setShouldFetchModels] = useState(false);
+    const fetchTriggeredRef = useRef(false);
 
     // Transform static models to the format we need
     const staticModelsList = useMemo(() =>
@@ -37,32 +47,52 @@ export function SearchBar({ autoOpenOnFocus = true }: SearchBarProps) {
         []
     );
 
-    // Load models from cache or API
     useEffect(() => {
-        const CACHE_KEY = 'gatewayz_models_cache_v4_all_gateways';
-        const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
-
-        // Start with static models for instant search
         setAllModels(staticModelsList);
+    }, [staticModelsList]);
+
+    useEffect(() => {
+        if (inMemoryModelCache && Date.now() - inMemoryModelCache.timestamp < MEMORY_CACHE_DURATION) {
+            setAllModels(inMemoryModelCache.data);
+        }
+    }, []);
+
+    const enableModelFetch = useCallback(() => {
+        if (fetchTriggeredRef.current) {
+            return;
+        }
+        fetchTriggeredRef.current = true;
+        setShouldFetchModels(true);
+    }, []);
+
+    useEffect(() => {
+        if (open) {
+            enableModelFetch();
+        }
+    }, [open, enableModelFetch]);
+
+    useEffect(() => {
+        if (!shouldFetchModels) {
+            return;
+        }
+
+        let cancelled = false;
+
+        const hydrateFromCache = () => {
+            if (inMemoryModelCache && Date.now() - inMemoryModelCache.timestamp < MEMORY_CACHE_DURATION) {
+                setAllModels(inMemoryModelCache.data);
+                return true;
+            }
+            return false;
+        };
+
+        if (hydrateFromCache()) {
+            return;
+        }
 
         const fetchModels = async () => {
+            setLoading(true);
             try {
-                // Check cache first
-                const cached = localStorage.getItem(CACHE_KEY);
-                if (cached) {
-                    try {
-                        const { data, timestamp } = JSON.parse(cached);
-                        if (Date.now() - timestamp < CACHE_DURATION) {
-                            setAllModels(data);
-                            return;
-                        }
-                    } catch (e) {
-                        console.log('Cache parse error:', e);
-                    }
-                }
-
-                // Fetch from API in background
-                setLoading(true);
                 const [openrouterRes, portkeyRes, featherlessRes, chutesRes, fireworksRes, togetherRes, groqRes] = await Promise.allSettled([
                     fetch(`/api/models?gateway=openrouter`),
                     fetch(`/api/models?gateway=portkey`),
@@ -78,7 +108,7 @@ export function SearchBar({ autoOpenOnFocus = true }: SearchBarProps) {
                         try {
                             const data = await result.value.json();
                             return data.data || [];
-                        } catch (e) {
+                        } catch {
                             return [];
                         }
                     }
@@ -97,7 +127,6 @@ export function SearchBar({ autoOpenOnFocus = true }: SearchBarProps) {
 
                 const combinedModels = [...openrouterData, ...portkeyData, ...featherlessData, ...chutesData, ...fireworksData, ...togetherData, ...groqData];
 
-                // Deduplicate by ID
                 const uniqueModelsMap = new Map();
                 combinedModels.forEach((model: any) => {
                     if (!uniqueModelsMap.has(model.id)) {
@@ -106,32 +135,30 @@ export function SearchBar({ autoOpenOnFocus = true }: SearchBarProps) {
                 });
                 const models = Array.from(uniqueModelsMap.values());
 
-                setAllModels(models);
-
-                // Cache the results
-                try {
-                    const compactModels = models.map((m: any) => ({
-                        id: m.id,
-                        name: m.name,
-                        description: m.description?.substring(0, 100),
-                        provider_slug: m.provider_slug
-                    }));
-                    localStorage.setItem(CACHE_KEY, JSON.stringify({
-                        data: compactModels,
+                if (!cancelled) {
+                    setAllModels(models);
+                    inMemoryModelCache = {
+                        data: models,
                         timestamp: Date.now()
-                    }));
-                } catch (e) {
-                    console.log('Failed to cache models');
+                    };
                 }
             } catch (error) {
-                console.log('Failed to fetch models:', error);
+                if (!cancelled) {
+                    console.log('Failed to fetch models:', error);
+                }
             } finally {
-                setLoading(false);
+                if (!cancelled) {
+                    setLoading(false);
+                }
             }
         };
 
         fetchModels();
-    }, [staticModelsList]);
+
+        return () => {
+            cancelled = true;
+        };
+    }, [shouldFetchModels]);
 
     const filteredModels = useMemo(() => {
         if (!searchTerm) return allModels.slice(0, 10);
@@ -151,10 +178,21 @@ export function SearchBar({ autoOpenOnFocus = true }: SearchBarProps) {
                     type="search"
                     placeholder="Search Models..."
                     className="pl-3 pr-10 h-[45px] w-full"
-                    onFocus={() => autoOpenOnFocus && setOpen(true)}
-                    onClick={() => setOpen(true)}
+                    onFocus={() => {
+                        if (autoOpenOnFocus) {
+                            setOpen(true);
+                        }
+                        enableModelFetch();
+                    }}
+                    onClick={() => {
+                        setOpen(true);
+                        enableModelFetch();
+                    }}
                     value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
+                    onChange={(e) => {
+                        enableModelFetch();
+                        setSearchTerm(e.target.value);
+                    }}
                 />
                 {/* <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /> */}
                 <img src="/material-symbols_search.svg" alt="Search" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" style={{ width: "24px", height: "24px" }} />
