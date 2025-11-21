@@ -24,7 +24,7 @@ jobs:
 
       - name: Authenticate with Railway
         run: |
-          railway login --token ${{ secrets.RAILWAY_TOKEN }}
+          railway login
 
       - name: Check production health
         id: prod-health
@@ -154,7 +154,7 @@ jobs:
 
       - name: Authenticate with Railway
         run: |
-          railway login --token ${{ secrets.RAILWAY_TOKEN }}
+          railway login
 
       - name: Collect production metrics
         continue-on-error: true
