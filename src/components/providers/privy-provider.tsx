@@ -46,10 +46,11 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
         return;
       }
 
-      // Suppress non-blocking wallet extension errors
+      // Log wallet extension errors but DON'T preventDefault
+      // preventDefault() would block Privy's error recovery and break authentication
       if (isWalletExtensionError(reasonStr)) {
-        console.warn("[Auth] Suppressing non-blocking wallet extension error:", reasonStr);
-        event.preventDefault();
+        console.warn("[Auth] Wallet extension error detected (non-blocking):", reasonStr);
+        // Don't call event.preventDefault() - let Privy handle its own error recovery
         return;
       }
     };
@@ -57,9 +58,10 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
     // Handle regular errors (not promise rejections) that might be triggered by wallet extensions
     const errorListener = (event: ErrorEvent) => {
       if (isWalletExtensionError(event.message)) {
-        console.warn("[Auth] Suppressing wallet extension error:", event.message);
-        event.preventDefault();
-        return false;
+        console.warn("[Auth] Wallet extension error detected (non-blocking):", event.message);
+        // Don't call event.preventDefault() - let Privy handle its own flow
+        // Just log the error for visibility
+        return;
       }
     };
 

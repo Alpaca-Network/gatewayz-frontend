@@ -84,11 +84,34 @@ export function SessionInitializer() {
   const router = useRouter();
   const { status, refresh, login, privyReady } = useGatewayzAuth();
   const initializedRef = useRef(false);
+  const waitingForPrivyRef = useRef(false);
   const actionProcessedRef = useRef(false);
 
   useEffect(() => {
     // Skip if already initialized to prevent double execution
     if (initializedRef.current) return;
+
+    // Only proceed if Privy is ready and we have an action to process
+    // Don't mark as initialized if waiting for Privy, so we'll retry when Privy is ready
+    try {
+      const { action } = getSessionTransferParams();
+      if (action && !privyReady) {
+        // Only log once to avoid console spam
+        if (!waitingForPrivyRef.current) {
+          console.log("[SessionInit] Privy not ready yet, waiting for Privy to initialize before processing action");
+          waitingForPrivyRef.current = true;
+        }
+        return; // Don't mark initializedRef.current as true - wait for Privy
+      } else if (waitingForPrivyRef.current && privyReady) {
+        // Privy is now ready, log the transition
+        console.log("[SessionInit] Privy is now ready, proceeding with session initialization");
+        waitingForPrivyRef.current = false;
+      }
+    } catch (e) {
+      // If we can't get session params, just continue with initialization
+      // Errors during actual initialization will be caught below
+      console.error("[SessionInit] Error checking session transfer params:", e);
+    }
 
     // Mark as initialized BEFORE async operations to prevent duplicate initialization
     initializedRef.current = true;
