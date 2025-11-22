@@ -40,12 +40,22 @@ jest.mock('@/components/auth/rate-limit-handler', () => ({
   RateLimitHandler: () => null,
 }));
 
+const mockCanUseLocalStorage = jest.fn(() => true);
+const mockWaitForLocalStorageAccess = jest.fn(() => Promise.resolve(true));
+
+jest.mock('@/lib/safe-storage', () => ({
+  canUseLocalStorage: () => mockCanUseLocalStorage(),
+  waitForLocalStorageAccess: () => mockWaitForLocalStorageAccess(),
+}));
+
 describe('PrivyProviderWrapper', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     (global as any).__PRIVY_CONFIG__ = null;
     // Reset env
     delete process.env.NEXT_PUBLIC_PRIVY_APP_ID;
+    mockCanUseLocalStorage.mockReturnValue(true);
+    mockWaitForLocalStorageAccess.mockResolvedValue(true);
   });
 
   afterEach(() => {
@@ -154,22 +164,39 @@ describe('PrivyProviderWrapper', () => {
     });
   });
 
-  describe('Embedded Wallets Configuration', () => {
-    it('should enable ethereum embedded wallets for users without wallets', () => {
-      process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app-id-12345';
+    describe('Embedded Wallets Configuration', () => {
+      it('should enable ethereum embedded wallets for users without wallets', () => {
+        process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app-id-12345';
 
-      render(
-        <PrivyProviderWrapper>
-          <div>Test Child</div>
-        </PrivyProviderWrapper>
-      );
+        render(
+          <PrivyProviderWrapper>
+            <div>Test Child</div>
+          </PrivyProviderWrapper>
+        );
 
-      const config = (global as any).__PRIVY_CONFIG__;
-      expect(config.embeddedWallets).toBeDefined();
-      expect(config.embeddedWallets.ethereum).toBeDefined();
-      expect(config.embeddedWallets.ethereum.createOnLogin).toBe('users-without-wallets');
+        const config = (global as any).__PRIVY_CONFIG__;
+        expect(config.embeddedWallets).toBeDefined();
+        expect(config.embeddedWallets.ethereum).toBeDefined();
+        expect(config.embeddedWallets.ethereum.createOnLogin).toBe('users-without-wallets');
+      });
     });
-  });
+
+    describe('Storage Availability Guard', () => {
+      it('should show warning when localStorage cannot be accessed', async () => {
+        mockCanUseLocalStorage.mockReturnValue(false);
+        mockWaitForLocalStorageAccess.mockResolvedValue(false);
+
+        render(
+          <PrivyProviderWrapper>
+            <div>Test Child</div>
+          </PrivyProviderWrapper>
+        );
+
+        expect(
+          await screen.findByText('Browser storage is disabled')
+        ).toBeInTheDocument();
+      });
+    });
 
   describe('Provider Structure', () => {
     it('should render PrivyProvider', () => {
