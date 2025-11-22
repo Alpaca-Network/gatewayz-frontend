@@ -21,6 +21,7 @@ import { API_BASE_URL } from '@/lib/config';
 import { models as staticModels } from '@/lib/models-data';
 import { getApiKey } from '@/lib/api';
 import { InlineChat } from '@/components/models/inline-chat';
+import { safeParseJson } from '@/lib/http';
 
 // Lazy load heavy components
 const TopAppsTable = lazy(() => import('@/components/dashboard/top-apps-table'));
@@ -664,27 +665,20 @@ export default function ModelProfilePage() {
                     alibaba: alibabaRes?.status
                 });
 
-                const getData = async (result: PromiseSettledResult<Response | null>) => {
+                const getData = async (
+                    result: PromiseSettledResult<Response | null>,
+                    gatewayLabel: string
+                ) => {
                     if (result.status === 'fulfilled' && result.value) {
-                        try {
-                            // Check if response is ok before parsing
-                            if (!result.value.ok) {
-                                console.warn(`Gateway response not ok: ${result.value.status} ${result.value.statusText}`);
-                                // Consume the response body to prevent streaming errors when HTML is returned instead of JSON
-                                try {
-                                    await result.value.text();
-                                } catch (consumeError) {
-                                    // Ignore errors when consuming the error response body
-                                }
-                                return [];
-                            }
-                            const data = await result.value.json();
-                            console.log(`Gateway data parsed, models count:`, data.data?.length || 0);
-                            return data.data || [];
-                        } catch (e) {
-                            console.log('Error parsing gateway response:', e);
-                            return [];
+                        const payload = await safeParseJson<{ data?: Model[] }>(
+                            result.value,
+                            `[ModelProfilePage] ${gatewayLabel}`
+                        );
+                        if (payload?.data && Array.isArray(payload.data)) {
+                            console.log(`Gateway data parsed (${gatewayLabel}), models count:`, payload.data.length);
+                            return payload.data;
                         }
+                        return [];
                     }
                     if (result.status === 'rejected') {
                         console.warn('Gateway fetch rejected:', result.reason);
@@ -695,24 +689,24 @@ export default function ModelProfilePage() {
                 };
 
                 const [openrouterData, portkeyData, featherlessData, chutesData, fireworksData, togetherData, groqData, deepinfraData, googleData, cerebrasData, nebiusData, xaiData, novitaData, huggingfaceData, aimoData, nearData, falData, alibabaData] = await Promise.all([
-                    getData(openrouterRes),
-                    getData(portkeyRes),
-                    getData(featherlessRes),
-                    getData(chutesRes),
-                    getData(fireworksRes),
-                    getData(togetherRes),
-                    getData(groqRes),
-                    getData(deepinfraRes),
-                    getData(googleRes),
-                    getData(cerebrasRes),
-                    getData(nebiusRes),
-                    getData(xaiRes),
-                    getData(novitaRes),
-                    getData(huggingfaceRes),
-                    getData(aimoRes),
-                    getData(nearRes),
-                    getData(falRes),
-                    getData(alibabaRes)
+                    getData(openrouterRes, 'openrouter'),
+                    getData(portkeyRes, 'portkey'),
+                    getData(featherlessRes, 'featherless'),
+                    getData(chutesRes, 'chutes'),
+                    getData(fireworksRes, 'fireworks'),
+                    getData(togetherRes, 'together'),
+                    getData(groqRes, 'groq'),
+                    getData(deepinfraRes, 'deepinfra'),
+                    getData(googleRes, 'google'),
+                    getData(cerebrasRes, 'cerebras'),
+                    getData(nebiusRes, 'nebius'),
+                    getData(xaiRes, 'xai'),
+                    getData(novitaRes, 'novita'),
+                    getData(huggingfaceRes, 'huggingface'),
+                    getData(aimoRes, 'aimo'),
+                    getData(nearRes, 'near'),
+                    getData(falRes, 'fal'),
+                    getData(alibabaRes, 'alibaba')
                 ]);
 
                 // Combine models from all gateways
