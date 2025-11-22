@@ -86,7 +86,8 @@ export const STORAGE_GUARD_SCRIPT = `
     }
   }
 
+  // Only guard localStorage. Wrapping sessionStorage interferes with providers
+  // like Privy that depend on the native Storage object during initialization.
   wrapStorage('localStorage');
-  wrapStorage('sessionStorage');
 })();
 `;

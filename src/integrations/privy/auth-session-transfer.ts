@@ -1,3 +1,5 @@
+import { safeSessionStorage } from '@/lib/safe-session-storage';
+
 /**
  * Session Transfer Module
  *
@@ -123,7 +125,7 @@ export function storeSessionTransferToken(token: string, userId: string | number
   };
 
   // Store as a single JSON object for better security
-  sessionStorage.setItem(SESSION_TRANSFER_TOKEN_KEY, JSON.stringify(sessionData));
+  safeSessionStorage.setItem(SESSION_TRANSFER_TOKEN_KEY, JSON.stringify(sessionData));
 
   console.log('[SessionTransfer] Stored session transfer token:', {
     userId,
@@ -171,7 +173,7 @@ export function getStoredSessionTransferToken(): {
   }
 
   try {
-    const storedData = sessionStorage.getItem(SESSION_TRANSFER_TOKEN_KEY);
+    const storedData = safeSessionStorage.getItem(SESSION_TRANSFER_TOKEN_KEY);
 
     if (!storedData) {
       return { token: null, userId: null };
@@ -230,11 +232,11 @@ export function clearSessionTransferToken(): void {
   }
 
   // Clear the main token key (now stores JSON)
-  sessionStorage.removeItem(SESSION_TRANSFER_TOKEN_KEY);
+  safeSessionStorage.removeItem(SESSION_TRANSFER_TOKEN_KEY);
 
   // Clear legacy keys if they exist (backward compatibility)
-  sessionStorage.removeItem(SESSION_TRANSFER_USER_ID_KEY);
-  sessionStorage.removeItem(SESSION_TRANSFER_TIMESTAMP_KEY);
+  safeSessionStorage.removeItem(SESSION_TRANSFER_USER_ID_KEY);
+  safeSessionStorage.removeItem(SESSION_TRANSFER_TIMESTAMP_KEY);
 
   console.log('[SessionTransfer] Cleared session transfer token');
 }
