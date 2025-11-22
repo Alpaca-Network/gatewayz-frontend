@@ -592,9 +592,17 @@ export function GatewayzAuthProvider({
           // If it's just a wallet extension error, don't treat it as auth failure
           // The user can still authenticate with other methods (email, Google, GitHub)
           if (isWalletExtensionError) {
-            console.warn("[Auth] Wallet extension error (non-blocking), continuing with authentication");
-            // Revert to authenticating state and retry - Privy will handle gracefully
-            setStatus("authenticating");
+            console.warn("[Auth] Wallet extension error (non-blocking), ignoring and maintaining current auth state");
+            // Don't change status or clear credentials - just ignore the wallet error
+            // The authentication may have already succeeded before the wallet error occurred
+            // If user has valid cached credentials, keep them authenticated
+            const storedKey = getApiKey();
+            const storedUser = getUserData();
+            if (storedKey && storedUser && storedUser.user_id && storedUser.email) {
+              console.log("[Auth] Valid credentials found despite wallet error - keeping authenticated");
+              setStatus("authenticated");
+            }
+            // Otherwise, don't set error status - keep current status
             return;
           }
 
