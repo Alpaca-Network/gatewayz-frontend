@@ -5,6 +5,7 @@
 
 import { getModelsForGateway } from './models-service';
 import * as Sentry from '@sentry/nextjs';
+import { getErrorMessage, isAbortOrNetworkError } from './network-error';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
 
@@ -190,8 +191,15 @@ class ModelSyncService {
       return syncResult;
 
     } catch (error) {
-      console.error(`[ModelSync] Error syncing ${gateway}:`, error);
-      
+      const message = getErrorMessage(error);
+      const isTransient = isAbortOrNetworkError(error);
+
+      if (isTransient) {
+        console.warn(`[ModelSync] ${gateway}: sync aborted or timed out (transient): ${message}`);
+      } else {
+        console.error(`[ModelSync] Error syncing ${gateway}:`, error);
+      }
+
       const result: ModelSyncResult = {
         gateway,
         totalModels: 0,
@@ -199,17 +207,19 @@ class ModelSyncService {
         updatedModels: 0,
         removedModels: 0,
         lastSyncTimestamp: startTime,
-        errors: [error instanceof Error ? error.message : 'Unknown error']
+        errors: [message || 'Unknown error']
       };
 
-Sentry.captureException(error, {
+      if (!isTransient) {
+        Sentry.captureException(error, {
           tags: { gateway, sync_type: 'gateway_sync' },
-          extra: { 
+          extra: {
             gateway: result.gateway,
             totalModels: result.totalModels,
-            errors: result.errors 
+            errors: result.errors
           }
         });
+      }
 
       return result;
     }
