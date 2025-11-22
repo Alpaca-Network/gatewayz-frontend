@@ -95,6 +95,11 @@ const toUnixSeconds = (value: unknown): number | undefined => {
 };
 
 const mapLinkedAccount = (account: LinkedAccountWithMetadata) => {
+  // Skip wallet accounts as the backend only expects email/oauth accounts in linked_accounts
+  if (account.type === "wallet") {
+    return null;
+  }
+
   const get = (key: string) =>
     Object.prototype.hasOwnProperty.call(account, key)
       ? (account as unknown as Record<string, unknown>)[key]
@@ -105,7 +110,6 @@ const mapLinkedAccount = (account: LinkedAccountWithMetadata) => {
     subject: get("subject") as string | undefined,
     email: get("email") as string | undefined,
     name: get("name") as string | undefined,
-    address: get("address") as string | undefined,
     chain_type: get("chainType") as string | undefined,
     wallet_client_type: get("walletClientType") as string | undefined,
     connector_type: get("connectorType") as string | undefined,
@@ -420,7 +424,7 @@ export function GatewayzAuthProvider({
         user: stripUndefined({
           id: privyUser.id,
           created_at: toUnixSeconds(privyUser.createdAt) ?? Math.floor(Date.now() / 1000),
-          linked_accounts: (privyUser.linkedAccounts || []).map(mapLinkedAccount),
+          linked_accounts: (privyUser.linkedAccounts || []).map(mapLinkedAccount).filter(Boolean),
           mfa_methods: privyUser.mfaMethods || [],
           has_accepted_terms: privyUser.hasAcceptedTerms ?? false,
           is_guest: privyUser.isGuest ?? false,

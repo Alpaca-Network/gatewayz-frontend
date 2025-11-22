@@ -1,4 +1,5 @@
 import { models } from '@/lib/models-data';
+import { getErrorMessage, isAbortOrNetworkError } from '@/lib/network-error';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
 
@@ -9,8 +10,15 @@ const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
 // Transform static models data to backend format
 function transformModel(model: any, gateway: string) {
   const resolvedGateway = gateway === 'all' ? 'openrouter' : gateway;
+
+  // Normalize model name for URL-safe ID
+  // Extract actual model name by removing provider prefix (e.g., "Anthropic: " from "Anthropic: Claude 3.5 Sonnet")
+  const nameParts = model.name.split(':');
+  const modelNamePart = nameParts.length > 1 ? nameParts[1].trim() : model.name;
+  const normalizedName = modelNamePart.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+
   return {
-    id: `${model.developer}/${model.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+    id: `${model.developer}/${normalizedName}`,
     name: model.name,
     description: model.description,
     context_length: model.context * 1000, // Convert K to actual number
@@ -305,16 +313,16 @@ async function fetchModelsFromGateway(gateway: string, limit?: number): Promise<
 
       // Try both endpoints in parallel, use first successful response
       const response = await Promise.race(
-        urls.map(url =>
-fetch(url, {
-             method: 'GET',
-             headers,
-             next: {
-               revalidate: 300,
-               tags: [`models:gateway:${gateway}`, 'models:all']
-             },
-             signal: AbortSignal.timeout(timeoutMs)
-           })
+        urls.map((url) =>
+          fetch(url, {
+            method: 'GET',
+            headers,
+            next: {
+              revalidate: 300,
+              tags: [`models:gateway:${gateway}`, 'models:all']
+            },
+            signal: AbortSignal.timeout(timeoutMs)
+          })
         )
       );
 
@@ -343,7 +351,12 @@ fetch(url, {
         hasMore = false;
       }
     } catch (error: any) {
-      console.error(`[Models] Failed to fetch ${gateway}:`, error.message || error);
+      const message = getErrorMessage(error);
+      if (isAbortOrNetworkError(error)) {
+        console.warn(`[Models] ${gateway} request aborted or timed out after ${timeoutMs}ms (transient): ${message}`);
+      } else {
+        console.error(`[Models] Failed to fetch ${gateway}:`, message);
+      }
       hasMore = false;
     }
   }

@@ -5,10 +5,16 @@ import path from 'path';
  * Shared E2E Test Fixtures
  *
  * Provides reusable test fixtures for authentication, mocking, and common operations
+ *
+ * Credentials (from Privy test account):
+ * Email: test-1049@privy.io
+ * Phone: +1 555 555 6196
+ * OTP: 362762
  */
 
 interface TestFixtures {
   authenticatedPage: Page;
+  realAuthPage: Page;
   mockAuth: (context: BrowserContext) => Promise<void>;
   mockModelsAPI: (page: Page) => Promise<void>;
   mockChatAPI: (page: Page) => Promise<void>;
@@ -186,6 +192,54 @@ export const test = base.extend<TestFixtures>({
     };
 
     await use(setupMock);
+  },
+
+  realAuthPage: async ({ page }, use) => {
+    /**
+     * Real authentication using Privy test account
+     * This fixture logs in via Privy using email authentication
+     */
+
+    const email = process.env.PRIVY_TEST_EMAIL || 'test-1049@privy.io';
+    const otp = process.env.PRIVY_TEST_OTP || '362762';
+
+    // Navigate to the app
+    await page.goto('/');
+
+    // Wait for page to load
+    await page.waitForLoadState('networkidle');
+
+    // Look for the Privy login button and click it
+    const loginButton = page.locator('button').filter({ hasText: /sign in|log in|login/i }).first();
+    if (await loginButton.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await loginButton.click();
+    }
+
+    // Wait for Privy modal to appear
+    await page.waitForTimeout(2000);
+
+    // Look for email input field in Privy modal
+    const emailInput = page.locator('input[type="email"]').first();
+    if (await emailInput.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await emailInput.fill(email);
+      await emailInput.press('Enter');
+
+      // Wait for OTP prompt
+      await page.waitForTimeout(1500);
+
+      // Look for OTP input
+      const otpInput = page.locator('input[placeholder*="OTP"], input[placeholder*="code"], input[placeholder*="verify"]').first();
+      if (await otpInput.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await otpInput.fill(otp);
+        await otpInput.press('Enter');
+
+        // Wait for authentication to complete
+        await page.waitForLoadState('networkidle');
+        await page.waitForTimeout(2000);
+      }
+    }
+
+    await use(page);
   }
 });
 

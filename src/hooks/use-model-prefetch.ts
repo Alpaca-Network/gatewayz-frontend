@@ -1,6 +1,7 @@
 import { useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { getModelUrl } from '@/lib/utils';
+import { safeParseJson } from '@/lib/http';
 
 const CACHE_KEY = 'gatewayz_models_cache_v4_all_gateways';
 const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
@@ -70,22 +71,28 @@ export function useModelPrefetch() {
           'xai'
         ];
 
-        const fastFetches = fastGateways.map(gateway =>
-          fetchWithTimeout(`/api/models?gateway=${gateway}`).catch(() => null)
-        );
+          const fastFetches = fastGateways.map(gateway =>
+            fetchWithTimeout(`/api/models?gateway=${gateway}`).catch(() => null)
+          );
 
-        const results = await Promise.allSettled(fastFetches);
-        const allData: any[] = [];
+          const results = await Promise.allSettled(fastFetches);
+          const allData: any[] = [];
 
-        for (const result of results) {
-          if (result.status === 'fulfilled' && result.value) {
-            try {
-              const data = await result.value.json();
-              if (data.data) {
-                allData.push(...data.data);
+          for (let i = 0; i < results.length; i++) {
+            const result = results[i];
+            const gatewayLabel = fastGateways[i];
+
+            if (result.status === 'fulfilled' && result.value) {
+              const payload = await safeParseJson<{ data?: any[] }>(
+                result.value,
+                `[Prefetch] ${gatewayLabel}`
+              );
+
+              if (payload?.data) {
+                allData.push(...payload.data);
 
                 // Check if we found the model - if yes, we can stop early
-                const foundModel = data.data.find((m: any) => {
+                const foundModel = payload.data.find((m: any) => {
                   if (m.id === modelId) return true;
                   const modelNamePart = m.id.includes(':') ? m.id.split(':')[1] : m.id;
                   return modelNamePart === modelId || m.id.split('/').pop() === modelId;
@@ -124,11 +131,8 @@ export function useModelPrefetch() {
                   return foundModel;
                 }
               }
-            } catch (e) {
-              // Ignore parse errors
             }
           }
-        }
 
         console.log(`[Prefetch] Model ${modelId} not found in fast gateways`);
         return null;

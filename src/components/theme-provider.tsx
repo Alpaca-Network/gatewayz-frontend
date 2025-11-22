@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { safeLocalStorageGet, safeLocalStorageSet } from "@/lib/safe-storage"
 
 type Theme = "dark" | "light" | "system"
 
@@ -29,12 +30,8 @@ export function ThemeProvider({
   ...props
 }: ThemeProviderProps) {
   const [theme, setThemeState] = React.useState<Theme>(() => {
-    if (typeof window === "undefined") return defaultTheme
-    try {
-      return (window.localStorage.getItem(storageKey) as Theme) || defaultTheme
-    } catch {
-      return defaultTheme
-    }
+    const storedTheme = safeLocalStorageGet(storageKey)
+    return (storedTheme as Theme | null) || defaultTheme
   })
 
   React.useEffect(() => {
@@ -70,13 +67,7 @@ export function ThemeProvider({
 
   const handleSetTheme = React.useCallback(
     (newTheme: Theme) => {
-      if (typeof window !== "undefined") {
-        try {
-          window.localStorage.setItem(storageKey, newTheme)
-        } catch {
-          // ignore write errors (e.g. storage disabled)
-        }
-      }
+      safeLocalStorageSet(storageKey, newTheme)
       setThemeState(newTheme)
     },
     [storageKey]

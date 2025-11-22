@@ -8,6 +8,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import Link from 'next/link';
 import { models as staticModels } from '@/lib/models-data';
 import { getModelUrl } from '@/lib/utils';
+import { safeParseJson } from '@/lib/http';
 
 interface Model {
     id: string;
@@ -103,26 +104,25 @@ export function SearchBar({ autoOpenOnFocus = true }: SearchBarProps) {
                     fetch(`/api/models?gateway=groq`)
                 ]);
 
-                const getData = async (result: PromiseSettledResult<Response>) => {
-                    if (result.status === 'fulfilled') {
-                        try {
-                            const data = await result.value.json();
-                            return data.data || [];
-                        } catch {
-                            return [];
-                        }
+                const getData = async (result: PromiseSettledResult<Response>, gatewayLabel: string) => {
+                    if (result.status === 'fulfilled' && result.value) {
+                        const payload = await safeParseJson<{ data?: Model[] }>(
+                            result.value,
+                            `[SearchBar] ${gatewayLabel}`
+                        );
+                        return payload?.data || [];
                     }
                     return [];
                 };
 
                 const [openrouterData, portkeyData, featherlessData, chutesData, fireworksData, togetherData, groqData] = await Promise.all([
-                    getData(openrouterRes),
-                    getData(portkeyRes),
-                    getData(featherlessRes),
-                    getData(chutesRes),
-                    getData(fireworksRes),
-                    getData(togetherRes),
-                    getData(groqRes)
+                    getData(openrouterRes, 'openrouter'),
+                    getData(portkeyRes, 'portkey'),
+                    getData(featherlessRes, 'featherless'),
+                    getData(chutesRes, 'chutes'),
+                    getData(fireworksRes, 'fireworks'),
+                    getData(togetherRes, 'together'),
+                    getData(groqRes, 'groq')
                 ]);
 
                 const combinedModels = [...openrouterData, ...portkeyData, ...featherlessData, ...chutesData, ...fireworksData, ...togetherData, ...groqData];

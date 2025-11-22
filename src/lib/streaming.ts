@@ -323,6 +323,7 @@ export async function* streamChatResponse(
   let buffer = '';
   let chunkCount = 0;
   let receivedDoneSignal = false;
+  let firstChunkReceived = false;
 
   devLog('[Streaming] Stream reader obtained successfully');
   devLog('[Streaming] Starting to read stream...');
@@ -330,16 +331,28 @@ export async function* streamChatResponse(
   // Per-chunk timeout to detect stalled streams (30 seconds)
   // This resets on each chunk and prevents hanging if backend stops sending
   const chunkTimeoutMs = 30000;
+  const firstChunkTimeoutMs = 10000; // First chunk must arrive within 10 seconds
   let chunkTimeoutId: NodeJS.Timeout | null = null;
 
   const resetChunkTimeout = () => {
     if (chunkTimeoutId) {
       clearTimeout(chunkTimeoutId);
     }
+    // Use shorter timeout for first chunk, longer for subsequent chunks
+    const timeoutMs = firstChunkReceived ? chunkTimeoutMs : firstChunkTimeoutMs;
     chunkTimeoutId = setTimeout(() => {
-      devError('[Streaming] Stream chunk timeout - no data received for 30 seconds');
-      reader.cancel('Stream timeout: No data received for 30 seconds');
-    }, chunkTimeoutMs);
+      const timeoutMsg = firstChunkReceived
+        ? 'Stream chunk timeout - no data received for 30 seconds'
+        : 'First chunk timeout - backend did not start streaming within 10 seconds. This usually means the model is unavailable, overloaded, or the backend is not responding properly.';
+      devError('[Streaming]', timeoutMsg);
+      console.error('[Streaming] Timeout Details:', {
+        firstChunkReceived,
+        chunkCount,
+        url: requestBody?.model,
+        gateway: requestBody?.gateway
+      });
+      reader.cancel(`Stream timeout: ${timeoutMsg}`);
+    }, timeoutMs);
   };
 
   try {
@@ -348,6 +361,12 @@ export async function* streamChatResponse(
       resetChunkTimeout(); // Start chunk timeout before reading
 
       const { done, value } = await reader.read();
+
+      // Mark first chunk as received for timeout adjustment
+      if (!firstChunkReceived && value) {
+        firstChunkReceived = true;
+        devLog('[Streaming] First chunk received - adjusting timeout to 30 seconds for subsequent chunks');
+      }
 
       // Clear the chunk timeout when we receive data
       if (chunkTimeoutId) {

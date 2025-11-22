@@ -8,6 +8,7 @@ import { base } from "viem/chains";
 import { RateLimitHandler } from "@/components/auth/rate-limit-handler";
 import { GatewayzAuthProvider } from "@/context/gatewayz-auth-context";
 import { PreviewHostnameInterceptor } from "@/components/auth/preview-hostname-interceptor";
+import { waitForLocalStorageAccess, canUseLocalStorage } from "@/lib/safe-storage";
 
 interface PrivyProviderWrapperProps {
   children: ReactNode;
@@ -112,9 +113,54 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
   );
 }
 
-// Export a client-only version that doesn't render during SSR
-export const PrivyProviderWrapper = dynamic(
+const PrivyProviderNoSSR = dynamic(
   () => Promise.resolve(PrivyProviderWrapperInner),
   { ssr: false }
 );
+
+function StorageDisabledNotice() {
+  return (
+    <div className="flex min-h-[60vh] w-full flex-col items-center justify-center gap-4 px-6 text-center">
+      <div className="space-y-2">
+        <p className="text-base font-semibold">Browser storage is disabled</p>
+        <p className="text-sm text-muted-foreground max-w-xl mx-auto">
+          Gatewayz needs access to localStorage to securely cache your encrypted API key. Please enable browser
+          storage or use a standard browser window, then refresh this page to continue.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+export function PrivyProviderWrapper(props: PrivyProviderWrapperProps) {
+  const [status, setStatus] = useState<"checking" | "ready" | "blocked">(() =>
+    canUseLocalStorage() ? "ready" : "checking"
+  );
+
+  useEffect(() => {
+    if (status !== "checking") {
+      return;
+    }
+
+    let active = true;
+    waitForLocalStorageAccess({ attempts: 5, baseDelayMs: 200 }).then((available) => {
+      if (!active) return;
+      setStatus(available ? "ready" : "blocked");
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [status]);
+
+  if (status === "checking") {
+    return null;
+  }
+
+  if (status === "blocked") {
+    return <StorageDisabledNotice />;
+  }
+
+  return <PrivyProviderNoSSR {...props} />;
+}
 
