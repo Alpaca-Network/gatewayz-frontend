@@ -10,8 +10,15 @@ const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
 // Transform static models data to backend format
 function transformModel(model: any, gateway: string) {
   const resolvedGateway = gateway === 'all' ? 'openrouter' : gateway;
+
+  // Normalize model name for URL-safe ID
+  // Extract actual model name by removing provider prefix (e.g., "Anthropic: " from "Anthropic: Claude 3.5 Sonnet")
+  const nameParts = model.name.split(':');
+  const modelNamePart = nameParts.length > 1 ? nameParts[1].trim() : model.name;
+  const normalizedName = modelNamePart.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+
   return {
-    id: `${model.developer}/${model.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+    id: `${model.developer}/${normalizedName}`,
     name: model.name,
     description: model.description,
     context_length: model.context * 1000, // Convert K to actual number
