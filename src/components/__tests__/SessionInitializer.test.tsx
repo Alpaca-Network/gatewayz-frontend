@@ -538,6 +538,31 @@ describe('SessionInitializer', () => {
 
       consoleLogSpy.mockRestore();
     });
+
+    it('should trigger login once status transitions from idle to unauthenticated', async () => {
+      mockAuthContext.status = 'idle';
+      mockAuthContext.privyReady = true;
+
+      (sessionTransfer.getSessionTransferParams as jest.Mock).mockReturnValue({
+        token: null,
+        userId: null,
+        returnUrl: null,
+        action: 'signin',
+      });
+
+      const { rerender } = render(<SessionInitializer />);
+
+      await waitFor(() => {
+        expect(mockAuthContext.login).not.toHaveBeenCalled();
+      });
+
+      mockAuthContext.status = 'unauthenticated';
+      rerender(<SessionInitializer />);
+
+      await waitFor(() => {
+        expect(mockAuthContext.login).toHaveBeenCalled();
+      });
+    });
   });
 
   describe('Edge Cases', () => {

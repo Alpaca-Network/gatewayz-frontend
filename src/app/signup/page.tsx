@@ -31,6 +31,15 @@ function SignupContent() {
   }, [ready, authenticated, router]);
 
   const handleSignup = () => {
+    if (!ready) {
+      return;
+    }
+
+    if (authenticated) {
+      router.push('/chat');
+      return;
+    }
+
     login();
   };
 
@@ -89,6 +98,7 @@ function SignupContent() {
 
           <Button
             onClick={handleSignup}
+            disabled={!ready || authenticated}
             size="lg"
             className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
           >

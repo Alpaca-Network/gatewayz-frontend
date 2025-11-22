@@ -29,7 +29,7 @@ export function ThemeProvider({
   storageKey = "ui-theme",
   ...props
 }: ThemeProviderProps) {
-  const [theme, setTheme] = React.useState<Theme>(() => {
+  const [theme, setThemeState] = React.useState<Theme>(() => {
     const storedTheme = safeLocalStorageGet(storageKey)
     return (storedTheme as Theme | null) || defaultTheme
   })
@@ -65,13 +65,21 @@ export function ThemeProvider({
     return () => mediaQuery.removeEventListener("change", handleChange)
   }, [theme])
 
-  const value = {
-    theme,
-    setTheme: (nextTheme: Theme) => {
-      safeLocalStorageSet(storageKey, nextTheme)
-      setTheme(nextTheme)
+  const handleSetTheme = React.useCallback(
+    (newTheme: Theme) => {
+      safeLocalStorageSet(storageKey, newTheme)
+      setThemeState(newTheme)
     },
-  }
+    [storageKey]
+  )
+
+  const value = React.useMemo(
+    () => ({
+      theme,
+      setTheme: handleSetTheme,
+    }),
+    [theme, handleSetTheme]
+  )
 
   return (
     <ThemeProviderContext.Provider {...props} value={value}>

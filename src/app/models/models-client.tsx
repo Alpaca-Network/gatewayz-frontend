@@ -29,6 +29,7 @@ import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 import { stringToColor, getModelUrl } from '@/lib/utils';
 import ReactMarkdown from "react-markdown";
+import { safeParseJson } from '@/lib/http';
 
 
 interface Model {
@@ -344,22 +345,40 @@ export default function ModelsClient({
   useEffect(() => {
     if (initialModels.length < 50) {
       console.log('[Models] Only got', initialModels.length, 'models from server, fetching from client...');
-      setIsLoadingModels(true);
+      const controller = new AbortController();
+      let isActive = true;
 
-      fetch('/api/models?gateway=all&limit=50000')
-        .then(res => res.json())
-        .then(data => {
-          if (data.data && data.data.length > 0) {
-            console.log(`[Models] Fetched ${data.data.length} models from client`);
-            setModels(data.data);
+      const fetchAllModels = async () => {
+        setIsLoadingModels(true);
+        try {
+          const response = await fetch('/api/models?gateway=all&limit=50000', {
+            signal: controller.signal
+          });
+          const payload = await safeParseJson<{ data?: Model[] }>(
+            response,
+            '[Models] client bootstrap'
+          );
+          if (isActive && payload?.data && payload.data.length > 0) {
+            console.log(`[Models] Fetched ${payload.data.length} models from client`);
+            setModels(payload.data);
           }
-        })
-        .catch(err => {
-          console.error('[Models] Client fetch failed:', err);
-        })
-        .finally(() => {
-          setIsLoadingModels(false);
-        });
+        } catch (err) {
+          if (!controller.signal.aborted) {
+            console.error('[Models] Client fetch failed:', err);
+          }
+        } finally {
+          if (isActive) {
+            setIsLoadingModels(false);
+          }
+        }
+      };
+
+      fetchAllModels();
+
+      return () => {
+        isActive = false;
+        controller.abort();
+      };
     }
   }, [initialModels.length]);
 
