@@ -84,43 +84,29 @@ export function SessionInitializer() {
   const router = useRouter();
   const { status, refresh, login, privyReady } = useGatewayzAuth();
   const initializedRef = useRef(false);
+  const actionProcessedRef = useRef(false);
 
   useEffect(() => {
     // Skip if already initialized to prevent double execution
     if (initializedRef.current) return;
-
-    // Only proceed if Privy is ready and we have an action to process
-    // Don't mark as initialized if waiting for Privy, so we'll retry when Privy is ready
-    try {
-      const { action } = getSessionTransferParams();
-      if (action && !privyReady) {
-        console.log("[SessionInit] Privy not ready yet, waiting for Privy to initialize before processing action");
-        return; // Don't mark initializedRef.current as true - wait for Privy
-      }
-    } catch (e) {
-      // If we can't get session params, just continue with initialization
-      // Errors during actual initialization will be caught below
-      console.error("[SessionInit] Error checking session transfer params:", e);
-    }
 
     // Mark as initialized BEFORE async operations to prevent duplicate initialization
     initializedRef.current = true;
 
     async function initializeSession() {
       // Check for URL params from session transfer
-      const { token, userId, returnUrl, action: currentAction } = getSessionTransferParams();
+      const { token, userId, returnUrl } = getSessionTransferParams();
 
       console.log("[SessionInit] Session initialization started", {
         hasToken: !!token,
         tokenPreview: token ? token.substring(0, 20) + "..." : "none",
         hasUserId: !!userId,
-        action: currentAction,
-        status,
-        privyReady
       });
 
       if (token && userId) {
-        console.log("[SessionInit] Session transfer params detected", { action: currentAction });
+        console.log("[SessionInit] Session transfer params detected", {
+          hasReturnUrl: !!returnUrl,
+        });
 
         // Store token for persistence
         storeSessionTransferToken(token, userId);
@@ -241,35 +227,69 @@ export function SessionInitializer() {
         return;
       }
 
-      // Check for action parameter (from main domain redirects: signin, freetrial)
-      if (status === "unauthenticated") {
-        if (currentAction) {
-          console.log(
-            "[SessionInit] Action parameter detected, opening Privy popup",
-            { action: currentAction, status, privyReady }
-          );
-          cleanupSessionTransferParams();
-          try {
-            await login();
-            console.log("[SessionInit] Login triggered successfully for action:", currentAction);
-          } catch (error) {
-            console.error("[SessionInit] Failed to trigger login for action:", currentAction, error);
-          }
-          return;
-        }
-      }
-
-      // If already authenticated, continue normally
-      if (status === "authenticated") {
-        console.log("[SessionInit] Already authenticated");
-        return;
-      }
     }
 
     initializeSession().catch((error) => {
       console.error("[SessionInit] Error initializing session:", error);
     });
-  }, [refresh, router, status, login, privyReady]);
+  }, [refresh, router]);
+
+  useEffect(() => {
+    if (actionProcessedRef.current) {
+      return;
+    }
+
+    let currentAction: string | null = null;
+    try {
+      ({ action: currentAction } = getSessionTransferParams());
+    } catch (error) {
+      console.error("[SessionInit] Error checking session transfer params:", error);
+      return;
+    }
+
+    if (!currentAction) {
+      actionProcessedRef.current = true;
+      return;
+    }
+
+    if (!privyReady) {
+      console.log("[SessionInit] Privy not ready yet, waiting for Privy to initialize before processing action");
+      return;
+    }
+
+    if (status === "authenticated") {
+      actionProcessedRef.current = true;
+      return;
+    }
+
+    if (status !== "unauthenticated") {
+      return;
+    }
+
+    actionProcessedRef.current = true;
+
+    const processAction = async () => {
+      console.log(
+        "[SessionInit] Action parameter detected, opening Privy popup",
+        { action: currentAction, status, privyReady }
+      );
+
+      try {
+        cleanupSessionTransferParams();
+      } catch (cleanupError) {
+        console.warn("[SessionInit] Warning: Failed to cleanup session transfer params:", cleanupError);
+      }
+
+      try {
+        await login();
+        console.log("[SessionInit] Login triggered successfully for action:", currentAction);
+      } catch (error) {
+        console.error("[SessionInit] Failed to trigger login for action:", currentAction, error);
+      }
+    };
+
+    processAction();
+  }, [login, privyReady, status]);
 
   return null;
 }

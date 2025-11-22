@@ -45,6 +45,7 @@ const CACHE_KEY = 'gatewayz_models_cache_v5_optimized';
 const FAVORITES_KEY = 'gatewayz_favorite_models';
 const CACHE_DURATION = 60 * 60 * 1000; // 60 minutes - extended cache for maximum performance
 const INITIAL_MODELS_LIMIT = 50; // Load top 50 models initially for instant loading
+const CACHE_PERSIST_LIMIT = INITIAL_MODELS_LIMIT;
 const MAX_MODELS_PER_DEVELOPER = 10; // Limit models shown per developer for performance
 
 const ROUTER_OPTION: ModelOption = {
@@ -132,6 +133,24 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
   const [searchQuery, setSearchQuery] = React.useState('')
   const [debouncedSearchQuery, setDebouncedSearchQuery] = React.useState('')
   const [loadAllModels, setLoadAllModels] = React.useState(false)
+  const [totalAvailableModels, setTotalAvailableModels] = React.useState<number | null>(null)
+
+  const persistModelsToCache = React.useCallback((options: ModelOption[], totalCount: number | null) => {
+    try {
+      localStorage.setItem(CACHE_KEY, JSON.stringify({
+        data: options.slice(0, CACHE_PERSIST_LIMIT),
+        total: typeof totalCount === 'number' ? totalCount : null,
+        timestamp: Date.now()
+      }));
+    } catch (e) {
+      try {
+        localStorage.removeItem(CACHE_KEY);
+        localStorage.removeItem('gatewayz_models_cache');
+      } catch {
+        // Ignore
+      }
+    }
+  }, [])
 
   // Debounce search query for performance
   React.useEffect(() => {
@@ -172,25 +191,28 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
 
   React.useEffect(() => {
     async function fetchModels() {
-      // Check cache first
-      const cached = localStorage.getItem(CACHE_KEY);
-      if (cached) {
-        try {
-          const { data, timestamp } = JSON.parse(cached);
-          // Validate cached data has correct structure
-          if (Date.now() - timestamp < CACHE_DURATION && data && data.length > 0 && data[0].value) {
-            const hydrated = ensureRouterOption(data as ModelOption[]);
-            setModels(hydrated);
-            return;
-          } else {
-            // Clear invalid cache
+        // Check cache first
+        const cached = localStorage.getItem(CACHE_KEY);
+        if (cached) {
+          try {
+            const { data, timestamp, total } = JSON.parse(cached);
+            // Validate cached data has correct structure
+            if (Date.now() - timestamp < CACHE_DURATION && Array.isArray(data) && data.length > 0 && data[0].value) {
+              const hydrated = ensureRouterOption(data as ModelOption[]);
+              setModels(hydrated);
+              setTotalAvailableModels(typeof total === 'number' ? total : null);
+              if (!loadAllModels) {
+                return;
+              }
+            } else {
+              // Clear invalid cache
+              localStorage.removeItem(CACHE_KEY);
+            }
+          } catch (e) {
+            // Clear corrupted cache
             localStorage.removeItem(CACHE_KEY);
           }
-        } catch (e) {
-          // Clear corrupted cache
-          localStorage.removeItem(CACHE_KEY);
         }
-      }
 
       // Fetch from all gateways - optimized to load fewer models initially
       setLoading(true);
@@ -251,22 +273,12 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
         });
         const normalizedOptions = ensureRouterOption(modelOptions);
         setModels(normalizedOptions);
+        if (loadAllModels) {
+          setTotalAvailableModels(normalizedOptions.length);
+        }
 
         // Try to cache the results, but don't fail if quota exceeded
-        try {
-          localStorage.setItem(CACHE_KEY, JSON.stringify({
-            data: normalizedOptions,
-            timestamp: Date.now()
-          }));
-        } catch (e) {
-          // Storage quota exceeded, clear old cache
-          try {
-            localStorage.removeItem(CACHE_KEY);
-            localStorage.removeItem('gatewayz_models_cache');
-          } catch (clearError) {
-            // Ignore
-          }
-        }
+        persistModelsToCache(normalizedOptions, loadAllModels ? normalizedOptions.length : null);
       } catch (error) {
         // Failed to fetch models
       } finally {
@@ -274,7 +286,7 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
       }
     }
     fetchModels();
-  }, [loadAllModels]);
+    }, [loadAllModels, persistModelsToCache]);
 
   // Group models by developer and sort by Hugging Face popularity
   const modelsByDeveloper = React.useMemo(() => {
@@ -550,15 +562,9 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
             };
           });
 
-          // Update cache for instant access
-          try {
-            localStorage.setItem(CACHE_KEY, JSON.stringify({
-              data: ensureRouterOption(modelOptions),
-              timestamp: Date.now()
-            }));
-          } catch (e) {
-            // Quota exceeded, ignore
-          }
+            // Update cache for instant access (store only lightweight subset)
+            const normalizedPrefetch = ensureRouterOption(modelOptions);
+            persistModelsToCache(normalizedPrefetch, null);
         } catch (error) {
           // Prefetch failed, user can still load manually
           console.log('Background model prefetch failed:', error);
@@ -567,9 +573,12 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
 
       prefetchAllModels();
     }
-  }, [loadAllModels, models.length]);
+    }, [loadAllModels, models.length, persistModelsToCache]);
 
-  return (
+    const totalCountLabel = totalAvailableModels !== null ? totalAvailableModels.toString() : '330+';
+    const loadAllButtonLabel = `Load all models (${models.length} of ${totalCountLabel})`;
+
+    return (
     <Popover open={open} onOpenChange={(isOpen) => {
       setOpen(isOpen);
       if (!isOpen) {
@@ -825,14 +834,14 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
                   onClick={() => setLoadAllModels(true)}
                   disabled={loading}
                 >
-                  {loading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Loading all models...
-                    </>
-                  ) : (
-                    `Load all models (${models.length} of 330+)`
-                  )}
+                    {loading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Loading all models...
+                      </>
+                    ) : (
+                      loadAllButtonLabel
+                    )}
                 </Button>
               </div>
             )}

@@ -28,12 +28,14 @@ export function ThemeProvider({
   storageKey = "ui-theme",
   ...props
 }: ThemeProviderProps) {
-  const [theme, setTheme] = React.useState<Theme>(() => {
-    if (typeof localStorage !== 'undefined') {
-      return (localStorage.getItem(storageKey) as Theme) || defaultTheme;
+  const [theme, setThemeState] = React.useState<Theme>(() => {
+    if (typeof window === "undefined") return defaultTheme
+    try {
+      return (window.localStorage.getItem(storageKey) as Theme) || defaultTheme
+    } catch {
+      return defaultTheme
     }
-    return defaultTheme;
-  });
+  })
 
   React.useEffect(() => {
     const root = window.document.documentElement
@@ -66,13 +68,27 @@ export function ThemeProvider({
     return () => mediaQuery.removeEventListener("change", handleChange)
   }, [theme])
 
-  const value = {
-    theme,
-    setTheme: (theme: Theme) => {
-      localStorage.setItem(storageKey, theme)
-      setTheme(theme)
+  const handleSetTheme = React.useCallback(
+    (newTheme: Theme) => {
+      if (typeof window !== "undefined") {
+        try {
+          window.localStorage.setItem(storageKey, newTheme)
+        } catch {
+          // ignore write errors (e.g. storage disabled)
+        }
+      }
+      setThemeState(newTheme)
     },
-  }
+    [storageKey]
+  )
+
+  const value = React.useMemo(
+    () => ({
+      theme,
+      setTheme: handleSetTheme,
+    }),
+    [theme, handleSetTheme]
+  )
 
   return (
     <ThemeProviderContext.Provider {...props} value={value}>

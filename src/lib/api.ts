@@ -3,6 +3,33 @@
 const API_KEY_STORAGE_KEY = 'gatewayz_api_key';
 const USER_DATA_STORAGE_KEY = 'gatewayz_user_data';
 
+let hasLoggedStorageAccessError = false;
+
+const logStorageAccessIssue = (error: unknown): void => {
+  if (hasLoggedStorageAccessError) {
+    return;
+  }
+
+  hasLoggedStorageAccessError = true;
+  console.warn(
+    '[storage] localStorage is not accessible in this environment. Falling back to safe defaults.',
+    error
+  );
+};
+
+const getLocalStorageSafe = (): Storage | null => {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  try {
+    return window.localStorage;
+  } catch (error) {
+    logStorageAccessIssue(error);
+    return null;
+  }
+};
+
 export const AUTH_REFRESH_EVENT = 'gatewayz:refresh-auth';
 export const NEW_USER_WELCOME_EVENT = 'gatewayz:new-user-welcome';
 
@@ -43,18 +70,31 @@ export interface UserData {
 
 // API Key Management
 export const saveApiKey = (apiKey: string): void => {
-  if (typeof window !== 'undefined') {
-    localStorage.setItem(API_KEY_STORAGE_KEY, apiKey);
+  const storage = getLocalStorageSafe();
+  if (!storage) {
+    return;
+  }
+
+  try {
+    storage.setItem(API_KEY_STORAGE_KEY, apiKey);
+  } catch (error) {
+    logStorageAccessIssue(error);
   }
 };
 
 export const getApiKey = (): string | null => {
-  if (typeof window !== 'undefined') {
-    const apiKey = localStorage.getItem(API_KEY_STORAGE_KEY);
-    // Return null if key is empty string or falsy
-    return apiKey && apiKey.trim().length > 0 ? apiKey : null;
+  const storage = getLocalStorageSafe();
+  if (!storage) {
+    return null;
   }
-  return null;
+
+  try {
+    const apiKey = storage.getItem(API_KEY_STORAGE_KEY);
+    return apiKey && apiKey.trim().length > 0 ? apiKey : null;
+  } catch (error) {
+    logStorageAccessIssue(error);
+    return null;
+  }
 };
 
 /**
@@ -82,9 +122,16 @@ export const getApiKeyWithRetry = async (maxRetries: number = 3): Promise<string
 };
 
 export const removeApiKey = (): void => {
-  if (typeof window !== 'undefined') {
-    localStorage.removeItem(API_KEY_STORAGE_KEY);
-    localStorage.removeItem(USER_DATA_STORAGE_KEY);
+  const storage = getLocalStorageSafe();
+  if (!storage) {
+    return;
+  }
+
+  try {
+    storage.removeItem(API_KEY_STORAGE_KEY);
+    storage.removeItem(USER_DATA_STORAGE_KEY);
+  } catch (error) {
+    logStorageAccessIssue(error);
   }
 };
 
@@ -96,17 +143,45 @@ export const requestAuthRefresh = (): void => {
 
 // User Data Management
 export const saveUserData = (userData: UserData): void => {
-  if (typeof window !== 'undefined') {
-    localStorage.setItem(USER_DATA_STORAGE_KEY, JSON.stringify(userData));
+  const storage = getLocalStorageSafe();
+  if (!storage) {
+    return;
+  }
+
+  try {
+    storage.setItem(USER_DATA_STORAGE_KEY, JSON.stringify(userData));
+  } catch (error) {
+    logStorageAccessIssue(error);
   }
 };
 
 export const getUserData = (): UserData | null => {
-  if (typeof window !== 'undefined') {
-    const data = localStorage.getItem(USER_DATA_STORAGE_KEY);
-    return data ? JSON.parse(data) : null;
+  const storage = getLocalStorageSafe();
+  if (!storage) {
+    return null;
   }
-  return null;
+
+  try {
+    const data = storage.getItem(USER_DATA_STORAGE_KEY);
+    if (!data) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(data);
+    } catch (parseError) {
+      console.warn('[storage] Failed to parse user data from localStorage. Clearing corrupted value.', parseError);
+      try {
+        storage.removeItem(USER_DATA_STORAGE_KEY);
+      } catch (error) {
+        logStorageAccessIssue(error);
+      }
+      return null;
+    }
+  } catch (error) {
+    logStorageAccessIssue(error);
+    return null;
+  }
 };
 
 // Authenticated API Request Helper

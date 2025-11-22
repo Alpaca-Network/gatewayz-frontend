@@ -5,6 +5,7 @@ import { X, CheckCircle2, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { safeSessionStorage } from '@/lib/safe-session-storage';
 
 interface OnboardingTask {
   id: string;
@@ -124,7 +125,7 @@ export function OnboardingBanner() {
     // Chat will adjust automatically via CSS classes
     
     // Remember dismissal for this session
-    sessionStorage.setItem('onboarding_banner_dismissed', 'true');
+    safeSessionStorage.setItem('onboarding_banner_dismissed', 'true');
   };
 
   const completedCount = tasks.filter(t => t.completed).length;

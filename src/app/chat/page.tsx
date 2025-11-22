@@ -82,21 +82,41 @@ const ReactMarkdown = dynamic(() => import('react-markdown'), {
 
 // Lazy-loaded markdown component with plugins
 const MarkdownRenderer = ({ children, className }: { children: string; className?: string }) => {
-    const [plugins, setPlugins] = React.useState<any>(null);
+    const [plugins, setPlugins] = React.useState<{ remarkPlugins: any[]; rehypePlugins: any[] } | null>(null);
 
     React.useEffect(() => {
-        // Load markdown plugins and KaTeX CSS dynamically
-        Promise.all([
-            import('remark-gfm'),
-            import('remark-math'),
-            import('rehype-katex'),
-            import('katex/dist/katex.min.css')
-        ]).then(([gfm, math, katex]) => {
-            setPlugins({
-                remarkPlugins: [gfm.default, math.default],
-                rehypePlugins: [katex.default]
-            });
-        });
+        let isMounted = true;
+
+        const loadPlugins = async () => {
+            try {
+                const [gfm, math, katex] = await Promise.all([
+                    import('remark-gfm'),
+                    import('remark-math'),
+                    import('rehype-katex')
+                ]);
+
+                if (!isMounted) return;
+
+                setPlugins({
+                    remarkPlugins: [gfm.default, math.default],
+                    rehypePlugins: [katex.default]
+                });
+            } catch (error) {
+                console.error('[MarkdownRenderer] Failed to load markdown plugins', error);
+                if (isMounted) {
+                    setPlugins({
+                        remarkPlugins: [],
+                        rehypePlugins: []
+                    });
+                }
+            }
+        };
+
+        loadPlugins();
+
+        return () => {
+            isMounted = false;
+        };
     }, []);
 
     if (!plugins) {
@@ -2403,6 +2423,9 @@ function ChatPageContent() {
             return;
         }
 
+        // Set loading state to prevent double-clicks on send button
+        setLoading(true);
+
         const updatedMessages: Message[] = [...messages, {
             role: 'user' as const,
             content: userMessage,
@@ -2453,11 +2476,20 @@ function ChatPageContent() {
             audioInputRef.current.value = '';
         }
         setIsStreamingResponse(true); // Set streaming state immediately
-        setLoading(false); // Don't show loading spinner
 
         // Use ChatStreamHandler to manage streaming state and prevent scope issues
         // Declare outside try-catch so it's accessible in both blocks
         const streamHandler = new ChatStreamHandler();
+
+        // Safety timeout: Reset loading state after 45 seconds if streaming hasn't completed
+        // This ensures the send button is never permanently disabled due to stream timeout
+        const loadingTimeout = setTimeout(() => {
+            if (isStreamingResponse) {
+                console.warn('[Chat] Streaming took over 45 seconds, resetting loading state to unblock UI');
+                setLoading(false);
+                setIsStreamingResponse(false);
+            }
+        }, 45000);
 
         try {
             console.log('🚀 Starting handleSendMessage - Core auth check:', {
@@ -2852,6 +2884,8 @@ function ChatPageContent() {
                 // Mark streaming as complete and get final content
                 streamHandler.complete();
                 setIsStreamingResponse(false);
+                setLoading(false);
+                clearTimeout(loadingTimeout); // Clear the safety timeout
 
                 const finalContent = streamHandler.getFinalContent();
                 const finalReasoning = streamHandler.getFinalReasoning();
@@ -2954,6 +2988,8 @@ function ChatPageContent() {
                 }
 
                 setIsStreamingResponse(false);
+                setLoading(false);
+                clearTimeout(loadingTimeout); // Clear the safety timeout
                 if (streamHandler) {
                     streamHandler.addError(streamError instanceof Error ? streamError : new Error(String(streamError)));
                 }
@@ -3130,6 +3166,8 @@ function ChatPageContent() {
             }
         } catch (error) {
             setIsStreamingResponse(false);
+            setLoading(false);
+            clearTimeout(loadingTimeout); // Clear the safety timeout
             console.error('Send message error:', error);
 
             // Log analytics event for general error
@@ -3155,7 +3193,6 @@ function ChatPageContent() {
                 }
                 return session;
             }));
-            setLoading(false);
         }
     };
 
@@ -3656,6 +3693,8 @@ function ChatPageContent() {
                       if (e.target.value.trim()) {
                         setUserHasTyped(true);
                         userHasTypedRef.current = true;
+                        // Reset auto-send flag when user manually types
+                        autoSendTriggeredRef.current = false;
                       }
                     }}
                     onKeyDown={(e) => {
