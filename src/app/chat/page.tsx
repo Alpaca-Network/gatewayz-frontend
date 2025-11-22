@@ -2481,6 +2481,16 @@ function ChatPageContent() {
         // Declare outside try-catch so it's accessible in both blocks
         const streamHandler = new ChatStreamHandler();
 
+        // Safety timeout: Reset loading state after 45 seconds if streaming hasn't completed
+        // This ensures the send button is never permanently disabled due to stream timeout
+        const loadingTimeout = setTimeout(() => {
+            if (isStreamingResponse) {
+                console.warn('[Chat] Streaming took over 45 seconds, resetting loading state to unblock UI');
+                setLoading(false);
+                setIsStreamingResponse(false);
+            }
+        }, 45000);
+
         try {
             console.log('🚀 Starting handleSendMessage - Core auth check:', {
                 hasApiKey: !!apiKey,
@@ -2875,6 +2885,7 @@ function ChatPageContent() {
                 streamHandler.complete();
                 setIsStreamingResponse(false);
                 setLoading(false);
+                clearTimeout(loadingTimeout); // Clear the safety timeout
 
                 const finalContent = streamHandler.getFinalContent();
                 const finalReasoning = streamHandler.getFinalReasoning();
@@ -2978,6 +2989,7 @@ function ChatPageContent() {
 
                 setIsStreamingResponse(false);
                 setLoading(false);
+                clearTimeout(loadingTimeout); // Clear the safety timeout
                 if (streamHandler) {
                     streamHandler.addError(streamError instanceof Error ? streamError : new Error(String(streamError)));
                 }
@@ -3154,6 +3166,8 @@ function ChatPageContent() {
             }
         } catch (error) {
             setIsStreamingResponse(false);
+            setLoading(false);
+            clearTimeout(loadingTimeout); // Clear the safety timeout
             console.error('Send message error:', error);
 
             // Log analytics event for general error
@@ -3179,7 +3193,6 @@ function ChatPageContent() {
                 }
                 return session;
             }));
-            setLoading(false);
         }
     };
 
