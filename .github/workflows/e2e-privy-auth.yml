@@ -60,7 +60,23 @@ jobs:
           NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY }}
 
       - name: Wait for server to be ready
-        run: npx wait-on http://localhost:3000 --timeout 120000
+        run: |
+          set +e
+          npx wait-on http://localhost:3000 --timeout 120000
+          WAIT_RESULT=$?
+          set -e
+
+          if [ $WAIT_RESULT -ne 0 ]; then
+            echo "❌ Server failed to start. Checking logs..."
+            if [ -f /tmp/server.log ]; then
+              echo "=== Last 50 lines of server log ==="
+              tail -50 /tmp/server.log
+            fi
+            echo "=== Process list ==="
+            ps aux | grep -E 'node|pnpm|next' || true
+            exit 1
+          fi
+          echo "✅ Server is ready"
         timeout-minutes: 3
 
       - name: Run E2E tests - Real Privy Authentication
@@ -122,6 +138,14 @@ jobs:
           name: test-videos
           path: test-results/
           retention-days: 7
+
+      - name: Cleanup processes
+        if: always()
+        run: |
+          # Kill any lingering node/next processes
+          pkill -f "node.*next" || true
+          pkill -f "pnpm dev" || true
+          sleep 2
 
       - name: Publish test report to workflow summary
         if: always()
