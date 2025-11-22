@@ -55,25 +55,26 @@ export async function syncPrivyToGatewayz(
       created_at: privyUser.createdAt
         ? Math.floor(new Date(privyUser.createdAt).getTime() / 1000)
         : Math.floor(Date.now() / 1000),
-      linked_accounts: (privyUser.linkedAccounts || []).map((account: any) => ({
-        type: account.type,
-        subject: account.subject,
-        email: account.email,
-        name: account.name,
-        address: account.address,
-        chain_type: account.chainType,
-        wallet_client_type: account.walletClientType,
-        connector_type: account.connectorType,
-        verified_at: account.verifiedAt
-          ? Math.floor(new Date(account.verifiedAt).getTime() / 1000)
-          : undefined,
-        first_verified_at: account.firstVerifiedAt
-          ? Math.floor(new Date(account.firstVerifiedAt).getTime() / 1000)
-          : undefined,
-        latest_verified_at: account.latestVerifiedAt
-          ? Math.floor(new Date(account.latestVerifiedAt).getTime() / 1000)
-          : undefined,
-      })),
+      linked_accounts: (privyUser.linkedAccounts || [])
+        .filter((account: any) => account.type !== 'wallet') // Only include email/oauth accounts
+        .map((account: any) => ({
+          type: account.type,
+          subject: account.subject,
+          email: account.email,
+          name: account.name,
+          chain_type: account.chainType,
+          wallet_client_type: account.walletClientType,
+          connector_type: account.connectorType,
+          verified_at: account.verifiedAt
+            ? Math.floor(new Date(account.verifiedAt).getTime() / 1000)
+            : undefined,
+          first_verified_at: account.firstVerifiedAt
+            ? Math.floor(new Date(account.firstVerifiedAt).getTime() / 1000)
+            : undefined,
+          latest_verified_at: account.latestVerifiedAt
+            ? Math.floor(new Date(account.latestVerifiedAt).getTime() / 1000)
+            : undefined,
+        })),
       mfa_methods: privyUser.mfaMethods || [],
       has_accepted_terms: privyUser.hasAcceptedTerms ?? false,
       is_guest: privyUser.isGuest ?? false,
