@@ -2423,6 +2423,9 @@ function ChatPageContent() {
             return;
         }
 
+        // Set loading state to prevent double-clicks on send button
+        setLoading(true);
+
         const updatedMessages: Message[] = [...messages, {
             role: 'user' as const,
             content: userMessage,
@@ -2473,7 +2476,6 @@ function ChatPageContent() {
             audioInputRef.current.value = '';
         }
         setIsStreamingResponse(true); // Set streaming state immediately
-        setLoading(false); // Don't show loading spinner
 
         // Use ChatStreamHandler to manage streaming state and prevent scope issues
         // Declare outside try-catch so it's accessible in both blocks
@@ -2872,6 +2874,7 @@ function ChatPageContent() {
                 // Mark streaming as complete and get final content
                 streamHandler.complete();
                 setIsStreamingResponse(false);
+                setLoading(false);
 
                 const finalContent = streamHandler.getFinalContent();
                 const finalReasoning = streamHandler.getFinalReasoning();
@@ -2974,6 +2977,7 @@ function ChatPageContent() {
                 }
 
                 setIsStreamingResponse(false);
+                setLoading(false);
                 if (streamHandler) {
                     streamHandler.addError(streamError instanceof Error ? streamError : new Error(String(streamError)));
                 }
