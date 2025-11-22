@@ -1,4 +1,5 @@
 import { models } from '@/lib/models-data';
+import { getErrorMessage, isAbortOrNetworkError } from '@/lib/network-error';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
 
@@ -305,16 +306,16 @@ async function fetchModelsFromGateway(gateway: string, limit?: number): Promise<
 
       // Try both endpoints in parallel, use first successful response
       const response = await Promise.race(
-        urls.map(url =>
-fetch(url, {
-             method: 'GET',
-             headers,
-             next: {
-               revalidate: 300,
-               tags: [`models:gateway:${gateway}`, 'models:all']
-             },
-             signal: AbortSignal.timeout(timeoutMs)
-           })
+        urls.map((url) =>
+          fetch(url, {
+            method: 'GET',
+            headers,
+            next: {
+              revalidate: 300,
+              tags: [`models:gateway:${gateway}`, 'models:all']
+            },
+            signal: AbortSignal.timeout(timeoutMs)
+          })
         )
       );
 
@@ -343,7 +344,12 @@ fetch(url, {
         hasMore = false;
       }
     } catch (error: any) {
-      console.error(`[Models] Failed to fetch ${gateway}:`, error.message || error);
+      const message = getErrorMessage(error);
+      if (isAbortOrNetworkError(error)) {
+        console.warn(`[Models] ${gateway} request aborted or timed out after ${timeoutMs}ms (transient): ${message}`);
+      } else {
+        console.error(`[Models] Failed to fetch ${gateway}:`, message);
+      }
       hasMore = false;
     }
   }
