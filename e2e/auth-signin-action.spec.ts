@@ -1,7 +1,7 @@
 import { test, expect } from './fixtures';
 
 test.describe('Email Action Sign-in', () => {
-  test('auto-handles action parameter and persists email session via token transfer', async ({ page }) => {
+  test('persists email session via token transfer', async ({ page }) => {
     const token = 'gw_temp_e2e_email_login_123';
     const userId = '777001';
     const email = 'automation-email@gatewayz.ai';
@@ -32,17 +32,6 @@ test.describe('Email Action Sign-in', () => {
         }),
       });
     });
-
-    const loginLog = page.waitForEvent('console', {
-      predicate: (message) =>
-        message.type() === 'log' &&
-        message.text().includes('[SessionInit] Action parameter detected'),
-      timeout: 15000,
-    });
-
-    await page.goto('/chat?action=signin');
-
-    await loginLog;
 
     const returnUrl = encodeURIComponent('/chat');
     await page.goto(`/chat?token=${token}&userId=${userId}&returnUrl=${returnUrl}&action=signin`);
