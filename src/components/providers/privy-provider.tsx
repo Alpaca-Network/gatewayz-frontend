@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
+import * as Sentry from "@sentry/nextjs";
 import { PrivyProvider } from "@privy-io/react-auth";
 import { base } from "viem/chains";
 import { RateLimitHandler } from "@/components/auth/rate-limit-handler";
@@ -42,6 +43,16 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
       if (reason?.status === 429 || reasonStr?.includes("429")) {
         console.warn("Caught 429 error globally");
         setShowRateLimit(true);
+
+        // Capture rate limit error to Sentry
+        Sentry.captureMessage("Authentication rate limit exceeded (429)", {
+          level: 'warning',
+          tags: {
+            auth_error: 'rate_limit_exceeded',
+            http_status: 429,
+          },
+        });
+
         event.preventDefault();
         return;
       }
@@ -50,6 +61,16 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
       // preventDefault() would block Privy's error recovery and break authentication
       if (isWalletExtensionError(reasonStr)) {
         console.warn("[Auth] Wallet extension error detected (non-blocking):", reasonStr);
+
+        // Capture wallet extension error to Sentry as warning (non-blocking)
+        Sentry.captureMessage(`Wallet extension error: ${reasonStr}`, {
+          level: 'warning',
+          tags: {
+            auth_error: 'wallet_extension_error',
+            blocking: 'false',
+          },
+        });
+
         // Don't call event.preventDefault() - let Privy handle its own error recovery
         return;
       }
@@ -59,6 +80,16 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
     const errorListener = (event: ErrorEvent) => {
       if (isWalletExtensionError(event.message)) {
         console.warn("[Auth] Wallet extension error detected (non-blocking):", event.message);
+
+        // Capture wallet extension error to Sentry as warning (non-blocking)
+        Sentry.captureMessage(`Wallet extension error: ${event.message}`, {
+          level: 'warning',
+          tags: {
+            auth_error: 'wallet_extension_error',
+            blocking: 'false',
+          },
+        });
+
         // Don't call event.preventDefault() - let Privy handle its own flow
         // Just log the error for visibility
         return;
@@ -79,6 +110,15 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
       if (!error) return;
       if (error.status === 429 || error.message?.includes("429")) {
         setShowRateLimit(true);
+
+        // Capture rate limit error to Sentry
+        Sentry.captureMessage("Authentication rate limit exceeded (429)", {
+          level: 'warning',
+          tags: {
+            auth_error: 'rate_limit_exceeded',
+            http_status: 429,
+          },
+        });
       }
     },
     []
