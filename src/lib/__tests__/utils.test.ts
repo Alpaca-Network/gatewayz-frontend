@@ -1,4 +1,4 @@
-import { cn, stringToColor, extractTokenValue, normalizeModelId } from '../utils'
+import { cn, stringToColor, extractTokenValue, normalizeModelId, getModelUrl } from '../utils'
 
 describe('Utils', () => {
   describe('cn', () => {
@@ -114,6 +114,44 @@ describe('Utils', () => {
       const normalized = normalizeModelId(modelId)
       const gateway = normalized.split('/')[0]
       expect(gateway).toBe('near')
+    })
+  })
+
+  describe('getModelUrl', () => {
+    it('should handle simple provider/model format', () => {
+      expect(getModelUrl('openai/gpt-4')).toBe('/models/openai/gpt-4')
+    })
+
+    it('should normalize special characters in model names', () => {
+      expect(getModelUrl('openai/gpt-4o')).toBe('/models/openai/gpt-4o')
+    })
+
+    it('should preserve nested paths for NEAR models', () => {
+      expect(getModelUrl('near/deepseek-ai/deepseek-v3-1')).toBe('/models/near/deepseek-ai/deepseek-v3-1')
+    })
+
+    it('should handle NEAR models with multiple path segments', () => {
+      expect(getModelUrl('near/zai-org/GLM-4.6')).toBe('/models/near/zai-org/glm-4-6')
+    })
+
+    it('should handle provider:model format', () => {
+      expect(getModelUrl('aimo:model-name')).toBe('/models/aimo/model-name')
+    })
+
+    it('should handle provider slug fallback', () => {
+      expect(getModelUrl('gpt-4o mini', 'openai')).toBe('/models/openai/gpt-4o-mini')
+    })
+
+    it('should return /models for empty input', () => {
+      expect(getModelUrl('')).toBe('/models')
+    })
+
+    it('should handle FAL models with complex paths', () => {
+      expect(getModelUrl('fal-ai/flux-pro/v1-1-ultra')).toBe('/models/fal-ai/flux-pro/v1-1-ultra')
+    })
+
+    it('should convert provider to lowercase', () => {
+      expect(getModelUrl('OpenAI/GPT-4')).toBe('/models/openai/gpt-4')
     })
   })
 })
