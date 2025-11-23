@@ -57,11 +57,11 @@ export async function GET(request: NextRequest) {
         }
 
         const data = await response.json();
-        span.setStatus('ok');
+        span.setStatus({ code: 'ok' });
         span.setAttribute('data_size', JSON.stringify(data).length);
         return NextResponse.json(data);
       } catch (error) {
-        span.setStatus('error');
+        span.setStatus({ code: 'error' });
         span.setAttribute('error', true);
         return handleApiError(error, 'Activity Stats API');
       }

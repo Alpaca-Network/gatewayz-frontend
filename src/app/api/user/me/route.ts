@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
         }
 
         console.log("[API /api/user/me] User info fetched successfully");
-        span.setStatus("ok");
+        span.setStatus({ code: 'ok' });
         span.setAttribute("response_size", responseText.length);
 
         return new NextResponse(responseText, {
@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
           },
         });
       } catch (error) {
-        span.setStatus("error");
+        span.setStatus({ code: 'error' });
         span.setAttribute("error", true);
         return handleApiError(error, "API /api/user/me");
       }

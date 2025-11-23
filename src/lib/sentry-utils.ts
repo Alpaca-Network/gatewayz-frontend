@@ -348,10 +348,10 @@ export async function withSpanError<T>(
     async (span) => {
       try {
         const result = await fn(span);
-        span.setStatus('ok');
+        span.setStatus({ code: 'ok' });
         return result;
       } catch (error) {
-        span.setStatus('error');
+        span.setStatus({ code: 'error' });
         span.setAttribute('error', true);
 
         if (error instanceof Error) {
