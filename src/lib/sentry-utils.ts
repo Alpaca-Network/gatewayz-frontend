@@ -512,14 +512,15 @@ export function captureApiError(
  */
 export async function withFetchErrorCapture<T>(
   fn: () => Promise<Response>,
-  context: Omit<ApiErrorContext, 'statusCode'>
+  context: ApiErrorContext & { statusCode?: never }
 ): Promise<T> {
   try {
     const response = await fn();
 
     if (!response.ok) {
       const errorContext: ApiErrorContext = {
-        ...context,
+        endpoint: context.endpoint,
+        method: context.method,
         statusCode: response.status,
       };
 
@@ -543,7 +544,8 @@ export async function withFetchErrorCapture<T>(
     return await response.json();
   } catch (error) {
     captureApiError(error, {
-      ...context,
+      endpoint: context.endpoint,
+      method: context.method,
       statusCode: 0,
     });
     throw error;
