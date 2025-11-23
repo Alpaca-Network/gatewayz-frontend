@@ -52,7 +52,7 @@ interface GatewayzAuthProviderProps {
   betaDomain?: string;
 }
 
-const GatewayzAuthContext = createContext<GatewayzAuthContextValue | undefined>(undefined);
+export const GatewayzAuthContext = createContext<GatewayzAuthContextValue | undefined>(undefined);
 const TEMP_API_KEY_PREFIX = "gw_temp_";
 
 const stripUndefined = <T,>(value: T): T => {
