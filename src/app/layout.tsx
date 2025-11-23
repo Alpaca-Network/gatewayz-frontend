@@ -21,7 +21,6 @@ import { ErrorSuppressor } from '@/components/error-suppressor';
 import { AnalyticsProvidersWrapper } from '@/components/providers/analytics-providers-wrapper';
 import { ReferralBonusDialog } from '@/components/dialogs/referral-bonus-dialog';
 import { SafeStorageShim } from '@/components/safe-storage-shim';
-import { AuthDebugPanel } from '@/components/auth-debug-panel';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -150,7 +149,6 @@ export default function RootLayout({
               <WelcomeDialog />
               <TrialCreditsNotice />
               <ReferralBonusDialog />
-              <AuthDebugPanel />
               <Analytics />
               <SpeedInsights />
             </AnalyticsProvidersWrapper>
