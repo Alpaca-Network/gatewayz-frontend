@@ -15,6 +15,7 @@ import {
   type UserData,
 } from "@/lib/api";
 import { getAdaptiveTimeout } from "@/lib/network-timeouts";
+import { retryFetch } from "@/lib/retry-utils";
 import { usePrivy, type User, type LinkedAccountWithMetadata } from "@privy-io/react-auth";
 import {
   redirectToBetaWithSession,
@@ -573,14 +574,24 @@ export function GatewayzAuthProvider({
           });
           const timeoutId = setTimeout(() => controller.abort(), timeoutMs); // Network-aware timeout
 
-        const response = await fetch("/api/auth", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(authBody),
-          signal: controller.signal,
-        });
+        const response = await retryFetch(
+          () =>
+            fetch("/api/auth", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify(authBody),
+              signal: controller.signal,
+            }),
+          {
+            maxRetries: 2,
+            initialDelayMs: 300,
+            maxDelayMs: 3000,
+            backoffMultiplier: 2,
+            retryableStatuses: [502, 503, 504],
+          }
+        );
 
         clearTimeout(timeoutId);
         const rawResponseText = await response.text();
