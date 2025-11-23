@@ -119,8 +119,8 @@ const nextConfig: NextConfig = {
   },
 };
 
-// Get release information for Sentry
-const getRelease = () => {
+// Get release name for Sentry
+const getReleaseName = () => {
   // In production/CI environments, use git commit as release identifier
   if (process.env.SENTRY_RELEASE) {
     return process.env.SENTRY_RELEASE;
@@ -180,8 +180,8 @@ const sentryWebpackPluginOptions = {
   automaticVercelMonitors: true,
 
   // Release tracking
-  // Automatically associates errors with the release they occurred in
-  release: getRelease(),
+  // Automatically associates source maps with the release they were built for
+  ...(getReleaseName() && { release: { name: getReleaseName() } }),
 };
 
 export default withSentryConfig(
