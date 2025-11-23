@@ -137,11 +137,53 @@ export function OnboardingBanner() {
 
   return (
     <div data-onboarding-banner className="bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-md fixed top-[65px] left-0 right-0 z-30">
-      <div className="px-4 py-3 max-w-full overflow-x-hidden">
-        <div className="flex items-center justify-between gap-2 sm:gap-4">
-          <div className="flex items-center gap-2 sm:gap-4 flex-1 min-w-0">
+      <div className="px-3 sm:px-4 py-2.5 sm:py-3 w-full">
+        {/* Mobile layout: stacked on xs/sm screens */}
+        <div className="md:hidden space-y-2">
+          {/* Progress and dismiss on same row */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <div className="flex items-center gap-1">
+                {tasks.map((task) => (
+                  <div
+                    key={task.id}
+                    className={`h-2 w-2 rounded-full transition-colors ${
+                      task.completed ? 'bg-green-300' : 'bg-white/30'
+                    }`}
+                  />
+                ))}
+              </div>
+              <span className="text-xs sm:text-sm font-medium whitespace-nowrap">
+                {completedCount}/{totalCount}
+              </span>
+            </div>
+            <button
+              onClick={handleDismiss}
+              className="flex-shrink-0 hover:bg-white/20 rounded-full p-1 transition-colors"
+              aria-label="Dismiss banner"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          {/* Next task button */}
+          <Link href={nextTask.path} className="block w-full">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="!bg-white/20 !text-white hover:!bg-white/30 hover:!text-white font-semibold border border-white/30 text-xs w-full justify-start"
+            >
+              <span className="truncate flex-1 text-left">{nextTask.title}</span>
+              <ArrowRight className="ml-1 h-3 w-3 flex-shrink-0" />
+            </Button>
+          </Link>
+        </div>
+
+        {/* Desktop layout: horizontal on md+ screens */}
+        <div className="hidden md:flex items-center justify-between gap-4">
+          <div className="flex items-center gap-4 flex-1 min-w-0">
             {/* Progress indicator */}
-            <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+            <div className="flex items-center gap-2 flex-shrink-0">
               <div className="flex items-center gap-1">
                 {tasks.map((task) => (
                   <div
@@ -158,13 +200,13 @@ export function OnboardingBanner() {
             </div>
 
             {/* Next task */}
-            <div className="flex items-center gap-1.5 sm:gap-2 flex-1 min-w-0 overflow-hidden">
-              <span className="text-sm whitespace-nowrap hidden sm:inline">Next step:</span>
-              <Link href={nextTask.path} className="min-w-0 overflow-hidden">
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <span className="text-sm whitespace-nowrap">Next step:</span>
+              <Link href={nextTask.path} className="min-w-0 flex-1">
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="!bg-white/20 !text-white hover:!bg-white/30 hover:!text-white font-semibold border border-white/30 text-xs sm:text-sm truncate max-w-full"
+                  className="!bg-white/20 !text-white hover:!bg-white/30 hover:!text-white font-semibold border border-white/30 text-sm truncate max-w-full w-full justify-start"
                 >
                   <span className="truncate">{nextTask.title}</span>
                   <ArrowRight className="ml-1 h-4 w-4 flex-shrink-0" />
@@ -173,7 +215,7 @@ export function OnboardingBanner() {
             </div>
 
             {/* Back to onboarding link */}
-            <Link href="/onboarding" className="hidden md:block flex-shrink-0">
+            <Link href="/onboarding" className="flex-shrink-0">
               <Button
                 variant="ghost"
                 size="sm"
@@ -187,7 +229,7 @@ export function OnboardingBanner() {
           {/* Dismiss button */}
           <button
             onClick={handleDismiss}
-            className="flex-shrink-0 hover:bg-white/20 rounded-full p-1.5 transition-colors ml-2"
+            className="flex-shrink-0 hover:bg-white/20 rounded-full p-1.5 transition-colors"
             aria-label="Dismiss banner"
           >
             <X className="h-5 w-5" />
