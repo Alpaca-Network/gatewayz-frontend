@@ -52,11 +52,11 @@ export async function GET(request: NextRequest) {
         }
 
         const data = await response.json();
-        span.setStatus({ code: 'ok' });
+        span.setStatus('ok' as any);
         span.setAttribute('sessions_count', Array.isArray(data) ? data.length : 0);
         return NextResponse.json(data);
       } catch (error) {
-        span.setStatus({ code: 'error' });
+        span.setStatus('error' as any);
         span.setAttribute('error', true);
         return handleApiError(error, 'Chat Sessions API - GET');
       }
@@ -112,11 +112,11 @@ export async function POST(request: NextRequest) {
         }
 
         const data = await response.json();
-        span.setStatus({ code: 'ok' });
+        span.setStatus('ok' as any);
         span.setAttribute('session_id', data?.id?.toString() || 'unknown');
         return NextResponse.json(data);
       } catch (error) {
-        span.setStatus({ code: 'error' });
+        span.setStatus('error' as any);
         span.setAttribute('error', true);
         return handleApiError(error, 'Chat Sessions API - POST');
       }
