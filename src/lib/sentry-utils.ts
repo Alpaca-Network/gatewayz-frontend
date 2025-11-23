@@ -500,10 +500,7 @@ export function captureApiError(
     },
     contexts: {
       api: {
-        endpoint: context.endpoint,
-        method: context.method,
         status_code: context.statusCode,
-        ...context,
       },
     },
     level,
@@ -545,7 +542,10 @@ export async function withFetchErrorCapture<T>(
 
     return await response.json();
   } catch (error) {
-    captureApiError(error, context);
+    captureApiError(error, {
+      ...context,
+      statusCode: 0,
+    });
     throw error;
   }
 }
