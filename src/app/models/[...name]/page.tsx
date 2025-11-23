@@ -172,42 +172,7 @@ export default function ModelProfilePage() {
     const params = useParams();
     const router = useRouter();
 
-    // Extract catch-all parameter and parse it
-    // For URL /models/near/deepseek-ai/deepseek-v3-1
-    // params.name will be ['near', 'deepseek-ai', 'deepseek-v3-1']
-    const nameParts = Array.isArray(params.name) ? params.name : (params.name ? [params.name] : []);
-
-    if (nameParts.length < 2) {
-        return (
-            <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                <Card className="max-w-2xl mx-auto">
-                    <CardContent className="p-8 text-center">
-                        <h1 className="text-2xl font-bold mb-4">Invalid Model URL</h1>
-                        <p className="text-muted-foreground mb-6">
-                            The URL format is invalid. Please use /models/[gateway]/[model-name]
-                        </p>
-                        <Link href="/models">
-                            <Button>Browse Models</Button>
-                        </Link>
-                    </CardContent>
-                </Card>
-            </div>
-        );
-    }
-
-    // Extract developer (first part) and reconstruct model name from remaining parts
-    const developer = nameParts[0]?.toLowerCase() || '';
-    // Rejoin remaining parts with slashes for NEAR models like "deepseek-ai/deepseek-v3-1"
-    const modelNameParam = nameParts.slice(1).join('/');
-
-    // Redirect alibaba models to qwen
-    useEffect(() => {
-        if (developer === 'alibaba') {
-            router.replace(`/models/qwen/${modelNameParam}`);
-        }
-    }, [developer, modelNameParam, router]);
-
-    // State declarations
+    // State declarations - must be before any early returns
     const [model, setModel] = useState<Model | null>(null);
     const [allModels, setAllModels] = useState<Model[]>([]);
     const [loading, setLoading] = useState(true);
@@ -219,6 +184,24 @@ export default function ModelProfilePage() {
     const [apiKey, setApiKey] = useState('gw_live_YOUR_API_KEY_HERE');
     const [selectedProvider, setSelectedProvider] = useState<string>('gatewayz');
     const [selectedPlaygroundProvider, setSelectedPlaygroundProvider] = useState<string>('gatewayz');
+
+    // Extract catch-all parameter and parse it
+    // For URL /models/near/deepseek-ai/deepseek-v3-1
+    // params.name will be ['near', 'deepseek-ai', 'deepseek-v3-1']
+    const nameParts = Array.isArray(params.name) ? params.name : (params.name ? [params.name] : []);
+    const isInvalidUrl = nameParts.length < 2;
+
+    // Extract developer (first part) and reconstruct model name from remaining parts
+    const developer = !isInvalidUrl ? (nameParts[0]?.toLowerCase() || '') : '';
+    // Rejoin remaining parts with slashes for NEAR models like "deepseek-ai/deepseek-v3-1"
+    const modelNameParam = !isInvalidUrl ? nameParts.slice(1).join('/') : '';
+
+    // Redirect alibaba models to qwen
+    useEffect(() => {
+        if (developer === 'alibaba') {
+            router.replace(`/models/qwen/${modelNameParam}`);
+        }
+    }, [developer, modelNameParam, router]);
 
     // Provider configurations for API calls
     const providerConfigs: Record<string, {
@@ -921,6 +904,25 @@ export default function ModelProfilePage() {
             console.error('Failed to copy:', error);
         }
     };
+
+    // Check for invalid URL after all hooks are declared
+    if (isInvalidUrl) {
+        return (
+            <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                <Card className="max-w-2xl mx-auto">
+                    <CardContent className="p-8 text-center">
+                        <h1 className="text-2xl font-bold mb-4">Invalid Model URL</h1>
+                        <p className="text-muted-foreground mb-6">
+                            The URL format is invalid. Please use /models/[gateway]/[model-name]
+                        </p>
+                        <Link href="/models">
+                            <Button>Browse Models</Button>
+                        </Link>
+                    </CardContent>
+                </Card>
+            </div>
+        );
+    }
 
     if (loading) {
         return (
