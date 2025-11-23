@@ -73,20 +73,8 @@ export interface HookErrorContext {
 }
 
 /**
- * Wraps a hook function with Sentry error capture
- * Automatically logs errors with hook context
- *
- * @example
- * ```typescript
- * export const useCustomData = captureHookErrors(
- *   () => {
- *     const [data, setData] = useState(null);
- *     useEffect(() => { ... }, []);
- *     return data;
- *   },
- *   { hookName: 'useCustomData' }
- * );
- * ```
+ * Wraps a hook function with Sentry error capture.
+ * Automatically logs errors with hook context.
  */
 export function captureHookErrors<T extends (...args: any[]) => any>(
   hookFn: T,
@@ -138,16 +126,8 @@ export interface ComponentErrorContext {
 }
 
 /**
- * Wraps a component event handler with error capture
- * Useful for onClick, onChange, onSubmit handlers
- *
- * @example
- * ```typescript
- * const handleClick = wrapComponentError(
- *   () => { /* handler logic */ },
- *   { componentName: 'MyButton', operation: 'onClick' }
- * );
- * ```
+ * Wraps a component event handler with error capture.
+ * Useful for onClick, onChange, onSubmit handlers.
  */
 export function wrapComponentError<T extends (...args: any[]) => any>(
   fn: T,
@@ -198,16 +178,8 @@ export interface ServiceErrorContext {
 }
 
 /**
- * Wraps a service function with error capture
+ * Wraps a service function with error capture.
  * Useful for API clients, data services, etc.
- *
- * @example
- * ```typescript
- * export const fetchModels = wrapServiceError(
- *   async (options) => { /* fetch logic */ },
- *   { serviceName: 'ModelsService', operation: 'fetchModels' }
- * );
- * ```
  */
 export function wrapServiceError<T extends (...args: any[]) => any>(
   fn: T,
@@ -269,17 +241,7 @@ export interface AsyncErrorContext {
 }
 
 /**
- * Wraps async operations with timeout and error capture
- *
- * @example
- * ```typescript
- * const result = await withAsyncErrorCapture(
- *   async () => {
- *     return await fetch('/api/data');
- *   },
- *   { operationName: 'fetchData', timeout: 5000, retries: 3 }
- * );
- * ```
+ * Wraps async operations with timeout and error capture.
  */
 export async function withAsyncErrorCapture<T>(
   fn: () => Promise<T>,
@@ -372,20 +334,7 @@ export interface SpanErrorContext {
 }
 
 /**
- * Wraps an operation in a Sentry span for performance tracking
- *
- * @example
- * ```typescript
- * const result = await withSpanError(
- *   async (span) => {
- *     span.setAttribute('user_id', userId);
- *     const data = await fetchUserData(userId);
- *     span.setAttribute('data_size', data.length);
- *     return data;
- *   },
- *   { operationName: 'fetchUserData' }
- * );
- * ```
+ * Wraps an operation in a Sentry span for performance tracking.
  */
 export async function withSpanError<T>(
   fn: (span: Sentry.Span) => Promise<T>,
