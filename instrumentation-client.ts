@@ -1,7 +1,30 @@
 import * as Sentry from "@sentry/nextjs";
 
+// Get release information
+const getRelease = () => {
+  if (process.env.NEXT_PUBLIC_SENTRY_RELEASE) {
+    return process.env.NEXT_PUBLIC_SENTRY_RELEASE;
+  }
+
+  if (process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA) {
+    return process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA;
+  }
+
+  if (typeof window !== 'undefined') {
+    const metaTag = document.querySelector('meta[property="sentry:release"]');
+    if (metaTag) {
+      return metaTag.getAttribute('content') || undefined;
+    }
+  }
+
+  return undefined;
+};
+
 Sentry.init({
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
+
+  // Release tracking for associating errors with specific versions
+  release: getRelease(),
 
   // Adjust this value in production, or use tracesSampler for greater control
   tracesSampleRate: 1.0,
@@ -33,7 +56,7 @@ Sentry.init({
   beforeSend(event, hint) {
     const error = hint.originalException;
     const errorMessage = typeof error === 'string' ? error : error instanceof Error ? error.message : '';
-    
+
     // Filter out chrome.runtime.sendMessage errors from Privy wallet provider (inpage.js)
     // These are non-blocking and occur when Privy tries to detect wallet extensions
     if (
@@ -43,8 +66,8 @@ Sentry.init({
     ) {
       // Check if error originates from Privy's inpage.js or wallet provider code
       const stackFrames = event.exception?.values?.[0]?.stacktrace?.frames;
-      if (stackFrames?.some(frame => 
-        frame.filename?.includes('inpage.js') || 
+      if (stackFrames?.some(frame =>
+        frame.filename?.includes('inpage.js') ||
         frame.filename?.includes('privy') ||
         frame.function?.includes('Zt') // Minified function name from inpage.js
       )) {

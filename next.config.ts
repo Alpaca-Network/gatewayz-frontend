@@ -119,6 +119,31 @@ const nextConfig: NextConfig = {
   },
 };
 
+// Get release information for Sentry
+const getRelease = () => {
+  // In production/CI environments, use git commit as release identifier
+  if (process.env.SENTRY_RELEASE) {
+    return process.env.SENTRY_RELEASE;
+  }
+
+  // Try to use git commit SHA if available
+  if (process.env.VERCEL_GIT_COMMIT_SHA) {
+    return process.env.VERCEL_GIT_COMMIT_SHA;
+  }
+
+  if (process.env.GIT_COMMIT_SHA) {
+    return process.env.GIT_COMMIT_SHA;
+  }
+
+  // Fallback to package version
+  try {
+    const packageJson = require('./package.json');
+    return `${packageJson.name}@${packageJson.version}`;
+  } catch (e) {
+    return undefined;
+  }
+};
+
 // Sentry configuration options
 const sentryWebpackPluginOptions = {
   // For all available options, see:
@@ -153,6 +178,10 @@ const sentryWebpackPluginOptions = {
   // https://docs.sentry.io/product/crons/
   // https://vercel.com/docs/cron-jobs
   automaticVercelMonitors: true,
+
+  // Release tracking
+  // Automatically associates errors with the release they occurred in
+  release: getRelease(),
 };
 
 export default withSentryConfig(

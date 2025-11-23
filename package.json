@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:with-sentry": "node scripts/sentry-release.js info && next build",
+    "build:with-release": "node scripts/sentry-release.js info && next build && node scripts/sentry-release.js create",
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
@@ -15,6 +17,8 @@
     "test:e2e:debug": "playwright test --debug",
     "test:e2e:headed": "playwright test --headed",
     "check-subscription": "node scripts/check-subscription-config.js",
+    "sentry:release": "node scripts/sentry-release.js",
+    "sentry:create": "node scripts/sentry-release.js create",
     "pm2:start": "pm2 start ecosystem.config.js --env production",
     "pm2:start:dev": "pm2 start ecosystem.config.js --env development --only gatewayz-frontend-dev",
     "pm2:stop": "pm2 stop gatewayz-frontend",
