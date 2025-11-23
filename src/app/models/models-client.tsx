@@ -323,6 +323,7 @@ export default function ModelsClient({
   }, []);
   const router = useRouter();
   const searchParams = useSearchParams();
+  const lastSyncedQueryRef = React.useRef<string>(searchParams.toString());
 
   // Client-side model fetching state
   const [models, setModels] = useState<Model[]>(initialModels);
@@ -462,11 +463,11 @@ export default function ModelsClient({
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
-  // Update URL parameters when filters change
+  // Update URL parameters when filters change (debounced to avoid excessive router fetches)
   useEffect(() => {
     const params = new URLSearchParams();
 
-    if (searchTerm) params.set('search', searchTerm);
+    if (debouncedSearchTerm) params.set('search', debouncedSearchTerm);
     if (selectedInputFormats.length > 0) params.set('inputFormats', selectedInputFormats.join(','));
     if (selectedOutputFormats.length > 0) params.set('outputFormats', selectedOutputFormats.join(','));
     if (contextLengthRange[0] !== 0) params.set('contextLengthMin', contextLengthRange[0].toString());
@@ -483,8 +484,43 @@ export default function ModelsClient({
     if (releaseDateFilter !== 'all') params.set('releaseDate', releaseDateFilter);
 
     const queryString = params.toString();
-    router.replace(queryString ? `?${queryString}` : '/models', { scroll: false });
-  }, [searchTerm, selectedInputFormats, selectedOutputFormats, contextLengthRange, promptPricingRange, selectedParameters, selectedDevelopers, selectedGateways, selectedModelSeries, pricingFilter, privacyFilter, sortBy, releaseDateFilter, router]);
+    if (queryString === lastSyncedQueryRef.current) {
+      return;
+    }
+    lastSyncedQueryRef.current = queryString;
+
+    const target = queryString ? `/models?${queryString}` : '/models';
+
+    // Avoid triggering a new RSC fetch if the user is offline or Navigator API reports no connectivity.
+    if (typeof window !== 'undefined' && typeof navigator !== 'undefined' && navigator.onLine === false) {
+      window.history.replaceState(window.history.state ?? null, '', target);
+      return;
+    }
+
+    try {
+      router.replace(queryString ? `?${queryString}` : '/models', { scroll: false });
+    } catch (error) {
+      console.warn('[Models] router.replace failed, falling back to history.replaceState', error);
+      if (typeof window !== 'undefined') {
+        window.history.replaceState(window.history.state ?? null, '', target);
+      }
+    }
+  }, [
+    debouncedSearchTerm,
+    selectedInputFormats,
+    selectedOutputFormats,
+    contextLengthRange,
+    promptPricingRange,
+    selectedParameters,
+    selectedDevelopers,
+    selectedGateways,
+    selectedModelSeries,
+    pricingFilter,
+    privacyFilter,
+    sortBy,
+    releaseDateFilter,
+    router,
+  ]);
 
   const handleCheckboxChange = (setter: React.Dispatch<React.SetStateAction<string[]>>) => (value: string, checked: boolean) => {
     setter(prev => checked ? [...prev, value] : prev.filter(v => v !== value));
