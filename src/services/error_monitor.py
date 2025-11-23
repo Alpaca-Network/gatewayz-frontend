@@ -13,7 +13,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
 from enum import Enum
 from typing import Any, Dict, List, Optional
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 
 import httpx
 
@@ -133,7 +133,10 @@ class ErrorMonitor:
             }
 
             # Loki query API endpoint (typically /loki/api/v1/query_range)
-            url = f"{self.loki_url.rstrip('/')}/loki/api/v1/query_range"
+            # Extract base URL (scheme://host:port) from the push URL
+            parsed_url = urlparse(self.loki_url)
+            base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
+            url = f"{base_url}/loki/api/v1/query_range"
 
             response = await self.session.get(url, params=params)
             response.raise_for_status()
