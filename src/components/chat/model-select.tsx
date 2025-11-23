@@ -5,6 +5,7 @@ import * as React from "react"
 import { Check, ChevronDown, ChevronRight, ChevronsUpDown, Loader2, Star, Sparkles } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import { getAdaptiveTimeout } from "@/lib/network-timeouts"
 import { Button } from "@/components/ui/button"
 import {
   Command,
@@ -221,9 +222,14 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
         const limit = loadAllModels ? undefined : INITIAL_MODELS_LIMIT;
         const limitParam = limit ? `&limit=${limit}` : '';
 
-        const controller = new AbortController();
-        // Reduced timeout from 10s to 7s - models should load much faster with optimized gateways
-        const timeoutId = setTimeout(() => controller.abort(), 7000);
+          const controller = new AbortController();
+          const baseTimeout = loadAllModels ? 12000 : 9000;
+          const timeoutMs = getAdaptiveTimeout(baseTimeout, {
+            maxMs: loadAllModels ? 25000 : 20000,
+            slowNetworkMultiplier: 3,
+            mobileMultiplier: 2,
+          });
+          const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
         const allGatewaysRes = await fetch(`/api/models?gateway=all${limitParam}`, { signal: controller.signal });
         clearTimeout(timeoutId);
