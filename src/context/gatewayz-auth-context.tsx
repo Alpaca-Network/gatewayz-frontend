@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import * as Sentry from "@sentry/nextjs";
 import {
   AUTH_REFRESH_EVENT,
   getApiKey,
@@ -352,6 +353,18 @@ export function GatewayzAuthProvider({
         user_id: authData.user_id
       });
 
+      // Add breadcrumb for successful authentication
+      Sentry.addBreadcrumb({
+        category: 'auth',
+        message: 'User authenticated successfully',
+        level: 'info',
+        data: {
+          user_id: authData.user_id,
+          is_new_user: authData.is_new_user,
+          tier: authData.tier,
+        },
+      });
+
       processAuthResponse(authData);
       updateStateFromStorage();
       lastSyncedPrivyIdRef.current = authData.privy_user_id || null;
@@ -489,6 +502,16 @@ export function GatewayzAuthProvider({
         setStatus("authenticating");
         setError(null);
 
+        // Add breadcrumb for auth sync start
+        Sentry.addBreadcrumb({
+          category: 'auth',
+          message: 'Starting backend authentication sync',
+          level: 'debug',
+          data: {
+            force: options?.force ?? false,
+          },
+        });
+
       try {
         // Get token with timeout to prevent hanging
         const tokenPromise = getAccessToken();
@@ -504,6 +527,28 @@ export function GatewayzAuthProvider({
           ]);
         } catch (tokenErr) {
           console.warn("[Auth] Failed to get token:", tokenErr);
+
+          // Capture token retrieval error to Sentry (but as warning since we can continue)
+          const tokenErrMsg = tokenErr instanceof Error ? tokenErr.message : String(tokenErr);
+          if (tokenErrMsg.includes("timeout")) {
+            Sentry.captureMessage("Token retrieval timeout during authentication", {
+              level: 'warning',
+              tags: {
+                auth_error: 'token_timeout',
+              },
+            });
+          } else {
+            Sentry.captureException(
+              tokenErr instanceof Error ? tokenErr : new Error(String(tokenErr)),
+              {
+                tags: {
+                  auth_error: 'token_retrieval_failed',
+                },
+                level: 'warning',
+              }
+            );
+          }
+
           token = null; // Continue without token, let backend decide
         }
 
@@ -540,6 +585,24 @@ export function GatewayzAuthProvider({
           setStatus("error");
           const authError: AuthError = { status: response.status, message: rawResponseText };
           setError(authError.message ?? `Authentication failed: ${response.status}`);
+
+          // Capture auth failure to Sentry
+          Sentry.captureException(
+            new Error(`Authentication failed: ${response.status}`),
+            {
+              tags: {
+                auth_error: 'backend_auth_failed',
+                http_status: response.status,
+              },
+              extra: {
+                response_status: response.status,
+                response_text: rawResponseText.substring(0, 500),
+                auth_method: (authBody as { auth_method?: string }).auth_method,
+              },
+              level: 'error',
+            }
+          );
+
           onAuthError?.(authError);
           return;
         }
@@ -554,6 +617,22 @@ export function GatewayzAuthProvider({
           clearStoredCredentials();
           setStatus("error");
           setError("Authentication failed: Invalid response format");
+
+          // Capture JSON parse error to Sentry
+          Sentry.captureException(
+            parseError instanceof Error ? parseError : new Error(String(parseError)),
+            {
+              tags: {
+                auth_error: 'response_parse_failed',
+              },
+              extra: {
+                response_text: rawResponseText.substring(0, 500),
+                response_length: rawResponseText.length,
+              },
+              level: 'error',
+            }
+          );
+
           onAuthError?.({ raw: parseError });
           return;
         }
@@ -573,6 +652,22 @@ export function GatewayzAuthProvider({
             clearStoredCredentials();
             setStatus("error");
             setError("Authentication failed: No API key in response");
+
+            // Capture missing API key error to Sentry
+            Sentry.captureException(
+              new Error("Authentication failed: No API key in response"),
+              {
+                tags: {
+                  auth_error: 'missing_api_key',
+                },
+                extra: {
+                  response_data: JSON.stringify(authData, null, 2).substring(0, 500),
+                  response_keys: Object.keys(authData).join(', '),
+                },
+                level: 'error',
+              }
+            );
+
             onAuthError?.({ message: "Missing API key in auth response" });
             return;
           }
@@ -597,6 +692,16 @@ export function GatewayzAuthProvider({
           // The user can still authenticate with other methods (email, Google, GitHub)
           if (isWalletExtensionError) {
             console.warn("[Auth] Wallet extension error (non-blocking), ignoring and maintaining current auth state");
+
+            // Log wallet error to Sentry but as a warning (non-blocking)
+            Sentry.captureMessage(`Wallet extension error during auth: ${errorMsg}`, {
+              level: 'warning',
+              tags: {
+                auth_error: 'wallet_extension_error',
+                blocking: 'false',
+              },
+            });
+
             // Don't change status or clear credentials - just ignore the wallet error
             // The authentication may have already succeeded before the wallet error occurred
             // If user has valid cached credentials, keep them authenticated
@@ -613,6 +718,21 @@ export function GatewayzAuthProvider({
           clearStoredCredentials();
           setStatus("error");
           setError(err instanceof Error ? err.message : "Authentication failed");
+
+          // Capture authentication error to Sentry
+          Sentry.captureException(
+            err instanceof Error ? err : new Error(String(err)),
+            {
+              tags: {
+                auth_error: 'backend_sync_error',
+              },
+              extra: {
+                error_message: errorMsg,
+              },
+              level: 'error',
+            }
+          );
+
           onAuthError?.({ raw: err });
         } finally {
           syncInFlightRef.current = false;
