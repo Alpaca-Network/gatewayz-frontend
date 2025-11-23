@@ -14,6 +14,7 @@ import {
   type AuthResponse,
   type UserData,
 } from "@/lib/api";
+import { getAdaptiveTimeout } from "@/lib/network-timeouts";
 import { usePrivy, type User, type LinkedAccountWithMetadata } from "@privy-io/react-auth";
 import {
   redirectToBetaWithSession,
@@ -560,11 +561,17 @@ export function GatewayzAuthProvider({
           has_token: !!authBody.token,
           is_new_user: authBody.is_new_user,
           auto_create_api_key: authBody.auto_create_api_key,
-        });
+          });
 
-        // Use fetch with timeout for backend call
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+          // Use fetch with timeout for backend call
+          const controller = new AbortController();
+          const baseTimeout = 10000;
+          const timeoutMs = getAdaptiveTimeout(baseTimeout, {
+            maxMs: 25000,
+            mobileMultiplier: 2.2,
+            slowNetworkMultiplier: 3,
+          });
+          const timeoutId = setTimeout(() => controller.abort(), timeoutMs); // Network-aware timeout
 
         const response = await fetch("/api/auth", {
           method: "POST",
