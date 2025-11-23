@@ -303,10 +303,10 @@ console.log(response.choices[0].message.content);`
       {showBanner && (
         <div className="bg-gradient-to-r from-purple-600 to-blue-600 text-white">
           <div className="container mx-auto px-4 py-3">
-            <div className="flex items-center justify-between flex-wrap gap-4">
-              <div className="flex items-center gap-6 flex-1 flex-wrap">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 lg:gap-4">
+              <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2 sm:gap-3 lg:gap-6 flex-1">
                 <div className="flex items-center gap-2">
-                  <Terminal className="h-5 w-5" />
+                  <Terminal className="h-5 w-5 flex-shrink-0" />
                   <span className="font-semibold">Developers:</span>
                 </div>
                 <Link
@@ -314,37 +314,39 @@ console.log(response.choices[0].message.content);`
                   target="_blank"
                   className="flex items-center gap-2 hover:underline transition-all"
                 >
-                  <Code className="h-4 w-4" />
+                  <Code className="h-4 w-4 flex-shrink-0" />
                   <span className="text-sm">Install SDK</span>
-                  <ArrowRight className="h-3 w-3" />
+                  <ArrowRight className="h-3 w-3 flex-shrink-0" />
                 </Link>
                 <Link
                   href="/claude-code"
                   className="flex items-center gap-2 hover:underline transition-all"
                 >
-                  <Sparkles className="h-4 w-4" />
+                  <Sparkles className="h-4 w-4 flex-shrink-0" />
                   <span className="text-sm">Try Claude Code</span>
-                  <ArrowRight className="h-3 w-3" />
+                  <ArrowRight className="h-3 w-3 flex-shrink-0" />
                 </Link>
-                <div className="flex items-center gap-2 ml-4 pl-4 border-l border-white/30">
-                  <CreditCard className="h-4 w-4" />
+              </div>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 sm:border-l sm:border-white/30 sm:pl-3 lg:ml-4 lg:pl-4">
+                <div className="flex items-center gap-2 flex-1 sm:flex-initial">
+                  <CreditCard className="h-4 w-4 flex-shrink-0" />
                   <span className="text-sm font-semibold">💰 Add $10 and get a bonus $10 in free credits on your first top up</span>
-                  <Link href="/settings/credits">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="ml-2 text-white border-white hover:bg-white hover:text-purple-600 transition-all"
-                    >
-                      Add Credits
-                    </Button>
-                  </Link>
                 </div>
+                <Link href="/settings/credits" className="flex-shrink-0">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-white border-white hover:bg-white hover:text-purple-600 transition-all w-full sm:w-auto"
+                  >
+                    Add Credits
+                  </Button>
+                </Link>
               </div>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => setShowBanner(false)}
-                className="text-white hover:bg-white/20"
+                className="text-white hover:bg-white/20 self-start lg:self-center"
               >
                 Dismiss
               </Button>
