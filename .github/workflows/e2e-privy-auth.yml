@@ -1,0 +1,199 @@
+name: E2E Tests with Real Privy Authentication
+
+on:
+  schedule:
+    # Run E2E tests with real Privy authentication daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      test_scope:
+        description: 'Test scope to run'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - auth-only
+          - models-only
+          - chat-only
+          - privy-real-only
+
+jobs:
+  e2e-real-auth:
+    name: E2E Tests with Real Privy Authentication
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.17.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ~/.pnpm-store
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('**/package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Build application
+        run: pnpm build
+        env:
+          NEXT_PUBLIC_PRIVY_APP_ID: ${{ secrets.NEXT_PUBLIC_PRIVY_APP_ID }}
+          NEXT_PUBLIC_API_BASE_URL: ${{ secrets.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai' }}
+          NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY }}
+
+      - name: Start dev server
+        run: pnpm dev > /tmp/server.log 2>&1 &
+        env:
+          NEXT_PUBLIC_PRIVY_APP_ID: ${{ secrets.NEXT_PUBLIC_PRIVY_APP_ID }}
+          NEXT_PUBLIC_API_BASE_URL: ${{ secrets.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai' }}
+          NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY }}
+
+      - name: Wait for server to be ready
+        run: |
+          set +e
+          npx wait-on http://localhost:3000 --timeout 120000
+          WAIT_RESULT=$?
+          set -e
+
+          if [ $WAIT_RESULT -ne 0 ]; then
+            echo "❌ Server failed to start. Checking logs..."
+            if [ -f /tmp/server.log ]; then
+              echo "=== Last 50 lines of server log ==="
+              tail -50 /tmp/server.log
+            fi
+            echo "=== Process list ==="
+            ps aux | grep -E 'node|pnpm|next' || true
+            exit 1
+          fi
+          echo "✅ Server is ready"
+        timeout-minutes: 3
+
+      - name: Run E2E tests - Real Privy Authentication
+        if: github.event.inputs.test_scope == 'all' || github.event.inputs.test_scope == 'privy-real-only' || github.event_name == 'schedule'
+        run: pnpm exec playwright test e2e/auth-privy-real.spec.ts --reporter=html
+        env:
+          CI: true
+          PLAYWRIGHT_BASE_URL: http://localhost:3000
+          PRIVY_TEST_EMAIL: ${{ secrets.PRIVY_TEST_EMAIL || 'test-1049@privy.io' }}
+          PRIVY_TEST_OTP: ${{ secrets.PRIVY_TEST_OTP || '362762' }}
+
+      - name: Run E2E tests - Authentication
+        if: github.event.inputs.test_scope == 'all' || github.event.inputs.test_scope == 'auth-only'
+        run: pnpm exec playwright test e2e/auth*.spec.ts --reporter=html
+        env:
+          CI: true
+          PLAYWRIGHT_BASE_URL: http://localhost:3000
+
+      - name: Run E2E tests - Models
+        if: github.event.inputs.test_scope == 'all' || github.event.inputs.test_scope == 'models-only'
+        run: pnpm exec playwright test e2e/models*.spec.ts --reporter=html
+        env:
+          CI: true
+          PLAYWRIGHT_BASE_URL: http://localhost:3000
+
+      - name: Run E2E tests - Chat
+        if: github.event.inputs.test_scope == 'all' || github.event.inputs.test_scope == 'chat-only'
+        run: pnpm exec playwright test e2e/chat*.spec.ts --reporter=html
+        env:
+          CI: true
+          PLAYWRIGHT_BASE_URL: http://localhost:3000
+
+      - name: Collect server logs on failure
+        if: failure()
+        run: |
+          echo "=== Server Logs ===" >> $GITHUB_STEP_SUMMARY
+          tail -100 /tmp/server.log >> $GITHUB_STEP_SUMMARY || echo "No server logs found"
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-privy
+          path: playwright-report/
+          retention-days: 30
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-json
+          path: test-results.json
+          retention-days: 7
+
+      - name: Upload test videos
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-videos
+          path: test-results/
+          retention-days: 7
+
+      - name: Cleanup processes
+        if: always()
+        run: |
+          # Kill any lingering node/next processes
+          pkill -f "node.*next" || true
+          pkill -f "pnpm dev" || true
+          sleep 2
+
+      - name: Publish test report to workflow summary
+        if: always()
+        run: |
+          echo "## E2E Test Results" >> $GITHUB_STEP_SUMMARY
+          if [ -f test-results.json ]; then
+            TOTAL=$(jq '.stats.expected' test-results.json 2>/dev/null || echo "0")
+            PASSED=$(jq '.stats.expected - (.stats.unexpected + .stats.flaky)' test-results.json 2>/dev/null || echo "0")
+            FAILED=$(jq '.stats.unexpected' test-results.json 2>/dev/null || echo "0")
+            FLAKY=$(jq '.stats.flaky' test-results.json 2>/dev/null || echo "0")
+
+            echo "| Metric | Count |" >> $GITHUB_STEP_SUMMARY
+            echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+            echo "| Total Tests | $TOTAL |" >> $GITHUB_STEP_SUMMARY
+            echo "| Passed | $PASSED |" >> $GITHUB_STEP_SUMMARY
+            echo "| Failed | $FAILED |" >> $GITHUB_STEP_SUMMARY
+            echo "| Flaky | $FLAKY |" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "[View full report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
+
+  notify-on-failure:
+    name: Notify on E2E Failure
+    runs-on: ubuntu-latest
+    needs: e2e-real-auth
+    if: failure() && github.event_name == 'schedule'
+
+    steps:
+      - name: Post failure notification
+        run: |
+          echo "⚠️ E2E tests with real Privy authentication failed"
+          echo "Repository: ${{ github.repository }}"
+          echo "Workflow: E2E Tests with Real Privy Authentication"
+          echo "Branch: ${{ github.ref }}"
+          echo "Run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"

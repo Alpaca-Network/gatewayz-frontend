@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import * as Sentry from "@sentry/nextjs";
 import {
   AUTH_REFRESH_EVENT,
   getApiKey,
@@ -13,6 +14,8 @@ import {
   type AuthResponse,
   type UserData,
 } from "@/lib/api";
+import { getAdaptiveTimeout } from "@/lib/network-timeouts";
+import { retryFetch } from "@/lib/retry-utils";
 import { usePrivy, type User, type LinkedAccountWithMetadata } from "@privy-io/react-auth";
 import {
   redirectToBetaWithSession,
@@ -51,7 +54,7 @@ interface GatewayzAuthProviderProps {
   betaDomain?: string;
 }
 
-const GatewayzAuthContext = createContext<GatewayzAuthContextValue | undefined>(undefined);
+export const GatewayzAuthContext = createContext<GatewayzAuthContextValue | undefined>(undefined);
 const TEMP_API_KEY_PREFIX = "gw_temp_";
 
 const stripUndefined = <T,>(value: T): T => {
@@ -95,6 +98,11 @@ const toUnixSeconds = (value: unknown): number | undefined => {
 };
 
 const mapLinkedAccount = (account: LinkedAccountWithMetadata) => {
+  // Skip wallet accounts as the backend only expects email/oauth accounts in linked_accounts
+  if (account.type === "wallet") {
+    return null;
+  }
+
   const get = (key: string) =>
     Object.prototype.hasOwnProperty.call(account, key)
       ? (account as unknown as Record<string, unknown>)[key]
@@ -105,7 +113,6 @@ const mapLinkedAccount = (account: LinkedAccountWithMetadata) => {
     subject: get("subject") as string | undefined,
     email: get("email") as string | undefined,
     name: get("name") as string | undefined,
-    address: get("address") as string | undefined,
     chain_type: get("chainType") as string | undefined,
     wallet_client_type: get("walletClientType") as string | undefined,
     connector_type: get("connectorType") as string | undefined,
@@ -348,6 +355,18 @@ export function GatewayzAuthProvider({
         user_id: authData.user_id
       });
 
+      // Add breadcrumb for successful authentication
+      Sentry.addBreadcrumb({
+        category: 'auth',
+        message: 'User authenticated successfully',
+        level: 'info',
+        data: {
+          user_id: authData.user_id,
+          is_new_user: authData.is_new_user,
+          tier: authData.tier,
+        },
+      });
+
       processAuthResponse(authData);
       updateStateFromStorage();
       lastSyncedPrivyIdRef.current = authData.privy_user_id || null;
@@ -420,7 +439,7 @@ export function GatewayzAuthProvider({
         user: stripUndefined({
           id: privyUser.id,
           created_at: toUnixSeconds(privyUser.createdAt) ?? Math.floor(Date.now() / 1000),
-          linked_accounts: (privyUser.linkedAccounts || []).map(mapLinkedAccount),
+          linked_accounts: (privyUser.linkedAccounts || []).map(mapLinkedAccount).filter(Boolean),
           mfa_methods: privyUser.mfaMethods || [],
           has_accepted_terms: privyUser.hasAcceptedTerms ?? false,
           is_guest: privyUser.isGuest ?? false,
@@ -485,6 +504,16 @@ export function GatewayzAuthProvider({
         setStatus("authenticating");
         setError(null);
 
+        // Add breadcrumb for auth sync start
+        Sentry.addBreadcrumb({
+          category: 'auth',
+          message: 'Starting backend authentication sync',
+          level: 'debug',
+          data: {
+            force: options?.force ?? false,
+          },
+        });
+
       try {
         // Get token with timeout to prevent hanging
         const tokenPromise = getAccessToken();
@@ -500,6 +529,28 @@ export function GatewayzAuthProvider({
           ]);
         } catch (tokenErr) {
           console.warn("[Auth] Failed to get token:", tokenErr);
+
+          // Capture token retrieval error to Sentry (but as warning since we can continue)
+          const tokenErrMsg = tokenErr instanceof Error ? tokenErr.message : String(tokenErr);
+          if (tokenErrMsg.includes("timeout")) {
+            Sentry.captureMessage("Token retrieval timeout during authentication", {
+              level: 'warning',
+              tags: {
+                auth_error: 'token_timeout',
+              },
+            });
+          } else {
+            Sentry.captureException(
+              tokenErr instanceof Error ? tokenErr : new Error(String(tokenErr)),
+              {
+                tags: {
+                  auth_error: 'token_retrieval_failed',
+                },
+                level: 'warning',
+              }
+            );
+          }
+
           token = null; // Continue without token, let backend decide
         }
 
@@ -511,20 +562,36 @@ export function GatewayzAuthProvider({
           has_token: !!authBody.token,
           is_new_user: authBody.is_new_user,
           auto_create_api_key: authBody.auto_create_api_key,
-        });
+          });
 
-        // Use fetch with timeout for backend call
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+          // Use fetch with timeout for backend call
+          const controller = new AbortController();
+          const baseTimeout = 10000;
+          const timeoutMs = getAdaptiveTimeout(baseTimeout, {
+            maxMs: 25000,
+            mobileMultiplier: 2.2,
+            slowNetworkMultiplier: 3,
+          });
+          const timeoutId = setTimeout(() => controller.abort(), timeoutMs); // Network-aware timeout
 
-        const response = await fetch("/api/auth", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(authBody),
-          signal: controller.signal,
-        });
+        const response = await retryFetch(
+          () =>
+            fetch("/api/auth", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify(authBody),
+              signal: controller.signal,
+            }),
+          {
+            maxRetries: 2,
+            initialDelayMs: 300,
+            maxDelayMs: 3000,
+            backoffMultiplier: 2,
+            retryableStatuses: [502, 503, 504],
+          }
+        );
 
         clearTimeout(timeoutId);
         const rawResponseText = await response.text();
@@ -536,6 +603,24 @@ export function GatewayzAuthProvider({
           setStatus("error");
           const authError: AuthError = { status: response.status, message: rawResponseText };
           setError(authError.message ?? `Authentication failed: ${response.status}`);
+
+          // Capture auth failure to Sentry
+          Sentry.captureException(
+            new Error(`Authentication failed: ${response.status}`),
+            {
+              tags: {
+                auth_error: 'backend_auth_failed',
+                http_status: response.status,
+              },
+              extra: {
+                response_status: response.status,
+                response_text: rawResponseText.substring(0, 500),
+                auth_method: (authBody as { auth_method?: string }).auth_method,
+              },
+              level: 'error',
+            }
+          );
+
           onAuthError?.(authError);
           return;
         }
@@ -550,6 +635,22 @@ export function GatewayzAuthProvider({
           clearStoredCredentials();
           setStatus("error");
           setError("Authentication failed: Invalid response format");
+
+          // Capture JSON parse error to Sentry
+          Sentry.captureException(
+            parseError instanceof Error ? parseError : new Error(String(parseError)),
+            {
+              tags: {
+                auth_error: 'response_parse_failed',
+              },
+              extra: {
+                response_text: rawResponseText.substring(0, 500),
+                response_length: rawResponseText.length,
+              },
+              level: 'error',
+            }
+          );
+
           onAuthError?.({ raw: parseError });
           return;
         }
@@ -569,6 +670,22 @@ export function GatewayzAuthProvider({
             clearStoredCredentials();
             setStatus("error");
             setError("Authentication failed: No API key in response");
+
+            // Capture missing API key error to Sentry
+            Sentry.captureException(
+              new Error("Authentication failed: No API key in response"),
+              {
+                tags: {
+                  auth_error: 'missing_api_key',
+                },
+                extra: {
+                  response_data: JSON.stringify(authData, null, 2).substring(0, 500),
+                  response_keys: Object.keys(authData).join(', '),
+                },
+                level: 'error',
+              }
+            );
+
             onAuthError?.({ message: "Missing API key in auth response" });
             return;
           }
@@ -592,15 +709,48 @@ export function GatewayzAuthProvider({
           // If it's just a wallet extension error, don't treat it as auth failure
           // The user can still authenticate with other methods (email, Google, GitHub)
           if (isWalletExtensionError) {
-            console.warn("[Auth] Wallet extension error (non-blocking), continuing with authentication");
-            // Revert to authenticating state and retry - Privy will handle gracefully
-            setStatus("authenticating");
+            console.warn("[Auth] Wallet extension error (non-blocking), ignoring and maintaining current auth state");
+
+            // Log wallet error to Sentry but as a warning (non-blocking)
+            Sentry.captureMessage(`Wallet extension error during auth: ${errorMsg}`, {
+              level: 'warning',
+              tags: {
+                auth_error: 'wallet_extension_error',
+                blocking: 'false',
+              },
+            });
+
+            // Don't change status or clear credentials - just ignore the wallet error
+            // The authentication may have already succeeded before the wallet error occurred
+            // If user has valid cached credentials, keep them authenticated
+            const storedKey = getApiKey();
+            const storedUser = getUserData();
+            if (storedKey && storedUser && storedUser.user_id && storedUser.email) {
+              console.log("[Auth] Valid credentials found despite wallet error - keeping authenticated");
+              setStatus("authenticated");
+            }
+            // Otherwise, don't set error status - keep current status
             return;
           }
 
           clearStoredCredentials();
           setStatus("error");
           setError(err instanceof Error ? err.message : "Authentication failed");
+
+          // Capture authentication error to Sentry
+          Sentry.captureException(
+            err instanceof Error ? err : new Error(String(err)),
+            {
+              tags: {
+                auth_error: 'backend_sync_error',
+              },
+              extra: {
+                error_message: errorMsg,
+              },
+              level: 'error',
+            }
+          );
+
           onAuthError?.({ raw: err });
         } finally {
           syncInFlightRef.current = false;
@@ -678,20 +828,10 @@ export function GatewayzAuthProvider({
 
   // Memoize login/logout to avoid inline function recreation
   const login = useCallback(async () => {
-    try {
-      await privyLogin();
-    } catch (err) {
-      // Suppress wallet extension errors - they don't prevent authentication
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      if (errorMsg.includes("chrome.runtime.sendMessage") ||
-          errorMsg.includes("Extension ID") ||
-          errorMsg.includes("from a webpage")) {
-        console.warn("[Auth] Wallet extension error (suppressed, non-blocking):", errorMsg);
-        return;
-      }
-      // Re-throw actual authentication errors
-      throw err;
-    }
+    // Let Privy handle its own login flow - don't intercept errors here
+    // Wallet errors during Privy's flow are handled by Privy itself
+    // Wallet errors during backend sync are handled in syncWithBackend()
+    await privyLogin();
   }, [privyLogin]);
   const logout = useCallback(async () => {
     clearStoredCredentials();

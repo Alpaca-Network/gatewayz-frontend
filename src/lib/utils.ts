@@ -90,6 +90,7 @@ export const normalizeToUrlSafe = (str: string): string => {
  * Handles various model ID formats:
  * - "openai/gpt-5.1" → "/models/openai/gpt-5-1"
  * - "aimo:model-name" → "/models/aimo/model-name"
+ * - "near/deepseek-ai/deepseek-v3-1" → "/models/near/deepseek-ai/deepseek-v3-1" (preserves nested paths)
  * - "gpt-4o mini" → Uses provider_slug if available
  */
 export const getModelUrl = (modelId: string, providerSlug?: string): string => {
@@ -102,12 +103,12 @@ export const getModelUrl = (modelId: string, providerSlug?: string): string => {
     return `/models/${provider.toLowerCase()}/${urlSafeName}`;
   }
 
-  // Handle provider/model format (e.g., "openai/gpt-5.1")
+  // Handle provider/model format (e.g., "openai/gpt-5.1" or "near/deepseek-ai/deepseek-v3-1")
   if (modelId.includes('/')) {
     const [provider, ...modelParts] = modelId.split('/');
-    const model = modelParts.join('/'); // In case there are multiple slashes
-    const urlSafeName = normalizeToUrlSafe(model);
-    return `/models/${provider.toLowerCase()}/${urlSafeName}`;
+    // Normalize each segment individually and preserve the path structure with slashes
+    const normalizedParts = modelParts.map(part => normalizeToUrlSafe(part));
+    return `/models/${provider.toLowerCase()}/${normalizedParts.join('/')}`;
   }
 
   // Fallback: just the model ID (should rarely happen)

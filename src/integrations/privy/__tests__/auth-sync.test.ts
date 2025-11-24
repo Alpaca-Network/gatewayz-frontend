@@ -362,14 +362,19 @@ describe('auth-sync', () => {
       expect(requestBody.user.created_at).toBe(Math.floor(1700000000000 / 1000));
     });
 
-    it('should handle linked accounts without verified timestamps', async () => {
+    it('should filter out wallet accounts from linked_accounts', async () => {
       const mockPrivyUser = createMockPrivyUser({
         linkedAccounts: [
+          {
+            type: 'email',
+            email: 'test@example.com',
+            verifiedAt: new Date('2024-01-01').getTime(),
+          } as any,
           {
             type: 'wallet',
             address: '0x1234567890abcdef',
             chainType: 'ethereum',
-            // No verified timestamps
+            // Wallet accounts should be filtered out
           } as any,
         ],
       });
@@ -386,18 +391,12 @@ describe('auth-sync', () => {
         (global.fetch as jest.Mock).mock.calls[0][1].body
       );
 
-      // Check that the account has the basic fields
+      // Only email account should be included, wallet account should be filtered out
+      expect(requestBody.user.linked_accounts).toHaveLength(1);
       expect(requestBody.user.linked_accounts[0]).toMatchObject({
-        type: 'wallet',
-        address: '0x1234567890abcdef',
-        chain_type: 'ethereum',
+        type: 'email',
+        email: 'test@example.com',
       });
-
-      // Verified timestamps should be undefined (not included in payload)
-      const account = requestBody.user.linked_accounts[0];
-      expect(account.verified_at).toBeUndefined();
-      expect(account.first_verified_at).toBeUndefined();
-      expect(account.latest_verified_at).toBeUndefined();
     });
 
     it('should handle empty linked accounts', async () => {

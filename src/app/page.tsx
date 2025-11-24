@@ -97,14 +97,17 @@ export default function Home() {
       }
     };
 
-    window.addEventListener('storage', handleStorageChange);
+    // Also listen for custom events from same tab (when localStorage updates)
+    const handleCustomStorageEvent = () => {
+      loadApiKey();
+    };
 
-    // Poll for changes every 5 seconds to catch same-tab updates (reduced from 1s for performance)
-    const interval = setInterval(loadApiKey, 5000);
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('gatewayz:api-key-updated', handleCustomStorageEvent);
 
     return () => {
       window.removeEventListener('storage', handleStorageChange);
-      clearInterval(interval);
+      window.removeEventListener('gatewayz:api-key-updated', handleCustomStorageEvent);
     };
   }, [user, ready]);
 
@@ -371,7 +374,6 @@ console.log(completion.choices[0].message);`,
             alt="Background logo"
             width={768}
             height={768}
-            priority
             className="absolute top-0 left-1/2 transform -translate-x-1/2 w-[180px] h-[180px] sm:w-[350px] sm:h-[350px] md:w-[450px] md:h-[450px] lg:w-[640px] lg:h-[640px] xl:w-[768px] xl:h-[768px] pointer-events-none opacity-20 sm:opacity-50 md:opacity-100"
             style={{ zIndex: 0 }}
           />

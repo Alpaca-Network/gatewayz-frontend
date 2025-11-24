@@ -21,6 +21,7 @@ import { API_BASE_URL } from '@/lib/config';
 import { models as staticModels } from '@/lib/models-data';
 import { getApiKey } from '@/lib/api';
 import { InlineChat } from '@/components/models/inline-chat';
+import { safeParseJson } from '@/lib/http';
 
 // Lazy load heavy components
 const TopAppsTable = lazy(() => import('@/components/dashboard/top-apps-table'));
@@ -54,7 +55,7 @@ const ChartCard = ({ modelName, title, dataKey, yAxisFormatter }: { modelName: s
     const providers = useMemo(() => providerData[modelName] || [], [modelName]);
     const chartData = useMemo(() => generateChartData(providers, dataKey), [providers, dataKey]);
     const statsTable = useMemo(() => generateStatsTable(providers, dataKey), [providers, dataKey]);
-    
+
     return (
         <Dialog>
             <Card>
@@ -171,18 +172,7 @@ export default function ModelProfilePage() {
     const params = useParams();
     const router = useRouter();
 
-    // Extract and normalize developer and model name
-    const developer = (params.developer as string)?.toLowerCase() || '';
-    const modelNameParam = (params.model as string) || '';
-
-    // Redirect alibaba models to qwen
-    useEffect(() => {
-        if (developer === 'alibaba') {
-            router.replace(`/models/qwen/${modelNameParam}`);
-        }
-    }, [developer, modelNameParam, router]);
-
-    // State declarations
+    // State declarations - must be before any early returns
     const [model, setModel] = useState<Model | null>(null);
     const [allModels, setAllModels] = useState<Model[]>([]);
     const [loading, setLoading] = useState(true);
@@ -194,6 +184,24 @@ export default function ModelProfilePage() {
     const [apiKey, setApiKey] = useState('gw_live_YOUR_API_KEY_HERE');
     const [selectedProvider, setSelectedProvider] = useState<string>('gatewayz');
     const [selectedPlaygroundProvider, setSelectedPlaygroundProvider] = useState<string>('gatewayz');
+
+    // Extract catch-all parameter and parse it
+    // For URL /models/near/deepseek-ai/deepseek-v3-1
+    // params.name will be ['near', 'deepseek-ai', 'deepseek-v3-1']
+    const nameParts = Array.isArray(params.name) ? params.name : (params.name ? [params.name] : []);
+    const isInvalidUrl = nameParts.length < 2;
+
+    // Extract developer (first part) and reconstruct model name from remaining parts
+    const developer = !isInvalidUrl ? (nameParts[0]?.toLowerCase() || '') : '';
+    // Rejoin remaining parts with slashes for NEAR models like "deepseek-ai/deepseek-v3-1"
+    const modelNameParam = !isInvalidUrl ? nameParts.slice(1).join('/') : '';
+
+    // Redirect alibaba models to qwen
+    useEffect(() => {
+        if (developer === 'alibaba') {
+            router.replace(`/models/qwen/${modelNameParam}`);
+        }
+    }, [developer, modelNameParam, router]);
 
     // Provider configurations for API calls
     const providerConfigs: Record<string, {
@@ -303,7 +311,7 @@ export default function ModelProfilePage() {
             requiresApiKey: true,
             apiKeyPlaceholder: 'near_...',
             modelIdFormat: (modelId: string) => {
-                // NEAR Protocol uses the full model ID
+                // NEAR Protocol uses the full model ID (including nested paths like near/deepseek-ai/DeepSeek-V3.1)
                 return modelId;
             }
         },
@@ -387,7 +395,7 @@ export default function ModelProfilePage() {
         },
     };
 
-    // Store the URL-safe model name for searching
+    // Store the model ID
     let modelId = `${developer}/${modelNameParam}`;
     // Decode URL-encoded characters (e.g., %40 -> @)
     modelId = decodeURIComponent(modelId);
@@ -664,27 +672,20 @@ export default function ModelProfilePage() {
                     alibaba: alibabaRes?.status
                 });
 
-                const getData = async (result: PromiseSettledResult<Response | null>) => {
+                const getData = async (
+                    result: PromiseSettledResult<Response | null>,
+                    gatewayLabel: string
+                ) => {
                     if (result.status === 'fulfilled' && result.value) {
-                        try {
-                            // Check if response is ok before parsing
-                            if (!result.value.ok) {
-                                console.warn(`Gateway response not ok: ${result.value.status} ${result.value.statusText}`);
-                                // Consume the response body to prevent streaming errors when HTML is returned instead of JSON
-                                try {
-                                    await result.value.text();
-                                } catch (consumeError) {
-                                    // Ignore errors when consuming the error response body
-                                }
-                                return [];
-                            }
-                            const data = await result.value.json();
-                            console.log(`Gateway data parsed, models count:`, data.data?.length || 0);
-                            return data.data || [];
-                        } catch (e) {
-                            console.log('Error parsing gateway response:', e);
-                            return [];
+                        const payload = await safeParseJson<{ data?: Model[] }>(
+                            result.value,
+                            `[ModelProfilePage] ${gatewayLabel}`
+                        );
+                        if (payload?.data && Array.isArray(payload.data)) {
+                            console.log(`Gateway data parsed (${gatewayLabel}), models count:`, payload.data.length);
+                            return payload.data;
                         }
+                        return [];
                     }
                     if (result.status === 'rejected') {
                         console.warn('Gateway fetch rejected:', result.reason);
@@ -695,24 +696,24 @@ export default function ModelProfilePage() {
                 };
 
                 const [openrouterData, portkeyData, featherlessData, chutesData, fireworksData, togetherData, groqData, deepinfraData, googleData, cerebrasData, nebiusData, xaiData, novitaData, huggingfaceData, aimoData, nearData, falData, alibabaData] = await Promise.all([
-                    getData(openrouterRes),
-                    getData(portkeyRes),
-                    getData(featherlessRes),
-                    getData(chutesRes),
-                    getData(fireworksRes),
-                    getData(togetherRes),
-                    getData(groqRes),
-                    getData(deepinfraRes),
-                    getData(googleRes),
-                    getData(cerebrasRes),
-                    getData(nebiusRes),
-                    getData(xaiRes),
-                    getData(novitaRes),
-                    getData(huggingfaceRes),
-                    getData(aimoRes),
-                    getData(nearRes),
-                    getData(falRes),
-                    getData(alibabaRes)
+                    getData(openrouterRes, 'openrouter'),
+                    getData(portkeyRes, 'portkey'),
+                    getData(featherlessRes, 'featherless'),
+                    getData(chutesRes, 'chutes'),
+                    getData(fireworksRes, 'fireworks'),
+                    getData(togetherRes, 'together'),
+                    getData(groqRes, 'groq'),
+                    getData(deepinfraRes, 'deepinfra'),
+                    getData(googleRes, 'google'),
+                    getData(cerebrasRes, 'cerebras'),
+                    getData(nebiusRes, 'nebius'),
+                    getData(xaiRes, 'xai'),
+                    getData(novitaRes, 'novita'),
+                    getData(huggingfaceRes, 'huggingface'),
+                    getData(aimoRes, 'aimo'),
+                    getData(nearRes, 'near'),
+                    getData(falRes, 'fal'),
+                    getData(alibabaRes, 'alibaba')
                 ]);
 
                 // Combine models from all gateways
@@ -903,6 +904,25 @@ export default function ModelProfilePage() {
             console.error('Failed to copy:', error);
         }
     };
+
+    // Check for invalid URL after all hooks are declared
+    if (isInvalidUrl) {
+        return (
+            <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                <Card className="max-w-2xl mx-auto">
+                    <CardContent className="p-8 text-center">
+                        <h1 className="text-2xl font-bold mb-4">Invalid Model URL</h1>
+                        <p className="text-muted-foreground mb-6">
+                            The URL format is invalid. Please use /models/[gateway]/[model-name]
+                        </p>
+                        <Link href="/models">
+                            <Button>Browse Models</Button>
+                        </Link>
+                    </CardContent>
+                </Card>
+            </div>
+        );
+    }
 
     if (loading) {
         return (
@@ -1589,7 +1609,3 @@ console.log(response.choices[0].message.content);`
         </TooltipProvider>
     );
 }
-
-    
-
-    

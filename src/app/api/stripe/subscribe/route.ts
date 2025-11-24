@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(req: NextRequest) {
   try {
-    const { priceId, productId, userEmail, userId, apiKey } = await req.json();
+    const { priceId, productId, userEmail, userId, apiKey, tier } = await req.json();
 
     const normalizedEmail = typeof userEmail === 'string' && userEmail.includes('@') && !userEmail.startsWith('did:privy:')
       ? userEmail
@@ -45,6 +45,7 @@ export async function POST(req: NextRequest) {
       success_url: `${frontendUrl}/settings/credits?session_id={{CHECKOUT_SESSION_ID}}`,
       cancel_url: `${frontendUrl}/settings/credits`,
       mode: 'subscription', // Subscription mode instead of payment
+      ...(tier && { tier }), // Pass tier for subscription metadata tracking
     };
 
     console.log('[Subscribe API] Frontend URL:', frontendUrl);

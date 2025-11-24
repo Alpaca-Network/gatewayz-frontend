@@ -20,6 +20,7 @@ import { GTMLoader } from '@/components/analytics/gtm-loader';
 import { ErrorSuppressor } from '@/components/error-suppressor';
 import { AnalyticsProvidersWrapper } from '@/components/providers/analytics-providers-wrapper';
 import { ReferralBonusDialog } from '@/components/dialogs/referral-bonus-dialog';
+import { SafeStorageShim } from '@/components/safe-storage-shim';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -81,9 +82,16 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning className="scroll-smooth">
       <head>
+        {/* Preconnect to Google Fonts to reduce font loading latency */}
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+      </head>
+        <body className={`${inter.className} antialiased bg-background min-h-screen flex flex-col`} suppressHydrationWarning>
+          <SafeStorageShim />
+        <ErrorSuppressor />
         <Script
           id="chrome-runtime-guard"
-          strategy="beforeInteractive"
+          strategy="afterInteractive"
           dangerouslySetInnerHTML={{
             __html: `(function () {
   if (typeof window === 'undefined') return;
@@ -115,9 +123,6 @@ export default function RootLayout({
 })();`,
           }}
         />
-      </head>
-      <body className={`${inter.className} antialiased bg-background min-h-screen flex flex-col`} suppressHydrationWarning>
-        <ErrorSuppressor />
         <GoogleAnalytics />
         <ThemeProvider
           defaultTheme="system"
@@ -136,12 +141,14 @@ export default function RootLayout({
               <main className="flex-1 flex flex-col w-full overflow-x-hidden">
                 {children}
               </main>
-              <Script
+              {/* Keak-script disabled for performance optimization - unclear purpose and no documentation */}
+              {/* Enable if needed for analytics: re-enable this script and its source */}
+              {/* <Script
                 id="keak-script"
                 src="https://zzontar2hsjaawcn.public.blob.vercel-storage.com/scripts/domain-542-httpsgatewayz.ai.js"
                 data-domain="542"
                 strategy="afterInteractive"
-              />
+              /> */}
               <Toaster />
               <AppFooter />
               <WelcomeDialog />
