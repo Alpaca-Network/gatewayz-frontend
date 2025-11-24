@@ -282,74 +282,116 @@ jobs:
           pkill -f "pnpm start" || true
           sleep 2
 
-  # Trigger Codex on CI failure
-  trigger-codex-on-failure:
-    name: Trigger Codex on Failure
+  # Fix CI failures automatically using Cursor CLI
+  fix-ci:
+    name: Fix CI Failures
     runs-on: ubuntu-latest
     needs: [test, lint, typecheck, build]
     if: failure()
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Fetch PR comments and CI context
-        id: fetch-context
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.17.1
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.pnpm-store
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Determine failed jobs
+        id: failures
         run: |
-          # Prepare context for Codex
           FAILED_JOBS=""
           [[ "${{ needs.test.result }}" == "failure" ]] && FAILED_JOBS="${FAILED_JOBS}test "
           [[ "${{ needs.lint.result }}" == "failure" ]] && FAILED_JOBS="${FAILED_JOBS}lint "
           [[ "${{ needs.typecheck.result }}" == "failure" ]] && FAILED_JOBS="${FAILED_JOBS}typecheck "
           [[ "${{ needs.build.result }}" == "failure" ]] && FAILED_JOBS="${FAILED_JOBS}build "
-          [[ "${{ needs.e2e.result }}" == "failure" ]] && FAILED_JOBS="${FAILED_JOBS}e2e "
 
-          echo "Failed jobs: $FAILED_JOBS"
-          echo "FAILED_JOBS=$FAILED_JOBS" >> $GITHUB_OUTPUT
+          echo "failed_jobs=${FAILED_JOBS}" >> $GITHUB_OUTPUT
 
-          # Fetch PR comments if this is a pull request
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            echo "--- PR Comments and Suggestions ---" >> $GITHUB_OUTPUT
-            gh pr view ${{ github.event.pull_request.number }} --json comments --jq '.comments[] | select(.body | contains("TODO") or contains("FIXME") or contains("suggestion") or contains("⚠")) | .author.login + ": " + .body' >> pr_comments.txt 2>/dev/null || true
+      - name: Install Cursor CLI
+        run: npm install -g @cursor.so/cli
 
-            # Also fetch review comments
-            gh pr view ${{ github.event.pull_request.number }} --json reviews --jq '.reviews[] | select(.state | contains("COMMENTED")) | .author.login + " (" + .state + "): " + (.comments[] | .body)' >> pr_comments.txt 2>/dev/null || true
-          fi
-
-          # Display collected context
-          if [ -f pr_comments.txt ]; then
-            echo "--- Relevant Comments Found ---"
-            cat pr_comments.txt
-          fi
-
-          echo "Branch: ${{ github.ref }}"
-          echo "Commit: ${{ github.sha }}"
-          echo "Trigger: Codex will analyze and fix CI failures"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Trigger Codex with context
+      - name: Run Cursor CLI to fix issues
         run: |
-          # Codex will use the collected context to:
-          # 1. Analyze which CI jobs failed (test, lint, typecheck, build)
-          # 2. Review any PR comments for specific suggestions or TODOs
-          # 3. Check for review comments with ⚠️ warnings or FIXME markers
-          # 4. Automatically address issues and create fixes
+          FAILED_JOBS="${{ steps.failures.outputs.failed_jobs }}"
 
-          FAILED_JOBS="${{ steps.fetch-context.outputs.FAILED_JOBS }}"
+          # Build the fix command based on failed jobs
+          CURSOR_COMMAND="Fix the following CI failures: "
 
-          echo "📋 CI Failure Context for Codex:"
-          echo "  Branch: ${{ github.ref }}"
-          echo "  Commit: ${{ github.sha }}"
-          echo "  Failed Jobs: $FAILED_JOBS"
-          echo ""
-          echo "🔍 Codex will:"
-          echo "  • Analyze failed job logs and error messages"
-          echo "  • Review PR comments for TODOs, FIXMEs, and suggestions"
-          echo "  • Check for review comments with warnings (⚠️)"
-          echo "  • Automatically fix issues and push changes"
+          if echo "$FAILED_JOBS" | grep -q "typecheck"; then
+            CURSOR_COMMAND="${CURSOR_COMMAND}TypeScript type errors, "
+          fi
+
+          if echo "$FAILED_JOBS" | grep -q "lint"; then
+            CURSOR_COMMAND="${CURSOR_COMMAND}ESLint violations, "
+          fi
+
+          if echo "$FAILED_JOBS" | grep -q "test"; then
+            CURSOR_COMMAND="${CURSOR_COMMAND}failing tests, "
+          fi
+
+          if echo "$FAILED_JOBS" | grep -q "build"; then
+            CURSOR_COMMAND="${CURSOR_COMMAND}build errors, "
+          fi
+
+          # Remove trailing comma and space
+          CURSOR_COMMAND="${CURSOR_COMMAND%, }"
+          CURSOR_COMMAND="${CURSOR_COMMAND}. Make only minimal changes necessary to fix the issues. Do not refactor code or make unnecessary changes."
+
+          echo "Cursor prompt: $CURSOR_COMMAND"
+
+          # Run Cursor CLI with the fix command
+          cursor fix "$CURSOR_COMMAND"
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+
+      - name: Commit and push fixes
+        run: |
+          # Configure git
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+
+          # Check for changes
+          if ! git diff --quiet; then
+            git add -A
+            git commit -m "fix: resolve CI failures
+
+Fixes automatically applied by Cursor CLI for:
+$([[ '${{ needs.test.result }}' == 'failure' ]] && echo '  - test failures')
+$([[ '${{ needs.lint.result }}' == 'failure' ]] && echo '  - lint errors')
+$([[ '${{ needs.typecheck.result }}' == 'failure' ]] && echo '  - type errors')
+$([[ '${{ needs.build.result }}' == 'failure' ]] && echo '  - build errors')
+
+🤖 Co-authored-by: Cursor CLI <cursor@github.com>"
+
+            # Push to the same branch
+            git push origin HEAD:${{ github.head_ref || github.ref_name }}
+
+            echo "✅ Fixes committed and pushed to ${{ github.head_ref || github.ref_name }}"
+          else
+            echo "ℹ️ No changes to commit"
+          fi
 
   # Summary job that all other jobs depend on - useful for branch protection rules
   ci-success:
