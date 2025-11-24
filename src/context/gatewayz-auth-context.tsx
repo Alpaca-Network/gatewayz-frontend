@@ -122,8 +122,14 @@ const mapLinkedAccount = (account: LinkedAccountWithMetadata) => {
       ? (account as unknown as Record<string, unknown>)[key]
       : undefined;
 
+  // Normalize account type: Privy returns 'github_oauth' but backend expects 'github'
+  let normalizedType = account.type as string | undefined;
+  if (normalizedType === "github_oauth") {
+    normalizedType = "github";
+  }
+
   return stripUndefined({
-    type: account.type as string | undefined,
+    type: normalizedType,
     subject: get("subject") as string | undefined,
     email: get("email") as string | undefined,
     name: get("name") as string | undefined,

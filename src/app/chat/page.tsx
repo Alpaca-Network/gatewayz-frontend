@@ -286,7 +286,8 @@ const parseBackendDate = (dateString: string, fieldName: string, sessionId?: num
 
 // API helper functions for chat history integration
 const apiHelpers = {
-    // Load chat sessions from API (without messages for faster initial load)
+    // Load chat sessions from cache or API (without messages for faster initial load)
+    // Uses cached sessions for instant page load, syncs with backend in background
     loadChatSessions: async (userId: string): Promise<ChatSession[]> => {
         try {
             const apiKey = getApiKey();
@@ -301,15 +302,17 @@ const apiHelpers = {
             }
 
             const chatAPI = new ChatHistoryAPI(apiKey, undefined, userData?.privy_user_id);
-            console.log('Chat sessions - Making API request to getSessions');
-            const apiSessions = await chatAPI.getSessions(50, 0);
+
+            // Use cache-aware loading: returns cached sessions immediately, syncs in background
+            console.log('Chat sessions - Loading sessions with cache support');
+            const apiSessions = await chatAPI.getSessionsWithCache(50, 0);
 
             // Map sessions WITHOUT loading messages (for faster initial load)
             const sessions = apiSessions.map((apiSession) => {
                 // Use helper function to safely parse dates
                 const createdAt = parseBackendDate(apiSession.created_at, 'created_at', apiSession.id);
                 const updatedAt = parseBackendDate(apiSession.updated_at, 'updated_at', apiSession.id);
-                
+
                 return {
                     id: `api-${apiSession.id}`,
                     title: apiSession.title,
@@ -379,13 +382,14 @@ const apiHelpers = {
         }
     },
 
-    // Create new chat session in API
+    // Create new chat session in API with caching support
+    // Stores model preference in cache for faster future sessions
     createChatSession: async (title: string, model?: string): Promise<ChatSession> => {
         try {
             const apiKey = getApiKey();
             console.log('Create session - API Key found:', !!apiKey);
             console.log('Create session - API Key preview:', apiKey ? `${apiKey.substring(0, 10)}...` : 'None');
-            
+
             if (!apiKey) {
                 console.warn('No API key found, creating local session');
                 // Fallback to local session
@@ -402,14 +406,21 @@ const apiHelpers = {
             }
 
             const chatAPI = new ChatHistoryAPI(apiKey, undefined, getUserData()?.privy_user_id);
-            console.log('Create session - Making API request to createSession');
+
+            // Cache the model preference for faster future sessions
+            if (model) {
+                console.log('Create session - Caching default model:', model);
+                chatAPI.cacheDefaultModel(model);
+            }
+
+            console.log('Create session - Making API request to createSession (with retry support)');
             const apiSession = await chatAPI.createSession(title, model);
-            
+
             // Use helper function to safely parse dates
             const createdAt = parseBackendDate(apiSession.created_at, 'created_at', apiSession.id);
             const updatedAt = parseBackendDate(apiSession.updated_at, 'updated_at', apiSession.id);
-            
-            return {
+
+            const newSession = {
                 id: `api-${apiSession.id}`,
                 title: apiSession.title,
                 startTime: createdAt, // Use created_at as startTime for consistency
@@ -419,6 +430,11 @@ const apiHelpers = {
                 apiSessionId: apiSession.id,
                 messages: []
             };
+
+            // Cache the new session for instant recall on next page load
+            chatAPI.optimisticAddSession(apiSession);
+
+            return newSession;
         } catch (error) {
             console.error('Failed to create chat session in API:', error);
             // Fallback to local session

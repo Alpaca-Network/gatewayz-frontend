@@ -1,8 +1,22 @@
 // Chat History API Types and Interfaces
 import { API_BASE_URL } from './config';
 import { TIMEOUT_CONFIG, createTimeoutController, withTimeoutAndRetry } from './timeout-config';
+<<<<<<< HEAD
 import { messageBatcher, type BatchedMessage } from './message-batcher';
 import { debounce } from './utils';
+=======
+import { getUserData, AUTH_REFRESH_EVENT } from './api';
+import {
+  getCachedSessions,
+  setCachedSessions,
+  getCachedDefaultModel,
+  setCachedDefaultModel,
+  addCachedSession,
+  updateCachedSession,
+  removeCachedSession,
+  clearSessionCache
+} from './session-cache';
+>>>>>>> refs/remotes/origin/master
 
 export interface ChatMessage {
   id: number;
@@ -158,13 +172,66 @@ export class ChatHistoryAPI {
   }
 
   /**
-   * Creates a new chat session
+   * Creates a new chat session with automatic retry on timeout/network errors
    */
   async createSession(title?: string, model?: string): Promise<ChatSession> {
-    const result = await this.makeRequest<ChatSession>('POST', '/sessions', {
-      title: title || `Chat ${new Date().toLocaleString()}`,
-      model: model || 'openai/gpt-3.5-turbo'
-    }, TIMEOUT_CONFIG.chat.sessionCreate);
+    const sessionTitle = title || `Chat ${new Date().toLocaleString()}`;
+    const sessionModel = model || 'openai/gpt-3.5-turbo';
+
+    // Use withTimeoutAndRetry for automatic retry on transient failures
+    const result = await withTimeoutAndRetry<ApiResponse<ChatSession>>(
+      async (signal) => {
+        const { controller, timeoutId } = createTimeoutController(TIMEOUT_CONFIG.chat.sessionCreate);
+
+        try {
+          const response = await fetch(`${this.baseUrl}/sessions`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${this.apiKey}`,
+              'Content-Type': 'application/json',
+              'Connection': 'keep-alive'
+            },
+            body: JSON.stringify({
+              title: sessionTitle,
+              model: sessionModel
+            }),
+            signal: controller.signal
+          });
+
+          clearTimeout(timeoutId);
+
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || `HTTP ${response.status}: ${response.statusText}`);
+          }
+
+          return await response.json();
+        } catch (error) {
+          clearTimeout(timeoutId);
+          if (error instanceof Error && error.name === 'AbortError') {
+            throw new Error(`Request timed out after ${TIMEOUT_CONFIG.chat.sessionCreate / 1000} seconds. Please try again.`);
+          }
+          throw error;
+        }
+      },
+      {
+        timeout: TIMEOUT_CONFIG.chat.sessionCreate,
+        maxRetries: 3,
+        shouldRetry: (error) => {
+          // Retry on timeouts and network errors
+          if (error instanceof Error) {
+            return error.name === 'AbortError' ||
+                   error.message.includes('timeout') ||
+                   error.message.includes('network');
+          }
+          return false;
+        },
+        onRetry: (attempt, error) => {
+          console.log(`[Session Creation Retry] Attempt ${attempt} failed:`, error);
+        }
+      }
+    );
+
     return result.data!;
   }
 
@@ -459,6 +526,79 @@ export class ChatHistoryAPI {
   async getStats(): Promise<ChatStats> {
     const result = await this.makeRequest<ChatStats>('GET', '/stats');
     return result.data!;
+  }
+
+  /**
+   * Cache-aware session loading
+   * Returns cached sessions immediately, syncs with backend in background
+   */
+  async getSessionsWithCache(limit: number = 50, offset: number = 0): Promise<ChatSession[]> {
+    // Return cached sessions immediately for instant UI
+    const cached = getCachedSessions();
+    if (cached.length > 0) {
+      // Trigger background sync in non-blocking way
+      this.getSessions(limit, offset)
+        .then(sessions => {
+          // Update cache with fresh data
+          setCachedSessions(sessions);
+        })
+        .catch(error => {
+          console.warn('[ChatHistoryAPI] Background sync failed:', error);
+          // Silently fail - we already have cached data to show
+        });
+
+      return cached;
+    }
+
+    // No cache, fetch from backend
+    const sessions = await this.getSessions(limit, offset);
+
+    // Cache the result for next time
+    setCachedSessions(sessions);
+
+    return sessions;
+  }
+
+  /**
+   * Get cached default model for new sessions
+   */
+  getCachedDefaultModel(): string {
+    return getCachedDefaultModel() || 'openai/gpt-3.5-turbo';
+  }
+
+  /**
+   * Store user's model preference in cache
+   */
+  cacheDefaultModel(model: string): void {
+    setCachedDefaultModel(model);
+  }
+
+  /**
+   * Add optimistic session to cache (before backend confirmation)
+   */
+  optimisticAddSession(session: ChatSession): void {
+    addCachedSession(session);
+  }
+
+  /**
+   * Update optimistic session in cache
+   */
+  optimisticUpdateSession(sessionId: number, updates: Partial<ChatSession>): void {
+    updateCachedSession(sessionId, updates);
+  }
+
+  /**
+   * Remove session from cache
+   */
+  removeCachedSession(sessionId: number): void {
+    removeCachedSession(sessionId);
+  }
+
+  /**
+   * Clear entire session cache (e.g., on logout)
+   */
+  clearCache(): void {
+    clearSessionCache();
   }
 }
 
