@@ -62,10 +62,21 @@ export async function POST(req: NextRequest) {
       });
 
       // Get the amount of credits and user info from metadata
-      const credits = session.metadata?.credits;
-      const userId = session.metadata?.userId || session.metadata?.user_id; // Support both userId and user_id
+      const credits = session.metadata?.credits || session.metadata?.credits_cents;
+      const userId = session.metadata?.userId || session.metadata?.user_id;
+      const sessionId = session.metadata?.session_id || session.id;
       const paymentId = session.metadata?.payment_id;
       const userEmail = session.metadata?.userEmail || session.customer_email || session.customer_details?.email;
+
+      // Log full metadata for debugging
+      console.log('Checkout session metadata:', {
+        metadataKeys: Object.keys(session.metadata || {}),
+        session_id: sessionId,
+        user_id: userId,
+        credits,
+        payment_id: paymentId,
+        customer_email: userEmail,
+      });
 
       if (!credits) {
         console.warn('No credits found in session metadata for checkout session', session.id);
@@ -89,22 +100,29 @@ export async function POST(req: NextRequest) {
 
       try {
         // Call your backend API to credit the user
+        // Parse credits - handle both cents and credits
+        const creditsAmount = typeof credits === 'string' ? parseInt(credits) : credits;
+
+        const requestPayload = {
+          user_id: userId ? parseInt(userId) : undefined,
+          email: userEmail,
+          credits: creditsAmount,
+          transaction_type: 'purchase',
+          description: `Stripe payment - ${credits} credits`,
+          stripe_session_id: session.id,
+          payment_id: paymentId ? parseInt(paymentId) : undefined,
+          amount: session.amount_total ? session.amount_total / 100 : undefined, // Convert cents to dollars
+          stripe_payment_intent: session.payment_intent as string,
+        };
+
+        console.log('Sending credit request to backend:', requestPayload);
+
         const response = await fetch(`${API_BASE_URL}/user/credits`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            user_id: userId ? parseInt(userId) : undefined,
-            email: userEmail,
-            credits: parseInt(credits),
-            transaction_type: 'purchase',
-            description: `Stripe payment - ${credits} credits`,
-            stripe_session_id: session.id,
-            payment_id: paymentId ? parseInt(paymentId) : undefined,
-            amount: session.amount_total ? session.amount_total / 100 : undefined, // Convert cents to dollars
-            stripe_payment_intent: session.payment_intent as string,
-          }),
+          body: JSON.stringify(requestPayload),
         });
 
         if (!response.ok) {
@@ -115,6 +133,7 @@ export async function POST(req: NextRequest) {
             userId,
             credits,
             sessionId: session.id,
+            requestPayload,
           });
           // Still return 200 to Stripe to prevent infinite retries
           return NextResponse.json(
