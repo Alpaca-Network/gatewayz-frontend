@@ -31,10 +31,10 @@ interface ModelRecord {
   provider_slug: string;
   source_gateways: string[];
   context_length: number;
-  pricing: {
-    prompt: string;
-    completion: string;
-  };
+  pricing?: {
+    prompt?: string | number | null;
+    completion?: string | number | null;
+  } | null;
   architecture: {
     input_modalities: string[];
     output_modalities: string[];
@@ -292,11 +292,16 @@ class ModelSyncService {
    * Check if two models are equal (for change detection)
    */
   private modelsEqual(a: ModelRecord, b: ModelRecord): boolean {
+    const pricingPromptA = a.pricing?.prompt ?? null;
+    const pricingPromptB = b.pricing?.prompt ?? null;
+    const pricingCompletionA = a.pricing?.completion ?? null;
+    const pricingCompletionB = b.pricing?.completion ?? null;
+
     return (
       a.name === b.name &&
       a.context_length === b.context_length &&
-      a.pricing.prompt === b.pricing.prompt &&
-      a.pricing.completion === b.pricing.completion &&
+      pricingPromptA === pricingPromptB &&
+      pricingCompletionA === pricingCompletionB &&
       JSON.stringify(a.architecture) === JSON.stringify(b.architecture) &&
       JSON.stringify(a.supported_parameters) === JSON.stringify(b.supported_parameters)
     );
