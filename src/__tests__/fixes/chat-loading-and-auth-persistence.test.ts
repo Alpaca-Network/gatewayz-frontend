@@ -15,8 +15,8 @@ describe('Chat Loading and Auth Persistence Fixes', () => {
       expect(TIMEOUT_CONFIG.chat.messagesSave).toBe(10000);
     });
 
-    it('should have increased sessionCreate timeout to 15s', () => {
-      expect(TIMEOUT_CONFIG.chat.sessionCreate).toBe(15000);
+    it('should have increased sessionCreate timeout to 30s', () => {
+      expect(TIMEOUT_CONFIG.chat.sessionCreate).toBe(30000);
     });
 
     it('should have increased sessionUpdate timeout to 15s', () => {
@@ -43,8 +43,9 @@ describe('Chat Loading and Auth Persistence Fixes', () => {
         TIMEOUT_CONFIG.chat.sessionCreate
       );
 
-      // sessionDelete should be longest as it's the most expensive
-      expect(TIMEOUT_CONFIG.chat.sessionDelete).toBeGreaterThan(
+      // sessionDelete should be longest or equal as it's similarly expensive
+      // After timeout increase, sessionDelete (30s) >= sessionCreate (30s)
+      expect(TIMEOUT_CONFIG.chat.sessionDelete).toBeGreaterThanOrEqual(
         TIMEOUT_CONFIG.chat.sessionCreate
       );
     });
@@ -84,13 +85,13 @@ describe('Chat Loading and Auth Persistence Fixes', () => {
       // in the localStorage callback chain, preventing the auth context from
       // detecting an existing key and skipping the sync via deduplication logic.
 
-      // The test verifies the timeout is set correctly
-      expect(TIMEOUT_CONFIG.chat.sessionCreate).toBe(15000);
+      // The test verifies the timeout is set correctly (30s for session creation)
+      expect(TIMEOUT_CONFIG.chat.sessionCreate).toBe(30000);
     });
 
     it('should use unified timeout configuration in updateSession', () => {
       // Verifies that updateSession uses TIMEOUT_CONFIG instead of hardcoded value
-      // This prevents timeouts from being too aggressive
+      // This prevents timeouts from being too aggressive (15s for session update)
       expect(TIMEOUT_CONFIG.chat.sessionUpdate).toBe(15000);
     });
   });
@@ -123,9 +124,9 @@ describe('Chat Loading and Auth Persistence Fixes', () => {
 
   describe('Session Update Consistency', () => {
     it('should use consistent timeout across all session operations', () => {
-      // Both sessionCreate and sessionUpdate should have the same timeout
-      // since they're similar operations
-      expect(TIMEOUT_CONFIG.chat.sessionCreate).toBe(
+      // sessionCreate (30s) should be >= sessionUpdate (15s)
+      // Creation may take longer due to retry logic and backend initialization
+      expect(TIMEOUT_CONFIG.chat.sessionCreate).toBeGreaterThanOrEqual(
         TIMEOUT_CONFIG.chat.sessionUpdate
       );
     });
@@ -185,8 +186,9 @@ describe('Chat Loading and Auth Persistence Fixes', () => {
 
   describe('Performance and UX Implications', () => {
     it('should not make timeouts so large that UX suffers', () => {
-      // 15 seconds is the max we want users to wait
-      expect(TIMEOUT_CONFIG.chat.sessionCreate).toBeLessThanOrEqual(15000);
+      // 30 seconds for session creation (with retries it may take longer)
+      // 15 seconds for session updates and message saves
+      expect(TIMEOUT_CONFIG.chat.sessionCreate).toBeLessThanOrEqual(30000);
       expect(TIMEOUT_CONFIG.chat.sessionUpdate).toBeLessThanOrEqual(15000);
       expect(TIMEOUT_CONFIG.chat.messagesSave).toBeLessThanOrEqual(15000);
     });

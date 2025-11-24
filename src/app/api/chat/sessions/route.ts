@@ -86,35 +86,60 @@ export async function POST(request: NextRequest) {
         const url = `${CHAT_HISTORY_API_URL}/v1/chat/sessions`;
         console.log(`Chat sessions API - Creating session at: ${url}`);
 
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            title: title || `Chat ${new Date().toLocaleString()}`,
-            model: model || 'openai/gpt-3.5-turbo'
-          })
-        });
+        // Create abort controller with 25s timeout (less than frontend 30s timeout)
+        // to prevent proxy from hanging indefinitely
+        const controller = new AbortController();
+        const timeoutMs = 25000;
+        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-        span.setAttribute('backend_status', response.status);
-        console.log(`Chat sessions API - Create response status: ${response.status}`);
+        try {
+          const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${apiKey}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              title: title || `Chat ${new Date().toLocaleString()}`,
+              model: model || 'openai/gpt-3.5-turbo'
+            }),
+            signal: controller.signal
+          });
 
-        if (!response.ok) {
-          span.setAttribute('error', true);
-          span.setAttribute('error_type', 'backend_error');
-          const error = await response.json().catch(() => ({}));
-          return NextResponse.json(
-            { error: error.detail || 'Failed to create session' },
-            { status: response.status }
-          );
+          clearTimeout(timeoutId);
+          span.setAttribute('backend_status', response.status);
+          console.log(`Chat sessions API - Create response status: ${response.status}`);
+
+          if (!response.ok) {
+            span.setAttribute('error', true);
+            span.setAttribute('error_type', 'backend_error');
+            const error = await response.json().catch(() => ({}));
+            return NextResponse.json(
+              { error: error.detail || 'Failed to create session' },
+              { status: response.status }
+            );
+          }
+
+          const data = await response.json();
+          span.setStatus('ok' as any);
+          span.setAttribute('session_id', data?.id?.toString() || 'unknown');
+          return NextResponse.json(data);
+        } catch (error) {
+          clearTimeout(timeoutId);
+
+          // Handle timeout specifically
+          if (error instanceof Error && error.name === 'AbortError') {
+            span.setAttribute('error', true);
+            span.setAttribute('error_type', 'proxy_timeout');
+            console.error(`Chat sessions API - Proxy timeout after ${timeoutMs}ms`);
+            return NextResponse.json(
+              { error: 'Session creation timed out. Please try again.' },
+              { status: 504 }
+            );
+          }
+
+          throw error;
         }
-
-        const data = await response.json();
-        span.setStatus('ok' as any);
-        span.setAttribute('session_id', data?.id?.toString() || 'unknown');
-        return NextResponse.json(data);
       } catch (error) {
         span.setStatus('error' as any);
         span.setAttribute('error', true);
