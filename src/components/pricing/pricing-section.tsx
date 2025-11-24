@@ -137,6 +137,7 @@ export function PricingSection() {
           userEmail: userData.email,
           userId: userData.user_id,
           apiKey: userData.api_key,
+          tier: tier.id, // Include tier name for Stripe metadata
         }),
       });
 

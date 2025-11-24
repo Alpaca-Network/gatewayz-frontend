@@ -234,29 +234,42 @@ function CreditsPageContent() {
       const fetchFreshData = async () => {
         try {
           let currentCredits: number | undefined;
-          // Fetch credits
+          let tierUpdated = false;
+
+          // Fetch user profile with tier and subscription info
           const response = await makeAuthenticatedRequest(`${API_BASE_URL}/user/profile`);
           if (response.ok) {
             const data = await response.json();
             if (data.credits !== undefined) {
               currentCredits = data.credits;
               setCredits(data.credits);
-              // Update localStorage with fresh credits, tier, and subscription info
-              const userData = getUserData();
-              if (userData) {
-                saveUserData({
-                  ...userData,
-                  credits: data.credits,
-                  // Normalize tier to lowercase to match frontend expectations
-                  tier: data.tier?.toLowerCase(),
-                  tier_display_name: data.tier_display_name,
-                  subscription_status: data.subscription_status,
-                  subscription_end_date: data.subscription_end_date
-                });
+            }
+
+            // Update localStorage with fresh credits, tier, and subscription info
+            const userData = getUserData();
+            if (userData) {
+              const updatedUserData = {
+                ...userData,
+                credits: data.credits || userData.credits,
+                // Ensure tier is normalized to lowercase
+                tier: data.tier ? data.tier.toLowerCase() : userData.tier,
+                tier_display_name: data.tier_display_name || userData.tier_display_name,
+                subscription_status: data.subscription_status || userData.subscription_status,
+                subscription_end_date: data.subscription_end_date || userData.subscription_end_date
+              };
+
+              // Only save if we have valid tier information
+              if (updatedUserData.tier && updatedUserData.subscription_status === 'active') {
+                tierUpdated = true;
+                saveUserData(updatedUserData);
                 // Trigger a storage event manually since same-tab updates don't fire storage events
                 window.dispatchEvent(new Event('storage'));
+              } else if (!updatedUserData.tier) {
+                console.warn('Plan upgrade detected but tier field missing from backend response. Scheduling retry...');
               }
             }
+          } else {
+            console.error('Failed to fetch user profile after payment:', response.status);
           }
 
           // Fetch transactions
@@ -277,10 +290,40 @@ function CreditsPageContent() {
             }
           }
 
-          // Trigger auth refresh to update tier and subscription info
+          // Trigger auth refresh to update tier and subscription info in context
           requestAuthRefresh();
+
+          // If tier was not updated, retry after a short delay (backend might still be processing)
+          if (!tierUpdated) {
+            console.log('Scheduling tier verification retry in 2 seconds...');
+            setTimeout(async () => {
+              try {
+                const retryResponse = await makeAuthenticatedRequest(`${API_BASE_URL}/user/profile`);
+                if (retryResponse.ok) {
+                  const retryData = await retryResponse.json();
+                  if (retryData.tier && retryData.subscription_status === 'active') {
+                    const retryUserData = getUserData();
+                    if (retryUserData) {
+                      saveUserData({
+                        ...retryUserData,
+                        tier: retryData.tier.toLowerCase(),
+                        tier_display_name: retryData.tier_display_name,
+                        subscription_status: retryData.subscription_status,
+                        subscription_end_date: retryData.subscription_end_date
+                      });
+                      window.dispatchEvent(new Event('storage'));
+                      requestAuthRefresh();
+                      console.log('Tier updated on retry:', retryData.tier);
+                    }
+                  }
+                }
+              } catch (retryError) {
+                console.log('Tier verification retry failed:', retryError);
+              }
+            }, 2000);
+          }
         } catch (error) {
-          console.log('Could not fetch fresh data after payment');
+          console.error('Error fetching fresh data after payment:', error);
         }
       };
 
