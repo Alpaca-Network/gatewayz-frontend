@@ -1,10 +1,8 @@
 // Chat History API Types and Interfaces
 import { API_BASE_URL } from './config';
 import { TIMEOUT_CONFIG, createTimeoutController, withTimeoutAndRetry } from './timeout-config';
-<<<<<<< HEAD
 import { messageBatcher, type BatchedMessage } from './message-batcher';
 import { debounce } from './utils';
-=======
 import { getUserData, AUTH_REFRESH_EVENT } from './api';
 import {
   getCachedSessions,
@@ -16,7 +14,6 @@ import {
   removeCachedSession,
   clearSessionCache
 } from './session-cache';
->>>>>>> refs/remotes/origin/master
 
 export interface ChatMessage {
   id: number;
