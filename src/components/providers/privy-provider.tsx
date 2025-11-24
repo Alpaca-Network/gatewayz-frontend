@@ -3,12 +3,16 @@
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
+import { usePathname, useSearchParams } from "next/navigation";
 import * as Sentry from "@sentry/nextjs";
 import { PrivyProvider } from "@privy-io/react-auth";
+import type { PrivyClientConfig } from "@privy-io/react-auth";
 import { base } from "viem/chains";
 import { RateLimitHandler } from "@/components/auth/rate-limit-handler";
 import { GatewayzAuthProvider } from "@/context/gatewayz-auth-context";
 import { PreviewHostnameInterceptor } from "@/components/auth/preview-hostname-interceptor";
+import { isVercelPreviewDeployment } from "@/lib/preview-hostname-handler";
+import { buildPreviewSafeRedirectUrl, DEFAULT_PREVIEW_REDIRECT_ORIGIN } from "@/lib/preview-oauth-redirect";
 import { waitForLocalStorageAccess, canUseLocalStorage } from "@/lib/safe-storage";
 
 interface PrivyProviderWrapperProps {
@@ -19,6 +23,11 @@ interface PrivyProviderWrapperProps {
 function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapperProps) {
   const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID || "clxxxxxxxxxxxxxxxxxxx";
   const [showRateLimit, setShowRateLimit] = useState(false);
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const searchParamsKey = searchParams?.toString() ?? "";
+  const previewRedirectOrigin =
+    process.env.NEXT_PUBLIC_PRIVY_OAUTH_REDIRECT_ORIGIN?.trim() || DEFAULT_PREVIEW_REDIRECT_ORIGIN;
 
   useEffect(() => {
     if (!process.env.NEXT_PUBLIC_PRIVY_APP_ID) {
@@ -124,6 +133,48 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
     []
   );
 
+  const previewSafeOAuthRedirectUrl = useMemo(() => {
+    if (typeof window === "undefined") {
+      return undefined;
+    }
+
+    if (!isVercelPreviewDeployment()) {
+      return undefined;
+    }
+
+    if (!previewRedirectOrigin) {
+      return undefined;
+    }
+
+    return buildPreviewSafeRedirectUrl({
+      currentHref: window.location.href,
+      targetOrigin: previewRedirectOrigin,
+    });
+  }, [pathname, searchParamsKey, previewRedirectOrigin]);
+
+  const privyConfig = useMemo<PrivyClientConfig>(() => {
+    const config: PrivyClientConfig = {
+      loginMethods: ["email", "google", "github"],
+      appearance: {
+        theme: "light",
+        accentColor: "#000000",
+        logo: "/logo_black.svg",
+      },
+      embeddedWallets: {
+        ethereum: {
+          createOnLogin: "users-without-wallets",
+        },
+      },
+      defaultChain: base,
+    };
+
+    if (previewSafeOAuthRedirectUrl) {
+      config.customOAuthRedirectUrl = previewSafeOAuthRedirectUrl;
+    }
+
+    return config;
+  }, [previewSafeOAuthRedirectUrl]);
+
   const renderChildren = children;
 
   return (
@@ -131,20 +182,7 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
       <RateLimitHandler show={showRateLimit} onDismiss={() => setShowRateLimit(false)} />
       <PrivyProvider
         appId={appId}
-        config={{
-          loginMethods: ["email", "google", "github"],
-          appearance: {
-            theme: "light",
-            accentColor: "#000000",
-            logo: "/logo_black.svg",
-          },
-          embeddedWallets: {
-            ethereum: {
-              createOnLogin: "users-without-wallets",
-            },
-          },
-          defaultChain: base,
-        }}
+        config={privyConfig}
       >
         <PreviewHostnameInterceptor />
         <GatewayzAuthProvider onAuthError={handleAuthError}>{renderChildren}</GatewayzAuthProvider>
