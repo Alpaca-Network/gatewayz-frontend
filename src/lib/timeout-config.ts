@@ -14,7 +14,7 @@ export const TIMEOUT_CONFIG = {
 
   // Chat session timeouts
   chat: {
-    sessionCreate: 15000,    // 15 seconds to create a session
+    sessionCreate: 30000,    // 30 seconds to create a session (increased from 15s for backend performance under load)
     sessionUpdate: 15000,    // 15 seconds to update a session
     sessionDelete: 30000,    // 30 seconds to delete a session
     messagesSave: 10000,     // 10 seconds to save a message (was 5s, too aggressive)
