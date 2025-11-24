@@ -32,7 +32,9 @@
       "Bash(chmod:*)",
       "Bash(./refactor-api-routes.sh)",
       "Bash(npm run build)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(curl:*)",
+      "Bash(kill:*)"
     ],
     "deny": [],
     "ask": []

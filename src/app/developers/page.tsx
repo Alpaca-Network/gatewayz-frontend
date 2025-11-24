@@ -137,10 +137,8 @@ export default function DevelopersPage() {
         const fetchData = async () => {
             try {
                 setLoading(true);
-                const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
-
-                // Fetch ranking models
-                const rankingUrl = `${apiBaseUrl}/ranking/models`;
+                // Fetch ranking models using Next.js API proxy to avoid CORS issues
+                const rankingUrl = '/api/ranking/models';
                 console.log('Fetching ranking models from:', rankingUrl);
                 const rankingResponse = await fetch(rankingUrl);
                 console.log('Ranking response status:', rankingResponse.status);
