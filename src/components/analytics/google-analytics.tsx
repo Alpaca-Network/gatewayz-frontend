@@ -11,6 +11,7 @@ export function GoogleAnalytics() {
     <>
       {/* Google Tag Manager Container - loads GTM, which manages GA via tags */}
       <Script
+        id="gtm-container"
         strategy="afterInteractive"
         dangerouslySetInnerHTML={{
           __html: `(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
