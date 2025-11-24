@@ -347,11 +347,8 @@ export async function* streamChatResponse(
   let buffer = '';
   let chunkCount = 0;
   let receivedDoneSignal = false;
-<<<<<<< HEAD
-  let isFirstContentChunk = true;
-=======
   let firstChunkReceived = false;
->>>>>>> refs/remotes/origin/master
+  let isFirstContentChunk = true; // Track first content token for TTFT
 
   devLog('[Streaming] Stream reader obtained successfully');
   devLog('[Streaming] Starting to read stream...');

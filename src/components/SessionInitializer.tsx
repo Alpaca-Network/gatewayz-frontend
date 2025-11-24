@@ -44,7 +44,7 @@ async function fetchUserDataOptimized(token: string): Promise<UserData | null> {
   try {
     console.log("[SessionInit] Fetching user data from backend with token:", token.substring(0, 20) + "...");
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout for user fetch
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout for user fetch
 
     const userResponse = await fetch("/api/user/me", {
       headers: {
@@ -71,10 +71,23 @@ async function fetchUserDataOptimized(token: string): Promise<UserData | null> {
     } else {
       const responseText = await userResponse.text().catch(() => "(unable to read response)");
       console.error("[SessionInit] Failed to fetch user data. Status:", userResponse.status, "Response:", responseText.substring(0, 200));
+
+      // Clear invalid token from storage if we get 401/403
+      if (userResponse.status === 401 || userResponse.status === 403) {
+        console.warn("[SessionInit] Token appears invalid (401/403), will let auth context handle it");
+      }
+
       return null;
     }
   } catch (error) {
-    console.error("[SessionInit] Error fetching user data:", error);
+    const errorMsg = error instanceof Error ? error.message : String(error);
+
+    if (errorMsg.includes("aborted") || errorMsg.includes("timeout")) {
+      console.error("[SessionInit] User data fetch timeout - network may be slow");
+    } else {
+      console.error("[SessionInit] Error fetching user data:", error);
+    }
+
     // Return null on timeout or network error - context will handle it
     return null;
   }
@@ -112,9 +125,6 @@ export function SessionInitializer() {
       // Errors during actual initialization will be caught below
       console.error("[SessionInit] Error checking session transfer params:", e);
     }
-
-    // Mark as initialized BEFORE async operations to prevent duplicate initialization
-    initializedRef.current = true;
 
     async function initializeSession() {
       // Check for URL params from session transfer
@@ -252,10 +262,16 @@ export function SessionInitializer() {
 
     }
 
+    // Mark as initialized AFTER setting up async operations
+    // This ensures we don't try to initialize twice even if component re-renders
+    initializedRef.current = true;
+
     initializeSession().catch((error) => {
       console.error("[SessionInit] Error initializing session:", error);
+      // Reset initialized flag on error so it can be retried
+      initializedRef.current = false;
     });
-  }, [refresh, router]);
+  }, [refresh, router, privyReady]);
 
   useEffect(() => {
     if (actionProcessedRef.current) {
