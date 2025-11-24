@@ -89,17 +89,31 @@ const MarkdownRenderer = ({ children, className }: { children: string; className
 
         const loadPlugins = async () => {
             try {
-                const [gfm, math, katex] = await Promise.all([
-                    import('remark-gfm'),
-                    import('remark-math'),
-                    import('rehype-katex')
-                ]);
+                // Check if content contains math notation before loading expensive libraries
+                const hasMath = children && (children.includes('$') || children.includes('\\(') || children.includes('\\['));
+
+                // Always load GFM (required for markdown)
+                const gfm = await import('remark-gfm');
+
+                let remarkPlugins: any[] = [gfm.default];
+                let rehypePlugins: any[] = [];
+
+                // Only load math libraries if content actually contains math
+                if (hasMath) {
+                    const [math, katex] = await Promise.all([
+                        import('remark-math'),
+                        import('rehype-katex')
+                    ]);
+
+                    remarkPlugins.push(math.default);
+                    rehypePlugins.push(katex.default);
+                }
 
                 if (!isMounted) return;
 
                 setPlugins({
-                    remarkPlugins: [gfm.default, math.default],
-                    rehypePlugins: [katex.default]
+                    remarkPlugins,
+                    rehypePlugins
                 });
             } catch (error) {
                 console.error('[MarkdownRenderer] Failed to load markdown plugins', error);
@@ -117,7 +131,7 @@ const MarkdownRenderer = ({ children, className }: { children: string; className
         return () => {
             isMounted = false;
         };
-    }, []);
+    }, [children]);
 
     if (!plugins) {
         return <div className={`${className} animate-pulse`}>{children}</div>;
