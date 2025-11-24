@@ -67,6 +67,8 @@ export async function POST(req: NextRequest) {
       const sessionId = session.metadata?.session_id || session.id;
       const paymentId = session.metadata?.payment_id;
       const userEmail = session.metadata?.userEmail || session.customer_email || session.customer_details?.email;
+      const tier = session.metadata?.tier; // Capture tier for subscription tracking
+      const checkoutType = session.metadata?.checkout_type; // 'subscription' or 'one_time'
 
       // Log full metadata for debugging
       console.log('Checkout session metadata:', {
@@ -76,6 +78,8 @@ export async function POST(req: NextRequest) {
         credits,
         payment_id: paymentId,
         customer_email: userEmail,
+        tier,
+        checkout_type: checkoutType,
       });
 
       if (!credits) {
@@ -113,6 +117,9 @@ export async function POST(req: NextRequest) {
           payment_id: paymentId ? parseInt(paymentId) : undefined,
           amount: session.amount_total ? session.amount_total / 100 : undefined, // Convert cents to dollars
           stripe_payment_intent: session.payment_intent as string,
+          // Include tier information for subscription tracking
+          ...(tier && { tier }),
+          ...(checkoutType && { checkout_type: checkoutType }),
         };
 
         console.log('Sending credit request to backend:', requestPayload);

@@ -39,13 +39,23 @@ export const getUserTier = (userData: UserData | null): UserTier => {
 
   // If user has explicit tier from backend, use it
   if (userData.tier) {
-    return userData.tier;
+    const normalizedTier = (userData.tier as string).toLowerCase() as UserTier;
+    // Validate the tier is a recognized value
+    if (normalizedTier === 'basic' || normalizedTier === 'pro' || normalizedTier === 'max') {
+      return normalizedTier;
+    }
   }
 
   // Fallback to determining tier from subscription status
+  // Note: When tier is missing from backend response, we cannot safely determine if user is 'pro' or 'max'
+  // The backend should always return explicit tier for subscribed users
   if (userData.subscription_status === 'active') {
-    // This would need backend to provide tier info, defaulting to pro
-    // In production, the backend should always return tier for subscription users
+    // Cannot safely determine tier without explicit backend data
+    // Default to 'pro' for backward compatibility, but log this edge case
+    console.warn(
+      'getUserTier: User has active subscription but no tier field. Defaulting to pro. User ID may need manual verification.',
+      { subscription_status: userData.subscription_status }
+    );
     return 'pro';
   }
 
