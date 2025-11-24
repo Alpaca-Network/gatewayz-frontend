@@ -33,6 +33,20 @@ type AuthError = {
   raw?: unknown;
 };
 
+// Auth state machine for clear state transitions
+const AUTH_STATE_TRANSITIONS: Record<AuthStatus, AuthStatus[]> = {
+  idle: ["unauthenticated", "authenticating", "authenticated"],
+  unauthenticated: ["authenticating", "authenticated"],
+  authenticating: ["authenticated", "unauthenticated", "error"],
+  authenticated: ["authenticating", "unauthenticated", "error"],
+  error: ["unauthenticated", "authenticating"],
+};
+
+// Auth retry configuration
+const MAX_AUTH_RETRIES = 3;
+const AUTHENTICATING_TIMEOUT_MS = 30000; // 30 seconds
+const TOKEN_TIMEOUT_BASE_MS = 5000; // Base 5 seconds, adaptive up to 10s
+
 interface GatewayzAuthContextValue {
   status: AuthStatus;
   apiKey: string | null;
@@ -174,6 +188,52 @@ export function GatewayzAuthProvider({
   const upgradeAttemptedRef = useRef(false);
   const upgradePromiseRef = useRef<Promise<void> | null>(null);
   const betaRedirectAttemptedRef = useRef(false);
+  const authRetryCountRef = useRef(0);
+  const authTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Helper function to validate and set auth status with state machine
+  const setAuthStatus = useCallback((newStatus: AuthStatus, reason?: string) => {
+    setStatus((currentStatus) => {
+      const allowedTransitions = AUTH_STATE_TRANSITIONS[currentStatus];
+
+      if (!allowedTransitions.includes(newStatus)) {
+        console.warn(
+          `[Auth] Invalid state transition: ${currentStatus} -> ${newStatus}${reason ? ` (${reason})` : ""}. Skipping.`
+        );
+        return currentStatus; // Don't change status
+      }
+
+      console.log(
+        `[Auth] State transition: ${currentStatus} -> ${newStatus}${reason ? ` (${reason})` : ""}`
+      );
+      return newStatus;
+    });
+  }, []);
+
+  // Clear authenticating timeout guard
+  const clearAuthTimeout = useCallback(() => {
+    if (authTimeoutRef.current) {
+      clearTimeout(authTimeoutRef.current);
+      authTimeoutRef.current = null;
+    }
+  }, []);
+
+  // Set authenticating timeout guard
+  const setAuthTimeout = useCallback(() => {
+    clearAuthTimeout();
+    authTimeoutRef.current = setTimeout(() => {
+      console.error("[Auth] Authentication timeout - stuck in authenticating state for 30s");
+      setAuthStatus("error", "timeout");
+      setError("Authentication timeout - please try again");
+
+      Sentry.captureMessage("Authentication timeout - stuck in authenticating state", {
+        level: 'error',
+        tags: {
+          auth_error: 'authenticating_timeout',
+        },
+      });
+    }, AUTHENTICATING_TIMEOUT_MS);
+  }, [clearAuthTimeout, setAuthStatus]);
 
   const updateStateFromStorage = useCallback(() => {
     const key = getApiKey();
@@ -181,9 +241,9 @@ export function GatewayzAuthProvider({
     setApiKey(key);
     setUserData(stored);
     if (key && stored) {
-      setStatus("authenticated");
+      setAuthStatus("authenticated", "from storage");
     }
-  }, []);
+  }, [setAuthStatus]);
 
   const clearStoredCredentials = useCallback(() => {
     removeApiKey();
@@ -191,7 +251,9 @@ export function GatewayzAuthProvider({
     setUserData(null);
     lastSyncedPrivyIdRef.current = null;
     upgradeAttemptedRef.current = false;
-  }, []);
+    authRetryCountRef.current = 0;
+    clearAuthTimeout();
+  }, [clearAuthTimeout]);
 
   const upgradeApiKeyIfNeeded = useCallback(
     async (authData: AuthResponse) => {
@@ -478,15 +540,33 @@ export function GatewayzAuthProvider({
 
       if (!authenticated || !user) {
         clearStoredCredentials();
-        setStatus(privyReady ? "unauthenticated" : "idle");
+        setAuthStatus(privyReady ? "unauthenticated" : "idle", "no privy user");
         syncPromiseRef.current = null;
+        return;
+      }
+
+      // Check retry limit
+      if (authRetryCountRef.current >= MAX_AUTH_RETRIES && !options?.force) {
+        console.error("[Auth] Max retry limit reached, aborting sync");
+        setAuthStatus("error", "max retries");
+        setError(`Authentication failed after ${MAX_AUTH_RETRIES} attempts. Please try again later.`);
+
+        Sentry.captureMessage("Authentication max retry limit reached", {
+          level: 'error',
+          tags: {
+            auth_error: 'max_retries_exceeded',
+          },
+          extra: {
+            retry_count: authRetryCountRef.current,
+          },
+        });
         return;
       }
 
       // Skip if we've already synced with this Privy user and have valid credentials
       if (!options?.force && lastSyncedPrivyIdRef.current === user.id && apiKey) {
         console.log("[Auth] Already synced with this Privy user, skipping sync");
-        setStatus("authenticated");
+        setAuthStatus("authenticated", "already synced");
         return;
       }
 
@@ -494,6 +574,11 @@ export function GatewayzAuthProvider({
       if (syncPromiseRef.current && !options?.force) {
         console.log("[Auth] Sync already in flight, returning existing promise");
         return syncPromiseRef.current;
+      }
+
+      // Reset retry count on forced refresh
+      if (options?.force) {
+        authRetryCountRef.current = 0;
       }
 
       // Create new sync promise
@@ -507,8 +592,15 @@ export function GatewayzAuthProvider({
           return;
         }
 
-        setStatus("authenticating");
+        // Increment retry count
+        authRetryCountRef.current += 1;
+        console.log(`[Auth] Sync attempt ${authRetryCountRef.current}/${MAX_AUTH_RETRIES}`);
+
+        setAuthStatus("authenticating", `attempt ${authRetryCountRef.current}`);
         setError(null);
+
+        // Set timeout guard for stuck authenticating state
+        setAuthTimeout();
 
         // Add breadcrumb for auth sync start
         Sentry.addBreadcrumb({
@@ -517,20 +609,27 @@ export function GatewayzAuthProvider({
           level: 'debug',
           data: {
             force: options?.force ?? false,
+            retry_attempt: authRetryCountRef.current,
           },
         });
 
       try {
-        // Get token with timeout to prevent hanging
+        // Get token with adaptive timeout to prevent hanging
         const tokenPromise = getAccessToken();
         let token: string | null = null;
 
         try {
-          // Add a reasonable timeout (3 seconds) for token retrieval
+          // Adaptive timeout: 5-10 seconds based on network conditions
+          const tokenTimeoutMs = getAdaptiveTimeout(TOKEN_TIMEOUT_BASE_MS, {
+            maxMs: 10000, // Up to 10 seconds
+            mobileMultiplier: 1.8,
+            slowNetworkMultiplier: 2,
+          });
+
           token = await Promise.race([
             tokenPromise,
             new Promise<null>((_, reject) =>
-              setTimeout(() => reject(new Error("Token retrieval timeout")), 3000)
+              setTimeout(() => reject(new Error("Token retrieval timeout")), tokenTimeoutMs)
             )
           ]);
         } catch (tokenErr) {
@@ -606,7 +705,7 @@ export function GatewayzAuthProvider({
           console.error("[Auth] Backend auth failed with status", response.status);
           console.error("[Auth] Response text:", rawResponseText.substring(0, 500));
           clearStoredCredentials();
-          setStatus("error");
+          setAuthStatus("error", `backend status ${response.status}`);
           const authError: AuthError = { status: response.status, message: rawResponseText };
           setError(authError.message ?? `Authentication failed: ${response.status}`);
 
@@ -622,6 +721,7 @@ export function GatewayzAuthProvider({
                 response_status: response.status,
                 response_text: rawResponseText.substring(0, 500),
                 auth_method: (authBody as { auth_method?: string }).auth_method,
+                retry_attempt: authRetryCountRef.current,
               },
               level: 'error',
             }
@@ -639,7 +739,7 @@ export function GatewayzAuthProvider({
           console.error("[Auth] Parse error:", parseError instanceof Error ? parseError.message : String(parseError));
           console.error("[Auth] Response was:", rawResponseText.substring(0, 500));
           clearStoredCredentials();
-          setStatus("error");
+          setAuthStatus("error", "parse error");
           setError("Authentication failed: Invalid response format");
 
           // Capture JSON parse error to Sentry
@@ -652,6 +752,7 @@ export function GatewayzAuthProvider({
               extra: {
                 response_text: rawResponseText.substring(0, 500),
                 response_length: rawResponseText.length,
+                retry_attempt: authRetryCountRef.current,
               },
               level: 'error',
             }
@@ -674,7 +775,7 @@ export function GatewayzAuthProvider({
             console.error("[Auth] Backend auth response missing api_key field");
             console.error("[Auth] Response data was:", JSON.stringify(authData, null, 2).substring(0, 500));
             clearStoredCredentials();
-            setStatus("error");
+            setAuthStatus("error", "missing api key");
             setError("Authentication failed: No API key in response");
 
             // Capture missing API key error to Sentry
@@ -687,6 +788,7 @@ export function GatewayzAuthProvider({
                 extra: {
                   response_data: JSON.stringify(authData, null, 2).substring(0, 500),
                   response_keys: Object.keys(authData).join(', '),
+                  retry_attempt: authRetryCountRef.current,
                 },
                 level: 'error',
               }
@@ -698,6 +800,11 @@ export function GatewayzAuthProvider({
         }
 
         console.log("[Auth] Backend authentication successful:", authData);
+
+        // Clear timeout guard and reset retry count on success
+        clearAuthTimeout();
+        authRetryCountRef.current = 0;
+
         await handleAuthSuccessAsync(
           authData,
           (authBody as { is_new_user?: boolean }).is_new_user ?? false
@@ -715,7 +822,7 @@ export function GatewayzAuthProvider({
           // If it's just a wallet extension error, don't treat it as auth failure
           // The user can still authenticate with other methods (email, Google, GitHub)
           if (isWalletExtensionError) {
-            console.warn("[Auth] Wallet extension error (non-blocking), ignoring and maintaining current auth state");
+            console.warn("[Auth] Wallet extension error (non-blocking), maintaining current auth state");
 
             // Log wallet error to Sentry but as a warning (non-blocking)
             Sentry.captureMessage(`Wallet extension error during auth: ${errorMsg}`, {
@@ -733,14 +840,18 @@ export function GatewayzAuthProvider({
             const storedUser = getUserData();
             if (storedKey && storedUser && storedUser.user_id && storedUser.email) {
               console.log("[Auth] Valid credentials found despite wallet error - keeping authenticated");
-              setStatus("authenticated");
+              setAuthStatus("authenticated", "wallet error non-blocking");
+              clearAuthTimeout(); // Clear timeout if we're staying authenticated
+              authRetryCountRef.current = 0; // Reset retry count
+            } else {
+              // Show user-friendly error if we can't maintain auth
+              setError("Wallet extension error - please sign in with email or social login");
             }
-            // Otherwise, don't set error status - keep current status
             return;
           }
 
           clearStoredCredentials();
-          setStatus("error");
+          setAuthStatus("error", "backend sync exception");
           setError(err instanceof Error ? err.message : "Authentication failed");
 
           // Capture authentication error to Sentry
@@ -752,6 +863,7 @@ export function GatewayzAuthProvider({
               },
               extra: {
                 error_message: errorMsg,
+                retry_attempt: authRetryCountRef.current,
               },
               level: 'error',
             }
@@ -761,6 +873,7 @@ export function GatewayzAuthProvider({
         } finally {
           syncInFlightRef.current = false;
           syncPromiseRef.current = null;
+          // Note: Don't clear timeout here - it's cleared on success or kept on error
         }
       })();
 
@@ -783,7 +896,7 @@ export function GatewayzAuthProvider({
 
   useEffect(() => {
     if (!privyReady) {
-      setStatus("idle");
+      setAuthStatus("idle", "privy not ready");
       return;
     }
 
@@ -803,15 +916,15 @@ export function GatewayzAuthProvider({
       // If we have valid cached credentials, stay authenticated
       if (storedKey && storedUser && storedUser.user_id && storedUser.email) {
         console.log("[Auth] Privy not authenticated but cached credentials found - maintaining session");
-        setStatus("authenticated");
+        setAuthStatus("authenticated", "cached credentials");
       } else {
         // Only clear if we truly have no session
         clearStoredCredentials();
-        setStatus("unauthenticated");
+        setAuthStatus("unauthenticated", "no privy or cached session");
       }
       return;
     }
-  }, [authenticated, clearStoredCredentials, privyReady, syncWithBackend, user]);
+  }, [authenticated, clearStoredCredentials, privyReady, setAuthStatus, syncWithBackend, user]);
 
   useEffect(() => {
     const handler = () => {
@@ -842,8 +955,8 @@ export function GatewayzAuthProvider({
   const logout = useCallback(async () => {
     clearStoredCredentials();
     await privyLogout();
-    setStatus("unauthenticated");
-  }, [clearStoredCredentials, privyLogout]);
+    setAuthStatus("unauthenticated", "logout");
+  }, [clearStoredCredentials, privyLogout, setAuthStatus]);
 
   const contextValue = useMemo<GatewayzAuthContextValue>(
     () => ({

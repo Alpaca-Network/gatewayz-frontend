@@ -165,8 +165,8 @@ export default function OrganizationPage() {
   useEffect(() => {
     const fetchRankingModels = async () => {
         try {
-            const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
-            const response = await fetch(`${apiBaseUrl}/ranking/models`);
+            // Use Next.js API proxy to avoid CORS issues
+            const response = await fetch('/api/ranking/models');
             const data = await response.json();
 
             if (data.success && data.data) {

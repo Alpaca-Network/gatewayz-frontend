@@ -166,7 +166,8 @@ console.log(completion.choices[0].message);`,
     const fetchRankingModels = async () => {
       try {
         setIsLoadingModels(true);
-        const response = await fetch(`${API_BASE_URL}/ranking/models`, {
+        // Use Next.js API proxy to avoid CORS issues
+        const response = await fetch('/api/ranking/models', {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',

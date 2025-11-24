@@ -56,7 +56,8 @@ export default function StartApiPage() {
     const fetchModels = async () => {
       try {
         setLoadingModels(true);
-        const response = await fetch(`${API_BASE_URL}/ranking/models`, {
+        // Use Next.js API proxy to avoid CORS issues
+        const response = await fetch('/api/ranking/models', {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',

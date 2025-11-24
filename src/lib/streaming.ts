@@ -27,8 +27,15 @@ export interface StreamChunk {
   content?: string;
   reasoning?: string;
   done?: boolean;
-  status?: 'rate_limit_retry';
+  status?: 'rate_limit_retry' | 'first_token' | 'timing_info';
   retryAfterMs?: number;
+
+  // Performance timing metadata
+  timingMetadata?: {
+    backendTimeMs?: number;
+    networkTimeMs?: number;
+    totalTimeMs?: number;
+  };
 }
 
 const toPlainText = (input: unknown): string => {
@@ -313,6 +320,23 @@ export async function* streamChatResponse(
     );
   }
 
+  // Extract timing headers for performance tracking
+  const backendTimeStr = response.headers.get('X-Backend-Time');
+  const networkTimeStr = response.headers.get('X-Network-Time');
+  const totalTimeStr = response.headers.get('X-Response-Time');
+
+  if (backendTimeStr || networkTimeStr || totalTimeStr) {
+    // Yield timing metadata as first chunk (doesn't affect UI, just for tracking)
+    yield {
+      status: 'timing_info',
+      timingMetadata: {
+        backendTimeMs: backendTimeStr ? parseFloat(backendTimeStr) : undefined,
+        networkTimeMs: networkTimeStr ? parseFloat(networkTimeStr) : undefined,
+        totalTimeMs: totalTimeStr ? parseFloat(totalTimeStr) : undefined,
+      }
+    };
+  }
+
   const reader = response.body?.getReader();
   if (!reader) {
     devError('[Streaming] No readable stream in response body');
@@ -324,6 +348,7 @@ export async function* streamChatResponse(
   let chunkCount = 0;
   let receivedDoneSignal = false;
   let firstChunkReceived = false;
+  let isFirstContentChunk = true; // Track first content token for TTFT
 
   devLog('[Streaming] Stream reader obtained successfully');
   devLog('[Streaming] Starting to read stream...');
@@ -606,11 +631,18 @@ export async function* streamChatResponse(
               // Only yield chunks that have actual content, reasoning, or are the final chunk
               // Skip empty chunks to improve streaming performance
               if (chunk.content || chunk.reasoning || chunk.done) {
+                // Mark first content chunk for TTFT tracking
+                if (isFirstContentChunk && (chunk.content || chunk.reasoning)) {
+                  chunk.status = 'first_token';
+                  isFirstContentChunk = false;
+                }
+
                 devLog('[Streaming] Yielding chunk:', {
                   hasContent: !!chunk.content,
                   contentLength: chunk.content?.length || 0,
                   hasReasoning: !!chunk.reasoning,
-                  isDone: !!chunk.done
+                  isDone: !!chunk.done,
+                  isFirstToken: chunk.status === 'first_token'
                 });
                 yield chunk;
               } else {
