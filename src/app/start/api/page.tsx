@@ -12,7 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import posthog from 'posthog-js';
 import Link from 'next/link';
 import { API_BASE_URL } from '@/lib/config';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { CodeHighlighter } from '@/components/code-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 interface ModelData {
@@ -406,7 +406,7 @@ console.log(completion.choices[0].message.content);`
 
             {/* Code Display */}
             <div className="bg-slate-950/80 overflow-x-auto">
-              <SyntaxHighlighter
+              <CodeHighlighter
                 language={activeTab === 'curl' ? 'bash' : activeTab}
                 style={vscDarkPlus}
                 customStyle={{
@@ -418,7 +418,7 @@ console.log(completion.choices[0].message.content);`
                 }}
               >
                 {codeExamples[activeTab]}
-              </SyntaxHighlighter>
+              </CodeHighlighter>
             </div>
 
             {/* Bottom gradient */}

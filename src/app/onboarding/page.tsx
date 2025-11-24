@@ -9,7 +9,7 @@ import Link from "next/link";
 import { getUserData, getApiKey } from '@/lib/api';
 import { API_BASE_URL } from '@/lib/config';
 import { useToast } from '@/hooks/use-toast';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { CodeHighlighter } from '@/components/code-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 interface OnboardingTask {
@@ -549,7 +549,7 @@ console.log(response.choices[0].message.content);`
                     </Button>
                   </div>
                   <div className="rounded-md overflow-hidden">
-                    <SyntaxHighlighter
+                    <CodeHighlighter
                       language="bash"
                       style={vscDarkPlus}
                       customStyle={{
@@ -560,7 +560,7 @@ console.log(response.choices[0].message.content);`
                       }}
                     >
                       {getCodeExample('curl')}
-                    </SyntaxHighlighter>
+                    </CodeHighlighter>
                   </div>
                 </div>
 
@@ -577,7 +577,7 @@ console.log(response.choices[0].message.content);`
                     </Button>
                   </div>
                   <div className="rounded-md overflow-hidden">
-                    <SyntaxHighlighter
+                    <CodeHighlighter
                       language="python"
                       style={vscDarkPlus}
                       customStyle={{
@@ -588,7 +588,7 @@ console.log(response.choices[0].message.content);`
                       }}
                     >
                       {getCodeExample('python')}
-                    </SyntaxHighlighter>
+                    </CodeHighlighter>
                   </div>
                 </div>
 
@@ -605,7 +605,7 @@ console.log(response.choices[0].message.content);`
                     </Button>
                   </div>
                   <div className="rounded-md overflow-hidden">
-                    <SyntaxHighlighter
+                    <CodeHighlighter
                       language="javascript"
                       style={vscDarkPlus}
                       customStyle={{
@@ -616,7 +616,7 @@ console.log(response.choices[0].message.content);`
                       }}
                     >
                       {getCodeExample('javascript')}
-                    </SyntaxHighlighter>
+                    </CodeHighlighter>
                   </div>
                 </div>
 
@@ -633,7 +633,7 @@ console.log(response.choices[0].message.content);`
                     </Button>
                   </div>
                   <div className="rounded-md overflow-hidden">
-                    <SyntaxHighlighter
+                    <CodeHighlighter
                       language="typescript"
                       style={vscDarkPlus}
                       customStyle={{
@@ -644,7 +644,7 @@ console.log(response.choices[0].message.content);`
                       }}
                     >
                       {getCodeExample('typescript')}
-                    </SyntaxHighlighter>
+                    </CodeHighlighter>
                   </div>
                 </div>
               </div>

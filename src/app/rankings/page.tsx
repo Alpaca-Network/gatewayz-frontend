@@ -1,15 +1,34 @@
 
 "use client";
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, Suspense } from 'react';
+import dynamic from 'next/dynamic';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { ChevronDown, ArrowUp, ArrowDown } from 'lucide-react';
-import TokenStackedBarChart from '@/components/TokenStackedBarChart';
-import CategoryStackedAreaChart from '@/components/CategoryStackedAreaChart';
+import { ChartSkeleton } from '@/components/skeletons/ChartSkeleton';
 import { extractTokenValue } from '@/lib/utils';
 import Link from 'next/link';
+
+// Dynamically import charts to reduce initial bundle
+// TokenStackedBarChart uses chart.js (~70KB), only needed on this page
+const TokenStackedBarChart = dynamic(
+  () => import('@/components/TokenStackedBarChart'),
+  {
+    loading: () => <ChartSkeleton />,
+    ssr: false
+  }
+);
+
+// CategoryStackedAreaChart uses recharts (~180KB), also only needed on rankings page
+const CategoryStackedAreaChart = dynamic(
+  () => import('@/components/CategoryStackedAreaChart'),
+  {
+    loading: () => <ChartSkeleton />,
+    ssr: false
+  }
+);
 
 export interface ModelData {
   id: number;

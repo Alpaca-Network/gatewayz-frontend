@@ -2,6 +2,7 @@
 
 import Script from 'next/script';
 
+// Primary GA4 ID (managed by GTM, but keep for direct initialization if GTM fails)
 const GA_MEASUREMENT_ID = 'G-NCWGNQ7981';
 const GOOGLE_ADS_ID = 'AW-17515449277';
 const GTM_ID = 'GTM-5VPXMFRW';
@@ -23,12 +24,12 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
       />
       {/* Google tag (gtag.js) - for direct GA measurements and cross-domain linking */}
       <Script
-        strategy="afterInteractive"
+        strategy="lazyOnload"
         src={`https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`}
       />
       <Script
         id="google-analytics"
-        strategy="afterInteractive"
+        strategy="lazyOnload"
         dangerouslySetInnerHTML={{
           __html: `
             window.dataLayer = window.dataLayer || [];
