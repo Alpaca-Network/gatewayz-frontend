@@ -5,12 +5,24 @@ import Script from 'next/script';
 // Primary GA4 ID (managed by GTM, but keep for direct initialization if GTM fails)
 const GA_MEASUREMENT_ID = 'G-NCWGNQ7981';
 const GOOGLE_ADS_ID = 'AW-17515449277';
+const GTM_ID = 'GTM-5VPXMFRW';
 
 export function GoogleAnalytics() {
   return (
     <>
-      {/* Google tag (gtag.js) - Initialize via dataLayer for GTM compatibility
-          GTM (GTM-5VPXMFRW) will also initialize, but this ensures GA works if GTM fails */}
+      {/* Google Tag Manager Container - loads GTM, which manages GA via tags */}
+      <Script
+        id="gtm-container"
+        strategy="afterInteractive"
+        dangerouslySetInnerHTML={{
+          __html: `(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+})(window,document,'script','dataLayer','${GTM_ID}');`,
+        }}
+      />
+      {/* Google tag (gtag.js) - for direct GA measurements and cross-domain linking */}
       <Script
         strategy="lazyOnload"
         src={`https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`}
