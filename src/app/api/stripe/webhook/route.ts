@@ -7,10 +7,11 @@ export async function POST(req: NextRequest) {
   try {
     // Check if Stripe is configured
     if (!process.env.STRIPE_SECRET_KEY || !process.env.STRIPE_WEBHOOK_SECRET) {
-      console.log('Stripe is not fully configured');
+      console.error('Stripe is not fully configured');
+      // Return 200 to prevent retries, but log the error
       return NextResponse.json(
-        { error: 'Stripe is not configured' },
-        { status: 503 }
+        { error: 'Stripe is not configured', received: true },
+        { status: 200 }
       );
     }
 
@@ -23,10 +24,11 @@ export async function POST(req: NextRequest) {
     const signature = req.headers.get('stripe-signature');
 
     if (!signature) {
-      console.log('No Stripe signature found');
+      console.error('No Stripe signature found in webhook request');
+      // Return 200 to prevent retries, but log the error
       return NextResponse.json(
-        { error: 'No signature' },
-        { status: 400 }
+        { error: 'No signature', received: true },
+        { status: 200 }
       );
     }
 
@@ -39,10 +41,11 @@ export async function POST(req: NextRequest) {
         process.env.STRIPE_WEBHOOK_SECRET
       );
     } catch (err) {
-      console.log('Webhook signature verification failed:', err);
+      console.error('Webhook signature verification failed:', err);
+      // Return 200 to prevent retries for invalid signatures
       return NextResponse.json(
-        { error: 'Invalid signature' },
-        { status: 400 }
+        { error: 'Invalid signature', received: true },
+        { status: 200 }
       );
     }
 
@@ -65,18 +68,20 @@ export async function POST(req: NextRequest) {
       const userEmail = session.metadata?.userEmail || session.customer_email || session.customer_details?.email;
 
       if (!credits) {
-        console.log('No credits found in session metadata');
+        console.warn('No credits found in session metadata for checkout session', session.id);
+        // Return 200 since this is expected for some sessions
         return NextResponse.json(
-          { error: 'No credits in metadata' },
-          { status: 400 }
+          { error: 'No credits in metadata', received: true },
+          { status: 200 }
         );
       }
 
       if (!userId && !userEmail) {
-        console.log('No user ID or email found in session');
+        console.warn('No user ID or email found in session', session.id);
+        // Return 200 but log for investigation
         return NextResponse.json(
-          { error: 'No user identification' },
-          { status: 400 }
+          { error: 'No user identification', received: true },
+          { status: 200 }
         );
       }
 
@@ -111,20 +116,36 @@ export async function POST(req: NextRequest) {
             credits,
             sessionId: session.id,
           });
-          throw new Error('Failed to credit user');
+          // Still return 200 to Stripe to prevent infinite retries
+          return NextResponse.json(
+            { error: 'Failed to credit user', received: true },
+            { status: 200 }
+          );
         }
 
         const result = await response.json();
         console.log('Successfully processed payment and credited user:', result);
       } catch (error) {
         console.error('Error crediting user:', error);
-        // Still return success to Stripe to prevent infinite retries
-        // The error is logged for manual review
+        // Return 200 to prevent retries - error is logged for manual review
+        return NextResponse.json(
+          { error: 'Error processing payment', received: true },
+          { status: 200 }
+        );
       }
+    } else {
+      // Log unhandled event types but still return 200
+      console.info('Unhandled Stripe webhook event type:', event.type);
     }
 
-    return NextResponse.json({ received: true });
+    return NextResponse.json({ received: true }, { status: 200 });
   } catch (error) {
-    return handleApiError(error, 'Stripe Webhook');
+    console.error('Unexpected error in Stripe webhook:', error);
+    // Always return 200 to prevent Stripe retries
+    // The error is logged for investigation
+    return NextResponse.json(
+      { error: 'Internal server error', received: true },
+      { status: 200 }
+    );
   }
 }
