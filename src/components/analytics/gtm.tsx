@@ -4,7 +4,9 @@ import { useEffect } from 'react';
 
 export function GTM() {
   useEffect(() => {
-    // Google Tag Manager
+    // Google Tag Manager - handles GA4 (G-NCWGNQ7981) and Ads ID initialization via GTM rules
+    // Primary GA4 initialization is in google-analytics.tsx with lazyOnload strategy
+    // GTM ensures both configurations are sent via dataLayer
     (function(w: any, d: Document, s: string, l: string, i: string) {
       w[l] = w[l] || [];
       w[l].push({ 'gtm.start': new Date().getTime(), event: 'gtm.js' });
@@ -16,20 +18,8 @@ export function GTM() {
       f.parentNode?.insertBefore(j, f);
     })(window, document, 'script', 'dataLayer', 'GTM-5VPXMFRW');
 
-    // Google Analytics
-    const gaScript = document.createElement('script');
-    gaScript.src = 'https://www.googletagmanager.com/gtag/js?id=G-TE0EZ0C0SX';
-    gaScript.async = true;
-    document.head.appendChild(gaScript);
-
-    gaScript.onload = () => {
-      (window as any).dataLayer = (window as any).dataLayer || [];
-      function gtag(...args: any[]) {
-        (window as any).dataLayer.push(args);
-      }
-      gtag('js', new Date());
-      gtag('config', 'G-TE0EZ0C0SX');
-    };
+    // No need to load separate GA4 script here - it's already loaded in GoogleAnalytics component
+    // GTM will handle configuration and transmission via dataLayer
   }, []);
 
   return (
