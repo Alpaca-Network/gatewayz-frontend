@@ -100,8 +100,14 @@ export async function syncPrivyToGatewayz(
       created_at: toUnixSeconds(privyUser.createdAt) ?? Math.floor(Date.now() / 1000),
       linked_accounts: (privyUser.linkedAccounts || [])
         .filter((account: any) => account.type !== 'wallet') // Only include email/oauth accounts
-        .map((account: any) => stripUndefined({
-          type: account.type as string | undefined,
+        .map((account: any) => {
+          // Normalize account type: Privy returns 'github_oauth' but backend expects 'github'
+          let normalizedType = account.type as string | undefined;
+          if (normalizedType === 'github_oauth') {
+            normalizedType = 'github';
+          }
+          return stripUndefined({
+            type: normalizedType,
           subject: Object.prototype.hasOwnProperty.call(account, 'subject')
             ? (account as unknown as Record<string, unknown>)['subject']
             : undefined,
@@ -129,7 +135,8 @@ export async function syncPrivyToGatewayz(
           latest_verified_at: toUnixSeconds(Object.prototype.hasOwnProperty.call(account, 'latestVerifiedAt')
             ? (account as unknown as Record<string, unknown>)['latestVerifiedAt']
             : undefined),
-        }))
+          });
+        })
         .filter(Boolean),
       mfa_methods: privyUser.mfaMethods || [],
       has_accepted_terms: privyUser.hasAcceptedTerms ?? false,
