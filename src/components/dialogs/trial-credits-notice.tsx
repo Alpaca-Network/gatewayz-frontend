@@ -66,7 +66,7 @@ export function TrialCreditsNotice() {
             <DialogTitle className="text-xl">Welcome to Gatewayz! 🎉</DialogTitle>
           </div>
           <DialogDescription className="text-sm text-muted-foreground">
-            You're starting with <strong className="text-amber-600 dark:text-amber-400">{credits} free trial credits</strong> to explore our platform.
+            You're starting with <span className="font-semibold text-amber-600 dark:text-amber-400">{credits} free trial credits</span> to explore our platform.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3 pt-2">
@@ -75,7 +75,7 @@ export function TrialCreditsNotice() {
             <div className="text-sm">
               <p className="font-semibold text-amber-900 dark:text-amber-100">Important:</p>
               <p className="text-amber-800 dark:text-amber-200 mt-1">
-                Trial credits expire <strong>3 days after signup</strong> unless you add $10 or more to your account.
+                Trial credits expire <span className="font-semibold">3 days after signup</span> unless you add $10 or more to your account.
               </p>
             </div>
           </div>

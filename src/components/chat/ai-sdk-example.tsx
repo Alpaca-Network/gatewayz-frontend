@@ -241,7 +241,7 @@ export function AISDKChatExample() {
       {/* Info Box */}
       <Card className="p-4 bg-blue-50">
         <p className="text-sm text-blue-900">
-          <strong>Tip:</strong> Select a model with "Thinking" support to see
+          <strong className="font-semibold">Tip:</strong> Select a model with "Thinking" support to see
           the model's reasoning process as it thinks through your question.
           The reasoning appears above the final answer.
         </p>
