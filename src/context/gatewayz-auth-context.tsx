@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import * as Sentry from "@sentry/nextjs";
 import {
   AUTH_REFRESH_EVENT,
+  AUTH_REFRESH_COMPLETE_EVENT,
   getApiKey,
   getUserData,
   processAuthResponse,
@@ -937,6 +938,12 @@ export function GatewayzAuthProvider({
           syncInFlightRef.current = false;
           syncPromiseRef.current = null;
           // Note: Don't clear timeout here - it's cleared on success or kept on error
+
+          // Signal that auth refresh is complete (success or failure)
+          // This allows requestAuthRefresh() promise to resolve/reject
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new Event(AUTH_REFRESH_COMPLETE_EVENT));
+          }
         }
       })();
 
