@@ -71,6 +71,12 @@ interface GatewayzAuthProviderProps {
 export const GatewayzAuthContext = createContext<GatewayzAuthContextValue | undefined>(undefined);
 const TEMP_API_KEY_PREFIX = "gw_temp_";
 
+const BACKEND_PROXY_TIMEOUT_MS = 15000;
+const BACKEND_PROXY_MAX_RETRIES = 3;
+const BACKEND_PROXY_SAFETY_BUFFER_MS = 5000;
+const MIN_AUTH_SYNC_TIMEOUT_MS =
+  BACKEND_PROXY_TIMEOUT_MS * BACKEND_PROXY_MAX_RETRIES + BACKEND_PROXY_SAFETY_BUFFER_MS;
+
 const stripUndefined = <T,>(value: T): T => {
   if (Array.isArray(value)) {
     return value.map(stripUndefined) as unknown as T;
@@ -669,36 +675,41 @@ export function GatewayzAuthProvider({
           auto_create_api_key: authBody.auto_create_api_key,
           });
 
-          // Use fetch with timeout for backend call
-          const controller = new AbortController();
-          const baseTimeout = 10000;
-          const timeoutMs = getAdaptiveTimeout(baseTimeout, {
-            maxMs: 25000,
-            mobileMultiplier: 2.2,
-            slowNetworkMultiplier: 3,
-          });
-          const timeoutId = setTimeout(() => controller.abort(), timeoutMs); // Network-aware timeout
+        // Use fetch with timeout for backend call (minimum aligned with proxy retries)
+        const controller = new AbortController();
+        const baseTimeout = 10000;
+        const adaptiveTimeout = getAdaptiveTimeout(baseTimeout, {
+          maxMs: 25000,
+          mobileMultiplier: 2.2,
+          slowNetworkMultiplier: 3,
+        });
+        const timeoutMs = Math.max(adaptiveTimeout, MIN_AUTH_SYNC_TIMEOUT_MS);
+        const timeoutId = setTimeout(() => controller.abort(), timeoutMs); // Network-aware timeout
 
-        const response = await retryFetch(
-          () =>
-            fetch("/api/auth", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify(authBody),
-              signal: controller.signal,
-            }),
-          {
-            maxRetries: 2,
-            initialDelayMs: 300,
-            maxDelayMs: 3000,
-            backoffMultiplier: 2,
-            retryableStatuses: [502, 503, 504],
-          }
-        );
+        let response: Response;
+        try {
+          response = await retryFetch(
+            () =>
+              fetch("/api/auth", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify(authBody),
+                signal: controller.signal,
+              }),
+            {
+              maxRetries: 2,
+              initialDelayMs: 300,
+              maxDelayMs: 3000,
+              backoffMultiplier: 2,
+              retryableStatuses: [502, 503, 504],
+            }
+          );
+        } finally {
+          clearTimeout(timeoutId);
+        }
 
-        clearTimeout(timeoutId);
         const rawResponseText = await response.text();
 
         if (!response.ok) {
@@ -811,6 +822,27 @@ export function GatewayzAuthProvider({
         );
         } catch (err) {
           console.error("[Auth] Error during backend sync:", err);
+
+          const isAbortError =
+            err instanceof DOMException && err.name === "AbortError";
+
+          if (isAbortError) {
+            console.warn(
+              "[Auth] Backend sync aborted after exceeding timeout (frontend safeguard)"
+            );
+            setStatus("error");
+            setError("Authentication request timed out. Please try again.");
+
+            Sentry.captureMessage("Authentication sync aborted by client timeout", {
+              level: "warning",
+              tags: {
+                auth_error: "frontend_timeout",
+              },
+            });
+
+            onAuthError?.({ message: "Authentication request timed out", raw: err });
+            return;
+          }
 
           // Check if this is a non-blocking wallet extension error
           const errorMsg = err instanceof Error ? err.message : String(err);
