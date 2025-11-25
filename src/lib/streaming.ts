@@ -235,6 +235,38 @@ export async function* streamChatResponse(
       );
     }
 
+    // Handle 503 Service Unavailable and 504 Gateway Timeout with retry logic
+    if (response.status === 503 || response.status === 504) {
+      const isTimeout = response.status === 504;
+      const statusText = isTimeout ? 'Gateway Timeout' : 'Service Unavailable';
+      const errorMessage = errorData.detail || errorData.error?.message || errorData.message || statusText;
+
+      if (retryCount < maxRetries) {
+        // Use exponential backoff with longer delays for server errors
+        // 503/504 often indicate temporary overload, so give the server time to recover
+        const baseDelay = 2000; // Start with 2 seconds
+        const maxDelay = 30000; // Up to 30 seconds
+        const waitTime = Math.min(baseDelay * Math.pow(2, retryCount), maxDelay);
+        const jitter = Math.floor(Math.random() * 1000);
+        const totalWaitTime = waitTime + jitter;
+
+        devLog(`${statusText} (${response.status}) detected, retrying in ${totalWaitTime}ms (attempt ${retryCount + 1}/${maxRetries})...`);
+        devError(`${statusText} error details:`, errorData);
+
+        await sleep(totalWaitTime);
+
+        // Recursive retry
+        yield* streamChatResponse(url, apiKey, requestBody, retryCount + 1, maxRetries);
+        return;
+      }
+
+      // Max retries exceeded
+      devError(`Max retries exceeded for ${statusText}`);
+      throw new Error(
+        `${statusText} error: ${errorMessage}. The backend service appears to be temporarily unavailable. Please try again in a moment.`
+      );
+    }
+
     // Handle 404 Model Not Found
     if (response.status === 404) {
       const errorMessage = errorData.detail || errorData.error?.message || errorData.message || 'Model not found';
