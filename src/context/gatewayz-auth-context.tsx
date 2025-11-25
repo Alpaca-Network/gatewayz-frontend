@@ -43,8 +43,8 @@ const AUTH_STATE_TRANSITIONS: Record<AuthStatus, AuthStatus[]> = {
 };
 
 // Auth retry configuration
-const MAX_AUTH_RETRIES = 3;
-const AUTHENTICATING_TIMEOUT_MS = 30000; // 30 seconds
+const MAX_AUTH_RETRIES = 2; // 1 initial attempt + 2 retries = 3 total attempts
+const AUTHENTICATING_TIMEOUT_MS = 60000; // 60 seconds - accommodates full retry chain (15s × 3 + backoff + margin)
 const TOKEN_TIMEOUT_BASE_MS = 5000; // Base 5 seconds, adaptive up to 10s
 
 interface GatewayzAuthContextValue {
@@ -72,10 +72,14 @@ export const GatewayzAuthContext = createContext<GatewayzAuthContextValue | unde
 const TEMP_API_KEY_PREFIX = "gw_temp_";
 
 const BACKEND_PROXY_TIMEOUT_MS = 15000;
-const BACKEND_PROXY_MAX_RETRIES = 3;
+const BACKEND_PROXY_MAX_RETRIES = 2; // 1 initial attempt + 2 retries = 3 total attempts
 const BACKEND_PROXY_SAFETY_BUFFER_MS = 5000;
-const MIN_AUTH_SYNC_TIMEOUT_MS =
-  BACKEND_PROXY_TIMEOUT_MS * BACKEND_PROXY_MAX_RETRIES + BACKEND_PROXY_SAFETY_BUFFER_MS;
+// Calculate minimum timeout to accommodate full retry chain:
+// - 15s per attempt × 3 total attempts = 45s
+// - Exponential backoff delays: ~500ms + 1s = ~1.5s
+// - Safety buffer: 5s
+// - Total: ~51.5s, rounded up to 55s
+const MIN_AUTH_SYNC_TIMEOUT_MS = 55000;
 
 const stripUndefined = <T,>(value: T): T => {
   if (Array.isArray(value)) {
@@ -227,8 +231,9 @@ export function GatewayzAuthProvider({
   // Set authenticating timeout guard
   const setAuthTimeout = useCallback(() => {
     clearAuthTimeout();
+    console.log(`[Auth] Setting authenticating timeout guard to ${AUTHENTICATING_TIMEOUT_MS}ms (${AUTHENTICATING_TIMEOUT_MS / 1000}s)`);
     authTimeoutRef.current = setTimeout(() => {
-      console.error("[Auth] Authentication timeout - stuck in authenticating state for 30s");
+      console.error(`[Auth] Authentication timeout - stuck in authenticating state for ${AUTHENTICATING_TIMEOUT_MS / 1000}s`);
       setAuthStatus("error", "timeout");
       setError("Authentication timeout - please try again");
 
@@ -236,6 +241,10 @@ export function GatewayzAuthProvider({
         level: 'error',
         tags: {
           auth_error: 'authenticating_timeout',
+          timeout_ms: AUTHENTICATING_TIMEOUT_MS,
+        },
+        extra: {
+          timeout_seconds: AUTHENTICATING_TIMEOUT_MS / 1000,
         },
       });
     }, AUTHENTICATING_TIMEOUT_MS);
@@ -600,9 +609,10 @@ export function GatewayzAuthProvider({
 
         // Increment retry count
         authRetryCountRef.current += 1;
-        console.log(`[Auth] Sync attempt ${authRetryCountRef.current}/${MAX_AUTH_RETRIES}`);
+        const totalAttempts = MAX_AUTH_RETRIES + 1; // initial + retries
+        console.log(`[Auth] Sync attempt ${authRetryCountRef.current}/${totalAttempts} (1 initial + ${MAX_AUTH_RETRIES} retries)`);
 
-        setAuthStatus("authenticating", `attempt ${authRetryCountRef.current}`);
+        setAuthStatus("authenticating", `attempt ${authRetryCountRef.current}/${totalAttempts}`);
         setError(null);
 
         // Set timeout guard for stuck authenticating state
@@ -715,6 +725,7 @@ export function GatewayzAuthProvider({
           slowNetworkMultiplier: 3,
         });
         const timeoutMs = Math.max(adaptiveTimeout, MIN_AUTH_SYNC_TIMEOUT_MS);
+        console.log(`[Auth] Backend sync timeout: adaptive=${adaptiveTimeout}ms, minimum=${MIN_AUTH_SYNC_TIMEOUT_MS}ms, final=${timeoutMs}ms`);
         const timeoutId = setTimeout(() => controller.abort(), timeoutMs); // Network-aware timeout
 
         let response: Response;
@@ -730,7 +741,7 @@ export function GatewayzAuthProvider({
                 signal: controller.signal,
               }),
             {
-              maxRetries: 2,
+              maxRetries: MAX_AUTH_RETRIES,
               initialDelayMs: 300,
               maxDelayMs: 3000,
               backoffMultiplier: 2,

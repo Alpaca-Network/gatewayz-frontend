@@ -14,14 +14,17 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    console.log("[API /api/auth] Proxying authentication request to backend");
+    console.log("[API /api/auth] Proxying authentication request to backend (attempt 1/3 with retries)");
 
     // Use timeout to prevent hanging requests
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout for backend auth
+    console.log("[API /api/auth] Request timeout: 15000ms per attempt");
 
     try {
       // Wrap fetch in retry logic for 502/503/504 errors
+      // Using 2 retries: 1 initial attempt + 2 retries = 3 total attempts
+      console.log("[API /api/auth] Starting authentication with retry logic (maxRetries: 2, initialDelay: 500ms)");
       const response = await retryFetch(
         () =>
           proxyFetch(`${API_BASE_URL}/auth`, {
@@ -33,7 +36,7 @@ export async function POST(request: NextRequest) {
             signal: controller.signal,
           }),
         {
-          maxRetries: 3,
+          maxRetries: 2,
           initialDelayMs: 500,
           maxDelayMs: 5000,
           backoffMultiplier: 2,
@@ -45,7 +48,8 @@ export async function POST(request: NextRequest) {
       const responseText = await response.text();
 
       if (!response.ok) {
-        console.error("[API /api/auth] Backend auth failed:", response.status, responseText.substring(0, 200));
+        console.error("[API /api/auth] Backend auth failed with status:", response.status);
+        console.error("[API /api/auth] Error response:", responseText.substring(0, 200));
         return new NextResponse(responseText, {
           status: response.status,
           headers: {
@@ -54,7 +58,7 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      console.log("[API /api/auth] Backend auth successful");
+      console.log("[API /api/auth] Backend auth successful - returning 200");
 
       return new NextResponse(responseText, {
         status: 200,
