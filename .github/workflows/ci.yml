@@ -11,9 +11,43 @@ on:
       - '**'
 
 jobs:
+  # Check for merge conflicts first
+  check-merge-conflicts:
+    name: Check Merge Conflicts
+    runs-on: ubuntu-latest
+    outputs:
+      has-conflicts: ${{ steps.check.outputs.has-conflicts }}
+      conflicted-files: ${{ steps.check.outputs.conflicted-files }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect merge conflicts
+        id: check
+        run: |
+          set +e
+          bash scripts/check-merge-conflicts.sh
+          EXIT_CODE=$?
+          set -e
+
+          if [ $EXIT_CODE -eq 0 ]; then
+            echo "has-conflicts=false" >> $GITHUB_OUTPUT
+          else
+            echo "has-conflicts=true" >> $GITHUB_OUTPUT
+            # Get list of conflicted files for JSON output
+            CONFLICTED_FILES=$(git diff --diff-filter=U --name-only 2>/dev/null || git grep -l '<<<<<<< HEAD|=======|>>>>>>> ' 2>/dev/null || echo "")
+            FILES_JSON=$(echo "$CONFLICTED_FILES" | jq -R -s -c 'split("\n") | map(select(length > 0))')
+            echo "conflicted-files=$FILES_JSON" >> $GITHUB_OUTPUT
+          fi
+
   test:
     name: Test
     runs-on: ubuntu-latest
+    needs: [check-merge-conflicts]
+    if: needs.check-merge-conflicts.outputs.has-conflicts == 'false'
 
     steps:
       - name: Checkout code
@@ -58,6 +92,8 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    needs: [check-merge-conflicts]
+    if: needs.check-merge-conflicts.outputs.has-conflicts == 'false'
 
     steps:
       - name: Checkout code
@@ -91,6 +127,8 @@ jobs:
   typecheck:
     name: Type Check
     runs-on: ubuntu-latest
+    needs: [check-merge-conflicts]
+    if: needs.check-merge-conflicts.outputs.has-conflicts == 'false'
 
     steps:
       - name: Checkout code
@@ -124,6 +162,8 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
+    needs: [check-merge-conflicts]
+    if: needs.check-merge-conflicts.outputs.has-conflicts == 'false'
 
     steps:
       - name: Checkout code
@@ -170,8 +210,9 @@ jobs:
   e2e:
     name: E2E Tests (Playwright)
     runs-on: ubuntu-latest
-    # Only run E2E tests on main branches and PRs to avoid excessive test runs
-    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/develop'
+    needs: [check-merge-conflicts]
+    # Only run E2E tests on main branches and PRs to avoid excessive test runs, and if no merge conflicts
+    if: (github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/develop') && needs.check-merge-conflicts.outputs.has-conflicts == 'false'
     timeout-minutes: 30
 
     steps:
@@ -282,12 +323,94 @@ jobs:
           pkill -f "pnpm start" || true
           sleep 2
 
+  # Resolve merge conflicts using Cursor agent
+  resolve-conflicts:
+    name: Resolve Merge Conflicts
+    runs-on: ubuntu-latest
+    needs: [check-merge-conflicts]
+    if: needs.check-merge-conflicts.outputs.has-conflicts == 'true'
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.17.1
+
+      - name: Install Cursor CLI
+        run: npm install -g @cursor.so/cli
+
+      - name: Run Cursor agent to resolve conflicts
+        run: |
+          CONFLICTED_FILES='${{ needs.check-merge-conflicts.outputs.conflicted-files }}'
+
+          echo "Files with merge conflicts:"
+          echo "$CONFLICTED_FILES" | jq -r '.[]' 2>/dev/null || echo "$CONFLICTED_FILES"
+
+          # Build the cursor fix command with conflict-specific instructions
+          CURSOR_COMMAND="Resolve all merge conflicts in this repository. "
+          CURSOR_COMMAND="${CURSOR_COMMAND}The following files have merge conflicts: $(echo "$CONFLICTED_FILES" | jq -r '.[]' 2>/dev/null | tr '\n' ', ' || echo "$CONFLICTED_FILES"). "
+          CURSOR_COMMAND="${CURSOR_COMMAND}Carefully review the conflicting sections marked with <<<<<<<, =======, and >>>>>>>. "
+          CURSOR_COMMAND="${CURSOR_COMMAND}Choose the correct version for each conflict or combine them if both are needed. "
+          CURSOR_COMMAND="${CURSOR_COMMAND}Ensure all merge markers are removed and the code is valid. "
+          CURSOR_COMMAND="${CURSOR_COMMAND}Do not make any other changes beyond resolving the conflicts."
+
+          echo "Cursor prompt: $CURSOR_COMMAND"
+
+          # Run Cursor CLI with the resolve command
+          cursor fix "$CURSOR_COMMAND"
+        env:
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+
+      - name: Verify conflicts are resolved
+        run: |
+          if bash scripts/check-merge-conflicts.sh; then
+            echo "✅ All merge conflicts resolved"
+          else
+            echo "❌ Some merge conflicts remain"
+            exit 1
+          fi
+
+      - name: Commit and push resolution
+        run: |
+          # Configure git
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+
+          # Check for changes
+          if ! git diff --quiet; then
+            git add -A
+            git commit -m "fix: resolve merge conflicts
+
+Merge conflicts automatically resolved using Cursor agent.
+
+🤖 Co-authored-by: Cursor Agent <cursor@github.com>"
+
+            # Push to the same branch
+            git push origin HEAD:${{ github.head_ref || github.ref_name }}
+
+            echo "✅ Conflict resolution committed and pushed to ${{ github.head_ref || github.ref_name }}"
+          else
+            echo "ℹ️ No changes after conflict resolution"
+          fi
+
   # Fix CI failures automatically using Cursor CLI
   fix-ci:
     name: Fix CI Failures
     runs-on: ubuntu-latest
-    needs: [test, lint, typecheck, build]
-    if: failure()
+    needs: [test, lint, typecheck, build, check-merge-conflicts]
+    if: failure() && needs.check-merge-conflicts.outputs.has-conflicts == 'false'
     permissions:
       contents: write
 
@@ -397,18 +520,54 @@ $([[ '${{ needs.build.result }}' == 'failure' ]] && echo '  - build errors')
   ci-success:
     name: CI Success
     runs-on: ubuntu-latest
-    needs: [test, lint, typecheck, build, e2e]
+    needs: [check-merge-conflicts, resolve-conflicts, test, lint, typecheck, build, e2e, fix-ci]
     if: always()
 
     steps:
       - name: Check all jobs
         run: |
-          if [[ "${{ needs.test.result }}" == "failure" ]] || \
-             [[ "${{ needs.lint.result }}" == "failure" ]] || \
-             [[ "${{ needs.typecheck.result }}" == "failure" ]] || \
-             [[ "${{ needs.build.result }}" == "failure" ]] || \
-             [[ "${{ needs.e2e.result }}" == "failure" ]]; then
-            echo "One or more CI jobs failed"
+          # Check merge conflict detection and resolution
+          if [[ "${{ needs.check-merge-conflicts.result }}" == "failure" ]]; then
+            echo "Merge conflict check failed"
             exit 1
           fi
-          echo "All CI jobs passed successfully"
+
+          # resolve-conflicts job is optional (skipped if no conflicts)
+          if [[ "${{ needs.resolve-conflicts.result }}" == "failure" ]]; then
+            echo "Merge conflict resolution failed"
+            exit 1
+          fi
+
+          # Test jobs are skipped if conflicts exist, otherwise must pass
+          if [[ "${{ needs.test.result }}" != "skipped" ]] && [[ "${{ needs.test.result }}" == "failure" ]]; then
+            echo "Test job failed"
+            exit 1
+          fi
+
+          if [[ "${{ needs.lint.result }}" != "skipped" ]] && [[ "${{ needs.lint.result }}" == "failure" ]]; then
+            echo "Lint job failed"
+            exit 1
+          fi
+
+          if [[ "${{ needs.typecheck.result }}" != "skipped" ]] && [[ "${{ needs.typecheck.result }}" == "failure" ]]; then
+            echo "Typecheck job failed"
+            exit 1
+          fi
+
+          if [[ "${{ needs.build.result }}" != "skipped" ]] && [[ "${{ needs.build.result }}" == "failure" ]]; then
+            echo "Build job failed"
+            exit 1
+          fi
+
+          if [[ "${{ needs.e2e.result }}" != "skipped" ]] && [[ "${{ needs.e2e.result }}" == "failure" ]]; then
+            echo "E2E tests failed"
+            exit 1
+          fi
+
+          # fix-ci job is optional (skipped if no failures)
+          if [[ "${{ needs.fix-ci.result }}" == "failure" ]]; then
+            echo "Fix CI job failed"
+            exit 1
+          fi
+
+          echo "All CI checks passed successfully"
