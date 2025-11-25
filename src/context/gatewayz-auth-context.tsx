@@ -620,6 +620,29 @@ export function GatewayzAuthProvider({
         });
 
       try {
+        // Ensure Privy is actually ready before attempting token retrieval
+        if (!privyReady || !authenticated || !user) {
+          console.warn("[Auth] Privy state invalid for token retrieval - aborting sync attempt");
+          console.warn("[Auth] State: privyReady=", privyReady, "authenticated=", authenticated, "user=", !!user);
+
+          Sentry.captureMessage("Invalid Privy state during token retrieval attempt", {
+            level: 'warning',
+            tags: {
+              auth_error: 'invalid_privy_state_for_token',
+            },
+            extra: {
+              privy_ready: privyReady,
+              privy_authenticated: authenticated,
+              has_user: !!user,
+            },
+          });
+
+          syncInFlightRef.current = false;
+          syncPromiseRef.current = null;
+          setAuthStatus("unauthenticated", "privy state invalid");
+          return;
+        }
+
         // Get token with adaptive timeout to prevent hanging
         const tokenPromise = getAccessToken();
         let token: string | null = null;
@@ -632,18 +655,25 @@ export function GatewayzAuthProvider({
             slowNetworkMultiplier: 2,
           });
 
+          console.log(`[Auth] Attempting token retrieval with ${tokenTimeoutMs}ms timeout`);
+
           token = await Promise.race([
             tokenPromise,
             new Promise<null>((_, reject) =>
               setTimeout(() => reject(new Error("Token retrieval timeout")), tokenTimeoutMs)
             )
           ]);
+
+          if (!token) {
+            console.warn("[Auth] Token retrieval returned null/empty token");
+          }
         } catch (tokenErr) {
           console.warn("[Auth] Failed to get token:", tokenErr);
 
           // Capture token retrieval error to Sentry (but as warning since we can continue)
           const tokenErrMsg = tokenErr instanceof Error ? tokenErr.message : String(tokenErr);
           if (tokenErrMsg.includes("timeout")) {
+            console.warn("[Auth] Token timeout - proceeding with null token");
             Sentry.captureMessage("Token retrieval timeout during authentication", {
               level: 'warning',
               tags: {
@@ -651,6 +681,7 @@ export function GatewayzAuthProvider({
               },
             });
           } else {
+            console.warn("[Auth] Token retrieval error:", tokenErrMsg);
             Sentry.captureException(
               tokenErr instanceof Error ? tokenErr : new Error(String(tokenErr)),
               {
@@ -927,8 +958,8 @@ export function GatewayzAuthProvider({
   );
 
   useEffect(() => {
+    // Only proceed with sync when Privy is ready
     if (!privyReady) {
-      setAuthStatus("idle", "privy not ready");
       return;
     }
 
