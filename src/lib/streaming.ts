@@ -2,7 +2,8 @@
  * Utility for handling streaming responses from chat API
  */
 
-import { requestAuthRefresh } from '@/lib/api';
+import { requestAuthRefresh, getApiKey } from '@/lib/api';
+import { StreamCoordinator } from '@/lib/stream-coordinator';
 
 // OPTIMIZATION: Dev-only logging helpers to remove console logs from production
 const devLog = (...args: any[]) => {
@@ -303,12 +304,42 @@ export async function* streamChatResponse(
     }
 
     if (response.status === 401) {
-      // Don't immediately clear the API key - it could be a temporary backend issue
-      // Let the auth context handle re-authentication via refresh event
-      requestAuthRefresh();
-      throw new Error(
-        'Authentication failed. Please check your API key or log in again.'
-      );
+      // Handle 401 authentication error with potential recovery
+      // 1. Attempt to refresh authentication
+      // 2. Retry with new API key if available
+      // 3. If retry fails or no new key, throw error to user
+
+      try {
+        devLog('[Streaming] 401 Authentication error - attempting refresh');
+
+        // Wait for auth refresh to complete
+        await StreamCoordinator.handleAuthError();
+
+        // Try to get the new API key after refresh
+        const newApiKey = StreamCoordinator.getApiKey();
+
+        if (newApiKey && newApiKey !== apiKey) {
+          devLog('[Streaming] New API key obtained after refresh, retrying stream');
+
+          // Retry the stream with the new API key
+          yield* streamChatResponse(url, newApiKey, requestBody, retryCount, maxRetries);
+          return;
+        } else {
+          devLog('[Streaming] No new API key available after refresh');
+          throw new Error('No new credentials available after refresh');
+        }
+      } catch (refreshError) {
+        devError('[Streaming] Auth refresh failed:', refreshError);
+
+        // If refresh fails, provide user-friendly error
+        const refreshErrorMsg = refreshError instanceof Error
+          ? refreshError.message
+          : 'Unknown error during refresh';
+
+        throw new Error(
+          `Authentication failed: ${refreshErrorMsg}. Please log in again.`
+        );
+      }
     }
 
     // Generic error with the response message

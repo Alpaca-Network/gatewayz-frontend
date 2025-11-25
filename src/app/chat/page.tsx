@@ -1600,13 +1600,9 @@ function ChatPageContent() {
         window.addEventListener('storage', handleStorageChange);
         window.addEventListener(AUTH_REFRESH_EVENT as unknown as string, handleAuthRefresh as EventListener);
 
-        // Poll as a fallback for same-tab updates since the storage event doesn't fire
-        const pollInterval = window.setInterval(updateApiKeyState, 1500);
-
         return () => {
             window.removeEventListener('storage', handleStorageChange);
             window.removeEventListener(AUTH_REFRESH_EVENT as unknown as string, handleAuthRefresh as EventListener);
-            clearInterval(pollInterval);
         };
     }, [authLoading, isAuthenticated]);
 

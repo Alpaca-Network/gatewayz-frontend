@@ -31,6 +31,7 @@ const getLocalStorageSafe = (): Storage | null => {
 };
 
 export const AUTH_REFRESH_EVENT = 'gatewayz:refresh-auth';
+export const AUTH_REFRESH_COMPLETE_EVENT = 'gatewayz:refresh-complete';
 export const NEW_USER_WELCOME_EVENT = 'gatewayz:new-user-welcome';
 
 export type UserTier = 'basic' | 'pro' | 'max';
@@ -135,10 +136,38 @@ export const removeApiKey = (): void => {
   }
 };
 
-export const requestAuthRefresh = (): void => {
-  if (typeof window !== 'undefined') {
+/**
+ * Request an auth refresh and wait for completion
+ * Returns a promise that resolves when the refresh is complete
+ * Rejects if refresh times out (30 seconds)
+ */
+export const requestAuthRefresh = (): Promise<void> => {
+  return new Promise((resolve, reject) => {
+    if (typeof window === 'undefined') {
+      reject(new Error('requestAuthRefresh called in non-browser environment'));
+      return;
+    }
+
+    // Handler for completion event
+    const handleCompletion = () => {
+      window.removeEventListener(AUTH_REFRESH_COMPLETE_EVENT, handleCompletion);
+      clearTimeout(timeoutId);
+      resolve();
+    };
+
+    // Set timeout to prevent hanging if completion event never fires
+    const timeoutId = setTimeout(() => {
+      window.removeEventListener(AUTH_REFRESH_COMPLETE_EVENT, handleCompletion);
+      console.error('[Auth] Auth refresh timed out after 30 seconds');
+      reject(new Error('Auth refresh timeout'));
+    }, 30000);
+
+    // Listen for completion event
+    window.addEventListener(AUTH_REFRESH_COMPLETE_EVENT, handleCompletion);
+
+    // Dispatch refresh event to trigger auth context sync
     window.dispatchEvent(new Event(AUTH_REFRESH_EVENT));
-  }
+  });
 };
 
 // User Data Management
