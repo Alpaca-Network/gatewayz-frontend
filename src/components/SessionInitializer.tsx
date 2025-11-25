@@ -152,11 +152,13 @@ export function SessionInitializer() {
           // Continue anyway - session transfer can still proceed
         }
 
-        // Fetch user data and refresh auth (blocking operation for critical session setup)
-        // NOTE: Save API key in promise chain AFTER fetching user data to avoid auth deduplication skip
-        fetchUserDataOptimized(token).then((userData) => {
+        try {
+          // Fetch user data with proper async/await flow
+          const userData = await fetchUserDataOptimized(token);
+
           // Save API key to localStorage (must happen after userData fetch for proper deduplication)
           saveApiKey(token);
+
           if (userData) {
             // Save complete user data to localStorage
             const userDataToSave: UserData = {
@@ -182,21 +184,22 @@ export function SessionInitializer() {
               // Continue anyway - API key is already saved, auth will sync
             }
           }
+
           // Refresh auth context to update state from localStorage
           // IMPORTANT: Wait for refresh to complete to ensure auth state is synced before page content loads
-          return refresh().catch((error) => {
+          await refresh().catch((error) => {
             console.error("[SessionInit] Error refreshing auth after user data fetch:", error);
           });
-        }).catch((error) => {
-          console.error("[SessionInit] Unexpected error during session init:", error);
+        } catch (error) {
+          console.error("[SessionInit] Error during session init:", error);
           // Still trigger refresh even if something unexpected happens
           // IMPORTANT: Wait for refresh to ensure auth state is properly updated
-          return refresh().catch((err) => {
+          await refresh().catch((err) => {
             console.error("[SessionInit] Error refreshing auth after error:", err);
           });
-        });
+        }
 
-        // Redirect to return URL if provided (immediate, don't wait for user fetch)
+        // Redirect to return URL if provided (after refresh completes)
         if (returnUrl) {
           router.push(returnUrl);
         }
@@ -213,11 +216,13 @@ export function SessionInitializer() {
       if (storedToken && storedUserId && !existingApiKey) {
         console.log("[SessionInit] Using stored session transfer token from sessionStorage");
 
-        // Fetch user data and refresh auth (blocking operation for critical session setup)
-        // NOTE: Save API key in promise chain AFTER fetching user data to avoid auth deduplication skip
-        fetchUserDataOptimized(storedToken).then((userData) => {
+        try {
+          // Fetch user data with proper async/await flow
+          const userData = await fetchUserDataOptimized(storedToken);
+
           // Restore API key from sessionStorage (must happen after userData fetch for proper deduplication)
           saveApiKey(storedToken);
+
           if (userData) {
             // Save complete user data to localStorage
             const userDataToSave: UserData = {
@@ -243,33 +248,31 @@ export function SessionInitializer() {
               // Continue anyway - API key is already saved, auth will sync
             }
           }
+
           // Refresh auth context to update state from localStorage
           // IMPORTANT: Wait for refresh to complete to ensure auth state is synced
-          return refresh().catch((error) => {
+          await refresh().catch((error) => {
             console.error("[SessionInit] Error refreshing auth after stored token fetch:", error);
           });
-        }).catch((error) => {
-          console.error("[SessionInit] Error fetching user data from stored token:", error);
+        } catch (error) {
+          console.error("[SessionInit] Error during stored token session init:", error);
           // Still trigger refresh on error
           // IMPORTANT: Wait for refresh to ensure auth state is properly updated
-          return refresh().catch((err) => {
+          await refresh().catch((err) => {
             console.error("[SessionInit] Error refreshing auth after stored token error:", err);
           });
-        });
+        }
 
         return;
       }
-
     }
 
-    // Mark as initialized AFTER setting up async operations
-    // This ensures we don't try to initialize twice even if component re-renders
-    initializedRef.current = true;
-
-    initializeSession().catch((error) => {
+    // Execute initialization and only mark as complete when done
+    initializeSession().then(() => {
+      initializedRef.current = true;
+    }).catch((error) => {
       console.error("[SessionInit] Error initializing session:", error);
-      // Reset initialized flag on error so it can be retried
-      initializedRef.current = false;
+      initializedRef.current = true; // Mark as initialized even on error to avoid infinite retries
     });
   }, [refresh, router, privyReady]);
 
