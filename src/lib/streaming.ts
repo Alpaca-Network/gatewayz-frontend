@@ -376,6 +376,7 @@ export async function* streamChatResponse(
   const decoder = new TextDecoder();
   let buffer = '';
   let chunkCount = 0;
+  let contentChunkCount = 0;  // Track chunks with actual content
   let receivedDoneSignal = false;
   let firstChunkReceived = false;
   let isFirstContentChunk = true; // Track first content token for TTFT
@@ -667,12 +668,18 @@ export async function* streamChatResponse(
                   isFirstContentChunk = false;
                 }
 
+                // Track actual content chunks (not just metadata or done signals)
+                if (chunk.content || chunk.reasoning) {
+                  contentChunkCount++;
+                }
+
                 devLog('[Streaming] Yielding chunk:', {
                   hasContent: !!chunk.content,
                   contentLength: chunk.content?.length || 0,
                   hasReasoning: !!chunk.reasoning,
                   isDone: !!chunk.done,
-                  isFirstToken: chunk.status === 'first_token'
+                  isFirstToken: chunk.status === 'first_token',
+                  contentChunkCount
                 });
                 yield chunk;
               } else {
@@ -710,16 +717,20 @@ export async function* streamChatResponse(
     devLog('[Streaming] Stream ended normally, yielding final done signal');
 
     // Important: Log if we received any content at all
-    if (chunkCount === 0) {
+    if (contentChunkCount === 0) {
       const errorMsg = `No response received from model "${requestBody.model}". This model may not be properly configured, may be unavailable, or may not support the requested features. Please try a different model or check the model's availability status.`;
       console.error('[Streaming] ERROR:', errorMsg);
       console.error('[Streaming] Model:', requestBody.model);
       console.error('[Streaming] API Base URL:', url);
+      console.error('[Streaming] Total SSE lines processed:', chunkCount);
       // Throw an error so the UI can show a proper error message
       throw new Error(errorMsg);
     }
 
+    // Final signal to indicate stream is complete
     yield { done: true };
+
+    devLog('[Streaming] Stream completed successfully with', contentChunkCount, 'content chunks from', chunkCount, 'total SSE lines');
   } catch (error) {
     clearTimeout(timeoutId);
 

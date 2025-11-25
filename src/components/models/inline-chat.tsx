@@ -225,9 +225,16 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
       // Mark streaming as complete and collapse thinking
       setMessages(prev => {
         const newMessages = [...prev];
+
+        // If no content was received, show a helpful error message
+        let finalContent = accumulatedContent;
+        if (!accumulatedContent || accumulatedContent.trim().length === 0) {
+          finalContent = `[Error: No response received from model. The model may be unavailable, misconfigured, or not support this operation. Try selecting a different model.]`;
+        }
+
         newMessages[streamingMessageIndex] = {
           role: 'assistant',
-          content: accumulatedContent || 'No response received',
+          content: finalContent,
           thinking: accumulatedThinking,
           isStreaming: false
         };
