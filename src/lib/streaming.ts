@@ -2,7 +2,7 @@
  * Utility for handling streaming responses from chat API
  */
 
-import { removeApiKey, requestAuthRefresh } from '@/lib/api';
+import { requestAuthRefresh } from '@/lib/api';
 
 // OPTIMIZATION: Dev-only logging helpers to remove console logs from production
 const devLog = (...args: any[]) => {
@@ -296,8 +296,6 @@ export async function* streamChatResponse(
         return;
       }
 
-      removeApiKey();
-      requestAuthRefresh();
       throw new Error(
         detailMessage ||
         'Rate limit exceeded. Please wait a moment and try again.'
@@ -305,7 +303,8 @@ export async function* streamChatResponse(
     }
 
     if (response.status === 401) {
-      removeApiKey();
+      // Don't immediately clear the API key - it could be a temporary backend issue
+      // Let the auth context handle re-authentication via refresh event
       requestAuthRefresh();
       throw new Error(
         'Authentication failed. Please check your API key or log in again.'
