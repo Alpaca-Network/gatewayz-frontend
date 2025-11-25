@@ -72,15 +72,42 @@ export async function POST(request: NextRequest) {
             if (Array.isArray(models) && models.length > 0) {
               for (const model of models.slice(0, 10)) { // Limit to prevent too many invalidations
                 if (model.id || model.name) {
-                  const modelId = model.id || model.name.toLowerCase().replace(/[^a-z0-9]/g, '-');
-                  const modelTag = `model:${modelId}`;
-                  revalidateTag(modelTag);
-                  invalidatedTags.push(modelTag);
-                  
-                  revalidatePath(`/models/${modelId}`);
-                  invalidatedPaths.push(`/models/${modelId}`);
+                  // Handle both model.id (e.g., "anthropic/claude-opus-4-5")
+                  // and construct from provider + name
+                  let modelDetailPath = '';
+
+                  if (model.id && model.id.includes('/')) {
+                    // Model ID is already in provider/name format
+                    modelDetailPath = `/models/${model.id}`;
+                  } else if (model.provider_slug && model.name) {
+                    // Construct from provider and name
+                    const normalizedName = model.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+                    modelDetailPath = `/models/${model.provider_slug}/${normalizedName}`;
+                  } else if (model.name) {
+                    // Fallback to just name (will be normalized)
+                    const normalizedName = model.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+                    modelDetailPath = `/models/unknown/${normalizedName}`;
+                  }
+
+                  if (modelDetailPath) {
+                    const modelTag = `model:${model.id || model.name}`;
+                    revalidateTag(modelTag);
+                    invalidatedTags.push(modelTag);
+
+                    revalidatePath(modelDetailPath);
+                    invalidatedPaths.push(modelDetailPath);
+
+                    // Also revalidate the parent models listing
+                    revalidateTag('models:detail');
+                  }
                 }
               }
+            }
+
+            // Invalidate all model detail pages for major changes
+            if (event_type === 'models.added' || event_type === 'models.removed') {
+              revalidateTag('models:detail');
+              invalidatedTags.push('models:detail');
             }
             break;
 
