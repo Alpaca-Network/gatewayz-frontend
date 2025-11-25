@@ -466,6 +466,9 @@ describe('ChatHistoryAPI', () => {
     });
 
     it('should save assistant message with model and tokens', async () => {
+      // Create API without batching to test immediate save behavior
+      const apiNoBatch = new ChatHistoryAPI(mockApiKey, undefined, undefined, false);
+
       const mockMessage: ChatMessage = {
         id: 2,
         session_id: 1,
@@ -481,7 +484,7 @@ describe('ChatHistoryAPI', () => {
         json: async () => ({ success: true, data: mockMessage }),
       });
 
-      const result = await api.saveMessage(
+      const result = await apiNoBatch.saveMessage(
         1,
         'assistant',
         'I am doing well, thank you!',
@@ -774,7 +777,8 @@ describe('Integration Scenarios', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.useFakeTimers();
-    api = new ChatHistoryAPI(mockApiKey);
+    // Disable batching for integration tests to avoid message queueing complications
+    api = new ChatHistoryAPI(mockApiKey, undefined, undefined, false);
   });
 
   afterEach(() => {

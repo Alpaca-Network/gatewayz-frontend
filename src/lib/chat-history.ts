@@ -149,7 +149,7 @@ export class ChatHistoryAPI {
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new Event('gatewayz:refresh-auth'));
         }
-        throw new Error('Authentication failed. Please login again.');
+        throw new Error('Session authentication failed. Attempting to refresh...');
       }
 
       if (!response.ok) {
@@ -181,7 +181,13 @@ export class ChatHistoryAPI {
         const { controller, timeoutId } = createTimeoutController(TIMEOUT_CONFIG.chat.sessionCreate);
 
         try {
-          const response = await fetch(`${this.baseUrl}/sessions`, {
+          // Build URL with privy_user_id parameter if available
+          let url = `${this.baseUrl}/sessions`;
+          if (this.privyUserId) {
+            url += `?privy_user_id=${encodeURIComponent(this.privyUserId)}`;
+          }
+
+          const response = await fetch(url, {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${this.apiKey}`,
