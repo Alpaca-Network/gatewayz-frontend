@@ -298,9 +298,9 @@ export const PerformanceMonitor: React.FC<PerformanceMonitorProps> = ({ isOpen, 
 
           <div className="mt-4 pt-4 border-t border-border">
             <div className="text-xs text-muted-foreground space-y-1">
-              <div><strong>TTFT:</strong> Time to First Token - How long before the model starts responding</div>
-              <div><strong>Total:</strong> Complete response time from send to finish</div>
-              <div><strong>TPS:</strong> Tokens per second (higher is better)</div>
+              <div><span className="font-semibold">TTFT:</span> Time to First Token - How long before the model starts responding</div>
+              <div><span className="font-semibold">Total:</span> Complete response time from send to finish</div>
+              <div><span className="font-semibold">TPS:</span> Tokens per second (higher is better)</div>
             </div>
           </div>
         </CardContent>
