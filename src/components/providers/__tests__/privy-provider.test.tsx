@@ -2,6 +2,13 @@ import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { PrivyProviderWrapper } from '../privy-provider';
 
+const mockUsePathname = jest.fn(() => '/');
+const mockUseSearchParams = jest.fn(() => ({
+  toString: () => '',
+}));
+const mockIsVercelPreviewDeployment = jest.fn(() => false);
+const mockBuildPreviewSafeRedirectUrl = jest.fn();
+
 // Mock the dynamic import
 jest.mock('next/dynamic', () => ({
   __esModule: true,
@@ -12,6 +19,11 @@ jest.mock('next/dynamic', () => ({
     RequiredComponent.preload ? RequiredComponent.preload() : RequiredComponent.render?.preload?.();
     return RequiredComponent;
   },
+}));
+
+jest.mock('next/navigation', () => ({
+  usePathname: () => mockUsePathname(),
+  useSearchParams: () => mockUseSearchParams(),
 }));
 
 // Mock Privy
@@ -35,6 +47,15 @@ jest.mock('@/components/auth/preview-hostname-interceptor', () => ({
   PreviewHostnameInterceptor: () => null,
 }));
 
+jest.mock('@/lib/preview-hostname-handler', () => ({
+  isVercelPreviewDeployment: () => mockIsVercelPreviewDeployment(),
+}));
+
+jest.mock('@/lib/preview-oauth-redirect', () => ({
+  buildPreviewSafeRedirectUrl: (args: unknown) => mockBuildPreviewSafeRedirectUrl(args),
+  DEFAULT_PREVIEW_REDIRECT_ORIGIN: 'https://beta.gatewayz.ai',
+}));
+
 // Mock RateLimitHandler
 jest.mock('@/components/auth/rate-limit-handler', () => ({
   RateLimitHandler: () => null,
@@ -54,8 +75,15 @@ describe('PrivyProviderWrapper', () => {
     (global as any).__PRIVY_CONFIG__ = null;
     // Reset env
     delete process.env.NEXT_PUBLIC_PRIVY_APP_ID;
+    delete process.env.NEXT_PUBLIC_PRIVY_OAUTH_REDIRECT_ORIGIN;
     mockCanUseLocalStorage.mockReturnValue(true);
     mockWaitForLocalStorageAccess.mockResolvedValue(true);
+    mockIsVercelPreviewDeployment.mockReturnValue(false);
+    mockUsePathname.mockReturnValue('/');
+    mockUseSearchParams.mockReturnValue({
+      toString: () => '',
+    });
+    mockBuildPreviewSafeRedirectUrl.mockReset();
   });
 
   afterEach(() => {
@@ -269,6 +297,72 @@ describe('PrivyProviderWrapper', () => {
       );
 
       consoleSpy.mockRestore();
+    });
+  });
+
+  describe('Preview OAuth redirect override', () => {
+    it('should not set customOAuthRedirectUrl outside preview deployments', () => {
+      process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app-id-12345';
+
+      render(
+        <PrivyProviderWrapper>
+          <div>Test Child</div>
+        </PrivyProviderWrapper>
+      );
+
+      const config = (global as any).__PRIVY_CONFIG__;
+      expect(config.customOAuthRedirectUrl).toBeUndefined();
+      expect(mockBuildPreviewSafeRedirectUrl).not.toHaveBeenCalled();
+    });
+
+    it('should set preview-safe redirect when on Vercel preview host', () => {
+      process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app-id-12345';
+      mockIsVercelPreviewDeployment.mockReturnValue(true);
+      mockUsePathname.mockReturnValue('/rankings');
+      mockUseSearchParams.mockReturnValue({
+        toString: () => 'tab=usage',
+      });
+      process.env.NEXT_PUBLIC_PRIVY_OAUTH_REDIRECT_ORIGIN = 'https://beta.gatewayz.ai';
+      mockBuildPreviewSafeRedirectUrl.mockReturnValue('https://beta.gatewayz.ai/rankings?tab=usage#stats');
+
+      render(
+        <PrivyProviderWrapper>
+          <div>Test Child</div>
+        </PrivyProviderWrapper>
+      );
+
+      const config = (global as any).__PRIVY_CONFIG__;
+      expect(config.customOAuthRedirectUrl).toBe('https://beta.gatewayz.ai/rankings?tab=usage#stats');
+      expect(mockBuildPreviewSafeRedirectUrl).toHaveBeenCalledTimes(1);
+      expect(mockBuildPreviewSafeRedirectUrl).toHaveBeenCalledWith(
+        expect.objectContaining({
+          targetOrigin: 'https://beta.gatewayz.ai',
+        }),
+      );
+    });
+
+    it('should fall back to default beta domain when env override is absent', () => {
+      process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app-id-12345';
+      mockIsVercelPreviewDeployment.mockReturnValue(true);
+      mockUsePathname.mockReturnValue('/chat');
+      mockUseSearchParams.mockReturnValue({
+        toString: () => '',
+      });
+      mockBuildPreviewSafeRedirectUrl.mockReturnValue('https://beta.gatewayz.ai/chat');
+
+      render(
+        <PrivyProviderWrapper>
+          <div>Test Child</div>
+        </PrivyProviderWrapper>
+      );
+
+      const config = (global as any).__PRIVY_CONFIG__;
+      expect(config.customOAuthRedirectUrl).toBe('https://beta.gatewayz.ai/chat');
+      expect(mockBuildPreviewSafeRedirectUrl).toHaveBeenCalledWith(
+        expect.objectContaining({
+          targetOrigin: 'https://beta.gatewayz.ai',
+        }),
+      );
     });
   });
 
