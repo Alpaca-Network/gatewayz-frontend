@@ -362,6 +362,11 @@ export async function* streamChatResponse(
             throw new Error('Max retries exceeded after refresh');
           }
 
+          // Add a backoff delay to allow backend state to propagate
+          const authWaitTime = Math.min(1000 * (retryCount + 1), 5000);
+          devLog(`[Streaming] Waiting ${authWaitTime}ms before retrying with refreshed credentials...`);
+          await sleep(authWaitTime);
+
           // Retry the stream with the new API key (even if it's the same)
           // Increment retryCount to ensure we eventually give up if the server keeps rejecting it
           yield* streamChatResponse(url, newApiKey, requestBody, retryCount + 1, maxRetries);
