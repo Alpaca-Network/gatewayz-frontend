@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { usePrivy, User, LinkedAccountWithMetadata } from '@privy-io/react-auth';
 import { useAuthStore } from '@/lib/store/auth-store';
-import { processAuthResponse, AuthResponse, getApiKey, getUserData, saveApiKey, saveUserData } from '@/lib/api';
+import { processAuthResponse, AuthResponse, getApiKey, getUserData, saveApiKey, saveUserData, AUTH_REFRESH_COMPLETE_EVENT } from '@/lib/api';
 
 // Helper to strip undefined values (copied from original context)
 const stripUndefined = <T>(value: T): T => {
@@ -168,6 +168,37 @@ export function useAuthSync() {
           // clearAuth(); 
       }
   }, [error, setError]);
+
+  // Listen for auth refresh completion (triggered by legacy context or other components)
+  // This breaks the loop where ChatHistoryAPI triggers refresh, Context updates localStorage,
+  // but this store remains stale, causing subsequent 401s.
+  useEffect(() => {
+    const handleRefreshComplete = () => {
+      const storedKey = getApiKey();
+      const storedUser = getUserData();
+      if (storedKey && storedUser) {
+        console.log('[useAuthSync] Refresh complete, updating store from storage');
+        setAuth(storedKey, storedUser);
+        // Invalidate query to ensure fresh data next time
+        queryClient.invalidateQueries({ queryKey: ['auth-sync'] });
+      } else {
+        // If storage is empty after a refresh attempt, it likely means auth failed or user was logged out.
+        // We should sync the store to reflect this to prevent UI from showing stale auth state.
+        console.log('[useAuthSync] Refresh complete but no credentials found - clearing auth');
+        clearAuth();
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener(AUTH_REFRESH_COMPLETE_EVENT, handleRefreshComplete);
+    }
+
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener(AUTH_REFRESH_COMPLETE_EVENT, handleRefreshComplete);
+      }
+    };
+  }, [setAuth, clearAuth, queryClient]);
   
   // Handle Logout
   useEffect(() => {

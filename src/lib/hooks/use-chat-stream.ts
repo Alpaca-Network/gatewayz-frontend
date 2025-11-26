@@ -144,7 +144,7 @@ export function useChatStream() {
                 const last = old[old.length - 1];
                  return [...old.slice(0, -1), {
                     ...last,
-                    content: last.content + "\n\n[Error: Failed to complete response]",
+                    content: last.content + `\n\n[Error: ${e instanceof Error ? e.message : "Failed to complete response"}]`,
                     isStreaming: false
                 }];
             });
