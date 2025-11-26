@@ -8,9 +8,8 @@ import { useAuth } from "@/hooks/use-auth";
 import { getApiKey } from "@/lib/api";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
-// This page has been refactored to use the new "v2" architecture
-// based on Zustand + React Query for robust state management.
-// See src/components/chat-v2/ for the components.
+// This page uses the v2 chat architecture (Zustand + React Query)
+// located under src/components/chat-v2/.
 
 export default function ChatPage() {
   const { isAuthenticated, loading: authLoading } = useAuth();
