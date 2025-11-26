@@ -480,12 +480,34 @@ export function GatewayzAuthProvider({
 
   const handleAuthSuccessAsync = useCallback(
     async (authData: AuthResponse, isNewUserExpected: boolean) => {
-      handleAuthSuccess(authData, isNewUserExpected);
-      // Fire and forget the API key upgrade - don't await it
-      // This prevents blocking login completion on a secondary operation
-      upgradeApiKeyIfNeeded(authData).catch((error) => {
-        console.log("[Auth] Background API key upgrade failed (non-blocking):", error);
-      });
+      // Check if we need to attempt a key upgrade
+      // New users start with trial credits and don't need immediate upgrade
+      // Users with low credits (<= 10) likely only have the temp key anyway
+      const shouldCheckUpgrade = !authData.is_new_user && (authData.credits ?? 0) > 10;
+
+      let finalAuthData = authData;
+
+      if (shouldCheckUpgrade) {
+        // Save initial credentials so upgrade logic can access them from storage
+        processAuthResponse(authData);
+
+        try {
+          // Await the upgrade to ensure we have the correct key before resolving auth
+          // This prevents race conditions where UI tries to use temp key
+          await upgradeApiKeyIfNeeded(authData);
+
+          // If key was upgraded, update authData so handleAuthSuccess uses the new key
+          const currentKey = getApiKey();
+          if (currentKey && currentKey !== authData.api_key) {
+            console.log("[Auth] API key upgraded during login, using new key");
+            finalAuthData = { ...authData, api_key: currentKey };
+          }
+        } catch (error) {
+          console.warn("[Auth] Key upgrade check failed:", error);
+        }
+      }
+
+      handleAuthSuccess(finalAuthData, isNewUserExpected);
     },
     [handleAuthSuccess, upgradeApiKeyIfNeeded]
   );
