@@ -350,11 +350,21 @@ export async function* streamChatResponse(
         // Try to get the new API key after refresh
         const newApiKey = StreamCoordinator.getApiKey();
 
-        if (newApiKey && newApiKey !== apiKey) {
-          devLog('[Streaming] New API key obtained after refresh, retrying stream');
+        if (newApiKey) {
+          if (newApiKey !== apiKey) {
+            devLog('[Streaming] New API key obtained after refresh, retrying stream');
+          } else {
+            devLog('[Streaming] API key refreshed (same key returned), retrying stream');
+          }
 
-          // Retry the stream with the new API key
-          yield* streamChatResponse(url, newApiKey, requestBody, retryCount, maxRetries);
+          // Check if we have exceeded max retries to prevent infinite loops
+          if (retryCount >= maxRetries) {
+            throw new Error('Max retries exceeded after refresh');
+          }
+
+          // Retry the stream with the new API key (even if it's the same)
+          // Increment retryCount to ensure we eventually give up if the server keeps rejecting it
+          yield* streamChatResponse(url, newApiKey, requestBody, retryCount + 1, maxRetries);
           return;
         } else {
           devLog('[Streaming] No new API key available after refresh');
@@ -362,6 +372,11 @@ export async function* streamChatResponse(
         }
       } catch (refreshError) {
         devError('[Streaming] Auth refresh failed:', refreshError);
+
+        // If it's already a wrapped authentication error (from recursive calls), re-throw it as is
+        if (refreshError instanceof Error && refreshError.message.startsWith('Authentication failed:')) {
+          throw refreshError;
+        }
 
         // If refresh fails, provide user-friendly error
         const refreshErrorMsg = refreshError instanceof Error
