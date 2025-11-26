@@ -1,14 +1,43 @@
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { ChatLayout } from "@/components/chat-v2/ChatLayout";
 import { FreeModelsBanner } from "@/components/chat/free-models-banner";
+import { useAuth } from "@/hooks/use-auth";
+import { getApiKey } from "@/lib/api";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 // This page has been refactored to use the new "v2" architecture
 // based on Zustand + React Query for robust state management.
 // See src/components/chat-v2/ for the components.
 
 export default function ChatPage() {
+  const { isAuthenticated, loading: authLoading } = useAuth();
+  const apiKey = getApiKey();
+  const router = useRouter();
+
+  useEffect(() => {
+    // Redirect to login if not authenticated and no API key is present
+    if (!authLoading && !isAuthenticated && !apiKey) {
+      router.push("/login");
+    }
+  }, [authLoading, isAuthenticated, apiKey, router]);
+
+  // Show loading screen while auth is initializing
+  if (authLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <LoadingSpinner message="Initializing chat..." className="border-none bg-transparent" />
+      </div>
+    );
+  }
+
+  // Prevent rendering if we are about to redirect
+  if (!isAuthenticated && !apiKey) {
+    return null;
+  }
+
   return (
     <Suspense fallback={<div className="flex h-screen items-center justify-center">Loading...</div>}>
       <FreeModelsBanner />
