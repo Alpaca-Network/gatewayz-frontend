@@ -21,7 +21,7 @@ const ReasoningDisplay = dynamic(
 
 export interface ChatMessageProps {
   role: 'user' | 'assistant';
-  content: string;
+  content: string | any[];
   reasoning?: string;
   image?: string;
   video?: string;
@@ -52,6 +52,28 @@ export const ChatMessage = memo<ChatMessageProps>(
   }) => {
     const isUser = role === 'user';
 
+    // Parse content if it's an array
+    let displayContent = '';
+    let displayImage = image;
+    let displayVideo = video;
+    let displayAudio = audio;
+
+    if (Array.isArray(content)) {
+      content.forEach(part => {
+        if (part.type === 'text') {
+          displayContent += part.text || '';
+        } else if (part.type === 'image_url') {
+          displayImage = part.image_url?.url;
+        } else if (part.type === 'video_url') {
+          displayVideo = part.video_url?.url;
+        } else if (part.type === 'audio_url') {
+          displayAudio = part.audio_url?.url;
+        }
+      });
+    } else {
+      displayContent = content;
+    }
+
     return (
       <div className={`flex gap-3 ${isUser ? 'justify-end' : 'justify-start'} mb-4`}>
         {!isUser && (
@@ -71,10 +93,10 @@ export const ChatMessage = memo<ChatMessageProps>(
             }`}
           >
             {/* Image attachment */}
-            {image && (
+            {displayImage && (
               <div className="mb-3">
                 <img
-                  src={image}
+                  src={displayImage}
                   alt="Uploaded"
                   className="max-w-full rounded-md"
                   style={{ maxHeight: '300px' }}
@@ -83,10 +105,10 @@ export const ChatMessage = memo<ChatMessageProps>(
             )}
 
             {/* Video attachment */}
-            {video && (
+            {displayVideo && (
               <div className="mb-3">
                 <video
-                  src={video}
+                  src={displayVideo}
                   controls
                   className="max-w-full rounded-md"
                   style={{ maxHeight: '300px' }}
@@ -95,9 +117,9 @@ export const ChatMessage = memo<ChatMessageProps>(
             )}
 
             {/* Audio attachment */}
-            {audio && (
+            {displayAudio && (
               <div className="mb-3">
-                <audio src={audio} controls className="w-full" />
+                <audio src={displayAudio} controls className="w-full" />
               </div>
             )}
 
@@ -111,7 +133,7 @@ export const ChatMessage = memo<ChatMessageProps>(
             {/* Message content */}
             <div className="prose prose-sm dark:prose-invert max-w-none">
               {isUser ? (
-                <p className="whitespace-pre-wrap m-0">{content}</p>
+                <p className="whitespace-pre-wrap m-0">{displayContent}</p>
               ) : (
                 <ReactMarkdown
                   components={{
@@ -131,7 +153,7 @@ export const ChatMessage = memo<ChatMessageProps>(
                     p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
                   }}
                 >
-                  {content}
+                  {displayContent}
                 </ReactMarkdown>
               )}
             </div>
