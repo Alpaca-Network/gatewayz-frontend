@@ -162,7 +162,8 @@ export default function DevelopersPage() {
 
                 while (hasMore) {
                     const offsetParam = offset > 0 ? `&offset=${offset}` : '';
-                    const modelsUrl = `${apiBaseUrl}/v1/models?limit=${pageSize}${offsetParam}`;
+                    const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
+                const modelsUrl = `${apiBaseUrl}/v1/models?limit=${pageSize}${offsetParam}`;
                     console.log('Fetching models from:', modelsUrl);
                     const modelsResponse = await fetch(modelsUrl);
                     console.log('Models response status:', modelsResponse.status);
