@@ -1,383 +1,474 @@
-# Auth Refresh Coordination Fix - Implementation Plan
+# Auth & Chat Rearchitecture Plan
 
 ## Executive Summary
 
-The current auth refresh system is **fire-and-forget**: when a 401 error occurs during chat streaming, the code dispatches an event and immediately throws an error. This causes:
-- Streams to end abruptly
-- Chat UX to break mid-response
-- Race conditions between auth context and chat layers
-- Arbitrary polling creating stale API key windows
+This plan addresses the fundamental architectural issues in both the authentication and chat systems. The current implementations are functional but suffer from:
 
-This plan implements **coordinated, awaitable auth refresh** with stream recovery.
+1. **Auth System**: Race conditions, inconsistent state management across 3 sources of truth, complex retry/timeout logic scattered across multiple files
+2. **Chat System**: A 3,671-line monolithic component, multiple race conditions, inefficient re-rendering, and duplicated retry logic
 
----
-
-## Problem Analysis
-
-### Current Flow (Broken)
-```
-401 Error in Stream
-  ↓
-requestAuthRefresh() → window.dispatchEvent(EVENT)  [Fire-and-forget]
-  ↓
-Streaming code immediately throws error, stream ends
-  ↓
-Auth context processes event asynchronously
-  ↓
-New API key available but stream already closed
-  ↓
-User sees broken experience
-```
-
-### Root Causes
-
-1. **Fire-and-forget dispatch** - No mechanism to await completion
-2. **No stream coordination** - Streaming doesn't know about auth state
-3. **Multiple independent systems** - localStorage + custom event + polling
-4. **Stale API key window** - 1500ms polling = up to 1.5s of stale requests
-5. **No request queuing** - Failed requests aren't retried with new credentials
+The goal is to create robust, maintainable, and fluid systems that handle edge cases gracefully.
 
 ---
 
-## Solution Architecture
+## Current State Analysis
 
-### Phase 1: Make Auth Refresh Awaitable
+### Authentication Issues (Critical)
 
-**Goal**: Replace fire-and-forget event dispatch with promise-based coordination
+| Issue | Severity | Impact |
+|-------|----------|--------|
+| Race condition in `syncWithBackend()` | HIGH | Duplicate auth attempts |
+| 3 sources of truth (Privy, localStorage, Context) | HIGH | State desync |
+| Dual auth hooks confusion (`useAuth` vs `useGatewayzAuth`) | HIGH | Wrong auth checks |
+| Wallet error string matching | MEDIUM | False positives |
+| Scattered timeout configuration | MEDIUM | Hard to maintain |
+| 30s timeout vs 60s retry chain mismatch | MEDIUM | Premature failures |
 
-**Files Modified**:
-- `src/lib/api.ts` - Add completion signal system
-- `src/context/gatewayz-auth-context.tsx` - Dispatch completion event
+### Chat Issues (Critical)
 
-**Changes**:
-```typescript
-// BEFORE (fire-and-forget)
-export function requestAuthRefresh(): void {
-  window.dispatchEvent(new Event(AUTH_REFRESH_EVENT));
-}
+| Issue | Severity | Impact |
+|-------|----------|--------|
+| 3,671-line monolithic component | CRITICAL | Unmaintainable |
+| 20+ useState hooks in one component | HIGH | Cascading re-renders |
+| Multiple race conditions (session creation, auto-send) | HIGH | Duplicate messages, data loss |
+| No error boundaries | HIGH | App crashes on errors |
+| Duplicated retry logic (API routes + streaming.ts) | MEDIUM | Maintenance nightmare |
+| O(n²) message deduplication | LOW | Slow with large histories |
 
-// AFTER (returns promise, waits for completion)
-export function requestAuthRefresh(): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const handler = () => {
-      window.removeEventListener(AUTH_REFRESH_COMPLETE_EVENT, handler);
-      resolve();
-    };
+---
 
-    window.addEventListener(AUTH_REFRESH_COMPLETE_EVENT, handler);
-    window.dispatchEvent(new Event(AUTH_REFRESH_EVENT));
+## Architecture Proposal
 
-    // Timeout after 30s to prevent hanging
-    const timeout = setTimeout(() => {
-      window.removeEventListener(AUTH_REFRESH_COMPLETE_EVENT, handler);
-      reject(new Error('Auth refresh timeout'));
-    }, 30000);
-  });
-}
+### Auth Architecture: State Machine Pattern
+
+Replace the current ad-hoc state management with a proper state machine:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     AUTH STATE MACHINE                          │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│    ┌──────────┐     login()      ┌─────────────────┐            │
+│    │   IDLE   │ ───────────────► │ AUTHENTICATING  │            │
+│    └──────────┘                  └────────┬────────┘            │
+│         ▲                                 │                     │
+│         │ logout()                        │                     │
+│         │                    ┌────────────┼────────────┐        │
+│         │                    │            │            │        │
+│         │                    ▼            ▼            ▼        │
+│    ┌────┴─────┐       ┌──────────┐  ┌──────────┐ ┌─────────┐    │
+│    │ UNAUTH   │       │ SYNCING  │  │  ERROR   │ │ TIMEOUT │    │
+│    └──────────┘       └────┬─────┘  └────┬─────┘ └────┬────┘    │
+│         ▲                  │             │            │         │
+│         │                  ▼             │  retry()   │         │
+│         │           ┌──────────┐         │            │         │
+│         └───────────┤   AUTH   │◄────────┴────────────┘         │
+│                     └──────────┘                                │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-**Auth Context Changes**:
-- After successful sync completes → dispatch `AUTH_REFRESH_COMPLETE_EVENT`
-- After error state → dispatch completion (not success) so clients can handle
+**Key Principles:**
+1. **Single Source of Truth**: Auth state machine is THE authority
+2. **Atomic Transitions**: No intermediate states, no race conditions
+3. **Centralized Config**: All timeouts/retries in one config object
+4. **Event-Driven**: Components subscribe to state changes
 
-### Phase 2: Create Stream Coordinator
+### Chat Architecture: Feature-Based Decomposition
 
-**Goal**: Coordinate streaming with auth refresh, allowing streams to pause/resume
+Split the monolithic chat into focused, testable modules:
 
-**Files Created**:
-- `src/lib/stream-coordinator.ts` - New module for stream state management
-
-**Design**:
-```typescript
-class StreamCoordinator {
-  private isRefreshing = false;
-  private refreshPromise: Promise<void> | null = null;
-
-  async handleAuthError(error: Response): Promise<void> {
-    // Mark as refreshing, prevent multiple refreshes
-    if (this.isRefreshing) {
-      // Wait for existing refresh
-      await this.refreshPromise;
-      return;
-    }
-
-    this.isRefreshing = true;
-    try {
-      // Wait for auth refresh to complete (now awaitable!)
-      await requestAuthRefresh();
-    } finally {
-      this.isRefreshing = false;
-    }
-  }
-
-  getApiKey(): string | null {
-    // Get fresh API key from auth context
-    return getApiKey();
-  }
-}
+```
+┌────────────────────────────────────────────────────────────────────┐
+│                         CHAT PAGE                                  │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │                    useChatOrchestrator()                     │  │
+│  │  Coordinates: auth state, sessions, messages, streaming      │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+│                              │                                     │
+│         ┌────────────────────┼────────────────────┐                │
+│         │                    │                    │                │
+│         ▼                    ▼                    ▼                │
+│  ┌─────────────┐     ┌─────────────┐     ┌──────────────┐          │
+│  │  SIDEBAR    │     │  MESSAGES   │     │    INPUT     │          │
+│  │ useSessions │     │ useMessages │     │  useInput    │          │
+│  └─────────────┘     └─────────────┘     └──────────────┘          │
+│         │                    │                    │                │
+│         ▼                    ▼                    ▼                │
+│  ┌─────────────┐     ┌─────────────┐     ┌──────────────┐          │
+│  │ChatHistory  │     │useStreaming │     │ ModelSelect  │          │
+│  │   API       │     └─────────────┘     └──────────────┘          │
+│  └─────────────┘                                                   │
+└────────────────────────────────────────────────────────────────────┘
 ```
 
-### Phase 3: Update Streaming Layer
-
-**Goal**: Leverage StreamCoordinator for 401 handling
-
-**Files Modified**:
-- `src/lib/streaming.ts` - Use coordinator for 401 errors
-
-**Changes**:
-```typescript
-if (response.status === 401) {
-  try {
-    const coordinator = new StreamCoordinator();
-    await coordinator.handleAuthError(response);
-
-    // After successful refresh, retry with new API key
-    const newApiKey = coordinator.getApiKey();
-    if (newApiKey && newApiKey !== apiKey) {
-      // Retry streaming with new credentials
-      yield* streamChatResponse(url, newApiKey, requestBody, retryCount, maxRetries);
-      return;
-    }
-  } catch (refreshError) {
-    throw new Error(
-      'Authentication failed after refresh attempt. ' +
-      'Please log in again.'
-    );
-  }
-
-  throw new Error('Authentication failed');
-}
-```
-
-### Phase 4: Eliminate Redundant Polling
-
-**Goal**: Remove 1500ms polling, rely only on event system
-
-**Files Modified**:
-- `src/app/chat/page.tsx` - Remove polling interval
-
-**Changes**:
-```typescript
-// REMOVE this:
-// const pollInterval = window.setInterval(updateApiKeyState, 1500);
-
-// Keep only:
-window.addEventListener('storage', handleStorageChange);
-window.addEventListener(AUTH_REFRESH_EVENT, handleAuthRefresh);
-```
-
-### Phase 5: Unify Chat Auth State
-
-**Goal**: Chat uses `useGatewayzAuth()` directly instead of manual polling
-
-**Files Modified**:
-- `src/app/chat/page.tsx` - Use auth context hook
-
-**Changes**:
-```typescript
-// BEFORE: Manual API key fetching
-const [hasApiKey, setHasApiKey] = useState(false);
-useEffect(() => {
-  const apiKey = getApiKey();
-  setHasApiKey(!!apiKey);
-  // polling...
-}, []);
-
-// AFTER: Use auth context
-const { apiKey, status } = useGatewayzAuth();
-const hasApiKey = !!apiKey;
-```
+**Key Principles:**
+1. **Single Responsibility**: Each hook/component does one thing well
+2. **Composition**: Orchestrator combines smaller pieces
+3. **Error Boundaries**: Each feature handles its own errors
+4. **Testable**: Each hook can be unit tested in isolation
 
 ---
 
 ## Implementation Phases
 
-### Phase 1: Auth Refresh Coordination (Priority 1)
-**Time**: ~2-3 hours
-**Risk**: Medium (event system changes)
-**Testing**: Test event firing order
+### Phase 1: Auth Foundation (Priority: Critical)
 
-**Tasks**:
-1. Add `AUTH_REFRESH_COMPLETE_EVENT` constant in `api.ts`
-2. Modify `requestAuthRefresh()` to return Promise
-3. Update auth context to dispatch completion event after sync
-4. Add tests for promise resolution/rejection
-5. Test 401 scenarios with new flow
+**Goal**: Create a robust auth state machine that eliminates race conditions
 
-### Phase 2: Stream Coordinator (Priority 2)
-**Time**: ~2-3 hours
-**Risk**: Medium (new abstraction)
-**Testing**: Unit test coordinator class
+#### 1.1 Create Auth State Machine
+- **New File**: `src/lib/auth/auth-machine.ts`
+- Implements formal state machine with defined transitions
+- Single source of truth for auth state
+- Atomic state transitions (no intermediate states)
 
-**Tasks**:
-1. Create `stream-coordinator.ts` with coordinator class
-2. Implement `handleAuthError()` method
-3. Add `getApiKey()` method
-4. Write unit tests
-5. Test with chat scenarios
+#### 1.2 Create Unified Auth Config
+- **New File**: `src/lib/auth/auth-config.ts`
+- Centralizes ALL timeout and retry configuration
+- Network-adaptive timeout calculation
+- Clear documentation of each value
 
-### Phase 3: Streaming Layer Integration (Priority 3)
-**Time**: ~2-3 hours
-**Risk**: High (affects core chat UX)
-**Testing**: E2E test with real chat
+#### 1.3 Create Auth Service
+- **New File**: `src/lib/auth/auth-service.ts`
+- Handles Privy → Backend sync
+- Manages token retrieval with proper timeout
+- Implements retry logic in one place
+- Returns Result<T, Error> pattern for explicit error handling
 
-**Tasks**:
-1. Import coordinator in `streaming.ts`
-2. Update 401 handler to use coordinator
-3. Implement retry with new API key
-4. Test rate limiting still works
-5. Test network errors still work
-6. Manual E2E chat test
+#### 1.4 Simplify Auth Context
+- **Refactor**: `src/context/gatewayz-auth-context.tsx`
+- Remove complex retry/timeout logic (moved to service)
+- Subscribe to state machine events
+- Expose simple API: `login()`, `logout()`, `refresh()`
+- Single `useGatewayzAuth()` hook (deprecate `useAuth()`)
 
-### Phase 4: Remove Polling (Priority 4)
-**Time**: ~30 mins
-**Risk**: Low (cleanup only)
-**Testing**: Verify no regressions
+#### 1.5 Fix Auth API Routes
+- **Refactor**: `src/app/api/auth/route.ts`
+- Remove retry logic (handled by service layer)
+- Add request validation with Zod
+- Standardized error responses
 
-**Tasks**:
-1. Remove polling interval from `chat/page.tsx`
-2. Keep event listeners
-3. Test chat still detects auth changes
-4. Monitor localStorage access
+**Files to Create:**
+- `src/lib/auth/auth-machine.ts` (~200 lines)
+- `src/lib/auth/auth-config.ts` (~80 lines)
+- `src/lib/auth/auth-service.ts` (~300 lines)
+- `src/lib/auth/types.ts` (~50 lines)
+- `src/lib/auth/index.ts` (exports)
 
-### Phase 5: Unify Auth State (Priority 5)
-**Time**: ~1-2 hours
-**Risk**: Medium (state management)
-**Testing**: Verify no stale state issues
-
-**Tasks**:
-1. Replace manual `getApiKey()` calls with `useGatewayzAuth()`
-2. Remove `hasApiKey` state variable
-3. Update dependencies
-4. Test auth state flows
-5. Verify no race conditions
+**Files to Refactor:**
+- `src/context/gatewayz-auth-context.tsx` (reduce from ~1000 to ~300 lines)
+- `src/app/api/auth/route.ts`
+- `src/hooks/use-auth.ts` (deprecate or redirect to unified hook)
 
 ---
 
-## Files Affected
+### Phase 2: Chat Decomposition (Priority: Critical)
 
-### Create
-- `src/lib/stream-coordinator.ts` - New coordinator class
+**Goal**: Break down the monolithic chat into manageable, testable pieces
 
-### Modify
-- `src/lib/api.ts` - Make refresh awaitable
-- `src/context/gatewayz-auth-context.tsx` - Emit completion event
-- `src/lib/streaming.ts` - Use coordinator for 401 handling
-- `src/app/chat/page.tsx` - Remove polling, use auth context
-- `src/lib/chat-history.ts` - Update for awaitable refresh (minor)
+#### 2.1 Create Chat Hooks Layer
+- **New File**: `src/hooks/chat/use-sessions.ts`
+  - Session CRUD operations
+  - Session list with virtual scrolling
+  - Active session management
 
-### Test
-- `src/lib/__tests__/api.test.ts` - Test auth refresh promise
-- `src/__tests__/integration/auth-to-chat-flow.integration.test.ts` - E2E
+- **New File**: `src/hooks/chat/use-messages.ts`
+  - Message list management
+  - Message deduplication (O(1) with Set)
+  - Optimistic updates
 
----
+- **New File**: `src/hooks/chat/use-streaming.ts`
+  - Stream lifecycle management
+  - Chunk processing
+  - Error recovery with retry
+  - Timing metrics
 
-## Key Decisions
+- **New File**: `src/hooks/chat/use-chat-input.ts`
+  - Input state management
+  - File attachment handling
+  - Send validation
 
-### Decision 1: Promise-based Coordination vs Callback-based
-**Choice**: Promise-based (async/await)
-**Reason**: Cleaner API, better error handling, aligns with modern JS patterns
+#### 2.2 Create Chat Orchestrator
+- **New File**: `src/hooks/chat/use-chat-orchestrator.ts`
+  - Coordinates all chat hooks
+  - Handles cross-cutting concerns (auth state, URL params)
+  - Initialization sequence state machine
 
-### Decision 2: Singleton vs Instance-per-request StreamCoordinator
-**Choice**: Singleton per request
-**Reason**: Prevents multiple simultaneous refreshes, simpler state management
+#### 2.3 Create Chat Components
+- **New File**: `src/components/chat/chat-sidebar.tsx`
+  - Session list rendering
+  - Virtual scrolling
+  - Session actions (rename, delete)
 
-### Decision 3: Retry after refresh vs Give up
-**Choice**: Retry with new API key
-**Reason**: Maximizes recovery, improves UX, most errors are auth-related
+- **New File**: `src/components/chat/chat-messages.tsx`
+  - Message list rendering
+  - Auto-scroll management
+  - Loading states
 
-### Decision 4: Kill polling immediately vs Gradual migration
-**Choice**: Immediate (after phase 3)
-**Reason**: Polling creates stale windows, better to remove cleanly after new system works
+- **New File**: `src/components/chat/chat-input-area.tsx`
+  - Input field
+  - Model selector
+  - Send button
+  - File attachments
 
-### Decision 5: localStorage vs In-memory sync for API key
-**Choice**: Keep localStorage as source of truth
-**Reason**: Necessary for tab sync, coordinator reads from localStorage
+- **New File**: `src/components/chat/chat-error-boundary.tsx`
+  - Feature-specific error handling
+  - Recovery options
 
----
+#### 2.4 Simplify Main Chat Page
+- **Refactor**: `src/app/chat/page.tsx`
+  - Reduce from 3,671 lines to ~200 lines
+  - Use orchestrator hook
+  - Compose feature components
+  - Add error boundaries
 
-## Backward Compatibility
+**Files to Create:**
+- `src/hooks/chat/use-sessions.ts` (~200 lines)
+- `src/hooks/chat/use-messages.ts` (~150 lines)
+- `src/hooks/chat/use-streaming.ts` (~250 lines)
+- `src/hooks/chat/use-chat-input.ts` (~100 lines)
+- `src/hooks/chat/use-chat-orchestrator.ts` (~200 lines)
+- `src/hooks/chat/types.ts` (~100 lines)
+- `src/hooks/chat/index.ts` (exports)
+- `src/components/chat/chat-sidebar.tsx` (~300 lines)
+- `src/components/chat/chat-messages.tsx` (~250 lines)
+- `src/components/chat/chat-input-area.tsx` (~200 lines)
+- `src/components/chat/chat-error-boundary.tsx` (~80 lines)
 
-✅ **Fully backward compatible**:
-- Event listeners still work
-- localStorage still used for persistence
-- Auth context API unchanged (just adds completion signal)
-- Existing error handling preserved
-- Graceful fallback if refresh fails
-
----
-
-## Testing Strategy
-
-### Unit Tests
-- `stream-coordinator.ts` - Mock auth refresh events
-- `api.ts` - Test promise resolution/rejection
-
-### Integration Tests
-- Complete auth refresh flow with streaming
-- 401 during stream → refresh → retry
-- Multiple 401s in quick succession
-- Auth refresh timeout handling
-- Storage event + custom event coordination
-
-### E2E Tests
-- Real chat with 401 injection
-- Verify stream resumes after refresh
-- Verify UI updates properly
-- Verify no double messages
-
-### Manual Testing
-- Real chat scenarios
-- Network throttling to trigger 401
-- Multi-tab auth sync
-- Performance monitoring
+**Files to Refactor:**
+- `src/app/chat/page.tsx` (reduce from 3,671 to ~200 lines)
 
 ---
 
-## Rollback Plan
+### Phase 3: Streaming Consolidation (Priority: High)
 
-If issues arise:
-1. Revert `stream-coordinator.ts` and streaming changes
-2. Keep `requestAuthRefresh()` as async but don't call await
-3. Re-enable 1500ms polling as fallback
-4. Existing error handling ensures graceful degradation
+**Goal**: Single, robust streaming implementation
+
+#### 3.1 Refactor Streaming Module
+- **Refactor**: `src/lib/streaming.ts`
+  - Extract SSE parsing into testable function
+  - Extract retry logic into reusable utility
+  - Simplify response format handling
+  - Add proper TypeScript types for all formats
+
+#### 3.2 Remove Duplicate Retry Logic
+- **Refactor**: `src/app/api/chat/completions/route.ts`
+  - Remove retry logic (handled by streaming module)
+  - Simplify to pure proxy
+
+#### 3.3 Create Stream Coordinator Service
+- **Refactor**: `src/lib/stream-coordinator.ts`
+  - Proper cleanup on unmount
+  - Handle auth refresh mid-stream
+  - Backpressure handling
+
+**Files to Refactor:**
+- `src/lib/streaming.ts` (reduce from 799 to ~400 lines)
+- `src/app/api/chat/completions/route.ts`
+- `src/lib/stream-coordinator.ts`
 
 ---
 
-## Risks & Mitigations
+### Phase 4: Error Handling & Recovery (Priority: High)
 
-| Risk | Severity | Mitigation |
-|------|----------|-----------|
-| Race conditions in coordinator | Medium | Thorough test coverage, ref-based locking |
-| Streams stuck during refresh | Medium | 30s timeout, explicit error throw |
-| Multiple refreshes in flight | Medium | Coordinator queue + deduplication |
-| Auth key becomes stale mid-stream | Low | Immediate retry with new key on 401 |
-| Polling removal breaks edge case | Low | Keep storage event listener as fallback |
-| Performance impact | Low | Coordinator is minimal abstraction |
+**Goal**: Graceful error handling throughout
+
+#### 4.1 Create Error Types
+- **New File**: `src/lib/errors/index.ts`
+  - `AuthError`, `NetworkError`, `StreamError`, `SessionError`
+  - Error codes for each type
+  - User-friendly messages
+
+#### 4.2 Create Error Boundary Components
+- **New File**: `src/components/error/auth-error-boundary.tsx`
+- **New File**: `src/components/error/chat-error-boundary.tsx`
+- Recovery options for each error type
+
+#### 4.3 Standardize API Error Responses
+- All API routes return consistent error format:
+```typescript
+interface ApiError {
+  code: string;
+  message: string;
+  details?: Record<string, unknown>;
+  retryable: boolean;
+}
+```
+
+**Files to Create:**
+- `src/lib/errors/index.ts` (~150 lines)
+- `src/lib/errors/auth-errors.ts` (~80 lines)
+- `src/lib/errors/chat-errors.ts` (~80 lines)
+- `src/components/error/auth-error-boundary.tsx` (~100 lines)
+- `src/components/error/chat-error-boundary.tsx` (~100 lines)
+
+---
+
+### Phase 5: Testing & Documentation (Priority: Medium)
+
+**Goal**: Ensure stability with comprehensive tests
+
+#### 5.1 Unit Tests
+- Auth state machine transitions
+- Streaming chunk parsing
+- Session CRUD operations
+- Error handling paths
+
+#### 5.2 Integration Tests
+- Full auth flow (login → sync → authenticated)
+- Chat flow (create session → send message → receive stream)
+- Error recovery flows
+
+#### 5.3 E2E Tests
+- Happy path: Login → Chat → Logout
+- Error path: Network failure → Recovery
+- Edge cases: Tab switching, page refresh
+
+**Test Files to Create:**
+- `src/lib/auth/__tests__/auth-machine.test.ts`
+- `src/lib/auth/__tests__/auth-service.test.ts`
+- `src/hooks/chat/__tests__/use-sessions.test.ts`
+- `src/hooks/chat/__tests__/use-streaming.test.ts`
+- `src/lib/__tests__/streaming.test.ts`
+
+---
+
+## Migration Strategy
+
+### Approach: Parallel Implementation
+
+To minimize risk, we'll implement the new architecture alongside the existing code:
+
+1. **Phase 1-2**: Create new modules without touching existing code
+2. **Phase 3**: Wire up new modules behind feature flag
+3. **Phase 4**: A/B test new vs old implementation
+4. **Phase 5**: Remove old code after validation
+
+### Feature Flag Strategy
+
+```typescript
+// src/lib/feature-flags.ts
+export const USE_NEW_AUTH = process.env.NEXT_PUBLIC_NEW_AUTH === 'true';
+export const USE_NEW_CHAT = process.env.NEXT_PUBLIC_NEW_CHAT === 'true';
+```
+
+### Rollback Plan
+
+Each phase can be independently rolled back:
+- Phase 1: Revert to old auth context (feature flag)
+- Phase 2: Revert to old chat page (feature flag)
+- Phase 3: Revert streaming changes
+- Phase 4: Error boundaries are additive (no rollback needed)
+
+---
+
+## Risk Assessment
+
+### High Risk Items
+
+| Risk | Mitigation |
+|------|------------|
+| Breaking auth for all users | Feature flag, extensive testing |
+| Chat data loss during migration | Parallel implementation, no data schema changes |
+| Regression in streaming | Keep existing streaming as fallback |
+
+### Medium Risk Items
+
+| Risk | Mitigation |
+|------|------------|
+| Performance regression | Benchmark before/after |
+| Memory leaks in new hooks | Proper cleanup in useEffect |
+| State desync during transition | Clear state on feature flag toggle |
 
 ---
 
 ## Success Criteria
 
-✅ No more broken streams on 401
-✅ Auth refresh completes before stream retry
-✅ Chat UX smooth during refresh (no visible interruption)
-✅ Polling removed (no 1500ms stale windows)
-✅ All tests pass (unit + integration + E2E)
-✅ No performance regression
-✅ Handles edge cases (multiple 401s, timeout, network errors)
-✅ Backward compatible
+### Auth System
+- [ ] No race conditions in auth flow
+- [ ] Single source of truth for auth state
+- [ ] Auth completes within 60s on slow networks
+- [ ] Clear error messages for all failure modes
+- [ ] <5s auth time on fast networks
+
+### Chat System
+- [ ] Chat page <500 lines (down from 3,671)
+- [ ] Each hook <300 lines
+- [ ] No duplicate messages
+- [ ] Graceful error recovery
+- [ ] <100ms input latency
+- [ ] Smooth streaming (no jank)
+
+### Overall
+- [ ] Zero increase in Sentry errors
+- [ ] TypeScript strict mode passes
+- [ ] All existing E2E tests pass
+- [ ] New unit tests with >80% coverage on new code
 
 ---
 
-## Timeline Estimate
+## File Summary
 
-- Phase 1: 2-3 hours
-- Phase 2: 2-3 hours
-- Phase 3: 2-3 hours (most complex)
-- Phase 4: 30 mins
-- Phase 5: 1-2 hours
-- Testing: 2-3 hours
-- **Total: 10-17 hours** (1-2 days of focused work)
+### New Files (23 files)
 
-Can be compressed by doing phases in parallel where possible.
+**Auth Module:**
+- `src/lib/auth/auth-machine.ts`
+- `src/lib/auth/auth-config.ts`
+- `src/lib/auth/auth-service.ts`
+- `src/lib/auth/types.ts`
+- `src/lib/auth/index.ts`
+
+**Chat Hooks:**
+- `src/hooks/chat/use-sessions.ts`
+- `src/hooks/chat/use-messages.ts`
+- `src/hooks/chat/use-streaming.ts`
+- `src/hooks/chat/use-chat-input.ts`
+- `src/hooks/chat/use-chat-orchestrator.ts`
+- `src/hooks/chat/types.ts`
+- `src/hooks/chat/index.ts`
+
+**Chat Components:**
+- `src/components/chat/chat-sidebar.tsx`
+- `src/components/chat/chat-messages.tsx`
+- `src/components/chat/chat-input-area.tsx`
+- `src/components/chat/chat-error-boundary.tsx`
+
+**Error Handling:**
+- `src/lib/errors/index.ts`
+- `src/lib/errors/auth-errors.ts`
+- `src/lib/errors/chat-errors.ts`
+- `src/components/error/auth-error-boundary.tsx`
+- `src/components/error/chat-error-boundary.tsx`
+
+**Tests:**
+- `src/lib/auth/__tests__/auth-machine.test.ts`
+- `src/lib/auth/__tests__/auth-service.test.ts`
+- `src/hooks/chat/__tests__/use-sessions.test.ts`
+- `src/hooks/chat/__tests__/use-streaming.test.ts`
+
+### Files to Refactor (8 files)
+
+- `src/context/gatewayz-auth-context.tsx` (1000 → 300 lines)
+- `src/app/api/auth/route.ts`
+- `src/hooks/use-auth.ts`
+- `src/app/chat/page.tsx` (3671 → 200 lines)
+- `src/lib/streaming.ts` (799 → 400 lines)
+- `src/app/api/chat/completions/route.ts`
+- `src/lib/stream-coordinator.ts`
+- `src/lib/chat-history.ts`
+
+---
+
+## Questions for User
+
+Before proceeding, I'd like to clarify:
+
+1. **Feature Flags**: Do you have an existing feature flag system (Statsig?) that we should integrate with, or should we use simple env vars?
+
+2. **Testing Priority**: Should we prioritize unit tests or E2E tests? (I recommend unit tests for the state machine and hooks)
+
+3. **Migration Timeline**: Do you want to implement this incrementally (ship Phase 1 first) or complete all phases before deploying?
+
+4. **Existing Auth Timeout Work**: I noticed there's existing dev docs at `dev/active/auth-timeout-retry/`. Should we incorporate those timeout fixes as part of Phase 1, or treat them separately?
+
+5. **Breaking Changes**: Are you okay with deprecating `useAuth()` in favor of `useGatewayzAuth()`, or do we need to maintain backward compatibility?
