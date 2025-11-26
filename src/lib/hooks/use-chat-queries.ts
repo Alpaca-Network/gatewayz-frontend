@@ -116,7 +116,7 @@ export const useSaveMessage = () => {
         }: { 
             sessionId: number, 
             role: 'user' | 'assistant', 
-            content: string, 
+            content: string | any[], 
             model?: string, 
             tokens?: number 
         }) => {

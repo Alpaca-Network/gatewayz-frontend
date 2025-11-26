@@ -30,6 +30,9 @@ export function useChatStream() {
         setIsStreaming(true);
         streamHandlerRef.current.reset();
 
+        // Cancel any outgoing refetches (so they don't overwrite our optimistic update)
+        await queryClient.cancelQueries({ queryKey: ['chat-messages', sessionId] });
+
         // 1. Save User Message (Optimistic Update handled by useSaveMessage mutation, but we do it manually here for immediate UI)
         // Actually, let's update the cache manually for immediate feedback
         const userMsg: Partial<ChatMessage> = {

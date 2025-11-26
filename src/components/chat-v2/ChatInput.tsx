@@ -22,7 +22,7 @@ const fileToBase64 = (file: File): Promise<string> => {
 
 export function ChatInput() {
   const { activeSessionId, setActiveSessionId, selectedModel, inputValue, setInputValue } = useChatUIStore();
-  const { data: messages = [] } = useSessionMessages(activeSessionId);
+  const { data: messages = [], isLoading: isHistoryLoading } = useSessionMessages(activeSessionId);
   const createSession = useCreateSession();
   const { isStreaming, streamMessage } = useChatStream();
   const { toast } = useToast();
@@ -36,7 +36,7 @@ export function ChatInput() {
   const audioInputRef = useRef<HTMLInputElement>(null);
 
   const handleSend = async () => {
-    if ((!inputValue.trim() && !selectedImage && !selectedVideo && !selectedAudio) || isStreaming) return;
+    if ((!inputValue.trim() && !selectedImage && !selectedVideo && !selectedAudio) || isStreaming || isHistoryLoading) return;
     if (!selectedModel) {
         toast({ title: "No model selected", variant: "destructive" });
         return;
@@ -145,10 +145,10 @@ export function ChatInput() {
             <Button 
                 size="icon" 
                 onClick={handleSend}
-                disabled={(!inputValue.trim() && !selectedImage) || isStreaming}
-                className={cn("bg-primary", isStreaming && "opacity-50")}
+                disabled={(!inputValue.trim() && !selectedImage && !selectedVideo && !selectedAudio) || isStreaming || isHistoryLoading}
+                className={cn("bg-primary", (isStreaming || isHistoryLoading) && "opacity-50")}
             >
-                {isStreaming ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                {(isStreaming || isHistoryLoading) ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             </Button>
         </div>
       </div>

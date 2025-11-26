@@ -19,7 +19,7 @@ export interface ChatMessage {
   id: number;
   session_id: number;
   role: 'user' | 'assistant';
-  content: string;
+  content: string | any[];
   model?: string;
   tokens?: number;
   created_at: string; // ISO 8601 format
@@ -79,7 +79,7 @@ export interface UpdateSessionRequest {
 
 export interface SaveMessageRequest {
   role: 'user' | 'assistant';
-  content: string;
+  content: string | any[];
   model?: string;
   tokens?: number;
 }
@@ -374,7 +374,7 @@ export class ChatHistoryAPI {
   async saveMessage(
     sessionId: number,
     role: 'user' | 'assistant',
-    content: string,
+    content: string | any[],
     model?: string,
     tokens?: number
   ): Promise<ChatMessage> {
@@ -414,7 +414,7 @@ export class ChatHistoryAPI {
   private async saveMessageImmediate(
     sessionId: number,
     role: 'user' | 'assistant',
-    content: string,
+    content: string | any[],
     model?: string,
     tokens?: number
   ): Promise<ChatMessage> {

@@ -5,6 +5,17 @@ import { useSessionMessages } from "@/lib/hooks/use-chat-queries";
 import { useChatUIStore } from "@/lib/store/chat-ui-store";
 import { ChatMessage } from "@/components/chat/ChatMessage";
 
+const getTextFromContent = (content: string | any[]): string => {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content
+      .filter(c => c.type === 'text')
+      .map(c => c.text)
+      .join('');
+  }
+  return '';
+};
+
 export function MessageList() {
   const { activeSessionId } = useChatUIStore();
   const { data: messages = [], isLoading } = useSessionMessages(activeSessionId);
@@ -47,7 +58,7 @@ export function MessageList() {
           isStreaming={msg.isStreaming}
           model={msg.model}
           showActions={msg.role === 'assistant'}
-          onCopy={() => navigator.clipboard.writeText(msg.content)}
+          onCopy={() => navigator.clipboard.writeText(getTextFromContent(msg.content))}
           // onRegenerate implementation omitted for simplicity in v1
         />
       ))}
