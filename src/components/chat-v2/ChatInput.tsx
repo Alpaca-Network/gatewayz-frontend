@@ -117,7 +117,7 @@ export function ChatInput() {
              {/* ... other previews */}
         </div>
 
-        <div className="flex gap-2 items-center bg-muted/30 p-2 rounded-lg border">
+        <div className="flex gap-2 items-center bg-background p-2 rounded-lg border">
             {/* Hidden Inputs */}
             <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageSelect} className="hidden" />
             

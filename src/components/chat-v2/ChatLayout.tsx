@@ -59,7 +59,7 @@ export function ChatLayout() {
 
    if (authLoading && !isAuthenticated) {
        return (
-           <div className="flex h-[calc(100vh-130px)] items-center justify-center">
+           <div className="flex h-[calc(100vh-160px)] items-center justify-center">
                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
            </div>
        );
@@ -68,7 +68,7 @@ export function ChatLayout() {
    // Optional: Show login prompt if not authenticated (though Layout handles this usually)
    if (!isAuthenticated) {
        return (
-            <div className="flex h-[calc(100vh-130px)] items-center justify-center flex-col gap-4">
+            <div className="flex h-[calc(100vh-160px)] items-center justify-center flex-col gap-4">
                 <h2 className="text-xl font-semibold">Please Log In</h2>
                 <p className="text-muted-foreground">You need to be logged in to use the chat.</p>
             </div>
@@ -76,7 +76,7 @@ export function ChatLayout() {
    }
 
    return (
-       <div className="flex h-[calc(100vh-130px)] w-full overflow-hidden bg-background">
+       <div className="flex h-[calc(100vh-160px)] w-full overflow-hidden bg-background">
            {/* Desktop Sidebar */}
            <div className="hidden lg:block w-72 border-r flex-shrink-0">
                <ChatSidebar className="h-full border-none" />
