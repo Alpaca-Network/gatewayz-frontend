@@ -1,4 +1,5 @@
 import * as Sentry from "@sentry/nextjs";
+import { shouldFilterWalletExtensionError } from "./sentry-wallet-filter";
 
 // Get release information
 const getRelease = () => {
@@ -54,26 +55,19 @@ Sentry.init({
 
   // Filter out non-blocking wallet extension errors from Privy
   beforeSend(event, hint) {
-    const error = hint.originalException;
-    const errorMessage = typeof error === 'string' ? error : error instanceof Error ? error.message : '';
+    if (shouldFilterWalletExtensionError(event, hint)) {
+      const error = hint?.originalException;
+      const errorMessage =
+        (typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : undefined) ||
+        event.message ||
+        "Wallet extension error";
 
-    // Filter out chrome.runtime.sendMessage errors from Privy wallet provider (inpage.js)
-    // These are non-blocking and occur when Privy tries to detect wallet extensions
-    if (
-      errorMessage.includes('chrome.runtime.sendMessage') ||
-      errorMessage.includes('runtime.sendMessage') ||
-      (errorMessage.includes('Extension ID') && errorMessage.includes('from a webpage'))
-    ) {
-      // Check if error originates from Privy's inpage.js or wallet provider code
-      const stackFrames = event.exception?.values?.[0]?.stacktrace?.frames;
-      if (stackFrames?.some(frame =>
-        frame.filename?.includes('inpage.js') ||
-        frame.filename?.includes('privy') ||
-        frame.function?.includes('Zt') // Minified function name from inpage.js
-      )) {
-        console.warn('[Sentry] Filtered out non-blocking Privy wallet extension error:', errorMessage);
-        return null; // Don't send this error to Sentry
-      }
+      console.warn("[Sentry] Filtered out non-blocking Privy wallet extension error:", errorMessage);
+      return null;
     }
 
     return event;
