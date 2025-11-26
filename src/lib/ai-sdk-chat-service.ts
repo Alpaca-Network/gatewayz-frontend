@@ -5,12 +5,12 @@
  * Provides a unified interface for sending messages with chain-of-thought support
  */
 
-import type { Message } from '@/app/chat/page';
+import type { ChatMessage as Message } from '@/lib/chat-history';
 import { AISDKStreamChunk, parseAISDKStream } from './ai-sdk-gateway';
 
 export interface AISDKChatOptions {
   model: string;
-  messages: Message[];
+  messages: Array<Pick<Message, 'role' | 'content' | 'reasoning'>>;
   temperature?: number;
   maxTokens?: number;
   topP?: number;

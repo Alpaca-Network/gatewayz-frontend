@@ -23,6 +23,12 @@ export interface ChatMessage {
   model?: string;
   tokens?: number;
   created_at: string; // ISO 8601 format
+  // Extended fields
+  reasoning?: string;
+  image?: string;
+  video?: string;
+  audio?: string;
+  isStreaming?: boolean;
 }
 
 export interface ChatSession {

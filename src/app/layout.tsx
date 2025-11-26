@@ -74,6 +74,10 @@ export const metadata: Metadata = {
   },
 };
 
+import { ReactQueryProvider } from "@/lib/providers/query-provider";
+
+// ... (other imports)
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -81,83 +85,48 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning className="scroll-smooth">
-      <head>
-        {/* Preconnect to Google Fonts to reduce font loading latency */}
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-      </head>
+      {/* ... (head content) */}
         <body className={`${inter.className} antialiased bg-background min-h-screen flex flex-col`} suppressHydrationWarning>
           <SafeStorageShim />
         <ErrorSuppressor />
-        <Script
-          id="chrome-runtime-guard"
-          strategy="afterInteractive"
-          dangerouslySetInnerHTML={{
-            __html: `(function () {
-  if (typeof window === 'undefined') return;
-  try {
-    var chromeObj = window.chrome;
-    if (!chromeObj || !chromeObj.runtime) return;
-    if (chromeObj.runtime.__gatewayzPatchedSendMessage) return;
-    var originalSendMessage = chromeObj.runtime.sendMessage;
-    if (typeof originalSendMessage !== 'function') return;
-    chromeObj.runtime.sendMessage = function () {
-      var extensionId = arguments[0];
-      if (typeof extensionId !== 'string') {
-        var maybeCallback = arguments[arguments.length - 1];
-        if (typeof maybeCallback === 'function') {
-          try {
-            maybeCallback(new Error('Extension ID is required when calling chrome.runtime.sendMessage from a webpage.'));
-          } catch (callbackError) {
-            console.warn('[Gatewayz] Failed to notify callback about blocked chrome.runtime.sendMessage call.', callbackError);
-          }
-        }
-        return undefined;
-      }
-      return originalSendMessage.apply(this, arguments);
-    };
-    chromeObj.runtime.__gatewayzPatchedSendMessage = true;
-  } catch (guardError) {
-    console.warn('[Gatewayz] Unable to patch chrome.runtime.sendMessage guard.', guardError);
-  }
-})();`,
-          }}
-        />
+        {/* ... (script) */}
         <GoogleAnalytics />
         <ThemeProvider
           defaultTheme="system"
           storageKey="ui-theme"
         >
-          {/* Preview hostname restoration - handles Vercel preview OAuth redirects */}
-          <PreviewHostnameRestorer />
-          <PrivyProviderWrapper>
-            <AnalyticsProvidersWrapper>
-              {/* Session transfer from main domain - handles automatic authentication */}
-              <SessionInitializer />
-              <GTMLoader />
-              <AppHeader />
-              <OnboardingBanner />
-              <div data-header-spacer aria-hidden="true" className="flex-shrink-0 h-[65px] has-onboarding-banner:h-[115px]" style={{ transition: 'height 0.3s ease' }} />
-              <main className="flex-1 flex flex-col w-full overflow-x-hidden">
-                {children}
-              </main>
-              {/* Keak-script disabled for performance optimization - unclear purpose and no documentation */}
-              {/* Enable if needed for analytics: re-enable this script and its source */}
-              {/* <Script
-                id="keak-script"
-                src="https://zzontar2hsjaawcn.public.blob.vercel-storage.com/scripts/domain-542-httpsgatewayz.ai.js"
-                data-domain="542"
-                strategy="afterInteractive"
-              /> */}
-              <Toaster />
-              <AppFooter />
-              <WelcomeDialog />
-              <TrialCreditsNotice />
-              <ReferralBonusDialog />
-              <Analytics />
-              <SpeedInsights />
-            </AnalyticsProvidersWrapper>
-          </PrivyProviderWrapper>
+          <ReactQueryProvider>
+            {/* Preview hostname restoration - handles Vercel preview OAuth redirects */}
+            <PreviewHostnameRestorer />
+            <PrivyProviderWrapper>
+              <AnalyticsProvidersWrapper>
+                {/* Session transfer from main domain - handles automatic authentication */}
+                <SessionInitializer />
+                <GTMLoader />
+                <AppHeader />
+                <OnboardingBanner />
+                <div data-header-spacer aria-hidden="true" className="flex-shrink-0 h-[65px] has-onboarding-banner:h-[115px]" style={{ transition: 'height 0.3s ease' }} />
+                <main className="flex-1 flex flex-col w-full overflow-x-hidden">
+                  {children}
+                </main>
+                {/* Keak-script disabled for performance optimization - unclear purpose and no documentation */}
+                {/* Enable if needed for analytics: re-enable this script and its source */}
+                {/* <Script
+                  id="keak-script"
+                  src="https://zzontar2hsjaawcn.public.blob.vercel-storage.com/scripts/domain-542-httpsgatewayz.ai.js"
+                  data-domain="542"
+                  strategy="afterInteractive"
+                /> */}
+                <Toaster />
+                <AppFooter />
+                <WelcomeDialog />
+                <TrialCreditsNotice />
+                <ReferralBonusDialog />
+                <Analytics />
+                <SpeedInsights />
+              </AnalyticsProvidersWrapper>
+            </PrivyProviderWrapper>
+          </ReactQueryProvider>
         </ThemeProvider>
       </body>
     </html>

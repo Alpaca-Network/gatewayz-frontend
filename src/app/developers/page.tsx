@@ -133,6 +133,8 @@ export default function DevelopersPage() {
         today: 'Top today',
     };
 
+    const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
+
     useEffect(() => {
         const fetchData = async () => {
             try {
