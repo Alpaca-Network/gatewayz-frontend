@@ -308,8 +308,12 @@ export function GatewayzAuthProvider({
             clearTimeout(timeoutId);
 
             if (!response.ok) {
-              console.log("[Auth] Unable to fetch upgraded API keys:", response.status);
-              return;
+              console.error("[Auth] Unable to fetch upgraded API keys:", response.status);
+              console.error("[Auth] This is a critical issue - temp keys cannot be upgraded!");
+              console.error("[Auth] User will be unable to use chat completions with temp key");
+
+              // If we can't upgrade and have a temp key, this is a critical auth failure
+              throw new Error(`Failed to upgrade temporary API key: ${response.status}. Temp keys have limited permissions.`);
             }
 
             const data = await response.json();
@@ -501,15 +505,68 @@ export function GatewayzAuthProvider({
           if (currentKey && currentKey !== authData.api_key) {
             console.log("[Auth] API key upgraded during login, using new key");
             finalAuthData = { ...authData, api_key: currentKey };
+          } else if (currentKey?.startsWith(TEMP_API_KEY_PREFIX)) {
+            // Still have temp key after upgrade attempt - this is critical
+            console.error("[Auth] Still using temporary API key after upgrade attempt!");
+            console.error("[Auth] This will cause 401 errors on protected endpoints");
+
+            // Clear the invalid credentials
+            clearStoredCredentials();
+
+            // Set error state
+            setAuthStatus("error", "temp key upgrade failed");
+            setError("Authentication failed: Unable to obtain valid API key. Please try logging in again.");
+
+            // Capture to Sentry
+            Sentry.captureMessage("Temporary API key could not be upgraded after authentication", {
+              level: 'error',
+              tags: {
+                auth_error: 'temp_key_upgrade_failed',
+              },
+              extra: {
+                credits: authData.credits,
+                is_new_user: authData.is_new_user,
+                has_temp_key: true,
+              },
+            });
+
+            return; // Don't proceed with authentication
           }
         } catch (error) {
-          console.warn("[Auth] Key upgrade check failed:", error);
+          console.error("[Auth] Key upgrade check failed:", error);
+
+          // If upgrade failed and we have a temp key, this is critical
+          const currentKey = getApiKey();
+          if (currentKey?.startsWith(TEMP_API_KEY_PREFIX)) {
+            clearStoredCredentials();
+            setAuthStatus("error", "temp key upgrade error");
+            setError("Authentication failed: Unable to obtain valid API key. Please try logging in again.");
+
+            Sentry.captureException(
+              error instanceof Error ? error : new Error(String(error)),
+              {
+                tags: {
+                  auth_error: 'temp_key_upgrade_exception',
+                },
+                extra: {
+                  credits: authData.credits,
+                  is_new_user: authData.is_new_user,
+                },
+                level: 'error',
+              }
+            );
+
+            return; // Don't proceed with authentication
+          }
+
+          // If not a temp key issue, just warn and continue
+          console.warn("[Auth] Key upgrade check failed but proceeding with current key");
         }
       }
 
       handleAuthSuccess(finalAuthData, isNewUserExpected);
     },
-    [handleAuthSuccess, upgradeApiKeyIfNeeded]
+    [handleAuthSuccess, upgradeApiKeyIfNeeded, clearStoredCredentials, setAuthStatus, setError]
   );
 
   const buildAuthRequestBody = useCallback(
@@ -542,7 +599,9 @@ export function GatewayzAuthProvider({
           is_guest: privyUser.isGuest ?? false,
         }),
         token: token ?? "",
-        auto_create_api_key: isNewUser || !hasStoredApiKey,
+        // ALWAYS request API key creation to avoid temp keys being returned
+        // Temp keys have limited permissions and cause 401 errors on endpoints like /chat/completions
+        auto_create_api_key: true,
         is_new_user: isNewUser,
         has_referral_code: !!referralCode,
         referral_code: referralCode ?? null,
@@ -865,6 +924,13 @@ export function GatewayzAuthProvider({
         }
 
         console.log("[Auth] Backend authentication successful:", authData);
+
+        // Check if we got a temporary API key
+        if (authData.api_key?.startsWith(TEMP_API_KEY_PREFIX)) {
+          console.warn("[Auth] Received temporary API key, will need to upgrade");
+        } else {
+          console.log("[Auth] Received permanent API key");
+        }
 
         // Clear timeout guard and reset retry count on success
         clearAuthTimeout();
