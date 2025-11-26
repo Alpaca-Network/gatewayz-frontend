@@ -1,32 +1,46 @@
 "use client";
 
-import { Suspense } from "react";
-import { AuthGate } from "@/features/auth/AuthGate";
-import { ChatExperience } from "@/features/chat/ChatExperience";
-import { Loader2 } from "lucide-react";
+import { Suspense, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { ChatLayout } from "@/components/chat-v2/ChatLayout";
+import { FreeModelsBanner } from "@/components/chat/free-models-banner";
+import { useAuth } from "@/hooks/use-auth";
+import { getApiKey } from "@/lib/api";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
-function ChatShell() {
-  return (
-    <div className="container mx-auto px-4 py-6">
-      <AuthGate title="Sign in to chat" description="We use Privy to keep your session and API key secure.">
-        <ChatExperience />
-      </AuthGate>
-    </div>
-  );
-}
+// This page uses the v2 chat architecture (Zustand + React Query)
+// located under src/components/chat-v2/.
 
 export default function ChatPage() {
+  const { isAuthenticated, loading: authLoading } = useAuth();
+  const apiKey = getApiKey();
+  const router = useRouter();
+
+  useEffect(() => {
+    // Redirect to login if not authenticated and no API key is present
+    if (!authLoading && !isAuthenticated && !apiKey) {
+      router.push("/login");
+    }
+  }, [authLoading, isAuthenticated, apiKey, router]);
+
+  // Show loading screen while auth is initializing
+  if (authLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <LoadingSpinner message="Initializing chat..." className="border-none bg-transparent" />
+      </div>
+    );
+  }
+
+  // Prevent rendering if we are about to redirect
+  if (!isAuthenticated && !apiKey) {
+    return null;
+  }
+
   return (
-    <Suspense
-      fallback={
-        <div className="flex min-h-[60vh] items-center justify-center text-muted-foreground">
-          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          Loading chat…
-        </div>
-      }
-    >
-      <ChatShell />
+    <Suspense fallback={<div className="flex h-screen items-center justify-center">Loading...</div>}>
+      <FreeModelsBanner />
+      <ChatLayout />
     </Suspense>
   );
 }
-
