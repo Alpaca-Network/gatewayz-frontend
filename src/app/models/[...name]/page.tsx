@@ -16,32 +16,23 @@ import { providerData } from '@/lib/provider-data';
 import { generateChartData, generateStatsTable } from '@/lib/data';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import ReactMarkdown from "react-markdown";
-import { cn, normalizeToUrlSafe } from '@/lib/utils';
+import { cn } from '@/lib/utils';
 import { API_BASE_URL } from '@/lib/config';
 import { models as staticModels } from '@/lib/models-data';
 import { getApiKey } from '@/lib/api';
 import { InlineChat } from '@/components/models/inline-chat';
 import { safeParseJson } from '@/lib/http';
+import {
+    findModelByRouteParams,
+    getModelGateways,
+    transformStaticModel,
+    type ModelDetailRecord,
+} from '@/lib/model-detail-utils';
 
 // Lazy load heavy components
 const TopAppsTable = lazy(() => import('@/components/dashboard/top-apps-table'));
 
-interface Model {
-  id: string;
-  name: string;
-  description: string;
-  context_length: number;
-  pricing: {
-    prompt: string;
-    completion: string;
-  } | null;
-  architecture: {
-    input_modalities: string[];
-  };
-  supported_parameters: string[];
-  provider_slug: string;
-  is_private?: boolean; // Indicates if model is on a private network (e.g., NEAR)
-}
+type Model = ModelDetailRecord;
 
 const Section = ({ title, description, children, className }: { title: string, description?: string, children: React.ReactNode, className?: string }) => (
     <section className={cn("py-8", className)}>
@@ -142,32 +133,6 @@ const ChartCard = ({ modelName, title, dataKey, yAxisFormatter }: { modelName: s
 
 type TabType = 'Playground' | 'Use Model' | 'Providers' | 'Activity' | 'Apps';
 
-// Transform static model to API format
-function transformStaticModel(staticModel: typeof staticModels[0]): Model {
-    // Normalize model name for URL-safe ID
-    // e.g., "Anthropic: Claude 3.5 Sonnet" -> "claude-35-sonnet"
-    // Split by colon to extract the actual model name part (remove provider prefix like "Anthropic: ")
-    const nameParts = staticModel.name.split(':');
-    const modelNamePart = nameParts.length > 1 ? nameParts[1].trim() : staticModel.name;
-    const normalizedName = normalizeToUrlSafe(modelNamePart);
-
-    return {
-        id: `${staticModel.developer}/${normalizedName}`,
-        name: staticModel.name,
-        description: staticModel.description,
-        context_length: staticModel.context * 1000,
-        pricing: {
-            prompt: staticModel.inputCost.toString(),
-            completion: staticModel.outputCost.toString()
-        },
-        architecture: {
-            input_modalities: staticModel.modalities.map(m => m.toLowerCase())
-        },
-        supported_parameters: staticModel.supportedParameters,
-        provider_slug: staticModel.developer
-    };
-}
-
 export default function ModelProfilePage() {
     const params = useParams();
     const router = useRouter();
@@ -184,6 +149,7 @@ export default function ModelProfilePage() {
     const [apiKey, setApiKey] = useState('gw_live_YOUR_API_KEY_HERE');
     const [selectedProvider, setSelectedProvider] = useState<string>('gatewayz');
     const [selectedPlaygroundProvider, setSelectedPlaygroundProvider] = useState<string>('gatewayz');
+    const transformedStaticModels = useMemo(() => staticModels.map(transformStaticModel), []);
 
     // Extract catch-all parameter and parse it
     // For URL /models/near/deepseek-ai/deepseek-v3-1
@@ -482,411 +448,78 @@ export default function ModelProfilePage() {
     }, [modelProviders, model]);
 
     useEffect(() => {
-        const CACHE_KEY = 'gatewayz_models_cache_v4_all_gateways';
-        const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
         let mounted = true;
 
-        // Load static data immediately for instant page render (only if found)
-        const staticModelsTransformed = staticModels.map(transformStaticModel);
-        const normalizeForUrl = (str: string): string => {
-            return str.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-        };
-        const urlNormalizedSearchName = normalizeForUrl(modelNameParam);
-
-        let staticFoundModel = staticModelsTransformed.find((m: Model) => m.id === modelId);
-
-        // If not found by full ID, try matching by name using URL normalization
-        if (!staticFoundModel) {
-            staticFoundModel = staticModelsTransformed.find((m: Model) => {
-                const idParts = m.id.split('/');
-                // For multi-segment IDs like "fal-ai/flux-pro/v1.1-ultra", get everything after the first segment
-                // For single-segment IDs like "openai/gpt-4", get everything after the first segment
-                const modelNamePart = idParts.length > 2 ? idParts.slice(1).join('/') : idParts.pop() || '';
-                const urlNormalizedDataName = normalizeForUrl(modelNamePart);
-                return urlNormalizedDataName === urlNormalizedSearchName && m.provider_slug?.toLowerCase() === developer;
-            });
-        }
+        const staticFoundModel = findModelByRouteParams(transformedStaticModels, {
+            modelId,
+            developer,
+            modelNameParam
+        });
 
         if (staticFoundModel && mounted) {
             setModel(staticFoundModel);
-            setAllModels(staticModelsTransformed);
+            setAllModels(transformedStaticModels);
             setLoading(false);
         }
-        // If not found in static data, keep loading=true until API data arrives
 
-        const fetchModels = async () => {
+        const fetchModelDetail = async () => {
             try {
-                console.log(`[ModelProfilePage] Starting to fetch gateway data for model: ${modelId}`);
-                // Check cache first
-                const cached = localStorage.getItem(CACHE_KEY);
-                let models: Model[] = [];
+                const params = new URLSearchParams();
+                if (modelId) params.set('modelId', modelId);
+                if (developer) params.set('developer', developer);
+                if (modelNameParam) params.set('modelName', modelNameParam);
 
-                if (cached) {
-                    try {
-                        const { data, timestamp } = JSON.parse(cached);
-                        if (Date.now() - timestamp < CACHE_DURATION) {
-                            models = data;
-                            if (mounted) {
-                                setAllModels(models);
-                                let foundModel = models.find((m: Model) => m.id === modelId);
-
-                                // If not found by full ID, try matching by name using URL normalization
-                                if (!foundModel) {
-                                    foundModel = models.find((m: Model) => {
-                                        const idParts = m.id.split('/');
-                                        // For multi-segment IDs like "fal-ai/flux-pro/v1.1-ultra", get everything after the first segment
-                                        // For single-segment IDs like "openai/gpt-4", get everything after the first segment
-                                        const modelNamePart = idParts.length > 2 ? idParts.slice(1).join('/') : idParts.pop() || '';
-                                        const urlNormalizedDataName = normalizeForUrl(modelNamePart);
-                                        return urlNormalizedDataName === urlNormalizedSearchName && m.provider_slug?.toLowerCase() === developer;
-                                    });
-                                }
-
-                                if (foundModel) {
-                                    setModel(foundModel);
-                                    setLoading(false);
-                                    return; // Only return if model was found in cache
-                                }
-                                // If model not found in cache, continue to fetch from API
-                                console.log(`Model ${modelId} not in cache, fetching from API...`);
-                            }
-                        }
-                    } catch (e) {
-                        console.log('Cache parse error:', e);
-                    }
-                }
-
-                // Fetch from all gateways to get all models via frontend API proxy
-                // Add timeout to prevent hanging
-                const fetchWithTimeout = (url: string, timeout = 5000) => {
-                    return Promise.race([
-                        fetch(url, {
-                            signal: AbortSignal.timeout(timeout)
-                        }).catch(err => {
-                            // Handle both fetch errors and timeout errors
-                            console.warn(`Fetch timeout or error for ${url}:`, err.message);
-                            return null as any;
-                        }),
-                        new Promise<Response>((_, reject) =>
-                            setTimeout(() => reject(new Error('Request timeout')), timeout)
-                        )
-                    ]).catch(err => {
-                        console.warn(`Timeout wrapper error for ${url}:`, err.message);
-                        return null as any;
-                    });
-                };
-
-                console.log(`[ModelProfilePage] Fetching from all gateway APIs...`);
-                const [openrouterRes, portkeyRes, featherlessRes, chutesRes, fireworksRes, togetherRes, groqRes, deepinfraRes, googleRes, cerebrasRes, nebiusRes, xaiRes, novitaRes, huggingfaceRes, aimoRes, nearRes, falRes, alibabaRes] = await Promise.allSettled([
-                    fetchWithTimeout(`/api/models?gateway=openrouter`, 5000).catch(err => {
-                        console.error('OpenRouter fetch error:', err);
-                        return null;
-                    }),
-                    fetchWithTimeout(`/api/models?gateway=portkey`, 5000).catch(err => {
-                        console.error('Portkey fetch error:', err);
-                        return null;
-                    }),
-                    fetchWithTimeout(`/api/models?gateway=featherless`, 5000).catch(err => {
-                        console.error('Featherless fetch error:', err);
-                        return null;
-                    }),
-                    fetchWithTimeout(`/api/models?gateway=chutes`, 5000).catch(err => {
-                        console.error('Chutes fetch error:', err);
-                        return null;
-                    }),
-                    fetchWithTimeout(`/api/models?gateway=fireworks`, 5000).catch(err => {
-                        console.error('Fireworks fetch error:', err);
-                        return null;
-                    }),
-                    fetchWithTimeout(`/api/models?gateway=together`, 5000).catch(err => {
-                        console.error('Together fetch error:', err);
-                        return null;
-                    }),
-                    fetchWithTimeout(`/api/models?gateway=groq`, 5000).catch(err => {
-                        console.error('Groq fetch error:', err);
-                        return null;
-                    }),
-                    fetchWithTimeout(`/api/models?gateway=deepinfra`, 5000).catch(err => {
-                        console.error('DeepInfra fetch error:', err);
-                        return null;
-                    }),
-                    fetchWithTimeout(`/api/models?gateway=google`, 5000).catch(err => {
-                        console.error('Google fetch error:', err);
-                        return null;
-                    }),
-                    fetchWithTimeout(`/api/models?gateway=cerebras`, 5000).catch(err => {
-                        console.error('Cerebras fetch error:', err);
-                        return null;
-                    }),
-                    fetchWithTimeout(`/api/models?gateway=nebius`, 5000).catch(err => {
-                        console.error('Nebius fetch error:', err);
-                        return null;
-                    }),
-                    fetchWithTimeout(`/api/models?gateway=xai`, 5000).catch(err => {
-                        console.error('xAI fetch error:', err);
-                        return null;
-                    }),
-                    fetchWithTimeout(`/api/models?gateway=novita`, 5000).catch(err => {
-                        console.error('Novita fetch error:', err);
-                        return null;
-                    }),
-                    fetchWithTimeout(`/api/models?gateway=huggingface`, 15000).catch(err => {
-                        console.error('HuggingFace fetch error:', err);
-                        return null;
-                    }),
-                    fetchWithTimeout(`/api/models?gateway=aimo`, 15000).catch(err => {
-                        console.error('AIMO fetch error:', err);
-                        return null;
-                    }),
-                    fetchWithTimeout(`/api/models?gateway=near`, 15000).catch(err => {
-                        console.error('NEAR fetch error:', err);
-                        return null;
-                    }),
-                    fetchWithTimeout(`/api/models?gateway=fal`, 15000).catch(err => {
-                        console.error('FAL fetch error:', err);
-                        return null;
-                    }),
-                    fetchWithTimeout(`/api/models?gateway=alibaba`, 5000).catch(err => {
-                        console.error('Alibaba fetch error:', err);
-                        return null;
-                    })
-                ]);
-                console.log(`[ModelProfilePage] Gateway API responses:`, {
-                    openrouter: openrouterRes?.status,
-                    portkey: portkeyRes?.status,
-                    featherless: featherlessRes?.status,
-                    chutes: chutesRes?.status,
-                    fireworks: fireworksRes?.status,
-                    together: togetherRes?.status,
-                    groq: groqRes?.status,
-                    deepinfra: deepinfraRes?.status,
-                    google: googleRes?.status,
-                    cerebras: cerebrasRes?.status,
-                    nebius: nebiusRes?.status,
-                    xai: xaiRes?.status,
-                    novita: novitaRes?.status,
-                    huggingface: huggingfaceRes?.status,
-                    aimo: aimoRes?.status,
-                    near: nearRes?.status,
-                    fal: falRes?.status,
-                    alibaba: alibabaRes?.status
+                const response = await fetch(`/api/models/detail?${params.toString()}`, {
+                    signal: AbortSignal.timeout(15000)
                 });
 
-                const getData = async (
-                    result: PromiseSettledResult<Response | null>,
-                    gatewayLabel: string
-                ) => {
-                    if (result.status === 'fulfilled' && result.value) {
-                        const payload = await safeParseJson<{ data?: Model[] }>(
-                            result.value,
-                            `[ModelProfilePage] ${gatewayLabel}`
-                        );
-                        if (payload?.data && Array.isArray(payload.data)) {
-                            console.log(`Gateway data parsed (${gatewayLabel}), models count:`, payload.data.length);
-                            return payload.data;
-                        }
-                        return [];
-                    }
-                    if (result.status === 'rejected') {
-                        console.warn('Gateway fetch rejected:', result.reason);
-                    } else {
-                        console.log('Gateway fetch returned null or undefined');
-                    }
-                    return [];
-                };
-
-                const [openrouterData, portkeyData, featherlessData, chutesData, fireworksData, togetherData, groqData, deepinfraData, googleData, cerebrasData, nebiusData, xaiData, novitaData, huggingfaceData, aimoData, nearData, falData, alibabaData] = await Promise.all([
-                    getData(openrouterRes, 'openrouter'),
-                    getData(portkeyRes, 'portkey'),
-                    getData(featherlessRes, 'featherless'),
-                    getData(chutesRes, 'chutes'),
-                    getData(fireworksRes, 'fireworks'),
-                    getData(togetherRes, 'together'),
-                    getData(groqRes, 'groq'),
-                    getData(deepinfraRes, 'deepinfra'),
-                    getData(googleRes, 'google'),
-                    getData(cerebrasRes, 'cerebras'),
-                    getData(nebiusRes, 'nebius'),
-                    getData(xaiRes, 'xai'),
-                    getData(novitaRes, 'novita'),
-                    getData(huggingfaceRes, 'huggingface'),
-                    getData(aimoRes, 'aimo'),
-                    getData(nearRes, 'near'),
-                    getData(falRes, 'fal'),
-                    getData(alibabaRes, 'alibaba')
-                ]);
-
-                // Combine models from all gateways
-                const allModels = [
-                    ...openrouterData,
-                    ...portkeyData,
-                    ...featherlessData,
-                    ...chutesData,
-                    ...fireworksData,
-                    ...togetherData,
-                    ...groqData,
-                    ...deepinfraData,
-                    ...googleData,
-                    ...cerebrasData,
-                    ...nebiusData,
-                    ...xaiData,
-                    ...novitaData,
-                    ...huggingfaceData,
-                    ...aimoData,
-                    ...nearData,
-                    ...falData,
-                    ...alibabaData
-                ];
-
-                // Deduplicate models by ID - keep the first occurrence
-                const uniqueModelsMap = new Map();
-                allModels.forEach((model: any) => {
-                    if (!uniqueModelsMap.has(model.id)) {
-                        uniqueModelsMap.set(model.id, model);
-                    }
-                });
-                models = Array.from(uniqueModelsMap.values());
-
-                // Try to cache the result with compression (only essential fields)
-                try {
-                    // Only cache essential fields to reduce size
-                    const compactModels = models.map((m: Model) => ({
-                        id: m.id,
-                        name: m.name,
-                        description: m.description.substring(0, 200), // Truncate descriptions
-                        context_length: m.context_length,
-                        pricing: m.pricing,
-                        architecture: m.architecture,
-                        supported_parameters: m.supported_parameters,
-                        provider_slug: m.provider_slug
-                    }));
-
-                    localStorage.setItem(CACHE_KEY, JSON.stringify({
-                        data: compactModels,
-                        timestamp: Date.now()
-                    }));
-                } catch (e) {
-                    // If still too large, don't cache at all (we have static fallback)
-                    console.log('Cache skipped (storage quota), using static data fallback');
-                    try {
-                        localStorage.removeItem(CACHE_KEY);
-                        localStorage.removeItem('gatewayz_models_cache'); // Old cache key
-                    } catch (clearError) {
-                        // Ignore cleanup errors
-                    }
+                if (!response.ok) {
+                    throw new Error(`Model detail request failed (${response.status})`);
                 }
 
-                if (mounted) {
-                    setAllModels(models);
-                    // Find model by ID or by name (for AIMO models where URL uses just the model name)
-                    let foundModel = models.find((m: Model) => m.id === modelId);
+                const payload = await safeParseJson<{
+                    data?: Model;
+                    providers?: string[];
+                    related?: Model[];
+                }>(response, '[ModelProfilePage] detail fetch');
 
-                    // If not found by full ID, try matching by name using URL normalization
-                    if (!foundModel) {
-                        foundModel = models.find((m: Model) => {
-                            const idParts = m.id.split('/');
-                            // For multi-segment IDs like "fal-ai/flux-pro/v1.1-ultra", get everything after the first segment
-                            // For single-segment IDs like "openai/gpt-4", get everything after the first segment
-                            const modelNamePart = idParts.length > 2 ? idParts.slice(1).join('/') : idParts.pop() || '';
-                            const urlNormalizedDataName = normalizeForUrl(modelNamePart);
-                            return urlNormalizedDataName === urlNormalizedSearchName && m.provider_slug?.toLowerCase() === developer;
-                        });
-                    }
+                if (!mounted) {
+                    return;
+                }
 
-                    // Update if found, or set to null if not found (after API fetch completes)
-                    if (foundModel) {
-                        setModel(foundModel);
-                    } else if (!staticFoundModel) {
-                        // Model not in static data and not in API - show "not found"
-                        setModel(null);
-                    }
+                if (payload?.data) {
+                    setModel(payload.data);
+                    setAllModels(payload.related || []);
+                    const providerList = payload.providers?.length
+                        ? payload.providers
+                        : getModelGateways(payload.data);
+                    setModelProviders(providerList ?? []);
                     setLoading(false);
-
-                    // Determine which gateways support this model
-                    // Use case-insensitive comparison and also check for alternative ID formats
-                    const providers: string[] = [];
-                    const modelIdLower = modelId.toLowerCase();
-
-                    // Helper function to normalize model names for URL matching
-                    // Converts spaces, dots, underscores, and hyphens to hyphens
-                    const normalizeForUrl = (str: string): string => {
-                        return str.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-                    };
-
-                    // Helper function to check if model exists in gateway data
-                    const hasModel = (data: Model[], gateway: string) => {
-                        const found = data.some((m: Model) => {
-                            // For multi-segment IDs like "fal-ai/flux-pro/v1.1-ultra", get everything after the first segment
-                            const idParts = m.id.split('/');
-                            const modelNamePart = idParts.length > 2 ? idParts.slice(1).join('/').toLowerCase() : (idParts.pop()?.toLowerCase() || '');
-                            const urlNormalizedSearchName = normalizeForUrl(modelNameParam);
-                            const urlNormalizedDataName = normalizeForUrl(modelNamePart);
-
-                            // Check exact match (case-insensitive)
-                            if (m.id.toLowerCase() === modelIdLower) return true;
-
-                            // Check if the model name parts match after URL normalization
-                            // This handles: "GPT-4o mini" -> "gpt-4o-mini" matching and "fal-ai/flux-pro/v1.1-ultra" -> "flux-pro-v1-1-ultra"
-                            if (urlNormalizedDataName === urlNormalizedSearchName && m.provider_slug?.toLowerCase() === developer) return true;
-
-                            // For AIMO models, check if the model name part matches
-                            const aimoModelNamePart = m.id.includes(':') ? m.id.split(':')[1].toLowerCase() : m.id.toLowerCase();
-                            if (aimoModelNamePart === modelIdLower) return true;
-
-                            // Check if IDs match after normalization (handle different separators)
-                            const normalizedModelId = modelIdLower.replace(/[_\-\/]/g, '');
-                            const normalizedDataId = m.id.toLowerCase().replace(/[_\-\/]/g, '');
-                            if (normalizedModelId === normalizedDataId) return true;
-
-                            return false;
-                        });
-                        if (found) {
-                            console.log(`Model ${modelId} found in ${gateway}`);
-                        }
-                        return found;
-                    };
-
-                    if (hasModel(openrouterData, 'openrouter')) providers.push('openrouter');
-                    if (hasModel(portkeyData, 'portkey')) providers.push('portkey');
-                    if (hasModel(featherlessData, 'featherless')) providers.push('featherless');
-                    if (hasModel(chutesData, 'chutes')) providers.push('chutes');
-                    if (hasModel(fireworksData, 'fireworks')) providers.push('fireworks');
-                    if (hasModel(togetherData, 'together')) providers.push('together');
-                    if (hasModel(groqData, 'groq')) providers.push('groq');
-                    if (hasModel(deepinfraData, 'deepinfra')) providers.push('deepinfra');
-                    if (hasModel(googleData, 'google')) providers.push('google');
-                    if (hasModel(cerebrasData, 'cerebras')) providers.push('cerebras');
-                    if (hasModel(nebiusData, 'nebius')) providers.push('nebius');
-                    if (hasModel(xaiData, 'xai')) providers.push('xai');
-                    if (hasModel(novitaData, 'novita')) providers.push('novita');
-                    if (hasModel(huggingfaceData, 'huggingface')) providers.push('huggingface');
-                    if (hasModel(aimoData, 'aimo')) providers.push('aimo');
-                    if (hasModel(nearData, 'near')) providers.push('near');
-                    if (hasModel(falData, 'fal')) providers.push('fal');
-                    if (hasModel(alibabaData, 'alibaba')) providers.push('alibaba');
-
-                    console.log(`Model ${modelId} available in gateways:`, providers);
-                    setModelProviders(providers);
-                    setLoadingProviders(false);
+                } else if (!staticFoundModel) {
+                    setModel(null);
+                    setLoading(false);
                 }
+
+                setLoadingProviders(false);
             } catch (error) {
-                console.log('Failed to fetch models:', error);
-                if (mounted) {
-                    setLoadingProviders(false);
-                    if (!staticFoundModel) {
-                        setLoading(false);
-                    }
+                console.error('[ModelProfilePage] Failed to load model detail:', error);
+                if (!mounted) {
+                    return;
                 }
+                if (!staticFoundModel) {
+                    setModel(null);
+                    setLoading(false);
+                }
+                setLoadingProviders(false);
             }
         };
 
-        // Fetch API data in background (non-blocking)
-        fetchModels();
+        fetchModelDetail();
 
         return () => {
             mounted = false;
         };
-    }, [modelId]);
+    }, [modelId, developer, modelNameParam, transformedStaticModels]);
 
     const relatedModels = useMemo(() => {
       if(!model) return [];
