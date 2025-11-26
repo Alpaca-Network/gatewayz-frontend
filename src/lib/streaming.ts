@@ -342,10 +342,14 @@ export async function* streamChatResponse(
       // 3. If retry fails or no new key, throw error to user
 
       try {
-        devLog('[Streaming] 401 Authentication error - attempting refresh');
+        if (retryCount === 0) {
+          devLog('[Streaming] 401 Authentication error - attempting refresh');
 
-        // Wait for auth refresh to complete
-        await StreamCoordinator.handleAuthError();
+          // Wait for auth refresh to complete
+          await StreamCoordinator.handleAuthError();
+        } else {
+          devLog(`[Streaming] 401 Authentication error on retry ${retryCount} - skipping refresh, checking key`);
+        }
 
         // Try to get the new API key after refresh
         const newApiKey = StreamCoordinator.getApiKey();
