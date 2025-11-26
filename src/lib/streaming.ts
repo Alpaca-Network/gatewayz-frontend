@@ -359,7 +359,7 @@ export async function* streamChatResponse(
 
           // Check if we have exceeded max retries to prevent infinite loops
           if (retryCount >= maxRetries) {
-            throw new Error('Authentication failed: Max retries exceeded after refresh.');
+            throw new Error('Max retries exceeded after refresh');
           }
 
           // Retry the stream with the new API key (even if it's the same)
@@ -372,6 +372,11 @@ export async function* streamChatResponse(
         }
       } catch (refreshError) {
         devError('[Streaming] Auth refresh failed:', refreshError);
+
+        // If it's already a wrapped authentication error (from recursive calls), re-throw it as is
+        if (refreshError instanceof Error && refreshError.message.startsWith('Authentication failed:')) {
+          throw refreshError;
+        }
 
         // If refresh fails, provide user-friendly error
         const refreshErrorMsg = refreshError instanceof Error
