@@ -23,6 +23,16 @@ export async function GET() {
     }
 
     const client = getRedisClient();
+
+    if (!client) {
+      return NextResponse.json({
+        success: false,
+        error: 'Redis client could not be initialized',
+        status: getRedisStatus(),
+        timestamp: Date.now()
+      }, { status: 503 });
+    }
+
     const testKey = 'test:connection:' + Date.now();
     const testValue = 'Hello from Gatewayz!';
 

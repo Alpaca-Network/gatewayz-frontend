@@ -92,6 +92,11 @@ export async function cacheAside<T>(
 ): Promise<T> {
   const redis = getRedisClient();
 
+  // If Redis client is null (browser environment), bypass cache
+  if (!redis) {
+    return await fetchFn();
+  }
+
   // Check if Redis is available (isolate Redis errors)
   let available = false;
   try {
@@ -150,6 +155,10 @@ export async function cacheAside<T>(
 export async function cacheGet<T>(key: string): Promise<T | null> {
   try {
     const redis = getRedisClient();
+    if (!redis) {
+      return null;
+    }
+
     const available = await isRedisAvailable();
 
     if (!available) {
@@ -178,6 +187,10 @@ export async function cacheSet<T>(
 ): Promise<void> {
   try {
     const redis = getRedisClient();
+    if (!redis) {
+      return;
+    }
+
     const available = await isRedisAvailable();
 
     if (!available) {
@@ -198,6 +211,10 @@ export async function cacheSet<T>(
 export async function cacheInvalidate(keyOrPattern: string): Promise<number> {
   try {
     const redis = getRedisClient();
+    if (!redis) {
+      return 0;
+    }
+
     const available = await isRedisAvailable();
 
     if (!available) {
@@ -240,6 +257,10 @@ export async function cacheInvalidate(keyOrPattern: string): Promise<number> {
 export async function cacheInvalidateMultiple(keys: string[]): Promise<number> {
   try {
     const redis = getRedisClient();
+    if (!redis) {
+      return 0;
+    }
+
     const available = await isRedisAvailable();
 
     if (!available || keys.length === 0) {
@@ -264,6 +285,9 @@ export async function cacheInvalidateMultiple(keys: string[]): Promise<number> {
 export async function cacheTTL(key: string): Promise<number> {
   try {
     const redis = getRedisClient();
+    if (!redis) {
+      return -2;
+    }
     return await redis.ttl(key);
   } catch (error) {
     console.error('[Cache] Error getting TTL:', error);
@@ -286,6 +310,11 @@ export async function cacheMGet<T>(keys: string[]): Promise<Map<string, T | null
     }
 
     const redis = getRedisClient();
+    if (!redis) {
+      keys.forEach((key) => result.set(key, null));
+      return result;
+    }
+
     const available = await isRedisAvailable();
 
     if (!available) {
@@ -368,6 +397,9 @@ export async function warmCache<T>(
 ): Promise<void> {
   try {
     const redis = getRedisClient();
+    if (!redis) {
+      return;
+    }
     await redis.setex(key, ttl, JSON.stringify(value));
     console.log(`[Cache] Warmed cache for key: ${key}`);
   } catch (error) {
@@ -384,6 +416,9 @@ export async function warmCache<T>(
 export async function cacheExists(key: string): Promise<boolean> {
   try {
     const redis = getRedisClient();
+    if (!redis) {
+      return false;
+    }
     const exists = await redis.exists(key);
     return exists === 1;
   } catch (error) {
@@ -401,6 +436,9 @@ export async function cacheExists(key: string): Promise<boolean> {
 export async function cacheKeys(pattern: string): Promise<string[]> {
   try {
     const redis = getRedisClient();
+    if (!redis) {
+      return [];
+    }
     return await redis.keys(pattern);
   } catch (error) {
     console.error('[Cache] Error getting keys:', error);
