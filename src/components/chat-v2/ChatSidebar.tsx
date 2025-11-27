@@ -32,6 +32,7 @@ import { useChatSessions, useCreateSession, useDeleteSession, useUpdateSession }
 import { useChatUIStore } from "@/lib/store/chat-ui-store";
 import { ChatSession } from "@/lib/chat-history";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
 
 export function ChatSidebar({ className, onClose }: { className?: string; onClose?: () => void }) {
   const { data: sessions = [], isLoading } = useChatSessions();
@@ -39,6 +40,7 @@ export function ChatSidebar({ className, onClose }: { className?: string; onClos
   const createSession = useCreateSession();
   const deleteSession = useDeleteSession();
   const updateSession = useUpdateSession();
+  const { toast } = useToast();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [sessionToDelete, setSessionToDelete] = useState<number | null>(null);
@@ -75,6 +77,11 @@ export function ChatSidebar({ className, onClose }: { className?: string; onClos
           onClose?.();
       } catch (e) {
           console.error("Failed to create session", e);
+          toast({
+            title: "Unable to start a new chat",
+            description: "Please try again in a moment.",
+            variant: "destructive",
+          });
       }
   };
 
