@@ -1,6 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { traced, wrapTraced } from 'braintrust';
-import { isBraintrustEnabled } from '@/lib/braintrust';
 import { profiler, generateRequestId } from '@/lib/performance-profiler';
 import { normalizeModelId } from '@/lib/utils';
 import { API_BASE_URL } from '@/lib/config';
@@ -57,23 +55,21 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
- * Process LLM completion with Braintrust tracing
+ * Process LLM completion without tracing
  */
-const processCompletion = wrapTraced(
-  async function processCompletion(
-    body: any,
-    apiKey: string,
-    targetUrl: string,
-    timeoutMs: number
-  ) {
-    return traced(async (span) => {
-      const startTime = Date.now();
-      const maxRetries = 3;
-      let lastError: { status: number; errorData: any; retryAfter: string | null } | null = null;
+async function processCompletion(
+  body: any,
+  apiKey: string,
+  targetUrl: string,
+  timeoutMs: number
+) {
+  const startTime = Date.now();
+  const maxRetries = 3;
+  let lastError: { status: number; errorData: any; retryAfter: string | null } | null = null;
 
-      console.log('[API Proxy] Forwarding request to:', targetUrl);
-      console.log('[API Proxy] Model:', body.model);
-      console.log('[API Proxy] Stream:', body.stream);
+  console.log('[API Proxy] Forwarding request to:', targetUrl);
+  console.log('[API Proxy] Model:', body.model);
+  console.log('[API Proxy] Stream:', body.stream);
 
       for (let retryCount = 0; retryCount <= maxRetries; retryCount++) {
         // Create an AbortController for timeout handling (AbortSignal.timeout may not be available)
@@ -157,88 +153,50 @@ const processCompletion = wrapTraced(
         const totalTokens = data.usage?.total_tokens || promptTokens + completionTokens;
         const latency = Date.now() - startTime;
 
-        // Log to Braintrust
-        if (isBraintrustEnabled()) {
-          span.log({
-            input: body.messages || [{ role: 'user', content: body.prompt || '' }],
-            output: data.choices?.[0]?.message?.content || data.choices?.[0]?.text || '',
-            metrics: {
-              prompt_tokens: promptTokens,
-              completion_tokens: completionTokens,
-              tokens: totalTokens,
-              latency_ms: latency,
-            },
-            metadata: {
-              model: body.model,
-              temperature: body.temperature,
-              max_tokens: body.max_tokens,
-              top_p: body.top_p,
-              frequency_penalty: body.frequency_penalty,
-              presence_penalty: body.presence_penalty,
-              stream: body.stream,
-              response_status: response.status,
-            },
-          });
-        }
+        console.log('[API Proxy] Response metrics:', {
+          promptTokens,
+          completionTokens,
+          totalTokens,
+          latency
+        });
 
-            return { data, status: response.status };
+        return { data, status: response.status };
           }
 
-          // For streaming responses, we'll log basic info and return the stream
-          if (!response.body) {
-            throw new Error('No response body for streaming response');
-          }
-
-          // Log streaming request to Braintrust (without output since it's streaming)
-          if (isBraintrustEnabled()) {
-            span.log({
-              input: body.messages || [{ role: 'user', content: body.prompt || '' }],
-              metadata: {
-                model: body.model,
-                temperature: body.temperature,
-                max_tokens: body.max_tokens,
-                top_p: body.top_p,
-                stream: true,
-                response_status: response.status,
-              },
-            });
-          }
-
-          console.log('[API Proxy] Setting up streaming response forwarding');
-          return { stream: response.body, status: response.status };
-        } catch (fetchError) {
-          clearTimeout(timeoutId);
-          
-          // Don't retry on abort/timeout errors
-          if (fetchError instanceof Error && (
-            fetchError.name === 'AbortError' ||
-            fetchError.message.includes('aborted') ||
-            fetchError.message.includes('timeout')
-          )) {
-            console.error('[API Proxy] Request aborted/timed out, not retrying:', fetchError);
-            throw fetchError;
-          }
-          
-          // Retry on network errors if we haven't exceeded max retries
-          if (retryCount < maxRetries) {
-            console.warn(`[API Proxy] Fetch error on attempt ${retryCount + 1}, will retry:`, fetchError);
-            await sleep(calculateRetryDelay(retryCount, null, false));
-            continue;
-          }
-          
-          throw fetchError;
-        }
+      // For streaming responses, we'll log basic info and return the stream
+      if (!response.body) {
+        throw new Error('No response body for streaming response');
       }
-      
-      // Should never reach here, but TypeScript needs it
-      throw new Error('Unexpected error in processCompletion');
-    });
-  },
-  {
-    type: 'llm',
-    name: 'Gatewayz Chat Completion',
+
+      console.log('[API Proxy] Setting up streaming response forwarding');
+      return { stream: response.body, status: response.status };
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+
+      // Don't retry on abort/timeout errors
+      if (fetchError instanceof Error && (
+        fetchError.name === 'AbortError' ||
+        fetchError.message.includes('aborted') ||
+        fetchError.message.includes('timeout')
+      )) {
+        console.error('[API Proxy] Request aborted/timed out, not retrying:', fetchError);
+        throw fetchError;
+      }
+
+      // Retry on network errors if we haven't exceeded max retries
+      if (retryCount < maxRetries) {
+        console.warn(`[API Proxy] Fetch error on attempt ${retryCount + 1}, will retry:`, fetchError);
+        await sleep(calculateRetryDelay(retryCount, null, false));
+        continue;
+      }
+
+      throw fetchError;
+    }
   }
-);
+
+  // Should never reach here, but TypeScript needs it
+  throw new Error('Unexpected error in processCompletion');
+}
 
 /**
  * API Proxy for Chat Completions
