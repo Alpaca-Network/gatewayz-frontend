@@ -654,7 +654,8 @@ export function GatewayzAuthProvider({
       // Skip if we've already synced with this Privy user and have valid credentials
       if (!options?.force && lastSyncedPrivyIdRef.current === user.id && apiKey) {
         console.log("[Auth] Already synced with this Privy user, skipping sync");
-        setAuthStatus("authenticated", "already synced");
+        // Don't try to transition to authenticated if already authenticated
+        // This would cause an invalid state transition warning
         return;
       }
 
