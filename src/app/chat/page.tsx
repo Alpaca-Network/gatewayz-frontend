@@ -38,7 +38,7 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-65px)] has-onboarding-banner:h-[calc(100vh-115px)]">
+    <div className="flex flex-col h-[calc(100vh-65px)] has-onboarding-banner:h-[calc(100vh-115px)] md:h-[calc(100vh-130px)] md:has-onboarding-banner:h-[calc(100vh-180px)]">
       <Suspense fallback={<div className="flex h-screen items-center justify-center">Loading...</div>}>
         <FreeModelsBanner />
         <ChatLayout />
