@@ -40,7 +40,7 @@ export interface ChatMessage {
   id: number | string; // Can be temp ID (string) or server ID (number)
   sessionId: number;
   role: MessageRole;
-  content: string;
+  content: string | any[]; // Support rich content (text, images, video, audio)
   model?: string;
   tokens?: number;
   createdAt: string;
