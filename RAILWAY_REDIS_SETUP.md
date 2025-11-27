@@ -1,8 +1,12 @@
-# Railway Redis Setup Guide
+# Railway Redis Setup Guide (Backend API Services)
 
 ## Overview
 
-This guide shows you how to add Redis to your Railway deployment for the Gatewayz Beta application.
+**Important**: This guide is for adding Redis to your **backend API services** deployed on Railway.
+
+**Frontend deployed on Vercel?** See `VERCEL_REDIS_SETUP.md` instead for frontend-specific setup.
+
+This guide shows you how to add Redis to your Railway deployment for backend services.
 
 ## 🚀 Quick Setup (5 minutes)
 
@@ -10,7 +14,7 @@ This guide shows you how to add Redis to your Railway deployment for the Gateway
 
 1. **Open your Railway project dashboard**
    - Go to https://railway.app/dashboard
-   - Select your `gatewayz-frontend` project
+   - Select your backend API project
 
 2. **Add Redis service**
    - Click **"+ New"** button
@@ -33,7 +37,7 @@ Railway automatically creates these variables for the Redis service:
 
 You need to **map these to your app's expected variable names**:
 
-1. **Go to your frontend service** (not the Redis service)
+1. **Go to your backend API service** (not the Redis service)
 2. Click **"Variables"** tab
 3. **Add these variables**:
 
@@ -65,7 +69,7 @@ That's it! Redis caching is now active. ✅
 
 If you prefer to set variables manually:
 
-1. Go to your **frontend service** → **Variables**
+1. Go to your **backend API service** → **Variables**
 2. Add these variables:
 
 ```bash
@@ -143,7 +147,7 @@ Railway automatically handles service-to-service networking:
 ### Service Reference Syntax
 
 ```bash
-# Reference Redis service variables in your frontend service
+# Reference Redis service variables in your backend API service
 REDIS_HOST=${{Redis.REDISHOST}}
 REDIS_PORT=${{Redis.REDISPORT}}
 REDIS_PASSWORD=${{Redis.REDISPASSWORD}}
@@ -170,7 +174,7 @@ Railway Redis includes:
    - View memory usage, connections, commands/sec
 
 2. **Application Logs**
-   - Go to frontend service → **Deployments** → **View Logs**
+   - Go to backend API service → **Deployments** → **View Logs**
    - Search for `[Redis]` or `[Cache]` to see cache activity
 
 ### Cache Metrics API
