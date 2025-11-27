@@ -147,6 +147,9 @@ export class ChatPerformanceTracker {
       console.log(`✅ [Performance] Complete in ${metric.totalResponseTime?.toFixed(0)}ms`);
       this.logSummary(id);
     }
+
+    // Persist to Redis (fire-and-forget)
+    this.persistToRedis(id);
   }
 
   /**
@@ -191,6 +194,9 @@ export class ChatPerformanceTracker {
     if (process.env.NODE_ENV === 'development') {
       console.error('❌ [Performance] Error:', errorType);
     }
+
+    // Persist error to Redis (fire-and-forget)
+    this.persistToRedis(id);
   }
 
   /**
@@ -359,6 +365,47 @@ export class ChatPerformanceTracker {
       byModel: this.getMetricsByModel(),
       exportedAt: new Date().toISOString(),
     }, null, 2);
+  }
+
+  /**
+   * Persist metrics to Redis via backend API
+   * Fire-and-forget - doesn't block on completion
+   */
+  async persistToRedis(messageId?: string): Promise<void> {
+    const id = messageId || this.currentMessageId;
+    if (!id) return;
+
+    const metric = this.metrics.get(id);
+    if (!metric) return;
+
+    try {
+      // Send metrics to backend API (fire-and-forget)
+      fetch('/api/metrics/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: metric.model,
+          gateway: metric.gateway,
+          session_id: metric.sessionId,
+          ttft_ms: metric.timeToFirstToken,
+          total_time_ms: metric.totalResponseTime,
+          network_time_ms: metric.networkLatency,
+          backend_time_ms: metric.backendProcessingTime,
+          success: !metric.hadError,
+          error_type: metric.errorType,
+        }),
+      }).catch((error) => {
+        // Log but don't throw - metrics should never break the app
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('[Performance] Failed to persist metrics to Redis:', error);
+        }
+      });
+    } catch (error) {
+      // Silent fail - metrics are nice-to-have, not critical
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('[Performance] Error in persistToRedis:', error);
+      }
+    }
   }
 }
 
