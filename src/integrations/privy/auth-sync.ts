@@ -136,6 +136,8 @@ export async function syncPrivyToGatewayz(
       is_guest: privyUser.isGuest ?? false,
     }),
     token: privyAccessToken ?? '',
+    // Only request API key creation for new users or users without stored keys
+    // Existing users should get their existing key back to avoid replacing live keys with temp keys
     auto_create_api_key: isNewUser || !hasStoredApiKey,
     is_new_user: isNewUser,
     has_referral_code: !!referralCode,
