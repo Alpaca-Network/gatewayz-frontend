@@ -634,11 +634,11 @@ export default function ModelProfilePage() {
                         <div className="flex items-center gap-2 flex-wrap text-sm text-muted-foreground">
                             <span>Created Oct 30, 2025</span>
                             <span>|</span>
-                            <span>{model.context_length > 0 ? `${(model.context_length / 1000).toLocaleString()}k` : 'N/A'} context</span>
+                            <span>{model.context_length && model.context_length > 0 ? `${(model.context_length / 1000).toLocaleString()}k` : 'N/A'} context</span>
                             <span>|</span>
-                            <span>${model.pricing && model.pricing.prompt ? (parseFloat(model.pricing.prompt) * 1000000).toFixed(2) : 'N/A'}/M input tokens</span>
+                            <span>${model.pricing && model.pricing.prompt ? (parseFloat(String(model.pricing.prompt)) * 1000000).toFixed(2) : 'N/A'}/M input tokens</span>
                             <span>|</span>
-                            <span>${model.pricing && model.pricing.completion ? (parseFloat(model.pricing.completion) * 1000000).toFixed(2) : 'N/A'}/M output tokens</span>
+                            <span>${model.pricing && model.pricing.completion ? (parseFloat(String(model.pricing.completion)) * 1000000).toFixed(2) : 'N/A'}/M output tokens</span>
                             {model.architecture && model.architecture.input_modalities && model.architecture.input_modalities.includes('audio') && (
                                 <>
                                     <span>|</span>
@@ -647,7 +647,7 @@ export default function ModelProfilePage() {
                             )}
                         </div>
                         <div className="flex items-center gap-2 flex-wrap mt-3">
-                            {model.pricing && parseFloat(model.pricing.prompt) === 0 && parseFloat(model.pricing.completion) === 0 && (
+                            {model.pricing && parseFloat(String(model.pricing.prompt ?? '0')) === 0 && parseFloat(String(model.pricing.completion ?? '0')) === 0 && (
                                 <Badge className="bg-black text-white hover:bg-gray-800">Free</Badge>
                             )}
                             {model.is_private && (
@@ -1089,19 +1089,19 @@ console.log(response.choices[0].message.content);`
                                                 <div>
                                                     <p className="text-sm text-muted-foreground">Input Cost</p>
                                                     <p className="text-lg font-semibold">
-                                                        ${model.pricing && model.pricing.prompt ? (parseFloat(model.pricing.prompt) * 1000000).toFixed(2) : 'N/A'}/M
+                                                        ${model.pricing && model.pricing.prompt ? (parseFloat(String(model.pricing.prompt)) * 1000000).toFixed(2) : 'N/A'}/M
                                                     </p>
                                                 </div>
                                                 <div>
                                                     <p className="text-sm text-muted-foreground">Output Cost</p>
                                                     <p className="text-lg font-semibold">
-                                                        ${model.pricing && model.pricing.completion ? (parseFloat(model.pricing.completion) * 1000000).toFixed(2) : 'N/A'}/M
+                                                        ${model.pricing && model.pricing.completion ? (parseFloat(String(model.pricing.completion)) * 1000000).toFixed(2) : 'N/A'}/M
                                                     </p>
                                                 </div>
                                                 <div>
                                                     <p className="text-sm text-muted-foreground">Context Length</p>
                                                     <p className="text-lg font-semibold">
-                                                        {model.context_length > 0 ? `${Math.round(model.context_length / 1000)}K` : 'N/A'}
+                                                        {model.context_length && model.context_length > 0 ? `${Math.round(model.context_length / 1000)}K` : 'N/A'}
                                                     </p>
                                                 </div>
                                                 <div>
