@@ -211,15 +211,18 @@ function StorageDisabledNotice() {
 }
 
 export function PrivyProviderWrapper(props: PrivyProviderWrapperProps) {
-  const [status, setStatus] = useState<"checking" | "ready" | "blocked">(() =>
-    canUseLocalStorage() ? "ready" : "checking"
-  );
+  // Always start with "checking" during SSR to ensure consistent hydration
+  // This prevents server/client mismatch since canUseLocalStorage() returns false on server
+  const [status, setStatus] = useState<"checking" | "ready" | "blocked">("checking");
 
   useEffect(() => {
-    if (status !== "checking") {
+    // Check localStorage availability after mount (client-side only)
+    if (canUseLocalStorage()) {
+      setStatus("ready");
       return;
     }
 
+    // If not immediately available, wait and retry
     let active = true;
     waitForLocalStorageAccess({ attempts: 5, baseDelayMs: 200 }).then((available) => {
       if (!active) return;
@@ -229,10 +232,11 @@ export function PrivyProviderWrapper(props: PrivyProviderWrapperProps) {
     return () => {
       active = false;
     };
-  }, [status]);
+  }, []);
 
   if (status === "checking") {
-    return null;
+    // Return empty fragment instead of null for consistent hydration
+    return <></>;
   }
 
   if (status === "blocked") {
