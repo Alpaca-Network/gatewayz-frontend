@@ -12,11 +12,11 @@ import { Bot, User, Copy, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import dynamic from 'next/dynamic';
 
-// Lazy load heavy components
-const ReactMarkdown = dynamic(() => import('react-markdown'), { ssr: false });
+// Lazy load heavy components - enable SSR to prevent hydration mismatch
+const ReactMarkdown = dynamic(() => import('react-markdown'), { ssr: true });
 const ReasoningDisplay = dynamic(
   () => import('@/components/chat/reasoning-display').then(mod => ({ default: mod.ReasoningDisplay })),
-  { ssr: false }
+  { ssr: true }
 );
 
 export interface ChatMessageProps {
