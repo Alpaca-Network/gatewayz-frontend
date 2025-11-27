@@ -1,15 +1,21 @@
 "use client";
 
 /**
- * Chat Page v2
+ * Chat Page v2 - TESTING ROUTE ONLY
  *
- * A simplified chat page using the new modular architecture:
+ * @deprecated This is a testing route at /chat-v2 only.
+ * The main /chat route uses ChatLayout from chat-v2 components.
+ *
+ * WARNING: This page has its own MessageBubble component that must be kept
+ * in sync with the shared ChatMessage component at /components/chat/ChatMessage.tsx
+ *
+ * TODO: Consider removing this testing page or migrating to use shared components
+ * to prevent style/feature drift.
+ *
+ * Architecture:
  * - useChatOrchestrator for state management
  * - Separate components for sidebar, messages, and input
  * - Error boundaries for graceful error handling
- *
- * This page can be accessed at /chat-v2 for testing.
- * Once validated, it can replace the main /chat page.
  */
 
 import React, { useEffect, useCallback, useRef, Suspense } from "react";
@@ -449,6 +455,28 @@ interface MessageBubbleProps {
 function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
   const isUser = message.role === "user";
 
+  // Parse content if it's an array (matching ChatMessage.tsx)
+  let displayContent = '';
+  let displayImage: string | undefined;
+  let displayVideo: string | undefined;
+  let displayAudio: string | undefined;
+
+  if (Array.isArray(message.content)) {
+    message.content.forEach((part: any) => {
+      if (part.type === 'text') {
+        displayContent += part.text || '';
+      } else if (part.type === 'image_url') {
+        displayImage = part.image_url?.url;
+      } else if (part.type === 'video_url') {
+        displayVideo = part.video_url?.url;
+      } else if (part.type === 'audio_url') {
+        displayAudio = part.audio_url?.url;
+      }
+    });
+  } else {
+    displayContent = message.content;
+  }
+
   return (
     <div className={cn("flex gap-3", isUser && "flex-row-reverse")}>
       {/* Avatar */}
@@ -468,12 +496,43 @@ function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
           isUser ? "bg-primary text-primary-foreground" : "bg-white dark:bg-white/10"
         )}
       >
+        {/* Image attachment */}
+        {displayImage && (
+          <div className="mb-3">
+            <img
+              src={displayImage}
+              alt="Uploaded"
+              className="max-w-full rounded-md"
+              style={{ maxHeight: '300px' }}
+            />
+          </div>
+        )}
+
+        {/* Video attachment */}
+        {displayVideo && (
+          <div className="mb-3">
+            <video
+              src={displayVideo}
+              controls
+              className="max-w-full rounded-md"
+              style={{ maxHeight: '300px' }}
+            />
+          </div>
+        )}
+
+        {/* Audio attachment */}
+        {displayAudio && (
+          <div className="mb-3">
+            <audio src={displayAudio} controls className="w-full" />
+          </div>
+        )}
+
         {isUser ? (
-          <p className="whitespace-pre-wrap">{message.content}</p>
+          <p className="whitespace-pre-wrap">{displayContent}</p>
         ) : (
           <div className="prose prose-sm dark:prose-invert max-w-none">
-            {message.content ? (
-              <ReactMarkdown>{message.content}</ReactMarkdown>
+            {displayContent ? (
+              <ReactMarkdown>{displayContent}</ReactMarkdown>
             ) : isStreaming ? (
               <span className="inline-block w-2 h-4 bg-current animate-pulse" />
             ) : null}
@@ -481,7 +540,7 @@ function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
         )}
 
         {/* Streaming indicator */}
-        {isStreaming && message.content && (
+        {isStreaming && displayContent && (
           <span className="inline-block w-2 h-4 bg-current animate-pulse ml-1" />
         )}
 
