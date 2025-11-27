@@ -48,22 +48,17 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
     limit ? `limit:${limit}` : 'all'
   );
 
-  try {
-    // Try Redis cache with automatic fetch on miss
-    return await cacheAside(
-      cacheKeyStr,
-      async () => {
-        // Fetch logic (extracted below)
-        return await fetchModelsLogic(gateway, limit);
-      },
-      TTL.MODELS_ALL,
-      'models' // Metrics category
-    );
-  } catch (error) {
-    console.error('[Models] Error with Redis cache, falling back to in-memory:', error);
-    // Fallback to in-memory cache
-    return await fetchModelsLogic(gateway, limit);
-  }
+  // cacheAside will handle Redis errors and fallback to fetchFn
+  // Let application errors (from fetchModelsLogic) propagate to caller
+  return await cacheAside(
+    cacheKeyStr,
+    async () => {
+      // Fetch logic (extracted below)
+      return await fetchModelsLogic(gateway, limit);
+    },
+    TTL.MODELS_ALL,
+    'models' // Metrics category
+  );
 }
 
 // Extracted fetch logic for reuse

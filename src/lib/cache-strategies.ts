@@ -92,39 +92,53 @@ export async function cacheAside<T>(
 ): Promise<T> {
   const redis = getRedisClient();
 
+  // Check if Redis is available (isolate Redis errors)
+  let available = false;
   try {
-    // Check if Redis is available
-    const available = await isRedisAvailable();
-    if (!available) {
-      console.warn('[Cache] Redis unavailable, bypassing cache');
-      return await fetchFn();
-    }
-
-    // Try to get from cache
-    const cached = await redis.get(key);
-
-    if (cached) {
-      // Cache hit
-      trackMetric(category, 'hit');
-      return JSON.parse(cached) as T;
-    }
-
-    // Cache miss - fetch data
-    trackMetric(category, 'miss');
-    const data = await fetchFn();
-
-    // Store in cache (fire-and-forget to avoid blocking)
-    redis.setex(key, ttl, JSON.stringify(data)).catch((error) => {
-      console.error('[Cache] Failed to set cache:', error);
-    });
-
-    return data;
+    available = await isRedisAvailable();
   } catch (error) {
-    // Cache error - fallback to direct fetch
-    console.error('[Cache] Error in cache-aside:', error);
+    console.warn('[Cache] Redis availability check failed, bypassing cache:', error);
     trackMetric(category, 'error');
     return await fetchFn();
   }
+
+  if (!available) {
+    console.warn('[Cache] Redis unavailable, bypassing cache');
+    return await fetchFn();
+  }
+
+  // Try to get from cache (isolate Redis errors)
+  let cached: string | null = null;
+  try {
+    cached = await redis.get(key);
+  } catch (error) {
+    console.error('[Cache] Redis GET error, bypassing cache:', error);
+    trackMetric(category, 'error');
+    return await fetchFn();
+  }
+
+  if (cached) {
+    // Cache hit
+    try {
+      trackMetric(category, 'hit');
+      return JSON.parse(cached) as T;
+    } catch (error) {
+      // JSON parse error - corrupted cache, fetch fresh data
+      console.error('[Cache] Failed to parse cached data, fetching fresh:', error);
+      trackMetric(category, 'error');
+    }
+  }
+
+  // Cache miss - fetch data
+  trackMetric(category, 'miss');
+  const data = await fetchFn(); // Let fetchFn errors propagate to caller
+
+  // Store in cache (fire-and-forget to avoid blocking)
+  redis.setex(key, ttl, JSON.stringify(data)).catch((error) => {
+    console.error('[Cache] Failed to set cache:', error);
+  });
+
+  return data;
 }
 
 /**
