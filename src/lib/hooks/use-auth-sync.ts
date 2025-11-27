@@ -76,7 +76,9 @@ export function useAuthSync() {
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['auth-sync', user?.id],
-    enabled: ready && authenticated && !!user,
+    // IMPORTANT: Disable this query if we already have valid credentials
+    // to prevent duplicate auth calls that can cause API key switching issues
+    enabled: ready && authenticated && !!user && !getApiKey(),
     staleTime: 5 * 60 * 1000, // 5 minutes
     retry: 2,
     queryFn: async () => {
@@ -84,7 +86,7 @@ export function useAuthSync() {
 
       // 1. Get Token
       const token = await getAccessToken();
-      
+
       // 2. Prepare Body
       const existingUserData = getUserData();
       const isNewUser = !existingUserData;
@@ -110,7 +112,8 @@ export function useAuthSync() {
           is_guest: user.isGuest ?? false,
         }),
         token: token ?? "",
-        auto_create_api_key: isNewUser || !hasStoredApiKey,
+        // ALWAYS request API key creation to avoid temp keys
+        auto_create_api_key: true,
         is_new_user: isNewUser,
         has_referral_code: !!referralCode,
         referral_code: referralCode ?? null,
@@ -131,7 +134,7 @@ export function useAuthSync() {
       }
 
       const authData = await response.json() as AuthResponse;
-      
+
       // Validate
       if (!authData.api_key) {
            // Fallback check
