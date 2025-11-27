@@ -54,7 +54,7 @@ export function AppFooter() {
     return null;
   }
 
-  // Hide footer on mobile for chat page
+  // Hide footer on chat page across all breakpoints
   if (isChatPage) {
     return null;
   }
