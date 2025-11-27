@@ -780,6 +780,16 @@ export function GatewayzAuthProvider({
 
         console.log("[Auth] Token retrieved:", token ? `${token.substring(0, 20)}...` : "null");
 
+        // Preserve existing live key before auth refresh
+        // If backend returns a temp key, we'll restore this
+        const existingLiveKey = userData?.api_key && !userData.api_key.startsWith(TEMP_API_KEY_PREFIX)
+          ? userData.api_key
+          : null;
+
+        if (existingLiveKey) {
+          console.log("[Auth] Preserving existing live key for potential restore");
+        }
+
         const authBody = buildAuthRequestBody(user, token, userData);
         console.log("[Auth] Sending auth body to backend:", {
           has_privy_user_id: !!authBody.privy_user_id,
@@ -928,6 +938,13 @@ export function GatewayzAuthProvider({
         // Check if we got a temporary API key
         if (authData.api_key?.startsWith(TEMP_API_KEY_PREFIX)) {
           console.warn("[Auth] Received temporary API key, will need to upgrade");
+
+          // CRITICAL FIX: If we had a live key before and backend returned a temp key,
+          // restore the live key instead of using the temp key
+          if (existingLiveKey) {
+            console.log("[Auth] Backend returned temp key but we have existing live key - restoring live key");
+            authData = { ...authData, api_key: existingLiveKey };
+          }
         } else {
           console.log("[Auth] Received permanent API key");
         }
