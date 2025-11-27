@@ -29,10 +29,18 @@ export function ThemeProvider({
   storageKey = "ui-theme",
   ...props
 }: ThemeProviderProps) {
-  const [theme, setThemeState] = React.useState<Theme>(() => {
-    const storedTheme = safeLocalStorageGet(storageKey)
-    return (storedTheme as Theme | null) || defaultTheme
-  })
+  // Always use defaultTheme during SSR and initial render to prevent hydration mismatch
+  const [theme, setThemeState] = React.useState<Theme>(defaultTheme)
+  const [isHydrated, setIsHydrated] = React.useState(false)
+
+  // Read from localStorage after hydration to prevent mismatch
+  React.useEffect(() => {
+    const storedTheme = safeLocalStorageGet(storageKey) as Theme | null
+    if (storedTheme) {
+      setThemeState(storedTheme)
+    }
+    setIsHydrated(true)
+  }, [storageKey])
 
   React.useEffect(() => {
     const root = window.document.documentElement
