@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as Sentry from '@sentry/nextjs';
 import { validateApiKey } from '@/app/api/middleware/auth';
-import { handleApiError } from '@/app/api/middleware/error-handler';
+import { handleApiError, HttpError } from '@/app/api/middleware/error-handler';
 import { CHAT_HISTORY_API_URL } from '@/lib/config';
 import { cacheAside, cacheInvalidate, cacheKey, CACHE_PREFIX, TTL } from '@/lib/cache-strategies';
 
@@ -59,8 +59,12 @@ export async function GET(request: NextRequest) {
             if (!response.ok) {
               span.setAttribute('error', true);
               span.setAttribute('error_type', 'backend_error');
-              const error = await response.json().catch(() => ({}));
-              throw new Error(error.detail || 'Failed to fetch sessions');
+              const errorData = await response.json().catch(() => ({}));
+              throw new HttpError(
+                errorData.detail || 'Failed to fetch sessions',
+                response.status,
+                errorData
+              );
             }
 
             return await response.json();

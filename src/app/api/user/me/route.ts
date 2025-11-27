@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as Sentry from "@sentry/nextjs";
-import { handleApiError } from "@/app/api/middleware/error-handler";
+import { handleApiError, HttpError } from "@/app/api/middleware/error-handler";
 import { API_BASE_URL } from "@/lib/config";
 import { proxyFetch } from "@/lib/proxy-fetch";
 import { cacheAside, cacheKey, CACHE_PREFIX, TTL } from "@/lib/cache-strategies";
@@ -56,7 +56,20 @@ export async function GET(request: NextRequest) {
               span.setAttribute("error_type", "backend_error");
               span.setAttribute("backend_status", response.status);
               console.error("[API /api/user/me] Backend request failed:", response.status, responseText);
-              throw new Error(`Backend error: ${response.status}`);
+
+              // Parse error details if available
+              let errorData;
+              try {
+                errorData = JSON.parse(responseText);
+              } catch {
+                errorData = { detail: responseText };
+              }
+
+              throw new HttpError(
+                errorData.detail || errorData.error || `Backend error: ${response.status}`,
+                response.status,
+                errorData
+              );
             }
 
             return JSON.parse(responseText);
