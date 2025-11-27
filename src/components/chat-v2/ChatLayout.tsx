@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect } from "react";
 import { Menu, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
@@ -12,7 +11,7 @@ import { useChatUIStore } from "@/lib/store/chat-ui-store";
 import { useAuthSync } from "@/lib/hooks/use-auth-sync";
 import { useAuthStore } from "@/lib/store/auth-store";
 import { Card } from "@/components/ui/card";
-import { useCreateSession } from "@/lib/hooks/use-chat-queries";
+import { useSessionMessages } from "@/lib/hooks/use-chat-queries";
 
 function WelcomeScreen({ onPromptSelect }: { onPromptSelect: (txt: string) => void }) {
     const prompts = [
@@ -56,6 +55,9 @@ export function ChatLayout() {
        // Actually, I'll update ChatInput to sync with store or just use local state + key.
        // For simplicity in v2, I'll update the store and have ChatInput use it.
    };
+
+   const { data: activeMessages = [], isLoading: messagesLoading } = useSessionMessages(activeSessionId);
+   const showWelcomeScreen = !activeSessionId || (!messagesLoading && activeMessages.length === 0);
 
    if (authLoading && !isAuthenticated) {
        return (
@@ -121,13 +123,17 @@ export function ChatLayout() {
                    </div>
                </header>
 
-               {/* Main Content */}
-               <div className="flex-1 overflow-hidden relative z-10 flex flex-col">
-                   {activeSessionId ? (
-                       <MessageList />
-                   ) : (
-                       <WelcomeScreen onPromptSelect={handlePromptSelect} />
-                   )}
+              {/* Main Content */}
+              <div className="flex-1 overflow-hidden relative z-10 flex flex-col">
+                  {showWelcomeScreen ? (
+                      <WelcomeScreen onPromptSelect={handlePromptSelect} />
+                  ) : (
+                      <MessageList
+                        sessionId={activeSessionId}
+                        messages={activeMessages}
+                        isLoading={messagesLoading}
+                      />
+                  )}
                </div>
 
                {/* Input */}
