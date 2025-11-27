@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as Sentry from '@sentry/nextjs';
 import { validateApiKey } from '@/app/api/middleware/auth';
-import { handleApiError } from '@/app/api/middleware/error-handler';
+import { handleApiError, HttpError } from '@/app/api/middleware/error-handler';
 import { CHAT_HISTORY_API_URL } from '@/lib/config';
+import { cacheAside, cacheInvalidate, cacheKey, CACHE_PREFIX, TTL } from '@/lib/cache-strategies';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-// GET /api/chat/sessions - List all chat sessions
+// GET /api/chat/sessions - List all chat sessions (with Redis caching)
 export async function GET(request: NextRequest) {
   return Sentry.startSpan(
     { op: 'http.server', name: 'GET /api/chat/sessions' },
@@ -27,33 +28,54 @@ export async function GET(request: NextRequest) {
           return error;
         }
 
-        const url = `${CHAT_HISTORY_API_URL}/v1/chat/sessions?limit=${limit}&offset=${offset}`;
-        console.log(`Chat sessions API - Calling: ${url}`);
+        // Extract user ID from API key for cache key (hash it for privacy)
+        const userCacheId = Buffer.from(apiKey).toString('base64').slice(0, 16);
+        const sessionsCacheKey = cacheKey(
+          CACHE_PREFIX.SESSIONS,
+          userCacheId,
+          'list',
+          `${limit}:${offset}`
+        );
 
-        const response = await fetch(url, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json'
-          }
-        });
+        // Use cache-aside pattern with Redis
+        const data = await cacheAside(
+          sessionsCacheKey,
+          async () => {
+            // Fetch from backend on cache miss
+            const url = `${CHAT_HISTORY_API_URL}/v1/chat/sessions?limit=${limit}&offset=${offset}`;
+            console.log(`[Cache MISS] Chat sessions API - Calling: ${url}`);
 
-        span.setAttribute('backend_status', response.status);
-        console.log(`Chat sessions API - Response status: ${response.status}`);
+            const response = await fetch(url, {
+              method: 'GET',
+              headers: {
+                'Authorization': `Bearer ${apiKey}`,
+                'Content-Type': 'application/json'
+              }
+            });
 
-        if (!response.ok) {
-          span.setAttribute('error', true);
-          span.setAttribute('error_type', 'backend_error');
-          const error = await response.json().catch(() => ({}));
-          return NextResponse.json(
-            { error: error.detail || 'Failed to fetch sessions' },
-            { status: response.status }
-          );
-        }
+            span.setAttribute('backend_status', response.status);
+            console.log(`Chat sessions API - Response status: ${response.status}`);
 
-        const data = await response.json();
+            if (!response.ok) {
+              span.setAttribute('error', true);
+              span.setAttribute('error_type', 'backend_error');
+              const errorData = await response.json().catch(() => ({}));
+              throw new HttpError(
+                errorData.detail || 'Failed to fetch sessions',
+                response.status,
+                errorData
+              );
+            }
+
+            return await response.json();
+          },
+          TTL.SESSIONS_LIST,
+          'sessions' // Metrics category
+        );
+
         span.setStatus('ok' as any);
         span.setAttribute('sessions_count', Array.isArray(data) ? data.length : 0);
+        span.setAttribute('cached', true);
         return NextResponse.json(data);
       } catch (error) {
         span.setStatus('error' as any);
@@ -123,6 +145,14 @@ export async function POST(request: NextRequest) {
           const data = await response.json();
           span.setStatus('ok' as any);
           span.setAttribute('session_id', data?.id?.toString() || 'unknown');
+
+          // Invalidate sessions list cache for this user
+          const userCacheId = Buffer.from(apiKey).toString('base64').slice(0, 16);
+          const cachePattern = cacheKey(CACHE_PREFIX.SESSIONS, userCacheId, '*');
+          await cacheInvalidate(cachePattern).catch((err) => {
+            console.warn('[Cache] Failed to invalidate sessions cache:', err);
+          });
+
           return NextResponse.json(data);
         } catch (error) {
           clearTimeout(timeoutId);

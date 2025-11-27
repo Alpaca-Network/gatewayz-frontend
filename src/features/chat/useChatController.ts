@@ -46,7 +46,7 @@ const mapSession = (session: ApiChatSession): ChatSessionView => ({
 const mapMessage = (message: ApiChatMessage): ChatMessageView => ({
   id: `api-msg-${message.id ?? makeLocalId("msg")}`,
   role: message.role,
-  content: message.content,
+  content: Array.isArray(message.content) ? JSON.stringify(message.content) : message.content,
   model: message.model,
   createdAt: Date.parse(message.created_at ?? "") || Date.now(),
 });

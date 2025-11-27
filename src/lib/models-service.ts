@@ -1,9 +1,10 @@
 import { models } from '@/lib/models-data';
 import { getErrorMessage, isAbortOrNetworkError } from '@/lib/network-error';
+import { cacheAside, cacheKey, CACHE_PREFIX, TTL, cacheInvalidate } from '@/lib/cache-strategies';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
 
-// In-memory cache for models to reduce API calls
+// In-memory cache for models to reduce API calls (fallback if Redis unavailable)
 let modelsCache: { data: any[], timestamp: number } | null = null;
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
 
@@ -40,11 +41,33 @@ function transformModel(model: any, gateway: string) {
 }
 
 export async function getModelsForGateway(gateway: string, limit?: number) {
-  // Check cache first
+  // Use Redis cache with cache-aside pattern
+  const cacheKeyStr = cacheKey(
+    CACHE_PREFIX.MODELS,
+    gateway,
+    limit ? `limit:${limit}` : 'all'
+  );
+
+  // cacheAside will handle Redis errors and fallback to fetchFn
+  // Let application errors (from fetchModelsLogic) propagate to caller
+  return await cacheAside(
+    cacheKeyStr,
+    async () => {
+      // Fetch logic (extracted below)
+      return await fetchModelsLogic(gateway, limit);
+    },
+    TTL.MODELS_ALL,
+    'models' // Metrics category
+  );
+}
+
+// Extracted fetch logic for reuse
+async function fetchModelsLogic(gateway: string, limit?: number) {
+  // Check in-memory cache as fallback
   if (modelsCache && gateway === 'all') {
     const now = Date.now();
     if (now - modelsCache.timestamp < CACHE_DURATION) {
-      console.log(`[Models] Returning cached models (${modelsCache.data.length} models)`);
+      console.log(`[Models] Returning in-memory cached models (${modelsCache.data.length} models)`);
       return { data: modelsCache.data };
     }
   }
@@ -443,4 +466,37 @@ function getStaticFallbackModels(gateway: string): any[] {
   }
 
   return transformedModels;
+}
+
+/**
+ * Invalidate models cache for a specific gateway or all gateways
+ *
+ * @param gateway - Gateway to invalidate, or 'all' for all caches
+ * @returns Number of cache keys invalidated
+ */
+export async function invalidateModelsCache(gateway?: string): Promise<number> {
+  try {
+    if (gateway) {
+      // Invalidate specific gateway cache
+      const pattern = cacheKey(CACHE_PREFIX.MODELS, gateway, '*');
+      const deleted = await cacheInvalidate(pattern);
+      console.log(`[Models] Invalidated ${deleted} cache entries for gateway: ${gateway}`);
+      return deleted;
+    } else {
+      // Invalidate all models caches
+      const pattern = cacheKey(CACHE_PREFIX.MODELS, '*');
+      const deleted = await cacheInvalidate(pattern);
+      console.log(`[Models] Invalidated ${deleted} cache entries for all gateways`);
+
+      // Also clear in-memory cache
+      modelsCache = null;
+
+      return deleted;
+    }
+  } catch (error) {
+    console.error('[Models] Error invalidating cache:', error);
+    // Clear in-memory cache as fallback
+    modelsCache = null;
+    return 0;
+  }
 }
