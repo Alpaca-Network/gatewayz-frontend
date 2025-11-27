@@ -89,7 +89,7 @@ export const ChatMessage = memo<ChatMessageProps>(
             className={`p-4 ${
               isUser
                 ? 'bg-primary text-primary-foreground'
-                : 'bg-muted/50'
+                : 'bg-white dark:bg-white/10'
             }`}
           >
             {/* Image attachment */}
