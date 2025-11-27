@@ -117,10 +117,10 @@ export function ChatInput() {
              {/* ... other previews */}
         </div>
 
-        <div className="flex gap-2 items-center bg-background p-2 rounded-lg border">
+        <div className="flex gap-2 items-center bg-muted p-2 rounded-lg border">
             {/* Hidden Inputs */}
             <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageSelect} className="hidden" />
-            
+
             <div className="flex gap-1">
                 <Button size="icon" variant="ghost" onClick={() => fileInputRef.current?.click()}>
                     <ImageIcon className="h-5 w-5 text-muted-foreground" />
@@ -128,7 +128,7 @@ export function ChatInput() {
                 {/* Add Video/Audio buttons here */}
             </div>
 
-            <Input 
+            <Input
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={(e) => {
@@ -138,7 +138,7 @@ export function ChatInput() {
                     }
                 }}
                 placeholder="Type a message..."
-                className="flex-1 border-0 bg-transparent focus-visible:ring-0"
+                className="flex-1 border-0 bg-background focus-visible:ring-0"
                 disabled={isStreaming}
             />
 
