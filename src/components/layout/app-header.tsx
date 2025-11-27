@@ -5,6 +5,7 @@ import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Menu } from "lucide-react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Sheet, SheetContent, SheetTrigger, SheetOverlay, SheetPortal, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { UserNav } from "./user-nav";
@@ -31,12 +32,19 @@ export function AppHeader() {
   const { privyUser: user, login, logout, status } = useGatewayzAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { toast } = useToast();
+  const pathname = usePathname();
   const walletAddress = useMemo(() => getWalletAddress(user), [user]);
   const isAuthenticating = status === "authenticating";
   const authToastShownRef = useRef(false);
 
   // Show toast when authentication starts and completes
+  // Skip showing toast on chat page to avoid clutter
   useEffect(() => {
+    // Don't show auth toasts on the chat page
+    if (pathname === "/chat") {
+      return;
+    }
+
     if (status === "authenticating" && !authToastShownRef.current) {
       authToastShownRef.current = true;
       toast({
@@ -57,7 +65,7 @@ export function AppHeader() {
         variant: "destructive",
       });
     }
-  }, [status, toast]);
+  }, [status, toast, pathname]);
 
   const formatAddress = (address: string) => {
     if (!address) return '';
