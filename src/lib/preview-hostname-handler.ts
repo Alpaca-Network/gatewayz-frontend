@@ -17,6 +17,28 @@ const STORAGE_TIMESTAMP_KEY = 'gatewayz_preview_hostname_timestamp';
 const STORAGE_TTL = 10 * 60 * 1000; // 10 minutes
 
 /**
+ * Safely access window.localStorage without throwing in restricted contexts.
+ */
+function getSafeStorage(): Storage | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  try {
+    const storage = window.localStorage;
+
+    if (!storage) {
+      return null;
+    }
+
+    return storage;
+  } catch (error) {
+    console.warn('[Preview] Local storage unavailable:', error);
+    return null;
+  }
+}
+
+/**
  * Detects if the current hostname is a Vercel preview deployment
  */
 export function isVercelPreviewDeployment(): boolean {
@@ -64,8 +86,14 @@ export function savePreviewHostname(): void {
   }
 
   try {
-    localStorage.setItem(STORAGE_KEY, hostname);
-    localStorage.setItem(STORAGE_TIMESTAMP_KEY, Date.now().toString());
+    const storage = getSafeStorage();
+
+    if (!storage) {
+      return;
+    }
+
+    storage.setItem(STORAGE_KEY, hostname);
+    storage.setItem(STORAGE_TIMESTAMP_KEY, Date.now().toString());
     console.log('[Preview] Saved preview hostname:', hostname);
   } catch (error) {
     console.error('[Preview] Failed to save preview hostname:', error);
@@ -81,8 +109,14 @@ export function getSavedPreviewHostname(): string | null {
   }
 
   try {
-    const hostname = localStorage.getItem(STORAGE_KEY);
-    const timestamp = localStorage.getItem(STORAGE_TIMESTAMP_KEY);
+    const storage = getSafeStorage();
+
+    if (!storage) {
+      return null;
+    }
+
+    const hostname = storage.getItem(STORAGE_KEY);
+    const timestamp = storage.getItem(STORAGE_TIMESTAMP_KEY);
 
     if (!hostname || !timestamp) {
       return null;
@@ -112,8 +146,14 @@ export function clearSavedPreviewHostname(): void {
   }
 
   try {
-    localStorage.removeItem(STORAGE_KEY);
-    localStorage.removeItem(STORAGE_TIMESTAMP_KEY);
+    const storage = getSafeStorage();
+
+    if (!storage) {
+      return;
+    }
+
+    storage.removeItem(STORAGE_KEY);
+    storage.removeItem(STORAGE_TIMESTAMP_KEY);
   } catch (error) {
     console.error('[Preview] Failed to clear saved preview hostname:', error);
   }
