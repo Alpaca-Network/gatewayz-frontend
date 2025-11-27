@@ -901,10 +901,14 @@ export function GatewayzAuthProvider({
           const fallbackApiKey =
             (authData as unknown as { data?: { api_key?: string } })?.data?.api_key ??
             (authData as unknown as { apiKey?: string }).apiKey ??
+            existingLiveKey ??
             null;
 
           if (fallbackApiKey) {
-            console.log("[Auth] Found API key in alternative field, using it");
+            const fallbackSource = fallbackApiKey === existingLiveKey
+              ? "cached live key"
+              : "alternative response field";
+            console.warn(`[Auth] Backend response missing api_key; using ${fallbackSource}`);
             authData = { ...authData, api_key: fallbackApiKey };
           } else {
             console.error("[Auth] Backend auth response missing api_key field");
