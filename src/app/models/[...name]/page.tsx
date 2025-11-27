@@ -773,31 +773,16 @@ export default function ModelProfilePage() {
                             </p>
                         </div>
 
-                        {/* Gateway Selector */}
+                        {/* Info about Gatewayz API */}
                         <div className="mb-4">
-                            <label className="text-sm font-medium mb-2 block">Select Gateway</label>
-                            <Select value={selectedProvider} onValueChange={setSelectedProvider}>
-                                <SelectTrigger className="w-full max-w-md">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="gatewayz">Gatewayz (Unified - Recommended)</SelectItem>
-                                    {modelProviders.length > 0 && modelProviders.map(provider => {
-                                        const config = providerConfigs[provider];
-                                        if (!config) return null;
-                                        return (
-                                            <SelectItem key={provider} value={provider}>
-                                                {config.name}
-                                            </SelectItem>
-                                        );
-                                    })}
-                                </SelectContent>
-                            </Select>
-                            {selectedProvider !== 'gatewayz' && (
-                                <p className="text-sm text-muted-foreground mt-2">
-                                    ⚠️ Using {providerConfigs[selectedProvider]?.name} directly requires a separate API key from that provider.
-                                </p>
-                            )}
+                            <Card className="bg-primary/5 border-primary/20">
+                                <CardContent className="p-4">
+                                    <p className="text-sm">
+                                        All code snippets use the unified <strong>Gatewayz API</strong> endpoint at <code className="px-2 py-1 bg-muted rounded">api.gatewayz.ai</code>.
+                                        This provides access to models from all gateway providers with a single API key.
+                                    </p>
+                                </CardContent>
+                            </Card>
                         </div>
 
                         {/* Language Selector */}
@@ -857,14 +842,11 @@ export default function ModelProfilePage() {
                         {/* Code Example */}
                         <div className="mb-6">
                             {(() => {
-                                // Get provider config
-                                const providerConfig = providerConfigs[selectedProvider] || providerConfigs.gatewayz;
-                                const baseUrl = providerConfig.baseUrl;
-                                const currentApiKey = providerConfig.apiKeyPlaceholder;
-                                // Format model ID according to provider requirements
-                                const formattedModelId = providerConfig.modelIdFormat
-                                    ? providerConfig.modelIdFormat(model.id)
-                                    : model.id;
+                                // Always use Gatewayz API endpoint for code snippets
+                                const baseUrl = 'https://api.gatewayz.ai/v1';
+                                const currentApiKey = apiKey;
+                                // Always use the full model ID for Gatewayz
+                                const formattedModelId = model.id;
 
                                 const codeExamples = {
                                     curl: `curl -X POST ${baseUrl}/chat/completions \\
