@@ -54,6 +54,13 @@ export const TTL = {
   RANKINGS_MODELS: 14400, // 4 hours
   RANKINGS_APPS: 14400, // 4 hours
   RANKINGS_CATEGORY: 14400, // 4 hours
+
+  // Real-time monitoring metrics (1 hour retention)
+  METRICS_REQUEST: 3600, // 1 hour
+  METRICS_LATENCY: 3600, // 1 hour
+  METRICS_HEALTH: 3600, // 1 hour
+  METRICS_SERIES: 21600, // 6 hours for time-series data
+  METRICS_DASHBOARD: 60, // 1 minute for dashboard aggregations
 } as const;
 
 /**
@@ -66,6 +73,9 @@ export const CACHE_PREFIX = {
   STATS: 'stats',
   RANKINGS: 'rankings',
   ACTIVITY: 'activity',
+  METRICS: 'metrics',
+  HEALTH: 'health',
+  PERF: 'perf',
 } as const;
 
 /**
