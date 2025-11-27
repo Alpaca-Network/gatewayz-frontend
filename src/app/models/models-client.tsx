@@ -28,7 +28,6 @@ import { BookText, Bot, Box, ChevronDown, ChevronUp, FileText, ImageIcon, Layout
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 import { stringToColor, getModelUrl } from '@/lib/utils';
-import ReactMarkdown from "react-markdown";
 import { safeParseJson } from '@/lib/http';
 
 
