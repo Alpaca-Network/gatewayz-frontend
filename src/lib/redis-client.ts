@@ -8,7 +8,13 @@
  * - Environment-based configuration
  */
 
-import Redis, { RedisOptions } from 'ioredis';
+import type { RedisOptions } from 'ioredis';
+
+// Only import Redis on the server side
+let Redis: typeof import('ioredis').default | null = null;
+if (typeof window === 'undefined') {
+  Redis = require('ioredis');
+}
 
 /**
  * Get Redis connection options (shared between URL and object configs)
@@ -60,16 +66,25 @@ function getRedisConfig(): { url: string; options: RedisOptions } | RedisOptions
   };
 }
 
-// Redis configuration from environment variables
-const REDIS_CONFIG = getRedisConfig();
+// Redis configuration from environment variables (only on server)
+let REDIS_CONFIG: ReturnType<typeof getRedisConfig> | null = null;
+if (typeof window === 'undefined') {
+  REDIS_CONFIG = getRedisConfig();
+}
 
 // Singleton Redis client instance
-let redisClient: Redis | null = null;
+let redisClient: import('ioredis').default | null = null;
 
 /**
  * Get or create Redis client singleton
+ * Returns null if running in browser environment
  */
-export function getRedisClient(): Redis {
+export function getRedisClient(): import('ioredis').default | null {
+  // Return null if running in browser
+  if (typeof window !== 'undefined' || !Redis || !REDIS_CONFIG) {
+    return null;
+  }
+
   if (!redisClient) {
     // Create Redis client based on config type
     if ('url' in REDIS_CONFIG) {
@@ -109,8 +124,16 @@ export function getRedisClient(): Redis {
  * Check if Redis is available and connected
  */
 export async function isRedisAvailable(): Promise<boolean> {
+  // Return false if running in browser
+  if (typeof window !== 'undefined') {
+    return false;
+  }
+
   try {
     const client = getRedisClient();
+    if (!client) {
+      return false;
+    }
     await client.ping();
     return true;
   } catch (error) {
@@ -139,6 +162,16 @@ export function getRedisStatus(): {
   host: string;
   port: number;
 } {
+  // Return disconnected status if running in browser
+  if (typeof window !== 'undefined' || !REDIS_CONFIG) {
+    return {
+      connected: false,
+      ready: false,
+      host: 'localhost',
+      port: 6379,
+    };
+  }
+
   const client = redisClient || getRedisClient();
 
   // Extract host and port from config
@@ -160,8 +193,8 @@ export function getRedisStatus(): {
   }
 
   return {
-    connected: client.status === 'connect' || client.status === 'ready',
-    ready: client.status === 'ready',
+    connected: client ? (client.status === 'connect' || client.status === 'ready') : false,
+    ready: client ? client.status === 'ready' : false,
     host,
     port,
   };
