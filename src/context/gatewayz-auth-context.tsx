@@ -273,6 +273,7 @@ export function GatewayzAuthProvider({
         const credits = Math.floor(authData.credits ?? 0);
         // Skip upgrade if insufficient credits or new user
         if (credits <= 10 || authData.is_new_user) {
+          console.log("[Auth] Skipping API key upgrade - new user or insufficient credits");
           return;
         }
 
@@ -284,6 +285,7 @@ export function GatewayzAuthProvider({
 
         // Atomic check-and-set for upgrade attempt
         if (upgradeAttemptedRef.current) {
+          console.log("[Auth] Upgrade already attempted in this session");
           return;
         }
 
@@ -291,114 +293,163 @@ export function GatewayzAuthProvider({
 
         // Create and store the upgrade promise
         const upgradePromise = (async () => {
-          try {
-            // Use timeout for API key fetch to prevent hanging
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+          // Retry logic for API key upgrade
+          const maxRetries = 2;
+          let lastError: Error | null = null;
 
-            const response = await fetch("/api/user/api-keys", {
-              method: "GET",
-              headers: {
-                Authorization: `Bearer ${currentKey}`,
-                "Content-Type": "application/json",
-              },
-              signal: controller.signal,
-            });
+          for (let attempt = 0; attempt <= maxRetries; attempt++) {
+            try {
+              if (attempt > 0) {
+                const backoffMs = 1000 * Math.pow(2, attempt - 1); // 1s, 2s
+                console.log(`[Auth] Retrying API key upgrade in ${backoffMs}ms (attempt ${attempt + 1}/${maxRetries + 1})`);
+                await new Promise(resolve => setTimeout(resolve, backoffMs));
+              }
 
-            clearTimeout(timeoutId);
+              console.log(`[Auth] Attempting to upgrade API key (attempt ${attempt + 1}/${maxRetries + 1})`);
 
-            if (!response.ok) {
-              console.error("[Auth] Unable to fetch upgraded API keys:", response.status);
-              console.error("[Auth] This is a critical issue - temp keys cannot be upgraded!");
-              console.error("[Auth] User will be unable to use chat completions with temp key");
+              // Use timeout for API key fetch to prevent hanging
+              const controller = new AbortController();
+              const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
 
-              // If we can't upgrade and have a temp key, this is a critical auth failure
-              throw new Error(`Failed to upgrade temporary API key: ${response.status}. Temp keys have limited permissions.`);
-            }
+              const response = await fetch("/api/user/api-keys", {
+                method: "GET",
+                headers: {
+                  Authorization: `Bearer ${currentKey}`,
+                  "Content-Type": "application/json",
+                },
+                signal: controller.signal,
+              });
 
-            const data = await response.json();
-            const keys: Array<{ api_key?: string; is_primary?: boolean; environment_tag?: string }> =
-              Array.isArray(data?.keys) ? data.keys : [];
+              clearTimeout(timeoutId);
 
-        // Find preferred key with better short-circuit logic
-        let preferredKey: { api_key?: string; is_primary?: boolean; environment_tag?: string } | undefined;
+              if (!response.ok) {
+                const errorText = await response.text().catch(() => 'Unable to read response');
+                console.warn(`[Auth] API key upgrade attempt ${attempt + 1} failed with status ${response.status}`);
+                console.warn(`[Auth] Response: ${errorText.substring(0, 200)}`);
 
-        for (const key of keys) {
-          if (
-            typeof key.api_key === "string" &&
-            !key.api_key.startsWith(TEMP_API_KEY_PREFIX)
-          ) {
-            // Primary preference: live environment + primary key
-            if (key.environment_tag === "live" && key.is_primary) {
-              preferredKey = key;
-              break;
-            }
-            // Secondary preference: live environment (any key)
-            if (key.environment_tag === "live" && !preferredKey) {
-              preferredKey = key;
-            }
-            // Fallback: any non-temp key
-            if (!preferredKey) {
-              preferredKey = key;
+                // Don't retry on 401/403 - these are auth errors that won't resolve with retries
+                if (response.status === 401 || response.status === 403) {
+                  throw new Error(`API key upgrade failed: Unauthorized (${response.status}). Temp key may not have permission to access this endpoint yet.`);
+                }
+
+                // Retry on 500/502/503/504 errors
+                if (attempt < maxRetries && (response.status === 500 || response.status === 502 || response.status === 503 || response.status === 504)) {
+                  lastError = new Error(`Temporary server error: ${response.status}`);
+                  continue; // Retry
+                }
+
+                throw new Error(`Failed to upgrade temporary API key: ${response.status}`);
+              }
+
+              const data = await response.json();
+              const keys: Array<{ api_key?: string; is_primary?: boolean; environment_tag?: string }> =
+                Array.isArray(data?.keys) ? data.keys : [];
+
+              console.log(`[Auth] Received ${keys.length} API keys from backend`);
+
+              // Find preferred key with better short-circuit logic
+              let preferredKey: { api_key?: string; is_primary?: boolean; environment_tag?: string } | undefined;
+
+              for (const key of keys) {
+                if (
+                  typeof key.api_key === "string" &&
+                  !key.api_key.startsWith(TEMP_API_KEY_PREFIX)
+                ) {
+                  // Primary preference: live environment + primary key
+                  if (key.environment_tag === "live" && key.is_primary) {
+                    preferredKey = key;
+                    break;
+                  }
+                  // Secondary preference: live environment (any key)
+                  if (key.environment_tag === "live" && !preferredKey) {
+                    preferredKey = key;
+                  }
+                  // Fallback: any non-temp key
+                  if (!preferredKey) {
+                    preferredKey = key;
+                  }
+                }
+              }
+
+              if (!preferredKey || !preferredKey.api_key) {
+                console.log("[Auth] No permanent API key found in response - only temp keys available");
+                console.log("[Auth] This is expected for users who haven't purchased credits yet");
+                return; // Not an error - just no permanent keys available yet
+              }
+
+              if (preferredKey.api_key === currentKey) {
+                console.log("[Auth] Current key is already the preferred key");
+                return;
+              }
+
+              console.log("[Auth] Successfully found permanent API key - upgrading");
+              saveApiKey(preferredKey.api_key);
+
+              const storedUser = getUserData();
+              if (storedUser) {
+                saveUserData({
+                  ...storedUser,
+                  api_key: preferredKey.api_key,
+                  tier: authData.tier,
+                  tier_display_name: authData.tier_display_name,
+                  subscription_status: authData.subscription_status,
+                  subscription_end_date: authData.subscription_end_date,
+                });
+              } else {
+                saveUserData({
+                  user_id: authData.user_id,
+                  api_key: preferredKey.api_key,
+                  auth_method: authData.auth_method,
+                  privy_user_id: authData.privy_user_id,
+                  display_name: authData.display_name,
+                  email: authData.email,
+                  credits: Math.floor(authData.credits ?? 0),
+                  tier: authData.tier,
+                  tier_display_name: authData.tier_display_name,
+                  subscription_status: authData.subscription_status,
+                  subscription_end_date: authData.subscription_end_date,
+                });
+              }
+
+              updateStateFromStorage();
+              console.log("[Auth] API key upgrade completed successfully");
+              return; // Success - exit retry loop
+
+            } catch (error) {
+              lastError = error instanceof Error ? error : new Error(String(error));
+
+              // If this is the last attempt, throw the error
+              if (attempt === maxRetries) {
+                throw lastError;
+              }
+
+              // Otherwise, log and continue to next retry
+              console.warn(`[Auth] API key upgrade attempt ${attempt + 1} failed:`, lastError.message);
             }
           }
-        }
 
-        if (!preferredKey || !preferredKey.api_key) {
-          console.log("[Auth] No upgraded API key found in response");
-          return;
-        }
-
-        if (preferredKey.api_key === currentKey) {
-          return;
-        }
-
-        console.log("[Auth] Upgrading stored API key to live key");
-        saveApiKey(preferredKey.api_key);
-
-        const storedUser = getUserData();
-        if (storedUser) {
-          saveUserData({
-            ...storedUser,
-            api_key: preferredKey.api_key,
-            tier: authData.tier,
-            tier_display_name: authData.tier_display_name,
-            subscription_status: authData.subscription_status,
-            subscription_end_date: authData.subscription_end_date,
-          });
-        } else {
-          saveUserData({
-            user_id: authData.user_id,
-            api_key: preferredKey.api_key,
-            auth_method: authData.auth_method,
-            privy_user_id: authData.privy_user_id,
-            display_name: authData.display_name,
-            email: authData.email,
-            credits: Math.floor(authData.credits ?? 0),
-            tier: authData.tier,
-            tier_display_name: authData.tier_display_name,
-            subscription_status: authData.subscription_status,
-            subscription_end_date: authData.subscription_end_date,
-          });
-        }
-
-            updateStateFromStorage();
-          } catch (error) {
-            console.log("[Auth] Failed to upgrade API key after payment", error);
-            upgradeAttemptedRef.current = false;
-            throw error;
-          } finally {
-            // Clear the promise reference when done
-            upgradePromiseRef.current = null;
+          // If we exhausted retries, throw the last error
+          if (lastError) {
+            throw lastError;
           }
-        })();
+
+        })().catch((error) => {
+          console.warn("[Auth] All API key upgrade attempts failed:", error);
+          upgradeAttemptedRef.current = false;
+          upgradePromiseRef.current = null;
+          throw error;
+        }).finally(() => {
+          // Clear the promise reference when done (success or final failure)
+          upgradePromiseRef.current = null;
+        });
 
         upgradePromiseRef.current = upgradePromise;
         await upgradePromise;
       } catch (error) {
-        console.log("[Auth] Failed to upgrade API key after payment", error);
+        console.warn("[Auth] API key upgrade failed - will proceed with temporary key:", error instanceof Error ? error.message : String(error));
         upgradeAttemptedRef.current = false;
         upgradePromiseRef.current = null;
+        // Don't re-throw - allow authentication to proceed with temp key
       }
     },
     [updateStateFromStorage]
@@ -506,22 +557,17 @@ export function GatewayzAuthProvider({
             console.log("[Auth] API key upgraded during login, using new key");
             finalAuthData = { ...authData, api_key: currentKey };
           } else if (currentKey?.startsWith(TEMP_API_KEY_PREFIX)) {
-            // Still have temp key after upgrade attempt - this is critical
-            console.error("[Auth] Still using temporary API key after upgrade attempt!");
-            console.error("[Auth] This will cause 401 errors on protected endpoints");
+            // Still have temp key after upgrade attempt - warn but allow authentication to proceed
+            // The temp key still allows basic operations, and upgrade can be retried later
+            console.warn("[Auth] Still using temporary API key after upgrade attempt");
+            console.warn("[Auth] This may cause issues with some protected endpoints");
+            console.warn("[Auth] User will be authenticated with limited permissions until upgrade succeeds");
 
-            // Clear the invalid credentials
-            clearStoredCredentials();
-
-            // Set error state
-            setAuthStatus("error", "temp key upgrade failed");
-            setError("Authentication failed: Unable to obtain valid API key. Please try logging in again.");
-
-            // Capture to Sentry
-            Sentry.captureMessage("Temporary API key could not be upgraded after authentication", {
-              level: 'error',
+            // Capture to Sentry as warning, not error
+            Sentry.captureMessage("Temporary API key could not be upgraded after authentication - proceeding with temp key", {
+              level: 'warning',
               tags: {
-                auth_error: 'temp_key_upgrade_failed',
+                auth_error: 'temp_key_upgrade_delayed',
               },
               extra: {
                 credits: authData.credits,
@@ -530,37 +576,37 @@ export function GatewayzAuthProvider({
               },
             });
 
-            return; // Don't proceed with authentication
+            // Continue with authentication using temp key
+            // Don't return - allow the flow to complete
           }
         } catch (error) {
-          console.error("[Auth] Key upgrade check failed:", error);
+          console.warn("[Auth] Key upgrade check failed:", error);
 
-          // If upgrade failed and we have a temp key, this is critical
+          // If upgrade failed and we have a temp key, warn but allow authentication
           const currentKey = getApiKey();
           if (currentKey?.startsWith(TEMP_API_KEY_PREFIX)) {
-            clearStoredCredentials();
-            setAuthStatus("error", "temp key upgrade error");
-            setError("Authentication failed: Unable to obtain valid API key. Please try logging in again.");
+            console.warn("[Auth] Proceeding with temporary API key despite upgrade failure");
+            console.warn("[Auth] User may experience limited functionality until key upgrade succeeds");
 
             Sentry.captureException(
               error instanceof Error ? error : new Error(String(error)),
               {
                 tags: {
-                  auth_error: 'temp_key_upgrade_exception',
+                  auth_error: 'temp_key_upgrade_exception_noncritical',
                 },
                 extra: {
                   credits: authData.credits,
                   is_new_user: authData.is_new_user,
                 },
-                level: 'error',
+                level: 'warning',
               }
             );
 
-            return; // Don't proceed with authentication
+            // Don't return - allow authentication to proceed with temp key
+          } else {
+            // If not a temp key issue, just warn and continue
+            console.warn("[Auth] Key upgrade check failed but proceeding with current key");
           }
-
-          // If not a temp key issue, just warn and continue
-          console.warn("[Auth] Key upgrade check failed but proceeding with current key");
         }
       }
 
