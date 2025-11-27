@@ -55,6 +55,10 @@ async function testRedis() {
       console.log('✅ Value verification: PASSED\n');
     } else {
       console.log('❌ Value verification: FAILED\n');
+      console.error(`Expected: ${testValue}`);
+      console.error(`Got: ${retrievedValue}\n`);
+      await redis.quit();
+      process.exit(1);
     }
 
     // Get Redis info

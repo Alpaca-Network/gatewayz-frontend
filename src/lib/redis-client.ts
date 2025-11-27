@@ -11,23 +11,10 @@
 import Redis, { RedisOptions } from 'ioredis';
 
 /**
- * Parse Redis configuration from environment variables
- * Supports both REDIS_URL and individual REDIS_HOST/PORT/PASSWORD variables
+ * Get Redis connection options (shared between URL and object configs)
  */
-function getRedisConfig(): RedisOptions | string {
-  // Option 1: Use REDIS_URL if provided (Railway, Heroku format)
-  // Format: redis://[username]:[password]@[host]:[port]/[db]
-  if (process.env.REDIS_URL) {
-    return process.env.REDIS_URL;
-  }
-
-  // Option 2: Use individual environment variables
+function getRedisOptions(): Partial<RedisOptions> {
   return {
-    host: process.env.REDIS_HOST || 'localhost',
-    port: parseInt(process.env.REDIS_PORT || '6379'),
-    password: process.env.REDIS_PASSWORD,
-    db: parseInt(process.env.REDIS_DB || '0'),
-
     // Connection settings
     retryStrategy: (times: number) => {
       const delay = Math.min(times * 50, 2000);
@@ -47,6 +34,32 @@ function getRedisConfig(): RedisOptions | string {
   };
 }
 
+/**
+ * Parse Redis configuration from environment variables
+ * Supports both REDIS_URL and individual REDIS_HOST/PORT/PASSWORD variables
+ */
+function getRedisConfig(): { url: string; options: RedisOptions } | RedisOptions {
+  const options = getRedisOptions();
+
+  // Option 1: Use REDIS_URL if provided (Railway, Heroku format)
+  // Format: redis://[username]:[password]@[host]:[port]/[db]
+  if (process.env.REDIS_URL) {
+    return {
+      url: process.env.REDIS_URL,
+      options: options as RedisOptions,
+    };
+  }
+
+  // Option 2: Use individual environment variables
+  return {
+    host: process.env.REDIS_HOST || 'localhost',
+    port: parseInt(process.env.REDIS_PORT || '6379'),
+    password: process.env.REDIS_PASSWORD,
+    db: parseInt(process.env.REDIS_DB || '0'),
+    ...options,
+  };
+}
+
 // Redis configuration from environment variables
 const REDIS_CONFIG = getRedisConfig();
 
@@ -59,9 +72,11 @@ let redisClient: Redis | null = null;
 export function getRedisClient(): Redis {
   if (!redisClient) {
     // Create Redis client based on config type
-    if (typeof REDIS_CONFIG === 'string') {
-      redisClient = new Redis(REDIS_CONFIG);
+    if ('url' in REDIS_CONFIG) {
+      // URL format with options
+      redisClient = new Redis(REDIS_CONFIG.url, REDIS_CONFIG.options);
     } else {
+      // Object format
       redisClient = new Redis(REDIS_CONFIG);
     }
 
@@ -130,10 +145,10 @@ export function getRedisStatus(): {
   let host = 'localhost';
   let port = 6379;
 
-  if (typeof REDIS_CONFIG === 'string') {
+  if ('url' in REDIS_CONFIG) {
     // Parse from URL format
     try {
-      const url = new URL(REDIS_CONFIG);
+      const url = new URL(REDIS_CONFIG.url);
       host = url.hostname;
       port = parseInt(url.port) || 6379;
     } catch (e) {

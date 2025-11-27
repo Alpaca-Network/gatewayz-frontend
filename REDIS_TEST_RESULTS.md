@@ -240,5 +240,5 @@ REDIS_DB=0
 
 **Created by:** Terry (Terragon Labs)
 **Test Files:**
-- `/root/repo/test-redis.js` - Standalone test script
-- `/root/repo/src/app/api/redis/test/route.ts` - API test endpoint
+- `test-redis.js` - Standalone test script
+- `src/app/api/redis/test/route.ts` - API test endpoint
