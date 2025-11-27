@@ -9,7 +9,6 @@ import { getApiKey, getUserData } from '@/lib/api';
 import { streamChatResponse } from '@/lib/streaming';
 import { normalizeModelId } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import { ReasoningDisplay } from '@/components/chat/reasoning-display';
 
@@ -305,7 +304,7 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
                   ) : (
                     <div className="text-sm prose prose-sm dark:prose-invert max-w-none">
                       <ReactMarkdown
-                        remarkPlugins={[remarkGfm, remarkMath]}
+                        remarkPlugins={[remarkMath]}
                         components={{
                           p: ({node, ...props}) => <p className="mb-2 last:mb-0" {...props} />,
                           ul: ({node, ...props}) => <ul className="list-disc list-inside mb-2" {...props} />,

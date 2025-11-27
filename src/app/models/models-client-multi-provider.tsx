@@ -28,8 +28,6 @@ import { BookText, Bot, ChevronDown, ChevronUp, FileText, ImageIcon, LayoutGrid,
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 import { stringToColor, getModelUrl } from '@/lib/utils';
-import ReactMarkdown from "react-markdown";
-
 interface Model {
   id: string;
   name: string;
