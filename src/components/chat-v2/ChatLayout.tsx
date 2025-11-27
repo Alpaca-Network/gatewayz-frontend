@@ -29,7 +29,7 @@ function WelcomeScreen({ onPromptSelect }: { onPromptSelect: (txt: string) => vo
                  {prompts.map((p) => (
                      <Card
                         key={p.title}
-                        className="p-4 cursor-pointer hover:border-primary transition-colors bg-muted border-border"
+                        className="p-4 cursor-pointer hover:border-primary transition-colors bg-transparent border-border"
                         onClick={() => onPromptSelect(p.title)}
                      >
                          <p className="font-medium text-sm">{p.title}</p>
