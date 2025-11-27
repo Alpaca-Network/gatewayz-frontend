@@ -27,9 +27,9 @@ function WelcomeScreen({ onPromptSelect }: { onPromptSelect: (txt: string) => vo
              <h1 className="text-2xl sm:text-4xl font-bold mb-8 text-center">What's On Your Mind?</h1>
              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-4xl w-full">
                  {prompts.map((p) => (
-                     <Card 
-                        key={p.title} 
-                        className="p-4 cursor-pointer hover:border-primary transition-colors bg-muted/30"
+                     <Card
+                        key={p.title}
+                        className="p-4 cursor-pointer hover:border-primary transition-colors bg-muted border-border"
                         onClick={() => onPromptSelect(p.title)}
                      >
                          <p className="font-medium text-sm">{p.title}</p>
