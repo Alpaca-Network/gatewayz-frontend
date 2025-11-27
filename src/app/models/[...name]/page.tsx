@@ -366,12 +366,26 @@ export default function ModelProfilePage() {
     // Decode URL-encoded characters (e.g., %40 -> @)
     modelId = decodeURIComponent(modelId);
 
-    // Load API key from storage
+    // Load API key from storage and listen for auth changes
     useEffect(() => {
-        const key = getApiKey();
-        if (key) {
-            setApiKey(key);
-        }
+        const updateApiKey = () => {
+            const key = getApiKey();
+            if (key) {
+                setApiKey(key);
+            }
+        };
+
+        // Load initial API key
+        updateApiKey();
+
+        // Listen for auth refresh events
+        window.addEventListener('gatewayz:refresh-auth', updateApiKey);
+        window.addEventListener('storage', updateApiKey);
+
+        return () => {
+            window.removeEventListener('gatewayz:refresh-auth', updateApiKey);
+            window.removeEventListener('storage', updateApiKey);
+        };
     }, []);
 
     // Select default provider based on lowest cost or latency
