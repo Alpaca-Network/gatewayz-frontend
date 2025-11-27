@@ -38,9 +38,11 @@ export default function ChatPage() {
   }
 
   return (
-    <Suspense fallback={<div className="flex h-screen items-center justify-center">Loading...</div>}>
-      <FreeModelsBanner />
-      <ChatLayout />
-    </Suspense>
+    <div className="flex flex-col h-full">
+      <Suspense fallback={<div className="flex h-screen items-center justify-center">Loading...</div>}>
+        <FreeModelsBanner />
+        <ChatLayout />
+      </Suspense>
+    </div>
   );
 }
