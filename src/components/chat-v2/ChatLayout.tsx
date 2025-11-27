@@ -76,7 +76,7 @@ export function ChatLayout() {
    }
 
    return (
-       <div className="flex h-[calc(100vh-160px)] w-full overflow-hidden bg-background">
+       <div className="flex flex-1 w-full overflow-hidden bg-background">
            {/* Desktop Sidebar */}
            <div className="hidden lg:block w-72 border-r flex-shrink-0">
                <ChatSidebar className="h-full border-none" />
