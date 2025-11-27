@@ -89,7 +89,7 @@ export const ChatMessage = memo<ChatMessageProps>(
             className={`p-4 ${
               isUser
                 ? 'bg-blue-600 text-white dark:bg-blue-500'
-                : 'bg-transparent border-border text-foreground'
+                : 'bg-transparent border-border text-white'
             }`}
           >
             {/* Image attachment */}
@@ -131,7 +131,7 @@ export const ChatMessage = memo<ChatMessageProps>(
             )}
 
             {/* Message content */}
-            <div className="prose prose-sm dark:prose-invert max-w-none">
+            <div className="prose prose-sm prose-invert max-w-none text-white">
               {isUser ? (
                 <p className="whitespace-pre-wrap m-0">{displayContent}</p>
               ) : (
