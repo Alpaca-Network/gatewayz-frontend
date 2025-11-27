@@ -88,7 +88,7 @@ export const ChatMessage = memo<ChatMessageProps>(
           <Card
             className={`p-4 ${
               isUser
-                ? 'bg-primary text-primary-foreground'
+                ? 'bg-blue-600 text-white dark:bg-blue-500'
                 : 'bg-transparent border-border text-foreground'
             }`}
           >
