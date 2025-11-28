@@ -20,15 +20,20 @@ function SignupContent() {
       console.log('Referral code detected:', refCode);
       // Store referral code in localStorage for use during authentication
       localStorage.setItem('gatewayz_referral_code', refCode);
+
+      // Immediately redirect to chat with referral code
+      // The referral toast will be shown after authentication
+      router.push(`/chat?ref=${refCode}`);
     }
-  }, [searchParams]);
+  }, [searchParams, router]);
 
   useEffect(() => {
-    // Redirect authenticated users to chat
-    if (ready && authenticated) {
+    // Redirect authenticated users to chat (only if no ref code)
+    const refCode = searchParams?.get('ref');
+    if (ready && authenticated && !refCode) {
       router.push('/chat');
     }
-  }, [ready, authenticated, router]);
+  }, [ready, authenticated, router, searchParams]);
 
   const handleSignup = () => {
     if (!ready) {
