@@ -37,12 +37,18 @@ export function MessageList({ sessionId, messages, isLoading }: MessageListProps
     setUserHasScrolled(!isNearBottom);
   }, []);
 
+  // Get the last message for dependency tracking
+  const lastMessage = messages[messages.length - 1];
+  const lastMessageContent = typeof lastMessage?.content === 'string'
+    ? lastMessage.content
+    : JSON.stringify(lastMessage?.content);
+
   // Auto-scroll to bottom only when:
   // 1. New message is added (user or assistant)
   // 2. User hasn't manually scrolled away
   // 3. OR when streaming starts (new assistant message)
+  // 4. OR during streaming when content updates
   useEffect(() => {
-    const lastMessage = messages[messages.length - 1];
     const isNewMessage = messages.length > lastMessageCountRef.current;
     const isStreamingNewMessage = lastMessage?.isStreaming && isNewMessage;
 
@@ -57,7 +63,7 @@ export function MessageList({ sessionId, messages, isLoading }: MessageListProps
     }
 
     lastMessageCountRef.current = messages.length;
-  }, [messages.length, messages[messages.length - 1]?.isStreaming, userHasScrolled]);
+  }, [messages.length, lastMessage?.isStreaming, lastMessageContent, userHasScrolled]);
 
   if (!sessionId) {
     return null;

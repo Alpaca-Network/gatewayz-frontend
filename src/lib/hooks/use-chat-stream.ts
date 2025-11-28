@@ -114,7 +114,7 @@ export function useChatStream() {
         try {
             // 4. Stream Loop
             let lastUpdate = Date.now();
-            
+
             for await (const chunk of streamChatResponse(url, apiKey, requestBody)) {
                 if (chunk.content) {
                     streamHandlerRef.current.processContentWithThinking(String(chunk.content));
@@ -122,24 +122,30 @@ export function useChatStream() {
                 if (chunk.reasoning) {
                     streamHandlerRef.current.addReasoning(String(chunk.reasoning));
                 }
-                
-                // Throttle UI updates (every 50ms)
-                if (Date.now() - lastUpdate > 50 || chunk.done) {
+
+                // Throttle UI updates (every 50ms) - use requestAnimationFrame timing
+                const now = Date.now();
+                if (now - lastUpdate > 50 || chunk.done) {
                     const currentContent = streamHandlerRef.current.getFinalContent();
                     const currentReasoning = streamHandlerRef.current.getFinalReasoning();
 
                     queryClient.setQueryData(['chat-messages', sessionId], (old: any[] | undefined) => {
                         if (!old) return [];
                         const last = old[old.length - 1];
-                        if (last.role !== 'assistant') return old; 
+                        if (last.role !== 'assistant') return old;
 
                         return [...old.slice(0, -1), {
                             ...last,
                             content: currentContent,
-                            reasoning: currentReasoning
+                            reasoning: currentReasoning,
+                            isStreaming: true, // Ensure streaming flag stays true during updates
                         }];
                     });
-                    lastUpdate = Date.now();
+                    lastUpdate = now;
+
+                    // Yield to the event loop to allow React to re-render
+                    // This is critical for real-time streaming updates
+                    await new Promise(resolve => setTimeout(resolve, 0));
                 }
             }
 
