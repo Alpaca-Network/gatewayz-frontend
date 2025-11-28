@@ -192,9 +192,11 @@ jobs:
       - name: Cache Next.js build output
         uses: actions/cache@v4
         with:
-          path: .next
-          key: ${{ runner.os }}-nextjs-${{ hashFiles('**/package.json') }}
+          path: |
+            .next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('**/pnpm-lock.yaml', 'src/**/*.ts', 'src/**/*.tsx') }}-${{ hashFiles('**/package.json') }}
           restore-keys: |
+            ${{ runner.os }}-nextjs-${{ hashFiles('**/pnpm-lock.yaml') }}-
             ${{ runner.os }}-nextjs-
 
       - name: Install dependencies
@@ -214,7 +216,7 @@ jobs:
     needs: [check-merge-conflicts]
     # Only run E2E tests on main branches and PRs to avoid excessive test runs, and if no merge conflicts
     if: (github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/develop') && needs.check-merge-conflicts.outputs.has-conflicts == 'false'
-    timeout-minutes: 30
+    timeout-minutes: 15
 
     steps:
       - name: Checkout code
@@ -252,6 +254,16 @@ jobs:
 
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps chromium
+
+      - name: Cache Next.js build output for E2E
+        uses: actions/cache@v4
+        with:
+          path: |
+            .next/cache
+          key: ${{ runner.os }}-nextjs-e2e-${{ hashFiles('**/pnpm-lock.yaml', 'src/**/*.ts', 'src/**/*.tsx') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-e2e-
+            ${{ runner.os }}-nextjs-
 
       - name: Build application for E2E tests
         run: pnpm build
