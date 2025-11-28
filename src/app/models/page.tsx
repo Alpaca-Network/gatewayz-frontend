@@ -35,166 +35,11 @@ const DEFERRED_GATEWAYS = [
   'nebius', 'xai', 'novita', 'huggingface', 'aimo', 'near', 'fal', 'helicone', 'alpaca', 'alibaba', 'clarifai'
 ];
 
-async function getPriorityModels(): Promise<Model[]> {
-  try {
-    // During build time, skip API calls if running in CI/build environment
-    if (process.env.NEXT_PHASE === 'phase-production-build' || process.env.CI) {
-      console.log('[Models Page] Build time detected, skipping API calls');
-      return [];
-    }
-
-    console.log('[Models Page] Fetching priority models from fast gateways:', PRIORITY_GATEWAYS);
-    const startTime = Date.now();
-
-    // Fetch from priority gateways in parallel with timeout for fast failure
-    const promises = PRIORITY_GATEWAYS.map(gateway =>
-      Promise.race([
-        getModelsForGateway(gateway),
-        new Promise(resolve => setTimeout(() => resolve({ data: [] }), 3000)) // 3s timeout
-      ])
-    );
-
-    const results = await Promise.all(promises);
-
-    const allModels = results.flatMap((result: unknown) => {
-      const typedResult = result as { data?: Model[] };
-      return typedResult.data || [];
-    });
-
-    // Deduplicate intelligently by normalized name + provider slug
-    const modelMap = new Map<string, Model>();
-    for (const model of allModels) {
-      // Normalize the model name for deduplication
-      const normalizedName = (model.name || '')
-        .toLowerCase()
-        .replace(/^(google:|openai:|meta:|anthropic:|models\/)/i, '')
-        .replace(/\s+/g, '-')
-        .replace(/[^\w-]/g, '');
-
-      const dedupKey = `${normalizedName}:::${model.provider_slug || 'unknown'}`;
-
-      // Merge models from multiple gateways
-      if (modelMap.has(dedupKey)) {
-        const existing = modelMap.get(dedupKey)!;
-
-        // Merge source_gateways arrays
-        const existingGateways = existing.source_gateways || [];
-        const newGateways = model.source_gateways || [];
-        const combinedGateways = Array.from(new Set([...existingGateways, ...newGateways]));
-
-        // Calculate data completeness score
-        const existingScore = (existing.description ? 1 : 0) +
-                              (existing.pricing?.prompt ? 1 : 0) +
-                              (existing.context_length > 0 ? 1 : 0);
-        const newScore = (model.description ? 1 : 0) +
-                         (model.pricing?.prompt ? 1 : 0) +
-                         (model.context_length > 0 ? 1 : 0);
-
-        // Keep model with more complete data
-        const mergedModel = newScore > existingScore ? model : existing;
-        mergedModel.source_gateways = combinedGateways;
-        modelMap.set(dedupKey, mergedModel);
-      } else {
-        // First occurrence - ensure source_gateways is an array
-        if (!model.source_gateways) {
-          model.source_gateways = model.source_gateway ? [model.source_gateway] : [];
-        }
-        modelMap.set(dedupKey, model);
-      }
-    }
-
-    const uniqueModels = Array.from(modelMap.values());
-
-    const duration = Date.now() - startTime;
-    console.log(`[Models Page] Priority models fetched: ${uniqueModels.length} models in ${duration}ms`);
-    return uniqueModels;
-  } catch (error) {
-    console.error('[Models Page] Failed to fetch priority models:', error);
-    return [];
-  }
-}
-
-async function getDeferredModels(): Promise<Model[]> {
-  try {
-    console.log('[Models Page] Fetching deferred models from slower gateways:', DEFERRED_GATEWAYS);
-    const startTime = Date.now();
-
-    // Fetch from deferred gateways in parallel
-    const results = await Promise.all(
-      DEFERRED_GATEWAYS.map(gateway => getModelsForGateway(gateway))
-    );
-
-    const allModels = results.flatMap(result => result.data || []);
-
-    // Deduplicate intelligently by normalized name + provider slug
-    const modelMap = new Map<string, Model>();
-    for (const model of allModels) {
-      // Normalize the model name for deduplication
-      const normalizedName = (model.name || '')
-        .toLowerCase()
-        .replace(/^(google:|openai:|meta:|anthropic:|models\/)/i, '')
-        .replace(/\s+/g, '-')
-        .replace(/[^\w-]/g, '');
-
-      const dedupKey = `${normalizedName}:::${model.provider_slug || 'unknown'}`;
-
-      // Merge models from multiple gateways
-      if (modelMap.has(dedupKey)) {
-        const existing = modelMap.get(dedupKey)!;
-
-        // Merge source_gateways arrays
-        const existingGateways = existing.source_gateways || [];
-        const newGateways = model.source_gateways || [];
-        const combinedGateways = Array.from(new Set([...existingGateways, ...newGateways]));
-
-        // Calculate data completeness score
-        const existingScore = (existing.description ? 1 : 0) +
-                              (existing.pricing?.prompt ? 1 : 0) +
-                              (existing.context_length > 0 ? 1 : 0);
-        const newScore = (model.description ? 1 : 0) +
-                         (model.pricing?.prompt ? 1 : 0) +
-                         (model.context_length > 0 ? 1 : 0);
-
-        // Keep model with more complete data
-        const mergedModel = newScore > existingScore ? model : existing;
-        mergedModel.source_gateways = combinedGateways;
-        modelMap.set(dedupKey, mergedModel);
-      } else {
-        // First occurrence - ensure source_gateways is an array
-        if (!model.source_gateways) {
-          model.source_gateways = model.source_gateway ? [model.source_gateway] : [];
-        }
-        modelMap.set(dedupKey, model);
-      }
-    }
-
-    const uniqueModels = Array.from(modelMap.values());
-
-    const duration = Date.now() - startTime;
-    console.log(`[Models Page] Deferred models fetched: ${uniqueModels.length} models in ${duration}ms`);
-    return uniqueModels;
-  } catch (error) {
-    console.error('[Models Page] Failed to fetch deferred models:', error);
-    return [];
-  }
-}
-
-// Suspense boundary component for deferred models
-async function DeferredModelsLoader({
-  priorityModels,
-  deferredModelsPromise
-}: {
-  priorityModels: Model[],
-  deferredModelsPromise: Promise<Model[]>
-}) {
-  // This will stream in after priority models are rendered
-  const deferredModels = await deferredModelsPromise;
-
-  // Combine and deduplicate intelligently by normalized name + provider slug
-  const allModels = [...priorityModels, ...deferredModels];
+// Shared deduplication logic to avoid code duplication
+function deduplicateModels(models: Model[]): Model[] {
   const modelMap = new Map<string, Model>();
 
-  for (const model of allModels) {
+  for (const model of models) {
     // Normalize the model name for deduplication
     const normalizedName = (model.name || '')
       .toLowerCase()
@@ -228,13 +73,91 @@ async function DeferredModelsLoader({
     } else {
       // First occurrence - ensure source_gateways is an array
       if (!model.source_gateways) {
-        model.source_gateways = [];
+        model.source_gateways = model.source_gateway ? [model.source_gateway] : [];
       }
       modelMap.set(dedupKey, model);
     }
   }
 
-  const uniqueModels = Array.from(modelMap.values());
+  return Array.from(modelMap.values());
+}
+
+async function getPriorityModels(): Promise<Model[]> {
+  try {
+    // During build time, skip API calls if running in CI/build environment
+    if (process.env.NEXT_PHASE === 'phase-production-build' || process.env.CI) {
+      console.log('[Models Page] Build time detected, skipping API calls');
+      return [];
+    }
+
+    console.log('[Models Page] Fetching priority models from fast gateways:', PRIORITY_GATEWAYS);
+    const startTime = Date.now();
+
+    // Fetch from priority gateways in parallel with timeout for fast failure
+    const promises = PRIORITY_GATEWAYS.map(gateway =>
+      Promise.race([
+        getModelsForGateway(gateway),
+        new Promise(resolve => setTimeout(() => resolve({ data: [] }), 1500)) // 1.5s timeout (optimized)
+      ])
+    );
+
+    const results = await Promise.all(promises);
+
+    const allModels = results.flatMap((result: unknown) => {
+      const typedResult = result as { data?: Model[] };
+      return typedResult.data || [];
+    });
+
+    // Deduplicate intelligently using shared function
+    const uniqueModels = deduplicateModels(allModels);
+
+    const duration = Date.now() - startTime;
+    console.log(`[Models Page] Priority models fetched: ${uniqueModels.length} models in ${duration}ms`);
+    return uniqueModels;
+  } catch (error) {
+    console.error('[Models Page] Failed to fetch priority models:', error);
+    return [];
+  }
+}
+
+async function getDeferredModels(): Promise<Model[]> {
+  try {
+    console.log('[Models Page] Fetching deferred models from slower gateways:', DEFERRED_GATEWAYS);
+    const startTime = Date.now();
+
+    // Fetch from deferred gateways in parallel
+    const results = await Promise.all(
+      DEFERRED_GATEWAYS.map(gateway => getModelsForGateway(gateway))
+    );
+
+    const allModels = results.flatMap(result => result.data || []);
+
+    // Deduplicate intelligently using shared function
+    const uniqueModels = deduplicateModels(allModels);
+
+    const duration = Date.now() - startTime;
+    console.log(`[Models Page] Deferred models fetched: ${uniqueModels.length} models in ${duration}ms`);
+    return uniqueModels;
+  } catch (error) {
+    console.error('[Models Page] Failed to fetch deferred models:', error);
+    return [];
+  }
+}
+
+// Suspense boundary component for deferred models
+async function DeferredModelsLoader({
+  priorityModels,
+  deferredModelsPromise
+}: {
+  priorityModels: Model[],
+  deferredModelsPromise: Promise<Model[]>
+}) {
+  // This will stream in after priority models are rendered
+  const deferredModels = await deferredModelsPromise;
+
+  // Combine and deduplicate intelligently using shared function
+  const allModels = [...priorityModels, ...deferredModels];
+  const uniqueModels = deduplicateModels(allModels);
 
   console.log(`[Models Page] Total combined models: ${uniqueModels.length}`);
   return <ModelsClient initialModels={uniqueModels} isLoadingMore={false} />;

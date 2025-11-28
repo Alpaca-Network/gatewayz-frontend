@@ -1,6 +1,6 @@
 import { models } from '@/lib/models-data';
 import { getErrorMessage, isAbortOrNetworkError } from '@/lib/network-error';
-import { cacheAside, cacheKey, CACHE_PREFIX, TTL, cacheInvalidate } from '@/lib/cache-strategies';
+import { cacheAside, cacheStaleWhileRevalidate, cacheKey, CACHE_PREFIX, TTL, cacheInvalidate } from '@/lib/cache-strategies';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
 
@@ -41,22 +41,25 @@ function transformModel(model: any, gateway: string) {
 }
 
 export async function getModelsForGateway(gateway: string, limit?: number) {
-  // Use Redis cache with cache-aside pattern
+  // Use Redis cache with stale-while-revalidate pattern for instant page loads
   const cacheKeyStr = cacheKey(
     CACHE_PREFIX.MODELS,
     gateway,
     limit ? `limit:${limit}` : 'all'
   );
 
-  // cacheAside will handle Redis errors and fallback to fetchFn
-  // Let application errors (from fetchModelsLogic) propagate to caller
-  return await cacheAside(
+  // Stale-while-revalidate:
+  // - Fresh for 4 hours (TTL.MODELS_ALL)
+  // - Serve stale for up to 12 additional hours (3x TTL)
+  // - Revalidate in background when stale
+  return await cacheStaleWhileRevalidate(
     cacheKeyStr,
     async () => {
       // Fetch logic (extracted below)
       return await fetchModelsLogic(gateway, limit);
     },
-    TTL.MODELS_ALL,
+    TTL.MODELS_ALL, // Fresh TTL: 4 hours
+    TTL.MODELS_ALL * 3, // Stale TTL: 12 hours (total cache lifetime: 16 hours)
     'models' // Metrics category
   );
 }

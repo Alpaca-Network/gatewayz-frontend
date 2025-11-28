@@ -30,9 +30,9 @@ const metrics: Record<string, CacheMetrics> = {};
  */
 export const TTL = {
   // Model data - changes infrequently
-  MODELS_ALL: 3600, // 1 hour
-  MODELS_GATEWAY: 3600, // 1 hour
-  MODEL_DETAIL: 3600, // 1 hour
+  MODELS_ALL: 14400, // 4 hours (optimized for performance)
+  MODELS_GATEWAY: 14400, // 4 hours (optimized for performance)
+  MODEL_DETAIL: 14400, // 4 hours (optimized for performance)
 
   // Chat sessions - changes frequently during use
   SESSIONS_LIST: 300, // 5 minutes
@@ -154,6 +154,106 @@ export async function cacheAside<T>(
   });
 
   return data;
+}
+
+/**
+ * Stale-while-revalidate pattern: Return stale cache immediately, revalidate in background
+ *
+ * This provides instant responses while ensuring data freshness:
+ * - Returns cached data immediately if available (even if expired)
+ * - Triggers background revalidation if data is stale
+ * - Only blocks on fetch if no cached data exists
+ *
+ * @param key - Cache key
+ * @param fetchFn - Function to fetch fresh data
+ * @param ttl - Fresh time to live in seconds
+ * @param staleTime - Stale time to live in seconds (data is served stale for this period after TTL)
+ * @param category - Metrics category (default: 'general')
+ * @returns Cached or fetched data
+ */
+export async function cacheStaleWhileRevalidate<T>(
+  key: string,
+  fetchFn: () => Promise<T>,
+  ttl: number,
+  staleTime: number,
+  category: string = 'general'
+): Promise<T> {
+  const redis = getRedisClient();
+
+  // If Redis unavailable, bypass cache
+  if (!redis) {
+    return await fetchFn();
+  }
+
+  try {
+    const available = await isRedisAvailable();
+    if (!available) {
+      return await fetchFn();
+    }
+
+    // Get cached data and TTL
+    const [cached, remainingTtl] = await Promise.all([
+      redis.get(key),
+      redis.ttl(key)
+    ]);
+
+    if (cached) {
+      const data = JSON.parse(cached) as T;
+
+      // Check if data is fresh
+      if (remainingTtl > 0) {
+        // Fresh cache hit - return immediately
+        trackMetric(category, 'hit');
+        return data;
+      }
+
+      // Data is stale but within stale-time window
+      // Return stale data immediately and revalidate in background
+      trackMetric(category, 'stale-hit');
+      console.log(`[Cache SWR] Returning stale data for ${key}, revalidating in background`);
+
+      // Background revalidation (fire-and-forget)
+      revalidateInBackground(key, fetchFn, ttl, staleTime, category);
+
+      return data;
+    }
+
+    // No cached data - fetch and cache
+    trackMetric(category, 'miss');
+    const freshData = await fetchFn();
+
+    // Store with extended TTL (ttl + staleTime)
+    await redis.setex(key, ttl + staleTime, JSON.stringify(freshData));
+
+    return freshData;
+  } catch (error) {
+    console.error('[Cache SWR] Error:', error);
+    trackMetric(category, 'error');
+    return await fetchFn();
+  }
+}
+
+/**
+ * Background revalidation helper
+ */
+async function revalidateInBackground<T>(
+  key: string,
+  fetchFn: () => Promise<T>,
+  ttl: number,
+  staleTime: number,
+  category: string
+): Promise<void> {
+  const redis = getRedisClient();
+  if (!redis) return;
+
+  try {
+    const freshData = await fetchFn();
+    await redis.setex(key, ttl + staleTime, JSON.stringify(freshData));
+    console.log(`[Cache SWR] Background revalidation completed for ${key}`);
+  } catch (error) {
+    console.error(`[Cache SWR] Background revalidation failed for ${key}:`, error);
+    trackMetric(category, 'error');
+  }
 }
 
 /**
@@ -350,14 +450,14 @@ export async function cacheMGet<T>(keys: string[]): Promise<Map<string, T | null
 /**
  * Track cache metrics
  */
-function trackMetric(category: string, type: 'hit' | 'miss' | 'error'): void {
+function trackMetric(category: string, type: 'hit' | 'miss' | 'error' | 'stale-hit'): void {
   if (!metrics[category]) {
     metrics[category] = { hits: 0, misses: 0, errors: 0, hitRate: 0 };
   }
 
   const metric = metrics[category];
 
-  if (type === 'hit') {
+  if (type === 'hit' || type === 'stale-hit') {
     metric.hits++;
   } else if (type === 'miss') {
     metric.misses++;
