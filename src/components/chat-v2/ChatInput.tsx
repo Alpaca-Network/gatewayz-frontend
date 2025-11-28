@@ -71,7 +71,7 @@ export function ChatInput() {
     };
   }, [focusInput]);
 
-  const handleSend = async () => {
+  const handleSend = useCallback(async () => {
     // Use the actual input field value to avoid race conditions on mobile
     const currentInputValue = inputRef.current?.value || inputValue;
 
@@ -139,7 +139,7 @@ export function ChatInput() {
     } catch (e) {
         toast({ title: "Failed to send message", variant: "destructive" });
     }
-  };
+  }, [inputValue, selectedImage, selectedVideo, selectedAudio, isStreaming, selectedModel, activeSessionId, messages, setInputValue, setActiveSessionId, createSession, streamMessage, toast]);
 
   // Expose send function for prompt auto-send from WelcomeScreen
   useEffect(() => {
@@ -151,7 +151,7 @@ export function ChatInput() {
         delete (window as any).__chatInputSend;
       }
     };
-  });
+  }, [handleSend]);
 
   const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
