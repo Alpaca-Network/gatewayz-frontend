@@ -15,15 +15,18 @@ const useChatApi = () => {
 export const useChatSessions = () => {
   const api = useChatApi();
   const { isAuthenticated } = useAuthStore();
-  
+
   return useQuery({
     queryKey: ['chat-sessions'],
     queryFn: async () => {
       if (!api) return [];
-      return api.getSessions(50, 0); 
+      // Use cache-aware loading that returns cached data immediately
+      return api.getSessionsWithCache(50, 0);
     },
     enabled: !!api && isAuthenticated,
     staleTime: 5 * 60 * 1000, // 5 minutes cache
+    // Always return cached data immediately while fetching in background
+    placeholderData: (previousData) => previousData,
   });
 };
 
@@ -40,6 +43,8 @@ export const useSessionMessages = (sessionId: number | null) => {
     },
     enabled: !!api && !!sessionId && isAuthenticated,
     staleTime: 60 * 1000,
+    // Keep previous data while fetching to prevent UI flicker
+    placeholderData: (previousData) => previousData,
   });
 };
 

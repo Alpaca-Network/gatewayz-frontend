@@ -69,7 +69,7 @@ export function ChatInput() {
   }, [focusInput]);
 
   const handleSend = async () => {
-    if ((!inputValue.trim() && !selectedImage && !selectedVideo && !selectedAudio) || isStreaming || isHistoryLoading) return;
+    if ((!inputValue.trim() && !selectedImage && !selectedVideo && !selectedAudio) || isStreaming) return;
     if (!selectedModel) {
         toast({ title: "No model selected", variant: "destructive" });
         return;
@@ -235,10 +235,10 @@ export function ChatInput() {
             <Button
                 size="icon"
                 onClick={handleSend}
-                disabled={(!inputValue.trim() && !selectedImage && !selectedVideo && !selectedAudio) || isStreaming || isHistoryLoading}
-                className={cn("bg-primary", (isStreaming || isHistoryLoading) && "opacity-50")}
+                disabled={(!inputValue.trim() && !selectedImage && !selectedVideo && !selectedAudio) || isStreaming}
+                className={cn("bg-primary", isStreaming && "opacity-50")}
             >
-                {(isStreaming || isHistoryLoading) ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                {isStreaming ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             </Button>
         </div>
       </div>
