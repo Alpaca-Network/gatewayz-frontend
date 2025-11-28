@@ -30,18 +30,20 @@ export default defineConfig({
   // Fail the build on CI if you accidentally left test.only in the source code
   forbidOnly: !!process.env.CI,
 
-  // Retry on CI and local failures
-  retries: process.env.CI ? 3 : 1,
+  // Retry on CI and local failures - reduced from 3 to 1 for speed
+  retries: process.env.CI ? 1 : 0,
 
-  // Opt out of parallel tests on CI for stability
-  workers: process.env.CI ? 1 : 4,
+  // Parallel workers for faster test execution
+  // Increased from 1 to 3 in CI for significant speedup (50-66% faster)
+  workers: process.env.CI ? 3 : 4,
 
-  // Global timeout for each test (increased for model loading and cold starts)
-  timeout: 60 * 1000,
+  // Global timeout for each test
+  // Reduced in CI since production builds are faster than dev server
+  timeout: process.env.CI ? 30 * 1000 : 60 * 1000,
 
   // Expect timeout
   expect: {
-    timeout: 15 * 1000,
+    timeout: process.env.CI ? 10 * 1000 : 15 * 1000,
   },
 
   // Reporter configuration
@@ -61,14 +63,16 @@ export default defineConfig({
     // Base URL to use in actions like `await page.goto('/')`
     baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000',
 
-    // Increased navigation timeout for cold starts and slow compilation
+    // Navigation timeout - reduced in CI since production builds are much faster
     // Override with --timeout flag or set PLAYWRIGHT_NAVIGATION_TIMEOUT env var
     navigationTimeout: process.env.PLAYWRIGHT_NAVIGATION_TIMEOUT
       ? parseInt(process.env.PLAYWRIGHT_NAVIGATION_TIMEOUT)
-      : 120 * 1000, // 2 minutes for cold Next.js dev server compiles
+      : process.env.CI
+      ? 30 * 1000 // 30 seconds for production mode in CI
+      : 120 * 1000, // 2 minutes for cold Next.js dev server compiles locally
 
     // Action timeout (clicks, fills, etc.)
-    actionTimeout: 15 * 1000,
+    actionTimeout: process.env.CI ? 10 * 1000 : 15 * 1000,
 
     // Collect trace when retrying the failed test
     trace: 'on-first-retry',

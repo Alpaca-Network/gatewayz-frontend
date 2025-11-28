@@ -22,7 +22,7 @@ jobs:
   e2e-real-auth:
     name: E2E Tests with Real Privy Authentication
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 30
 
     steps:
       - name: Checkout code
@@ -61,6 +61,15 @@ jobs:
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps chromium
 
+      - name: Cache Next.js build output
+        uses: actions/cache@v4
+        with:
+          path: |
+            .next/cache
+          key: ${{ runner.os }}-nextjs-privy-${{ hashFiles('**/pnpm-lock.yaml', 'src/**/*.ts', 'src/**/*.tsx') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-privy-
+
       - name: Build application
         run: pnpm build
         env:
@@ -68,8 +77,8 @@ jobs:
           NEXT_PUBLIC_API_BASE_URL: ${{ secrets.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai' }}
           NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY }}
 
-      - name: Start dev server
-        run: pnpm dev > /tmp/server.log 2>&1 &
+      - name: Start production server
+        run: pnpm start > /tmp/server.log 2>&1 &
         env:
           NEXT_PUBLIC_PRIVY_APP_ID: ${{ secrets.NEXT_PUBLIC_PRIVY_APP_ID }}
           NEXT_PUBLIC_API_BASE_URL: ${{ secrets.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai' }}
@@ -78,7 +87,7 @@ jobs:
       - name: Wait for server to be ready
         run: |
           set +e
-          npx wait-on http://localhost:3000 --timeout 120000
+          npx wait-on http://localhost:3000 --timeout 60000
           WAIT_RESULT=$?
           set -e
 
@@ -93,7 +102,7 @@ jobs:
             exit 1
           fi
           echo "✅ Server is ready"
-        timeout-minutes: 3
+        timeout-minutes: 2
 
       - name: Run E2E tests - Real Privy Authentication
         if: github.event.inputs.test_scope == 'all' || github.event.inputs.test_scope == 'privy-real-only' || github.event_name == 'schedule'
