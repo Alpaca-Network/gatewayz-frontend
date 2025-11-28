@@ -36,12 +36,12 @@ export default defineConfig({
   // Opt out of parallel tests on CI for stability
   workers: process.env.CI ? 1 : 4,
 
-  // Global timeout for each test (increased for model loading)
-  timeout: 45 * 1000,
+  // Global timeout for each test (increased for model loading and cold starts)
+  timeout: 60 * 1000,
 
   // Expect timeout
   expect: {
-    timeout: 10 * 1000,
+    timeout: 15 * 1000,
   },
 
   // Reporter configuration
@@ -60,6 +60,15 @@ export default defineConfig({
   use: {
     // Base URL to use in actions like `await page.goto('/')`
     baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000',
+
+    // Increased navigation timeout for cold starts and slow compilation
+    // Override with --timeout flag or set PLAYWRIGHT_NAVIGATION_TIMEOUT env var
+    navigationTimeout: process.env.PLAYWRIGHT_NAVIGATION_TIMEOUT
+      ? parseInt(process.env.PLAYWRIGHT_NAVIGATION_TIMEOUT)
+      : 120 * 1000, // 2 minutes for cold Next.js dev server compiles
+
+    // Action timeout (clicks, fills, etc.)
+    actionTimeout: 15 * 1000,
 
     // Collect trace when retrying the failed test
     trace: 'on-first-retry',
@@ -114,13 +123,19 @@ export default defineConfig({
   ],
 
   // Run your local dev server before starting the tests
-  webServer: process.env.CI
+  // NOTE: For faster, more reliable tests, use production mode:
+  //   1. Run: pnpm build && pnpm start (in separate terminal)
+  //   2. Set: PLAYWRIGHT_SKIP_WEBSERVER=1 pnpm test:e2e
+  // Or use the helper script: ./scripts/start-production-server.sh
+  webServer: process.env.CI || process.env.PLAYWRIGHT_SKIP_WEBSERVER
     ? undefined
     : {
         command: 'pnpm dev',
         url: 'http://localhost:3000',
         reuseExistingServer: !process.env.CI,
-        timeout: 120 * 1000,
+        timeout: 180 * 1000, // 3 minutes to allow for initial compilation
+        // Note: Even with timeout, tests may fail on first navigation to /chat
+        // due to Next.js cold compilation. See scripts/warmup-dev-server.ts
       },
 
   // Global configuration
