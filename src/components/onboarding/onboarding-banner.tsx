@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { X, CheckCircle2, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
@@ -20,7 +20,8 @@ export function OnboardingBanner() {
   const [visible, setVisible] = useState(false);
   const pathname = usePathname();
 
-  useEffect(() => {
+  // Function to load and check tasks
+  const loadTasks = useCallback(() => {
     // Check if onboarding is completed
     const completed = localStorage.getItem('gatewayz_onboarding_completed');
     if (completed) {
@@ -107,6 +108,32 @@ export function OnboardingBanner() {
       document.documentElement.style.setProperty('--onboarding-banner-height', '0px');
     }
   }, [pathname]);
+
+  useEffect(() => {
+    loadTasks();
+  }, [loadTasks]);
+
+  // Listen for localStorage changes (from other components marking tasks complete)
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'gatewayz_onboarding_tasks' || e.key === 'gatewayz_onboarding_completed') {
+        loadTasks();
+      }
+    };
+
+    // Also listen for custom events for same-tab updates
+    const handleCustomEvent = () => {
+      loadTasks();
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('onboarding-task-updated', handleCustomEvent);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('onboarding-task-updated', handleCustomEvent);
+    };
+  }, [loadTasks]);
 
   const handleDismiss = () => {
     setVisible(false);

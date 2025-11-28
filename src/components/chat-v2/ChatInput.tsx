@@ -140,6 +140,24 @@ export function ChatInput() {
             model: selectedModel,
             messagesHistory: currentMessages
         });
+
+        // Mark chat task as complete in onboarding after first message
+        if (typeof window !== 'undefined') {
+            try {
+                const savedTasks = localStorage.getItem('gatewayz_onboarding_tasks');
+                const taskState = savedTasks ? JSON.parse(savedTasks) : {};
+                if (!taskState.chat) {
+                    taskState.chat = true;
+                    localStorage.setItem('gatewayz_onboarding_tasks', JSON.stringify(taskState));
+                    console.log('Onboarding - Chat task marked as complete');
+
+                    // Dispatch custom event to notify the banner
+                    window.dispatchEvent(new Event('onboarding-task-updated'));
+                }
+            } catch (error) {
+                console.error('Failed to update onboarding task:', error);
+            }
+        }
     } catch (e) {
         toast({ title: "Failed to send message", variant: "destructive" });
     }
