@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { usePathname, useSearchParams } from "next/navigation";
 import * as Sentry from "@sentry/nextjs";
@@ -23,6 +23,7 @@ interface PrivyProviderWrapperProps {
 function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapperProps) {
   const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID || "clxxxxxxxxxxxxxxxxxxx";
   const [showRateLimit, setShowRateLimit] = useState(false);
+  const hasLoggedWalletConnectRelayErrorRef = useRef(false);
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const searchParamsKey = searchParams?.toString() ?? "";
@@ -36,12 +37,54 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
   }, []);
 
   useEffect(() => {
-    // Helper function to check if error is a non-blocking wallet extension error
-    const isWalletExtensionError = (errorStr: string): boolean => {
-      return errorStr?.includes("chrome.runtime.sendMessage") ||
-             errorStr?.includes("Extension ID") ||
-             errorStr?.includes("from a webpage") ||
-             errorStr?.includes("runtime.sendMessage");
+    type WalletErrorType = "extension" | "relay";
+
+    const classifyWalletError = (errorStr?: string): WalletErrorType | null => {
+      if (!errorStr) {
+        return null;
+      }
+
+      const normalized = errorStr.toLowerCase();
+      const isRelayError =
+        normalized.includes("walletconnect") ||
+        normalized.includes("requestrelay") ||
+        normalized.includes("websocket error 1006") ||
+        normalized.includes("explorer-api.walletconnect.com") ||
+        normalized.includes("relay.walletconnect.com");
+
+      if (isRelayError) {
+        return "relay";
+      }
+
+      const isExtensionError =
+        normalized.includes("chrome.runtime.sendmessage") ||
+        normalized.includes("runtime.sendmessage") ||
+        (normalized.includes("extension id") && normalized.includes("from a webpage"));
+
+      return isExtensionError ? "extension" : null;
+    };
+
+    const logWalletError = (type: WalletErrorType, message: string, source: "unhandledrejection" | "error") => {
+      const label = type === "relay" ? "WalletConnect relay error" : "Wallet extension error";
+      console.warn(`[Auth] ${label} detected (non-blocking via ${source}):`, message);
+
+      const alreadyLoggedRelay = hasLoggedWalletConnectRelayErrorRef.current;
+      if (type === "relay" && alreadyLoggedRelay) {
+        return;
+      }
+
+      if (type === "relay") {
+        hasLoggedWalletConnectRelayErrorRef.current = true;
+      }
+
+      Sentry.captureMessage(`${label}: ${message}`, {
+        level: type === "relay" ? "warning" : "info",
+        tags: {
+          auth_error: type === "relay" ? "walletconnect_relay_error" : "wallet_extension_error",
+          blocking: "false",
+          event_source: source,
+        },
+      });
     };
 
     const rateLimitListener = (event: PromiseRejectionEvent) => {
@@ -66,38 +109,21 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
         return;
       }
 
-      // Log wallet extension errors but DON'T preventDefault
+      const walletErrorType = classifyWalletError(reasonStr);
+
+      // Log wallet extension and WalletConnect relay errors but DON'T preventDefault
       // preventDefault() would block Privy's error recovery and break authentication
-      if (isWalletExtensionError(reasonStr)) {
-        console.warn("[Auth] Wallet extension error detected (non-blocking):", reasonStr);
-
-        // Capture wallet extension error to Sentry as warning (non-blocking)
-        Sentry.captureMessage(`Wallet extension error: ${reasonStr}`, {
-          level: 'warning',
-          tags: {
-            auth_error: 'wallet_extension_error',
-            blocking: 'false',
-          },
-        });
-
-        // Don't call event.preventDefault() - let Privy handle its own error recovery
+      if (walletErrorType) {
+        logWalletError(walletErrorType, reasonStr, "unhandledrejection");
         return;
       }
     };
 
     // Handle regular errors (not promise rejections) that might be triggered by wallet extensions
     const errorListener = (event: ErrorEvent) => {
-      if (isWalletExtensionError(event.message)) {
-        console.warn("[Auth] Wallet extension error detected (non-blocking):", event.message);
-
-        // Capture wallet extension error to Sentry as warning (non-blocking)
-        Sentry.captureMessage(`Wallet extension error: ${event.message}`, {
-          level: 'warning',
-          tags: {
-            auth_error: 'wallet_extension_error',
-            blocking: 'false',
-          },
-        });
+      const walletErrorType = classifyWalletError(event.message);
+      if (walletErrorType) {
+        logWalletError(walletErrorType, event.message, "error");
 
         // Don't call event.preventDefault() - let Privy handle its own flow
         // Just log the error for visibility
