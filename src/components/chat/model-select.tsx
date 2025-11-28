@@ -51,7 +51,7 @@ const MAX_MODELS_PER_DEVELOPER = 10; // Limit models shown per developer for per
 
 const ROUTER_OPTION: ModelOption = {
   value: 'openrouter/auto',
-  label: 'Alpaca Router',
+  label: 'Gatewayz Router',
   category: 'Router',
   sourceGateway: 'openrouter',
   developer: 'Alpaca',
