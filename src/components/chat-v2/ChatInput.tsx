@@ -51,8 +51,8 @@ export function ChatInput() {
   const audioInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Track if button should be disabled - use input ref for immediate value on mobile
-  const [isInputEmpty, setIsInputEmpty] = useState(true);
+  // Derive input empty state directly from inputValue to avoid desync issues
+  const isInputEmpty = !inputValue.trim();
 
   // Expose focus method for external use (e.g., welcome screen prompt selection)
   const focusInput = useCallback(() => {
@@ -71,7 +71,7 @@ export function ChatInput() {
     };
   }, [focusInput]);
 
-  const handleSend = async () => {
+  const handleSend = useCallback(async () => {
     // Use the actual input field value to avoid race conditions on mobile
     const currentInputValue = inputRef.current?.value || inputValue;
 
@@ -89,7 +89,6 @@ export function ChatInput() {
 
     // Clear input immediately for better UX
     setInputValue("");
-    setIsInputEmpty(true);
     // Also clear the actual input element to ensure it's in sync
     if (inputRef.current) {
       inputRef.current.value = "";
@@ -115,7 +114,6 @@ export function ChatInput() {
       } catch (e) {
         // Restore input on failure
         setInputValue(messageText);
-        setIsInputEmpty(!messageText.trim());
         setSelectedImage(currentImage);
         setSelectedVideo(currentVideo);
         setSelectedAudio(currentAudio);
@@ -145,7 +143,19 @@ export function ChatInput() {
     } catch (e) {
         toast({ title: "Failed to send message", variant: "destructive" });
     }
-  };
+  }, [inputValue, selectedImage, selectedVideo, selectedAudio, isStreaming, selectedModel, activeSessionId, messages, setInputValue, setActiveSessionId, createSession, streamMessage, toast]);
+
+  // Expose send function for prompt auto-send from WelcomeScreen
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).__chatInputSend = handleSend;
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        delete (window as any).__chatInputSend;
+      }
+    };
+  }, [handleSend]);
 
   const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
@@ -232,11 +242,7 @@ export function ChatInput() {
             <Input
                 ref={inputRef}
                 value={inputValue}
-                onChange={(e) => {
-                    const value = e.target.value;
-                    setInputValue(value);
-                    setIsInputEmpty(!value.trim());
-                }}
+                onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault();
@@ -250,6 +256,7 @@ export function ChatInput() {
             />
 
             <Button
+                type="button"
                 size="icon"
                 onPointerDown={(e) => {
                     // Prevent focus loss on mobile which can cause state sync issues
@@ -262,7 +269,6 @@ export function ChatInput() {
                 }}
                 disabled={isStreaming}
                 className={cn("bg-primary", isStreaming && "opacity-50")}
-                type="button"
             >
                 {isStreaming ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             </Button>
