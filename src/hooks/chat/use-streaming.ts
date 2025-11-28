@@ -141,7 +141,10 @@ export function useStreaming(options: UseStreamingOptions = {}): UseStreamingRet
     }, FIRST_CHUNK_TIMEOUT);
 
     try {
-      const response = await fetch(COMPLETIONS_ENDPOINT, {
+      // Include session_id in query params
+      const url = `${COMPLETIONS_ENDPOINT}?session_id=${sessionId}`;
+
+      const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
