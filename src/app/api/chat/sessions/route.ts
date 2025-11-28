@@ -4,6 +4,7 @@ import { validateApiKey } from '@/app/api/middleware/auth';
 import { handleApiError, HttpError } from '@/app/api/middleware/error-handler';
 import { CHAT_HISTORY_API_URL } from '@/lib/config';
 import { cacheAside, cacheInvalidate, cacheKey, CACHE_PREFIX, TTL } from '@/lib/cache-strategies';
+import { ChatCacheInvalidation } from '@/lib/chat-cache-invalidation';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -146,11 +147,9 @@ export async function POST(request: NextRequest) {
           span.setStatus('ok' as any);
           span.setAttribute('session_id', data?.id?.toString() || 'unknown');
 
-          // Invalidate sessions list cache for this user
-          const userCacheId = Buffer.from(apiKey).toString('base64').slice(0, 16);
-          const cachePattern = cacheKey(CACHE_PREFIX.SESSIONS, userCacheId, '*');
-          await cacheInvalidate(cachePattern).catch((err) => {
-            console.warn('[Cache] Failed to invalidate sessions cache:', err);
+          // Invalidate relevant caches (sessions list, stats)
+          await ChatCacheInvalidation.onSessionCreate(apiKey).catch((err) => {
+            console.warn('[Cache] Failed to invalidate caches:', err);
           });
 
           return NextResponse.json(data);

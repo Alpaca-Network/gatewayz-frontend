@@ -74,7 +74,7 @@ export async function GET(request: NextRequest) {
 
             return JSON.parse(responseText);
           },
-          TTL.USER_PROFILE,
+          TTL.USER_CREDITS, // 5 minutes - shorter TTL for credit freshness
           'user_profile' // Metrics category
         );
 

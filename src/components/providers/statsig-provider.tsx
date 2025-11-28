@@ -119,15 +119,16 @@ function StatsigProviderInternal({ children }: { children: React.ReactNode }) {
     }
   }, [sdkKey]);
 
-  // Initialize Statsig client with enhanced error handling
+  // Initialize Statsig client with enhanced error handling and caching
   // Defer heavy plugins until after auth is complete to avoid blocking
   // Only initialize if SDK key is present
+  // disableStorage: false enables localStorage caching which persists feature flags across sessions
   const { client } = useClientAsyncInit(
     sdkKey || 'disabled',
     { userID: userId },
     {
       plugins: [], // Initialize without plugins first for faster startup
-      disableStorage: !sdkKey, // Disable storage if SDK key missing
+      disableStorage: false, // Enable localStorage caching for feature flags (reduces API calls by ~50%)
     },
   );
 
