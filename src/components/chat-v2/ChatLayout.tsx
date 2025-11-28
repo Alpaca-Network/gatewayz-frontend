@@ -13,6 +13,7 @@ import { useAuthSync } from "@/lib/hooks/use-auth-sync";
 import { useAuthStore } from "@/lib/store/auth-store";
 import { Card } from "@/components/ui/card";
 import { useSessionMessages } from "@/lib/hooks/use-chat-queries";
+import { GuestChatCounter } from "@/components/chat/guest-chat-counter";
 
 // Pool of prompts to randomly select from
 const ALL_PROMPTS = [
@@ -131,13 +132,18 @@ export function ChatLayout() {
                                <ChatSidebar className="h-full border-none" onClose={() => setMobileSidebarOpen(false)} />
                            </SheetContent>
                        </Sheet>
-                       
+
                        {/* Title - Placeholder for now, could use useSession details */}
                        <h1 className="font-semibold text-lg truncate hidden sm:block">
                            {activeSessionId ? "Chat" : "New Chat"}
                        </h1>
+
+                       {/* Guest Chat Counter - only show for non-authenticated users */}
+                       {!isAuthenticated && (
+                           <GuestChatCounter className="hidden sm:flex" />
+                       )}
                    </div>
-                   
+
                    <div className="w-[200px] sm:w-[250px] shrink-0">
                        <ModelSelect selectedModel={selectedModel} onSelectModel={setSelectedModel} />
                    </div>
