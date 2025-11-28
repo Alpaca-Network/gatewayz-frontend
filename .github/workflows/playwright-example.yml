@@ -1,0 +1,142 @@
+name: Playwright Tests (Example)
+
+# This is an example workflow showing the recommended approach for running
+# Playwright E2E tests in CI. It uses production mode for maximum reliability.
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+
+jobs:
+  test-e2e:
+    name: E2E Tests
+    timeout-minutes: 20
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Build Next.js (production)
+        run: pnpm build
+        env:
+          # Add any build-time env vars here
+          NODE_ENV: production
+
+      - name: Start production server
+        run: |
+          pnpm start &
+          echo $! > .next-server.pid
+        env:
+          PORT: 3000
+          NODE_ENV: production
+
+      - name: Wait for server to be ready
+        run: |
+          npx wait-on http://localhost:3000/api/health -t 30000
+          # Give it an extra second to fully stabilize
+          sleep 1
+
+      - name: Run Playwright tests
+        run: PLAYWRIGHT_SKIP_WEBSERVER=1 pnpm test:e2e
+        env:
+          CI: true
+          PLAYWRIGHT_BASE_URL: http://localhost:3000
+
+      - name: Stop server
+        if: always()
+        run: |
+          if [ -f .next-server.pid ]; then
+            kill $(cat .next-server.pid) || true
+            rm .next-server.pid
+          fi
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+      - name: Upload test artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-failures
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 7
+
+  # Alternative: Dev mode with warmup (slower but tests latest code)
+  test-e2e-dev:
+    name: E2E Tests (Dev Mode)
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    # Only run on PRs or manually
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Start dev server
+        run: pnpm dev &
+        env:
+          PORT: 3000
+
+      - name: Warm up dev server
+        run: pnpm warmup
+        env:
+          WARMUP_BASE_URL: http://localhost:3000
+          WARMUP_MAX_WAIT: 180
+
+      - name: Run Playwright tests
+        run: PLAYWRIGHT_SKIP_WEBSERVER=1 pnpm test:e2e
+        env:
+          PLAYWRIGHT_BASE_URL: http://localhost:3000
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-dev
+          path: playwright-report/
+          retention-days: 7
