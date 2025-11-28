@@ -42,7 +42,7 @@ interface ModelSelectProps {
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
 
-const CACHE_KEY = 'gatewayz_models_cache_v5_optimized';
+const CACHE_KEY = 'gatewayz_models_cache_v6_gateway_fix';
 const FAVORITES_KEY = 'gatewayz_favorite_models';
 const CACHE_DURATION = 60 * 60 * 1000; // 60 minutes - extended cache for maximum performance
 const INITIAL_MODELS_LIMIT = 50; // Load top 50 models initially for instant loading

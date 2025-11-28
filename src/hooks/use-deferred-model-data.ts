@@ -26,7 +26,7 @@ interface DeferredModelData {
   isDeferredDataLoaded: boolean; // Deferred data (providers, related models) is loaded
 }
 
-const CACHE_KEY = 'gatewayz_models_cache_v4_all_gateways';
+const CACHE_KEY = 'gatewayz_models_cache_v6_gateway_fix';
 const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
 
 /**
