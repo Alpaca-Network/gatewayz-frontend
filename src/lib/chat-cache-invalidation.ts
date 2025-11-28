@@ -67,11 +67,33 @@ export async function invalidateUserSessionsCache(apiKey: string): Promise<void>
   try {
     const userHash = Buffer.from(apiKey).toString('base64').slice(0, 16);
     // Invalidate all session list variations (different limits/offsets)
-    const sessionsPattern = cacheKey(CACHE_PREFIX.SESSIONS, 'list', userHash, '*');
+    // Pattern: "sessions:{userHash}:list:*" matches all pagination pages
+    const sessionsPattern = cacheKey(CACHE_PREFIX.SESSIONS, userHash, 'list', '*');
     const deleted = await cacheInvalidate(sessionsPattern);
     console.log(`[Cache] Invalidated ${deleted} session list cache entries for user`);
   } catch (error) {
     console.error('[Cache] Error invalidating sessions cache:', error);
+  }
+}
+
+/**
+ * Invalidate user profile cache (credits, tier, subscription)
+ *
+ * Call this when:
+ * - Credits spent (message sent to paid model)
+ * - Subscription updated
+ * - Tier changed
+ *
+ * @param apiKey - User's API key
+ */
+export async function invalidateUserProfileCache(apiKey: string): Promise<void> {
+  try {
+    const userHash = Buffer.from(apiKey).toString('base64').slice(0, 16);
+    const profileKey = cacheKey(CACHE_PREFIX.USER, userHash, 'profile');
+    await cacheInvalidate(profileKey);
+    console.log('[Cache] Invalidated user profile cache');
+  } catch (error) {
+    console.error('[Cache] Error invalidating user profile cache:', error);
   }
 }
 
@@ -136,6 +158,7 @@ export const ChatCacheInvalidation = {
     await Promise.all([
       invalidateUserStatsCache(apiKey), // Message count changes
       invalidateUserSearchCache(apiKey), // Message content indexed for search
+      invalidateUserProfileCache(apiKey), // Credits may have been spent
       // Don't invalidate session list - message doesn't affect session list
     ]);
   },
