@@ -191,6 +191,9 @@ export function ChatInput() {
           const newCount = incrementGuestMessageCount();
           setGuestMessageCount(newCount);
 
+          // Dispatch event to update counter display
+          window.dispatchEvent(new Event('guest-count-updated'));
+
           // Show warning when approaching limit
           const remaining = getRemainingGuestMessages();
           if (remaining <= 3 && remaining > 0) {
