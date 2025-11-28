@@ -63,6 +63,35 @@ jest.mock('@/hooks/use-toast', () => ({
   useToast: () => ({ toast: mockToast }),
 }));
 
+// Mock auth store
+jest.mock('@/lib/store/auth-store', () => ({
+  useAuthStore: () => ({
+    isAuthenticated: true,
+    isLoading: false,
+  }),
+}));
+
+// Mock Privy
+jest.mock('@privy-io/react-auth', () => ({
+  usePrivy: () => ({
+    login: jest.fn(),
+  }),
+}));
+
+// Mock guest chat utilities
+jest.mock('@/lib/guest-chat', () => ({
+  incrementGuestMessageCount: jest.fn(() => 1),
+  hasReachedGuestLimit: jest.fn(() => false),
+  getRemainingGuestMessages: jest.fn(() => 10),
+  getGuestMessageLimit: jest.fn(() => 10),
+}));
+
+// Mock Alert component
+jest.mock('@/components/ui/alert', () => ({
+  Alert: ({ children, ...props }: any) => <div data-testid="alert" {...props}>{children}</div>,
+  AlertDescription: ({ children, ...props }: any) => <div data-testid="alert-description" {...props}>{children}</div>,
+}));
+
 // Import after mocks
 import { ChatInput } from '../ChatInput';
 

@@ -9,6 +9,16 @@ import { useCreateSession, useSessionMessages } from "@/lib/hooks/use-chat-queri
 import { useChatStream } from "@/lib/hooks/use-chat-stream";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { useAuthStore } from "@/lib/store/auth-store";
+import {
+  incrementGuestMessageCount,
+  hasReachedGuestLimit,
+  getRemainingGuestMessages,
+  getGuestMessageLimit
+} from "@/lib/guest-chat";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { usePrivy } from "@privy-io/react-auth";
+import Link from "next/link";
 
 // Helper for file to base64
 const fileToBase64 = (file: File): Promise<string> => {
@@ -41,10 +51,14 @@ export function ChatInput() {
   const createSession = useCreateSession();
   const { isStreaming, streamMessage } = useChatStream();
   const { toast } = useToast();
+  const { isAuthenticated } = useAuthStore();
+  const { login } = usePrivy();
 
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
   const [selectedAudio, setSelectedAudio] = useState<string | null>(null);
+  const [guestMessageCount, setGuestMessageCount] = useState(0);
+  const [showGuestLimitWarning, setShowGuestLimitWarning] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
@@ -79,6 +93,19 @@ export function ChatInput() {
     if (!selectedModel) {
         toast({ title: "No model selected", variant: "destructive" });
         return;
+    }
+
+    // Guest mode: Check message limit
+    if (!isAuthenticated) {
+      if (hasReachedGuestLimit()) {
+        setShowGuestLimitWarning(true);
+        toast({
+          title: "Guest limit reached",
+          description: `You've reached the ${getGuestMessageLimit()}-message limit. Sign up to continue chatting!`,
+          variant: "destructive",
+        });
+        return;
+      }
     }
 
     // Capture current input values before any async operations
@@ -141,8 +168,8 @@ export function ChatInput() {
             messagesHistory: currentMessages
         });
 
-        // Mark chat task as complete in onboarding after first message
-        if (typeof window !== 'undefined') {
+        // Mark chat task as complete in onboarding after first message (authenticated users only)
+        if (typeof window !== 'undefined' && isAuthenticated) {
             try {
                 const savedTasks = localStorage.getItem('gatewayz_onboarding_tasks');
                 const taskState = savedTasks ? JSON.parse(savedTasks) : {};
@@ -158,10 +185,25 @@ export function ChatInput() {
                 console.error('Failed to update onboarding task:', error);
             }
         }
+
+        // Guest mode: Increment message count after successful send
+        if (!isAuthenticated) {
+          const newCount = incrementGuestMessageCount();
+          setGuestMessageCount(newCount);
+
+          // Show warning when approaching limit
+          const remaining = getRemainingGuestMessages();
+          if (remaining <= 3 && remaining > 0) {
+            toast({
+              title: `${remaining} ${remaining === 1 ? 'message' : 'messages'} remaining`,
+              description: "Sign up to continue chatting without limits!",
+            });
+          }
+        }
     } catch (e) {
         toast({ title: "Failed to send message", variant: "destructive" });
     }
-  }, [inputValue, selectedImage, selectedVideo, selectedAudio, isStreaming, selectedModel, activeSessionId, messages, setInputValue, setActiveSessionId, createSession, streamMessage, toast]);
+  }, [inputValue, selectedImage, selectedVideo, selectedAudio, isStreaming, selectedModel, activeSessionId, messages, setInputValue, setActiveSessionId, createSession, streamMessage, toast, isAuthenticated]);
 
   // Expose send function for prompt auto-send from WelcomeScreen
   useEffect(() => {
@@ -217,6 +259,32 @@ export function ChatInput() {
   return (
     <div className="w-full p-4 border-t bg-background">
       <div className="max-w-4xl mx-auto">
+        {/* Guest Limit Warning */}
+        {!isAuthenticated && showGuestLimitWarning && (
+          <Alert className="mb-3 border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20">
+            <AlertDescription className="flex items-center justify-between">
+              <span className="text-sm">
+                You've reached your {getGuestMessageLimit()}-message limit.{" "}
+                <button
+                  onClick={login}
+                  className="font-semibold underline hover:no-underline"
+                >
+                  Sign up
+                </button>{" "}
+                to continue chatting!
+              </span>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setShowGuestLimitWarning(false)}
+                className="h-6 px-2"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+
         {/* Previews */}
         <div className="flex gap-2 mb-2 overflow-x-auto">
             {selectedImage && (
