@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Send, Image as ImageIcon, Video as VideoIcon, Mic as AudioIcon, X, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +20,21 @@ const fileToBase64 = (file: File): Promise<string> => {
     });
 };
 
+// Helper to generate smart session title (truncates at word boundary)
+const generateSessionTitle = (text: string, maxLength: number = 30): string => {
+    if (!text.trim()) return "New Chat";
+    const trimmed = text.trim();
+    if (trimmed.length <= maxLength) return trimmed;
+
+    // Find the last space before maxLength
+    const lastSpace = trimmed.lastIndexOf(' ', maxLength);
+    if (lastSpace > maxLength / 2) {
+        return trimmed.substring(0, lastSpace) + '...';
+    }
+    // If no good word boundary, truncate at maxLength
+    return trimmed.substring(0, maxLength - 3) + '...';
+};
+
 export function ChatInput() {
   const { activeSessionId, setActiveSessionId, selectedModel, inputValue, setInputValue } = useChatUIStore();
   const { data: messages = [], isLoading: isHistoryLoading } = useSessionMessages(activeSessionId);
@@ -34,6 +49,24 @@ export function ChatInput() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Expose focus method for external use (e.g., welcome screen prompt selection)
+  const focusInput = useCallback(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  // Store focus function in window for access from ChatLayout
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).__chatInputFocus = focusInput;
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        delete (window as any).__chatInputFocus;
+      }
+    };
+  }, [focusInput]);
 
   const handleSend = async () => {
     if ((!inputValue.trim() && !selectedImage && !selectedVideo && !selectedAudio) || isStreaming || isHistoryLoading) return;
@@ -42,32 +75,51 @@ export function ChatInput() {
         return;
     }
 
+    // Capture current input values before any async operations
+    const messageText = inputValue;
+    const currentImage = selectedImage;
+    const currentVideo = selectedVideo;
+    const currentAudio = selectedAudio;
+
+    // Clear input immediately for better UX
+    setInputValue("");
+    setSelectedImage(null);
+    setSelectedVideo(null);
+    setSelectedAudio(null);
+
     let sessionId = activeSessionId;
-    let currentMessages = messages;
+    // Create a snapshot of messages BEFORE session creation to avoid race conditions
+    let currentMessages = [...messages];
 
     if (!sessionId) {
       try {
-        const newSession = await createSession.mutateAsync({ 
-            title: inputValue.substring(0, 30) || "New Chat", 
-            model: selectedModel.value 
+        const newSession = await createSession.mutateAsync({
+            title: generateSessionTitle(messageText),
+            model: selectedModel.value
         });
         sessionId = newSession.id;
         setActiveSessionId(sessionId);
+        // For new sessions, start with empty history (the user message will be added by streamMessage)
         currentMessages = [];
       } catch (e) {
+        // Restore input on failure
+        setInputValue(messageText);
+        setSelectedImage(currentImage);
+        setSelectedVideo(currentVideo);
+        setSelectedAudio(currentAudio);
         toast({ title: "Failed to create session", variant: "destructive" });
         return;
       }
     }
 
     // Combine message and attachments
-    let content: any = inputValue;
-    if (selectedImage || selectedVideo || selectedAudio) {
+    let content: any = messageText;
+    if (currentImage || currentVideo || currentAudio) {
         content = [
-            { type: "text", text: inputValue },
-            ...(selectedImage ? [{ type: "image_url", image_url: { url: selectedImage } }] : []),
-            ...(selectedVideo ? [{ type: "video_url", video_url: { url: selectedVideo } }] : []),
-            ...(selectedAudio ? [{ type: "audio_url", audio_url: { url: selectedAudio } }] : [])
+            { type: "text", text: messageText },
+            ...(currentImage ? [{ type: "image_url", image_url: { url: currentImage } }] : []),
+            ...(currentVideo ? [{ type: "video_url", video_url: { url: currentVideo } }] : []),
+            ...(currentAudio ? [{ type: "audio_url", audio_url: { url: currentAudio } }] : [])
         ];
     }
 
@@ -78,12 +130,6 @@ export function ChatInput() {
             model: selectedModel,
             messagesHistory: currentMessages
         });
-        
-        // Clear input
-        setInputValue("");
-        setSelectedImage(null);
-        setSelectedVideo(null);
-        setSelectedAudio(null);
     } catch (e) {
         toast({ title: "Failed to send message", variant: "destructive" });
     }
@@ -98,10 +144,35 @@ export function ChatInput() {
       } catch (e) {
           toast({ title: "Failed to load image", variant: "destructive" });
       }
+      // Reset input so the same file can be selected again
+      if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  // ... (similar handlers for video/audio omitted for brevity, logic is same)
-  // Reusing fileToBase64 for all
+  const handleVideoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      try {
+          const base64 = await fileToBase64(file);
+          setSelectedVideo(base64);
+      } catch (e) {
+          toast({ title: "Failed to load video", variant: "destructive" });
+      }
+      // Reset input so the same file can be selected again
+      if (videoInputRef.current) videoInputRef.current.value = '';
+  };
+
+  const handleAudioSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      try {
+          const base64 = await fileToBase64(file);
+          setSelectedAudio(base64);
+      } catch (e) {
+          toast({ title: "Failed to load audio", variant: "destructive" });
+      }
+      // Reset input so the same file can be selected again
+      if (audioInputRef.current) audioInputRef.current.value = '';
+  };
 
   return (
     <div className="w-full p-4 border-t bg-background">
@@ -114,21 +185,40 @@ export function ChatInput() {
                     <Button size="icon" variant="destructive" className="absolute -top-1 -right-1 h-4 w-4 rounded-full" onClick={() => setSelectedImage(null)}><X className="h-3 w-3" /></Button>
                 </div>
             )}
-             {/* ... other previews */}
+            {selectedVideo && (
+                <div className="relative">
+                    <video src={selectedVideo} className="h-16 w-16 object-cover rounded" />
+                    <Button size="icon" variant="destructive" className="absolute -top-1 -right-1 h-4 w-4 rounded-full" onClick={() => setSelectedVideo(null)}><X className="h-3 w-3" /></Button>
+                </div>
+            )}
+            {selectedAudio && (
+                <div className="relative flex items-center justify-center h-16 w-16 bg-muted rounded">
+                    <AudioIcon className="h-6 w-6 text-muted-foreground" />
+                    <Button size="icon" variant="destructive" className="absolute -top-1 -right-1 h-4 w-4 rounded-full" onClick={() => setSelectedAudio(null)}><X className="h-3 w-3" /></Button>
+                </div>
+            )}
         </div>
 
         <div className="flex gap-2 items-center bg-muted p-2 rounded-lg border">
             {/* Hidden Inputs */}
             <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageSelect} className="hidden" />
+            <input ref={videoInputRef} type="file" accept="video/*" onChange={handleVideoSelect} className="hidden" />
+            <input ref={audioInputRef} type="file" accept="audio/*" onChange={handleAudioSelect} className="hidden" />
 
             <div className="flex gap-1">
-                <Button size="icon" variant="ghost" onClick={() => fileInputRef.current?.click()}>
+                <Button size="icon" variant="ghost" onClick={() => fileInputRef.current?.click()} title="Upload image">
                     <ImageIcon className="h-5 w-5 text-muted-foreground" />
                 </Button>
-                {/* Add Video/Audio buttons here */}
+                <Button size="icon" variant="ghost" onClick={() => videoInputRef.current?.click()} title="Upload video">
+                    <VideoIcon className="h-5 w-5 text-muted-foreground" />
+                </Button>
+                <Button size="icon" variant="ghost" onClick={() => audioInputRef.current?.click()} title="Upload audio">
+                    <AudioIcon className="h-5 w-5 text-muted-foreground" />
+                </Button>
             </div>
 
             <Input
+                ref={inputRef}
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={(e) => {
@@ -142,8 +232,8 @@ export function ChatInput() {
                 disabled={isStreaming}
             />
 
-            <Button 
-                size="icon" 
+            <Button
+                size="icon"
                 onClick={handleSend}
                 disabled={(!inputValue.trim() && !selectedImage && !selectedVideo && !selectedAudio) || isStreaming || isHistoryLoading}
                 className={cn("bg-primary", (isStreaming || isHistoryLoading) && "opacity-50")}

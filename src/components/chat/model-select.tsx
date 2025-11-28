@@ -157,7 +157,7 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
   React.useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearchQuery(searchQuery);
-    }, 300); // 300ms debounce
+    }, 150); // 150ms debounce - faster for better UX
 
     return () => clearTimeout(timer);
   }, [searchQuery]);

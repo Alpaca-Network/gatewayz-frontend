@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { ChatMessage as ChatMessageBubble } from "@/components/chat/ChatMessage";
 import type { ChatMessage as ChatMessageData } from "@/lib/chat-history";
 
@@ -17,19 +17,47 @@ const getTextFromContent = (content: string | any[]): string => {
 
 interface MessageListProps {
   sessionId: number | null;
-  messages: ChatMessageData[];
+  messages: (ChatMessageData & { error?: string; hasError?: boolean })[];
   isLoading: boolean;
 }
 
 export function MessageList({ sessionId, messages, isLoading }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [userHasScrolled, setUserHasScrolled] = useState(false);
+  const lastMessageCountRef = useRef(messages.length);
 
-  // Auto-scroll to bottom
+  // Detect if user has scrolled away from bottom
+  const handleScroll = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    // Check if user is near the bottom (within 100px)
+    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
+    setUserHasScrolled(!isNearBottom);
+  }, []);
+
+  // Auto-scroll to bottom only when:
+  // 1. New message is added (user or assistant)
+  // 2. User hasn't manually scrolled away
+  // 3. OR when streaming starts (new assistant message)
   useEffect(() => {
-    if (messages.length > 0) {
+    const lastMessage = messages[messages.length - 1];
+    const isNewMessage = messages.length > lastMessageCountRef.current;
+    const isStreamingNewMessage = lastMessage?.isStreaming && isNewMessage;
+
+    // Always scroll on new message or when streaming starts
+    if (isNewMessage || isStreamingNewMessage) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+      setUserHasScrolled(false);
+    }
+    // Scroll during streaming only if user hasn't scrolled away
+    else if (lastMessage?.isStreaming && !userHasScrolled) {
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [messages.length, messages[messages.length - 1]?.content, messages[messages.length - 1]?.isStreaming]);
+
+    lastMessageCountRef.current = messages.length;
+  }, [messages.length, messages[messages.length - 1]?.isStreaming, userHasScrolled]);
 
   if (!sessionId) {
     return null;
@@ -55,7 +83,11 @@ export function MessageList({ sessionId, messages, isLoading }: MessageListProps
   }
 
   return (
-    <div className="flex-1 overflow-y-auto p-3 sm:p-4 lg:p-6 space-y-4 sm:space-y-6">
+    <div
+      ref={containerRef}
+      onScroll={handleScroll}
+      className="flex-1 overflow-y-auto p-3 sm:p-4 lg:p-6 space-y-4 sm:space-y-6"
+    >
       {messages.map((msg, idx) => (
         <ChatMessageBubble
           key={msg.id ?? `${msg.role}-${idx}`}
@@ -67,6 +99,8 @@ export function MessageList({ sessionId, messages, isLoading }: MessageListProps
           audio={msg.audio}
           isStreaming={msg.isStreaming}
           model={msg.model}
+          error={msg.error}
+          hasError={msg.hasError}
           showActions={msg.role === 'assistant'}
           onCopy={() => navigator.clipboard.writeText(getTextFromContent(msg.content))}
         />

@@ -48,12 +48,13 @@ export function ChatLayout() {
    // Handle prompt selection from welcome screen
    const handlePromptSelect = (text: string) => {
        setInputValue(text);
-       // Focus input handled in ChatInput via store or effect, 
-       // but strictly ChatInput reads store? No, ChatInput manages its own state usually.
-       // Let's make ChatInput read from store or we pass a prop?
-       // The store has `inputValue`. I should update ChatInput to use it.
-       // Actually, I'll update ChatInput to sync with store or just use local state + key.
-       // For simplicity in v2, I'll update the store and have ChatInput use it.
+       // Focus the input after setting the value
+       // Use requestAnimationFrame to ensure the DOM has updated
+       requestAnimationFrame(() => {
+           if (typeof window !== 'undefined' && (window as any).__chatInputFocus) {
+               (window as any).__chatInputFocus();
+           }
+       });
    };
 
    const { data: activeMessages = [], isLoading: messagesLoading } = useSessionMessages(activeSessionId);
