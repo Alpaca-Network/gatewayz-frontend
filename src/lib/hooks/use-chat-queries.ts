@@ -129,9 +129,11 @@ export const useSaveMessage = () => {
              return api.saveMessage(sessionId, role, content, model, tokens);
         },
         onSuccess: (savedMessage, variables) => {
-            // Optimistically update or invalidate
-            queryClient.invalidateQueries({ queryKey: ['chat-messages', variables.sessionId] });
-            // Also invalidate session list because "updated_at" changed
+            // Don't invalidate chat-messages - this would trigger a refetch that overwrites
+            // the optimistic updates from use-chat-stream.ts before the backend has persisted
+            // the batched messages. The local cache already has the correct data.
+
+            // Only invalidate sessions list to update "updated_at" timestamp in sidebar
             queryClient.invalidateQueries({ queryKey: ['chat-sessions'] });
         }
     })
