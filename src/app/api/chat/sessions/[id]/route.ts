@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { validateApiKey } from '@/app/api/middleware/auth';
 import { handleApiError } from '@/app/api/middleware/error-handler';
 import { CHAT_HISTORY_API_URL } from '@/lib/config';
+import { ChatCacheInvalidation } from '@/lib/chat-cache-invalidation';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -81,6 +82,12 @@ export async function PUT(
     }
 
     const data = await response.json();
+
+    // Invalidate caches when session is updated (title/model changed)
+    await ChatCacheInvalidation.onSessionUpdate(apiKey).catch((err) => {
+      console.warn('[Cache] Failed to invalidate caches:', err);
+    });
+
     return NextResponse.json(data);
   } catch (error) {
     return handleApiError(error, 'Chat Session API - PUT');
@@ -115,6 +122,11 @@ export async function DELETE(
         { status: response.status }
       );
     }
+
+    // Invalidate caches when session is deleted
+    await ChatCacheInvalidation.onSessionDelete(apiKey).catch((err) => {
+      console.warn('[Cache] Failed to invalidate caches:', err);
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {
