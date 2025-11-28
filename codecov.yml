@@ -1,0 +1,61 @@
+# Codecov Configuration
+# https://docs.codecov.com/docs/codecov-yaml
+
+coverage:
+  # Overall project coverage settings
+  status:
+    project:
+      default:
+        # Coverage should not decrease by more than 1%
+        threshold: 1%
+        # Only run on PRs and main branches
+        informational: true
+    patch:
+      default:
+        # New code should have at least some coverage
+        threshold: 0%
+        informational: true
+
+# Ignore certain paths from coverage
+ignore:
+  # Test files
+  - "**/__tests__/**"
+  - "**/*.test.ts"
+  - "**/*.test.tsx"
+  - "**/*.spec.ts"
+  - "**/*.spec.tsx"
+  # Type definitions
+  - "**/*.d.ts"
+  # Story files
+  - "**/*.stories.ts"
+  - "**/*.stories.tsx"
+  # E2E tests
+  - "e2e/**"
+  # Configuration files
+  - "jest.config.mjs"
+  - "jest.setup.js"
+  - "next.config.ts"
+  - "tailwind.config.ts"
+  - "postcss.config.mjs"
+  - "playwright.config.ts"
+  # Scripts
+  - "scripts/**"
+
+# Comment settings for PRs
+comment:
+  layout: "reach,diff,flags,files"
+  behavior: default
+  require_changes: true
+  require_base: false
+  require_head: true
+
+# Flags for different test types
+flags:
+  unittests:
+    paths:
+      - src/
+    carryforward: true
+
+# GitHub-specific settings
+github_checks:
+  annotations: true
