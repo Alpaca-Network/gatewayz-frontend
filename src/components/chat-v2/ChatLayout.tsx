@@ -85,7 +85,8 @@ export function ChatLayout() {
    };
 
    const { data: activeMessages = [], isLoading: messagesLoading } = useSessionMessages(activeSessionId);
-   const showWelcomeScreen = !activeSessionId || (!messagesLoading && activeMessages.length === 0);
+   // When logged out, don't wait for messages to load - show welcome screen immediately
+   const showWelcomeScreen = !activeSessionId || (!isAuthenticated && activeMessages.length === 0) || (isAuthenticated && !messagesLoading && activeMessages.length === 0);
 
    if (authLoading) {
        return (
