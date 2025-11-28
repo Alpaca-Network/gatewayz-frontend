@@ -110,7 +110,7 @@ pnpm test src/app/api/chat/completions/__tests__/route.test.ts
 ```
 
 ### 4. E2E Tests with Playwright
-**Location:** `e2e/openrouter-auto-streaming.spec.ts`
+**Location:** `e2e/chat-openrouter-auto-streaming.spec.ts`
 
 End-to-end tests that validate streaming in the full application context using Playwright.
 
@@ -148,7 +148,7 @@ End-to-end tests that validate streaming in the full application context using P
 
 **Run Tests:**
 ```bash
-pnpm test:e2e e2e/openrouter-auto-streaming.spec.ts
+pnpm test:e2e e2e/chat-openrouter-auto-streaming.spec.ts
 ```
 
 ## Streaming Implementation Details
@@ -238,7 +238,7 @@ pnpm test src/lib/__tests__/streaming.test.ts
 pnpm test src/app/api/chat/completions/__tests__/route.test.ts
 
 # Only OpenRouter auto E2E tests
-pnpm test:e2e e2e/openrouter-auto-streaming.spec.ts
+pnpm test:e2e e2e/chat-openrouter-auto-streaming.spec.ts
 
 # Existing chat smoke test (includes openrouter/auto)
 pnpm test:e2e e2e/chat-smoke-new.spec.ts
@@ -333,7 +333,7 @@ tsx tests/streaming-validation.ts
 | `tests/streaming-validation.ts` | Manual | 6 | Manual validation with real API |
 | `src/lib/__tests__/streaming.test.ts` | Unit | 20+ | Test streaming.ts module |
 | `src/app/api/chat/completions/__tests__/route.test.ts` | Integration | 15+ | Test API route handler |
-| `e2e/openrouter-auto-streaming.spec.ts` | E2E | 7 | Full application testing |
+| `e2e/chat-openrouter-auto-streaming.spec.ts` | E2E | 7 | Full application testing |
 | `e2e/chat-smoke-new.spec.ts` | E2E | 1 | Existing smoke test |
 
 **Total: 50+ tests covering all aspects of OpenRouter auto streaming**

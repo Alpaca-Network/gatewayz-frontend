@@ -2,10 +2,17 @@
  * Integration tests for chat completions API route
  *
  * Tests the POST handler for streaming and non-streaming requests
+ * @jest-environment node
  */
 
 import { NextRequest } from 'next/server';
 import { POST } from '../route';
+import { ReadableStream } from 'stream/web';
+
+// Polyfill ReadableStream for Node.js test environment
+if (typeof globalThis.ReadableStream === 'undefined') {
+  (globalThis as any).ReadableStream = ReadableStream;
+}
 
 // Mock the performance profiler
 jest.mock('@/lib/performance-profiler', () => ({
@@ -45,7 +52,7 @@ describe('Chat Completions API Route', () => {
           controller.close();
         }
       },
-    });
+    }) as ReadableStream<Uint8Array>;
   }
 
   /**

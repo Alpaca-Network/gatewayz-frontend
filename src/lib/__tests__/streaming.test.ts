@@ -5,6 +5,20 @@
  */
 
 import { streamChatResponse, StreamChunk } from '../streaming';
+import { ReadableStream } from 'stream/web';
+
+// Polyfill ReadableStream for Node.js test environment
+if (typeof globalThis.ReadableStream === 'undefined') {
+  (globalThis as any).ReadableStream = ReadableStream;
+}
+
+// Mock StreamCoordinator
+jest.mock('../stream-coordinator', () => ({
+  StreamCoordinator: {
+    handleAuthError: jest.fn(),
+    getApiKey: jest.fn(() => null),
+  },
+}));
 
 // Mock fetch globally
 global.fetch = jest.fn();
