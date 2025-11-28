@@ -102,7 +102,7 @@ export function useStreaming(options: UseStreamingOptions = {}): UseStreamingRet
 
   const startStream = useCallback(async (
     sessionId: number,
-    messages: Array<{ role: MessageRole; content: string }>,
+    messages: Array<{ role: MessageRole; content: string | any[] }>,
     model: string,
     onChunk: (chunk: StreamChunk) => void
   ): Promise<void> => {
