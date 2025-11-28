@@ -110,7 +110,7 @@ async function preloadModels() {
     });
 
     // Try to cache the results
-    const CACHE_KEY = 'gatewayz_models_cache_v5_optimized';
+    const CACHE_KEY = 'gatewayz_models_cache_v6_gateway_fix';
     try {
       localStorage.setItem(CACHE_KEY, JSON.stringify({
         data: modelOptions,
