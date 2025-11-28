@@ -158,7 +158,7 @@ export class RedisMetricsService {
    */
   async recordRequestStart(options: MetricRecordOptions): Promise<void> {
     try {
-      if (!(await isRedisAvailable())) {
+      if (!(await isRedisAvailable()) || !this.redis) {
         return;
       }
 
@@ -193,7 +193,7 @@ export class RedisMetricsService {
    */
   async recordLatency(options: LatencyMetricOptions): Promise<void> {
     try {
-      if (!(await isRedisAvailable())) {
+      if (!(await isRedisAvailable()) || !this.redis) {
         return;
       }
 
@@ -239,7 +239,7 @@ export class RedisMetricsService {
    */
   async recordStatus(options: StatusMetricOptions): Promise<void> {
     try {
-      if (!(await isRedisAvailable())) {
+      if (!(await isRedisAvailable()) || !this.redis) {
         return;
       }
 
@@ -273,6 +273,10 @@ export class RedisMetricsService {
    */
   async updateHealthScore(model: string, bucket?: string): Promise<void> {
     try {
+      if (!this.redis) {
+        return;
+      }
+
       const timeBucket = bucket || this.getTimeBucket();
       const statusKey = this.buildKey('metrics', 'model', model, 'status', timeBucket);
 
@@ -329,7 +333,7 @@ export class RedisMetricsService {
     options: GatewayMetricOptions
   ): Promise<void> {
     try {
-      if (!(await isRedisAvailable())) {
+      if (!(await isRedisAvailable()) || !this.redis) {
         return;
       }
 
@@ -369,7 +373,7 @@ export class RedisMetricsService {
    */
   async getModelMetrics(modelId: string, timeBucket?: string): Promise<ModelMetrics | null> {
     try {
-      if (!(await isRedisAvailable())) {
+      if (!(await isRedisAvailable()) || !this.redis) {
         return null;
       }
 
@@ -433,7 +437,7 @@ export class RedisMetricsService {
     timeBucket?: string
   ): Promise<HealthScore[]> {
     try {
-      if (!(await isRedisAvailable())) {
+      if (!(await isRedisAvailable()) || !this.redis) {
         return [];
       }
 
@@ -474,7 +478,7 @@ export class RedisMetricsService {
    */
   async getProviderSummary(provider: string, timeBucket?: string): Promise<ProviderMetrics | null> {
     try {
-      if (!(await isRedisAvailable())) {
+      if (!(await isRedisAvailable()) || !this.redis) {
         return null;
       }
 
@@ -568,7 +572,7 @@ export class RedisMetricsService {
     hours: number = 6
   ): Promise<TrendDataPoint[]> {
     try {
-      if (!(await isRedisAvailable())) {
+      if (!(await isRedisAvailable()) || !this.redis) {
         return [];
       }
 

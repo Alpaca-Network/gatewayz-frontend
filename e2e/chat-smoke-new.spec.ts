@@ -19,9 +19,10 @@ const fulfillJson = (route: any, body: unknown, status = 200) =>
   });
 
 test.describe('Chat smoke (mocked backend)', () => {
-  // Skip: This test is flaky due to auth state synchronization timing issues
-  // between localStorage and Zustand store. Needs deeper investigation.
-  // Tracked as part of ongoing E2E reliability improvements.
+  // Skip: This test has a race condition where the auth context doesn't properly
+  // initialize from localStorage before the chat sessions query runs. The auth
+  // system depends on Privy's ready state which isn't properly mocked.
+  // TODO: Fix by properly mocking the auth context or using test fixtures.
   test.skip('auth and send message flow succeeds', async ({ page }) => {
     // Seed auth before any page scripts run
     await page.addInitScript(() => {
