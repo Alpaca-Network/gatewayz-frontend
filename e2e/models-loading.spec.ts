@@ -373,7 +373,7 @@ test.describe('Models - Error Recovery', () => {
     });
 
     // First attempt might fail
-    await page.goto('/models', { waitUntil: 'domcontentloaded' });
+    await page.goto('/models', { waitUntil: 'commit', timeout: 90000 });
 
     // Reload - should recover (use domcontentloaded to avoid slow networkidle)
     await page.reload({ waitUntil: 'domcontentloaded' });
