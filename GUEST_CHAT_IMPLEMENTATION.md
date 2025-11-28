@@ -32,6 +32,7 @@ This implementation adds guest mode functionality to the chat interface, allowin
 
 #### Files Created:
 - `src/lib/referral.ts` - Referral tracking utilities
+- `src/components/referral/referral-toast.tsx` - Toast notification component
 
 #### Key Functions:
 - `getReferralCodeFromURL()` - Extract from URL params (`?ref=CODE`)
@@ -40,13 +41,16 @@ This implementation adds guest mode functionality to the chat interface, allowin
 - `clearReferralCode()` - Remove after signup
 - `getReferralCode()` - Get from URL or localStorage (URL takes priority)
 - `initializeReferralTracking()` - Call on page load
+- `getReferralSource()` - Get the source of the referral code
 
 #### User Experience:
 1. **URL Detection**: Automatically captures `?ref=CODE` or `?referral=CODE`
-2. **Persistent Storage**: Saved in localStorage until signup
-3. **Cross-Session**: Works even if user closes browser and returns later
-4. **Priority**: URL code overrides stored code
-5. **Cleanup**: Cleared after successful signup
+2. **Toast Notification**: Shows a gift icon toast in bottom-right corner when referred
+3. **Persistent Storage**: Saved in localStorage until signup
+4. **Cross-Session**: Works even if user closes browser and returns later
+5. **Priority**: URL code overrides stored code
+6. **Cleanup**: Cleared after successful signup
+7. **Dismissible**: Toast can be dismissed for the session
 
 ### 3. Files Modified
 
@@ -71,6 +75,14 @@ This implementation adds guest mode functionality to the chat interface, allowin
 - Uses `getReferralCode()` for consistent tracking
 - Clears referral code after signup
 - Resets guest message count after signup
+
+#### `/src/app/layout.tsx`
+- Added `ReferralToast` component to root layout
+- Toast shows for all unauthenticated users with referral codes
+
+#### `/src/components/onboarding/onboarding-banner.tsx`
+- Added check to hide banner for guest users
+- Only authenticated users see onboarding tasks
 
 ## Technical Implementation
 
@@ -99,17 +111,21 @@ This implementation adds guest mode functionality to the chat interface, allowin
    ↓
 2. Code stored in localStorage
    ↓
-3. User browses site, closes browser
+3. Toast notification appears: "You've been referred!"
    ↓
-4. Returns days later to /chat
+4. User can click "Sign Up & Get Credits" or dismiss
    ↓
-5. Code still in localStorage
+5. User browses site, closes browser
    ↓
-6. User signs up
+6. Returns days later to /chat
    ↓
-7. Code sent to backend in auth request
+7. Code still in localStorage
    ↓
-8. Code cleared from localStorage
+8. User signs up
+   ↓
+9. Code sent to backend in auth request
+   ↓
+10. Code cleared from localStorage
 ```
 
 ### LocalStorage Keys
@@ -117,6 +133,10 @@ This implementation adds guest mode functionality to the chat interface, allowin
 - `gatewayz_guest_message_count` - Guest message counter (integer)
 - `gatewayz_referral_code` - Referral code string
 - `gatewayz_referral_source` - Source of referral (e.g., "url", "manual")
+
+### SessionStorage Keys
+
+- `gatewayz_referral_toast_dismissed` - Toast dismissal flag (session-only)
 
 ## Testing Checklist
 
@@ -138,6 +158,13 @@ This implementation adds guest mode functionality to the chat interface, allowin
 
 - [ ] Code captured from `?ref=CODE` in URL
 - [ ] Code captured from `?referral=CODE` in URL
+- [ ] Toast notification appears when referral code detected
+- [ ] Toast shows "You've been referred!" message
+- [ ] Toast has "Sign Up & Get Credits" button
+- [ ] Toast can be dismissed with X button
+- [ ] Toast doesn't show again after dismissal (same session)
+- [ ] Toast reappears in new session if code still stored
+- [ ] Toast doesn't show for authenticated users
 - [ ] Code persists in localStorage
 - [ ] Code survives browser close/reopen
 - [ ] URL code overrides stored code
