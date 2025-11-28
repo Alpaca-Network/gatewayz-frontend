@@ -573,14 +573,22 @@ describe('cache-strategies', () => {
       expect(metrics.errors).toBe(1);
     });
 
-    it('should reset metrics by category', () => {
+    it('should reset metrics by category', async () => {
       mockRedis.get.mockResolvedValue(JSON.stringify({ data: 'test' }));
 
-      cacheAside('key1', jest.fn(), 300, 'category1');
+      // Execute cacheAside to increment the hit counter
+      await cacheAside('key1', jest.fn(), 300, 'category1');
+
+      // Verify metrics were incremented
+      const metricsBeforeReset = getCacheMetrics('category1');
+      expect(metricsBeforeReset.hits).toBe(1);
+
+      // Reset metrics for this category
       resetCacheMetrics('category1');
 
-      const metrics = getCacheMetrics('category1');
-      expect(metrics.hits).toBe(0);
+      // Verify metrics were reset
+      const metricsAfterReset = getCacheMetrics('category1');
+      expect(metricsAfterReset.hits).toBe(0);
     });
 
     it('should reset all metrics', async () => {
