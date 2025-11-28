@@ -23,10 +23,10 @@ Optimized Playwright tests in GitHub CI to run **50-75% faster** with the follow
 - **Navigation timeout:** 120s → 30s in CI (production builds are much faster)
 - **Impact:** Tests fail faster, don't wait unnecessarily
 
-### 4. **Build Artifact Sharing** (.github/workflows/ci.yml:211-216, 263-267)
-- **Before:** E2E job rebuilt the entire application
-- **After:** E2E job downloads pre-built artifact from build job
-- **Impact:** Eliminates ~2-3 minutes of duplicate build time
+### 4. **Shared Build Caching** (.github/workflows/ci.yml:258-266)
+- **Before:** E2E job had separate cache, rebuilt from scratch
+- **After:** E2E job shares cache with build job via restore-keys
+- **Impact:** Faster E2E builds when cache is warm (~30-50% faster builds)
 
 ### 5. **Enhanced Next.js Build Caching** (.github/workflows/ci.yml:192-200)
 - **Before:** Basic cache with package.json hash only
