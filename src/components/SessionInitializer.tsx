@@ -10,6 +10,7 @@ import {
   getStoredSessionTransferToken,
 } from "@/integrations/privy/auth-session-transfer";
 import { saveApiKey, saveUserData, type UserData } from "@/lib/api";
+import { toast } from "@/hooks/use-toast";
 
 // Cache for user data fetches to avoid duplicate requests within same session
 const userDataCache = new Map<string, { data: UserData; timestamp: number }>();
@@ -99,6 +100,7 @@ export function SessionInitializer() {
   const initializedRef = useRef(false);
   const waitingForPrivyRef = useRef(false);
   const actionProcessedRef = useRef(false);
+  const referralToastShownRef = useRef(false);
 
   useEffect(() => {
     // Skip if already initialized to prevent double execution
@@ -332,6 +334,53 @@ export function SessionInitializer() {
 
     processAction();
   }, [login, privyReady, status]);
+
+  // Handle referral code toast notification
+  useEffect(() => {
+    // Only show toast once per session
+    if (referralToastShownRef.current) {
+      return;
+    }
+
+    // Wait until user is authenticated
+    if (status !== "authenticated") {
+      return;
+    }
+
+    // Check for referral code in URL or localStorage
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const refCode = urlParams.get('ref') || localStorage.getItem('gatewayz_referral_code');
+
+    if (refCode) {
+      // Mark as shown to prevent duplicates
+      referralToastShownRef.current = true;
+
+      // Show toast notification
+      toast({
+        title: "Welcome! You've been referred!",
+        description: "Bonus credits will be added to your account after signup.",
+        variant: "default",
+      });
+
+      // Clean up the ref parameter from URL if present
+      if (urlParams.get('ref')) {
+        try {
+          urlParams.delete('ref');
+          const newUrl = window.location.pathname + (urlParams.toString() ? '?' + urlParams.toString() : '');
+          window.history.replaceState({}, document.title, newUrl);
+          console.log('[SessionInit] Cleaned up ref parameter from URL');
+        } catch (error) {
+          console.warn('[SessionInit] Failed to cleanup ref parameter:', error);
+        }
+      }
+
+      console.log('[SessionInit] Referral toast shown for code:', refCode);
+    }
+  }, [status]);
 
   return null;
 }
