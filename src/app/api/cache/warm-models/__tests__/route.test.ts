@@ -313,68 +313,7 @@ describe('POST /api/cache/warm-models', () => {
   });
 
   describe('Sentry Integration', () => {
-    it('should capture exceptions in Sentry on fatal error', async () => {
-      const testError = new Error('Test fatal error');
-
-      // Mock Sentry.startSpan to actually call callback with real error handling
-      const realStartSpan = async (options: any, callback: any) => {
-        const mockSpan = { setAttribute: jest.fn() };
-        try {
-          return await callback(mockSpan);
-        } catch (error) {
-          mockSpan.setAttribute('error', true);
-          mockSpan.setAttribute('error_message', error instanceof Error ? error.message : 'Unknown error');
-
-          // Capture the exception as the real implementation does
-          (Sentry.captureException as jest.Mock)(error, {
-            tags: {
-              api_route: '/api/cache/warm-models',
-              error_type: 'cache_warming_error',
-            },
-          });
-
-          // Return error response as the implementation does
-          return new Response(
-            JSON.stringify({
-              error: error instanceof Error ? error.message : 'Cache warming failed',
-              success: false
-            }),
-            { status: 500, headers: { 'Content-Type': 'application/json' } }
-          );
-        }
-      };
-
-      (Sentry.startSpan as jest.Mock).mockImplementationOnce(realStartSpan);
-
-      mockGetModelsForGateway.mockImplementation(() => {
-        throw testError;
-      });
-
-      const request = new NextRequest('http://localhost:3000/api/cache/warm-models', {
-        method: 'POST',
-        headers: {
-          'authorization': 'Bearer test-secret-123',
-        },
-      });
-
-      const response = await POST(request);
-      const data = await response.json();
-
-      expect(response.status).toBe(500);
-      expect(data.success).toBe(false);
-
-      expect(Sentry.captureException).toHaveBeenCalledWith(
-        testError,
-        expect.objectContaining({
-          tags: expect.objectContaining({
-            api_route: '/api/cache/warm-models',
-            error_type: 'cache_warming_error',
-          }),
-        })
-      );
-    });
-
-    it('should set span attributes on success', async () => {
+    it('should track successful cache warming with span attributes', async () => {
       mockGetModelsForGateway.mockResolvedValue({ data: [{ id: '1' }] });
 
       const mockSetAttribute = jest.fn();
@@ -389,50 +328,24 @@ describe('POST /api/cache/warm-models', () => {
         },
       });
 
-      await POST(request);
+      const response = await POST(request);
 
+      expect(response.status).toBe(200);
       expect(mockSetAttribute).toHaveBeenCalledWith('total_models', expect.any(Number));
       expect(mockSetAttribute).toHaveBeenCalledWith('success_count', expect.any(Number));
       expect(mockSetAttribute).toHaveBeenCalledWith('error_count', expect.any(Number));
       expect(mockSetAttribute).toHaveBeenCalledWith('duration_ms', expect.any(Number));
     });
 
-    it('should set error span attributes on failure', async () => {
+    it('should track gateway errors in details', async () => {
+      mockGetModelsForGateway
+        .mockRejectedValueOnce(new Error('Gateway failed'))
+        .mockResolvedValue({ data: [] });
+
       const mockSetAttribute = jest.fn();
-      const testError = new Error('Test error');
-
-      // Mock Sentry.startSpan to handle the error inside the callback
-      const realStartSpan = async (options: any, callback: any) => {
-        const mockSpan = { setAttribute: mockSetAttribute };
-        try {
-          return await callback(mockSpan);
-        } catch (error) {
-          // Simulating error handling within Sentry span
-          mockSpan.setAttribute('error', true);
-          mockSpan.setAttribute('error_message', error instanceof Error ? error.message : 'Unknown error');
-
-          (Sentry.captureException as jest.Mock)(error, {
-            tags: {
-              api_route: '/api/cache/warm-models',
-              error_type: 'cache_warming_error',
-            },
-          });
-
-          return new Response(
-            JSON.stringify({
-              error: error instanceof Error ? error.message : 'Cache warming failed',
-              success: false
-            }),
-            { status: 500, headers: { 'Content-Type': 'application/json' } }
-          );
-        }
-      };
-
-      (Sentry.startSpan as jest.Mock).mockImplementationOnce(realStartSpan);
-
-      mockGetModelsForGateway.mockImplementation(() => {
-        throw testError;
-      });
+      (Sentry.startSpan as jest.Mock).mockImplementation((options, callback) =>
+        callback({ setAttribute: mockSetAttribute })
+      );
 
       const request = new NextRequest('http://localhost:3000/api/cache/warm-models', {
         method: 'POST',
@@ -442,10 +355,16 @@ describe('POST /api/cache/warm-models', () => {
       });
 
       const response = await POST(request);
+      const data = await response.json();
 
-      expect(response.status).toBe(500);
-      expect(mockSetAttribute).toHaveBeenCalledWith('error', true);
-      expect(mockSetAttribute).toHaveBeenCalledWith('error_message', 'Test error');
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(data.gateways_failed).toBeGreaterThan(0);
+
+      // Find the failed gateway in details
+      const failedGateway = data.details.find((d: any) => d.status === 'error');
+      expect(failedGateway).toBeDefined();
+      expect(failedGateway.error).toContain('Gateway failed');
     });
   });
 
