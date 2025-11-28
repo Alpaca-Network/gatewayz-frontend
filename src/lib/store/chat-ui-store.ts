@@ -6,11 +6,12 @@ interface ChatUIState {
   mobileSidebarOpen: boolean;
   inputValue: string;
   selectedModel: ModelOption | null;
-  
+
   setActiveSessionId: (id: number | null) => void;
   setMobileSidebarOpen: (open: boolean) => void;
   setInputValue: (val: string) => void;
   setSelectedModel: (model: ModelOption | null) => void;
+  resetChatState: () => void;
 }
 
 export const useChatUIStore = create<ChatUIState>((set) => ({
@@ -30,4 +31,9 @@ export const useChatUIStore = create<ChatUIState>((set) => ({
   setMobileSidebarOpen: (open) => set({ mobileSidebarOpen: open }),
   setInputValue: (val) => set({ inputValue: val }),
   setSelectedModel: (model) => set({ selectedModel: model }),
+  resetChatState: () => set({
+    activeSessionId: null,
+    inputValue: '',
+    mobileSidebarOpen: false
+  }),
 }));

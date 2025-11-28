@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { usePrivy, User, LinkedAccountWithMetadata } from '@privy-io/react-auth';
 import { useAuthStore } from '@/lib/store/auth-store';
+import { useChatUIStore } from '@/lib/store/chat-ui-store';
 import { processAuthResponse, AuthResponse, getApiKey, getUserData, saveApiKey, saveUserData, AUTH_REFRESH_COMPLETE_EVENT } from '@/lib/api';
 
 // Helper to strip undefined values (copied from original context)
@@ -61,6 +62,7 @@ const mapLinkedAccount = (account: LinkedAccountWithMetadata) => {
 export function useAuthSync() {
   const { user, ready, authenticated, getAccessToken } = usePrivy();
   const { setAuth, setLoading, setError, clearAuth } = useAuthStore();
+  const { resetChatState } = useChatUIStore();
   const queryClient = useQueryClient();
 
   // Initialize store from localStorage on mount
@@ -189,6 +191,10 @@ export function useAuthSync() {
         // We should sync the store to reflect this to prevent UI from showing stale auth state.
         console.log('[useAuthSync] Refresh complete but no credentials found - clearing auth');
         clearAuth();
+        // Clear chat state to remove cached session and messages
+        resetChatState();
+        // Clear all React Query caches to remove stale data
+        queryClient.clear();
       }
     };
 
