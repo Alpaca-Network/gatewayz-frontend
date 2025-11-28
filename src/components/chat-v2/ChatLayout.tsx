@@ -85,8 +85,9 @@ export function ChatLayout() {
    };
 
    const { data: activeMessages = [], isLoading: messagesLoading } = useSessionMessages(activeSessionId);
-   // When logged out, don't wait for messages to load - show welcome screen immediately
-   const showWelcomeScreen = !activeSessionId || (!isAuthenticated && activeMessages.length === 0) || (isAuthenticated && !messagesLoading && activeMessages.length === 0);
+   // When logged out, always show welcome screen (ignore cached messages and activeSessionId)
+   // When logged in, show welcome screen only if no active session or no messages after loading
+   const showWelcomeScreen = !isAuthenticated || !activeSessionId || (!messagesLoading && activeMessages.length === 0);
 
    if (authLoading) {
        return (
