@@ -4,42 +4,67 @@ import { streamChatResponse } from '@/lib/streaming';
 import { ChatStreamHandler } from '@/lib/chat-stream-handler';
 import { useSaveMessage } from '@/lib/hooks/use-chat-queries';
 import { useAuthStore } from '@/lib/store/auth-store';
+import { getApiKey } from '@/lib/api';
 import { ModelOption } from '@/components/chat/model-select';
 import { ChatMessage } from '@/lib/chat-history';
 
+// Helper to extract image/video/audio from content array for display
+const extractMediaFromContent = (content: any): { image?: string; video?: string; audio?: string } => {
+    if (!Array.isArray(content)) return {};
+    const result: { image?: string; video?: string; audio?: string } = {};
+    for (const part of content) {
+        if (part.type === 'image_url' && part.image_url?.url) {
+            result.image = part.image_url.url;
+        } else if (part.type === 'video_url' && part.video_url?.url) {
+            result.video = part.video_url.url;
+        } else if (part.type === 'audio_url' && part.audio_url?.url) {
+            result.audio = part.audio_url.url;
+        }
+    }
+    return result;
+};
+
 export function useChatStream() {
     const [isStreaming, setIsStreaming] = useState(false);
+    const [streamError, setStreamError] = useState<string | null>(null);
     const streamHandlerRef = useRef<ChatStreamHandler>(new ChatStreamHandler());
-    const { apiKey } = useAuthStore();
+    const { apiKey: storeApiKey } = useAuthStore();
     const saveMessage = useSaveMessage();
     const queryClient = useQueryClient();
 
-    const streamMessage = useCallback(async ({ 
+    const streamMessage = useCallback(async ({
         sessionId,
         content,
         model,
         messagesHistory
-    }: { 
+    }: {
         sessionId: number,
-        content: any, 
+        content: any,
         model: ModelOption,
         messagesHistory: any[]
     }) => {
+        // Try store first, fall back to localStorage for auth state desync fix
+        const apiKey = storeApiKey || getApiKey();
         if (!apiKey) throw new Error("No API Key");
 
         setIsStreaming(true);
+        setStreamError(null);
         streamHandlerRef.current.reset();
 
         // Cancel any outgoing refetches (so they don't overwrite our optimistic update)
         await queryClient.cancelQueries({ queryKey: ['chat-messages', sessionId] });
 
-        // 1. Save User Message (Optimistic Update handled by useSaveMessage mutation, but we do it manually here for immediate UI)
-        // Actually, let's update the cache manually for immediate feedback
-        const userMsg: Partial<ChatMessage> = {
+        // Extract media attachments for proper display
+        const mediaAttachments = extractMediaFromContent(content);
+
+        // 1. Save User Message with full content (including attachments)
+        // Store the actual content for display, not a placeholder
+        const userMsg: Partial<ChatMessage> & { image?: string; video?: string; audio?: string } = {
             role: 'user',
-            content: typeof content === 'string' ? content : 'Sent an image/file', // Simplification for now
+            content: content, // Store full content (string or array)
             model: model.value,
-            created_at: new Date().toISOString()
+            created_at: new Date().toISOString(),
+            ...mediaAttachments // Include extracted media for easy rendering
         };
 
         queryClient.setQueryData(['chat-messages', sessionId], (old: any[] | undefined) => {
@@ -138,24 +163,32 @@ export function useChatStream() {
 
         } catch (e) {
             console.error("Streaming failed", e);
-            // Add error message to chat
+            const errorMessage = e instanceof Error ? e.message : "Failed to complete response";
+            setStreamError(errorMessage);
+
+            // Mark the assistant message as failed with error metadata, not appended to content
             queryClient.setQueryData(['chat-messages', sessionId], (old: any[] | undefined) => {
                 if (!old) return [];
                 const last = old[old.length - 1];
-                 return [...old.slice(0, -1), {
+                if (last.role !== 'assistant') return old;
+
+                return [...old.slice(0, -1), {
                     ...last,
-                    content: last.content + `\n\n[Error: ${e instanceof Error ? e.message : "Failed to complete response"}]`,
-                    isStreaming: false
+                    content: last.content || '', // Keep existing content if any
+                    isStreaming: false,
+                    error: errorMessage, // Store error separately, not in content
+                    hasError: true
                 }];
             });
         } finally {
             setIsStreaming(false);
         }
 
-    }, [apiKey, queryClient, saveMessage]);
+    }, [storeApiKey, queryClient, saveMessage]);
 
     return {
         isStreaming,
+        streamError,
         streamMessage
     };
 }

@@ -28,10 +28,24 @@ export interface ChatMessageProps {
   audio?: string;
   isStreaming?: boolean;
   model?: string;
+  error?: string;
+  hasError?: boolean;
   onCopy?: () => void;
   onRegenerate?: () => void;
   showActions?: boolean;
 }
+
+// Helper to compare content (handles arrays properly)
+const contentEquals = (a: string | any[], b: string | any[]): boolean => {
+  if (typeof a === 'string' && typeof b === 'string') {
+    return a === b;
+  }
+  if (Array.isArray(a) && Array.isArray(b)) {
+    if (a.length !== b.length) return false;
+    return JSON.stringify(a) === JSON.stringify(b);
+  }
+  return false;
+};
 
 /**
  * Individual chat message component with memoization
@@ -46,6 +60,8 @@ export const ChatMessage = memo<ChatMessageProps>(
     audio,
     isStreaming,
     model,
+    error,
+    hasError,
     onCopy,
     onRegenerate,
     showActions = true,
@@ -89,8 +105,8 @@ export const ChatMessage = memo<ChatMessageProps>(
             className={`p-4 ${
               isUser
                 ? 'bg-blue-600 text-white dark:bg-blue-500'
-                : 'bg-transparent border-border text-white'
-            }`}
+                : 'bg-transparent border-border text-foreground'
+            } ${hasError ? 'border-destructive' : ''}`}
           >
             {/* Image attachment */}
             {displayImage && (
@@ -131,7 +147,7 @@ export const ChatMessage = memo<ChatMessageProps>(
             )}
 
             {/* Message content */}
-            <div className="prose prose-sm prose-invert max-w-none text-white">
+            <div className={`prose prose-sm max-w-none ${isUser ? 'text-white prose-invert' : 'text-foreground dark:prose-invert'}`}>
               {isUser ? (
                 <p className="whitespace-pre-wrap m-0">{displayContent}</p>
               ) : (
@@ -157,6 +173,13 @@ export const ChatMessage = memo<ChatMessageProps>(
                 </ReactMarkdown>
               )}
             </div>
+
+            {/* Error display */}
+            {hasError && error && (
+              <div className="mt-2 p-2 bg-destructive/10 border border-destructive/20 rounded text-sm text-destructive">
+                {error}
+              </div>
+            )}
 
             {/* Streaming indicator */}
             {isStreaming && (
@@ -216,13 +239,15 @@ export const ChatMessage = memo<ChatMessageProps>(
   (prevProps, nextProps) => {
     return (
       prevProps.role === nextProps.role &&
-      prevProps.content === nextProps.content &&
+      contentEquals(prevProps.content, nextProps.content) &&
       prevProps.reasoning === nextProps.reasoning &&
       prevProps.isStreaming === nextProps.isStreaming &&
       prevProps.model === nextProps.model &&
       prevProps.image === nextProps.image &&
       prevProps.video === nextProps.video &&
-      prevProps.audio === nextProps.audio
+      prevProps.audio === nextProps.audio &&
+      prevProps.error === nextProps.error &&
+      prevProps.hasError === nextProps.hasError
     );
   }
 );

@@ -87,22 +87,51 @@ export function ChatSidebar({ className, onClose }: { className?: string; onClos
 
   const handleDelete = async () => {
       if (sessionToDelete) {
-          await deleteSession.mutateAsync(sessionToDelete);
-          if (activeSessionId === sessionToDelete) {
-              setActiveSessionId(null);
+          try {
+              await deleteSession.mutateAsync(sessionToDelete);
+              if (activeSessionId === sessionToDelete) {
+                  setActiveSessionId(null);
+              }
+          } catch (e) {
+              console.error("Failed to delete session", e);
+              toast({
+                  title: "Failed to delete chat",
+                  description: "Please try again in a moment.",
+                  variant: "destructive",
+              });
+          } finally {
+              setSessionToDelete(null);
           }
-          setSessionToDelete(null);
       }
   };
 
   const handleRename = async () => {
       if (sessionToRename && newName.trim()) {
-          await updateSession.mutateAsync({
-              sessionId: sessionToRename.id,
-              title: newName.trim()
-          });
-          setSessionToRename(null);
+          try {
+              await updateSession.mutateAsync({
+                  sessionId: sessionToRename.id,
+                  title: newName.trim()
+              });
+              setSessionToRename(null);
+          } catch (e) {
+              console.error("Failed to rename session", e);
+              toast({
+                  title: "Failed to rename chat",
+                  description: "Please try again in a moment.",
+                  variant: "destructive",
+              });
+              // Don't close the dialog on error so user can retry
+          }
       }
+  };
+
+  // Handle session selection with proper sequencing to avoid race condition
+  const handleSessionSelect = (sessionId: number) => {
+      setActiveSessionId(sessionId);
+      // Use setTimeout to ensure state update completes before closing sidebar
+      setTimeout(() => {
+          onClose?.();
+      }, 50);
   };
 
   return (
@@ -142,10 +171,7 @@ export function ChatSidebar({ className, onClose }: { className?: string; onClos
                             "group flex items-center justify-between p-2 rounded-md hover:bg-accent cursor-pointer text-sm",
                             activeSessionId === session.id && "bg-accent"
                         )}
-                        onClick={() => {
-                            setActiveSessionId(session.id);
-                            onClose?.();
-                        }}
+                        onClick={() => handleSessionSelect(session.id)}
                     >
                         <div className="truncate flex-1 pr-2">
                             <div className="font-medium truncate">{session.title}</div>

@@ -140,9 +140,12 @@ export class ChatHistoryAPI {
       url += `${separator}privy_user_id=${encodeURIComponent(this.privyUserId)}`;
     }
 
-    console.log('ChatHistoryAPI - Making request to:', url);
-    console.log('ChatHistoryAPI - Method:', method);
-    console.log('ChatHistoryAPI - Has API key:', !!this.apiKey);
+    // Debug logging only in development
+    if (process.env.NODE_ENV === 'development') {
+      console.log('ChatHistoryAPI - Making request to:', url);
+      console.log('ChatHistoryAPI - Method:', method);
+      console.log('ChatHistoryAPI - Has API key:', !!this.apiKey);
+    }
 
     try {
       const response = await fetch(url, config);
