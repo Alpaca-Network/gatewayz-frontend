@@ -166,7 +166,7 @@ export interface UseStreamingReturn {
   // Actions
   startStream: (
     sessionId: number,
-    messages: Array<{ role: MessageRole; content: string }>,
+    messages: Array<{ role: MessageRole; content: string | any[] }>,
     model: string,
     onChunk: (chunk: StreamChunk) => void
   ) => Promise<void>;
