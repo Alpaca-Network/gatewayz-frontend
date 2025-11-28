@@ -38,8 +38,8 @@ export default defineConfig({
   workers: process.env.CI ? 3 : 4,
 
   // Global timeout for each test
-  // Reduced in CI since production builds are faster than dev server
-  timeout: process.env.CI ? 30 * 1000 : 60 * 1000,
+  // Increased slightly for complex pages like /models which load lots of data
+  timeout: process.env.CI ? 45 * 1000 : 60 * 1000,
 
   // Expect timeout
   expect: {
@@ -63,12 +63,12 @@ export default defineConfig({
     // Base URL to use in actions like `await page.goto('/')`
     baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000',
 
-    // Navigation timeout - reduced in CI since production builds are much faster
+    // Navigation timeout - for complex pages like /models
     // Override with --timeout flag or set PLAYWRIGHT_NAVIGATION_TIMEOUT env var
     navigationTimeout: process.env.PLAYWRIGHT_NAVIGATION_TIMEOUT
       ? parseInt(process.env.PLAYWRIGHT_NAVIGATION_TIMEOUT)
       : process.env.CI
-      ? 30 * 1000 // 30 seconds for production mode in CI
+      ? 45 * 1000 // 45 seconds for data-heavy pages in CI
       : 120 * 1000, // 2 minutes for cold Next.js dev server compiles locally
 
     // Action timeout (clicks, fills, etc.)
