@@ -80,14 +80,16 @@ describe('ChatInput', () => {
   });
 
   describe('send button disabled state', () => {
-    it('should disable send button when input is empty', () => {
+    it('should enable send button when not streaming (validation happens in handleSend)', () => {
       render(<ChatInput />);
 
       // Find all buttons and get the last one (send button)
       const buttons = screen.getAllByTestId('button');
       const sendBtn = buttons[buttons.length - 1];
 
-      expect(sendBtn).toBeDisabled();
+      // Button is only disabled during streaming, not when input is empty
+      // Validation of empty input happens inside handleSend
+      expect(sendBtn).not.toBeDisabled();
     });
 
     it('should derive isInputEmpty from inputValue without separate state', () => {
@@ -95,10 +97,11 @@ describe('ChatInput', () => {
       // not tracked as separate state that could desync
       render(<ChatInput />);
 
-      // Button should be disabled initially (empty input)
+      // The isInputEmpty value is used in handleSend validation, not for disabling the button
+      // This prevents the race condition where button state and input value could desync
       const buttons = screen.getAllByTestId('button');
       const sendBtn = buttons[buttons.length - 1];
-      expect(sendBtn).toBeDisabled();
+      expect(sendBtn).not.toBeDisabled();
     });
   });
 

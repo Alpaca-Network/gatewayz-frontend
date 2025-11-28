@@ -89,6 +89,10 @@ export function ChatInput() {
 
     // Clear input immediately for better UX
     setInputValue("");
+    // Also clear the actual input element to ensure it's in sync
+    if (inputRef.current) {
+      inputRef.current.value = "";
+    }
     setSelectedImage(null);
     setSelectedVideo(null);
     setSelectedAudio(null);
@@ -254,8 +258,16 @@ export function ChatInput() {
             <Button
                 type="button"
                 size="icon"
-                onClick={handleSend}
-                disabled={(isInputEmpty && !selectedImage && !selectedVideo && !selectedAudio) || isStreaming}
+                onPointerDown={(e) => {
+                    // Prevent focus loss on mobile which can cause state sync issues
+                    e.preventDefault();
+                }}
+                onClick={(e) => {
+                    // Prevent any default behavior that might interfere
+                    e.preventDefault();
+                    handleSend();
+                }}
+                disabled={isStreaming}
                 className={cn("bg-primary", isStreaming && "opacity-50")}
             >
                 {isStreaming ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}

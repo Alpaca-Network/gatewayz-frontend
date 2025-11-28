@@ -3,7 +3,7 @@ import { useRouter } from 'next/navigation';
 import { getModelUrl } from '@/lib/utils';
 import { safeParseJson } from '@/lib/http';
 
-const CACHE_KEY = 'gatewayz_models_cache_v4_all_gateways';
+const CACHE_KEY = 'gatewayz_models_cache_v6_gateway_fix';
 const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
 
 // In-memory prefetch cache to avoid duplicate requests
