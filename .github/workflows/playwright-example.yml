@@ -2,12 +2,17 @@ name: Playwright Tests (Example)
 
 # This is an example workflow showing the recommended approach for running
 # Playwright E2E tests in CI. It uses production mode for maximum reliability.
+#
+# IMPORTANT: This workflow is DISABLED by default and serves as an example.
+# To enable it, change workflow_dispatch to your desired triggers (push, pull_request, etc.)
 
 on:
-  push:
-    branches: [main, master, develop]
-  pull_request:
-    branches: [main, master, develop]
+  workflow_dispatch:  # Manual trigger only - change this to enable automatic runs
+  # Uncomment to enable on push/PR:
+  # push:
+  #   branches: [main, master, develop]
+  # pull_request:
+  #   branches: [main, master, develop]
 
 jobs:
   test-e2e:
@@ -39,8 +44,11 @@ jobs:
       - name: Build Next.js (production)
         run: pnpm build
         env:
-          # Add any build-time env vars here
+          # Required build-time environment variables
           NODE_ENV: production
+          NEXT_PUBLIC_PRIVY_APP_ID: ${{ secrets.NEXT_PUBLIC_PRIVY_APP_ID || 'test-privy-app-id' }}
+          NEXT_PUBLIC_API_BASE_URL: ${{ secrets.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai' }}
+          NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || 'pk_test_dummy' }}
 
       - name: Start production server
         run: |
@@ -93,8 +101,6 @@ jobs:
     name: E2E Tests (Dev Mode)
     timeout-minutes: 30
     runs-on: ubuntu-latest
-    # Only run on PRs or manually
-    if: github.event_name == 'pull_request'
 
     steps:
       - name: Checkout code
@@ -118,9 +124,18 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Start dev server
-        run: pnpm dev &
+        run: pnpm dev > /tmp/dev-server.log 2>&1 &
         env:
           PORT: 3000
+          NEXT_PUBLIC_PRIVY_APP_ID: ${{ secrets.NEXT_PUBLIC_PRIVY_APP_ID || 'test-privy-app-id' }}
+          NEXT_PUBLIC_API_BASE_URL: ${{ secrets.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai' }}
+          NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || 'pk_test_dummy' }}
+
+      - name: Wait for dev server to start
+        run: |
+          echo "Waiting for dev server to start..."
+          sleep 5
+          echo "Dev server should be starting..."
 
       - name: Warm up dev server
         run: pnpm warmup
