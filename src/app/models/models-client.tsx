@@ -445,7 +445,18 @@ export default function ModelsClient({
             taskState.explore = true;
             localStorage.setItem('gatewayz_onboarding_tasks', JSON.stringify(taskState));
             console.log('Onboarding - Explore task marked as complete');
+
+            // Dispatch custom event to notify the banner
+            window.dispatchEvent(new Event('onboarding-task-updated'));
           }
+        } else {
+          // Initialize task state if it doesn't exist and mark explore as complete
+          const taskState = { explore: true };
+          localStorage.setItem('gatewayz_onboarding_tasks', JSON.stringify(taskState));
+          console.log('Onboarding - Explore task initialized and marked as complete');
+
+          // Dispatch custom event to notify the banner
+          window.dispatchEvent(new Event('onboarding-task-updated'));
         }
       } catch (error) {
         console.error('Failed to update onboarding task:', error);

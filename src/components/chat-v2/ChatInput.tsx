@@ -168,6 +168,24 @@ export function ChatInput() {
             messagesHistory: currentMessages
         });
 
+        // Mark chat task as complete in onboarding after first message (authenticated users only)
+        if (typeof window !== 'undefined' && isAuthenticated) {
+            try {
+                const savedTasks = localStorage.getItem('gatewayz_onboarding_tasks');
+                const taskState = savedTasks ? JSON.parse(savedTasks) : {};
+                if (!taskState.chat) {
+                    taskState.chat = true;
+                    localStorage.setItem('gatewayz_onboarding_tasks', JSON.stringify(taskState));
+                    console.log('Onboarding - Chat task marked as complete');
+
+                    // Dispatch custom event to notify the banner
+                    window.dispatchEvent(new Event('onboarding-task-updated'));
+                }
+            } catch (error) {
+                console.error('Failed to update onboarding task:', error);
+            }
+        }
+
         // Guest mode: Increment message count after successful send
         if (!isAuthenticated) {
           const newCount = incrementGuestMessageCount();
