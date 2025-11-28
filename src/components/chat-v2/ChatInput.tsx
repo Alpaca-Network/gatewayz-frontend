@@ -175,7 +175,17 @@ export function ChatInput() {
 
           // Show warning when approaching limit
           const remaining = getRemainingGuestMessages();
-          if (remaining <= 3 && remaining > 0) {
+
+          if (remaining === 0) {
+            // Show banner when limit is reached
+            setShowGuestLimitWarning(true);
+            toast({
+              title: "Guest limit reached!",
+              description: `You've used all ${getGuestMessageLimit()} free messages. Sign up to continue chatting!`,
+              variant: "destructive",
+            });
+          } else if (remaining <= 3) {
+            // Show warning toast when approaching limit
             toast({
               title: `${remaining} ${remaining === 1 ? 'message' : 'messages'} remaining`,
               description: "Sign up to continue chatting without limits!",
