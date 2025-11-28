@@ -13,7 +13,16 @@ export function getGuestMessageCount(): number {
   if (typeof window === 'undefined') return 0;
 
   const count = localStorage.getItem(GUEST_MESSAGE_COUNT_KEY);
-  return count ? parseInt(count, 10) : 0;
+  if (!count) return 0;
+
+  const parsed = parseInt(count, 10);
+  // Handle corrupted values - return 0 and clear if NaN
+  if (isNaN(parsed)) {
+    localStorage.removeItem(GUEST_MESSAGE_COUNT_KEY);
+    return 0;
+  }
+
+  return parsed;
 }
 
 /**
