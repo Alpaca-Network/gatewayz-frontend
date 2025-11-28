@@ -51,6 +51,9 @@ export function ChatInput() {
   const audioInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Track if button should be disabled - use input ref for immediate value on mobile
+  const [isInputEmpty, setIsInputEmpty] = useState(true);
+
   // Expose focus method for external use (e.g., welcome screen prompt selection)
   const focusInput = useCallback(() => {
     inputRef.current?.focus();
@@ -69,20 +72,24 @@ export function ChatInput() {
   }, [focusInput]);
 
   const handleSend = async () => {
-    if ((!inputValue.trim() && !selectedImage && !selectedVideo && !selectedAudio) || isStreaming) return;
+    // Use the actual input field value to avoid race conditions on mobile
+    const currentInputValue = inputRef.current?.value || inputValue;
+
+    if ((!currentInputValue.trim() && !selectedImage && !selectedVideo && !selectedAudio) || isStreaming) return;
     if (!selectedModel) {
         toast({ title: "No model selected", variant: "destructive" });
         return;
     }
 
     // Capture current input values before any async operations
-    const messageText = inputValue;
+    const messageText = currentInputValue;
     const currentImage = selectedImage;
     const currentVideo = selectedVideo;
     const currentAudio = selectedAudio;
 
     // Clear input immediately for better UX
     setInputValue("");
+    setIsInputEmpty(true);
     setSelectedImage(null);
     setSelectedVideo(null);
     setSelectedAudio(null);
@@ -104,6 +111,7 @@ export function ChatInput() {
       } catch (e) {
         // Restore input on failure
         setInputValue(messageText);
+        setIsInputEmpty(!messageText.trim());
         setSelectedImage(currentImage);
         setSelectedVideo(currentVideo);
         setSelectedAudio(currentAudio);
@@ -220,7 +228,11 @@ export function ChatInput() {
             <Input
                 ref={inputRef}
                 value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
+                onChange={(e) => {
+                    const value = e.target.value;
+                    setInputValue(value);
+                    setIsInputEmpty(!value.trim());
+                }}
                 onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault();
@@ -230,12 +242,13 @@ export function ChatInput() {
                 placeholder="Type a message..."
                 className="flex-1 border-0 bg-background focus-visible:ring-0"
                 disabled={isStreaming}
+                enterKeyHint="send"
             />
 
             <Button
                 size="icon"
                 onClick={handleSend}
-                disabled={(!inputValue.trim() && !selectedImage && !selectedVideo && !selectedAudio) || isStreaming}
+                disabled={(isInputEmpty && !selectedImage && !selectedVideo && !selectedAudio) || isStreaming}
                 className={cn("bg-primary", isStreaming && "opacity-50")}
             >
                 {isStreaming ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
