@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { safeSessionStorage } from '@/lib/safe-session-storage';
+import { getUserData } from '@/lib/api';
 
 interface OnboardingTask {
   id: string;
@@ -21,6 +22,14 @@ export function OnboardingBanner() {
   const pathname = usePathname();
 
   useEffect(() => {
+    // Don't show banner for guest users (not authenticated)
+    const userData = getUserData();
+    if (!userData) {
+      setVisible(false);
+      document.documentElement.classList.remove('has-onboarding-banner');
+      return;
+    }
+
     // Check if onboarding is completed
     const completed = localStorage.getItem('gatewayz_onboarding_completed');
     if (completed) {
