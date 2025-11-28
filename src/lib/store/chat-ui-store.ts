@@ -19,7 +19,7 @@ export const useChatUIStore = create<ChatUIState>((set) => ({
   inputValue: '',
   selectedModel: {
       value: 'openrouter/auto',
-      label: 'Alpaca Router',
+      label: 'Gatewayz Router',
       category: 'Router',
       sourceGateway: 'openrouter',
       developer: 'Alpaca',

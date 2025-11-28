@@ -22,7 +22,7 @@ const ModelSelect = dynamic(() => import("@/components/chat/model-select").then(
 
 const DEFAULT_MODEL: ModelOption = {
   value: "openrouter/auto",
-  label: "Alpaca Router",
+  label: "Gatewayz Router",
   category: "Router",
   sourceGateway: "openrouter",
   developer: "Alpaca",
