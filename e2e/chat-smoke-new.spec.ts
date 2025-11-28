@@ -84,8 +84,19 @@ test.describe('Chat smoke (mocked backend)', () => {
 
     await page.goto('/chat');
 
-    // Wait for sidebar session to appear
-    await expect(page.getByText('Smoke Chat')).toBeVisible();
+    // Wait for the chat interface to be ready (not in loading state)
+    // The sidebar shows "Loading..." while fetching sessions
+    await page.waitForFunction(() => {
+      // Check if auth store is hydrated and authenticated
+      const apiKey = localStorage.getItem('gatewayz_api_key');
+      return !!apiKey;
+    }, { timeout: 5000 });
+
+    // Wait a moment for React state to sync after localStorage is read
+    await page.waitForTimeout(500);
+
+    // Wait for sidebar session to appear with extended timeout for auth sync and API calls
+    await expect(page.getByText('Smoke Chat')).toBeVisible({ timeout: 30000 });
 
     // Type and send a message
     const input = page.getByPlaceholder(/Message/i);

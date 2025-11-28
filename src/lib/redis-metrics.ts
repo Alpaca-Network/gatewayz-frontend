@@ -100,6 +100,17 @@ export class RedisMetricsService {
     this.redis = getRedisClient();
   }
 
+  /**
+   * Get the Redis client, throwing if not available
+   * Should only be called after checking isRedisAvailable()
+   */
+  private getRedis(): Redis {
+    if (!this.redis) {
+      throw new Error('Redis client not available');
+    }
+    return this.redis;
+  }
+
   // ==========================================================================
   // Time Bucketing Utilities
   // ==========================================================================
@@ -152,7 +163,7 @@ export class RedisMetricsService {
       }
 
       const bucket = this.getTimeBucket();
-      const pipeline = this.redis.pipeline();
+      const pipeline = this.getRedis().pipeline();
 
       // Increment request counters
       const modelKey = this.buildKey('metrics', 'model', options.model, 'requests', bucket);
@@ -187,7 +198,7 @@ export class RedisMetricsService {
       }
 
       const bucket = this.getTimeBucket();
-      const pipeline = this.redis.pipeline();
+      const pipeline = this.getRedis().pipeline();
 
       const latencyKey = this.buildKey('metrics', 'model', options.model, 'latency', bucket);
 
@@ -233,7 +244,7 @@ export class RedisMetricsService {
       }
 
       const bucket = this.getTimeBucket();
-      const pipeline = this.redis.pipeline();
+      const pipeline = this.getRedis().pipeline();
 
       const statusKey = this.buildKey('metrics', 'model', options.model, 'status', bucket);
 
@@ -270,7 +281,7 @@ export class RedisMetricsService {
       const statusKey = this.buildKey('metrics', 'model', model, 'status', timeBucket);
 
       // Get success and error counts
-      const stats = await this.redis.hgetall(statusKey);
+      const stats = await this.getRedis().hgetall(statusKey);
       const success = parseInt(stats.success || '0');
       const errorTimeout = parseInt(stats.error_timeout || '0');
       const errorRateLimit = parseInt(stats.error_rate_limit || '0');
@@ -283,8 +294,8 @@ export class RedisMetricsService {
         const successRate = (success / total) * 100;
 
         const healthKey = this.buildKey('metrics', 'health', 'models', timeBucket);
-        await this.redis.zadd(healthKey, successRate, model);
-        await this.redis.expire(healthKey, 3600);
+        await this.getRedis().zadd(healthKey, successRate, model);
+        await this.getRedis().expire(healthKey, 3600);
       }
     } catch (error) {
       console.error('[RedisMetrics] Failed to update health score:', error);
@@ -327,7 +338,7 @@ export class RedisMetricsService {
       }
 
       const bucket = this.getTimeBucket();
-      const pipeline = this.redis.pipeline();
+      const pipeline = this.getRedis().pipeline();
 
       if (type === 'success') {
         const successKey = this.buildKey('metrics', 'gateway', options.gateway, 'success', bucket);
@@ -374,9 +385,9 @@ export class RedisMetricsService {
       const statusKey = this.buildKey('metrics', 'model', modelId, 'status', bucket);
 
       const [requests, latencyData, statusData] = await Promise.all([
-        this.redis.get(requestKey),
-        this.redis.hgetall(latencyKey),
-        this.redis.hgetall(statusKey),
+        this.getRedis().get(requestKey),
+        this.getRedis().hgetall(latencyKey),
+        this.getRedis().hgetall(statusKey),
       ]);
 
       const requestCount = parseInt(requests || '0');
@@ -435,8 +446,8 @@ export class RedisMetricsService {
 
       // Get top or bottom models
       const results = order === 'desc'
-        ? await this.redis.zrevrange(healthKey, 0, limit - 1, 'WITHSCORES')
-        : await this.redis.zrange(healthKey, 0, limit - 1, 'WITHSCORES');
+        ? await this.getRedis().zrevrange(healthKey, 0, limit - 1, 'WITHSCORES')
+        : await this.getRedis().zrange(healthKey, 0, limit - 1, 'WITHSCORES');
 
       const leaderboard: HealthScore[] = [];
 
@@ -475,7 +486,7 @@ export class RedisMetricsService {
 
       // Get all model keys for this provider
       const pattern = this.buildKey('metrics', 'model', `${provider}/*`, 'requests', bucket);
-      const keys = await this.redis.keys(pattern);
+      const keys = await this.getRedis().keys(pattern);
 
       if (keys.length === 0) {
         return null;
@@ -577,7 +588,7 @@ export class RedisMetricsService {
           const startTime = bucketDate.getTime();
           const endTime = startTime + 60 * 60 * 1000; // 1 hour
 
-          const values = await this.redis.zrangebyscore(seriesKey, startTime, endTime);
+          const values = await this.getRedis().zrangebyscore(seriesKey, startTime, endTime);
 
           if (values.length > 0) {
             const avg = values.reduce((sum, v) => sum + parseFloat(v), 0) / values.length;

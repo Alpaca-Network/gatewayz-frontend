@@ -76,12 +76,10 @@ export function OnboardingBanner() {
     // Show banner if there are incomplete tasks
     const shouldShow = !!incomplete;
     setVisible(shouldShow);
-    
+
     // Add/remove class to document element for CSS targeting
     if (shouldShow) {
       document.documentElement.classList.add('has-onboarding-banner');
-      document.documentElement.style.setProperty('--sidebar-top', '130px');
-      document.documentElement.style.setProperty('--sidebar-height', 'calc(100vh - 130px)');
       // Measure banner height after render - use requestAnimationFrame to ensure DOM is ready
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
@@ -89,9 +87,15 @@ export function OnboardingBanner() {
           if (bannerElement) {
             const bannerHeight = bannerElement.getBoundingClientRect().height;
             const headerTop = 65 + bannerHeight;
+            document.documentElement.style.setProperty('--sidebar-top', `${headerTop}px`);
+            document.documentElement.style.setProperty('--sidebar-height', `calc(100vh - ${headerTop}px)`);
             document.documentElement.style.setProperty('--models-header-top', `${headerTop}px`);
+            document.documentElement.style.setProperty('--onboarding-banner-height', `${bannerHeight}px`);
           } else {
-            document.documentElement.style.setProperty('--models-header-top', '115px');
+            document.documentElement.style.setProperty('--sidebar-top', '105px');
+            document.documentElement.style.setProperty('--sidebar-height', 'calc(100vh - 105px)');
+            document.documentElement.style.setProperty('--models-header-top', '105px');
+            document.documentElement.style.setProperty('--onboarding-banner-height', '40px');
           }
         });
       });
@@ -100,6 +104,7 @@ export function OnboardingBanner() {
       document.documentElement.style.setProperty('--sidebar-top', '65px');
       document.documentElement.style.setProperty('--sidebar-height', 'calc(100vh - 65px)');
       document.documentElement.style.setProperty('--models-header-top', '65px');
+      document.documentElement.style.setProperty('--onboarding-banner-height', '0px');
     }
   }, [pathname]);
 
@@ -109,21 +114,22 @@ export function OnboardingBanner() {
     document.documentElement.style.setProperty('--sidebar-top', '65px');
     document.documentElement.style.setProperty('--sidebar-height', 'calc(100vh - 65px)');
     document.documentElement.style.setProperty('--models-header-top', '65px');
-    
+    document.documentElement.style.setProperty('--onboarding-banner-height', '0px');
+
     // Update spacer height
     const spacer = document.querySelector('[data-header-spacer]');
     if (spacer) {
       (spacer as HTMLElement).style.height = '65px';
     }
-    
+
     // Update page content padding for other pages
     const pageContents = document.querySelectorAll('[data-page-content]');
     pageContents.forEach((content) => {
       (content as HTMLElement).style.paddingTop = '128px'; // pt-32
     });
-    
+
     // Chat will adjust automatically via CSS classes
-    
+
     // Remember dismissal for this session
     safeSessionStorage.setItem('onboarding_banner_dismissed', 'true');
   };
@@ -137,46 +143,46 @@ export function OnboardingBanner() {
 
   return (
     <div data-onboarding-banner className="bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-md fixed top-[65px] left-0 right-0 z-30">
-      <div className="px-3 sm:px-4 py-2.5 sm:py-3 w-full">
-        {/* Mobile layout: stacked on xs/sm screens */}
-        <div className="md:hidden space-y-2">
-          {/* Progress and dismiss on same row */}
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1.5 flex-shrink-0">
-              <div className="flex items-center gap-1">
-                {tasks.map((task) => (
-                  <div
-                    key={task.id}
-                    className={`h-2 w-2 rounded-full transition-colors ${
-                      task.completed ? 'bg-green-300' : 'bg-white/30'
-                    }`}
-                  />
-                ))}
-              </div>
-              <span className="text-xs sm:text-sm font-medium whitespace-nowrap">
-                {completedCount}/{totalCount}
-              </span>
+      <div className="px-3 sm:px-4 py-1.5 sm:py-2 w-full">
+        {/* Mobile layout: single row on xs/sm screens */}
+        <div className="md:hidden flex items-center justify-between gap-2">
+          {/* Progress dots and count */}
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <div className="flex items-center gap-1">
+              {tasks.map((task) => (
+                <div
+                  key={task.id}
+                  className={`h-2 w-2 rounded-full transition-colors ${
+                    task.completed ? 'bg-green-300' : 'bg-white/30'
+                  }`}
+                />
+              ))}
             </div>
-            <button
-              onClick={handleDismiss}
-              className="flex-shrink-0 hover:bg-white/20 rounded-full p-1 transition-colors"
-              aria-label="Dismiss banner"
-            >
-              <X className="h-4 w-4" />
-            </button>
+            <span className="text-xs font-medium whitespace-nowrap">
+              {completedCount}/{totalCount}
+            </span>
           </div>
 
-          {/* Next task button */}
-          <Link href={nextTask.path} className="block w-full">
+          {/* Next task button - compact */}
+          <Link href={nextTask.path} className="flex-1 min-w-0">
             <Button
               variant="ghost"
               size="sm"
-              className="!bg-white/20 !text-white hover:!bg-white/30 hover:!text-white font-semibold border border-white/30 text-xs w-full justify-start"
+              className="!bg-white/20 !text-white hover:!bg-white/30 hover:!text-white font-semibold border border-white/30 text-xs h-7 px-2 w-full justify-start"
             >
               <span className="truncate flex-1 text-left">{nextTask.title}</span>
               <ArrowRight className="ml-1 h-3 w-3 flex-shrink-0" />
             </Button>
           </Link>
+
+          {/* Dismiss button */}
+          <button
+            onClick={handleDismiss}
+            className="flex-shrink-0 hover:bg-white/20 rounded-full p-1 transition-colors"
+            aria-label="Dismiss banner"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
 
         {/* Desktop layout: horizontal on md+ screens */}
