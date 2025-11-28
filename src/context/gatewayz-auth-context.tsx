@@ -25,6 +25,8 @@ import {
   storeSessionTransferToken,
   getStoredSessionTransferToken,
 } from "@/integrations/privy/auth-session-transfer";
+import { getReferralCode, clearReferralCode } from "@/lib/referral";
+import { resetGuestMessageCount } from "@/lib/guest-chat";
 
 type AuthStatus = "idle" | "unauthenticated" | "authenticating" | "authenticated" | "error";
 
@@ -451,15 +453,19 @@ export function GatewayzAuthProvider({
       lastSyncedPrivyIdRef.current = authData.privy_user_id || null;
       setStatus("authenticated");
 
-      // Clear referral code if present
-      const referralCode = localStorage.getItem("gatewayz_referral_code");
+      // Clear referral code and reset guest message count if present
+      const referralCode = getReferralCode();
       if (referralCode) {
-        localStorage.removeItem("gatewayz_referral_code");
+        clearReferralCode();
         if (authData.is_new_user ?? isNewUserExpected) {
           localStorage.setItem("gatewayz_show_referral_bonus", "true");
         }
-        console.log("Referral code cleared from localStorage after successful auth");
+        console.log("[Auth] Referral code cleared from localStorage after successful auth");
       }
+
+      // Reset guest message count when user signs up
+      resetGuestMessageCount();
+      console.log("[Auth] Guest message count reset after successful auth");
 
       // Verify localStorage was written before redirecting
       const savedUserData = getUserData();
@@ -575,18 +581,8 @@ export function GatewayzAuthProvider({
       const isNewUser = !existingGatewayzUser;
       const hasStoredApiKey = Boolean(existingGatewayzUser?.api_key);
 
-      // Check for referral code from storage or URL
-      let referralCode = localStorage.getItem("gatewayz_referral_code");
-      if (!referralCode && typeof window !== "undefined") {
-        const urlParams = new URLSearchParams(window.location.search);
-        const urlRefCode = urlParams.get("ref");
-        if (urlRefCode) {
-          referralCode = urlRefCode;
-          localStorage.setItem("gatewayz_referral_code", urlRefCode);
-          console.log("[Auth] Captured referral code from URL:", urlRefCode);
-        }
-      }
-
+      // Get referral code using utility (checks URL and localStorage)
+      const referralCode = getReferralCode();
       console.log("[Auth] Final referral code:", referralCode);
 
       const authRequestBody = {

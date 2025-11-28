@@ -71,7 +71,7 @@ export function ChatLayout() {
    useAuthSync(); // Trigger auth sync
    const { isAuthenticated, isLoading: authLoading } = useAuthStore();
    const { selectedModel, setSelectedModel, activeSessionId, setActiveSessionId, setInputValue, mobileSidebarOpen, setMobileSidebarOpen } = useChatUIStore();
-   
+
    // Handle prompt selection from welcome screen - auto-send the message
    const handlePromptSelect = (text: string) => {
        setInputValue(text);
@@ -87,7 +87,7 @@ export function ChatLayout() {
    const { data: activeMessages = [], isLoading: messagesLoading } = useSessionMessages(activeSessionId);
    const showWelcomeScreen = !activeSessionId || (!messagesLoading && activeMessages.length === 0);
 
-   if (authLoading && !isAuthenticated) {
+   if (authLoading) {
        return (
            <div className="flex flex-1 items-center justify-center">
                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
@@ -95,15 +95,7 @@ export function ChatLayout() {
        );
    }
 
-   // Optional: Show login prompt if not authenticated (though Layout handles this usually)
-   if (!isAuthenticated) {
-       return (
-            <div className="flex flex-1 items-center justify-center flex-col gap-4">
-                <h2 className="text-xl font-semibold">Please Log In</h2>
-                <p className="text-muted-foreground">You need to be logged in to use the chat.</p>
-            </div>
-       );
-   }
+   // Allow guest mode - no login required
 
    return (
        <div className="flex flex-1 w-full overflow-hidden bg-background">
