@@ -520,7 +520,7 @@ $([[ '${{ needs.build.result }}' == 'failure' ]] && echo '  - build errors')
   ci-success:
     name: CI Success
     runs-on: ubuntu-latest
-    needs: [check-merge-conflicts, resolve-conflicts, test, lint, typecheck, build, e2e, fix-ci]
+    needs: [check-merge-conflicts, resolve-conflicts, test, lint, typecheck, build, e2e]
     if: always()
 
     steps:
@@ -564,10 +564,6 @@ $([[ '${{ needs.build.result }}' == 'failure' ]] && echo '  - build errors')
             exit 1
           fi
 
-          # fix-ci job is optional (skipped if no failures)
-          if [[ "${{ needs.fix-ci.result }}" == "failure" ]]; then
-            echo "Fix CI job failed"
-            exit 1
-          fi
+          # Note: fix-ci job is not checked here as it's an optional recovery job
 
           echo "All CI checks passed successfully"
