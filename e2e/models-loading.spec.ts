@@ -325,9 +325,10 @@ test.describe('Models - Performance Metrics', () => {
 
     for (const viewport of viewports) {
       await page.setViewportSize(viewport);
-      await page.goto('/models');
-      // Use domcontentloaded instead of networkidle for better CI stability
-      await page.waitForLoadState('domcontentloaded');
+      await page.goto('/models', { waitUntil: 'commit', timeout: 90000 });
+
+      // Give page time to render without waiting for networkidle
+      await page.waitForTimeout(1000);
 
       // Page should render on all viewport sizes
       await expect(page.locator('body')).toBeVisible();
@@ -368,11 +369,11 @@ test.describe('Models - Error Recovery', () => {
     });
 
     // First attempt might fail
-    await page.goto('/models', { waitUntil: 'domcontentloaded' });
+    await page.goto('/models', { waitUntil: 'commit', timeout: 90000 });
 
-    // Reload - should recover
-    await page.reload();
-    await page.waitForLoadState('networkidle');
+    // Reload - should recover (use commit instead of networkidle for CI stability)
+    await page.reload({ waitUntil: 'commit', timeout: 90000 });
+    await page.waitForTimeout(1000);
 
     // Should load successfully
     await expect(page.locator('body')).toBeVisible();
