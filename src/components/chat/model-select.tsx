@@ -598,16 +598,18 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
           role="combobox"
           aria-expanded={open}
           className="w-full sm:w-[250px] justify-between bg-muted/30 hover:bg-muted/50 touch-manipulation"
-          disabled={loading}
           onMouseEnter={handlePrefetchModels}
         >
-          {loading ? (
+          {selectedModel ? (
+            <>
+              <span className="truncate text-sm sm:text-base">{selectedModel.label}</span>
+              {loading && <Loader2 className="ml-1 h-3 w-3 animate-spin flex-shrink-0 opacity-50" />}
+            </>
+          ) : loading ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin flex-shrink-0" />
               <span className="truncate">Loading...</span>
             </>
-          ) : selectedModel ? (
-            <span className="truncate text-sm sm:text-base">{selectedModel.label}</span>
           ) : (
             <span className="truncate text-sm sm:text-base">Select model...</span>
           )}
