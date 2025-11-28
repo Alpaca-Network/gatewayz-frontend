@@ -38,8 +38,8 @@ export default defineConfig({
   workers: process.env.CI ? 3 : 4,
 
   // Global timeout for each test
-  // Increased slightly for complex pages like /models which load lots of data
-  timeout: process.env.CI ? 45 * 1000 : 60 * 1000,
+  // Set to 60s for /models page which loads 300+ models and waits for networkidle
+  timeout: process.env.CI ? 60 * 1000 : 60 * 1000,
 
   // Expect timeout
   expect: {
@@ -68,7 +68,7 @@ export default defineConfig({
     navigationTimeout: process.env.PLAYWRIGHT_NAVIGATION_TIMEOUT
       ? parseInt(process.env.PLAYWRIGHT_NAVIGATION_TIMEOUT)
       : process.env.CI
-      ? 45 * 1000 // 45 seconds for data-heavy pages in CI
+      ? 60 * 1000 // 60 seconds for /models page with networkidle wait
       : 120 * 1000, // 2 minutes for cold Next.js dev server compiles locally
 
     // Action timeout (clicks, fills, etc.)
