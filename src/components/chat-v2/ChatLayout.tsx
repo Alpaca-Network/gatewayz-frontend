@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useMemo } from "react";
 import { Menu, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
@@ -13,13 +14,39 @@ import { useAuthStore } from "@/lib/store/auth-store";
 import { Card } from "@/components/ui/card";
 import { useSessionMessages } from "@/lib/hooks/use-chat-queries";
 
+// Pool of prompts to randomly select from
+const ALL_PROMPTS = [
+    { title: "What model is better for coding?", subtitle: "Compare different AI models for programming tasks" },
+    { title: "How long would it take to walk to the moon?", subtitle: "Calculate travel time and distance to the moon" },
+    { title: "When did England last win the world cup?", subtitle: "Get the latest football world cup information" },
+    { title: "Which athlete has won the most gold medals?", subtitle: "Find Olympic and sports statistics" },
+    { title: "Explain quantum computing in simple terms", subtitle: "Break down complex quantum concepts" },
+    { title: "What are the best practices for API design?", subtitle: "Learn about RESTful API patterns" },
+    { title: "How does machine learning differ from AI?", subtitle: "Understand the relationship between ML and AI" },
+    { title: "What's the fastest animal on Earth?", subtitle: "Discover amazing animal facts" },
+    { title: "How do black holes form?", subtitle: "Explore the mysteries of space" },
+    { title: "What programming language should I learn first?", subtitle: "Get guidance on starting your coding journey" },
+    { title: "Explain the theory of relativity", subtitle: "Understand Einstein's groundbreaking theory" },
+    { title: "What are the health benefits of meditation?", subtitle: "Learn about mindfulness and wellness" },
+    { title: "How does cryptocurrency work?", subtitle: "Understand blockchain and digital currencies" },
+    { title: "What caused the extinction of dinosaurs?", subtitle: "Explore prehistoric mysteries" },
+    { title: "How can I improve my writing skills?", subtitle: "Tips for better communication" },
+    { title: "What's the difference between HTTP and HTTPS?", subtitle: "Learn about web security basics" },
+];
+
+// Fisher-Yates shuffle algorithm
+function shuffleArray<T>(array: T[]): T[] {
+    const shuffled = [...array];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
+}
+
 function WelcomeScreen({ onPromptSelect }: { onPromptSelect: (txt: string) => void }) {
-    const prompts = [
-        { title: "What model is better for coding?", subtitle: "Compare different AI models for programming tasks" },
-        { title: "How long would it take to walk to the moon?", subtitle: "Calculate travel time and distance to the moon" },
-        { title: "When did England last win the world cup?", subtitle: "Get the latest football world cup information" },
-        { title: "Which athlete has won the most gold medals?", subtitle: "Find Olympic and sports statistics" }
-    ];
+    // Select 4 random prompts on mount (useMemo ensures consistency during render)
+    const [prompts] = useState(() => shuffleArray(ALL_PROMPTS).slice(0, 4));
 
     return (
         <div className="flex-1 flex flex-col items-center justify-center p-4 overflow-y-auto">
@@ -45,14 +72,14 @@ export function ChatLayout() {
    const { isAuthenticated, isLoading: authLoading } = useAuthStore();
    const { selectedModel, setSelectedModel, activeSessionId, setActiveSessionId, setInputValue, mobileSidebarOpen, setMobileSidebarOpen } = useChatUIStore();
    
-   // Handle prompt selection from welcome screen
+   // Handle prompt selection from welcome screen - auto-send the message
    const handlePromptSelect = (text: string) => {
        setInputValue(text);
-       // Focus the input after setting the value
-       // Use requestAnimationFrame to ensure the DOM has updated
+       // Trigger send after setting the value
+       // Use requestAnimationFrame to ensure the state has updated
        requestAnimationFrame(() => {
-           if (typeof window !== 'undefined' && (window as any).__chatInputFocus) {
-               (window as any).__chatInputFocus();
+           if (typeof window !== 'undefined' && (window as any).__chatInputSend) {
+               (window as any).__chatInputSend();
            }
        });
    };

@@ -51,8 +51,8 @@ export function ChatInput() {
   const audioInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Track if button should be disabled - use input ref for immediate value on mobile
-  const [isInputEmpty, setIsInputEmpty] = useState(true);
+  // Derive input empty state directly from inputValue to avoid desync issues
+  const isInputEmpty = !inputValue.trim();
 
   // Expose focus method for external use (e.g., welcome screen prompt selection)
   const focusInput = useCallback(() => {
@@ -89,7 +89,6 @@ export function ChatInput() {
 
     // Clear input immediately for better UX
     setInputValue("");
-    setIsInputEmpty(true);
     setSelectedImage(null);
     setSelectedVideo(null);
     setSelectedAudio(null);
@@ -111,7 +110,6 @@ export function ChatInput() {
       } catch (e) {
         // Restore input on failure
         setInputValue(messageText);
-        setIsInputEmpty(!messageText.trim());
         setSelectedImage(currentImage);
         setSelectedVideo(currentVideo);
         setSelectedAudio(currentAudio);
@@ -142,6 +140,18 @@ export function ChatInput() {
         toast({ title: "Failed to send message", variant: "destructive" });
     }
   };
+
+  // Expose send function for prompt auto-send from WelcomeScreen
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).__chatInputSend = handleSend;
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        delete (window as any).__chatInputSend;
+      }
+    };
+  });
 
   const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
@@ -228,11 +238,7 @@ export function ChatInput() {
             <Input
                 ref={inputRef}
                 value={inputValue}
-                onChange={(e) => {
-                    const value = e.target.value;
-                    setInputValue(value);
-                    setIsInputEmpty(!value.trim());
-                }}
+                onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault();
@@ -246,6 +252,7 @@ export function ChatInput() {
             />
 
             <Button
+                type="button"
                 size="icon"
                 onClick={handleSend}
                 disabled={(isInputEmpty && !selectedImage && !selectedVideo && !selectedAudio) || isStreaming}
