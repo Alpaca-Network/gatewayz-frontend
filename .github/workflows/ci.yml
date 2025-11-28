@@ -391,11 +391,7 @@ jobs:
           # Check for changes
           if ! git diff --quiet; then
             git add -A
-            git commit -m "fix: resolve merge conflicts
-
-Merge conflicts automatically resolved using Cursor agent.
-
-🤖 Co-authored-by: Cursor Agent <cursor@github.com>"
+            git commit -m "fix: resolve merge conflicts" -m "Merge conflicts automatically resolved using Cursor agent." -m "🤖 Co-authored-by: Cursor Agent <cursor@github.com>"
 
             # Push to the same branch
             git push origin HEAD:${{ github.head_ref || github.ref_name }}
@@ -498,15 +494,14 @@ Merge conflicts automatically resolved using Cursor agent.
           # Check for changes
           if ! git diff --quiet; then
             git add -A
-            git commit -m "fix: resolve CI failures
-
-Fixes automatically applied by Cursor CLI for:
-$([[ '${{ needs.test.result }}' == 'failure' ]] && echo '  - test failures')
-$([[ '${{ needs.lint.result }}' == 'failure' ]] && echo '  - lint errors')
-$([[ '${{ needs.typecheck.result }}' == 'failure' ]] && echo '  - type errors')
-$([[ '${{ needs.build.result }}' == 'failure' ]] && echo '  - build errors')
-
-🤖 Co-authored-by: Cursor CLI <cursor@github.com>"
+            # Build commit message dynamically
+            COMMIT_MSG="fix: resolve CI failures"
+            [[ '${{ needs.test.result }}' == 'failure' ]] && COMMIT_MSG="$COMMIT_MSG\n- test failures"
+            [[ '${{ needs.lint.result }}' == 'failure' ]] && COMMIT_MSG="$COMMIT_MSG\n- lint errors"
+            [[ '${{ needs.typecheck.result }}' == 'failure' ]] && COMMIT_MSG="$COMMIT_MSG\n- type errors"
+            [[ '${{ needs.build.result }}' == 'failure' ]] && COMMIT_MSG="$COMMIT_MSG\n- build errors"
+            COMMIT_MSG="$COMMIT_MSG\n\n🤖 Co-authored-by: Cursor CLI <cursor@github.com>"
+            git commit -m "$COMMIT_MSG"
 
             # Push to the same branch
             git push origin HEAD:${{ github.head_ref || github.ref_name }}
