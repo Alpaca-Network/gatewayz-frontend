@@ -75,14 +75,15 @@ export function ChatLayout() {
 
    // Handle prompt selection from welcome screen - auto-send the message
    const handlePromptSelect = (text: string) => {
+       // Set the input value first
        setInputValue(text);
-       // Trigger send after setting the value
-       // Use requestAnimationFrame to ensure the state has updated
-       requestAnimationFrame(() => {
+       // Use a small delay to ensure Zustand state is propagated, then trigger send
+       // setTimeout(0) pushes to next event loop tick after state update
+       setTimeout(() => {
            if (typeof window !== 'undefined' && (window as any).__chatInputSend) {
                (window as any).__chatInputSend();
            }
-       });
+       }, 0);
    };
 
    const { data: activeMessages = [], isLoading: messagesLoading } = useSessionMessages(activeSessionId);
