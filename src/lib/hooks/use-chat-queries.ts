@@ -34,7 +34,7 @@ const getChatApiNow = (): ChatHistoryAPI | null => {
 
 export const useChatSessions = () => {
   const api = useChatApi();
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, isLoading } = useAuthStore();
 
   return useQuery({
     queryKey: ['chat-sessions'],
@@ -43,7 +43,9 @@ export const useChatSessions = () => {
       // Use cache-aware loading that returns cached data immediately
       return api.getSessionsWithCache(50, 0);
     },
-    enabled: !!api && isAuthenticated,
+    // Only fetch when fully authenticated and not in loading state
+    // This prevents unnecessary API calls during auth transitions or when logged out
+    enabled: !!api && isAuthenticated && !isLoading,
     staleTime: 5 * 60 * 1000, // 5 minutes cache
     // Always return cached data immediately while fetching in background
     placeholderData: (previousData) => previousData,
@@ -52,7 +54,7 @@ export const useChatSessions = () => {
 
 export const useSessionMessages = (sessionId: number | null) => {
   const api = useChatApi();
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, isLoading } = useAuthStore();
 
   return useQuery({
     queryKey: ['chat-messages', sessionId],
@@ -61,7 +63,8 @@ export const useSessionMessages = (sessionId: number | null) => {
       const session = await api.getSession(sessionId);
       return session.messages || [];
     },
-    enabled: !!api && !!sessionId && isAuthenticated,
+    // Only fetch when fully authenticated and not in loading state
+    enabled: !!api && !!sessionId && isAuthenticated && !isLoading,
     staleTime: 60 * 1000,
     // Keep previous data while fetching to prevent UI flicker
     placeholderData: (previousData) => previousData,
