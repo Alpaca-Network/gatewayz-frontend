@@ -28,7 +28,6 @@ export function useChatStream() {
     const [isStreaming, setIsStreaming] = useState(false);
     const [streamError, setStreamError] = useState<string | null>(null);
     const streamHandlerRef = useRef<ChatStreamHandler>(new ChatStreamHandler());
-    const { apiKey: storeApiKey } = useAuthStore();
     const saveMessage = useSaveMessage();
     const queryClient = useQueryClient();
 
@@ -43,6 +42,11 @@ export function useChatStream() {
         model: ModelOption,
         messagesHistory: any[]
     }) => {
+        // IMPORTANT: Use getState() for imperative access to avoid stale closure issues
+        // The previous approach captured storeApiKey at render time, which could be null
+        // even when auth had completed but the component hadn't re-rendered yet.
+        // This pattern ensures we always get the latest auth state at execution time.
+        const storeApiKey = useAuthStore.getState().apiKey;
         // Try store first, fall back to localStorage for auth state desync fix
         const apiKey = storeApiKey || getApiKey();
         if (!apiKey) throw new Error("No API Key");
@@ -190,7 +194,7 @@ export function useChatStream() {
             setIsStreaming(false);
         }
 
-    }, [storeApiKey, queryClient, saveMessage]);
+    }, [queryClient, saveMessage]);
 
     return {
         isStreaming,
