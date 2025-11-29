@@ -212,6 +212,16 @@ export class ChatHistoryAPI {
 
           clearTimeout(timeoutId);
 
+          // Handle 401 specifically - invalid API key, trigger re-auth
+          if (response.status === 401) {
+            console.error('ChatHistoryAPI.createSession - Authentication failed (401), API key may be invalid');
+            // Dispatch auth refresh event to trigger re-authentication
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new Event('gatewayz:refresh-auth'));
+            }
+            throw new Error('Session authentication failed. Please try refreshing the page.');
+          }
+
           if (!response.ok) {
             const error = await response.json();
             throw new Error(error.detail || `HTTP ${response.status}: ${response.statusText}`);
@@ -295,6 +305,15 @@ export class ChatHistoryAPI {
 
         clearTimeout(timeoutId);
 
+        // Handle 401 specifically - invalid API key, trigger re-auth
+        if (response.status === 401) {
+          console.error('ChatHistoryAPI.updateSession - Authentication failed (401), API key may be invalid');
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new Event('gatewayz:refresh-auth'));
+          }
+          throw new Error('Session authentication failed. Please try refreshing the page.');
+        }
+
         if (!response.ok) {
           const error = await response.json().catch(() => ({ error: 'Failed to update session' }));
           throw new Error(error.error || `HTTP ${response.status}: ${response.statusText}`);
@@ -348,6 +367,15 @@ export class ChatHistoryAPI {
         });
 
         clearTimeout(timeoutId);
+
+        // Handle 401 specifically - invalid API key, trigger re-auth
+        if (response.status === 401) {
+          console.error('ChatHistoryAPI.deleteSession - Authentication failed (401), API key may be invalid');
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new Event('gatewayz:refresh-auth'));
+          }
+          throw new Error('Session authentication failed. Please try refreshing the page.');
+        }
 
         if (!response.ok) {
           const error = await response.json().catch(() => ({ error: 'Failed to delete session' }));
@@ -450,6 +478,15 @@ export class ChatHistoryAPI {
       });
 
       clearTimeout(timeoutId);
+
+      // Handle 401 specifically - invalid API key, trigger re-auth
+      if (response.status === 401) {
+        console.error('ChatHistoryAPI.saveMessageImmediate - Authentication failed (401), API key may be invalid');
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('gatewayz:refresh-auth'));
+        }
+        throw new Error('Session authentication failed. Please try refreshing the page.');
+      }
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));
