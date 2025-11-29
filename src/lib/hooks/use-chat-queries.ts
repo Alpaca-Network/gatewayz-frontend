@@ -20,11 +20,13 @@ const getChatApiNow = (): ChatHistoryAPI | null => {
     return new ChatHistoryAPI(storeState.apiKey, undefined, storeState.userData.privy_user_id);
   }
 
-  // Fallback to localStorage (handles race conditions on mobile)
+  // Fallback to localStorage (handles race conditions on mobile and during auth transitions)
+  // This is critical for session creation when auth state is still loading
   const apiKey = getApiKey();
   const userData = getUserData();
-  if (apiKey && userData) {
-    return new ChatHistoryAPI(apiKey, undefined, userData.privy_user_id);
+  if (apiKey) {
+    // userData may not be fully populated yet, but we can still create sessions
+    return new ChatHistoryAPI(apiKey, undefined, userData?.privy_user_id);
   }
 
   return null;

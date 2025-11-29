@@ -86,8 +86,11 @@ export function ChatInput() {
   }, [focusInput]);
 
   const handleSend = useCallback(async () => {
-    // Use the actual input field value to avoid race conditions on mobile
-    const currentInputValue = inputRef.current?.value || inputValue;
+    // IMPORTANT: Use fresh state from Zustand store to avoid stale closures
+    // This is critical for preloaded message clicks where inputValue was just set
+    const freshInputValue = useChatUIStore.getState().inputValue;
+    // Also check the actual input field as a fallback for typing scenarios
+    const currentInputValue = freshInputValue || inputRef.current?.value || inputValue;
 
     if ((!currentInputValue.trim() && !selectedImage && !selectedVideo && !selectedAudio) || isStreaming) return;
     if (!selectedModel) {
