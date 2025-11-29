@@ -7,6 +7,7 @@ import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/s
 import { ChatSidebar } from "./ChatSidebar";
 import { MessageList } from "./MessageList";
 import { ChatInput } from "./ChatInput";
+import { ConnectionStatus } from "./ConnectionStatus";
 import { ModelSelect } from "@/components/chat/model-select";
 import { useChatUIStore } from "@/lib/store/chat-ui-store";
 import { useAuthSync } from "@/lib/hooks/use-auth-sync";
@@ -14,6 +15,7 @@ import { useAuthStore } from "@/lib/store/auth-store";
 import { Card } from "@/components/ui/card";
 import { useSessionMessages } from "@/lib/hooks/use-chat-queries";
 import { GuestChatCounter } from "@/components/chat/guest-chat-counter";
+import { useNetworkStatus } from "@/hooks/use-network-status";
 
 // Pool of prompts to randomly select from
 const ALL_PROMPTS = [
@@ -151,6 +153,9 @@ export function ChatLayout() {
                        <ModelSelect selectedModel={selectedModel} onSelectModel={setSelectedModel} />
                    </div>
                </header>
+
+              {/* Connection Status - shows when offline or has pending/failed messages */}
+              <ConnectionStatus className="mx-auto mt-2" />
 
               {/* Main Content */}
               <div className="flex-1 overflow-hidden relative z-10 flex flex-col">
