@@ -2,6 +2,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ChatHistoryAPI, ChatSession } from '@/lib/chat-history';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { getApiKey, getUserData } from '@/lib/api';
+import { networkMonitor } from '@/lib/network-utils';
+import { executeWithOfflineRetry } from '@/lib/network-utils';
 
 // Helper to get API instance with current credentials (for queries)
 const useChatApi = () => {
@@ -83,7 +85,16 @@ export const useCreateSession = () => {
       // Get API at execution time to avoid stale closure issues on mobile
       const api = getChatApiNow();
       if (!api) throw new Error("Not authenticated");
-      return api.createSession(title, model);
+
+      // Use offline-aware retry wrapper for reliability on spotty connections
+      return executeWithOfflineRetry(
+        () => api.createSession(title, model),
+        {
+          maxRetries: 3,
+          retryDelayMs: 2000,
+          waitForOnlineTimeoutMs: 30000,
+        }
+      );
     },
     onSuccess: (newSession) => {
       // Invalidate sessions list to refetch
@@ -91,7 +102,17 @@ export const useCreateSession = () => {
       // Pre-seed the cache for this new session
       queryClient.setQueryData(['chat-sessions', newSession.id], newSession);
       queryClient.setQueryData(['chat-messages', newSession.id], []);
-    }
+    },
+    // Configure retry behavior at the mutation level
+    retry: (failureCount, error) => {
+      // Don't retry auth errors
+      if (error instanceof Error && error.message.includes('Not authenticated')) {
+        return false;
+      }
+      // Retry up to 2 more times for network errors
+      return failureCount < 2;
+    },
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
   });
 };
 
