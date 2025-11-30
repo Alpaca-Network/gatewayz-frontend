@@ -168,7 +168,15 @@ export function useSessions(options: UseSessionsOptions = {}): UseSessionsReturn
       }
 
       const data = await response.json();
-      const newSession = toSession(data.session || data);
+      const sessionData = data.session || data;
+
+      // Validate the response has required session fields
+      if (!sessionData || typeof sessionData.id !== 'number') {
+        console.error('[useSessions] Invalid session response:', data);
+        throw new Error('Failed to create session: Invalid response from server');
+      }
+
+      const newSession = toSession(sessionData);
 
       // Optimistic update - add to beginning of list
       setSessions(prev => [newSession, ...prev]);
