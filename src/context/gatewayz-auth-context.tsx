@@ -47,8 +47,8 @@ const AUTH_STATE_TRANSITIONS: Record<AuthStatus, AuthStatus[]> = {
 
 // Auth retry configuration
 const MAX_AUTH_RETRIES = 3;
-const AUTHENTICATING_TIMEOUT_MS = 30000; // 30 seconds
-const TOKEN_TIMEOUT_BASE_MS = 5000; // Base 5 seconds, adaptive up to 10s
+const AUTHENTICATING_TIMEOUT_MS = 60000; // 60 seconds - increased to handle slow backend responses
+const TOKEN_TIMEOUT_BASE_MS = 8000; // Base 8 seconds, adaptive up to 15s
 
 interface GatewayzAuthContextValue {
   status: AuthStatus;
@@ -74,11 +74,12 @@ interface GatewayzAuthProviderProps {
 export const GatewayzAuthContext = createContext<GatewayzAuthContextValue | undefined>(undefined);
 const TEMP_API_KEY_PREFIX = "gw_temp_";
 
-const BACKEND_PROXY_TIMEOUT_MS = 15000;
+// Backend proxy configuration - increased timeouts to handle slow responses
+const BACKEND_PROXY_TIMEOUT_MS = 20000; // 20 seconds per retry
 const BACKEND_PROXY_MAX_RETRIES = 3;
-const BACKEND_PROXY_SAFETY_BUFFER_MS = 5000;
+const BACKEND_PROXY_SAFETY_BUFFER_MS = 10000; // 10 seconds buffer
 const MIN_AUTH_SYNC_TIMEOUT_MS =
-  BACKEND_PROXY_TIMEOUT_MS * BACKEND_PROXY_MAX_RETRIES + BACKEND_PROXY_SAFETY_BUFFER_MS;
+  BACKEND_PROXY_TIMEOUT_MS * BACKEND_PROXY_MAX_RETRIES + BACKEND_PROXY_SAFETY_BUFFER_MS; // 70 seconds total
 
 const stripUndefined = <T,>(value: T): T => {
   if (Array.isArray(value)) {
@@ -227,20 +228,52 @@ export function GatewayzAuthProvider({
     }
   }, []);
 
-  // Set authenticating timeout guard
+  // Set authenticating timeout guard with automatic retry
   const setAuthTimeout = useCallback(() => {
     clearAuthTimeout();
     authTimeoutRef.current = setTimeout(() => {
-      console.error("[Auth] Authentication timeout - stuck in authenticating state for 30s");
-      setAuthStatus("error", "timeout");
-      setError("Authentication timeout - please try again");
+      console.error(`[Auth] Authentication timeout - stuck in authenticating state for ${AUTHENTICATING_TIMEOUT_MS / 1000}s`);
 
-      Sentry.captureMessage("Authentication timeout - stuck in authenticating state", {
-        level: 'error',
-        tags: {
-          auth_error: 'authenticating_timeout',
-        },
-      });
+      // Check if we can retry
+      if (authRetryCountRef.current < MAX_AUTH_RETRIES) {
+        console.log(`[Auth] Auto-retrying authentication (attempt ${authRetryCountRef.current + 1}/${MAX_AUTH_RETRIES})`);
+        setError("Authentication is taking longer than expected - retrying...");
+
+        Sentry.captureMessage("Authentication timeout - auto-retrying", {
+          level: 'warning',
+          tags: {
+            auth_error: 'authenticating_timeout_retry',
+          },
+          extra: {
+            retry_count: authRetryCountRef.current,
+            timeout_ms: AUTHENTICATING_TIMEOUT_MS,
+          },
+        });
+
+        // Reset sync state to allow retry
+        syncInFlightRef.current = false;
+        syncPromiseRef.current = null;
+
+        // Dispatch refresh event to trigger retry
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event(AUTH_REFRESH_EVENT));
+        }
+      } else {
+        // Max retries reached
+        setAuthStatus("error", "timeout");
+        setError("Authentication timeout - please check your connection and try again");
+
+        Sentry.captureMessage("Authentication timeout - max retries exceeded", {
+          level: 'error',
+          tags: {
+            auth_error: 'authenticating_timeout',
+          },
+          extra: {
+            retry_count: authRetryCountRef.current,
+            timeout_ms: AUTHENTICATING_TIMEOUT_MS,
+          },
+        });
+      }
     }, AUTHENTICATING_TIMEOUT_MS);
   }, [clearAuthTimeout, setAuthStatus]);
 
@@ -727,9 +760,9 @@ export function GatewayzAuthProvider({
         let token: string | null = null;
 
         try {
-          // Adaptive timeout: 5-10 seconds based on network conditions
+          // Adaptive timeout: 8-15 seconds based on network conditions
           const tokenTimeoutMs = getAdaptiveTimeout(TOKEN_TIMEOUT_BASE_MS, {
-            maxMs: 10000, // Up to 10 seconds
+            maxMs: 15000, // Up to 15 seconds
             mobileMultiplier: 1.8,
             slowNetworkMultiplier: 2,
           });
@@ -819,11 +852,11 @@ export function GatewayzAuthProvider({
                 signal: controller.signal,
               }),
             {
-              maxRetries: 2,
-              initialDelayMs: 300,
-              maxDelayMs: 3000,
+              maxRetries: 3,
+              initialDelayMs: 500,
+              maxDelayMs: 5000,
               backoffMultiplier: 2,
-              retryableStatuses: [502, 503, 504],
+              retryableStatuses: [500, 502, 503, 504], // Include 500 errors for retry
             }
           );
         } finally {
@@ -835,10 +868,50 @@ export function GatewayzAuthProvider({
         if (!response.ok) {
           console.error("[Auth] Backend auth failed with status", response.status);
           console.error("[Auth] Response text:", rawResponseText.substring(0, 500));
+
+          // For 5xx errors, check if we have cached credentials we can keep using
+          const is5xxError = response.status >= 500 && response.status < 600;
+          const cachedKey = getApiKey();
+          const cachedUser = getUserData();
+
+          if (is5xxError && cachedKey && cachedUser && cachedUser.user_id && cachedUser.email) {
+            // Keep using cached credentials for server errors
+            console.warn("[Auth] Backend 5xx error but valid cached credentials found - maintaining session");
+            setAuthStatus("authenticated", "cached credentials after 5xx");
+            clearAuthTimeout();
+
+            Sentry.captureMessage(`Authentication backend ${response.status} - using cached credentials`, {
+              level: 'warning',
+              tags: {
+                auth_error: 'backend_5xx_cached_fallback',
+                http_status: response.status,
+              },
+              extra: {
+                response_status: response.status,
+                retry_attempt: authRetryCountRef.current,
+                using_cached: true,
+              },
+            });
+            return;
+          }
+
           clearStoredCredentials();
           setAuthStatus("error", `backend status ${response.status}`);
+
+          // Provide user-friendly error messages based on status code
+          let userMessage: string;
+          if (is5xxError) {
+            userMessage = "Our servers are experiencing issues. Please try again in a moment.";
+          } else if (response.status === 401 || response.status === 403) {
+            userMessage = "Authentication failed. Please try logging in again.";
+          } else if (response.status === 429) {
+            userMessage = "Too many login attempts. Please wait a moment and try again.";
+          } else {
+            userMessage = `Authentication failed (${response.status}). Please try again.`;
+          }
+
           const authError: AuthError = { status: response.status, message: rawResponseText };
-          setError(authError.message ?? `Authentication failed: ${response.status}`);
+          setError(userMessage);
 
           // Capture auth failure to Sentry
           Sentry.captureException(
@@ -854,7 +927,7 @@ export function GatewayzAuthProvider({
                 auth_method: (authBody as { auth_method?: string }).auth_method,
                 retry_attempt: authRetryCountRef.current,
               },
-              level: 'error',
+              level: is5xxError ? 'error' : 'warning',
             }
           );
 
@@ -1020,9 +1093,73 @@ export function GatewayzAuthProvider({
             return;
           }
 
+          // Check if this is a network/fetch error
+          const isNetworkError = errorMsg.includes("Failed to fetch") ||
+                                errorMsg.includes("NetworkError") ||
+                                errorMsg.includes("Network request failed") ||
+                                errorMsg.includes("net::ERR_") ||
+                                errorMsg.includes("ECONNREFUSED") ||
+                                errorMsg.includes("ENOTFOUND") ||
+                                errorMsg.includes("CORS");
+
+          if (isNetworkError) {
+            console.warn("[Auth] Network error during authentication:", errorMsg);
+
+            // Check if we have cached credentials we can keep using
+            const cachedKey = getApiKey();
+            const cachedUser = getUserData();
+
+            if (cachedKey && cachedUser && cachedUser.user_id && cachedUser.email) {
+              // Keep using cached credentials for network errors
+              console.warn("[Auth] Network error but valid cached credentials found - maintaining session");
+              setAuthStatus("authenticated", "cached credentials after network error");
+              clearAuthTimeout();
+
+              Sentry.captureMessage(`Authentication network error - using cached credentials: ${errorMsg}`, {
+                level: 'warning',
+                tags: {
+                  auth_error: 'network_error_cached_fallback',
+                },
+                extra: {
+                  error_message: errorMsg,
+                  retry_attempt: authRetryCountRef.current,
+                  using_cached: true,
+                },
+              });
+              return;
+            }
+
+            // No cached credentials - show user-friendly network error
+            setAuthStatus("error", "network error");
+            setError("Unable to connect. Please check your internet connection and try again.");
+
+            Sentry.captureException(
+              err instanceof Error ? err : new Error(String(err)),
+              {
+                tags: {
+                  auth_error: 'network_error',
+                },
+                extra: {
+                  error_message: errorMsg,
+                  retry_attempt: authRetryCountRef.current,
+                },
+                level: 'warning',
+              }
+            );
+
+            onAuthError?.({ message: "Network error during authentication", raw: err });
+            return;
+          }
+
           clearStoredCredentials();
           setAuthStatus("error", "backend sync exception");
-          setError(err instanceof Error ? err.message : "Authentication failed");
+
+          // Provide user-friendly error message
+          let userFriendlyError = "Authentication failed. Please try again.";
+          if (errorMsg.includes("timeout")) {
+            userFriendlyError = "Connection timed out. Please try again.";
+          }
+          setError(userFriendlyError);
 
           // Capture authentication error to Sentry
           Sentry.captureException(
