@@ -336,193 +336,28 @@ jobs:
           pkill -f "pnpm start" || true
           sleep 2
 
-  # Resolve merge conflicts using Cursor agent
+  # Placeholder for future conflict resolution automation
+  # Note: Automatic conflict resolution is disabled as it requires a working
+  # AI-powered tool. Manual resolution is required when conflicts are detected.
   resolve-conflicts:
     name: Resolve Merge Conflicts
     runs-on: ubuntu-latest
     needs: [check-merge-conflicts]
     if: needs.check-merge-conflicts.outputs.has-conflicts == 'true'
-    permissions:
-      contents: write
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10.17.1
-
-      - name: Install Cursor CLI
-        run: npm install -g @cursor.so/cli
-
-      - name: Run Cursor agent to resolve conflicts
+      - name: Report conflicts
         run: |
-          CONFLICTED_FILES='${{ needs.check-merge-conflicts.outputs.conflicted-files }}'
+          echo "⚠️ Merge conflicts detected!"
+          echo "Please resolve conflicts manually before this PR can be merged."
+          echo ""
+          echo "Conflicted files: ${{ needs.check-merge-conflicts.outputs.conflicted-files }}"
+          exit 1
 
-          echo "Files with merge conflicts:"
-          echo "$CONFLICTED_FILES" | jq -r '.[]' 2>/dev/null || echo "$CONFLICTED_FILES"
-
-          # Build the cursor fix command with conflict-specific instructions
-          CURSOR_COMMAND="Resolve all merge conflicts in this repository. "
-          CURSOR_COMMAND="${CURSOR_COMMAND}The following files have merge conflicts: $(echo "$CONFLICTED_FILES" | jq -r '.[]' 2>/dev/null | tr '\n' ', ' || echo "$CONFLICTED_FILES"). "
-          CURSOR_COMMAND="${CURSOR_COMMAND}Carefully review the conflicting sections marked with <<<<<<<, =======, and >>>>>>>. "
-          CURSOR_COMMAND="${CURSOR_COMMAND}Choose the correct version for each conflict or combine them if both are needed. "
-          CURSOR_COMMAND="${CURSOR_COMMAND}Ensure all merge markers are removed and the code is valid. "
-          CURSOR_COMMAND="${CURSOR_COMMAND}Do not make any other changes beyond resolving the conflicts."
-
-          echo "Cursor prompt: $CURSOR_COMMAND"
-
-          # Run Cursor CLI with the resolve command
-          cursor fix "$CURSOR_COMMAND"
-        env:
-          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
-
-      - name: Verify conflicts are resolved
-        run: |
-          if bash scripts/check-merge-conflicts.sh; then
-            echo "✅ All merge conflicts resolved"
-          else
-            echo "❌ Some merge conflicts remain"
-            exit 1
-          fi
-
-      - name: Commit and push resolution
-        run: |
-          # Configure git
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-
-          # Check for changes
-          if ! git diff --quiet; then
-            git add -A
-            git commit -m "fix: resolve merge conflicts" -m "Merge conflicts automatically resolved using Cursor agent." -m "🤖 Co-authored-by: Cursor Agent <cursor@github.com>"
-
-            # Push to the same branch
-            git push origin HEAD:${{ github.head_ref || github.ref_name }}
-
-            echo "✅ Conflict resolution committed and pushed to ${{ github.head_ref || github.ref_name }}"
-          else
-            echo "ℹ️ No changes after conflict resolution"
-          fi
-
-  # Fix CI failures automatically using Cursor CLI
-  fix-ci:
-    name: Fix CI Failures
-    runs-on: ubuntu-latest
-    needs: [test, lint, typecheck, build, check-merge-conflicts]
-    if: failure() && needs.check-merge-conflicts.outputs.has-conflicts == 'false'
-    permissions:
-      contents: write
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10.17.1
-
-      - name: Setup pnpm cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.pnpm-store
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-store-
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Determine failed jobs
-        id: failures
-        run: |
-          FAILED_JOBS=""
-          [[ "${{ needs.test.result }}" == "failure" ]] && FAILED_JOBS="${FAILED_JOBS}test "
-          [[ "${{ needs.lint.result }}" == "failure" ]] && FAILED_JOBS="${FAILED_JOBS}lint "
-          [[ "${{ needs.typecheck.result }}" == "failure" ]] && FAILED_JOBS="${FAILED_JOBS}typecheck "
-          [[ "${{ needs.build.result }}" == "failure" ]] && FAILED_JOBS="${FAILED_JOBS}build "
-
-          echo "failed_jobs=${FAILED_JOBS}" >> $GITHUB_OUTPUT
-
-      - name: Install Cursor CLI
-        run: npm install -g @cursor.so/cli
-
-      - name: Run Cursor CLI to fix issues
-        run: |
-          FAILED_JOBS="${{ steps.failures.outputs.failed_jobs }}"
-
-          # Build the fix command based on failed jobs
-          CURSOR_COMMAND="Fix the following CI failures: "
-
-          if echo "$FAILED_JOBS" | grep -q "typecheck"; then
-            CURSOR_COMMAND="${CURSOR_COMMAND}TypeScript type errors, "
-          fi
-
-          if echo "$FAILED_JOBS" | grep -q "lint"; then
-            CURSOR_COMMAND="${CURSOR_COMMAND}ESLint violations, "
-          fi
-
-          if echo "$FAILED_JOBS" | grep -q "test"; then
-            CURSOR_COMMAND="${CURSOR_COMMAND}failing tests, "
-          fi
-
-          if echo "$FAILED_JOBS" | grep -q "build"; then
-            CURSOR_COMMAND="${CURSOR_COMMAND}build errors, "
-          fi
-
-          # Remove trailing comma and space
-          CURSOR_COMMAND="${CURSOR_COMMAND%, }"
-          CURSOR_COMMAND="${CURSOR_COMMAND}. Make only minimal changes necessary to fix the issues. Do not refactor code or make unnecessary changes."
-
-          echo "Cursor prompt: $CURSOR_COMMAND"
-
-          # Run Cursor CLI with the fix command
-          cursor fix "$CURSOR_COMMAND"
-        env:
-          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
-
-      - name: Commit and push fixes
-        run: |
-          # Configure git
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-
-          # Check for changes
-          if ! git diff --quiet; then
-            git add -A
-            # Build commit message dynamically
-            COMMIT_MSG="fix: resolve CI failures"
-            [[ '${{ needs.test.result }}' == 'failure' ]] && COMMIT_MSG="$COMMIT_MSG\n- test failures"
-            [[ '${{ needs.lint.result }}' == 'failure' ]] && COMMIT_MSG="$COMMIT_MSG\n- lint errors"
-            [[ '${{ needs.typecheck.result }}' == 'failure' ]] && COMMIT_MSG="$COMMIT_MSG\n- type errors"
-            [[ '${{ needs.build.result }}' == 'failure' ]] && COMMIT_MSG="$COMMIT_MSG\n- build errors"
-            COMMIT_MSG="$COMMIT_MSG\n\n🤖 Co-authored-by: Cursor CLI <cursor@github.com>"
-            git commit -m "$COMMIT_MSG"
-
-            # Push to the same branch
-            git push origin HEAD:${{ github.head_ref || github.ref_name }}
-
-            echo "✅ Fixes committed and pushed to ${{ github.head_ref || github.ref_name }}"
-          else
-            echo "ℹ️ No changes to commit"
-          fi
+  # Placeholder for future CI fix automation
+  # Note: Automatic CI fixes are disabled as they require a working
+  # AI-powered tool. Manual fixes are required when CI fails.
+  # This job is kept as a placeholder and does not run.
 
   # Summary job that all other jobs depend on - useful for branch protection rules
   ci-success:
@@ -571,7 +406,5 @@ jobs:
             echo "E2E tests failed"
             exit 1
           fi
-
-          # Note: fix-ci job is not checked here as it's an optional recovery job
 
           echo "All CI checks passed successfully"
