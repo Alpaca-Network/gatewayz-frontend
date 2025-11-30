@@ -254,7 +254,16 @@ export class ChatHistoryAPI {
       }
     );
 
-    return result.data!;
+    // Validate response - backend may return session directly or wrapped in { data: session }
+    const session = result.data ?? (result as unknown as ChatSession);
+
+    // Ensure we have a valid session with required fields
+    if (!session || typeof session.id !== 'number') {
+      console.error('[ChatHistoryAPI.createSession] Invalid response:', result);
+      throw new Error('Failed to create session: Invalid response from server');
+    }
+
+    return session;
   }
 
   /**
@@ -270,7 +279,12 @@ export class ChatHistoryAPI {
    */
   async getSession(sessionId: number): Promise<ChatSession> {
     const result = await this.makeRequest<ChatSession>('GET', `/sessions/${sessionId}`);
-    return result.data!;
+    // Handle both wrapped { data: session } and direct session response
+    const session = result.data ?? (result as unknown as ChatSession);
+    if (!session || typeof session.id !== 'number') {
+      throw new Error('Failed to get session: Invalid response from server');
+    }
+    return session;
   }
 
   /**
@@ -320,7 +334,12 @@ export class ChatHistoryAPI {
         }
 
         const result = await response.json();
-        return result.data;
+        // Handle both wrapped { data: session } and direct session response
+        const session = result.data ?? (result as ChatSession);
+        if (!session || typeof session.id !== 'number') {
+          throw new Error('Failed to update session: Invalid response from server');
+        }
+        return session;
       } catch (error) {
         clearTimeout(timeoutId);
         if (error instanceof Error && error.name === 'AbortError') {
@@ -336,7 +355,12 @@ export class ChatHistoryAPI {
       title,
       model
     });
-    return result.data!;
+    // Handle both wrapped { data: session } and direct session response
+    const session = result.data ?? (result as unknown as ChatSession);
+    if (!session || typeof session.id !== 'number') {
+      throw new Error('Failed to update session: Invalid response from server');
+    }
+    return session;
   }
 
   /**
@@ -574,7 +598,12 @@ export class ChatHistoryAPI {
    */
   async getStats(): Promise<ChatStats> {
     const result = await this.makeRequest<ChatStats>('GET', '/stats');
-    return result.data!;
+    // Handle both wrapped { data: stats } and direct stats response
+    const stats = result.data ?? (result as unknown as ChatStats);
+    if (!stats || typeof stats.total_sessions !== 'number') {
+      throw new Error('Failed to get stats: Invalid response from server');
+    }
+    return stats;
   }
 
   /**
