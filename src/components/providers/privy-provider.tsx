@@ -38,6 +38,7 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
 
   useEffect(() => {
     type WalletErrorType = "extension" | "relay";
+    type PrivyErrorType = "iframe" | "java_object";
 
     const classifyWalletError = (errorStr?: string): WalletErrorType | null => {
       if (!errorStr) {
@@ -64,6 +65,27 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
       return isExtensionError ? "extension" : null;
     };
 
+    // Classify Privy-specific errors that are non-blocking
+    const classifyPrivyError = (errorStr?: string): PrivyErrorType | null => {
+      if (!errorStr) {
+        return null;
+      }
+
+      const normalized = errorStr.toLowerCase();
+
+      // "iframe not initialized" - Privy iframe timing issue
+      if (normalized.includes("iframe not initialized")) {
+        return "iframe";
+      }
+
+      // "Java object is gone" - WebView/Android bridge timing issue
+      if (normalized.includes("java object is gone")) {
+        return "java_object";
+      }
+
+      return null;
+    };
+
     const logWalletError = (type: WalletErrorType, message: string, source: "unhandledrejection" | "error") => {
       const label = type === "relay" ? "WalletConnect relay error" : "Wallet extension error";
       console.warn(`[Auth] ${label} detected (non-blocking via ${source}):`, message);
@@ -81,6 +103,26 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
         level: type === "relay" ? "warning" : "info",
         tags: {
           auth_error: type === "relay" ? "walletconnect_relay_error" : "wallet_extension_error",
+          blocking: "false",
+          event_source: source,
+        },
+      });
+    };
+
+    const logPrivyError = (type: PrivyErrorType, message: string, source: "unhandledrejection" | "error") => {
+      const labels: Record<PrivyErrorType, string> = {
+        iframe: "Privy iframe initialization error",
+        java_object: "WebView bridge error",
+      };
+      const label = labels[type];
+
+      console.warn(`[Auth] ${label} detected (non-blocking via ${source}):`, message);
+
+      // Log to Sentry as info level - these are expected transient errors
+      Sentry.captureMessage(`${label}: ${message}`, {
+        level: "info",
+        tags: {
+          auth_error: `privy_${type}_error`,
           blocking: "false",
           event_source: source,
         },
@@ -109,6 +151,14 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
         return;
       }
 
+      // Handle Privy-specific errors (iframe not initialized, Java object gone)
+      const privyErrorType = classifyPrivyError(reasonStr);
+      if (privyErrorType) {
+        logPrivyError(privyErrorType, reasonStr, "unhandledrejection");
+        // Don't preventDefault - let Privy handle recovery
+        return;
+      }
+
       const walletErrorType = classifyWalletError(reasonStr);
 
       // Log wallet extension and WalletConnect relay errors but DON'T preventDefault
@@ -121,6 +171,14 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
 
     // Handle regular errors (not promise rejections) that might be triggered by wallet extensions
     const errorListener = (event: ErrorEvent) => {
+      // Handle Privy-specific errors
+      const privyErrorType = classifyPrivyError(event.message);
+      if (privyErrorType) {
+        logPrivyError(privyErrorType, event.message, "error");
+        // Don't preventDefault - these are transient errors that Privy recovers from
+        return;
+      }
+
       const walletErrorType = classifyWalletError(event.message);
       if (walletErrorType) {
         logWalletError(walletErrorType, event.message, "error");
