@@ -64,9 +64,13 @@ describe('Rate Limiting API', () => {
     cy.wait('@rateLimitError')
 
     // Should show some form of error notification
-    cy.get('body').should('contain.text', 'rate')
-      .or('contain.text', 'limit')
-      .or('contain.text', 'Too many')
+    cy.get('body').should(($body) => {
+      const text = $body.text().toLowerCase()
+      expect(text).to.satisfy((t: string) =>
+        t.includes('rate') || t.includes('limit') || t.includes('too many'),
+        'Expected body to contain rate limit error message'
+      )
+    })
   })
 
   it('respects retry-after header', () => {
@@ -168,8 +172,12 @@ describe('Rate Limiting API', () => {
     cy.wait('@insufficientCredits')
 
     // Should show credit-related message
-    cy.get('body').should('contain.text', 'credit')
-      .or('contain.text', 'balance')
-      .or('contain.text', 'Insufficient')
+    cy.get('body').should(($body) => {
+      const text = $body.text().toLowerCase()
+      expect(text).to.satisfy((t: string) =>
+        t.includes('credit') || t.includes('balance') || t.includes('insufficient'),
+        'Expected body to contain credit error message'
+      )
+    })
   })
 })

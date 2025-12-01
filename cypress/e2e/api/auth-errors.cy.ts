@@ -22,9 +22,13 @@ describe('Authentication Errors API', () => {
     // If still on chat page, should show error
     cy.url().then((url) => {
       if (url.includes('/chat')) {
-        cy.get('body').should('contain.text', 'auth')
-          .or('contain.text', 'login')
-          .or('contain.text', 'Unauthorized')
+        cy.get('body').should(($body) => {
+          const text = $body.text().toLowerCase()
+          expect(text).to.satisfy((t: string) =>
+            t.includes('auth') || t.includes('login') || t.includes('unauthorized'),
+            'Expected body to contain auth, login, or unauthorized'
+          )
+        })
       }
     })
   })
@@ -79,9 +83,13 @@ describe('Authentication Errors API', () => {
     cy.wait('@invalidKey')
 
     // Should show error message
-    cy.get('body').should('contain.text', 'Invalid')
-      .or('contain.text', 'key')
-      .or('contain.text', 'auth')
+    cy.get('body').should(($body) => {
+      const text = $body.text().toLowerCase()
+      expect(text).to.satisfy((t: string) =>
+        t.includes('invalid') || t.includes('key') || t.includes('auth'),
+        'Expected body to contain invalid key error message'
+      )
+    })
   })
 
   it('handles auth errors for models API', () => {
@@ -157,10 +165,13 @@ describe('Authentication Errors API', () => {
     cy.wait('@forbiddenModel')
 
     // Should show tier upgrade message
-    cy.get('body').should('contain.text', 'Pro')
-      .or('contain.text', 'tier')
-      .or('contain.text', 'upgrade')
-      .or('contain.text', 'Forbidden')
+    cy.get('body').should(($body) => {
+      const text = $body.text().toLowerCase()
+      expect(text).to.satisfy((t: string) =>
+        t.includes('pro') || t.includes('tier') || t.includes('upgrade') || t.includes('forbidden'),
+        'Expected body to contain tier upgrade message'
+      )
+    })
   })
 
   it('preserves user session across page reloads after auth error', () => {

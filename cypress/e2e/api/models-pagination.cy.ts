@@ -132,9 +132,13 @@ describe('Models Pagination API', () => {
     cy.wait('@emptyModels')
 
     // Should show empty state or message
-    cy.get('body').should('contain.text', 'No models')
-      .or('contain.text', 'models found')
-      .or('contain.text', 'Try')
+    cy.get('body').should(($body) => {
+      const text = $body.text()
+      expect(text).to.satisfy((t: string) =>
+        t.includes('No models') || t.includes('models found') || t.includes('Try'),
+        'Expected body to contain empty state message'
+      )
+    })
   })
 
   it('handles search with pagination', () => {

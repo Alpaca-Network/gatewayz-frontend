@@ -29,8 +29,8 @@ Cypress.on('uncaught:exception', (err, runnable) => {
 
 // Add custom logging for debugging
 Cypress.on('fail', (error, runnable) => {
-  // Log additional context when tests fail
-  cy.log('Test failed:', runnable.title)
-  cy.log('Error:', error.message)
+  // Log additional context when tests fail (use console.log for synchronous logging)
+  console.log('Test failed:', runnable.title)
+  console.log('Error:', error.message)
   throw error
 })
