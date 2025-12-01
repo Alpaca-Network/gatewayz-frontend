@@ -8,17 +8,16 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { ChatLayout } from '@/components/chat-v2/ChatLayout';
 import { ChatHistoryAPI } from '@/lib/chat-history';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useChatUIStore } from '@/lib/store/chat-ui-store';
 
 // Mock dependencies
-vi.mock('@/lib/chat-history');
-vi.mock('@/lib/streaming');
-vi.mock('@privy-io/react-auth');
-vi.mock('@/hooks/use-network-status', () => ({
+jest.mock('@/lib/chat-history');
+jest.mock('@/lib/streaming');
+jest.mock('@privy-io/react-auth');
+jest.mock('@/hooks/use-network-status', () => ({
   useNetworkStatus: () => ({ isOnline: true, isReconnecting: false })
 }));
 
@@ -58,19 +57,19 @@ describe('Chat Session Race Conditions', () => {
 
     // Mock API
     mockApi = {
-      createSession: vi.fn(),
-      getSessionsWithCache: vi.fn().mockResolvedValue([]),
-      getSession: vi.fn(),
-      saveMessage: vi.fn(),
-      updateSession: vi.fn(),
-      deleteSession: vi.fn()
+      createSession: jest.fn(),
+      getSessionsWithCache: jest.fn().mockResolvedValue([]),
+      getSession: jest.fn(),
+      saveMessage: jest.fn(),
+      updateSession: jest.fn(),
+      deleteSession: jest.fn()
     };
 
     (ChatHistoryAPI as any).mockImplementation(() => mockApi);
   });
 
   afterEach(() => {
-    vi.clearAllMocks();
+    jest.clearAllMocks();
   });
 
   const renderChat = () => {
@@ -198,7 +197,7 @@ describe('Chat Session Race Conditions', () => {
       mockApi.createSession.mockResolvedValue(mockSession);
       mockApi.getSession.mockResolvedValue(mockSession);
 
-      const saveMessageSpy = vi.fn().mockResolvedValue({
+      const saveMessageSpy = jest.fn().mockResolvedValue({
         id: 1,
         session_id: 123,
         role: 'user',
