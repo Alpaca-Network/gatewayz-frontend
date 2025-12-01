@@ -1,4 +1,5 @@
 /// <reference types="cypress" />
+/// <reference types="cypress-real-events" />
 
 // Import shared fixtures
 import authFixtures from '../../test-fixtures/auth.json'
@@ -100,6 +101,33 @@ Cypress.Commands.add('waitForStable', (selector: string, timeout: number = 5000)
   cy.wait(300) // Wait for animations to complete
 })
 
+// Custom OR command for conditional assertions
+Cypress.Commands.add(
+  'or',
+  { prevSubject: true },
+  (subject, ...selectors: string[]) => {
+    const matchedSelectors = []
+
+    // Find the element from the current subject
+    const $element = subject
+
+    // Check each selector to see if it matches
+    for (const selector of selectors) {
+      if ($element.is(selector) || $element.find(selector).length > 0) {
+        matchedSelectors.push(selector)
+      }
+    }
+
+    // If at least one selector matched, return the subject
+    // Otherwise fail the assertion
+    if (matchedSelectors.length > 0) {
+      return cy.wrap($element)
+    } else {
+      throw new Error(`Expected element to match one of: ${selectors.join(', ')}`)
+    }
+  }
+)
+
 // TypeScript declarations
 declare global {
   namespace Cypress {
@@ -153,6 +181,13 @@ declare global {
        * @example cy.waitForStable('[data-testid="modal"]')
        */
       waitForStable(selector: string, timeout?: number): Chainable<void>
+
+      /**
+       * Check if current subject matches any of the provided selectors
+       * @param selectors - CSS selectors to check against
+       * @example cy.get('body').or('.error', '.warning')
+       */
+      or(...selectors: string[]): Chainable<JQuery<HTMLElement>>
     }
   }
 }
