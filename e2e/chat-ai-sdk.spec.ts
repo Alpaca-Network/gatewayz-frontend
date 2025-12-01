@@ -6,16 +6,13 @@
 import { test, expect } from './fixtures';
 
 test.describe('Chat with AI SDK', () => {
-  test.beforeEach(async ({ authenticatedPage }) => {
-    // Navigate to chat page with authentication already set up
-    await authenticatedPage.goto('/chat');
-
-    // Wait for chat interface to load
-    await expect(authenticatedPage.locator('h1')).toContainText(/What's On Your Mind|Chat/i, { timeout: 15000 });
-  });
-
   test.describe('Basic Chat Functionality', () => {
     test('should send message and receive streaming response', async ({ authenticatedPage: page }) => {
+      // Navigate to chat page with authentication already set up
+      await page.goto('/chat');
+
+      // Wait for chat interface to load
+      await expect(page.locator('h1')).toContainText(/What's On Your Mind|Chat/i, { timeout: 15000 });
       // Select a model
       await page.click('[data-testid="model-select"], button:has-text("Select")');
       await page.click('text=GPT-4');
@@ -33,6 +30,9 @@ test.describe('Chat with AI SDK', () => {
     });
 
     test('should show streaming indicator while generating', async ({ authenticatedPage: page }) => {
+      await page.goto('/chat');
+      await expect(page.locator('h1')).toContainText(/What's On Your Mind|Chat/i, { timeout: 15000 });
+
       // Select a model
       await page.click('[data-testid="model-select"], button:has-text("Select")');
       await page.click('text=GPT-4');
@@ -49,6 +49,9 @@ test.describe('Chat with AI SDK', () => {
     });
 
     test('should work with multiple models', async ({ authenticatedPage: page }) => {
+      await page.goto('/chat');
+      await expect(page.locator('h1')).toContainText(/What's On Your Mind|Chat/i, { timeout: 15000 });
+
       const models = ['GPT-4', 'Claude', 'Gemini'];
 
       for (const model of models) {
@@ -76,6 +79,9 @@ test.describe('Chat with AI SDK', () => {
 
   test.describe('Reasoning Display', () => {
     test('should display reasoning for Claude 3.7 Sonnet', async ({ authenticatedPage: page }) => {
+      await page.goto('/chat');
+      await expect(page.locator('h1')).toContainText(/What's On Your Mind|Chat/i, { timeout: 15000 });
+
       // Select Claude 3.7 Sonnet
       await page.click('[data-testid="model-select"], button:has-text("Select")');
       await page.click('text=/Claude.*3.7.*Sonnet/i').catch(() => {
@@ -100,6 +106,9 @@ test.describe('Chat with AI SDK', () => {
     });
 
     test('should display reasoning for O1 models', async ({ authenticatedPage: page }) => {
+      await page.goto('/chat');
+      await expect(page.locator('h1')).toContainText(/What's On Your Mind|Chat/i, { timeout: 15000 });
+
       // Select O1 model
       await page.click('[data-testid="model-select"], button:has-text("Select")');
       await page.click('text=/O1|o1-preview/i').catch(() => {
@@ -120,6 +129,9 @@ test.describe('Chat with AI SDK', () => {
 
   test.describe('Error Handling', () => {
     test('should display error for invalid API key', async ({ authenticatedPage: page }) => {
+      await page.goto('/chat');
+      await expect(page.locator('h1')).toContainText(/What's On Your Mind|Chat/i, { timeout: 15000 });
+
       // Inject invalid API key
       await page.evaluate(() => {
         localStorage.setItem('gatewayz_api_key', 'invalid-key-12345');
@@ -140,6 +152,9 @@ test.describe('Chat with AI SDK', () => {
     });
 
     test('should handle network errors gracefully', async ({ authenticatedPage: page }) => {
+      await page.goto('/chat');
+      await expect(page.locator('h1')).toContainText(/What's On Your Mind|Chat/i, { timeout: 15000 });
+
       // Intercept and fail API calls
       await page.route('**/api/chat/ai-sdk-completions', route => {
         route.abort('failed');
@@ -159,6 +174,9 @@ test.describe('Chat with AI SDK', () => {
 
   test.describe('Session Management', () => {
     test('should maintain conversation history', async ({ authenticatedPage: page }) => {
+      await page.goto('/chat');
+      await expect(page.locator('h1')).toContainText(/What's On Your Mind|Chat/i, { timeout: 15000 });
+
       // Select model
       await page.click('[data-testid="model-select"], button:has-text("Select")');
       await page.click('text=GPT-4');
@@ -183,6 +201,9 @@ test.describe('Chat with AI SDK', () => {
 
   test.describe('Console Logging', () => {
     test('should log AI SDK route usage', async ({ authenticatedPage: page }) => {
+      await page.goto('/chat');
+      await expect(page.locator('h1')).toContainText(/What's On Your Mind|Chat/i, { timeout: 15000 });
+
       const consoleLogs: string[] = [];
 
       page.on('console', msg => {
