@@ -270,7 +270,13 @@ export class ChatHistoryAPI {
    * Retrieves all chat sessions for the authenticated user
    */
   async getSessions(limit: number = 50, offset: number = 0): Promise<ChatSession[]> {
-    const result = await this.makeRequest<ChatSession[]>('GET', `/sessions?limit=${limit}&offset=${offset}`);
+    // Use longer timeout for background sync to prevent timeout errors
+    const result = await this.makeRequest<ChatSession[]>(
+      'GET',
+      `/sessions?limit=${limit}&offset=${offset}`,
+      null,
+      TIMEOUT_CONFIG.api.long // 60 seconds for background sync
+    );
     return result.data || [];
   }
 
@@ -614,22 +620,66 @@ export class ChatHistoryAPI {
     // Return cached sessions immediately for instant UI
     const cached = getCachedSessions();
     if (cached.length > 0) {
-      // Trigger background sync in non-blocking way
-      this.getSessions(limit, offset)
+      // Trigger background sync with retry logic
+      // Note: signal parameter is intentionally not used because makeRequest()
+      // creates its own AbortController internally. The retry wrapper provides
+      // retry logic on top of makeRequest's built-in timeout mechanism.
+      withTimeoutAndRetry(
+        async () => {
+          return await this.getSessions(limit, offset);
+        },
+        {
+          timeout: TIMEOUT_CONFIG.api.long, // 60 seconds
+          maxRetries: 2, // Reduced retries for background sync
+          shouldRetry: (error) => {
+            if (error instanceof Error) {
+              // Retry on timeout and 504 gateway errors
+              return error.name === 'AbortError' ||
+                     error.message.toLowerCase().includes('timeout') ||
+                     error.message.toLowerCase().includes('timed out') ||
+                     error.message.includes('504');
+            }
+            return false;
+          },
+          onRetry: (attempt, error) => {
+            console.log(`[Session Sync Retry] Attempt ${attempt} failed:`, error);
+          }
+        }
+      )
         .then(sessions => {
           // Update cache with fresh data
           setCachedSessions(sessions);
         })
         .catch(error => {
-          console.warn('[ChatHistoryAPI] Background sync failed:', error);
+          console.warn('[ChatHistoryAPI] Background sync failed after retries:', error);
           // Silently fail - we already have cached data to show
         });
 
       return cached;
     }
 
-    // No cache, fetch from backend
-    const sessions = await this.getSessions(limit, offset);
+    // No cache, fetch from backend with retry logic
+    // Note: signal parameter is intentionally not used because makeRequest()
+    // creates its own AbortController internally. The retry wrapper provides
+    // retry logic on top of makeRequest's built-in timeout mechanism.
+    const sessions = await withTimeoutAndRetry(
+      async () => {
+        return await this.getSessions(limit, offset);
+      },
+      {
+        timeout: TIMEOUT_CONFIG.api.long, // 60 seconds
+        maxRetries: 3,
+        shouldRetry: (error) => {
+          if (error instanceof Error) {
+            return error.name === 'AbortError' ||
+                   error.message.toLowerCase().includes('timeout') ||
+                   error.message.toLowerCase().includes('timed out') ||
+                   error.message.includes('504');
+          }
+          return false;
+        }
+      }
+    );
 
     // Cache the result for next time
     setCachedSessions(sessions);

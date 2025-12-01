@@ -98,12 +98,11 @@ test.describe('Authentication - Account Type Mapping', () => {
       return data ? JSON.parse(data) : null;
     });
 
-    if (userData) {
-      // Verify essential auth fields
-      expect(userData.user_id).toBeDefined();
-      expect(userData.api_key).toBeDefined();
-      expect(userData.email).toBeDefined();
-    }
+    // Verify essential auth fields
+    expect(userData).not.toBeNull();
+    expect(userData.user_id).toBeDefined();
+    expect(userData.api_key).toBeDefined();
+    expect(userData.email).toBeDefined();
   });
 
   test('can navigate to settings after authentication', async ({ authenticatedPage: page }) => {
