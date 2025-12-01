@@ -156,6 +156,12 @@ describe('ChatLayout', () => {
       const mockSend = jest.fn();
       (window as any).__chatInputSend = mockSend;
 
+      // Mock requestAnimationFrame for testing
+      const rafSpy = jest.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+        cb(0);
+        return 0;
+      });
+
       render(<ChatLayout />);
 
       // Find and click a prompt card
@@ -166,6 +172,8 @@ describe('ChatLayout', () => {
       await waitFor(() => {
         expect(mockSend).toHaveBeenCalled();
       });
+
+      rafSpy.mockRestore();
     });
   });
 
@@ -184,6 +192,12 @@ describe('ChatLayout', () => {
       const mockSend = jest.fn();
       (window as any).__chatInputSend = mockSend;
 
+      // Mock requestAnimationFrame for testing
+      const rafSpy = jest.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+        cb(0);
+        return 0;
+      });
+
       render(<ChatLayout />);
 
       const cards = screen.getAllByTestId('card');
@@ -193,11 +207,22 @@ describe('ChatLayout', () => {
       await waitFor(() => {
         expect(mockSend).toHaveBeenCalled();
       });
+
+      rafSpy.mockRestore();
     });
 
     it('should not crash if __chatInputSend is not available', () => {
       // Ensure __chatInputSend is not set
       delete (window as any).__chatInputSend;
+
+      // Mock requestAnimationFrame for testing
+      const rafSpy = jest.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+        cb(0);
+        return 0;
+      });
+
+      // Mock console.warn to avoid polluting test output
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
 
       render(<ChatLayout />);
 
@@ -207,6 +232,12 @@ describe('ChatLayout', () => {
       expect(() => {
         fireEvent.click(cards[0]);
       }).not.toThrow();
+
+      // Should log a warning
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('__chatInputSend not available'));
+
+      rafSpy.mockRestore();
+      warnSpy.mockRestore();
     });
   });
 });

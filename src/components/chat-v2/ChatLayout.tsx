@@ -95,13 +95,16 @@ export function ChatLayout() {
    const handlePromptSelect = (text: string) => {
        // Set the input value first
        setInputValue(text);
-       // Use a small delay to ensure Zustand state is propagated, then trigger send
-       // setTimeout(0) pushes to next event loop tick after state update
-       setTimeout(() => {
+       // Use requestAnimationFrame to ensure React has finished rendering and
+       // the Zustand state update has propagated before triggering send.
+       // This prevents race conditions where __chatInputSend might be stale or undefined.
+       requestAnimationFrame(() => {
            if (typeof window !== 'undefined' && (window as any).__chatInputSend) {
                (window as any).__chatInputSend();
+           } else {
+               console.warn('[ChatLayout] __chatInputSend not available when prompt was selected');
            }
-       }, 0);
+       });
    };
 
    const { data: activeMessages = [], isLoading: messagesLoading } = useSessionMessages(activeSessionId);
