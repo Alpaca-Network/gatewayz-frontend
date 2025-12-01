@@ -71,6 +71,13 @@ jest.mock('@/hooks/use-toast', () => ({
   useToast: () => ({ toast: jest.fn() }),
 }));
 
+// Mock next/navigation for useSearchParams
+jest.mock('next/navigation', () => ({
+  useSearchParams: () => ({
+    get: jest.fn(() => null),
+  }),
+}));
+
 // Mock ChatSidebar to simplify tests
 jest.mock('../ChatSidebar', () => ({
   ChatSidebar: () => <div data-testid="chat-sidebar">Sidebar</div>,

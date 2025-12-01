@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { Menu, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
@@ -74,6 +75,21 @@ export function ChatLayout() {
    useAuthSync(); // Trigger auth sync
    const { isAuthenticated, isLoading: authLoading } = useAuthStore();
    const { selectedModel, setSelectedModel, activeSessionId, setActiveSessionId, setInputValue, mobileSidebarOpen, setMobileSidebarOpen } = useChatUIStore();
+   const searchParams = useSearchParams();
+
+   // Handle URL message parameter - populate input on mount
+   useEffect(() => {
+       const messageParam = searchParams.get('message');
+       if (messageParam) {
+           setInputValue(messageParam);
+           // Clean up URL parameter after reading it
+           if (typeof window !== 'undefined') {
+               const url = new URL(window.location.href);
+               url.searchParams.delete('message');
+               window.history.replaceState({}, '', url.toString());
+           }
+       }
+   }, [searchParams, setInputValue]);
 
    // Handle prompt selection from welcome screen - auto-send the message
    const handlePromptSelect = (text: string) => {
