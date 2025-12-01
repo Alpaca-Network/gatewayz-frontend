@@ -3,15 +3,29 @@
  * Tests the complete user flow from UI to streaming response
  */
 
-import { test, expect, Page } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 test.describe('Chat with AI SDK', () => {
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async ({ page, context }) => {
+    // Setup mock authentication
+    await context.addInitScript(() => {
+      localStorage.setItem('gatewayz_api_key', 'test-api-key-e2e-12345');
+      localStorage.setItem('gatewayz_user_data', JSON.stringify({
+        user_id: 999,
+        api_key: 'test-api-key-e2e-12345',
+        email: 'e2e-test@gatewayz.ai',
+        display_name: 'E2E Test User',
+        credits: 10000,
+        tier: 'pro',
+        subscription_status: 'active'
+      }));
+    });
+
     // Navigate to chat page
     await page.goto('/chat');
 
     // Wait for chat interface to load
-    await expect(page.locator('h1')).toContainText(/What's On Your Mind|Chat/i);
+    await expect(page.locator('h1')).toContainText(/What's On Your Mind|Chat/i, { timeout: 15000 });
   });
 
   test.describe('Basic Chat Functionality', () => {

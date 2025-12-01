@@ -133,7 +133,13 @@ export async function POST(request: NextRequest) {
     if (!modelId) {
       return new Response(
         JSON.stringify({ error: 'model is required' }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
+        {
+          status: 400,
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Supports-Thinking': 'false'
+          }
+        }
       );
     }
 
