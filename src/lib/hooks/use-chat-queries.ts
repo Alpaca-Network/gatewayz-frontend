@@ -79,9 +79,26 @@ export const useSessionMessages = (sessionId: number | null) => {
 
 export const useCreateSession = () => {
   const queryClient = useQueryClient();
+  const { isAuthenticated } = useAuthStore();
 
   return useMutation({
     mutationFn: async ({ title, model }: { title?: string; model?: string }) => {
+      // For guest users, create a temporary client-side session
+      if (!isAuthenticated) {
+        // Generate a temporary negative session ID for guest mode
+        const guestSessionId = -Date.now();
+        return {
+          id: guestSessionId,
+          user_id: -1,
+          title: title || 'Guest Chat',
+          model: model || 'openai/gpt-3.5-turbo',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          is_active: true,
+          messages: []
+        } as ChatSession;
+      }
+
       // Get API at execution time to avoid stale closure issues on mobile
       const api = getChatApiNow();
       if (!api) throw new Error("Not authenticated");
@@ -97,15 +114,17 @@ export const useCreateSession = () => {
       );
     },
     onSuccess: (newSession) => {
-      // Invalidate sessions list to refetch
-      queryClient.invalidateQueries({ queryKey: ['chat-sessions'] });
+      // Invalidate sessions list to refetch (only for authenticated users)
+      if (isAuthenticated) {
+        queryClient.invalidateQueries({ queryKey: ['chat-sessions'] });
+      }
       // Pre-seed the cache for this new session
       queryClient.setQueryData(['chat-sessions', newSession.id], newSession);
       queryClient.setQueryData(['chat-messages', newSession.id], []);
     },
     // Configure retry behavior at the mutation level
     retry: (failureCount, error) => {
-      // Don't retry auth errors
+      // Don't retry auth errors or guest mode (already handled)
       if (error instanceof Error && error.message.includes('Not authenticated')) {
         return false;
       }

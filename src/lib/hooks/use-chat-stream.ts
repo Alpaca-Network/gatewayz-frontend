@@ -46,9 +46,10 @@ export function useChatStream() {
         // The previous approach captured storeApiKey at render time, which could be null
         // even when auth had completed but the component hadn't re-rendered yet.
         // This pattern ensures we always get the latest auth state at execution time.
-        const storeApiKey = useAuthStore.getState().apiKey;
+        const { apiKey: storeApiKey, isAuthenticated } = useAuthStore.getState();
         // Try store first, fall back to localStorage for auth state desync fix
-        const apiKey = storeApiKey || getApiKey();
+        // For guest users, we use a special placeholder since they don't have API keys
+        const apiKey = storeApiKey || getApiKey() || (isAuthenticated ? null : 'guest');
         if (!apiKey) throw new Error("No API Key");
 
         setIsStreaming(true);
@@ -75,8 +76,10 @@ export function useChatStream() {
             return [...(old || []), userMsg];
         });
 
-        // Fire and forget save
-        saveMessage.mutate({ sessionId, role: 'user', content, model: model.value });
+        // Fire and forget save (only for authenticated users)
+        if (isAuthenticated) {
+            saveMessage.mutate({ sessionId, role: 'user', content, model: model.value });
+        }
 
         // 2. Add Optimistic Assistant Message
         const assistantMsg: Partial<ChatMessage> & { isStreaming?: boolean, reasoning?: string } = {
@@ -155,14 +158,16 @@ export function useChatStream() {
 
             // 5. Finalize
             const finalContent = streamHandlerRef.current.getFinalContent();
-            
-            // Save Assistant Message
-            saveMessage.mutate({ 
-                 sessionId, 
-                 role: 'assistant', 
-                 content: finalContent, 
-                 model: model.value 
-            });
+
+            // Save Assistant Message (only for authenticated users)
+            if (isAuthenticated) {
+                saveMessage.mutate({
+                     sessionId,
+                     role: 'assistant',
+                     content: finalContent,
+                     model: model.value
+                });
+            }
             
             // Mark isStreaming false
             queryClient.setQueryData(['chat-messages', sessionId], (old: any[] | undefined) => {
