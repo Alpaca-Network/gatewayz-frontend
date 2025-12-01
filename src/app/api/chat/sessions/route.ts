@@ -46,29 +46,50 @@ export async function GET(request: NextRequest) {
             const url = `${CHAT_HISTORY_API_URL}/v1/chat/sessions?limit=${limit}&offset=${offset}`;
             console.log(`[Cache MISS] Chat sessions API - Calling: ${url}`);
 
-            const response = await fetch(url, {
-              method: 'GET',
-              headers: {
-                'Authorization': `Bearer ${apiKey}`,
-                'Content-Type': 'application/json'
+            // Add timeout to prevent hanging requests
+            const controller = new AbortController();
+            const timeoutMs = 25000; // 25s timeout (less than frontend 30s timeout)
+            const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+            try {
+              const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                  'Authorization': `Bearer ${apiKey}`,
+                  'Content-Type': 'application/json'
+                },
+                signal: controller.signal
+              });
+
+              clearTimeout(timeoutId);
+              span.setAttribute('backend_status', response.status);
+              console.log(`Chat sessions API - Response status: ${response.status}`);
+
+              if (!response.ok) {
+                span.setAttribute('error', true);
+                span.setAttribute('error_type', 'backend_error');
+                const errorData = await response.json().catch(() => ({}));
+                throw new HttpError(
+                  errorData.detail || 'Failed to fetch sessions',
+                  response.status,
+                  errorData
+                );
               }
-            });
 
-            span.setAttribute('backend_status', response.status);
-            console.log(`Chat sessions API - Response status: ${response.status}`);
+              return await response.json();
+            } catch (error) {
+              clearTimeout(timeoutId);
 
-            if (!response.ok) {
-              span.setAttribute('error', true);
-              span.setAttribute('error_type', 'backend_error');
-              const errorData = await response.json().catch(() => ({}));
-              throw new HttpError(
-                errorData.detail || 'Failed to fetch sessions',
-                response.status,
-                errorData
-              );
+              // Handle timeout specifically
+              if (error instanceof Error && error.name === 'AbortError') {
+                span.setAttribute('error', true);
+                span.setAttribute('error_type', 'proxy_timeout');
+                console.error(`Chat sessions API - GET timeout after ${timeoutMs}ms`);
+                throw new HttpError('Request timed out fetching sessions', 504);
+              }
+
+              throw error;
             }
-
-            return await response.json();
           },
           TTL.SESSIONS_LIST,
           'sessions' // Metrics category
