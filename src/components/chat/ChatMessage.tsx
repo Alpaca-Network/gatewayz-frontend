@@ -196,7 +196,7 @@ export const ChatMessage = memo<ChatMessageProps>(
           {/* Model info and actions */}
           {!isUser && showActions && (
             <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
-              {model && <span>{model}</span>}
+              {model && model !== 'openrouter/auto' && <span>{model}</span>}
               <div className="flex gap-1">
                 {onCopy && (
                   <Button

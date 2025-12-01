@@ -17,8 +17,9 @@ export async function POST(request: NextRequest) {
     console.log("[API /api/auth] Proxying authentication request to backend");
 
     // Use timeout to prevent hanging requests
+    // Increased from 15s to 30s to handle backend load and slow network conditions
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout for backend auth
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout for backend auth
 
     try {
       // Wrap fetch in retry logic for 502/503/504 errors
