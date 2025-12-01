@@ -95,25 +95,50 @@ describe('Models Page - Server-Side Functions', () => {
     jest.restoreAllMocks();
   });
 
-  describe('getPriorityModels', () => {
-    it('should skip API calls during build time when NEXT_PHASE is set', async () => {
-      process.env.NEXT_PHASE = 'phase-production-build';
+  describe('Build-Time Detection Logic', () => {
+    // NOTE: These tests verify the boolean logic used in getPriorityModels (line 88 of page.tsx).
+    // getPriorityModels is not exported, and React Server Components cannot be reliably tested
+    // in Jest without complex mocking. These tests verify the condition logic is correct.
 
-      // The actual implementation would skip API calls during build
-      // We can verify the environment detection logic
+    it('should detect build time when NEXT_PHASE is phase-production-build', () => {
+      process.env.NEXT_PHASE = 'phase-production-build';
+      delete process.env.CI;
+
+      // This is the exact condition used in getPriorityModels (page.tsx:88)
       const isBuildTime = process.env.NEXT_PHASE === 'phase-production-build' || process.env.CI;
+
       expect(isBuildTime).toBe(true);
+      expect(process.env.NEXT_PHASE).toBe('phase-production-build');
     });
 
-    it('should skip API calls during build time when CI is set', async () => {
+    it('should detect build time when CI environment variable is set', () => {
+      delete process.env.NEXT_PHASE;
       process.env.CI = 'true';
 
-      // The actual implementation would skip API calls during build
-      // We can verify the environment detection logic
-      const isBuildTime = process.env.NEXT_PHASE === 'phase-production-build' || !!process.env.CI;
-      expect(isBuildTime).toBe(true);
+      // This is the exact condition used in getPriorityModels (page.tsx:88)
+      const isBuildTime = process.env.NEXT_PHASE === 'phase-production-build' || process.env.CI;
+
+      // process.env.CI is a string 'true', which is truthy
+      expect(isBuildTime).toBe('true'); // Truthy value (the string 'true')
+      expect(!!isBuildTime).toBe(true); // Boolean true
+      expect(process.env.CI).toBe('true');
     });
 
+    it('should NOT detect build time when neither variable is set', () => {
+      delete process.env.NEXT_PHASE;
+      delete process.env.CI;
+
+      // This is the exact condition used in getPriorityModels (page.tsx:88)
+      const isBuildTime = process.env.NEXT_PHASE === 'phase-production-build' || process.env.CI;
+
+      // When both are undefined, the result is undefined (falsy)
+      expect(isBuildTime).toBeUndefined();
+      expect(!!isBuildTime).toBe(false); // Boolean false
+    });
+
+  });
+
+  describe('getPriorityModels', () => {
     it('should fetch from priority gateways', async () => {
       const mockModels = [
         {
