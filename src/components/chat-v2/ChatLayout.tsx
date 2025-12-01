@@ -51,6 +51,24 @@ function shuffleArray<T>(array: T[]): T[] {
 function WelcomeScreen({ onPromptSelect }: { onPromptSelect: (txt: string) => void }) {
     // Select 4 random prompts on mount (useMemo ensures consistency during render)
     const [prompts] = useState(() => shuffleArray(ALL_PROMPTS).slice(0, 4));
+    const [clickedPrompt, setClickedPrompt] = useState<string | null>(null);
+
+    const handlePromptClick = (title: string) => {
+        setClickedPrompt(title);
+        onPromptSelect(title);
+    };
+
+    // If a prompt was clicked, show loading state
+    if (clickedPrompt) {
+        return (
+            <div className="flex-1 flex flex-col items-center justify-center p-4">
+                <div className="flex flex-col items-center gap-4">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+                    <p className="text-muted-foreground text-sm">Sending message...</p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="flex-1 flex flex-col items-center justify-center p-4 overflow-y-auto">
@@ -60,7 +78,7 @@ function WelcomeScreen({ onPromptSelect }: { onPromptSelect: (txt: string) => vo
                      <Card
                         key={p.title}
                         className="p-4 cursor-pointer hover:border-primary transition-colors bg-transparent border-border"
-                        onClick={() => onPromptSelect(p.title)}
+                        onClick={() => handlePromptClick(p.title)}
                      >
                          <p className="font-medium text-sm">{p.title}</p>
                          <p className="text-xs text-muted-foreground mt-1">{p.subtitle}</p>

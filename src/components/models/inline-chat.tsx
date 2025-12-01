@@ -55,10 +55,16 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
     }
 
     if (!apiKey) {
-      console.log('[InlineChat] No API key found in localStorage');
+      console.warn('[InlineChat] No API key found - triggering auth refresh');
       console.log('[InlineChat] localStorage gatewayz_api_key:', localStorage.getItem('gatewayz_api_key'));
       console.log('[InlineChat] localStorage gatewayz_user_data:', localStorage.getItem('gatewayz_user_data'));
-      setError('Authentication required. Please refresh the page or sign in again.');
+
+      // Trigger auth refresh to attempt re-authentication
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('gatewayz:refresh-auth'));
+      }
+
+      setError('Your session has expired. Please sign in again to continue chatting.');
       return;
     }
 
