@@ -339,7 +339,10 @@ describe('Chat Completions API Route', () => {
   });
 
   describe('Authentication', () => {
-    test('should return 401 if no API key provided', async () => {
+    test('should return 403 if no API key provided and GUEST_API_KEY not configured', async () => {
+      // Ensure GUEST_API_KEY is not set for this test
+      delete process.env.GUEST_API_KEY;
+
       const requestBody = {
         model: 'openrouter/auto',
         messages: [{ role: 'user', content: 'Hello' }],
@@ -349,9 +352,44 @@ describe('Chat Completions API Route', () => {
       const request = createMockRequest(requestBody);
       const response = await POST(request);
 
-      expect(response.status).toBe(401);
+      expect(response.status).toBe(403);
       const body = await response.json();
-      expect(body.error).toBe('API key required');
+      expect(body.error).toBe('Guest mode is not available. Please sign up to use chat.');
+    });
+
+    test('should use GUEST_API_KEY when no API key provided and GUEST_API_KEY is configured', async () => {
+      // Set GUEST_API_KEY for this test
+      process.env.GUEST_API_KEY = 'test-guest-key';
+
+      const requestBody = {
+        model: 'openrouter/auto',
+        messages: [{ role: 'user', content: 'Hello' }],
+        stream: true,
+      };
+
+      const mockChunks = [
+        'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n',
+        'data: [DONE]\n\n',
+      ];
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({
+          'content-type': 'text/event-stream',
+        }),
+        body: createMockStream(mockChunks),
+      });
+
+      const request = createMockRequest(requestBody);
+      await POST(request);
+
+      // Verify the guest API key was used
+      const fetchCall = (global.fetch as jest.Mock).mock.calls[0];
+      expect(fetchCall[1].headers['Authorization']).toBe('Bearer test-guest-key');
+
+      // Clean up
+      delete process.env.GUEST_API_KEY;
     });
 
     test('should accept API key from Authorization header', async () => {

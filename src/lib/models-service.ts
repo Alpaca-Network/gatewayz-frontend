@@ -379,7 +379,10 @@ async function fetchModelsFromGateway(gateway: string, limit?: number): Promise<
     } catch (error: any) {
       const message = getErrorMessage(error);
       if (isAbortOrNetworkError(error)) {
-        console.warn(`[Models] ${gateway} request aborted or timed out after ${timeoutMs}ms (transient): ${message}`);
+        // Only log timeouts in development mode to reduce console noise
+        if (process.env.NODE_ENV === 'development') {
+          console.warn(`[Models] ${gateway} request timed out after ${timeoutMs}ms (will use cache/fallback)`);
+        }
       } else {
         console.error(`[Models] Failed to fetch ${gateway}:`, message);
       }
@@ -387,13 +390,19 @@ async function fetchModelsFromGateway(gateway: string, limit?: number): Promise<
     }
   }
 
-  console.log(`[Models] Total fetched for gateway ${gateway}: ${allModels.length} models`);
+  // Only log fetch results in development or when models were actually fetched
+  if (process.env.NODE_ENV === 'development' || allModels.length > 0) {
+    console.log(`[Models] Total fetched for gateway ${gateway}: ${allModels.length} models`);
+  }
   return allModels;
 }
 
 // Helper function to get static fallback models
 function getStaticFallbackModels(gateway: string): any[] {
-  console.warn(`[Models] No models fetched from API for ${gateway}, falling back to static data (${models.length} models)`);
+  // Only log fallback usage in development to reduce console noise in production
+  if (process.env.NODE_ENV === 'development') {
+    console.warn(`[Models] No models fetched from API for ${gateway}, using static fallback (${models.length} models)`);
+  }
   let transformedModels;
 
   // Map developers to their preferred gateways

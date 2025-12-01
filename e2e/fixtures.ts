@@ -28,6 +28,8 @@ export const test = base.extend<TestFixtures>({
       localStorage.setItem('gatewayz_user_data', JSON.stringify({
         user_id: 999,
         api_key: 'test-api-key-e2e-12345',
+        auth_method: 'email',
+        privy_user_id: 'test-privy-user-id',
         email: 'e2e-test@gatewayz.ai',
         display_name: 'E2E Test User',
         credits: 10000,
@@ -46,6 +48,8 @@ export const test = base.extend<TestFixtures>({
         localStorage.setItem('gatewayz_user_data', JSON.stringify({
           user_id: 999,
           api_key: 'test-api-key-e2e-12345',
+          auth_method: 'email',
+          privy_user_id: 'test-privy-user-id',
           email: 'e2e-test@gatewayz.ai',
           display_name: 'E2E Test User',
           credits: 10000,
