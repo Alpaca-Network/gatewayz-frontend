@@ -337,11 +337,6 @@ export function SessionInitializer() {
 
   // Handle referral code toast notification
   useEffect(() => {
-    // Only show toast once per session
-    if (referralToastShownRef.current) {
-      return;
-    }
-
     // Wait until user is authenticated
     if (status !== "authenticated") {
       return;
@@ -352,11 +347,18 @@ export function SessionInitializer() {
       return;
     }
 
+    // Check if toast has already been shown (using sessionStorage for persistence across remounts)
+    const toastShown = sessionStorage.getItem('gatewayz_referral_toast_shown');
+    if (toastShown === 'true') {
+      return;
+    }
+
     const urlParams = new URLSearchParams(window.location.search);
     const refCode = urlParams.get('ref') || localStorage.getItem('gatewayz_referral_code');
 
     if (refCode) {
-      // Mark as shown to prevent duplicates
+      // Mark as shown in sessionStorage to persist across remounts
+      sessionStorage.setItem('gatewayz_referral_toast_shown', 'true');
       referralToastShownRef.current = true;
 
       // Show toast notification
