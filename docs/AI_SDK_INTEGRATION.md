@@ -17,14 +17,17 @@ Gatewayz Beta now integrates the official **Vercel AI SDK** for streaming chat c
 ### 2. API Routes
 
 #### `/api/chat/ai-sdk-completions`
-New streaming endpoint using AI SDK's `streamText`:
+**Primary** streaming endpoint using AI SDK's `streamText` - now used for **ALL models**:
 
 **Location**: `src/app/api/chat/ai-sdk-completions/route.ts`
 
 **Features**:
-- Multi-provider support (OpenAI, Anthropic, Google, OpenRouter)
+- **Universal model support** - handles all models from 60+ providers
+- Multi-provider support (OpenAI, Anthropic, Google, and OpenAI-compatible fallback)
 - Automatic provider detection based on model ID
-- Chain-of-thought reasoning for supported models
+- Chain-of-thought reasoning for compatible models (Claude, O1, Gemini)
+- Routes all traffic through Gatewayz backend API
+- Server-Sent Events (SSE) formatting for streaming
 - Streaming responses with proper error handling
 - Performance metrics and logging
 
@@ -236,6 +239,42 @@ Visit `/ai-sdk-demo` to test the AI SDK integration with:
 - Chain-of-thought reasoning visualization
 - Error handling demonstration
 - Performance monitoring
+
+## Current Implementation Status
+
+### ✅ Production Ready
+
+The `/chat` interface now uses AI SDK for **all models** by default:
+
+- **Route**: All chat requests go to `/api/chat/ai-sdk-completions`
+- **Coverage**: 100% of models (60+ providers, 300+ models)
+- **Streaming**: Real-time streaming via AI SDK's `streamText`
+- **Chain-of-Thought**: Automatic reasoning support for compatible models
+- **Backend**: All traffic routes through Gatewayz backend API
+- **Authentication**: Uses existing Gatewayz API key system
+
+### Provider Routing
+
+```typescript
+// Automatic provider detection in use-chat-stream.ts
+const url = `/api/chat/ai-sdk-completions?session_id=${sessionId}`;
+
+// Provider selection in ai-sdk-completions/route.ts
+- Claude models → Anthropic provider
+- GPT/O1/O3 models → OpenAI provider
+- Gemini models → Google provider
+- All other models → OpenAI-compatible fallback (via Gatewayz)
+```
+
+### Reasoning Support
+
+Models with native chain-of-thought reasoning:
+- ✅ Claude 3.7 Sonnet
+- ✅ Claude Opus 4
+- ✅ GPT O1 / O3
+- ✅ Gemini 2.0
+
+The reasoning is automatically captured and displayed in the chat interface via `reasoning-delta` stream events.
 
 ## Migration Guide
 
