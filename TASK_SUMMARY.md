@@ -64,7 +64,19 @@ The recent commits from the last 24 hours have successfully resolved major front
 
 ## Preventive Improvements Generated
 
-Since no critical errors were found, I generated **preventive error handling improvements**:
+Since no critical errors were found, I generated **preventive error handling improvements**.
+
+### 🔴 CRITICAL FIX APPLIED
+
+**Bug Found:** The initial implementation of `global-error-handlers.ts` was calling `Sentry.captureException()` for errors already captured by Sentry's built-in `globalHandlersIntegration`, causing **duplicate error reporting**.
+
+**Impact:** Each unhandled error would be sent to Sentry **twice**, inflating error counts and wasting quota.
+
+**Fix Applied:** Removed duplicate `Sentry.captureException()` calls. Now only adds breadcrumbs and console logging while Sentry's built-in handlers capture errors once.
+
+**See:** `DUPLICATE_ERROR_FIX.md` for complete details.
+
+---
 
 ### 1. 📁 `src/components/error/global-error-boundary.tsx` (NEW)
 **Purpose:** Root-level React error boundary
@@ -80,17 +92,22 @@ Since no critical errors were found, I generated **preventive error handling imp
 
 ---
 
-### 2. 📁 `src/lib/global-error-handlers.ts` (NEW)
-**Purpose:** Global error and promise rejection handlers
+### 2. 📁 `src/lib/global-error-handlers.ts` (NEW) - FIXED
 
-**Features:**
-- Catches unhandled promise rejections
-- Catches global window.onerror events
-- Tracks resource loading failures
-- Filters external script errors
-- Reports all to Sentry with proper context
+**Purpose:** Enhanced logging and breadcrumbs (no duplicate error capture)
 
-**Status:** ✅ Created and integrated into `instrumentation-client.ts`
+**Important:** Sentry's `@sentry/nextjs` SDK already has `globalHandlersIntegration` enabled by default. This module **does NOT duplicate** error capture - it only enhances with:
+- Console logging for debugging
+- Additional breadcrumbs for context
+- Resource loading error tracking
+- External script filtering
+
+**Critical Fix Applied:**
+- ❌ **Bug Found:** Originally called `Sentry.captureException()` for unhandled errors, duplicating Sentry's built-in capture
+- ✅ **Fixed:** Removed duplicate `captureException()` calls, kept only breadcrumbs
+- ✅ **Result:** No duplicate error reporting, accurate error counts, proper quota usage
+
+**Status:** ✅ Created, integrated, and FIXED (no duplicates)
 
 ---
 
@@ -162,17 +179,18 @@ Sentry (Existing: Aggregation & analysis)
 
 ## Files Created/Modified
 
-### Created (5 files)
+### Created (6 files)
 1. `src/components/error/global-error-boundary.tsx` - 245 lines
-2. `src/lib/global-error-handlers.ts` - 220 lines
-3. `ERROR_MONITORING_GUIDE.md` - 650+ lines
+2. `src/lib/global-error-handlers.ts` - 220 lines (FIXED - no duplicates)
+3. `ERROR_MONITORING_GUIDE.md` - 650+ lines (updated with fix)
 4. `FRONTEND_ERRORS_ANALYSIS_2025-12-01.md` - 480+ lines
-5. `PREVENTIVE_FIXES_APPLIED.md` - 330+ lines
+5. `PREVENTIVE_FIXES_APPLIED.md` - 330+ lines (updated with fix)
+6. `DUPLICATE_ERROR_FIX.md` - 400+ lines (documents the fix)
 
 ### Modified (1 file)
 1. `instrumentation-client.ts` - Added 4 lines for global handler initialization
 
-**Total Lines Added:** ~2,150 lines (code + documentation)
+**Total Lines Added:** ~2,550 lines (code + documentation)
 
 ---
 

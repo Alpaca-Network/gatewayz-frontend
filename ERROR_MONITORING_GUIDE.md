@@ -204,6 +204,19 @@ export class CustomErrorBoundary extends Component<Props, State> {
 
 **Location:** `src/lib/global-error-handlers.ts`
 
+### Important: No Duplicate Error Reporting
+
+**Sentry's `@sentry/nextjs` SDK already includes `globalHandlersIntegration`** which automatically captures:
+- Unhandled promise rejections
+- Global errors (window.onerror)
+- Uncaught exceptions
+
+Our custom handlers **DO NOT duplicate** this error capture. Instead, they provide:
+- Enhanced console logging for debugging
+- Additional breadcrumbs for context
+- Resource loading error tracking
+- External script filtering
+
 ### Initialization
 
 Global error handlers are automatically initialized in `instrumentation-client.ts`:
@@ -217,29 +230,35 @@ if (typeof window !== 'undefined') {
 }
 ```
 
-### Captured Error Types
+### What Gets Enhanced (Not Duplicated)
 
 1. **Unhandled Promise Rejections**
    ```javascript
-   // This will be caught and reported to Sentry
+   // Sentry's built-in handler captures this
+   // Our handler adds breadcrumb + console.error for debugging
    async function badFunction() {
      throw new Error('Unhandled error');
    }
    badFunction(); // No .catch()
    ```
+   **Result:** One error in Sentry + breadcrumb + console log
 
 2. **Global Errors (window.onerror)**
    ```javascript
-   // This will be caught
+   // Sentry's built-in handler captures this
+   // Our handler adds breadcrumb + console.error for debugging
    undefined.doSomething(); // ReferenceError
    ```
+   **Result:** One error in Sentry + breadcrumb + console log
 
-3. **Resource Loading Errors**
+3. **Resource Loading Errors** (Custom Capture)
    ```html
-   <!-- Failed script/stylesheet loads -->
+   <!-- These are NOT captured by Sentry's built-in handlers -->
+   <!-- Our custom handler reports these -->
    <script src="/nonexistent.js"></script>
    <link rel="stylesheet" href="/missing.css">
    ```
+   **Result:** Warning in Sentry for critical resources (scripts, stylesheets)
 
 ---
 

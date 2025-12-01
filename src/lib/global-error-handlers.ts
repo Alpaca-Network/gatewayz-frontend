@@ -1,17 +1,29 @@
 /**
  * Global Error Handlers
  *
- * Catches unhandled promise rejections and global errors.
- * Reports them to Sentry for monitoring.
+ * IMPORTANT: Sentry's @sentry/nextjs SDK already captures unhandled errors and
+ * promise rejections via its built-in globalHandlersIntegration.
  *
- * IMPORTANT: This should be initialized early in the app lifecycle,
- * ideally in instrumentation-client.ts or root layout.tsx
+ * This module provides ADDITIONAL context and logging WITHOUT duplicating
+ * Sentry's error capture. It adds breadcrumbs and custom logging only.
+ *
+ * If you want to disable Sentry's built-in handlers and use custom ones instead,
+ * add this to instrumentation-client.ts:
+ *
+ *   integrations: [
+ *     ...existingIntegrations,
+ *     Sentry.globalHandlersIntegration({ onerror: false, onunhandledrejection: false })
+ *   ]
  */
 
 import * as Sentry from '@sentry/nextjs';
 
 /**
  * Initialize global error handlers
+ *
+ * NOTE: This only adds breadcrumbs and logging.
+ * Sentry's built-in globalHandlersIntegration captures the actual errors.
+ *
  * Call this once at app startup
  */
 export function initializeGlobalErrorHandlers(): void {
@@ -25,10 +37,14 @@ export function initializeGlobalErrorHandlers(): void {
     return;
   }
 
-  console.log('[GlobalErrorHandlers] Initializing global error handlers');
+  console.log('[GlobalErrorHandlers] Initializing enhanced error logging and breadcrumbs');
+  console.log('[GlobalErrorHandlers] Note: Sentry globalHandlersIntegration already captures errors');
 
   // =============================================================================
   // UNHANDLED PROMISE REJECTIONS
+  //
+  // NOTE: Sentry's globalHandlersIntegration already captures these.
+  // We only add breadcrumbs and custom logging here.
   // =============================================================================
 
   window.addEventListener('unhandledrejection', (event: PromiseRejectionEvent) => {
@@ -39,37 +55,26 @@ export function initializeGlobalErrorHandlers(): void {
     const errorMessage = error instanceof Error ? error.message : String(error);
     const errorStack = error instanceof Error ? error.stack : undefined;
 
-    // Report to Sentry
-    Sentry.captureException(error, {
-      tags: {
-        error_type: 'unhandled_rejection',
-        handler: 'global',
-      },
-      contexts: {
-        promise: {
-          reason: errorMessage,
-          stack: errorStack,
-        },
-      },
-      level: 'error',
-    });
-
-    // Add breadcrumb for context
+    // Add breadcrumb for additional context (Sentry will capture the error itself)
     Sentry.addBreadcrumb({
       category: 'unhandled-rejection',
       message: errorMessage,
       level: 'error',
       data: {
         stack: errorStack,
+        captured_by: 'custom_handler',
       },
     });
 
-    // Prevent default error handling (avoid duplicate console errors)
-    // event.preventDefault();
+    // DO NOT call Sentry.captureException here - it would duplicate the error
+    // Sentry's globalHandlersIntegration already handles this
   });
 
   // =============================================================================
   // GLOBAL ERRORS (window.onerror)
+  //
+  // NOTE: Sentry's globalHandlersIntegration already captures these.
+  // We only add breadcrumbs and custom logging here.
   // =============================================================================
 
   window.addEventListener('error', (event: ErrorEvent) => {
@@ -81,28 +86,21 @@ export function initializeGlobalErrorHandlers(): void {
       return;
     }
 
-    // Report to Sentry
-    Sentry.captureException(event.error || new Error(event.message), {
-      tags: {
-        error_type: 'global_error',
-        handler: 'window.onerror',
-        filename: event.filename || 'unknown',
-        lineno: String(event.lineno || 0),
-        colno: String(event.colno || 0),
-      },
-      contexts: {
-        error_event: {
-          message: event.message,
-          filename: event.filename,
-          lineno: event.lineno,
-          colno: event.colno,
-        },
-      },
+    // Add breadcrumb for additional context (Sentry will capture the error itself)
+    Sentry.addBreadcrumb({
+      category: 'global-error',
+      message: event.message,
       level: 'error',
+      data: {
+        filename: event.filename,
+        lineno: event.lineno,
+        colno: event.colno,
+        captured_by: 'custom_handler',
+      },
     });
 
-    // Prevent default error handling
-    // event.preventDefault();
+    // DO NOT call Sentry.captureException here - it would duplicate the error
+    // Sentry's globalHandlersIntegration already handles this
   });
 
   // =============================================================================

@@ -46,31 +46,39 @@ export default function RootLayout({ children }) {
 
 **File Created:** `src/lib/global-error-handlers.ts`
 
-**Purpose:** Catch unhandled promise rejections and global errors
+**Purpose:** Add enhanced logging and breadcrumbs to Sentry's built-in error capture
+
+**Important Note:** Sentry's `@sentry/nextjs` SDK already has `globalHandlersIntegration` enabled by default, which captures unhandled errors and promise rejections. This module **does NOT duplicate** error capture - it only adds:
+- Enhanced console logging for debugging
+- Additional breadcrumbs for context
+- Resource loading error tracking (scripts, stylesheets)
+- External script filtering
 
 **Features:**
-- **Unhandled Promise Rejections** - Captures async errors without .catch()
-- **Global Errors (window.onerror)** - Captures synchronous errors
-- **Resource Loading Errors** - Tracks failed script/stylesheet loads
+- **Unhandled Promise Rejections** - Adds breadcrumbs (Sentry captures the error)
+- **Global Errors (window.onerror)** - Adds breadcrumbs (Sentry captures the error)
+- **Resource Loading Errors** - Tracks failed script/stylesheet loads (custom capture)
 - **External Script Filtering** - Skips third-party script errors
 - **Console Error Interception** - Optional console.error capture
 - **Idempotent Initialization** - Safe to call multiple times
 
 **Integration:** Automatically initialized in `instrumentation-client.ts`
 
-**Example Captured Errors:**
+**What Gets Logged:**
 ```javascript
 // Unhandled promise rejection
 async function badFunction() {
   throw new Error('Unhandled error');
 }
-badFunction(); // No .catch() - will be caught and reported
+badFunction(); // Sentry captures it, we add breadcrumb + console.error
 
 // Global error
 setTimeout(() => {
   throw new Error('Uncaught error');
-}, 100); // Will be caught and reported
+}, 100); // Sentry captures it, we add breadcrumb + console.error
 ```
+
+**No Duplicate Reporting:** Errors are only sent to Sentry once via built-in handlers
 
 ---
 
