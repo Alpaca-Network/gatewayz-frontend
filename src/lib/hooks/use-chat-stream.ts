@@ -116,7 +116,11 @@ export function useChatStream() {
              else if (modelValue.includes('deepinfra') || modelValue.includes('wizardlm')) requestBody.portkey_provider = 'deepinfra';
         }
 
-        const url = `/api/chat/completions?session_id=${sessionId}`;
+        // Use AI SDK route for all models
+        // This enables proper streaming and chain-of-thought support via Vercel AI SDK
+        const url = `/api/chat/ai-sdk-completions?session_id=${sessionId}`;
+
+        console.log('[Chat Stream] Using AI SDK route for model:', model.value);
 
         try {
             // 4. Stream Loop
