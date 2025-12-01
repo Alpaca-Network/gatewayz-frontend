@@ -16,6 +16,9 @@ const config: Configuration = {
           loader: 'ts-loader',
           options: {
             transpileOnly: true,
+            compilerOptions: {
+              jsx: 'react-jsx',
+            },
           },
         },
         exclude: /node_modules/,
