@@ -339,8 +339,8 @@ describe('Chat Completions API Route', () => {
   });
 
   describe('Authentication', () => {
-    test('should return 403 if no API key provided and GUEST_API_KEY not configured', async () => {
-      // Ensure GUEST_API_KEY is not set for this test
+    test('should return 401 if no API key provided (missing authentication)', async () => {
+      // When no API key is provided, it should return 401 to trigger re-authentication
       delete process.env.GUEST_API_KEY;
 
       const requestBody = {
@@ -352,12 +352,13 @@ describe('Chat Completions API Route', () => {
       const request = createMockRequest(requestBody);
       const response = await POST(request);
 
-      expect(response.status).toBe(403);
+      expect(response.status).toBe(401);
       const body = await response.json();
-      expect(body.error).toBe('Guest mode is not available. Please sign up to use chat.');
+      expect(body.error).toBe('Authentication required');
+      expect(body.detail).toBe('API key is missing or invalid. Please log in again.');
     });
 
-    test('should use GUEST_API_KEY when no API key provided and GUEST_API_KEY is configured', async () => {
+    test('should use GUEST_API_KEY when explicit guest request and GUEST_API_KEY is configured', async () => {
       // Set GUEST_API_KEY for this test
       process.env.GUEST_API_KEY = 'test-guest-key';
 
@@ -365,6 +366,7 @@ describe('Chat Completions API Route', () => {
         model: 'openrouter/auto',
         messages: [{ role: 'user', content: 'Hello' }],
         stream: true,
+        apiKey: 'guest', // Explicit guest request
       };
 
       const mockChunks = [
@@ -390,6 +392,25 @@ describe('Chat Completions API Route', () => {
 
       // Clean up
       delete process.env.GUEST_API_KEY;
+    });
+
+    test('should return 403 for explicit guest request when GUEST_API_KEY not configured', async () => {
+      // Ensure GUEST_API_KEY is not set
+      delete process.env.GUEST_API_KEY;
+
+      const requestBody = {
+        model: 'openrouter/auto',
+        messages: [{ role: 'user', content: 'Hello' }],
+        stream: true,
+        apiKey: 'guest', // Explicit guest request
+      };
+
+      const request = createMockRequest(requestBody);
+      const response = await POST(request);
+
+      expect(response.status).toBe(403);
+      const body = await response.json();
+      expect(body.error).toBe('Guest mode is not available. Please sign up to use chat.');
     });
 
     test('should accept API key from Authorization header', async () => {

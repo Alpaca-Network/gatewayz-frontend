@@ -207,7 +207,7 @@ describe('streamChatResponse', () => {
             { model: 'openrouter/auto', messages: [], stream: true }
           )
         )
-      ).rejects.toThrow(/Authentication failed/);
+      ).rejects.toThrow(/Invalid API key.*Attempting to refresh your session/);
     });
 
     test('should handle 400 bad request errors', async () => {

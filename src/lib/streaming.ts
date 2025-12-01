@@ -219,10 +219,29 @@ export async function* streamChatResponse(
       );
     }
 
-    if (response.status === 403) {
+    // Handle 401 Unauthorized - trigger auth refresh
+    if (response.status === 401) {
+      const errorMessage = errorData.detail || errorData.error?.message || 'Authentication required';
+      devError('401 Unauthorized - triggering auth refresh');
+
+      // Trigger auth refresh event to attempt re-authentication
+      if (typeof window !== 'undefined') {
+        devLog('Dispatching auth refresh event for 401 error');
+        window.dispatchEvent(new Event('gatewayz:refresh-auth'));
+      }
+
       throw new Error(
-        errorData.detail || errorData.error?.message ||
-        'API key validation failed. Your session may need to refresh. Please try logging out and back in.'
+        errorMessage + '. Attempting to refresh your session - please try again in a moment.'
+      );
+    }
+
+    // Handle 403 Forbidden - invalid or expired API key
+    if (response.status === 403) {
+      const errorMessage = errorData.detail || errorData.error?.message || 'Access forbidden';
+      devError('403 Forbidden details:', errorData);
+
+      throw new Error(
+        errorMessage + '. Your API key may be invalid or expired. Please try logging out and back in.'
       );
     }
 

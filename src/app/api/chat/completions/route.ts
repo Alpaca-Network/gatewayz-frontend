@@ -232,9 +232,12 @@ export async function POST(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const sessionId = searchParams.get('session_id');
 
-    // For guest users, use a special guest API key from environment
-    const isGuestRequest = !apiKey || apiKey === 'guest';
-    if (isGuestRequest) {
+    // Determine if this is an explicit guest request vs missing/invalid API key
+    const isExplicitGuestRequest = apiKey === 'guest';
+    const isMissingApiKey = !apiKey || apiKey.trim() === '';
+
+    // For explicit guest requests, use a special guest API key from environment
+    if (isExplicitGuestRequest) {
       apiKey = process.env.GUEST_API_KEY || '';
       if (!apiKey) {
         console.warn('[API Completions] Guest API key not configured in environment');
@@ -243,7 +246,18 @@ export async function POST(request: NextRequest) {
           { status: 403 }
         );
       }
-      console.log('[API Completions] Using guest API key for unauthenticated request');
+      console.log('[API Completions] Using guest API key for explicit guest request');
+    } else if (isMissingApiKey) {
+      // Missing API key for authenticated user - return 401 to trigger re-authentication
+      console.warn('[API Completions] Missing API key for authenticated request');
+      return NextResponse.json(
+        {
+          error: 'Authentication required',
+          detail: 'API key is missing or invalid. Please log in again.',
+          code: 'MISSING_API_KEY'
+        },
+        { status: 401 }
+      );
     }
 
     // Normalize @provider format model IDs (e.g., @google/models/gemini-pro → google/gemini-pro)
@@ -260,7 +274,8 @@ export async function POST(request: NextRequest) {
       messageCount: body.messages?.length || 0,
       stream: body.stream,
       hasApiKey: !!apiKey,
-      isGuestRequest,
+      isGuestRequest: isExplicitGuestRequest,
+      apiKeyPrefix: apiKey ? apiKey.substring(0, 10) + '...' : 'none',
     });
 
     profiler.markStage(requestId, 'prepare_backend_request');
