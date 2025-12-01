@@ -31,6 +31,14 @@ export function OnboardingBanner() {
       return;
     }
 
+    // Check if banner was dismissed this session
+    const dismissed = safeSessionStorage.getItem('onboarding_banner_dismissed');
+    if (dismissed) {
+      setVisible(false);
+      document.documentElement.classList.remove('has-onboarding-banner');
+      return;
+    }
+
     // Check if onboarding is completed
     const completed = localStorage.getItem('gatewayz_onboarding_completed');
     if (completed) {
