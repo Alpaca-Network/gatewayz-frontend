@@ -632,7 +632,8 @@ export class ChatHistoryAPI {
             if (error instanceof Error) {
               // Retry on timeout and 504 gateway errors
               return error.name === 'AbortError' ||
-                     error.message.includes('timeout') ||
+                     error.message.toLowerCase().includes('timeout') ||
+                     error.message.toLowerCase().includes('timed out') ||
                      error.message.includes('504');
             }
             return false;
@@ -665,7 +666,8 @@ export class ChatHistoryAPI {
         shouldRetry: (error) => {
           if (error instanceof Error) {
             return error.name === 'AbortError' ||
-                   error.message.includes('timeout') ||
+                   error.message.toLowerCase().includes('timeout') ||
+                   error.message.toLowerCase().includes('timed out') ||
                    error.message.includes('504');
           }
           return false;
