@@ -344,11 +344,22 @@ export function GatewayzAuthProvider({
 
             if (!response.ok) {
               console.error("[Auth] Unable to fetch upgraded API keys:", response.status);
-              console.error("[Auth] This is a critical issue - temp keys cannot be upgraded!");
-              console.error("[Auth] User will be unable to use chat completions with temp key");
+              console.error("[Auth] This is a non-critical issue - user can continue with temp key");
 
-              // If we can't upgrade and have a temp key, this is a critical auth failure
-              throw new Error(`Failed to upgrade temporary API key: ${response.status}. Temp keys have limited permissions.`);
+              // Log to Sentry but don't throw - let user continue with temp key
+              Sentry.captureMessage(`Failed to upgrade temporary API key: ${response.status}`, {
+                level: 'warning',
+                tags: {
+                  auth_error: 'api_key_upgrade_failed',
+                  http_status: response.status,
+                },
+                extra: {
+                  credits: authData.credits,
+                  is_new_user: authData.is_new_user,
+                },
+              });
+
+              return; // Continue with temp key - backend will create permanent key on next auth
             }
 
             const data = await response.json();
@@ -380,7 +391,17 @@ export function GatewayzAuthProvider({
         }
 
         if (!preferredKey || !preferredKey.api_key) {
-          console.log("[Auth] No upgraded API key found in response");
+          console.log("[Auth] No upgraded API key found in response - continuing with temp key");
+          Sentry.captureMessage("No upgraded API key found after payment", {
+            level: 'warning',
+            tags: {
+              auth_error: 'no_upgraded_key_found',
+            },
+            extra: {
+              credits: authData.credits,
+              keys_count: keys.length,
+            },
+          });
           return;
         }
 
@@ -1090,6 +1111,59 @@ export function GatewayzAuthProvider({
               // Show user-friendly error if we can't maintain auth
               setError("Wallet extension error - please sign in with email or social login");
             }
+            return;
+          }
+
+          // Check if this is an AbortError (user cancelled or timeout)
+          const isAuthAbortError = err instanceof Error &&
+            (err.name === 'AbortError' ||
+             errorMsg.includes('aborted') ||
+             errorMsg.includes('signal is aborted'));
+
+          if (isAuthAbortError) {
+            console.warn("[Auth] Request aborted:", errorMsg);
+
+            // Check if we have cached credentials we can keep using
+            const cachedKey = getApiKey();
+            const cachedUser = getUserData();
+
+            if (cachedKey && cachedUser && cachedUser.user_id && cachedUser.email) {
+              // Keep using cached credentials for abort errors
+              console.warn("[Auth] Request aborted but valid cached credentials found - maintaining session");
+              setAuthStatus("authenticated", "cached credentials after abort");
+              clearAuthTimeout();
+
+              Sentry.captureMessage(`Authentication sync aborted by client timeout`, {
+                level: 'warning',
+                tags: {
+                  auth_error: 'auth_sync_aborted',
+                },
+                extra: {
+                  error_message: errorMsg,
+                  retry_attempt: authRetryCountRef.current,
+                  using_cached: true,
+                },
+              });
+              return;
+            }
+
+            // No cached credentials - treat as timeout
+            setAuthStatus("error", "auth aborted");
+            setError("Authentication timed out. Please try again.");
+
+            Sentry.captureMessage(`Authentication sync aborted by client timeout`, {
+              level: 'warning',
+              tags: {
+                auth_error: 'auth_sync_aborted',
+              },
+              extra: {
+                error_message: errorMsg,
+                retry_attempt: authRetryCountRef.current,
+                using_cached: false,
+              },
+            });
+
+            onAuthError?.({ message: "Authentication aborted", raw: err });
             return;
           }
 

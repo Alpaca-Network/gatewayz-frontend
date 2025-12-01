@@ -58,6 +58,7 @@ export default function Home() {
   const router = useRouter();
   const { user, ready, login } = usePrivy();
   const [apiKey, setApiKey] = useState('');
+  const [isClient, setIsClient] = useState(false);
   const carouselRef = useRef<HTMLDivElement>(null);
   const [carouselOffset, setCarouselOffset] = useState(0);
   const [activeCodeTab, setActiveCodeTab] = useState<'python' | 'javascript' | 'curl'>('python');
@@ -66,8 +67,15 @@ export default function Home() {
   const { toast } = useToast();
   const [showPathChooser, setShowPathChooser] = useState(false);
 
+  // Fix hydration error - ensure client-only rendering
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
   // Load the actual API key when user is authenticated
   useEffect(() => {
+    if (!isClient) return;
+
     const loadApiKey = () => {
       // Wait for Privy to be ready
       if (!ready) {
@@ -102,14 +110,18 @@ export default function Home() {
       loadApiKey();
     };
 
-    window.addEventListener('storage', handleStorageChange);
-    window.addEventListener('gatewayz:api-key-updated', handleCustomStorageEvent);
+    if (typeof window !== 'undefined') {
+      window.addEventListener('storage', handleStorageChange);
+      window.addEventListener('gatewayz:api-key-updated', handleCustomStorageEvent);
+    }
 
     return () => {
-      window.removeEventListener('storage', handleStorageChange);
-      window.removeEventListener('gatewayz:api-key-updated', handleCustomStorageEvent);
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('storage', handleStorageChange);
+        window.removeEventListener('gatewayz:api-key-updated', handleCustomStorageEvent);
+      }
     };
-  }, [user, ready]);
+  }, [user, ready, isClient]);
 
   // Dynamic code examples with actual API key
   const codeExamples = {

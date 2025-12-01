@@ -56,6 +56,7 @@ Sentry.init({
   beforeSend(event, hint) {
     const error = hint.originalException;
     const errorMessage = typeof error === 'string' ? error : error instanceof Error ? error.message : '';
+    const stackFrames = event.exception?.values?.[0]?.stacktrace?.frames;
 
     // Filter out chrome.runtime.sendMessage errors from Privy wallet provider (inpage.js)
     // These are non-blocking and occur when Privy tries to detect wallet extensions
@@ -65,7 +66,6 @@ Sentry.init({
       (errorMessage.includes('Extension ID') && errorMessage.includes('from a webpage'))
     ) {
       // Check if error originates from Privy's inpage.js or wallet provider code
-      const stackFrames = event.exception?.values?.[0]?.stacktrace?.frames;
       if (stackFrames?.some(frame =>
         frame.filename?.includes('inpage.js') ||
         frame.filename?.includes('privy') ||
@@ -73,6 +73,19 @@ Sentry.init({
       )) {
         console.warn('[Sentry] Filtered out non-blocking Privy wallet extension error:', errorMessage);
         return null; // Don't send this error to Sentry
+      }
+    }
+
+    // Filter out wallet extension removeListener errors (JAVASCRIPT-NEXTJS-2)
+    // These occur when wallet extensions (MetaMask, Phantom, etc.) clean up listeners
+    if (errorMessage.includes('removeListener') || errorMessage.includes('stopListeners')) {
+      if (stackFrames?.some(frame =>
+        frame.filename?.includes('inpage.js') ||
+        frame.filename?.includes('app:///') ||
+        frame.function?.includes('stopListeners')
+      )) {
+        console.warn('[Sentry] Filtered out wallet extension removeListener error');
+        return null;
       }
     }
 
