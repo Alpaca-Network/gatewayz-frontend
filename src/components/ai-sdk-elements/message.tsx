@@ -55,8 +55,9 @@ export const MessageContent = forwardRef<HTMLDivElement, MessageContentProps>(
           remarkPlugins={[remarkGfm, remarkMath]}
           rehypePlugins={[rehypeKatex]}
           components={{
-            code: ({ node, inline, className: codeClassName, children: codeChildren, ...codeProps }) => {
-              return !inline ? (
+            code: ({ className: codeClassName, children: codeChildren, ...codeProps }) => {
+              const isInline = !(codeProps as any).node || (codeProps as any).inline === undefined;
+              return !isInline ? (
                 <pre className={cn("rounded-lg p-4 overflow-x-auto bg-muted", codeClassName)}>
                   <code {...codeProps}>{codeChildren}</code>
                 </pre>
