@@ -7,7 +7,7 @@ export default defineConfig({
     devServer: {
       framework: 'react',
       bundler: 'webpack',
-      webpackConfig: require('./cypress/webpack.config.ts'),
+      webpackConfig: require('./cypress/webpack.config.ts').default,
     },
     specPattern: 'cypress/component/**/*.cy.{ts,tsx}',
     supportFile: 'cypress/support/component.ts',

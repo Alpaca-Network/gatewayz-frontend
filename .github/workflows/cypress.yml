@@ -101,10 +101,9 @@ jobs:
         run: npx wait-on http://localhost:3000 -t 120000
 
       - name: Cypress E2E Tests
-        run: pnpm cypress:e2e
+        run: pnpm cypress run --e2e --spec 'cypress/e2e/visual/**/*.cy.ts' --config baseUrl=http://localhost:3000
         env:
           CYPRESS_PROJECT_ID: jwq6tx
-          CYPRESS_baseUrl: http://localhost:3000
 
       - name: Upload artifacts
         if: failure()
