@@ -648,5 +648,114 @@ describe('auth-sync', () => {
 
       global.window = originalWindow;
     });
+
+    it('should normalize github_oauth account type to github', async () => {
+      // Test for the fix: Privy returns 'github_oauth' but backend expects 'github'
+      const mockPrivyUser = createMockPrivyUser({
+        linkedAccounts: [
+          {
+            type: 'github_oauth',
+            subject: 'octocat',
+            name: 'The Octocat',
+            verifiedAt: new Date('2024-01-01').getTime(),
+          } as any,
+        ],
+      });
+      const mockAuthResponse = createMockAuthResponse();
+
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        text: async () => JSON.stringify(mockAuthResponse),
+      });
+
+      await syncPrivyToGatewayz(mockPrivyUser, 'token', null);
+
+      const requestBody = JSON.parse(
+        (global.fetch as jest.Mock).mock.calls[0][1].body
+      );
+
+      // Verify GitHub account type is normalized from 'github_oauth' to 'github'
+      expect(requestBody.user.linked_accounts).toHaveLength(1);
+      expect(requestBody.user.linked_accounts[0]).toMatchObject({
+        type: 'github',
+        subject: 'octocat',
+        name: 'The Octocat',
+      });
+    });
+
+    it('should preserve google_oauth account type unchanged', async () => {
+      // Ensure google_oauth doesn't get incorrectly normalized
+      const mockPrivyUser = createMockPrivyUser({
+        linkedAccounts: [
+          {
+            type: 'google_oauth',
+            subject: 'google-user-123',
+            email: 'user@gmail.com',
+            verifiedAt: new Date('2024-01-01').getTime(),
+          } as any,
+        ],
+      });
+      const mockAuthResponse = createMockAuthResponse();
+
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        text: async () => JSON.stringify(mockAuthResponse),
+      });
+
+      await syncPrivyToGatewayz(mockPrivyUser, 'token', null);
+
+      const requestBody = JSON.parse(
+        (global.fetch as jest.Mock).mock.calls[0][1].body
+      );
+
+      // Verify Google account type remains unchanged
+      expect(requestBody.user.linked_accounts).toHaveLength(1);
+      expect(requestBody.user.linked_accounts[0]).toMatchObject({
+        type: 'google_oauth',
+        subject: 'google-user-123',
+        email: 'user@gmail.com',
+      });
+    });
+
+    it('should handle mixed oauth accounts with github_oauth normalization', async () => {
+      // Test multiple accounts including GitHub OAuth
+      const mockPrivyUser = createMockPrivyUser({
+        linkedAccounts: [
+          {
+            type: 'email',
+            email: 'user@example.com',
+            verifiedAt: new Date('2024-01-01').getTime(),
+          } as any,
+          {
+            type: 'github_oauth',
+            subject: 'octocat',
+            verifiedAt: new Date('2024-01-02').getTime(),
+          } as any,
+          {
+            type: 'google_oauth',
+            subject: 'google-user-123',
+            verifiedAt: new Date('2024-01-03').getTime(),
+          } as any,
+        ],
+      });
+      const mockAuthResponse = createMockAuthResponse();
+
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        text: async () => JSON.stringify(mockAuthResponse),
+      });
+
+      await syncPrivyToGatewayz(mockPrivyUser, 'token', null);
+
+      const requestBody = JSON.parse(
+        (global.fetch as jest.Mock).mock.calls[0][1].body
+      );
+
+      // Verify all accounts are present with correct types
+      expect(requestBody.user.linked_accounts).toHaveLength(3);
+      expect(requestBody.user.linked_accounts[0].type).toBe('email');
+      expect(requestBody.user.linked_accounts[1].type).toBe('github'); // normalized from github_oauth
+      expect(requestBody.user.linked_accounts[2].type).toBe('google_oauth'); // unchanged
+    });
   });
 });
