@@ -10,6 +10,44 @@ jest.mock('@/lib/proxy-fetch', () => ({
   proxyFetch: jest.fn(),
 }));
 
+// Mock retry-utils with instant retries (no delays) for faster tests
+jest.mock('@/lib/retry-utils', () => ({
+  retryFetch: jest.fn(async (
+    fetchFn: () => Promise<any>,
+    options?: {
+      maxRetries?: number;
+      retryableStatuses?: number[];
+    }
+  ) => {
+    const maxRetries = options?.maxRetries ?? 3;
+    const retryableStatuses = options?.retryableStatuses ?? [502, 503, 504];
+
+    let lastError: any;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const response = await fetchFn();
+
+        // Check if response has a status code that should be retried
+        if (response && typeof response.status === 'number' &&
+            !response.ok && retryableStatuses.includes(response.status) &&
+            attempt < maxRetries) {
+          // Retry on retryable status codes
+          continue;
+        }
+
+        return response;
+      } catch (error) {
+        lastError = error;
+        if (attempt === maxRetries) {
+          throw error;
+        }
+        // Continue to retry on errors
+      }
+    }
+    throw lastError;
+  }),
+}));
+
 // Mock the error handler
 jest.mock('@/app/api/middleware/error-handler', () => ({
   handleApiError: jest.fn((error: Error, context: string) => {
