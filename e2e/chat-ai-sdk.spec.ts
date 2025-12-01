@@ -6,30 +6,16 @@
 import { test, expect } from './fixtures';
 
 test.describe('Chat with AI SDK', () => {
-  test.beforeEach(async ({ page, context }) => {
-    // Setup mock authentication
-    await context.addInitScript(() => {
-      localStorage.setItem('gatewayz_api_key', 'test-api-key-e2e-12345');
-      localStorage.setItem('gatewayz_user_data', JSON.stringify({
-        user_id: 999,
-        api_key: 'test-api-key-e2e-12345',
-        email: 'e2e-test@gatewayz.ai',
-        display_name: 'E2E Test User',
-        credits: 10000,
-        tier: 'pro',
-        subscription_status: 'active'
-      }));
-    });
-
-    // Navigate to chat page
-    await page.goto('/chat');
+  test.beforeEach(async ({ authenticatedPage }) => {
+    // Navigate to chat page with authentication already set up
+    await authenticatedPage.goto('/chat');
 
     // Wait for chat interface to load
-    await expect(page.locator('h1')).toContainText(/What's On Your Mind|Chat/i, { timeout: 15000 });
+    await expect(authenticatedPage.locator('h1')).toContainText(/What's On Your Mind|Chat/i, { timeout: 15000 });
   });
 
   test.describe('Basic Chat Functionality', () => {
-    test('should send message and receive streaming response', async ({ page }) => {
+    test('should send message and receive streaming response', async ({ authenticatedPage: page }) => {
       // Select a model
       await page.click('[data-testid="model-select"], button:has-text("Select")');
       await page.click('text=GPT-4');
@@ -46,7 +32,7 @@ test.describe('Chat with AI SDK', () => {
       await expect(assistantMessage).not.toBeEmpty();
     });
 
-    test('should show streaming indicator while generating', async ({ page }) => {
+    test('should show streaming indicator while generating', async ({ authenticatedPage: page }) => {
       // Select a model
       await page.click('[data-testid="model-select"], button:has-text("Select")');
       await page.click('text=GPT-4');
@@ -62,7 +48,7 @@ test.describe('Chat with AI SDK', () => {
       await expect(page.locator('[data-lucide="refresh-cw"].animate-spin')).not.toBeVisible({ timeout: 30000 });
     });
 
-    test('should work with multiple models', async ({ page }) => {
+    test('should work with multiple models', async ({ authenticatedPage: page }) => {
       const models = ['GPT-4', 'Claude', 'Gemini'];
 
       for (const model of models) {
@@ -89,7 +75,7 @@ test.describe('Chat with AI SDK', () => {
   });
 
   test.describe('Reasoning Display', () => {
-    test('should display reasoning for Claude 3.7 Sonnet', async ({ page }) => {
+    test('should display reasoning for Claude 3.7 Sonnet', async ({ authenticatedPage: page }) => {
       // Select Claude 3.7 Sonnet
       await page.click('[data-testid="model-select"], button:has-text("Select")');
       await page.click('text=/Claude.*3.7.*Sonnet/i').catch(() => {
@@ -113,7 +99,7 @@ test.describe('Chat with AI SDK', () => {
       }
     });
 
-    test('should display reasoning for O1 models', async ({ page }) => {
+    test('should display reasoning for O1 models', async ({ authenticatedPage: page }) => {
       // Select O1 model
       await page.click('[data-testid="model-select"], button:has-text("Select")');
       await page.click('text=/O1|o1-preview/i').catch(() => {
@@ -133,7 +119,7 @@ test.describe('Chat with AI SDK', () => {
   });
 
   test.describe('Error Handling', () => {
-    test('should display error for invalid API key', async ({ page }) => {
+    test('should display error for invalid API key', async ({ authenticatedPage: page }) => {
       // Inject invalid API key
       await page.evaluate(() => {
         localStorage.setItem('gatewayz_api_key', 'invalid-key-12345');
@@ -153,7 +139,7 @@ test.describe('Chat with AI SDK', () => {
       await expect(page.locator('text=/error|failed|invalid/i')).toBeVisible({ timeout: 5000 });
     });
 
-    test('should handle network errors gracefully', async ({ page }) => {
+    test('should handle network errors gracefully', async ({ authenticatedPage: page }) => {
       // Intercept and fail API calls
       await page.route('**/api/chat/ai-sdk-completions', route => {
         route.abort('failed');
@@ -172,7 +158,7 @@ test.describe('Chat with AI SDK', () => {
   });
 
   test.describe('Session Management', () => {
-    test('should maintain conversation history', async ({ page }) => {
+    test('should maintain conversation history', async ({ authenticatedPage: page }) => {
       // Select model
       await page.click('[data-testid="model-select"], button:has-text("Select")');
       await page.click('text=GPT-4');
@@ -196,7 +182,7 @@ test.describe('Chat with AI SDK', () => {
   });
 
   test.describe('Console Logging', () => {
-    test('should log AI SDK route usage', async ({ page }) => {
+    test('should log AI SDK route usage', async ({ authenticatedPage: page }) => {
       const consoleLogs: string[] = [];
 
       page.on('console', msg => {
