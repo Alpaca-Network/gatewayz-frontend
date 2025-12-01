@@ -8,6 +8,80 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewa
 let modelsCache: { data: any[], timestamp: number } | null = null;
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
 
+// Rate limiting configuration
+const BATCH_SIZE = 5; // Process 5 gateways at a time to avoid bursting rate limit
+const BATCH_DELAY_MS = 500; // Wait 500ms between batches
+
+/**
+ * Helper to sleep/delay execution
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Calculate retry delay for rate limit errors with exponential backoff
+ */
+function calculateRetryDelay(
+  retryCount: number,
+  retryAfterHeader: string | null
+): number {
+  // Base delay with exponential backoff
+  const baseDelay = 1000; // 1 second
+  const maxDelay = 30000; // 30 seconds
+  let waitTime = Math.min(baseDelay * Math.pow(2, retryCount), maxDelay);
+
+  // Parse Retry-After header if present
+  if (retryAfterHeader) {
+    const numericRetry = Number(retryAfterHeader);
+    if (!Number.isNaN(numericRetry) && numericRetry > 0) {
+      // Retry-After is in seconds
+      waitTime = Math.max(waitTime, numericRetry * 1000);
+    } else {
+      // Try parsing as HTTP date
+      const retryDate = Date.parse(retryAfterHeader);
+      if (!Number.isNaN(retryDate)) {
+        const headerWait = retryDate - Date.now();
+        if (headerWait > 0) {
+          waitTime = Math.max(waitTime, headerWait);
+        }
+      }
+    }
+  }
+
+  // Add jitter to prevent thundering herd
+  const jitter = Math.floor(Math.random() * 500);
+  waitTime += jitter;
+
+  return waitTime;
+}
+
+/**
+ * Process array in batches with delay between batches
+ */
+async function processBatches<T, R>(
+  items: T[],
+  batchSize: number,
+  delayMs: number,
+  processor: (batch: T[]) => Promise<R[]>
+): Promise<R[]> {
+  const results: R[] = [];
+
+  for (let i = 0; i < items.length; i += batchSize) {
+    const batch = items.slice(i, i + batchSize);
+    const batchResults = await processor(batch);
+    results.push(...batchResults);
+
+    // Add delay between batches (except after the last batch)
+    if (i + batchSize < items.length) {
+      console.log(`[Models] Processed batch ${Math.floor(i / batchSize) + 1}, waiting ${delayMs}ms before next batch...`);
+      await sleep(delayMs);
+    }
+  }
+
+  return results;
+}
+
 // Transform static models data to backend format
 function transformModel(model: any, gateway: string) {
   const resolvedGateway = gateway === 'all' ? 'openrouter' : gateway;
@@ -107,10 +181,11 @@ async function fetchModelsLogic(gateway: string, limit?: number) {
     throw new Error('Invalid gateway');
   }
 
-  // Special handling for 'all' gateway - fetch from all individual gateways in parallel
+  // Special handling for 'all' gateway - fetch from all individual gateways in batches
   // This ensures models are properly assigned to their respective gateways for filtering
+  // and avoids rate limiting by batching requests
   if (gateway === 'all') {
-    console.log('[Models] Fetching from all gateways in parallel');
+    console.log('[Models] Fetching from all gateways in batches to avoid rate limits');
     try {
       // Fetch from all known gateways (excluding deprecated 'portkey' and 'all' itself)
       const gatewaysToFetch = [
@@ -137,8 +212,18 @@ async function fetchModelsLogic(gateway: string, limit?: number) {
         'clarifai'
       ];
 
-      const results = await Promise.all(
-        gatewaysToFetch.map(gw => fetchModelsFromGateway(gw, limit))
+      // Process gateways in batches to avoid rate limiting
+      const results = await processBatches(
+        gatewaysToFetch,
+        BATCH_SIZE,
+        BATCH_DELAY_MS,
+        async (batch) => {
+          // Fetch batch in parallel
+          const batchResults = await Promise.all(
+            batch.map(gw => fetchModelsFromGateway(gw, limit))
+          );
+          return batchResults;
+        }
       );
 
       // Combine and deduplicate models intelligently
@@ -334,59 +419,91 @@ async function fetchModelsFromGateway(gateway: string, limit?: number): Promise<
       `${API_BASE_URL}/models?gateway=${gateway}&${limitParam}`
     ];
 
-    try {
-      const headers = buildHeaders(gateway);
+    const maxRetries = 3;
+    let retryCount = 0;
+    let lastError: { status: number; retryAfter: string | null } | null = null;
 
-      // Try both endpoints in parallel, use first successful response
-      const response = await Promise.race(
-        urls.map((url) =>
-          fetch(url, {
-            method: 'GET',
-            headers,
-            next: {
-              revalidate: 300,
-              tags: [`models:gateway:${gateway}`, 'models:all']
-            },
-            signal: AbortSignal.timeout(timeoutMs)
-          })
-        )
-      );
+    while (retryCount <= maxRetries) {
+      try {
+        // Add delay for retries
+        if (retryCount > 0 && lastError) {
+          const waitTime = calculateRetryDelay(retryCount - 1, lastError.retryAfter);
+          console.log(`[Models] Rate limited on ${gateway}, retry ${retryCount}/${maxRetries} after ${waitTime}ms`);
+          await sleep(waitTime);
+        }
 
-      if (response.ok) {
-        const data = await response.json();
+        const headers = buildHeaders(gateway);
 
-        if (data.data && Array.isArray(data.data) && data.data.length > 0) {
-          // Normalize each model to ensure provider_slugs and source_gateways are arrays
-          const normalizedModels = data.data.map((model: any) => normalizeModel(model, gateway));
-          allModels.push(...normalizedModels);
-          console.log(`[Models] Fetched ${data.data.length} models for gateway: ${gateway} (offset: ${offset})`);
+        // Try both endpoints in parallel, use first successful response
+        const response = await Promise.race(
+          urls.map((url) =>
+            fetch(url, {
+              method: 'GET',
+              headers,
+              next: {
+                revalidate: 300,
+                tags: [`models:gateway:${gateway}`, 'models:all']
+              },
+              signal: AbortSignal.timeout(timeoutMs)
+            })
+          )
+        );
 
-          const isFiveHundred = data.data.length === 500 && (gateway === 'huggingface' || gateway === 'featherless');
-          const hasReachedLimit = limit && allModels.length >= limit;
-          const gotFewerThanRequested = data.data.length < requestLimit && !isFiveHundred;
+        // Handle rate limit errors with retry
+        if (response.status === 429) {
+          const retryAfter = response.headers.get('retry-after');
 
-          if (gotFewerThanRequested || hasReachedLimit) {
-            hasMore = false;
+          if (retryCount < maxRetries) {
+            lastError = { status: 429, retryAfter };
+            retryCount++;
+            continue; // Retry
           } else {
-            offset += requestLimit;
+            // Max retries exceeded, log and skip this page
+            console.error(`[Models] Rate limit exceeded for ${gateway} after ${maxRetries} retries, skipping page`);
+            hasMore = false;
+            break;
           }
+        }
+
+        if (response.ok) {
+          const data = await response.json();
+
+          if (data.data && Array.isArray(data.data) && data.data.length > 0) {
+            // Normalize each model to ensure provider_slugs and source_gateways are arrays
+            const normalizedModels = data.data.map((model: any) => normalizeModel(model, gateway));
+            allModels.push(...normalizedModels);
+            console.log(`[Models] Fetched ${data.data.length} models for gateway: ${gateway} (offset: ${offset})`);
+
+            const isFiveHundred = data.data.length === 500 && (gateway === 'huggingface' || gateway === 'featherless');
+            const hasReachedLimit = limit && allModels.length >= limit;
+            const gotFewerThanRequested = data.data.length < requestLimit && !isFiveHundred;
+
+            if (gotFewerThanRequested || hasReachedLimit) {
+              hasMore = false;
+            } else {
+              offset += requestLimit;
+            }
+          } else {
+            hasMore = false;
+          }
+          break; // Success, exit retry loop
         } else {
           hasMore = false;
+          break;
         }
-      } else {
+      } catch (error: any) {
+        const message = getErrorMessage(error);
+        if (isAbortOrNetworkError(error)) {
+          // Only log timeouts in development mode to reduce console noise
+          if (process.env.NODE_ENV === 'development') {
+            console.warn(`[Models] ${gateway} request timed out after ${timeoutMs}ms (will use cache/fallback)`);
+          }
+        } else {
+          console.error(`[Models] Failed to fetch ${gateway}:`, message);
+        }
         hasMore = false;
+        break;
       }
-    } catch (error: any) {
-      const message = getErrorMessage(error);
-      if (isAbortOrNetworkError(error)) {
-        // Only log timeouts in development mode to reduce console noise
-        if (process.env.NODE_ENV === 'development') {
-          console.warn(`[Models] ${gateway} request timed out after ${timeoutMs}ms (will use cache/fallback)`);
-        }
-      } else {
-        console.error(`[Models] Failed to fetch ${gateway}:`, message);
-      }
-      hasMore = false;
     }
   }
 
