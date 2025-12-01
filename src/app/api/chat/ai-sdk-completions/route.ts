@@ -18,12 +18,60 @@ import { createGoogleGenerativeAI } from '@ai-sdk/google';
  */
 
 /**
+ * Detect if a model supports chain-of-thought reasoning based on model ID
+ * This is a comprehensive list that covers known reasoning-capable models
+ */
+function supportsReasoning(modelId: string): boolean {
+  const normalized = modelId.toLowerCase();
+
+  // Claude models with extended thinking
+  if (normalized.includes('claude')) {
+    // Claude 3.7 Sonnet and newer
+    if (normalized.includes('3-7') || normalized.includes('3.7')) return true;
+    if (normalized.includes('3.7')) return true;
+    // Claude Opus 4 and newer
+    if (normalized.includes('opus') && normalized.includes('4')) return true;
+    // Claude Sonnet 4 and newer
+    if (normalized.includes('sonnet') && normalized.includes('4')) return true;
+  }
+
+  // OpenAI reasoning models
+  if (normalized.includes('o1') || normalized.includes('o3')) return true;
+  if (normalized.includes('o1-preview') || normalized.includes('o1-mini')) return true;
+  if (normalized.includes('o3-mini')) return true;
+
+  // Google Gemini with thinking
+  if (normalized.includes('gemini')) {
+    if (normalized.includes('2.0') || normalized.includes('2-0')) return true;
+    if (normalized.includes('thinking') || normalized.includes('pro-exp')) return true;
+  }
+
+  // DeepSeek reasoning models
+  if (normalized.includes('deepseek')) {
+    if (normalized.includes('r1') || normalized.includes('reasoner')) return true;
+  }
+
+  // Qwen reasoning models
+  if (normalized.includes('qwen')) {
+    if (normalized.includes('qwq') || normalized.includes('thinking')) return true;
+  }
+
+  // Other known reasoning models
+  if (normalized.includes('thinking') || normalized.includes('reasoning')) return true;
+  if (normalized.includes('reflection')) return true;
+  if (normalized.includes('chain-of-thought') || normalized.includes('cot')) return true;
+
+  return false;
+}
+
+/**
  * Get the appropriate provider and model based on the model ID
  * All providers route through Gatewayz backend API
  */
 function getProviderAndModel(modelId: string, apiKey: string) {
   const normalized = modelId.toLowerCase();
   const gatewayBaseURL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
+  const supportsThinking = supportsReasoning(modelId);
 
   // Anthropic Claude models - use Gatewayz backend
   if (normalized.includes('claude')) {
@@ -34,7 +82,7 @@ function getProviderAndModel(modelId: string, apiKey: string) {
     return {
       provider: 'anthropic',
       model: anthropic(modelId),
-      supportsThinking: normalized.includes('sonnet') && (normalized.includes('3-7') || normalized.includes('3.7') || normalized.includes('4')),
+      supportsThinking,
     };
   }
 
@@ -47,7 +95,7 @@ function getProviderAndModel(modelId: string, apiKey: string) {
     return {
       provider: 'openai',
       model: openai(modelId),
-      supportsThinking: normalized.includes('o1') || normalized.includes('o3'),
+      supportsThinking,
     };
   }
 
@@ -60,11 +108,12 @@ function getProviderAndModel(modelId: string, apiKey: string) {
     return {
       provider: 'google',
       model: google(modelId),
-      supportsThinking: normalized.includes('2.0') || normalized.includes('2-0'),
+      supportsThinking,
     };
   }
 
   // Default fallback - use OpenAI-compatible endpoint through Gatewayz
+  // This handles DeepSeek, Qwen, and other reasoning models
   const openai = createOpenAI({
     apiKey: apiKey,  // Use Gatewayz API key
     baseURL: `${gatewayBaseURL}/v1`,  // Route through Gatewayz
@@ -72,7 +121,7 @@ function getProviderAndModel(modelId: string, apiKey: string) {
   return {
     provider: 'gatewayz',
     model: openai(modelId),
-    supportsThinking: false,
+    supportsThinking,
   };
 }
 
