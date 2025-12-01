@@ -228,9 +228,23 @@ export async function POST(request: NextRequest) {
     });
 
     // Extract API key and session ID
-    const apiKey = body.apiKey || request.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
+    let apiKey = body.apiKey || request.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
     const { searchParams } = new URL(request.url);
     const sessionId = searchParams.get('session_id');
+
+    // For guest users, use a special guest API key from environment
+    const isGuestRequest = !apiKey || apiKey === 'guest';
+    if (isGuestRequest) {
+      apiKey = process.env.GUEST_API_KEY || '';
+      if (!apiKey) {
+        console.warn('[API Completions] Guest API key not configured in environment');
+        return NextResponse.json(
+          { error: 'Guest mode is not available. Please sign up to use chat.' },
+          { status: 403 }
+        );
+      }
+      console.log('[API Completions] Using guest API key for unauthenticated request');
+    }
 
     // Normalize @provider format model IDs (e.g., @google/models/gemini-pro → google/gemini-pro)
     const originalModel = body.model;
@@ -246,14 +260,8 @@ export async function POST(request: NextRequest) {
       messageCount: body.messages?.length || 0,
       stream: body.stream,
       hasApiKey: !!apiKey,
+      isGuestRequest,
     });
-
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: 'API key required' },
-        { status: 401 }
-      );
-    }
 
     profiler.markStage(requestId, 'prepare_backend_request');
     const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
