@@ -268,13 +268,35 @@ const url = `/api/chat/ai-sdk-completions?session_id=${sessionId}`;
 
 ### Reasoning Support
 
-Models with native chain-of-thought reasoning:
-- ✅ Claude 3.7 Sonnet
-- ✅ Claude Opus 4
-- ✅ GPT O1 / O3
-- ✅ Gemini 2.0
+**Automatic reasoning detection** for all models that support chain-of-thought. The system detects and captures reasoning from:
 
-The reasoning is automatically captured and displayed in the chat interface via `reasoning-delta` stream events.
+**Anthropic (Claude)**:
+- ✅ Claude 3.7 Sonnet and newer
+- ✅ Claude Opus 4 and newer
+- ✅ Claude Sonnet 4 and newer
+
+**OpenAI**:
+- ✅ O1, O1-Preview, O1-Mini
+- ✅ O3, O3-Mini
+
+**Google (Gemini)**:
+- ✅ Gemini 2.0 and newer
+- ✅ Gemini Pro Experimental
+- ✅ Models with "thinking" in the name
+
+**DeepSeek**:
+- ✅ DeepSeek R1, DeepSeek Reasoner
+- ✅ Any DeepSeek model with reasoning capabilities
+
+**Qwen**:
+- ✅ QwQ (Qwen with Questions)
+- ✅ Qwen models with thinking modes
+
+**Other Models**:
+- ✅ Any model with "thinking", "reasoning", "reflection", or "chain-of-thought" in the name
+- ✅ Models using "COT" suffix
+
+The reasoning is automatically captured and displayed in the chat interface via `reasoning-delta` stream events. If a model supports reasoning but isn't detected, the backend may still send reasoning content which will be properly displayed.
 
 ## Migration Guide
 
