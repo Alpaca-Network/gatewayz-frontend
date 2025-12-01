@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { streamText, convertToCoreMessages } from 'ai';
+import { streamText } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 
 /**
@@ -166,23 +166,16 @@ export async function POST(request: NextRequest) {
       apiKeyPrefix: apiKey.substring(0, 10) + '...'
     });
 
-    // Convert messages to AI SDK core messages format
-    // Wrap in try-catch to provide better error messages for conversion issues
-    let coreMessages;
-    try {
-      coreMessages = convertToCoreMessages(messages);
-    } catch (conversionError) {
-      console.error('[AI SDK Route] Message conversion error:', conversionError);
-      console.error('[AI SDK Route] Messages that failed conversion:', JSON.stringify(messages, null, 2));
-      throw new Error(`Failed to convert messages: ${conversionError instanceof Error ? conversionError.message : 'Unknown conversion error'}`);
-    }
+    // Messages are already in the correct ModelMessage format (OpenAI-compatible)
+    // No conversion needed - streamText accepts messages in this format directly
+    console.log('[AI SDK Route] Using messages directly (already in ModelMessage format)');
 
     // Stream the response using AI SDK
     let result;
     try {
       result = streamText({
         model,
-        messages: coreMessages,
+        messages,
         temperature,
         maxOutputTokens: max_tokens,
         topP: top_p,
