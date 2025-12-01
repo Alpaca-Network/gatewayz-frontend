@@ -1,4 +1,5 @@
 import * as Sentry from "@sentry/nextjs";
+import { initializeGlobalErrorHandlers } from "./src/lib/global-error-handlers";
 
 // Get release information
 const getRelease = () => {
@@ -92,5 +93,10 @@ Sentry.init({
     return event;
   },
 });
+
+// Initialize global error handlers after Sentry is configured
+if (typeof window !== 'undefined') {
+  initializeGlobalErrorHandlers();
+}
 
 export const onRouterTransitionStart = Sentry.captureRouterTransitionStart;

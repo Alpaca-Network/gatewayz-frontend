@@ -13,7 +13,12 @@ export function ReferralToast() {
   const { login } = usePrivy();
 
   useEffect(() => {
-    // Don't show if user is already authenticated
+    // Always check for and capture referral codes first (before any early returns)
+    // This ensures URL codes are stored even if toast is dismissed
+    const code = getReferralCode();
+    const source = getReferralSource();
+
+    // Don't show toast if user is already authenticated
     const userData = getUserData();
     if (userData) {
       return;
@@ -25,11 +30,7 @@ export function ReferralToast() {
       return;
     }
 
-    // Check for referral code
-    const code = getReferralCode();
-    const source = getReferralSource();
-
-    // Only show if there's a referral code from URL (new visit)
+    // Only show toast if there's a referral code from URL (new visit)
     if (code && source === 'url') {
       setReferralCode(code);
       setShowToast(true);

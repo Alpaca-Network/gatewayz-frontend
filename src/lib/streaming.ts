@@ -367,7 +367,8 @@ export async function* streamChatResponse(
           }
 
           // Add a backoff delay to allow backend state to propagate
-          const authWaitTime = Math.min(1000 * (retryCount + 1), 5000);
+          // Exponential backoff: 1s, 2s, 4s, 8s, 10s (capped)
+          const authWaitTime = Math.min(1000 * Math.pow(2, retryCount), 10000);
           devLog(`[Streaming] Waiting ${authWaitTime}ms before retrying with refreshed credentials...`);
           await sleep(authWaitTime);
 

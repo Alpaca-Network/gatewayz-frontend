@@ -446,7 +446,7 @@ export async function POST(request: NextRequest) {
           // Wrap the stream to add debugging and ensure proper SSE format
           const wrappedStream = response.body.pipeThrough(
             new TransformStream({
-              async transform(chunk, controller) {
+              transform(chunk, controller) {
                 // Log chunk for debugging
                 const text = new TextDecoder().decode(chunk);
                 if (text.length > 0) {

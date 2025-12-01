@@ -20,6 +20,9 @@ export function ErrorSuppressor() {
       /Statsig.*networking error/i,
       /Failed to flush events/i,
       /runtime\.sendMessage.*Extension ID/i,
+      /Cannot redefine property.*ethereum/i,
+      /evmAsk.*ethereum/i,
+      /inpage.*sendMessage/i,
     ];
 
     // Override console.error
