@@ -158,31 +158,53 @@ export async function POST(request: NextRequest) {
 
     console.log('[AI SDK Route] Using provider:', provider, 'for model:', modelId);
     console.log('[AI SDK Route] Supports thinking:', supportsThinking);
+    console.log('[AI SDK Route] Request parameters:', {
+      modelId,
+      temperature,
+      max_tokens,
+      messagesCount: messages.length,
+      apiKeyPrefix: apiKey.substring(0, 10) + '...'
+    });
 
     // Convert messages to AI SDK core messages format
-    const coreMessages = convertToCoreMessages(messages);
+    // Wrap in try-catch to provide better error messages for conversion issues
+    let coreMessages;
+    try {
+      coreMessages = convertToCoreMessages(messages);
+    } catch (conversionError) {
+      console.error('[AI SDK Route] Message conversion error:', conversionError);
+      console.error('[AI SDK Route] Messages that failed conversion:', JSON.stringify(messages, null, 2));
+      throw new Error(`Failed to convert messages: ${conversionError instanceof Error ? conversionError.message : 'Unknown conversion error'}`);
+    }
 
     // Stream the response using AI SDK
-    const result = streamText({
-      model,
-      messages: coreMessages,
-      temperature,
-      maxOutputTokens: max_tokens,
-      topP: top_p,
-      frequencyPenalty: frequency_penalty,
-      presencePenalty: presence_penalty,
-      onFinish: ({ text, finishReason, usage }) => {
-        console.log('[AI SDK Route] Completion finished:', {
-          provider,
-          model: modelId,
-          finishReason,
-          inputTokens: usage.inputTokens,
-          outputTokens: usage.outputTokens,
-          totalTokens: usage.totalTokens,
-          textLength: text.length,
-        });
-      },
-    });
+    let result;
+    try {
+      result = streamText({
+        model,
+        messages: coreMessages,
+        temperature,
+        maxOutputTokens: max_tokens,
+        topP: top_p,
+        frequencyPenalty: frequency_penalty,
+        presencePenalty: presence_penalty,
+        onFinish: ({ text, finishReason, usage }) => {
+          console.log('[AI SDK Route] Completion finished:', {
+            provider,
+            model: modelId,
+            finishReason,
+            inputTokens: usage.inputTokens,
+            outputTokens: usage.outputTokens,
+            totalTokens: usage.totalTokens,
+            textLength: text.length,
+          });
+        },
+      });
+      console.log('[AI SDK Route] streamText call successful, starting stream...');
+    } catch (streamInitError) {
+      console.error('[AI SDK Route] Error initializing streamText:', streamInitError);
+      throw new Error(`Failed to initialize streaming: ${streamInitError instanceof Error ? streamInitError.message : 'Unknown error'}`);
+    }
 
     // Convert AI SDK stream to SSE format that the frontend expects
     // Use fullStream() to access reasoning, text, and other parts
@@ -192,6 +214,7 @@ export async function POST(request: NextRequest) {
     const sseStream = new ReadableStream({
       async start(controller) {
         try {
+          console.log('[AI SDK Route] Starting stream iteration...');
           for await (const part of stream) {
             // Handle different part types from AI SDK
             if (part.type === 'text-delta') {
@@ -237,6 +260,33 @@ export async function POST(request: NextRequest) {
           controller.close();
         } catch (error) {
           console.error('[AI SDK Route] Stream error:', error);
+
+          // Log additional error details
+          if (error instanceof Error) {
+            console.error('[AI SDK Route] Stream error name:', error.name);
+            console.error('[AI SDK Route] Stream error message:', error.message);
+            console.error('[AI SDK Route] Stream error stack:', error.stack);
+          }
+
+          // Try to send an error message to the client before closing the stream
+          try {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown stream error';
+            const errorData = {
+              choices: [{
+                delta: {},
+                finish_reason: 'error'
+              }],
+              error: {
+                message: errorMessage,
+                type: 'stream_error'
+              }
+            };
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(errorData)}\n\n`));
+            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+          } catch (sendError) {
+            console.error('[AI SDK Route] Failed to send error to client:', sendError);
+          }
+
           controller.error(error);
         }
       }
@@ -254,6 +304,13 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('[AI SDK Route] Error:', error);
+
+    // Log the full error details for debugging
+    if (error instanceof Error) {
+      console.error('[AI SDK Route] Error name:', error.name);
+      console.error('[AI SDK Route] Error message:', error.message);
+      console.error('[AI SDK Route] Error stack:', error.stack);
+    }
 
     const message = error instanceof Error ? error.message : 'Unknown error';
     const status = message.includes('API key') ? 401 : 500;

@@ -105,7 +105,8 @@ export function useChatStream() {
             messages: apiMessages,
             stream: true,
             max_tokens: 8000,
-            gateway: model.sourceGateway
+            gateway: model.sourceGateway,
+            apiKey: apiKey  // Pass API key in request body as well as Authorization header
         };
         
         // Portkey provider logic (copied from original)
