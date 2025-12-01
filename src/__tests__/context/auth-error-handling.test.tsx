@@ -54,7 +54,7 @@ describe('Authentication Error Handling', () => {
       // Simulate auth sync
       // In real test, would trigger via context provider
       const is5xxError = true;
-      const hasCache = cachedApiKey && cachedUserData.user_id && cachedUserData.email;
+      const hasCache = !!(cachedApiKey && cachedUserData.user_id && cachedUserData.email);
 
       expect(is5xxError && hasCache).toBe(true);
       expect(sentryMessageSpy).not.toHaveBeenCalled();
@@ -116,7 +116,7 @@ describe('Authentication Error Handling', () => {
 
       expect(isAuthAbortError).toBe(true);
 
-      const hasValidCache = cachedApiKey && cachedUserData.user_id && cachedUserData.email;
+      const hasValidCache = !!(cachedApiKey && cachedUserData.user_id && cachedUserData.email);
       expect(hasValidCache).toBe(true);
     });
 
@@ -280,7 +280,7 @@ describe('Authentication Error Handling', () => {
 
       expect(isNetworkError).toBe(true);
 
-      const hasValidCache = cachedApiKey && cachedUserData.user_id && cachedUserData.email;
+      const hasValidCache = !!(cachedApiKey && cachedUserData.user_id && cachedUserData.email);
       expect(hasValidCache).toBe(true);
     });
 
