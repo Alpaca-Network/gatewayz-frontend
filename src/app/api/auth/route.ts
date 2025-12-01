@@ -23,6 +23,7 @@ export async function POST(request: NextRequest) {
 
     try {
       // Wrap fetch in retry logic for 502/503/504 errors
+      // Increased retry delay to give backend time to recover under load
       const response = await retryFetch(
         () =>
           proxyFetch(`${API_BASE_URL}/auth`, {
@@ -35,8 +36,8 @@ export async function POST(request: NextRequest) {
           }),
         {
           maxRetries: 3,
-          initialDelayMs: 500,
-          maxDelayMs: 5000,
+          initialDelayMs: 1000, // Increased from 500ms to give backend more recovery time
+          maxDelayMs: 10000, // Increased from 5s to 10s
           backoffMultiplier: 2,
           retryableStatuses: [502, 503, 504],
         }
