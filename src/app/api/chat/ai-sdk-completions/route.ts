@@ -17,73 +17,62 @@ import { createGoogleGenerativeAI } from '@ai-sdk/google';
  * - OpenRouter (via OpenAI-compatible API)
  */
 
-// Initialize provider SDKs
-const openai = createOpenAI({
-  apiKey: process.env.OPENAI_API_KEY || '',
-});
-
-const anthropic = createAnthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY || '',
-});
-
-const google = createGoogleGenerativeAI({
-  apiKey: process.env.GOOGLE_API_KEY || '',
-});
-
-/**
- * Create an OpenRouter client using OpenAI-compatible API
- */
-function createOpenRouter(apiKey: string) {
-  return createOpenAI({
-    apiKey,
-    baseURL: 'https://openrouter.ai/api/v1',
-  });
-}
-
 /**
  * Get the appropriate provider and model based on the model ID
+ * All providers route through Gatewayz backend API
  */
-function getProviderAndModel(modelId: string, apiKey?: string) {
+function getProviderAndModel(modelId: string, apiKey: string) {
   const normalized = modelId.toLowerCase();
+  const gatewayBaseURL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
 
-  // OpenAI models
-  if (normalized.includes('gpt') || normalized.includes('o1')) {
-    return {
-      provider: 'openai',
-      model: openai(modelId),
-    };
-  }
-
-  // Anthropic Claude models
+  // Anthropic Claude models - use Gatewayz backend
   if (normalized.includes('claude')) {
+    const anthropic = createAnthropic({
+      apiKey: apiKey,  // Use Gatewayz API key
+      baseURL: `${gatewayBaseURL}/v1`,  // Route through Gatewayz
+    });
     return {
       provider: 'anthropic',
       model: anthropic(modelId),
+      supportsThinking: normalized.includes('sonnet') && (normalized.includes('3-7') || normalized.includes('3.7') || normalized.includes('4')),
     };
   }
 
-  // Google Gemini models
+  // OpenAI models - use Gatewayz backend
+  if (normalized.includes('gpt') || normalized.includes('o1') || normalized.includes('o3')) {
+    const openai = createOpenAI({
+      apiKey: apiKey,  // Use Gatewayz API key
+      baseURL: `${gatewayBaseURL}/v1`,  // Route through Gatewayz
+    });
+    return {
+      provider: 'openai',
+      model: openai(modelId),
+      supportsThinking: normalized.includes('o1') || normalized.includes('o3'),
+    };
+  }
+
+  // Google Gemini models - use Gatewayz backend
   if (normalized.includes('gemini')) {
+    const google = createGoogleGenerativeAI({
+      apiKey: apiKey,  // Use Gatewayz API key
+      baseURL: `${gatewayBaseURL}/v1`,  // Route through Gatewayz
+    });
     return {
       provider: 'google',
       model: google(modelId),
+      supportsThinking: normalized.includes('2.0') || normalized.includes('2-0'),
     };
   }
 
-  // OpenRouter (default fallback)
-  // Use the user's API key for OpenRouter
-  if (apiKey) {
-    const openrouter = createOpenRouter(apiKey);
-    return {
-      provider: 'openrouter',
-      model: openrouter(modelId),
-    };
-  }
-
-  // Fallback to OpenAI format
+  // Default fallback - use OpenAI-compatible endpoint through Gatewayz
+  const openai = createOpenAI({
+    apiKey: apiKey,  // Use Gatewayz API key
+    baseURL: `${gatewayBaseURL}/v1`,  // Route through Gatewayz
+  });
   return {
-    provider: 'openai',
+    provider: 'gatewayz',
     model: openai(modelId),
+    supportsThinking: false,
   };
 }
 
@@ -122,18 +111,21 @@ export async function POST(request: NextRequest) {
     // Get API key from request or headers
     const apiKey = userApiKey || request.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
 
+    if (!apiKey) {
+      return new Response(
+        JSON.stringify({ error: 'API key required' }),
+        { status: 401, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
     // Get the appropriate provider and model
-    const { provider, model } = getProviderAndModel(modelId, apiKey);
+    const { provider, model, supportsThinking } = getProviderAndModel(modelId, apiKey);
 
     console.log('[AI SDK Route] Using provider:', provider, 'for model:', modelId);
+    console.log('[AI SDK Route] Supports thinking:', supportsThinking);
 
     // Convert messages to AI SDK core messages format
     const coreMessages = convertToCoreMessages(messages);
-
-    // Determine if model supports extended thinking
-    const supportsThinking = modelId.toLowerCase().includes('claude-3-7-sonnet') ||
-                            modelId.toLowerCase().includes('claude-opus-4') ||
-                            modelId.toLowerCase().includes('o1');
 
     // Stream the response using AI SDK
     const result = streamText({
@@ -157,9 +149,69 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Return the streaming response with proper headers
-    return result.toTextStreamResponse({
+    // Convert AI SDK stream to SSE format that the frontend expects
+    // Use fullStream() to access reasoning, text, and other parts
+    const stream = result.fullStream;
+    const encoder = new TextEncoder();
+
+    const sseStream = new ReadableStream({
+      async start(controller) {
+        try {
+          for await (const part of stream) {
+            // Handle different part types from AI SDK
+            if (part.type === 'text-delta') {
+              // Regular text content
+              const sseData = {
+                choices: [{
+                  delta: {
+                    content: part.text
+                  },
+                  finish_reason: null
+                }]
+              };
+              const sseMessage = `data: ${JSON.stringify(sseData)}\n\n`;
+              controller.enqueue(encoder.encode(sseMessage));
+            } else if (part.type === 'reasoning-delta') {
+              // Chain-of-thought reasoning
+              const sseData = {
+                choices: [{
+                  delta: {
+                    reasoning_content: part.text
+                  },
+                  finish_reason: null
+                }]
+              };
+              const sseMessage = `data: ${JSON.stringify(sseData)}\n\n`;
+              controller.enqueue(encoder.encode(sseMessage));
+              console.log('[AI SDK Route] Reasoning chunk:', part.text.substring(0, 100));
+            } else if (part.type === 'finish') {
+              // Stream finished
+              const sseData = {
+                choices: [{
+                  delta: {},
+                  finish_reason: part.finishReason
+                }]
+              };
+              const sseMessage = `data: ${JSON.stringify(sseData)}\n\n`;
+              controller.enqueue(encoder.encode(sseMessage));
+            }
+          }
+
+          // Send final [DONE] message
+          controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+          controller.close();
+        } catch (error) {
+          console.error('[AI SDK Route] Stream error:', error);
+          controller.error(error);
+        }
+      }
+    });
+
+    return new Response(sseStream, {
       headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
         'X-Provider': provider,
         'X-Model': modelId,
         'X-Supports-Thinking': supportsThinking ? 'true' : 'false',
