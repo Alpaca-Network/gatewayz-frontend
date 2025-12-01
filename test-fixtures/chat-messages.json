@@ -1,0 +1,41 @@
+{
+  "messages": [
+    {
+      "id": 1,
+      "role": "user",
+      "content": "Hello, how are you?",
+      "created_at": "2024-01-01T12:00:00Z"
+    },
+    {
+      "id": 2,
+      "role": "assistant",
+      "content": "I'm doing well, thank you! How can I help you today?",
+      "model": "gpt-4-turbo",
+      "tokens": 15,
+      "created_at": "2024-01-01T12:00:01Z"
+    },
+    {
+      "id": 3,
+      "role": "user",
+      "content": "Can you explain what AI models are?",
+      "created_at": "2024-01-01T12:01:00Z"
+    },
+    {
+      "id": 4,
+      "role": "assistant",
+      "content": "AI models are algorithms trained on data to perform specific tasks...",
+      "model": "gpt-4-turbo",
+      "tokens": 120,
+      "created_at": "2024-01-01T12:01:05Z"
+    }
+  ],
+  "session": {
+    "id": 1,
+    "user_id": 999,
+    "title": "AI Discussion",
+    "model": "gpt-4-turbo",
+    "created_at": "2024-01-01T12:00:00Z",
+    "updated_at": "2024-01-01T12:01:05Z",
+    "is_active": true
+  }
+}

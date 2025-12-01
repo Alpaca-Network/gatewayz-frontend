@@ -49,3 +49,11 @@ firestore-debug.log.env.local
 # PM2 logs
 /logs
 *.log
+
+# Cypress
+cypress/screenshots/
+cypress/videos/
+cypress/downloads/
+cypress/results/
+cypress.env.json
+.cypress-cache/
