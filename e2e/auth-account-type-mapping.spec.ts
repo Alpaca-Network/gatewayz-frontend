@@ -92,30 +92,17 @@ test.describe('Authentication - Account Type Mapping', () => {
 
     await page.goto('/');
 
-    // Wait for auth data to be fully populated (may take a moment after authentication)
-    await page.waitForFunction(() => {
-      const data = localStorage.getItem('gatewayz_user_data');
-      if (!data) return false;
-      try {
-        const parsed = JSON.parse(data);
-        return parsed && parsed.api_key && parsed.user_id;
-      } catch {
-        return false;
-      }
-    }, { timeout: 5000 });
-
     // Check stored auth data
     const userData = await page.evaluate(() => {
       const data = localStorage.getItem('gatewayz_user_data');
       return data ? JSON.parse(data) : null;
     });
 
-    if (userData) {
-      // Verify essential auth fields
-      expect(userData.user_id).toBeDefined();
-      expect(userData.api_key).toBeDefined();
-      expect(userData.email).toBeDefined();
-    }
+    // Verify essential auth fields
+    expect(userData).not.toBeNull();
+    expect(userData.user_id).toBeDefined();
+    expect(userData.api_key).toBeDefined();
+    expect(userData.email).toBeDefined();
   });
 
   test('can navigate to settings after authentication', async ({ authenticatedPage: page }) => {
