@@ -621,8 +621,11 @@ export class ChatHistoryAPI {
     const cached = getCachedSessions();
     if (cached.length > 0) {
       // Trigger background sync with retry logic
+      // Note: signal parameter is intentionally not used because makeRequest()
+      // creates its own AbortController internally. The retry wrapper provides
+      // retry logic on top of makeRequest's built-in timeout mechanism.
       withTimeoutAndRetry(
-        async (signal) => {
+        async () => {
           return await this.getSessions(limit, offset);
         },
         {
@@ -656,8 +659,11 @@ export class ChatHistoryAPI {
     }
 
     // No cache, fetch from backend with retry logic
+    // Note: signal parameter is intentionally not used because makeRequest()
+    // creates its own AbortController internally. The retry wrapper provides
+    // retry logic on top of makeRequest's built-in timeout mechanism.
     const sessions = await withTimeoutAndRetry(
-      async (signal) => {
+      async () => {
         return await this.getSessions(limit, offset);
       },
       {
