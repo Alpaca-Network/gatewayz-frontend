@@ -1,20 +1,26 @@
 import { NextRequest } from 'next/server';
 import { streamText, convertToCoreMessages } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
-import { createAnthropic } from '@ai-sdk/anthropic';
-import { createGoogleGenerativeAI } from '@ai-sdk/google';
 
 /**
  * AI SDK Chat Completions Route
  *
  * This route uses the official Vercel AI SDK for streaming chat completions
- * with support for chain-of-thought reasoning and multiple providers.
+ * with support for chain-of-thought reasoning across all model providers.
  *
- * Supports:
- * - OpenAI (GPT models)
+ * Architecture:
+ * - All models use OpenAI-compatible format (via @ai-sdk/openai)
+ * - Requests are sent to Gatewayz backend API
+ * - Gatewayz backend handles provider-specific translation
+ * - Supports 300+ models from 60+ providers
+ *
+ * Providers supported (via Gatewayz):
+ * - OpenAI (GPT, O1, O3 models)
  * - Anthropic (Claude models with extended thinking)
  * - Google (Gemini models)
- * - OpenRouter (via OpenAI-compatible API)
+ * - DeepSeek (R1, Reasoner models)
+ * - Qwen (QwQ and thinking models)
+ * - And 60+ other providers
  */
 
 /**
@@ -66,60 +72,34 @@ function supportsReasoning(modelId: string): boolean {
 
 /**
  * Get the appropriate provider and model based on the model ID
- * All providers route through Gatewayz backend API
+ * All models use OpenAI-compatible format through Gatewayz backend
+ *
+ * NOTE: We use OpenAI provider for ALL models because Gatewayz backend
+ * expects OpenAI-compatible requests for all providers. The backend handles
+ * the translation to provider-specific formats (Anthropic, Google, etc.).
  */
 function getProviderAndModel(modelId: string, apiKey: string) {
   const normalized = modelId.toLowerCase();
   const gatewayBaseURL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
   const supportsThinking = supportsReasoning(modelId);
 
-  // Anthropic Claude models - use Gatewayz backend
-  if (normalized.includes('claude')) {
-    const anthropic = createAnthropic({
-      apiKey: apiKey,  // Use Gatewayz API key
-      baseURL: `${gatewayBaseURL}/v1`,  // Route through Gatewayz
-    });
-    return {
-      provider: 'anthropic',
-      model: anthropic(modelId),
-      supportsThinking,
-    };
-  }
+  // Detect provider name for logging
+  let providerName = 'gatewayz';
+  if (normalized.includes('claude')) providerName = 'anthropic';
+  else if (normalized.includes('gpt') || normalized.includes('o1') || normalized.includes('o3')) providerName = 'openai';
+  else if (normalized.includes('gemini')) providerName = 'google';
+  else if (normalized.includes('deepseek')) providerName = 'deepseek';
+  else if (normalized.includes('qwen')) providerName = 'qwen';
 
-  // OpenAI models - use Gatewayz backend
-  if (normalized.includes('gpt') || normalized.includes('o1') || normalized.includes('o3')) {
-    const openai = createOpenAI({
-      apiKey: apiKey,  // Use Gatewayz API key
-      baseURL: `${gatewayBaseURL}/v1`,  // Route through Gatewayz
-    });
-    return {
-      provider: 'openai',
-      model: openai(modelId),
-      supportsThinking,
-    };
-  }
-
-  // Google Gemini models - use Gatewayz backend
-  if (normalized.includes('gemini')) {
-    const google = createGoogleGenerativeAI({
-      apiKey: apiKey,  // Use Gatewayz API key
-      baseURL: `${gatewayBaseURL}/v1`,  // Route through Gatewayz
-    });
-    return {
-      provider: 'google',
-      model: google(modelId),
-      supportsThinking,
-    };
-  }
-
-  // Default fallback - use OpenAI-compatible endpoint through Gatewayz
-  // This handles DeepSeek, Qwen, and other reasoning models
+  // Use OpenAI provider for ALL models - Gatewayz handles provider routing
   const openai = createOpenAI({
-    apiKey: apiKey,  // Use Gatewayz API key
-    baseURL: `${gatewayBaseURL}/v1`,  // Route through Gatewayz
+    apiKey: apiKey,
+    baseURL: `${gatewayBaseURL}/v1`,
+    // Don't set any provider-specific headers - let Gatewayz handle it
   });
+
   return {
-    provider: 'gatewayz',
+    provider: providerName,
     model: openai(modelId),
     supportsThinking,
   };
