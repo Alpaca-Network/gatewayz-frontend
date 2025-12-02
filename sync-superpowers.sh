@@ -1,52 +1,47 @@
 #!/bin/bash
 set -euo pipefail
 
-# Configuration
-TMP_DIR="./tmp"
-REPO_DIR="$TMP_DIR/superpowers"
-REPO_URL="https://github.com/obra/superpowers"
-CLAUDE_DIR="./.claude"
+echo "🚀 Starting superpowers sync..."
 
-echo "=== Superpowers Sync Script ==="
-
-# Step 1: Clone or update the repository
-if [ -d "$REPO_DIR" ]; then
-    echo "📥 Repository exists, pulling latest changes..."
-    if ! git -C "$REPO_DIR" pull; then
-        echo "❌ Error: Failed to pull repository updates"
-        exit 1
-    fi
-    echo "✅ Repository updated successfully"
-else
-    echo "📦 Creating tmp directory if needed..."
-    mkdir -p "$TMP_DIR"
-    
-    echo "📥 Cloning repository..."
-    if ! git clone "$REPO_URL" "$REPO_DIR"; then
-        echo "❌ Error: Failed to clone repository"
-        exit 1
-    fi
-    echo "✅ Repository cloned successfully"
+# Step 1: Clone or update superpowers repository
+if [ ! -d "./tmp" ]; then
+    echo "📁 Creating tmp directory..."
+    mkdir -p ./tmp
 fi
 
-# Step 2: Sync .claude folder
-echo "📁 Creating .claude directory if needed..."
-mkdir -p "$CLAUDE_DIR"
+if [ -d "./tmp/superpowers" ]; then
+    echo "🔄 Updating existing superpowers repository..."
+    cd ./tmp/superpowers
+    if ! git pull; then
+        echo "❌ Error: Failed to pull latest changes from superpowers repository"
+        exit 1
+    fi
+    cd ../..
+else
+    echo "📦 Cloning superpowers repository..."
+    if ! git clone https://github.com/obra/superpowers ./tmp/superpowers; then
+        echo "❌ Error: Failed to clone superpowers repository"
+        exit 1
+    fi
+fi
 
-echo "🔄 Syncing .claude folder from superpowers..."
-if ! rsync -av --preserve-permissions "$REPO_DIR/.claude/" "$CLAUDE_DIR/"; then
+# Step 2: Sync .claude folder using rsync
+echo "🔄 Syncing .claude folder..."
+if [ ! -d "./.claude" ]; then
+    echo "📁 Creating .claude directory..."
+    mkdir -p ./.claude
+fi
+
+if ! rsync -av --delete ./tmp/superpowers/.claude/ ./.claude/; then
     echo "❌ Error: Failed to sync .claude folder"
     exit 1
 fi
-echo "✅ .claude folder synced successfully"
 
+echo "✅ Superpowers sync completed successfully!"
 echo ""
-echo "=== Sync Complete ==="
-echo "The .claude folder has been updated with the latest superpowers content."
-
-# TODO: Add a check for merge conflicts into the GitHub Actions CI pipeline
-# Ensure that this check runs after the .claude sync step and fails the pipeline if conflicts are detected
-# Example implementation:
-#   - Add a step in .github/workflows/ci.yml that runs after this sync script
-#   - Use `git diff --check` to detect conflict markers
-#   - Fail the pipeline if any conflicts are found
+echo "📝 TODO: Remember to add merge conflict check to GitHub Actions CI:"
+echo "   1. Add a step in .github/workflows/ci.yml (or similar)"
+echo "   2. Run this check after the .claude sync step"
+echo "   3. Ensure the pipeline fails if merge conflicts are detected"
+echo "   4. Example check command:"
+echo "      git diff --check || (echo 'Merge conflicts detected!' && exit 1)"
