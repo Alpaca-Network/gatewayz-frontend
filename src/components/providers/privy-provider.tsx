@@ -161,10 +161,15 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
 
       const walletErrorType = classifyWalletError(reasonStr);
 
-      // Log wallet extension and WalletConnect relay errors but DON'T preventDefault
-      // preventDefault() would block Privy's error recovery and break authentication
+      // Log wallet extension and WalletConnect relay errors
+      // For extension errors, we CAN call preventDefault() safely since these are from
+      // third-party browser extensions (like MetaMask's inpage.js) - not from Privy itself.
+      // This prevents the "Uncaught (in promise)" console error without affecting Privy.
       if (walletErrorType) {
         logWalletError(walletErrorType, reasonStr, "unhandledrejection");
+        if (walletErrorType === "extension") {
+          event.preventDefault();
+        }
         return;
       }
     };

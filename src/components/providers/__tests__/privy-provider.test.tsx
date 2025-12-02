@@ -61,6 +61,11 @@ jest.mock('@/components/auth/rate-limit-handler', () => ({
   RateLimitHandler: () => null,
 }));
 
+// Mock Sentry
+jest.mock('@sentry/nextjs', () => ({
+  captureMessage: jest.fn(),
+}));
+
 const mockCanUseLocalStorage = jest.fn(() => true);
 const mockWaitForLocalStorageAccess = jest.fn(() => Promise.resolve(true));
 
@@ -414,6 +419,118 @@ describe('PrivyProviderWrapper', () => {
       const config = (global as any).__PRIVY_CONFIG__;
       expect(Array.isArray(config.loginMethods)).toBe(true);
       expect(config.loginMethods.every((m: any) => typeof m === 'string')).toBe(true);
+    });
+  });
+
+  describe('Wallet Extension Error Handling', () => {
+    it('should call preventDefault for wallet extension errors (chrome.runtime.sendMessage)', () => {
+      process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app-id-12345';
+      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+
+      render(
+        <PrivyProviderWrapper>
+          <div>Test Child</div>
+        </PrivyProviderWrapper>
+      );
+
+      // Create a mock PromiseRejectionEvent with a wallet extension error
+      const mockEvent = new Event('unhandledrejection') as PromiseRejectionEvent;
+      Object.defineProperty(mockEvent, 'reason', {
+        value: { message: 'Error: Could not establish connection. Receiving end does not exist. chrome.runtime.sendMessage' },
+        writable: false,
+      });
+      const preventDefaultSpy = jest.spyOn(mockEvent, 'preventDefault');
+
+      window.dispatchEvent(mockEvent);
+
+      expect(preventDefaultSpy).toHaveBeenCalled();
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('[Auth] Wallet extension error detected'),
+        expect.any(String)
+      );
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should NOT call preventDefault for WalletConnect relay errors', () => {
+      process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app-id-12345';
+      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+
+      render(
+        <PrivyProviderWrapper>
+          <div>Test Child</div>
+        </PrivyProviderWrapper>
+      );
+
+      // Create a mock PromiseRejectionEvent with a WalletConnect relay error
+      const mockEvent = new Event('unhandledrejection') as PromiseRejectionEvent;
+      Object.defineProperty(mockEvent, 'reason', {
+        value: { message: 'WalletConnect relay connection failed' },
+        writable: false,
+      });
+      const preventDefaultSpy = jest.spyOn(mockEvent, 'preventDefault');
+
+      window.dispatchEvent(mockEvent);
+
+      // WalletConnect relay errors should NOT call preventDefault (let Privy handle)
+      expect(preventDefaultSpy).not.toHaveBeenCalled();
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('[Auth] WalletConnect relay error detected'),
+        expect.any(String)
+      );
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should call preventDefault for runtime.sendMessage errors from extensions', () => {
+      process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app-id-12345';
+      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+
+      render(
+        <PrivyProviderWrapper>
+          <div>Test Child</div>
+        </PrivyProviderWrapper>
+      );
+
+      // Create a mock PromiseRejectionEvent with a generic runtime.sendMessage error
+      const mockEvent = new Event('unhandledrejection') as PromiseRejectionEvent;
+      Object.defineProperty(mockEvent, 'reason', {
+        value: { message: 'runtime.sendMessage error in content script' },
+        writable: false,
+      });
+      const preventDefaultSpy = jest.spyOn(mockEvent, 'preventDefault');
+
+      window.dispatchEvent(mockEvent);
+
+      expect(preventDefaultSpy).toHaveBeenCalled();
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should NOT call preventDefault for non-wallet errors', () => {
+      process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app-id-12345';
+      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+
+      render(
+        <PrivyProviderWrapper>
+          <div>Test Child</div>
+        </PrivyProviderWrapper>
+      );
+
+      // Create a mock PromiseRejectionEvent with a generic error
+      const mockEvent = new Event('unhandledrejection') as PromiseRejectionEvent;
+      Object.defineProperty(mockEvent, 'reason', {
+        value: { message: 'Some other unrelated error' },
+        writable: false,
+      });
+      const preventDefaultSpy = jest.spyOn(mockEvent, 'preventDefault');
+
+      window.dispatchEvent(mockEvent);
+
+      // Generic errors should NOT have preventDefault called
+      expect(preventDefaultSpy).not.toHaveBeenCalled();
+
+      consoleSpy.mockRestore();
     });
   });
 });
