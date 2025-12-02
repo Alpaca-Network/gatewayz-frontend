@@ -239,7 +239,7 @@ export function useChatController() {
       const session = await ensureSession();
       await loadMessagesForSession(session.id);
 
-      const modelId = model?.value ?? "openrouter/auto";
+      const modelId = model?.value ?? "deepseek/deepseek-r1";
       const history = state.messagesBySession[session.id] ?? [];
 
       const userMessage: ChatMessageView = {
