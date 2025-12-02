@@ -51,25 +51,9 @@ function shuffleArray<T>(array: T[]): T[] {
 function WelcomeScreen({ onPromptSelect }: { onPromptSelect: (txt: string) => void }) {
     // Select 4 random prompts on mount (useMemo ensures consistency during render)
     const [prompts] = useState(() => shuffleArray(ALL_PROMPTS).slice(0, 4));
-    const [clickedPrompt, setClickedPrompt] = useState<string | null>(null);
 
-    const handlePromptClick = (title: string) => {
-        setClickedPrompt(title);
-        onPromptSelect(title);
-    };
-
-    // If a prompt was clicked, show loading state
-    if (clickedPrompt) {
-        return (
-            <div className="flex-1 flex flex-col items-center justify-center p-4">
-                <div className="flex flex-col items-center gap-4">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-                    <p className="text-muted-foreground text-sm">Sending message...</p>
-                </div>
-            </div>
-        );
-    }
-
+    // Note: We no longer show a loading spinner here because ChatLayout immediately
+    // switches to MessageList with optimistic UI when a prompt is clicked.
     return (
         <div className="flex-1 flex flex-col items-center justify-center p-4 overflow-y-auto">
              <h1 className="text-2xl sm:text-4xl font-bold mb-8 text-center">What's On Your Mind?</h1>
@@ -78,7 +62,7 @@ function WelcomeScreen({ onPromptSelect }: { onPromptSelect: (txt: string) => vo
                      <Card
                         key={p.title}
                         className="p-4 cursor-pointer hover:border-primary transition-colors bg-transparent border-border"
-                        onClick={() => handlePromptClick(p.title)}
+                        onClick={() => onPromptSelect(p.title)}
                      >
                          <p className="font-medium text-sm">{p.title}</p>
                          <p className="text-xs text-muted-foreground mt-1">{p.subtitle}</p>
@@ -95,6 +79,11 @@ export function ChatLayout() {
    const { selectedModel, setSelectedModel, activeSessionId, setActiveSessionId, setInputValue, mobileSidebarOpen, setMobileSidebarOpen } = useChatUIStore();
    const searchParams = useSearchParams();
 
+   // Track if user has clicked a prompt (to immediately hide welcome screen)
+   const [pendingPrompt, setPendingPrompt] = useState<string | null>(null);
+
+   const { data: activeMessages = [], isLoading: messagesLoading } = useSessionMessages(activeSessionId);
+
    // Handle URL message parameter - populate input on mount
    useEffect(() => {
        const messageParam = searchParams.get('message');
@@ -109,9 +98,18 @@ export function ChatLayout() {
        }
    }, [searchParams, setInputValue]);
 
+   // Clear pending prompt once we have real messages
+   useEffect(() => {
+       if (pendingPrompt && activeMessages.length > 0) {
+           setPendingPrompt(null);
+       }
+   }, [pendingPrompt, activeMessages.length]);
+
    // Handle prompt selection from welcome screen - auto-send the message
    const handlePromptSelect = (text: string) => {
-       // Set the input value first
+       // Set pending prompt immediately to hide welcome screen and show chat UI
+       setPendingPrompt(text);
+       // Set the input value
        setInputValue(text);
        // Use requestAnimationFrame to ensure React has finished rendering and
        // the Zustand state update has propagated before triggering send.
@@ -125,10 +123,10 @@ export function ChatLayout() {
        });
    };
 
-   const { data: activeMessages = [], isLoading: messagesLoading } = useSessionMessages(activeSessionId);
    // When logged out, always show welcome screen (ignore cached messages and activeSessionId)
    // When logged in, show welcome screen only if no active session or no messages after loading
-   const showWelcomeScreen = !isAuthenticated || !activeSessionId || (!messagesLoading && activeMessages.length === 0);
+   // ALSO hide welcome screen immediately when a prompt is clicked (pendingPrompt is set)
+   const showWelcomeScreen = !pendingPrompt && (!isAuthenticated || !activeSessionId || (!messagesLoading && activeMessages.length === 0));
 
    if (authLoading) {
        return (
@@ -203,6 +201,7 @@ export function ChatLayout() {
                         sessionId={activeSessionId}
                         messages={activeMessages}
                         isLoading={messagesLoading}
+                        pendingPrompt={pendingPrompt}
                       />
                   )}
                </div>
