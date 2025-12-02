@@ -101,6 +101,15 @@ const toPlainText = (input: unknown): string => {
 // Helper function to wait/sleep
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+// Custom error class for intentional errors that should be re-thrown
+// This distinguishes backend/API errors from JSON parsing errors
+class StreamingError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'StreamingError';
+  }
+}
+
 export async function* streamChatResponse(
   url: string,
   apiKey: string,
@@ -700,26 +709,26 @@ export async function* streamChatResponse(
               // Check if it's a trial expiration error
               if (errorMessage.toLowerCase().includes('trial has expired') ||
                   errorMessage.toLowerCase().includes('insufficient credits')) {
-                throw new Error(
+                throw new StreamingError(
                   'Trial credits have been used up. You can still use FREE models! Look for models with the "FREE" badge in the model selector, or add credits to use premium models.'
                 );
               }
 
               // Handle "upstream rejected" errors with the actual backend message
               if (errorMessage.toLowerCase().includes('upstream rejected')) {
-                throw new Error(
+                throw new StreamingError(
                   `Backend error: ${errorMessage}. This may be a temporary issue with the model provider. Please try again or select a different model.`
                 );
               }
 
-              throw new Error(errorMessage);
+              throw new StreamingError(errorMessage);
             }
 
             // Handle finish_reason: 'error' without an error object
             const choice = data.choices?.[0];
             if (choice?.finish_reason === 'error' && !data.error) {
               devError('[Streaming] Received finish_reason: error without error object');
-              throw new Error(
+              throw new StreamingError(
                 `Model error: The model returned an error without details. This may indicate the model is unavailable or misconfigured. Please try a different model.`
               );
             }
@@ -770,7 +779,7 @@ export async function* streamChatResponse(
                     (typeof data.error?.message === 'string' && data.error.message) ||
                     (typeof data.message === 'string' && data.message) ||
                     'Response stream error';
-                  throw new Error(errorMessage);
+                  throw new StreamingError(errorMessage);
                 }
                 default:
                   break;
@@ -816,13 +825,8 @@ export async function* streamChatResponse(
               devWarn('[Streaming] Data as JSON:', JSON.stringify(data, null, 2));
             }
           } catch (error) {
-            // Re-throw intentional errors (from error handling) vs JSON parsing errors
-            // Intentional errors are thrown with a message from the backend
-            if (error instanceof Error &&
-                !error.message.includes('JSON') &&
-                !error.message.includes('parse') &&
-                !error.message.includes('Unexpected token')) {
-              // This is an intentional error from error handling (e.g., rate limit, auth, backend error)
+            // Re-throw intentional errors (StreamingError) vs JSON parsing errors (SyntaxError)
+            if (error instanceof StreamingError) {
               throw error;
             }
             // Log parsing errors but continue processing other lines
