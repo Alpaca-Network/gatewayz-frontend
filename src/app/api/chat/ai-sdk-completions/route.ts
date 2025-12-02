@@ -260,11 +260,32 @@ export async function POST(request: NextRequest) {
     }
 
     // Get API key from request or headers
-    const apiKey = userApiKey || request.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
+    let apiKey = userApiKey || request.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
 
-    if (!apiKey) {
+    // Determine if this is an explicit guest request vs missing/invalid API key
+    const isExplicitGuestRequest = apiKey === 'guest';
+    const isMissingApiKey = !apiKey || apiKey.trim() === '';
+
+    // For explicit guest requests, use a special guest API key from environment
+    if (isExplicitGuestRequest) {
+      apiKey = process.env.GUEST_API_KEY || '';
+      if (!apiKey) {
+        console.warn('[AI SDK Route] Guest API key not configured in environment');
+        return new Response(
+          JSON.stringify({ error: 'Guest mode is not available. Please sign up to use chat.' }),
+          { status: 403, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      console.log('[AI SDK Route] Using guest API key for explicit guest request');
+    } else if (isMissingApiKey) {
+      // Missing API key for authenticated user - return 401 to trigger re-authentication
+      console.warn('[AI SDK Route] Missing API key for authenticated request');
       return new Response(
-        JSON.stringify({ error: 'API key required' }),
+        JSON.stringify({
+          error: 'Authentication required',
+          detail: 'API key is missing or invalid. Please log in again.',
+          code: 'MISSING_API_KEY'
+        }),
         { status: 401, headers: { 'Content-Type': 'application/json' } }
       );
     }

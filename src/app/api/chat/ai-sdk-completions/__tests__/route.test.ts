@@ -103,7 +103,8 @@ describe('AI SDK Completions Route', () => {
       expect(response.status).toBe(401);
 
       const data = await response.json();
-      expect(data.error).toContain('API key required');
+      expect(data.error).toContain('Authentication required');
+      expect(data.code).toBe('MISSING_API_KEY');
     });
 
     it('should accept API key from Authorization header', async () => {
@@ -152,6 +153,63 @@ describe('AI SDK Completions Route', () => {
       const response = await POST(request);
       expect(response.status).toBe(200);
       expect(streamText).toHaveBeenCalled();
+    });
+
+    it('should use GUEST_API_KEY when explicit guest request and GUEST_API_KEY is configured', async () => {
+      // Set GUEST_API_KEY for this test
+      process.env.GUEST_API_KEY = 'test-guest-key';
+
+      const { streamText, createOpenAI } = require('ai');
+      const { createOpenAI: createOpenAIMock } = require('@ai-sdk/openai');
+
+      streamText.mockReturnValue({
+        fullStream: (async function* () {
+          yield { type: 'text-delta', text: 'Hello', id: '1' };
+          yield { type: 'finish', finishReason: 'stop' };
+        })(),
+      });
+
+      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
+        method: 'POST',
+        body: JSON.stringify({
+          model: 'gpt-4',
+          messages: [{ role: 'user', content: 'Hello' }],
+          apiKey: 'guest', // Explicit guest request
+        }),
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(200);
+
+      // Verify the guest API key was used
+      expect(createOpenAIMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          apiKey: 'test-guest-key',
+        })
+      );
+
+      // Clean up
+      delete process.env.GUEST_API_KEY;
+    });
+
+    it('should return 403 for explicit guest request when GUEST_API_KEY not configured', async () => {
+      // Ensure GUEST_API_KEY is not set
+      delete process.env.GUEST_API_KEY;
+
+      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
+        method: 'POST',
+        body: JSON.stringify({
+          model: 'gpt-4',
+          messages: [{ role: 'user', content: 'Hello' }],
+          apiKey: 'guest', // Explicit guest request
+        }),
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(403);
+
+      const data = await response.json();
+      expect(data.error).toBe('Guest mode is not available. Please sign up to use chat.');
     });
   });
 
