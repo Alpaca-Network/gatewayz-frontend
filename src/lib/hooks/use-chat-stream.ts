@@ -76,10 +76,9 @@ export function useChatStream() {
             return [...(old || []), userMsg];
         });
 
-        // Fire and forget save (only for authenticated users)
-        if (isAuthenticated) {
-            saveMessage.mutate({ sessionId, role: 'user', content, model: model.value });
-        }
+        // Fire and forget save - for authenticated users OR guest sessions (negative IDs)
+        // Guest messages are saved to localStorage, authenticated to backend
+        saveMessage.mutate({ sessionId, role: 'user', content, model: model.value });
 
         // 2. Add Optimistic Assistant Message
         const assistantMsg: Partial<ChatMessage> & { isStreaming?: boolean, reasoning?: string } = {
@@ -164,15 +163,14 @@ export function useChatStream() {
             // 5. Finalize
             const finalContent = streamHandlerRef.current.getFinalContent();
 
-            // Save Assistant Message (only for authenticated users)
-            if (isAuthenticated) {
-                saveMessage.mutate({
-                     sessionId,
-                     role: 'assistant',
-                     content: finalContent,
-                     model: model.value
-                });
-            }
+            // Save Assistant Message - for authenticated users OR guest sessions (negative IDs)
+            // Guest messages are saved to localStorage, authenticated to backend
+            saveMessage.mutate({
+                 sessionId,
+                 role: 'assistant',
+                 content: finalContent,
+                 model: model.value
+            });
             
             // Mark isStreaming false
             queryClient.setQueryData(['chat-messages', sessionId], (old: any[] | undefined) => {
