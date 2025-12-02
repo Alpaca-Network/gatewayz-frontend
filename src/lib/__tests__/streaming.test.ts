@@ -20,6 +20,12 @@ jest.mock('../stream-coordinator', () => ({
   },
 }));
 
+// Mock api module for auth refresh
+jest.mock('../api', () => ({
+  requestAuthRefresh: jest.fn().mockRejectedValue(new Error('Auth refresh failed')),
+  getApiKey: jest.fn(() => null),
+}));
+
 // Mock fetch globally
 global.fetch = jest.fn();
 
@@ -207,7 +213,7 @@ describe('streamChatResponse', () => {
             { model: 'openrouter/auto', messages: [], stream: true }
           )
         )
-      ).rejects.toThrow(/Invalid API key.*Attempting to refresh your session/);
+      ).rejects.toThrow(/Invalid API key.*Your session has expired/);
     });
 
     test('should handle 400 bad request errors', async () => {
