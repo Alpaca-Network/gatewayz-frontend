@@ -12,26 +12,55 @@ import {
   type AuthResponse,
   type UserData,
 } from '../api';
+import {
+  createSuccessResponse,
+  createErrorResponse,
+  setupFetchMock,
+} from '@/__tests__/utils/mock-fetch';
+import {
+  runInSSRContext,
+  testSSRFunctions,
+} from '@/__tests__/utils/ssr-test-helper';
+import {
+  TEST_USER,
+  TEST_PRO_USER,
+  TEST_TIMESTAMPS,
+  createMockAuthResponse,
+  createMockUserData,
+} from '@/__tests__/utils/test-constants';
 
-// Mock console methods
+// Mock console methods - stored for assertions if needed
 const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
 const mockConsoleWarn = jest.spyOn(console, 'warn').mockImplementation();
 
-// Mock global fetch
-global.fetch = jest.fn();
-
 describe('api utilities', () => {
+  let mockFetch: jest.Mock;
+
   beforeEach(() => {
     jest.clearAllMocks();
     localStorage.clear();
 
-    // Reset fetch mock
-    (global.fetch as jest.Mock).mockReset();
+    // Setup fetch mock with safe default
+    mockFetch = setupFetchMock();
   });
 
   afterEach(() => {
     jest.restoreAllMocks();
   });
+
+  // Consolidated SSR tests - replaces 4 separate SSR test blocks
+  testSSRFunctions([
+    { name: 'getApiKey', fn: () => getApiKey(), expected: null },
+    { name: 'saveApiKey', fn: () => saveApiKey('test-key'), expected: undefined },
+    { name: 'removeApiKey', fn: () => removeApiKey(), expected: undefined },
+    { name: 'requestAuthRefresh', fn: () => requestAuthRefresh(), expected: undefined },
+    { name: 'getUserData', fn: () => getUserData(), expected: null },
+    {
+      name: 'saveUserData',
+      fn: () => saveUserData(createMockUserData()),
+      expected: undefined,
+    },
+  ]);
 
   describe('API Key Management', () => {
     describe('saveApiKey', () => {
@@ -50,19 +79,9 @@ describe('api utilities', () => {
         expect(localStorage.getItem('gatewayz_api_key')).toBe('new-key');
       });
 
-        it('should do nothing in SSR environment', () => {
-        const originalWindow = global.window;
-        (global as any).window = undefined;
+      // SSR behavior tested in consolidated testSSRFunctions block above
 
-        saveApiKey('test-key');
-
-        // Should not throw error
-        expect(true).toBe(true);
-
-        global.window = originalWindow;
-      });
-
-        it('should swallow storage errors when setItem throws', () => {
+      it('should swallow storage errors when setItem throws', () => {
           const setItemSpy = jest.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
             throw new Error('Access denied');
           });
@@ -88,18 +107,9 @@ describe('api utilities', () => {
         expect(apiKey).toBeNull();
       });
 
-        it('should return null in SSR environment', () => {
-        const originalWindow = global.window;
-        (global as any).window = undefined;
+      // SSR behavior tested in consolidated testSSRFunctions block above
 
-        const apiKey = getApiKey();
-
-        expect(apiKey).toBeNull();
-
-        global.window = originalWindow;
-      });
-
-        it('should return null when storage access throws a SecurityError', () => {
+      it('should return null when storage access throws a SecurityError', () => {
           const getItemSpy = jest.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
             throw new Error('Access denied');
           });
@@ -131,17 +141,7 @@ describe('api utilities', () => {
         expect(localStorage.getItem('other_item')).toBe('other-value');
       });
 
-      it('should do nothing in SSR environment', () => {
-        const originalWindow = global.window;
-        (global as any).window = undefined;
-
-        removeApiKey();
-
-        // Should not throw error
-        expect(true).toBe(true);
-
-        global.window = originalWindow;
-      });
+      // SSR behavior tested in consolidated testSSRFunctions block above
     });
 
     describe('requestAuthRefresh', () => {
@@ -157,17 +157,7 @@ describe('api utilities', () => {
         window.removeEventListener(AUTH_REFRESH_EVENT, eventListener);
       });
 
-      it('should do nothing in SSR environment', () => {
-        const originalWindow = global.window;
-        (global as any).window = undefined;
-
-        requestAuthRefresh();
-
-        // Should not throw error
-        expect(true).toBe(true);
-
-        global.window = originalWindow;
-      });
+      // SSR behavior tested in consolidated testSSRFunctions block above
     });
   });
 
@@ -221,27 +211,7 @@ describe('api utilities', () => {
         expect(JSON.parse(stored!)).toEqual(newData);
       });
 
-      it('should do nothing in SSR environment', () => {
-        const originalWindow = global.window;
-        (global as any).window = undefined;
-
-        const userData: UserData = {
-          user_id: 12345,
-          api_key: 'test-api-key',
-          auth_method: 'email',
-          privy_user_id: 'privy-123',
-          display_name: 'Test User',
-          email: 'test@example.com',
-          credits: 100,
-        };
-
-        saveUserData(userData);
-
-        // Should not throw error
-        expect(true).toBe(true);
-
-        global.window = originalWindow;
-      });
+      // SSR behavior tested in consolidated testSSRFunctions block above
     });
 
     describe('getUserData', () => {
@@ -292,18 +262,9 @@ describe('api utilities', () => {
         expect(retrieved?.subscription_end_date).toBe(1735689600);
       });
 
-      it('should return null in SSR environment', () => {
-        const originalWindow = global.window;
-        (global as any).window = undefined;
+      // SSR behavior tested in consolidated testSSRFunctions block above
 
-        const retrieved = getUserData();
-
-        expect(retrieved).toBeNull();
-
-        global.window = originalWindow;
-      });
-
-        it('should handle malformed JSON gracefully', () => {
+      it('should handle malformed JSON gracefully', () => {
         localStorage.setItem('gatewayz_user_data', 'invalid-json{');
 
           const result = getUserData();

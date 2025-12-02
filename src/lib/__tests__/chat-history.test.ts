@@ -9,23 +9,39 @@ import {
   type ChatMessage,
   type ChatStats,
 } from '../chat-history';
+import {
+  createSuccessResponse,
+  createErrorResponse,
+} from '@/__tests__/utils/mock-fetch';
+import {
+  TEST_USER,
+  TEST_SESSION,
+  TEST_MESSAGE,
+  TEST_TIMESTAMPS,
+} from '@/__tests__/utils/test-constants';
 
-// Mock global fetch
-global.fetch = jest.fn();
-
-// Mock console methods
+// Mock console methods - stored for potential assertions
 const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
 const mockConsoleError = jest.spyOn(console, 'error').mockImplementation();
 
 describe('ChatHistoryAPI', () => {
   let api: ChatHistoryAPI;
-  const mockApiKey = 'test-api-key-123';
-  const mockPrivyUserId = 'privy-user-456';
-  const mockFetch = global.fetch as jest.Mock;
+  let mockFetch: jest.Mock;
+  const mockApiKey = TEST_USER.API_KEY;
+  const mockPrivyUserId = TEST_USER.PRIVY_ID;
 
   beforeEach(() => {
+    // Standardized mock setup pattern
     jest.clearAllMocks();
     jest.useFakeTimers();
+
+    // Setup fetch mock with safe default
+    mockFetch = jest.fn();
+    mockFetch.mockRejectedValue(
+      new Error('Fetch not mocked for this test - please set up mock response')
+    );
+    global.fetch = mockFetch;
+
     api = new ChatHistoryAPI(mockApiKey);
   });
 
@@ -138,7 +154,7 @@ describe('ChatHistoryAPI', () => {
 
       const fetchCall = mockFetch.mock.calls[0];
       const url = fetchCall[0];
-      expect(url).toContain(`privy_user_id=${mockPrivyUserId}`);
+      expect(url).toContain(`privy_user_id=${encodeURIComponent(mockPrivyUserId)}`);
     });
 
     it('should throw error when API returns error', async () => {
@@ -429,7 +445,7 @@ describe('ChatHistoryAPI', () => {
 
       const fetchCall = mockFetch.mock.calls[0];
       const url = fetchCall[0];
-      expect(url).toContain(`privy_user_id=${mockPrivyUserId}`);
+      expect(url).toContain(`privy_user_id=${encodeURIComponent(mockPrivyUserId)}`);
     });
   });
 
@@ -538,7 +554,7 @@ describe('ChatHistoryAPI', () => {
 
       const fetchCall = mockFetch.mock.calls[0];
       const url = fetchCall[0];
-      expect(url).toContain(`privy_user_id=${mockPrivyUserId}`);
+      expect(url).toContain(`privy_user_id=${encodeURIComponent(mockPrivyUserId)}`);
     });
   });
 
@@ -741,10 +757,16 @@ describe('handleApiError', () => {
 });
 
 describe('createChatHistoryAPI', () => {
-  const mockFetch = global.fetch as jest.Mock;
+  let mockFetch: jest.Mock;
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // Setup fetch mock with safe default
+    mockFetch = jest.fn();
+    mockFetch.mockRejectedValue(
+      new Error('Fetch not mocked for this test - please set up mock response')
+    );
+    global.fetch = mockFetch;
   });
 
   it('should create ChatHistoryAPI instance', () => {
@@ -771,12 +793,20 @@ describe('createChatHistoryAPI', () => {
 
 describe('Integration Scenarios', () => {
   let api: ChatHistoryAPI;
+  let mockFetch: jest.Mock;
   const mockApiKey = 'integration-test-key';
-  const mockFetch = global.fetch as jest.Mock;
 
   beforeEach(() => {
     jest.clearAllMocks();
     jest.useFakeTimers();
+
+    // Setup fetch mock with safe default
+    mockFetch = jest.fn();
+    mockFetch.mockRejectedValue(
+      new Error('Fetch not mocked for this test - please set up mock response')
+    );
+    global.fetch = mockFetch;
+
     // Disable batching for integration tests to avoid message queueing complications
     api = new ChatHistoryAPI(mockApiKey, undefined, undefined, false);
   });

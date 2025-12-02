@@ -4,11 +4,29 @@
 import { POST } from '../route';
 import { NextRequest } from 'next/server';
 import * as proxyFetch from '@/lib/proxy-fetch';
+import {
+  TEST_USER,
+  TEST_NEW_USER,
+  TEST_PRO_USER,
+  TEST_TIMESTAMPS,
+} from '@/__tests__/utils/test-constants';
 
 // Mock the proxy-fetch module
 jest.mock('@/lib/proxy-fetch', () => ({
   proxyFetch: jest.fn(),
 }));
+
+/**
+ * Helper to create a mock Response for proxyFetch
+ * Uses text() method since that's what the route handler expects
+ */
+function createMockProxyResponse(data: unknown, status = 200): object {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    text: async () => JSON.stringify(data),
+  };
+}
 
 // Mock retry-utils with instant retries (no delays) for faster tests
 jest.mock('@/lib/retry-utils', () => ({
