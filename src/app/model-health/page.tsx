@@ -1,6 +1,11 @@
 /**
  * Model Health Dashboard Page
  * Comprehensive dashboard for monitoring model health metrics
+ *
+ * Now supports optional authentication for:
+ * - Better rate limits for authenticated users
+ * - Audit logging of monitoring access
+ * - Future access control features
  */
 
 "use client";
@@ -28,6 +33,7 @@ import {
   useModelHealthPolling,
 } from "@/hooks/use-model-health";
 import { calculateSuccessRate, formatTimeAgo } from "@/lib/model-health-utils";
+import { getApiKey } from "@/lib/api";
 import { Activity, TrendingUp, Zap, CheckCircle2, RefreshCw } from "lucide-react";
 
 export default function ModelHealthDashboard() {
@@ -35,12 +41,16 @@ export default function ModelHealthDashboard() {
   const [page, setPage] = useState(0);
   const pageSize = 50;
 
-  const { stats, loading: statsLoading, refetch: refetchStats } = useModelHealthStats();
+  // Get API key if user is authenticated (optional)
+  const apiKey = getApiKey() || undefined;
+
+  // Pass API key to hooks for optional authentication
+  const { stats, loading: statsLoading, refetch: refetchStats } = useModelHealthStats(apiKey);
   const {
     data,
     loading: listLoading,
     refetch: refetchList,
-  } = useModelHealthList(pageSize, page * pageSize);
+  } = useModelHealthList(pageSize, page * pageSize, apiKey);
 
   // Set up polling for both stats and list
   useModelHealthPolling(() => {
