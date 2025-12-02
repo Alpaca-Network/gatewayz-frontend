@@ -16,6 +16,7 @@ const navItems = [
   { href: "/settings/provisioning", label: "Provisioning Keys" },
   { href: "/settings/integrations", label: "Integrations (BYOK)" },
   { href: "/settings/privacy", label: "Privacy" },
+  { href: "/web-vitals", label: "Web Vitals" },
   { href: "/settings", label: "Settings" },
 ];
 
