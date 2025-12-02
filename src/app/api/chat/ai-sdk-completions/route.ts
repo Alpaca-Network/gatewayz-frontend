@@ -405,9 +405,14 @@ export async function POST(request: NextRequest) {
         try {
           console.log('[AI SDK Route] Starting stream iteration...');
           let contentReceived = false;
+          let errorAlreadySent = false; // Track if we've already sent an error to prevent duplicates
           let lastErrorMessage = '';
+          let partTypesReceived: string[] = []; // Track all part types for debugging
 
           for await (const part of stream) {
+            // Log all part types for debugging empty content issues
+            partTypesReceived.push(part.type);
+
             // Handle different part types from AI SDK
             if (part.type === 'text-delta') {
               // Regular text content
@@ -457,22 +462,57 @@ export async function POST(request: NextRequest) {
               };
               controller.enqueue(encoder.encode(`data: ${JSON.stringify(errorData)}\n\n`));
             } else if (part.type === 'finish') {
-              // Stream finished
-              const sseData = {
-                choices: [{
-                  delta: {},
-                  finish_reason: part.finishReason
-                }]
-              };
-              const sseMessage = `data: ${JSON.stringify(sseData)}\n\n`;
-              controller.enqueue(encoder.encode(sseMessage));
+              // Stream finished - check if it's an error finish
+              if (part.finishReason === 'error' && !contentReceived) {
+                // If we finished with error and no content, send an error message
+                const errorMessage = lastErrorMessage || `Model "${modelId}" finished with an error. The model may be unavailable, overloaded, or rate limited.`;
+                const errorData = {
+                  choices: [{
+                    delta: {},
+                    finish_reason: 'error'
+                  }],
+                  error: {
+                    message: errorMessage,
+                    type: 'finish_error'
+                  }
+                };
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify(errorData)}\n\n`));
+                errorAlreadySent = true; // Prevent duplicate error in !contentReceived check
+              } else {
+                const sseData = {
+                  choices: [{
+                    delta: {},
+                    finish_reason: part.finishReason
+                  }]
+                };
+                const sseMessage = `data: ${JSON.stringify(sseData)}\n\n`;
+                controller.enqueue(encoder.encode(sseMessage));
+              }
             }
+            // Silently ignore boundary markers (text-start, text-end, reasoning-start, reasoning-end)
+            // These don't contain content but are normal AI SDK behavior
+            // Also ignore step-start, step-finish, tool-* parts as they don't affect text output
           }
 
           // Check if we received any content - if not, send an error message
-          if (!contentReceived) {
+          // Skip if we already sent an error (e.g., from finish with error reason)
+          if (!contentReceived && !errorAlreadySent) {
             console.error('[AI SDK Route] Stream completed without any content');
-            const errorMessage = lastErrorMessage || `No response received from model "${modelId}". The model may not be properly configured, may be unavailable, or may not support the requested features.`;
+            console.error('[AI SDK Route] Part types received:', partTypesReceived.join(', ') || 'none');
+            console.error('[AI SDK Route] Part count:', partTypesReceived.length);
+
+            // Provide more specific error messages based on what we received
+            let errorMessage = lastErrorMessage;
+            if (!errorMessage) {
+              if (partTypesReceived.length === 0) {
+                errorMessage = `Model "${modelId}" returned an empty response. The model may be unavailable or rate limited. Please try again.`;
+              } else if (partTypesReceived.every(t => t === 'finish' || t === 'step-finish')) {
+                errorMessage = `Model "${modelId}" completed without generating any content. This may indicate the model is overloaded or the request was blocked. Please try again or select a different model.`;
+              } else {
+                errorMessage = `No response received from model "${modelId}". Part types received: ${partTypesReceived.slice(0, 5).join(', ')}. The model may not be properly configured or may not support the requested features.`;
+              }
+            }
+
             const errorData = {
               choices: [{
                 delta: {},
