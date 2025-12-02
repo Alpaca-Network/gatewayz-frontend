@@ -219,19 +219,40 @@ export async function* streamChatResponse(
       );
     }
 
-    // Handle 401 Unauthorized - trigger auth refresh
+    // Handle 401 Unauthorized - trigger auth refresh and retry
     if (response.status === 401) {
       const errorMessage = errorData.detail || errorData.error?.message || 'Authentication required';
       devError('401 Unauthorized - triggering auth refresh');
 
-      // Trigger auth refresh event to attempt re-authentication
-      if (typeof window !== 'undefined') {
-        devLog('Dispatching auth refresh event for 401 error');
-        window.dispatchEvent(new Event('gatewayz:refresh-auth'));
+      // Only retry auth refresh once to prevent infinite loops
+      if (retryCount === 0 && typeof window !== 'undefined') {
+        devLog('Attempting auth refresh for 401 error...');
+
+        try {
+          // Wait for auth refresh to complete (with 30s timeout)
+          await requestAuthRefresh();
+          devLog('Auth refresh completed, checking for new API key...');
+
+          // Get the new API key after refresh
+          const newApiKey = getApiKey();
+
+          if (newApiKey && newApiKey !== apiKey) {
+            devLog('Got new API key after refresh, retrying request...');
+
+            // Retry with the new API key (mark as retry to prevent infinite loop)
+            yield* streamChatResponse(url, newApiKey, requestBody, 1, maxRetries);
+            return;
+          } else {
+            devLog('No new API key after refresh, or key unchanged');
+          }
+        } catch (refreshError) {
+          devError('Auth refresh failed:', refreshError);
+          // Continue to throw the original 401 error
+        }
       }
 
       throw new Error(
-        errorMessage + '. Attempting to refresh your session - please try again in a moment.'
+        errorMessage + '. Your session has expired. Please sign in again to continue.'
       );
     }
 
