@@ -103,8 +103,9 @@ export const useCreateSession = () => {
     mutationFn: async ({ title, model }: { title?: string; model?: string }) => {
       // For guest users, create a persistent client-side session
       if (!isAuthenticated) {
-        // Generate a temporary negative session ID for guest mode
-        const guestSessionId = -Date.now();
+        // Generate a unique negative session ID for guest mode
+        // Use Date.now() + random to prevent collisions from rapid session creation
+        const guestSessionId = -(Date.now() + Math.floor(Math.random() * 10000));
         const guestSession: ChatSession = {
           id: guestSessionId,
           user_id: -1,
@@ -158,7 +159,6 @@ export const useCreateSession = () => {
 
 export const useUpdateSession = () => {
   const queryClient = useQueryClient();
-  const { isAuthenticated } = useAuthStore();
 
   return useMutation({
     mutationFn: async ({ sessionId, title, model }: { sessionId: number; title?: string; model?: string }) => {
@@ -182,9 +182,12 @@ export const useUpdateSession = () => {
       return api.updateSession(sessionId, title, model);
     },
     onSuccess: (updatedSession) => {
-        queryClient.invalidateQueries({ queryKey: ['chat-sessions', isAuthenticated] });
+        // Derive cache key from session type (negative ID = guest) rather than auth state
+        const isGuestSession = updatedSession.id < 0;
+        const cacheKey = ['chat-sessions', !isGuestSession];
+        queryClient.invalidateQueries({ queryKey: cacheKey });
         // Update the specific session in cache if it exists
-        queryClient.setQueryData(['chat-sessions', isAuthenticated], (old: ChatSession[] | undefined) => {
+        queryClient.setQueryData(cacheKey, (old: ChatSession[] | undefined) => {
             if (!old) return [updatedSession];
             return old.map(s => s.id === updatedSession.id ? updatedSession : s);
         });
@@ -194,7 +197,6 @@ export const useUpdateSession = () => {
 
 export const useDeleteSession = () => {
   const queryClient = useQueryClient();
-  const { isAuthenticated } = useAuthStore();
 
   return useMutation({
     mutationFn: async (sessionId: number) => {
@@ -211,7 +213,9 @@ export const useDeleteSession = () => {
       return sessionId;
     },
     onSuccess: (deletedSessionId) => {
-      queryClient.invalidateQueries({ queryKey: ['chat-sessions', isAuthenticated] });
+      // Derive cache key from session type (negative ID = guest) rather than auth state
+      const isGuestSession = deletedSessionId < 0;
+      queryClient.invalidateQueries({ queryKey: ['chat-sessions', !isGuestSession] });
       // Remove from cache
       queryClient.removeQueries({ queryKey: ['chat-messages', deletedSessionId] });
     }
@@ -220,7 +224,6 @@ export const useDeleteSession = () => {
 
 export const useSaveMessage = () => {
     const queryClient = useQueryClient();
-    const { isAuthenticated } = useAuthStore();
 
     return useMutation({
         mutationFn: async ({
@@ -257,8 +260,10 @@ export const useSaveMessage = () => {
             // the optimistic updates from use-chat-stream.ts before the backend has persisted
             // the batched messages. The local cache already has the correct data.
 
+            // Derive cache key from session type (negative ID = guest) rather than auth state
+            const isGuestSession = variables.sessionId < 0;
             // Only invalidate sessions list to update "updated_at" timestamp in sidebar
-            queryClient.invalidateQueries({ queryKey: ['chat-sessions', isAuthenticated] });
+            queryClient.invalidateQueries({ queryKey: ['chat-sessions', !isGuestSession] });
         }
     })
 }
