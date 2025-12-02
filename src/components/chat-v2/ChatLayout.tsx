@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { Menu, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -105,13 +105,24 @@ export function ChatLayout() {
        }
    }, [pendingPrompt, activeMessages.length]);
 
-   // Clear pending prompt when switching sessions to prevent stale optimistic UI
+   // Track the previous session ID to detect user-initiated session switches
+   const prevSessionIdRef = useRef<number | null>(activeSessionId);
+
+   // Clear pending prompt when user switches to a DIFFERENT existing session
+   // (not when a new session is created from the prompt click)
    useEffect(() => {
-       if (activeSessionId !== null) {
-           // User switched to an existing session, clear any pending prompt
+       const prevSessionId = prevSessionIdRef.current;
+       prevSessionIdRef.current = activeSessionId;
+
+       // Only clear if:
+       // 1. We have a pending prompt AND
+       // 2. Session changed from one non-null value to a DIFFERENT non-null value
+       //    (this means user clicked a different session in the sidebar)
+       // Don't clear when going from null -> non-null (new session creation from prompt)
+       if (pendingPrompt && prevSessionId !== null && activeSessionId !== null && prevSessionId !== activeSessionId) {
            setPendingPrompt(null);
        }
-   }, [activeSessionId]);
+   }, [activeSessionId, pendingPrompt]);
 
    // Timeout to clear pending prompt if send fails silently (e.g., network error)
    // This prevents the optimistic UI from being stuck indefinitely
