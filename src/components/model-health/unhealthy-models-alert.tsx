@@ -2,6 +2,8 @@
  * Unhealthy Models Alert Component
  * Displays a warning banner for models experiencing issues
  * Automatically polls for updates every 5 minutes
+ *
+ * Now supports optional authentication for better rate limits
  */
 
 "use client";
@@ -9,20 +11,26 @@
 import { useEffect } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useUnhealthyModels, useModelHealthPolling } from "@/hooks/use-model-health";
+import { getApiKey } from "@/lib/api";
 import { AlertTriangle } from "lucide-react";
 
 interface UnhealthyModelsAlertProps {
   errorThreshold?: number;
   pollInterval?: number; // in milliseconds, default 5 minutes
   className?: string;
+  apiKey?: string; // Optional API key for authenticated requests
 }
 
 export function UnhealthyModelsAlert({
   errorThreshold = 0.2,
   pollInterval = 300000, // 5 minutes
   className = "",
+  apiKey,
 }: UnhealthyModelsAlertProps) {
-  const { data, loading, refetch } = useUnhealthyModels(errorThreshold);
+  // Use provided API key or get from localStorage
+  const effectiveApiKey = apiKey || getApiKey() || undefined;
+
+  const { data, loading, refetch } = useUnhealthyModels(errorThreshold, effectiveApiKey);
 
   // Set up polling
   useModelHealthPolling(refetch, pollInterval);

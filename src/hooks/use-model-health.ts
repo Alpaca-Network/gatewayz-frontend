@@ -1,6 +1,9 @@
 /**
  * Model Health Hooks
  * Custom React hooks for fetching and managing model health data
+ *
+ * All hooks now support optional authentication via API key parameter.
+ * When apiKey is provided, requests are authenticated for better rate limits and audit logging.
  */
 
 import { useState, useEffect, useCallback } from "react";
@@ -12,13 +15,18 @@ import {
   ProviderSummary,
   ProviderListResponse,
 } from "@/types/model-health";
+import { monitoringService } from "@/lib/monitoring-service";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "https://api.gatewayz.ai";
 
 /**
  * Hook to fetch health data for a specific model
+ *
+ * @param provider - Provider name (e.g., "openai")
+ * @param model - Model name (e.g., "gpt-4")
+ * @param apiKey - Optional API key for authenticated requests
  */
-export function useModelHealth(provider: string, model: string) {
+export function useModelHealth(provider: string, model: string, apiKey?: string) {
   const [health, setHealth] = useState<ModelHealth | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,19 +38,7 @@ export function useModelHealth(provider: string, model: string) {
     setError(null);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/v1/model-health/${provider}/${model}`);
-
-      if (response.status === 404) {
-        // No health data yet for this model
-        setHealth(null);
-        return;
-      }
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-
-      const data = await response.json();
+      const data = await monitoringService.getModelHealth(provider, model, apiKey);
       setHealth(data);
     } catch (err) {
       console.error("Failed to fetch model health:", err);
@@ -51,7 +47,7 @@ export function useModelHealth(provider: string, model: string) {
     } finally {
       setLoading(false);
     }
-  }, [provider, model]);
+  }, [provider, model, apiKey]);
 
   useEffect(() => {
     fetchHealth();
@@ -62,8 +58,10 @@ export function useModelHealth(provider: string, model: string) {
 
 /**
  * Hook to fetch overall system statistics
+ *
+ * @param apiKey - Optional API key for authenticated requests
  */
-export function useModelHealthStats() {
+export function useModelHealthStats(apiKey?: string) {
   const [stats, setStats] = useState<ModelHealthStats | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -73,13 +71,7 @@ export function useModelHealthStats() {
     setError(null);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/v1/model-health/stats`);
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-
-      const data = await response.json();
+      const data = await monitoringService.getHealthStats(apiKey);
       setStats(data);
     } catch (err) {
       console.error("Failed to fetch model health stats:", err);
@@ -88,7 +80,7 @@ export function useModelHealthStats() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [apiKey]);
 
   useEffect(() => {
     fetchStats();
@@ -99,8 +91,12 @@ export function useModelHealthStats() {
 
 /**
  * Hook to fetch list of all models with health data
+ *
+ * @param limit - Number of results to return (default: 50)
+ * @param offset - Offset for pagination (default: 0)
+ * @param apiKey - Optional API key for authenticated requests
  */
-export function useModelHealthList(limit: number = 50, offset: number = 0) {
+export function useModelHealthList(limit: number = 50, offset: number = 0, apiKey?: string) {
   const [data, setData] = useState<ModelHealthListResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -110,15 +106,7 @@ export function useModelHealthList(limit: number = 50, offset: number = 0) {
     setError(null);
 
     try {
-      const response = await fetch(
-        `${API_BASE_URL}/v1/model-health?limit=${limit}&offset=${offset}`
-      );
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-
-      const result = await response.json();
+      const result = await monitoringService.getModelHealthList(limit, offset, apiKey);
       setData(result);
     } catch (err) {
       console.error("Failed to fetch model health list:", err);
@@ -127,7 +115,7 @@ export function useModelHealthList(limit: number = 50, offset: number = 0) {
     } finally {
       setLoading(false);
     }
-  }, [limit, offset]);
+  }, [limit, offset, apiKey]);
 
   useEffect(() => {
     fetchList();
@@ -138,8 +126,11 @@ export function useModelHealthList(limit: number = 50, offset: number = 0) {
 
 /**
  * Hook to fetch unhealthy models
+ *
+ * @param errorThreshold - Error rate threshold (0-1, default: 0.2 = 20%)
+ * @param apiKey - Optional API key for authenticated requests
  */
-export function useUnhealthyModels(errorThreshold: number = 0.2) {
+export function useUnhealthyModels(errorThreshold: number = 0.2, apiKey?: string) {
   const [data, setData] = useState<UnhealthyModelsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -149,15 +140,7 @@ export function useUnhealthyModels(errorThreshold: number = 0.2) {
     setError(null);
 
     try {
-      const response = await fetch(
-        `${API_BASE_URL}/v1/model-health/unhealthy?error_threshold=${errorThreshold}`
-      );
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-
-      const result = await response.json();
+      const result = await monitoringService.getUnhealthyModels(errorThreshold, apiKey);
       setData(result);
     } catch (err) {
       console.error("Failed to fetch unhealthy models:", err);
@@ -166,7 +149,7 @@ export function useUnhealthyModels(errorThreshold: number = 0.2) {
     } finally {
       setLoading(false);
     }
-  }, [errorThreshold]);
+  }, [errorThreshold, apiKey]);
 
   useEffect(() => {
     fetchUnhealthy();
@@ -177,8 +160,11 @@ export function useUnhealthyModels(errorThreshold: number = 0.2) {
 
 /**
  * Hook to fetch provider summary
+ *
+ * @param provider - Provider name (e.g., "openai")
+ * @param apiKey - Optional API key for authenticated requests
  */
-export function useProviderSummary(provider: string) {
+export function useProviderSummary(provider: string, apiKey?: string) {
   const [summary, setSummary] = useState<ProviderSummary | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -190,15 +176,7 @@ export function useProviderSummary(provider: string) {
     setError(null);
 
     try {
-      const response = await fetch(
-        `${API_BASE_URL}/v1/model-health/provider/${provider}/summary`
-      );
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-
-      const data = await response.json();
+      const data = await monitoringService.getProviderSummary(provider, apiKey);
       setSummary(data);
     } catch (err) {
       console.error("Failed to fetch provider summary:", err);
@@ -207,7 +185,7 @@ export function useProviderSummary(provider: string) {
     } finally {
       setLoading(false);
     }
-  }, [provider]);
+  }, [provider, apiKey]);
 
   useEffect(() => {
     fetchSummary();
@@ -218,8 +196,10 @@ export function useProviderSummary(provider: string) {
 
 /**
  * Hook to fetch list of all providers
+ *
+ * @param apiKey - Optional API key for authenticated requests
  */
-export function useProviderList() {
+export function useProviderList(apiKey?: string) {
   const [providers, setProviders] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -229,13 +209,7 @@ export function useProviderList() {
     setError(null);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/v1/model-health/providers`);
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-
-      const data: ProviderListResponse = await response.json();
+      const data: ProviderListResponse = await monitoringService.getProviderList(apiKey);
       setProviders(data.providers);
     } catch (err) {
       console.error("Failed to fetch provider list:", err);
@@ -244,7 +218,7 @@ export function useProviderList() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [apiKey]);
 
   useEffect(() => {
     fetchProviders();
