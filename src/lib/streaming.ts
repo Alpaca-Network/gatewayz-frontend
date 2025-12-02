@@ -816,6 +816,16 @@ export async function* streamChatResponse(
               devWarn('[Streaming] Data as JSON:', JSON.stringify(data, null, 2));
             }
           } catch (error) {
+            // Re-throw intentional errors (from error handling) vs JSON parsing errors
+            // Intentional errors are thrown with a message from the backend
+            if (error instanceof Error &&
+                !error.message.includes('JSON') &&
+                !error.message.includes('parse') &&
+                !error.message.includes('Unexpected token')) {
+              // This is an intentional error from error handling (e.g., rate limit, auth, backend error)
+              throw error;
+            }
+            // Log parsing errors but continue processing other lines
             devError('[Streaming] Error parsing SSE data:', error, trimmedLine);
           }
         } else {
