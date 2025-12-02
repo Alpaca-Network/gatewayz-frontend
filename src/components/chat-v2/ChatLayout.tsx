@@ -98,12 +98,35 @@ export function ChatLayout() {
        }
    }, [searchParams, setInputValue]);
 
-   // Clear pending prompt once we have real messages
+   // Clear pending prompt once we have real messages OR when session changes
    useEffect(() => {
        if (pendingPrompt && activeMessages.length > 0) {
            setPendingPrompt(null);
        }
    }, [pendingPrompt, activeMessages.length]);
+
+   // Clear pending prompt when switching sessions to prevent stale optimistic UI
+   useEffect(() => {
+       if (activeSessionId !== null) {
+           // User switched to an existing session, clear any pending prompt
+           setPendingPrompt(null);
+       }
+   }, [activeSessionId]);
+
+   // Timeout to clear pending prompt if send fails silently (e.g., network error)
+   // This prevents the optimistic UI from being stuck indefinitely
+   useEffect(() => {
+       if (!pendingPrompt) return;
+
+       const timeoutId = setTimeout(() => {
+           // If we still have a pending prompt after 30 seconds, something went wrong
+           // Clear it to allow the user to try again
+           console.warn('[ChatLayout] Pending prompt timed out, clearing optimistic UI');
+           setPendingPrompt(null);
+       }, 30000);
+
+       return () => clearTimeout(timeoutId);
+   }, [pendingPrompt]);
 
    // Handle prompt selection from welcome screen - auto-send the message
    const handlePromptSelect = (text: string) => {
@@ -119,6 +142,8 @@ export function ChatLayout() {
                (window as any).__chatInputSend();
            } else {
                console.warn('[ChatLayout] __chatInputSend not available when prompt was selected');
+               // Clear pending prompt to avoid stuck optimistic UI
+               setPendingPrompt(null);
            }
        });
    };
