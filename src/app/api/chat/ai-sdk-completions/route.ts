@@ -440,16 +440,36 @@ export async function POST(request: NextRequest) {
               };
               controller.enqueue(encoder.encode(`data: ${JSON.stringify(errorData)}\n\n`));
             } else if (part.type === 'finish') {
-              // Stream finished
-              const sseData = {
-                choices: [{
-                  delta: {},
-                  finish_reason: part.finishReason
-                }]
-              };
-              const sseMessage = `data: ${JSON.stringify(sseData)}\n\n`;
-              controller.enqueue(encoder.encode(sseMessage));
+              // Stream finished - check if it's an error finish
+              if (part.finishReason === 'error' && !contentReceived) {
+                // If we finished with error and no content, send an error message
+                const errorMessage = lastErrorMessage || `Model "${modelId}" finished with an error. The model may be unavailable, overloaded, or rate limited.`;
+                const errorData = {
+                  choices: [{
+                    delta: {},
+                    finish_reason: 'error'
+                  }],
+                  error: {
+                    message: errorMessage,
+                    type: 'finish_error'
+                  }
+                };
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify(errorData)}\n\n`));
+                lastErrorMessage = errorMessage; // Prevent duplicate error in !contentReceived check
+              } else {
+                const sseData = {
+                  choices: [{
+                    delta: {},
+                    finish_reason: part.finishReason
+                  }]
+                };
+                const sseMessage = `data: ${JSON.stringify(sseData)}\n\n`;
+                controller.enqueue(encoder.encode(sseMessage));
+              }
             }
+            // Silently ignore boundary markers (text-start, text-end, reasoning-start, reasoning-end)
+            // These don't contain content but are normal AI SDK behavior
+            // Also ignore step-start, step-finish, tool-* parts as they don't affect text output
           }
 
           // Check if we received any content - if not, send an error message
