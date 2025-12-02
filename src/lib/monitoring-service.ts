@@ -1,18 +1,19 @@
 /**
  * Monitoring Service
- * 
+ *
  * Centralized service for making monitoring API calls with optional authentication.
- * 
+ *
  * Features:
  * - Optional authentication via Bearer token
  * - Automatic fallback to unauthenticated requests on 401 errors
+ * - Rate limit handling with exponential backoff (429 errors)
  * - Type-safe request/response handling
  * - Consistent error handling
- * 
+ *
  * Usage:
  *   // Without authentication (public access)
  *   const health = await monitoringService.getProviderHealth();
- * 
+ *
  *   // With authentication (for logged-in users)
  *   const apiKey = getApiKey();
  *   const health = await monitoringService.getProviderHealth(apiKey);
@@ -20,14 +21,49 @@
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
 
+// Rate limit retry configuration
+const MAX_RATE_LIMIT_RETRIES = 3;
+const BASE_RETRY_DELAY_MS = 1000;
+const MAX_RETRY_DELAY_MS = 10000;
+
+// Helper function for delay
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
+ * Calculate retry delay with exponential backoff and jitter
+ */
+function calculateRetryDelay(
+  retryCount: number,
+  retryAfterHeader: string | null
+): number {
+  // Start with exponential backoff: 1s, 2s, 4s
+  let waitTime = Math.min(
+    BASE_RETRY_DELAY_MS * Math.pow(2, retryCount),
+    MAX_RETRY_DELAY_MS
+  );
+
+  // Honor Retry-After header if present
+  if (retryAfterHeader) {
+    const numericRetry = Number(retryAfterHeader);
+    if (!Number.isNaN(numericRetry) && numericRetry > 0) {
+      waitTime = Math.max(waitTime, numericRetry * 1000);
+    }
+  }
+
+  // Add jitter to prevent thundering herd (0-500ms)
+  const jitter = Math.floor(Math.random() * 500);
+  return waitTime + jitter;
+}
+
 interface FetchOptions {
   apiKey?: string;
   retryWithoutAuth?: boolean;
+  rateLimitRetryCount?: number;
 }
 
 /**
  * Makes an authenticated or unauthenticated fetch request to monitoring endpoints
- * 
+ *
  * @param url - The endpoint URL to fetch
  * @param options - Optional configuration including API key
  * @returns Response data
@@ -37,39 +73,66 @@ async function fetchWithOptionalAuth<T>(
   url: string,
   options: FetchOptions = {}
 ): Promise<T> {
-  const { apiKey, retryWithoutAuth = true } = options;
-  
+  const { apiKey, retryWithoutAuth = true, rateLimitRetryCount = 0 } = options;
+
   const headers: HeadersInit = {};
-  
+
   // Add authentication if API key is provided
   if (apiKey) {
     headers['Authorization'] = `Bearer ${apiKey}`;
   }
-  
+
   try {
     const response = await fetch(url, { headers });
-    
+
+    // Handle 429 - Rate limit with retry
+    if (response.status === 429) {
+      if (rateLimitRetryCount < MAX_RATE_LIMIT_RETRIES) {
+        const retryAfter = response.headers.get('retry-after');
+        const delayMs = calculateRetryDelay(rateLimitRetryCount, retryAfter);
+
+        console.warn(
+          `[monitoring-service] Rate limited (429), retrying in ${delayMs}ms ` +
+          `(attempt ${rateLimitRetryCount + 1}/${MAX_RATE_LIMIT_RETRIES})`
+        );
+
+        await sleep(delayMs);
+
+        // Retry with incremented retry count
+        return fetchWithOptionalAuth<T>(url, {
+          apiKey,
+          retryWithoutAuth,
+          rateLimitRetryCount: rateLimitRetryCount + 1
+        });
+      }
+
+      // Max retries exceeded
+      console.error('[monitoring-service] Rate limit exceeded after max retries');
+      throw new Error('Rate limit exceeded. Please try again later.');
+    }
+
     // Handle 401 - Invalid or expired API key
     if (response.status === 401 && apiKey && retryWithoutAuth) {
       console.warn('[monitoring-service] API key invalid, retrying without auth');
-      
+
       // Retry without authentication
-      return fetchWithOptionalAuth<T>(url, { 
-        apiKey: undefined, 
-        retryWithoutAuth: false // Prevent infinite retry loop
+      return fetchWithOptionalAuth<T>(url, {
+        apiKey: undefined,
+        retryWithoutAuth: false, // Prevent infinite retry loop
+        rateLimitRetryCount: 0 // Reset rate limit counter for new auth state
       });
     }
-    
+
     // Handle 404 - No data available
     if (response.status === 404) {
       throw new Error('No data available');
     }
-    
+
     // Handle other errors
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
-    
+
     return await response.json();
   } catch (error) {
     // Network errors, JSON parse errors, etc.
