@@ -21,12 +21,12 @@ const ModelSelect = dynamic(() => import("@/components/chat/model-select").then(
 });
 
 const DEFAULT_MODEL: ModelOption = {
-  value: "openrouter/auto",
-  label: "Gatewayz Router",
-  category: "Router",
+  value: "deepseek/deepseek-r1",
+  label: "DeepSeek R1",
+  category: "Reasoning",
   sourceGateway: "openrouter",
-  developer: "Alpaca",
-  modalities: ["Text", "Image", "File", "Audio", "Video"],
+  developer: "DeepSeek",
+  modalities: ["Text"],
 };
 
 export function ChatExperience() {

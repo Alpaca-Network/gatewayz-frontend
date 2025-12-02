@@ -19,12 +19,12 @@ export const useChatUIStore = create<ChatUIState>((set) => ({
   mobileSidebarOpen: false,
   inputValue: '',
   selectedModel: {
-      value: 'openrouter/auto',
-      label: 'Gatewayz Router',
-      category: 'Router',
+      value: 'deepseek/deepseek-r1',
+      label: 'DeepSeek R1',
+      category: 'Reasoning',
       sourceGateway: 'openrouter',
-      developer: 'Alpaca',
-      modalities: ['Text', 'Image', 'File', 'Audio', 'Video']
+      developer: 'DeepSeek',
+      modalities: ['Text']
   },
   
   setActiveSessionId: (id) => set({ activeSessionId: id }),

@@ -39,7 +39,7 @@ export function useChatOrchestrator(
   options: UseChatOrchestratorOptions = {}
 ): UseChatOrchestratorReturn {
   const {
-    defaultModel = 'gpt-4o-mini',
+    defaultModel = 'deepseek/deepseek-r1',
     onAuthRequired,
     onError,
   } = options;
