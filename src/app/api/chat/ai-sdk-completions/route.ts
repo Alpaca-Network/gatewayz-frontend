@@ -106,6 +106,22 @@ function getProviderAndModel(modelId: string, apiKey: string) {
 }
 
 /**
+ * Resolve "router" models to actual model IDs
+ * The "openrouter/auto" model is a special router that auto-selects the best model.
+ * Since the backend doesn't support auto-routing, we need to select a fallback model.
+ */
+function resolveRouterModel(modelId: string): string {
+  // Handle the Gatewayz Router / openrouter/auto model
+  if (modelId === 'openrouter/auto' || modelId === 'auto-router') {
+    // Use GPT-4o-mini as the default router fallback - it's fast, capable, and cost-effective
+    const fallbackModel = 'openai/gpt-4o-mini';
+    console.log(`[AI SDK Route] Router model "${modelId}" resolved to fallback: ${fallbackModel}`);
+    return fallbackModel;
+  }
+  return modelId;
+}
+
+/**
  * POST handler for AI SDK chat completions
  */
 export async function POST(request: NextRequest) {
@@ -113,7 +129,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const {
       messages,
-      model: modelId,
+      model: requestedModelId,
       temperature = 0.7,
       max_tokens = 4096,
       top_p = 1,
@@ -130,7 +146,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!modelId) {
+    if (!requestedModelId) {
       return new Response(
         JSON.stringify({ error: 'model is required' }),
         {
@@ -142,6 +158,9 @@ export async function POST(request: NextRequest) {
         }
       );
     }
+
+    // Resolve router models to actual model IDs
+    const modelId = resolveRouterModel(requestedModelId);
 
     // Get API key from request or headers
     const apiKey = userApiKey || request.headers.get('authorization')?.replace(/^Bearer\s+/i, '');

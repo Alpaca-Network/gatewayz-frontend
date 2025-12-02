@@ -260,6 +260,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Resolve router models to actual model IDs
+    // The "openrouter/auto" model is a special router that auto-selects the best model.
+    // Since the backend doesn't support auto-routing, we need to select a fallback model.
+    if (body.model === 'openrouter/auto' || body.model === 'auto-router') {
+      const fallbackModel = 'openai/gpt-4o-mini';
+      console.log(`[API Completions] Router model "${body.model}" resolved to fallback: ${fallbackModel}`);
+      body.model = fallbackModel;
+    }
+
     // Normalize @provider format model IDs (e.g., @google/models/gemini-pro → google/gemini-pro)
     const originalModel = body.model;
     const normalizedModel = normalizeModelId(body.model);
