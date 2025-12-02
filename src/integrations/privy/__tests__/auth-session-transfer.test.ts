@@ -516,8 +516,8 @@ describe('auth-session-transfer', () => {
       // Step 1: Store token
       storeSessionTransferToken('my-api-key', '99999');
 
-      // Step 2: Retrieve token within expiry
-      jest.spyOn(Date, 'now').mockReturnValue(1000000 + 1 * 60 * 1000);
+      // Step 2: Retrieve token within expiry (1 minute after NOW)
+      jest.spyOn(Date, 'now').mockReturnValue(TEST_TIMESTAMPS.NOW + 1 * 60 * 1000);
       const result = getStoredSessionTransferToken();
       expect(result).toEqual({ token: 'my-api-key', userId: '99999' });
 
