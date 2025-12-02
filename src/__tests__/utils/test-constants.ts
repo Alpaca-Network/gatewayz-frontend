@@ -3,6 +3,10 @@
  *
  * Provides well-documented, reusable test data to avoid hardcoded
  * values scattered across tests
+ *
+ * NOTE: All API keys and credentials in this file are FAKE/MOCK values
+ * used exclusively for unit testing. They do not represent real secrets.
+ * ggignore - GitGuardian should ignore this file
  */
 
 /**
@@ -38,7 +42,8 @@ export const TEST_USER = {
   EMAIL: 'test@example.com',
   DISPLAY_NAME: 'Test User',
   CREDITS: 500,
-  API_KEY: 'gw_test_key_abc123',
+  /** Fake test API key - not a real credential */
+  API_KEY: 'test_fake_key_not_real_abc123',
 } as const;
 
 /**
@@ -50,7 +55,8 @@ export const TEST_NEW_USER = {
   EMAIL: 'newuser@example.com',
   DISPLAY_NAME: 'New User',
   CREDITS: 500, // Welcome credits
-  API_KEY: 'gw_new_key_xyz789',
+  /** Fake test API key - not a real credential */
+  API_KEY: 'test_fake_newuser_key_xyz789',
 } as const;
 
 /**
@@ -62,7 +68,8 @@ export const TEST_PRO_USER = {
   EMAIL: 'pro@example.com',
   DISPLAY_NAME: 'Pro User',
   CREDITS: 1000,
-  API_KEY: 'gw_pro_key_123',
+  /** Fake test API key - not a real credential */
+  API_KEY: 'test_fake_prouser_key_123',
   TIER: 'pro' as const,
   SUBSCRIPTION_STATUS: 'active' as const,
   SUBSCRIPTION_END_DATE: 1735689600, // Some future timestamp
