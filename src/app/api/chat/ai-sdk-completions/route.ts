@@ -384,6 +384,7 @@ export async function POST(request: NextRequest) {
         try {
           console.log('[AI SDK Route] Starting stream iteration...');
           let contentReceived = false;
+          let errorAlreadySent = false; // Track if we've already sent an error to prevent duplicates
           let lastErrorMessage = '';
           let partTypesReceived: string[] = []; // Track all part types for debugging
 
@@ -455,7 +456,7 @@ export async function POST(request: NextRequest) {
                   }
                 };
                 controller.enqueue(encoder.encode(`data: ${JSON.stringify(errorData)}\n\n`));
-                lastErrorMessage = errorMessage; // Prevent duplicate error in !contentReceived check
+                errorAlreadySent = true; // Prevent duplicate error in !contentReceived check
               } else {
                 const sseData = {
                   choices: [{
@@ -473,7 +474,8 @@ export async function POST(request: NextRequest) {
           }
 
           // Check if we received any content - if not, send an error message
-          if (!contentReceived) {
+          // Skip if we already sent an error (e.g., from finish with error reason)
+          if (!contentReceived && !errorAlreadySent) {
             console.error('[AI SDK Route] Stream completed without any content');
             console.error('[AI SDK Route] Part types received:', partTypesReceived.join(', ') || 'none');
             console.error('[AI SDK Route] Part count:', partTypesReceived.length);
