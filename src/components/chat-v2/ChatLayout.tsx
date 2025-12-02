@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { Menu, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -51,25 +51,9 @@ function shuffleArray<T>(array: T[]): T[] {
 function WelcomeScreen({ onPromptSelect }: { onPromptSelect: (txt: string) => void }) {
     // Select 4 random prompts on mount (useMemo ensures consistency during render)
     const [prompts] = useState(() => shuffleArray(ALL_PROMPTS).slice(0, 4));
-    const [clickedPrompt, setClickedPrompt] = useState<string | null>(null);
 
-    const handlePromptClick = (title: string) => {
-        setClickedPrompt(title);
-        onPromptSelect(title);
-    };
-
-    // If a prompt was clicked, show loading state
-    if (clickedPrompt) {
-        return (
-            <div className="flex-1 flex flex-col items-center justify-center p-4">
-                <div className="flex flex-col items-center gap-4">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-                    <p className="text-muted-foreground text-sm">Sending message...</p>
-                </div>
-            </div>
-        );
-    }
-
+    // Note: We no longer show a loading spinner here because ChatLayout immediately
+    // switches to MessageList with optimistic UI when a prompt is clicked.
     return (
         <div className="flex-1 flex flex-col items-center justify-center p-4 overflow-y-auto">
              <h1 className="text-2xl sm:text-4xl font-bold mb-8 text-center">What's On Your Mind?</h1>
@@ -78,7 +62,7 @@ function WelcomeScreen({ onPromptSelect }: { onPromptSelect: (txt: string) => vo
                      <Card
                         key={p.title}
                         className="p-4 cursor-pointer hover:border-primary transition-colors bg-transparent border-border"
-                        onClick={() => handlePromptClick(p.title)}
+                        onClick={() => onPromptSelect(p.title)}
                      >
                          <p className="font-medium text-sm">{p.title}</p>
                          <p className="text-xs text-muted-foreground mt-1">{p.subtitle}</p>
@@ -95,6 +79,11 @@ export function ChatLayout() {
    const { selectedModel, setSelectedModel, activeSessionId, setActiveSessionId, setInputValue, mobileSidebarOpen, setMobileSidebarOpen } = useChatUIStore();
    const searchParams = useSearchParams();
 
+   // Track if user has clicked a prompt (to immediately hide welcome screen)
+   const [pendingPrompt, setPendingPrompt] = useState<string | null>(null);
+
+   const { data: activeMessages = [], isLoading: messagesLoading } = useSessionMessages(activeSessionId);
+
    // Handle URL message parameter - populate input on mount
    useEffect(() => {
        const messageParam = searchParams.get('message');
@@ -109,9 +98,52 @@ export function ChatLayout() {
        }
    }, [searchParams, setInputValue]);
 
+   // Clear pending prompt once we have real messages OR when session changes
+   useEffect(() => {
+       if (pendingPrompt && activeMessages.length > 0) {
+           setPendingPrompt(null);
+       }
+   }, [pendingPrompt, activeMessages.length]);
+
+   // Track the previous session ID to detect user-initiated session switches
+   const prevSessionIdRef = useRef<number | null>(activeSessionId);
+
+   // Clear pending prompt when user switches to a DIFFERENT existing session
+   // (not when a new session is created from the prompt click)
+   useEffect(() => {
+       const prevSessionId = prevSessionIdRef.current;
+       prevSessionIdRef.current = activeSessionId;
+
+       // Only clear if:
+       // 1. We have a pending prompt AND
+       // 2. Session changed from one non-null value to a DIFFERENT non-null value
+       //    (this means user clicked a different session in the sidebar)
+       // Don't clear when going from null -> non-null (new session creation from prompt)
+       if (pendingPrompt && prevSessionId !== null && activeSessionId !== null && prevSessionId !== activeSessionId) {
+           setPendingPrompt(null);
+       }
+   }, [activeSessionId, pendingPrompt]);
+
+   // Timeout to clear pending prompt if send fails silently (e.g., network error)
+   // This prevents the optimistic UI from being stuck indefinitely
+   useEffect(() => {
+       if (!pendingPrompt) return;
+
+       const timeoutId = setTimeout(() => {
+           // If we still have a pending prompt after 30 seconds, something went wrong
+           // Clear it to allow the user to try again
+           console.warn('[ChatLayout] Pending prompt timed out, clearing optimistic UI');
+           setPendingPrompt(null);
+       }, 30000);
+
+       return () => clearTimeout(timeoutId);
+   }, [pendingPrompt]);
+
    // Handle prompt selection from welcome screen - auto-send the message
    const handlePromptSelect = (text: string) => {
-       // Set the input value first
+       // Set pending prompt immediately to hide welcome screen and show chat UI
+       setPendingPrompt(text);
+       // Set the input value
        setInputValue(text);
        // Use requestAnimationFrame to ensure React has finished rendering and
        // the Zustand state update has propagated before triggering send.
@@ -121,14 +153,16 @@ export function ChatLayout() {
                (window as any).__chatInputSend();
            } else {
                console.warn('[ChatLayout] __chatInputSend not available when prompt was selected');
+               // Clear pending prompt to avoid stuck optimistic UI
+               setPendingPrompt(null);
            }
        });
    };
 
-   const { data: activeMessages = [], isLoading: messagesLoading } = useSessionMessages(activeSessionId);
    // When logged out, always show welcome screen (ignore cached messages and activeSessionId)
    // When logged in, show welcome screen only if no active session or no messages after loading
-   const showWelcomeScreen = !isAuthenticated || !activeSessionId || (!messagesLoading && activeMessages.length === 0);
+   // ALSO hide welcome screen immediately when a prompt is clicked (pendingPrompt is set)
+   const showWelcomeScreen = !pendingPrompt && (!isAuthenticated || !activeSessionId || (!messagesLoading && activeMessages.length === 0));
 
    if (authLoading) {
        return (
@@ -203,6 +237,7 @@ export function ChatLayout() {
                         sessionId={activeSessionId}
                         messages={activeMessages}
                         isLoading={messagesLoading}
+                        pendingPrompt={pendingPrompt}
                       />
                   )}
                </div>

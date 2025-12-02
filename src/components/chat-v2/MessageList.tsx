@@ -19,9 +19,10 @@ interface MessageListProps {
   sessionId: number | null;
   messages: (ChatMessageData & { error?: string; hasError?: boolean })[];
   isLoading: boolean;
+  pendingPrompt?: string | null;  // Optimistic message shown while session is being created
 }
 
-export function MessageList({ sessionId, messages, isLoading }: MessageListProps) {
+export function MessageList({ sessionId, messages, isLoading, pendingPrompt }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [userHasScrolled, setUserHasScrolled] = useState(false);
@@ -64,6 +65,35 @@ export function MessageList({ sessionId, messages, isLoading }: MessageListProps
 
     lastMessageCountRef.current = messages.length;
   }, [messages.length, lastMessage?.isStreaming, lastMessageContent, userHasScrolled]);
+
+  // Show pending prompt as optimistic message while session is being created
+  // This MUST come before the sessionId check to show UI immediately
+  if (pendingPrompt && messages.length === 0) {
+    return (
+      <div
+        ref={containerRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto p-3 sm:p-4 lg:p-6 space-y-4 sm:space-y-6"
+      >
+        {/* Optimistic user message */}
+        <ChatMessageBubble
+          role="user"
+          content={pendingPrompt}
+          showActions={false}
+          onCopy={() => navigator.clipboard.writeText(pendingPrompt)}
+        />
+        {/* Optimistic assistant message (loading) */}
+        <ChatMessageBubble
+          role="assistant"
+          content=""
+          isStreaming={true}
+          showActions={false}
+          onCopy={() => {}}
+        />
+        <div ref={bottomRef} className="h-1" />
+      </div>
+    );
+  }
 
   if (!sessionId) {
     return null;

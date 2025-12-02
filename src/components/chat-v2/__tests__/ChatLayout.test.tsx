@@ -88,6 +88,15 @@ jest.mock('../ChatInput', () => ({
   ChatInput: () => <div data-testid="chat-input">ChatInput</div>,
 }));
 
+// Mock MessageList to avoid its complex dependencies (ChatMessage, etc.)
+jest.mock('../MessageList', () => ({
+  MessageList: ({ pendingPrompt }: any) => (
+    <div data-testid="message-list">
+      {pendingPrompt && <div data-testid="pending-prompt">{pendingPrompt}</div>}
+    </div>
+  ),
+}));
+
 // Mock ModelSelect
 jest.mock('@/components/chat/model-select', () => ({
   ModelSelect: () => <div data-testid="model-select">Model Select</div>,
