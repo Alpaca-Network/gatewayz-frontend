@@ -261,7 +261,7 @@ export function getSessionCacheStats(): {
     return {
       sessionCount: data.sessions?.length || 0,
       cachedModels: data.recentModels || [],
-      defaultModel: data.defaultModel || 'openai/gpt-3.5-turbo',
+      defaultModel: data.defaultModel || 'deepseek/deepseek-r1',
       lastSync: new Date(data.lastSync),
       isExpired
     };
