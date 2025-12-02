@@ -251,7 +251,7 @@ export default function OnboardingPage() {
 
 client = OpenAI(
     api_key="${apiKey || 'YOUR_API_KEY'}",
-    base_url="https://api.gatewayz.ai"
+    base_url="https://api.gatewayz.ai/v1"
 )
 
 response = client.chat.completions.create(
@@ -264,7 +264,7 @@ print(response.choices[0].message.content)`,
 
 const client = new OpenAI({
   apiKey: "${apiKey || 'YOUR_API_KEY'}",
-  baseURL: "https://api.gatewayz.ai"
+  baseURL: "https://api.gatewayz.ai/v1"
 });
 
 const response = await client.chat.completions.create({
@@ -277,7 +277,7 @@ console.log(response.choices[0].message.content);`,
 
 const client = new OpenAI({
   apiKey: "${apiKey || 'YOUR_API_KEY'}",
-  baseURL: "https://api.gatewayz.ai"
+  baseURL: "https://api.gatewayz.ai/v1"
 });
 
 const response = await client.chat.completions.create({
