@@ -193,12 +193,12 @@ const FALLBACK_MODELS = [
  * The "openrouter/auto" model is a special router that auto-selects the best model.
  * Since the backend doesn't support auto-routing, we need to select a fallback model.
  */
-function resolveRouterModel(modelId: string, fallbackIndex: number = 0): string {
+function resolveRouterModel(modelId: string): string {
   // Handle the Gatewayz Router / openrouter/auto model
   if (modelId === 'openrouter/auto' || modelId === 'auto-router') {
-    // Use fallback models in order of preference
-    const fallbackModel = FALLBACK_MODELS[fallbackIndex % FALLBACK_MODELS.length];
-    console.log(`[AI SDK Route] Router model "${modelId}" resolved to fallback[${fallbackIndex}]: ${fallbackModel}`);
+    // Use first fallback model; subsequent fallbacks handled by getNextFallbackModel
+    const fallbackModel = FALLBACK_MODELS[0];
+    console.log(`[AI SDK Route] Router model "${modelId}" resolved to fallback: ${fallbackModel}`);
     return fallbackModel;
   }
   return modelId;
@@ -356,17 +356,17 @@ export async function POST(request: NextRequest) {
               console.log(`[AI SDK Route] Switching to fallback model: ${nextFallback}`);
               modelId = nextFallback;
             } else {
-              // All fallbacks exhausted, stop retrying
+              // All fallbacks exhausted, stop retrying - preserve original error for status code
               console.log(`[AI SDK Route] All fallback models exhausted, stopping retries`);
-              throw new Error(`All fallback models exhausted after ${retriesAttempted} attempt(s): ${lastError.message}`);
+              throw lastError;
             }
           }
 
           continue;
         }
 
-        // Non-retryable error or max retries reached
-        throw new Error(`Failed to initialize streaming after ${retriesAttempted} attempt(s): ${lastError.message}`);
+        // Non-retryable error or max retries reached - preserve original error for status code
+        throw lastError;
       }
     }
 
