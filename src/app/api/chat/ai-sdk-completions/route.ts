@@ -106,6 +106,22 @@ function getProviderAndModel(modelId: string, apiKey: string) {
 }
 
 /**
+ * Resolve "router" models to actual model IDs
+ * The "openrouter/auto" model is a special router that auto-selects the best model.
+ * Since the backend doesn't support auto-routing, we need to select a fallback model.
+ */
+function resolveRouterModel(modelId: string): string {
+  // Handle the Gatewayz Router / openrouter/auto model
+  if (modelId === 'openrouter/auto' || modelId === 'auto-router') {
+    // Use GPT-4o-mini as the default router fallback - it's fast, capable, and cost-effective
+    const fallbackModel = 'openai/gpt-4o-mini';
+    console.log(`[AI SDK Route] Router model "${modelId}" resolved to fallback: ${fallbackModel}`);
+    return fallbackModel;
+  }
+  return modelId;
+}
+
+/**
  * POST handler for AI SDK chat completions
  */
 export async function POST(request: NextRequest) {
@@ -113,7 +129,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const {
       messages,
-      model: modelId,
+      model: requestedModelId,
       temperature = 0.7,
       max_tokens = 4096,
       top_p = 1,
@@ -130,7 +146,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!modelId) {
+    if (!requestedModelId) {
       return new Response(
         JSON.stringify({ error: 'model is required' }),
         {
@@ -142,6 +158,9 @@ export async function POST(request: NextRequest) {
         }
       );
     }
+
+    // Resolve router models to actual model IDs
+    const modelId = resolveRouterModel(requestedModelId);
 
     // Get API key from request or headers
     const apiKey = userApiKey || request.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
@@ -208,10 +227,14 @@ export async function POST(request: NextRequest) {
       async start(controller) {
         try {
           console.log('[AI SDK Route] Starting stream iteration...');
+          let contentReceived = false;
+          let lastErrorMessage = '';
+
           for await (const part of stream) {
             // Handle different part types from AI SDK
             if (part.type === 'text-delta') {
               // Regular text content
+              contentReceived = true;
               const sseData = {
                 choices: [{
                   delta: {
@@ -224,6 +247,7 @@ export async function POST(request: NextRequest) {
               controller.enqueue(encoder.encode(sseMessage));
             } else if (part.type === 'reasoning-delta') {
               // Chain-of-thought reasoning
+              contentReceived = true;
               const sseData = {
                 choices: [{
                   delta: {
@@ -235,6 +259,26 @@ export async function POST(request: NextRequest) {
               const sseMessage = `data: ${JSON.stringify(sseData)}\n\n`;
               controller.enqueue(encoder.encode(sseMessage));
               console.log('[AI SDK Route] Reasoning chunk:', part.text.substring(0, 100));
+            } else if (part.type === 'error') {
+              // Handle error from the AI SDK / backend
+              console.error('[AI SDK Route] Received error part from stream:', part);
+              const errorMessage = typeof part.error === 'string'
+                ? part.error
+                : (part.error as Error)?.message || 'Unknown error from model provider';
+              lastErrorMessage = errorMessage;
+
+              // Send error to client
+              const errorData = {
+                choices: [{
+                  delta: {},
+                  finish_reason: 'error'
+                }],
+                error: {
+                  message: errorMessage,
+                  type: 'provider_error'
+                }
+              };
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify(errorData)}\n\n`));
             } else if (part.type === 'finish') {
               // Stream finished
               const sseData = {
@@ -246,6 +290,23 @@ export async function POST(request: NextRequest) {
               const sseMessage = `data: ${JSON.stringify(sseData)}\n\n`;
               controller.enqueue(encoder.encode(sseMessage));
             }
+          }
+
+          // Check if we received any content - if not, send an error message
+          if (!contentReceived) {
+            console.error('[AI SDK Route] Stream completed without any content');
+            const errorMessage = lastErrorMessage || `No response received from model "${modelId}". The model may not be properly configured, may be unavailable, or may not support the requested features.`;
+            const errorData = {
+              choices: [{
+                delta: {},
+                finish_reason: 'error'
+              }],
+              error: {
+                message: errorMessage,
+                type: 'no_content_error'
+              }
+            };
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(errorData)}\n\n`));
           }
 
           // Send final [DONE] message
