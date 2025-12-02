@@ -313,12 +313,12 @@ function generateHistory(
     byHour[key].push(metric);
   }
 
-  // Calculate p75 for each hour
+  // Calculate p75 for each hour (consistent with calculateAggregatedVital)
   return Object.entries(byHour)
     .map(([timestamp, hourMetrics]) => {
       const values = hourMetrics.map((m) => m.value).sort((a, b) => a - b);
-      const p75Index = Math.floor(values.length * 0.75);
-      const value = values[p75Index] || 0;
+      const p75Index = Math.min(Math.ceil(values.length * 0.75) - 1, values.length - 1);
+      const value = values[Math.max(0, p75Index)] || 0;
       const name = metrics[0].name;
 
       return {
