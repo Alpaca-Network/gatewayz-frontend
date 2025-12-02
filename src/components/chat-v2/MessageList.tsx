@@ -66,20 +66,9 @@ export function MessageList({ sessionId, messages, isLoading, pendingPrompt }: M
     lastMessageCountRef.current = messages.length;
   }, [messages.length, lastMessage?.isStreaming, lastMessageContent, userHasScrolled]);
 
-  if (!sessionId) {
-    return null;
-  }
-
-  if (isLoading) {
-    return (
-      <div className="flex-1 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-      </div>
-    );
-  }
-
   // Show pending prompt as optimistic message while session is being created
-  if (messages.length === 0 && pendingPrompt) {
+  // This MUST come before the sessionId check to show UI immediately
+  if (pendingPrompt && messages.length === 0) {
     return (
       <div
         ref={containerRef}
@@ -102,6 +91,18 @@ export function MessageList({ sessionId, messages, isLoading, pendingPrompt }: M
           onCopy={() => {}}
         />
         <div ref={bottomRef} className="h-1" />
+      </div>
+    );
+  }
+
+  if (!sessionId) {
+    return null;
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
       </div>
     );
   }
