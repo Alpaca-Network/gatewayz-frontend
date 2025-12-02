@@ -18,6 +18,7 @@ import type {
 import {
   getRating,
   calculatePerformanceScore,
+  calculateMetricScore,
   METRIC_WEIGHTS,
 } from '@/lib/web-vitals-types';
 
@@ -209,7 +210,7 @@ function calculateSummary(
       overall: overallScore,
       metrics: metricsForScore.map((m) => ({
         name: m.name,
-        score: Math.round(100 * (1 - m.value / 5000)), // Simple score
+        score: calculateMetricScore(m.name, m.value, device),
         weight: METRIC_WEIGHTS[device][m.name],
         value: m.value,
         rating: getRating(m.name, m.value, device),
@@ -248,8 +249,9 @@ function calculateAggregatedVital(
   // Sort values for percentile calculation
   const values = metrics.map((m) => m.value).sort((a, b) => a - b);
 
-  const p75Index = Math.floor(values.length * 0.75);
-  const p75 = values[p75Index] || 0;
+  // Use Math.ceil - 1 for proper p75 calculation (75th percentile)
+  const p75Index = Math.min(Math.ceil(values.length * 0.75) - 1, values.length - 1);
+  const p75 = values[Math.max(0, p75Index)] || 0;
 
   // Calculate rating based on p75
   const rating = getRating(name, p75, device);

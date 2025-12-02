@@ -64,11 +64,15 @@ export function useWebVitalsSummary(
   } = options;
 
   const [data, setData] = useState<WebVitalsSummary | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState<boolean>(enabled);
   const [error, setError] = useState<Error | null>(null);
 
   const fetchSummary = useCallback(async () => {
-    if (!enabled) return;
+    if (!enabled) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
 
     try {
       const params = new URLSearchParams({
@@ -136,11 +140,15 @@ export function usePagePerformance(
   } = options;
 
   const [data, setData] = useState<PagePerformanceData | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState<boolean>(enabled);
   const [error, setError] = useState<Error | null>(null);
 
   const fetchPages = useCallback(async () => {
-    if (!enabled) return;
+    if (!enabled) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
 
     try {
       const params = new URLSearchParams({
@@ -222,11 +230,15 @@ export function useWebVitalsHistory(
   const { metric, hours = 24, device = 'all', enabled = true } = options;
 
   const [data, setData] = useState<HistoryDataPoint[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState<boolean>(enabled);
   const [error, setError] = useState<Error | null>(null);
 
   const fetchHistory = useCallback(async () => {
-    if (!enabled) return;
+    if (!enabled) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
 
     try {
       const params = new URLSearchParams({
