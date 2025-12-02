@@ -457,8 +457,15 @@ export async function* streamChatResponse(
   let firstChunkReceived = false;
   let isFirstContentChunk = true; // Track first content token for TTFT
 
+  // Extract resolved model name from headers for better error messages
+  const resolvedModelId = response.headers.get('X-Model') || requestBody.model;
+  const requestedModelId = response.headers.get('X-Requested-Model');
+
   devLog('[Streaming] Stream reader obtained successfully');
   devLog('[Streaming] Starting to read stream...');
+  if (requestedModelId && requestedModelId !== resolvedModelId) {
+    devLog(`[Streaming] Router model "${requestedModelId}" was resolved to "${resolvedModelId}"`);
+  }
 
   // Per-chunk timeout to detect stalled streams (30 seconds)
   // This resets on each chunk and prevents hanging if backend stops sending
@@ -809,9 +816,14 @@ export async function* streamChatResponse(
 
     // Important: Log if we received any content at all
     if (contentChunkCount === 0) {
-      const errorMsg = `No response received from model "${requestBody.model}". This model may not be properly configured, may be unavailable, or may not support the requested features. Please try a different model or check the model's availability status.`;
+      // Use resolved model name in error message for clarity
+      const modelDisplayName = requestedModelId && requestedModelId !== resolvedModelId
+        ? `${requestedModelId} (resolved to ${resolvedModelId})`
+        : resolvedModelId;
+      const errorMsg = `No response received from model "${modelDisplayName}". This model may not be properly configured, may be unavailable, or may not support the requested features. Please try a different model or check the model's availability status.`;
       console.error('[Streaming] ERROR:', errorMsg);
-      console.error('[Streaming] Model:', requestBody.model);
+      console.error('[Streaming] Requested Model:', requestBody.model);
+      console.error('[Streaming] Resolved Model:', resolvedModelId);
       console.error('[Streaming] API Base URL:', url);
       console.error('[Streaming] Total SSE lines processed:', chunkCount);
       // Throw an error so the UI can show a proper error message

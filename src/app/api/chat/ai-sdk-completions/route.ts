@@ -113,8 +113,9 @@ function getProviderAndModel(modelId: string, apiKey: string) {
 function resolveRouterModel(modelId: string): string {
   // Handle the Gatewayz Router / openrouter/auto model
   if (modelId === 'openrouter/auto' || modelId === 'auto-router') {
-    // Use GPT-4o-mini as the default router fallback - it's fast, capable, and cost-effective
-    const fallbackModel = 'openai/gpt-4o-mini';
+    // Use a model that's known to work well with our streaming infrastructure
+    // Anthropic models via OpenRouter have proven reliability
+    const fallbackModel = 'openrouter/anthropic/claude-3.5-sonnet';
     console.log(`[AI SDK Route] Router model "${modelId}" resolved to fallback: ${fallbackModel}`);
     return fallbackModel;
   }
@@ -161,6 +162,7 @@ export async function POST(request: NextRequest) {
 
     // Resolve router models to actual model IDs
     const modelId = resolveRouterModel(requestedModelId);
+    const wasRouterResolved = modelId !== requestedModelId;
 
     // Get API key from request or headers
     const apiKey = userApiKey || request.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
@@ -354,6 +356,8 @@ export async function POST(request: NextRequest) {
         'X-Provider': provider,
         'X-Model': modelId,
         'X-Supports-Thinking': supportsThinking ? 'true' : 'false',
+        // Include original requested model if it was resolved to a different model
+        ...(wasRouterResolved && { 'X-Requested-Model': requestedModelId }),
       },
     });
   } catch (error) {
