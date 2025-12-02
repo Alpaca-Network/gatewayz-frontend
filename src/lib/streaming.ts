@@ -651,11 +651,17 @@ export async function* streamChatResponse(
                   }
                 }
               } else if (choice?.finish_reason) {
-                chunk = { done: true };
+                // Check if finish_reason indicates an error
+                if (choice.finish_reason === 'error') {
+                  // Error finish reason should be handled by the error check below
+                  devLog('[Streaming] Received finish_reason: error, checking for error object');
+                } else {
+                  chunk = { done: true };
+                }
               }
             }
 
-            // Check for error object in the response
+            // Check for error object in the response (also handles finish_reason: 'error')
             if (data.error && typeof data.error === 'object') {
               const errorObj = data.error as Record<string, unknown>;
               const errorMessage =
@@ -679,6 +685,15 @@ export async function* streamChatResponse(
               }
 
               throw new Error(errorMessage);
+            }
+
+            // Handle finish_reason: 'error' without an error object
+            const choice = data.choices?.[0];
+            if (choice?.finish_reason === 'error' && !data.error) {
+              devError('[Streaming] Received finish_reason: error without error object');
+              throw new Error(
+                `Model error: The model returned an error without details. This may indicate the model is unavailable or misconfigured. Please try a different model.`
+              );
             }
 
             // Handle event-based streaming formats
