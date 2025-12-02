@@ -22,6 +22,7 @@ import { AnalyticsProvidersWrapper } from '@/components/providers/analytics-prov
 import { ReferralBonusDialog } from '@/components/dialogs/referral-bonus-dialog';
 import { SafeStorageShim } from '@/components/safe-storage-shim';
 import { ReferralToast } from '@/components/referral/referral-toast';
+import { WebVitalsReporter } from '@/components/web-vitals';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -126,6 +127,7 @@ export default function RootLayout({
                 <ReferralToast />
                 <Analytics />
                 <SpeedInsights />
+                <WebVitalsReporter />
               </AnalyticsProvidersWrapper>
             </PrivyProviderWrapper>
           </ReactQueryProvider>
