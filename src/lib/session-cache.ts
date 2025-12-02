@@ -26,7 +26,7 @@ function createEmptyCache(): SessionCacheData {
   return {
     sessions: [],
     recentModels: [],
-    defaultModel: 'deepseek/deepseek-r1',
+    defaultModel: 'openai/gpt-4o-mini',
     lastSync: now,
     expiresAt: now + CACHE_TTL_MS
   };
@@ -75,7 +75,7 @@ export function getCachedDefaultModel(): string | null {
       return null;
     }
 
-    return data.defaultModel || 'deepseek/deepseek-r1';
+    return data.defaultModel || 'openai/gpt-4o-mini';
   } catch (error) {
     console.warn('[SessionCache] Failed to read cached default model:', error);
     return null;
@@ -249,7 +249,7 @@ export function getSessionCacheStats(): {
       return {
         sessionCount: 0,
         cachedModels: [],
-        defaultModel: 'deepseek/deepseek-r1',
+        defaultModel: 'openai/gpt-4o-mini',
         lastSync: null,
         isExpired: true
       };
@@ -261,7 +261,7 @@ export function getSessionCacheStats(): {
     return {
       sessionCount: data.sessions?.length || 0,
       cachedModels: data.recentModels || [],
-      defaultModel: data.defaultModel || 'deepseek/deepseek-r1',
+      defaultModel: data.defaultModel || 'openai/gpt-4o-mini',
       lastSync: new Date(data.lastSync),
       isExpired
     };
@@ -270,7 +270,7 @@ export function getSessionCacheStats(): {
     return {
       sessionCount: 0,
       cachedModels: [],
-      defaultModel: 'deepseek/deepseek-r1',
+      defaultModel: 'openai/gpt-4o-mini',
       lastSync: null,
       isExpired: true
     };

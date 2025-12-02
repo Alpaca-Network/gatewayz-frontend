@@ -182,7 +182,7 @@ export class ChatHistoryAPI {
    */
   async createSession(title?: string, model?: string): Promise<ChatSession> {
     const sessionTitle = title || `Chat ${new Date().toLocaleString()}`;
-    const sessionModel = model || 'deepseek/deepseek-r1';
+    const sessionModel = model || 'openai/gpt-4o-mini';
 
     // Use withTimeoutAndRetry for automatic retry on transient failures
     const result = await withTimeoutAndRetry<ApiResponse<ChatSession>>(
@@ -691,7 +691,7 @@ export class ChatHistoryAPI {
    * Get cached default model for new sessions
    */
   getCachedDefaultModel(): string {
-    return getCachedDefaultModel() || 'deepseek/deepseek-r1';
+    return getCachedDefaultModel() || 'openai/gpt-4o-mini';
   }
 
   /**

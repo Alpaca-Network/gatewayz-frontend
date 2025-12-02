@@ -21,11 +21,11 @@ const ModelSelect = dynamic(() => import("@/components/chat/model-select").then(
 });
 
 const DEFAULT_MODEL: ModelOption = {
-  value: "deepseek/deepseek-r1",
-  label: "DeepSeek R1",
-  category: "Reasoning",
+  value: "openai/gpt-4o-mini",
+  label: "GPT-4o Mini",
+  category: "Chat",
   sourceGateway: "openrouter",
-  developer: "DeepSeek",
+  developer: "OpenAI",
   modalities: ["Text"],
 };
 
