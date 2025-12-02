@@ -167,6 +167,11 @@ export default function ModelProfilePage() {
         if (developer === 'alibaba') {
             router.replace(`/models/qwen/${modelNameParam}`);
         }
+        // Redirect cerebras/qwen-3-32b to the correct Qwen model
+        // The Cerebras qwen-3-32b model is actually Qwen2.5 32B
+        if (developer === 'cerebras' && modelNameParam === 'qwen-3-32b') {
+            router.replace('/models/qwen/qwen2-5-32b');
+        }
     }, [developer, modelNameParam, router]);
 
     // Provider configurations for API calls
