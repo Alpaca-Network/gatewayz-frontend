@@ -355,6 +355,10 @@ export async function POST(request: NextRequest) {
             if (nextFallback) {
               console.log(`[AI SDK Route] Switching to fallback model: ${nextFallback}`);
               modelId = nextFallback;
+            } else {
+              // All fallbacks exhausted, stop retrying
+              console.log(`[AI SDK Route] All fallback models exhausted, stopping retries`);
+              throw new Error(`All fallback models exhausted after ${retriesAttempted} attempt(s): ${lastError.message}`);
             }
           }
 
