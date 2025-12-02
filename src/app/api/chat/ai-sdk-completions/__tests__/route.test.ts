@@ -6,13 +6,41 @@
  */
 
 import { NextRequest } from 'next/server';
-import { POST } from '../route';
 
-// Mock AI SDK
-jest.mock('ai', () => ({
-  streamText: jest.fn(),
-  convertToCoreMessages: jest.fn((messages) => messages),
-}));
+// Mock AI SDK - define MockAPICallError inside the factory to avoid hoisting issues
+jest.mock('ai', () => {
+  // Create a mock APICallError class for testing
+  class MockAPICallError extends Error {
+    statusCode?: number;
+    responseHeaders?: Record<string, string>;
+    responseBody?: string;
+    isRetryable: boolean;
+
+    constructor(options: {
+      message: string;
+      statusCode?: number;
+      responseHeaders?: Record<string, string>;
+      responseBody?: string;
+      isRetryable?: boolean;
+    }) {
+      super(options.message);
+      this.name = 'APICallError';
+      this.statusCode = options.statusCode;
+      this.responseHeaders = options.responseHeaders;
+      this.responseBody = options.responseBody;
+      this.isRetryable = options.isRetryable ?? false;
+    }
+  }
+
+  return {
+    streamText: jest.fn(),
+    convertToCoreMessages: jest.fn((messages: unknown[]) => messages),
+    APICallError: MockAPICallError,
+  };
+});
+
+// Import after mocks are set up
+import { POST } from '../route';
 
 jest.mock('@ai-sdk/openai', () => ({
   createOpenAI: jest.fn(() => {

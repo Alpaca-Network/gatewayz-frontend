@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { streamText } from 'ai';
+import { streamText, APICallError } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 
 /**
@@ -22,6 +22,78 @@ import { createOpenAI } from '@ai-sdk/openai';
  * - Qwen (QwQ and thinking models)
  * - And 60+ other providers
  */
+
+// Retry configuration for transient failures
+const MAX_RETRIES = 3;
+const INITIAL_RETRY_DELAY_MS = 1000;
+const MAX_RETRY_DELAY_MS = 10000;
+
+/**
+ * Calculate delay with exponential backoff and jitter
+ */
+function getRetryDelay(attempt: number): number {
+  const exponentialDelay = INITIAL_RETRY_DELAY_MS * Math.pow(2, attempt);
+  const jitter = Math.random() * 0.3 * exponentialDelay; // 0-30% jitter
+  return Math.min(exponentialDelay + jitter, MAX_RETRY_DELAY_MS);
+}
+
+/**
+ * Check if an error is retryable (rate limit, server error, or network issue)
+ */
+function isRetryableError(error: unknown): boolean {
+  if (error instanceof APICallError) {
+    const status = error.statusCode;
+    // Retry on rate limits (429), server errors (5xx), and certain client errors
+    if (status === 429 || (status && status >= 500)) {
+      return true;
+    }
+  }
+
+  // Check for network errors or timeouts
+  if (error instanceof Error) {
+    const message = error.message.toLowerCase();
+    if (
+      message.includes('timeout') ||
+      message.includes('econnreset') ||
+      message.includes('econnrefused') ||
+      message.includes('network') ||
+      message.includes('fetch failed') ||
+      message.includes('rate limit') ||
+      message.includes('too many requests')
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Extract rate limit info from error for better error messages
+ */
+function extractRateLimitInfo(error: unknown): { retryAfter?: number; message: string } {
+  if (error instanceof APICallError) {
+    // responseHeaders is Record<string, string>, not a Headers object
+    const retryAfterHeader = error.responseHeaders?.['retry-after'] || error.responseHeaders?.['Retry-After'];
+    const retryAfter = retryAfterHeader ? parseInt(retryAfterHeader, 10) : undefined;
+
+    if (error.statusCode === 429) {
+      return {
+        retryAfter,
+        message: `Rate limited by upstream provider. ${retryAfter ? `Retry after ${retryAfter}s.` : 'Please try again shortly.'}`
+      };
+    }
+  }
+
+  return { message: error instanceof Error ? error.message : 'Unknown error' };
+}
+
+/**
+ * Sleep for specified milliseconds
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
 /**
  * Detect if a model supports chain-of-thought reasoning based on model ID
@@ -106,6 +178,17 @@ function getProviderAndModel(modelId: string, apiKey: string) {
 }
 
 /**
+ * Fallback models in priority order for when primary model fails
+ * These are reliable models that work well with our streaming infrastructure
+ */
+const FALLBACK_MODELS = [
+  'openrouter/anthropic/claude-3.5-sonnet',
+  'openrouter/openai/gpt-4o',
+  'openrouter/google/gemini-pro-1.5',
+  'openrouter/meta-llama/llama-3.1-70b-instruct',
+];
+
+/**
  * Resolve "router" models to actual model IDs
  * The "openrouter/auto" model is a special router that auto-selects the best model.
  * Since the backend doesn't support auto-routing, we need to select a fallback model.
@@ -113,13 +196,29 @@ function getProviderAndModel(modelId: string, apiKey: string) {
 function resolveRouterModel(modelId: string): string {
   // Handle the Gatewayz Router / openrouter/auto model
   if (modelId === 'openrouter/auto' || modelId === 'auto-router') {
-    // Use a model that's known to work well with our streaming infrastructure
-    // Anthropic models via OpenRouter have proven reliability
-    const fallbackModel = 'openrouter/anthropic/claude-3.5-sonnet';
+    // Use first fallback model; subsequent fallbacks handled by getNextFallbackModel
+    const fallbackModel = FALLBACK_MODELS[0];
     console.log(`[AI SDK Route] Router model "${modelId}" resolved to fallback: ${fallbackModel}`);
     return fallbackModel;
   }
   return modelId;
+}
+
+/**
+ * Get the next fallback model when the current one fails
+ */
+function getNextFallbackModel(currentModel: string, originalModel: string): string | null {
+  // Only use fallbacks for router models
+  if (originalModel !== 'openrouter/auto' && originalModel !== 'auto-router') {
+    return null;
+  }
+
+  const currentIndex = FALLBACK_MODELS.indexOf(currentModel);
+  if (currentIndex === -1 || currentIndex >= FALLBACK_MODELS.length - 1) {
+    return null;
+  }
+
+  return FALLBACK_MODELS[currentIndex + 1];
 }
 
 /**
@@ -160,10 +259,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Resolve router models to actual model IDs
-    const modelId = resolveRouterModel(requestedModelId);
-    const wasRouterResolved = modelId !== requestedModelId;
-
     // Get API key from request or headers
     const apiKey = userApiKey || request.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
 
@@ -174,50 +269,109 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get the appropriate provider and model
-    const { provider, model, supportsThinking } = getProviderAndModel(modelId, apiKey);
+    // Resolve router models to actual model IDs
+    let modelId = resolveRouterModel(requestedModelId);
+    const wasRouterResolved = modelId !== requestedModelId;
+    const isRouterModel = requestedModelId === 'openrouter/auto' || requestedModelId === 'auto-router';
 
-    console.log('[AI SDK Route] Using provider:', provider, 'for model:', modelId);
-    console.log('[AI SDK Route] Supports thinking:', supportsThinking);
-    console.log('[AI SDK Route] Request parameters:', {
-      modelId,
-      temperature,
-      max_tokens,
-      messagesCount: messages.length,
-      apiKeyPrefix: apiKey.substring(0, 10) + '...'
-    });
+    // Track retry attempts and last error for better error reporting
+    let lastError: Error | null = null;
+    let retriesAttempted = 0;
+    let result: ReturnType<typeof streamText> | null = null;
+    let finalProvider = 'gatewayz';
+    let finalSupportsThinking = false;
 
-    // Messages are already in the correct ModelMessage format (OpenAI-compatible)
-    // No conversion needed - streamText accepts messages in this format directly
-    console.log('[AI SDK Route] Using messages directly (already in ModelMessage format)');
+    // Retry loop with exponential backoff
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        // Get the appropriate provider and model
+        const { provider, model, supportsThinking } = getProviderAndModel(modelId, apiKey);
+        finalProvider = provider;
+        finalSupportsThinking = supportsThinking;
 
-    // Stream the response using AI SDK
-    let result;
-    try {
-      result = streamText({
-        model,
-        messages,
-        temperature,
-        maxOutputTokens: max_tokens,
-        topP: top_p,
-        frequencyPenalty: frequency_penalty,
-        presencePenalty: presence_penalty,
-        onFinish: ({ text, finishReason, usage }) => {
-          console.log('[AI SDK Route] Completion finished:', {
-            provider,
-            model: modelId,
-            finishReason,
-            inputTokens: usage.inputTokens,
-            outputTokens: usage.outputTokens,
-            totalTokens: usage.totalTokens,
-            textLength: text.length,
-          });
-        },
-      });
-      console.log('[AI SDK Route] streamText call successful, starting stream...');
-    } catch (streamInitError) {
-      console.error('[AI SDK Route] Error initializing streamText:', streamInitError);
-      throw new Error(`Failed to initialize streaming: ${streamInitError instanceof Error ? streamInitError.message : 'Unknown error'}`);
+        if (attempt > 0) {
+          console.log(`[AI SDK Route] Retry attempt ${attempt}/${MAX_RETRIES} for model: ${modelId}`);
+        }
+
+        console.log('[AI SDK Route] Using provider:', provider, 'for model:', modelId);
+        console.log('[AI SDK Route] Supports thinking:', supportsThinking);
+        console.log('[AI SDK Route] Request parameters:', {
+          modelId,
+          temperature,
+          max_tokens,
+          messagesCount: messages.length,
+          apiKeyPrefix: apiKey.substring(0, 10) + '...',
+          attempt,
+        });
+
+        // Messages are already in the correct ModelMessage format (OpenAI-compatible)
+        console.log('[AI SDK Route] Using messages directly (already in ModelMessage format)');
+
+        // Stream the response using AI SDK
+        result = streamText({
+          model,
+          messages,
+          temperature,
+          maxOutputTokens: max_tokens,
+          topP: top_p,
+          frequencyPenalty: frequency_penalty,
+          presencePenalty: presence_penalty,
+          onFinish: ({ text, finishReason, usage }) => {
+            console.log('[AI SDK Route] Completion finished:', {
+              provider,
+              model: modelId,
+              finishReason,
+              inputTokens: usage.inputTokens,
+              outputTokens: usage.outputTokens,
+              totalTokens: usage.totalTokens,
+              textLength: text.length,
+              retriesAttempted,
+            });
+          },
+        });
+
+        console.log('[AI SDK Route] streamText call successful, starting stream...');
+        break; // Success - exit retry loop
+
+      } catch (streamInitError) {
+        lastError = streamInitError instanceof Error ? streamInitError : new Error(String(streamInitError));
+        retriesAttempted = attempt + 1;
+
+        console.error(`[AI SDK Route] Error initializing streamText (attempt ${attempt + 1}/${MAX_RETRIES + 1}):`, streamInitError);
+
+        // Check if error is retryable
+        if (isRetryableError(streamInitError) && attempt < MAX_RETRIES) {
+          const rateLimitInfo = extractRateLimitInfo(streamInitError);
+          const delay = rateLimitInfo.retryAfter
+            ? rateLimitInfo.retryAfter * 1000
+            : getRetryDelay(attempt);
+
+          console.log(`[AI SDK Route] Retryable error detected. Waiting ${delay}ms before retry...`);
+          await sleep(delay);
+
+          // For router models, try the next fallback model
+          if (isRouterModel) {
+            const nextFallback = getNextFallbackModel(modelId, requestedModelId);
+            if (nextFallback) {
+              console.log(`[AI SDK Route] Switching to fallback model: ${nextFallback}`);
+              modelId = nextFallback;
+            } else {
+              // All fallbacks exhausted, stop retrying - preserve original error for status code
+              console.log(`[AI SDK Route] All fallback models exhausted, stopping retries`);
+              throw lastError;
+            }
+          }
+
+          continue;
+        }
+
+        // Non-retryable error or max retries reached - preserve original error for status code
+        throw lastError;
+      }
+    }
+
+    if (!result) {
+      throw new Error(`Failed to initialize streaming after ${retriesAttempted} attempts`);
     }
 
     // Convert AI SDK stream to SSE format that the frontend expects
@@ -353,11 +507,13 @@ export async function POST(request: NextRequest) {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
         'Connection': 'keep-alive',
-        'X-Provider': provider,
+        'X-Provider': finalProvider,
         'X-Model': modelId,
-        'X-Supports-Thinking': supportsThinking ? 'true' : 'false',
+        'X-Supports-Thinking': finalSupportsThinking ? 'true' : 'false',
         // Include original requested model if it was resolved to a different model
         ...(wasRouterResolved && { 'X-Requested-Model': requestedModelId }),
+        // Include retry info for debugging
+        ...(retriesAttempted > 0 && { 'X-Retries-Attempted': String(retriesAttempted) }),
       },
     });
   } catch (error) {
@@ -370,17 +526,48 @@ export async function POST(request: NextRequest) {
       console.error('[AI SDK Route] Error stack:', error.stack);
     }
 
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    const status = message.includes('API key') ? 401 : 500;
+    // Extract detailed error information
+    let status = 500;
+    let errorType = 'server_error';
+    let message = error instanceof Error ? error.message : 'Unknown error';
+    let retryAfter: number | undefined;
+
+    if (error instanceof APICallError) {
+      status = error.statusCode || 500;
+      errorType = status === 429 ? 'rate_limit_error' : 'api_error';
+
+      // Extract retry-after header if available (responseHeaders is Record<string, string>)
+      const retryAfterHeader = error.responseHeaders?.['retry-after'] || error.responseHeaders?.['Retry-After'];
+      retryAfter = retryAfterHeader ? parseInt(retryAfterHeader, 10) : undefined;
+
+      // Provide more helpful error messages
+      if (status === 429) {
+        message = `Rate limited by upstream provider. ${retryAfter ? `Please retry after ${retryAfter} seconds.` : 'Please try again shortly.'}`;
+      } else if (status === 401 || status === 403) {
+        message = 'Authentication failed. Please check your API key.';
+        errorType = 'auth_error';
+      } else if (status >= 500) {
+        message = `Upstream provider error (${status}). Please try again later.`;
+        errorType = 'upstream_error';
+      }
+    } else if (message.includes('API key')) {
+      status = 401;
+      errorType = 'auth_error';
+    }
 
     return new Response(
       JSON.stringify({
         error: message,
+        type: errorType,
         details: 'Failed to process chat completion with AI SDK',
+        ...(retryAfter && { retry_after: retryAfter }),
       }),
       {
         status,
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(retryAfter && { 'Retry-After': String(retryAfter) }),
+        },
       }
     );
   }
