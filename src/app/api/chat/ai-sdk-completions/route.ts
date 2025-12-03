@@ -299,6 +299,62 @@ export async function POST(request: NextRequest) {
     const wasRouterResolved = modelId !== requestedModelId;
     const isRouterModel = requestedModelId === 'openrouter/auto' || requestedModelId === 'auto-router';
 
+    // IMPORTANT: Redirect models that return non-standard formats to the flexible completions route
+    // These providers return OpenAI Responses API format (object: "response.chunk" with output[] array)
+    // which the AI SDK cannot parse. The /api/chat/completions route has flexible format handling.
+    // This is a server-side fallback in case client-side detection fails.
+    const modelLower = modelId.toLowerCase();
+    const gatewayLower = (body.gateway || '').toLowerCase();
+
+    // Check for Fireworks models (return Responses API format)
+    const isFireworksModel = modelLower.includes('fireworks') || modelLower.includes('accounts/fireworks');
+
+    // Check for DeepSeek direct gateway (when using deepseek/ prefix without another gateway)
+    // DeepSeek through OpenRouter/Together normalizes the format, but direct DeepSeek API uses Responses format
+    const isDirectDeepSeekGateway = gatewayLower === 'deepseek' ||
+                                     (modelLower.startsWith('deepseek/') && !gatewayLower);
+
+    const needsFlexibleRoute = isFireworksModel || isDirectDeepSeekGateway;
+
+    if (needsFlexibleRoute) {
+      const reason = isFireworksModel ? 'fireworks-format' : 'deepseek-direct-format';
+      console.log(`[AI SDK Route] Redirecting to flexible completions route (${reason}): ${modelId}`);
+
+      // Forward the request to /api/chat/completions instead
+      // SECURITY: Use a hardcoded trusted origin to prevent SSRF via Host header spoofing.
+      // We use the app's known internal URL or fall back to localhost for local dev.
+      const trustedOrigin = process.env.NEXT_PUBLIC_APP_URL ||
+                            (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+      const searchParams = new URL(request.url).searchParams;
+      const completionsUrl = new URL('/api/chat/completions', trustedOrigin);
+      searchParams.forEach((value, key) => completionsUrl.searchParams.set(key, value));
+
+      // Update the body with the resolved API key (important for guest users where
+      // 'guest' was resolved to GUEST_API_KEY) to ensure consistent authentication
+      const forwardedBody = { ...body, apiKey };
+
+      const forwardedResponse = await fetch(completionsUrl.toString(), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(forwardedBody),
+      });
+
+      // Return the response from the flexible completions route
+      return new Response(forwardedResponse.body, {
+        status: forwardedResponse.status,
+        headers: {
+          'Content-Type': forwardedResponse.headers.get('Content-Type') || 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+          'X-Redirected-From': 'ai-sdk-completions',
+          'X-Redirect-Reason': reason,
+        },
+      });
+    }
+
     // Track retry attempts and last error for better error reporting
     let lastError: Error | null = null;
     let retriesAttempted = 0;
