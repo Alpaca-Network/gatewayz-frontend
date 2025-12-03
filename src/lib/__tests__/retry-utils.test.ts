@@ -142,7 +142,7 @@ describe('Retry Utils', () => {
       expect(mockFetch).toHaveBeenCalledTimes(2);
     });
 
-    it('should respect Retry-After header for 429 responses', async () => {
+    it('should respect Retry-After header (numeric seconds) for 429 responses', async () => {
       const headers = new Headers();
       headers.set('retry-after', '2'); // 2 seconds
 
@@ -164,16 +164,42 @@ describe('Retry Utils', () => {
         .mockResolvedValueOnce(mockResponse429)
         .mockResolvedValueOnce(mockResponse200);
 
-      // Mock performance.now to measure delay indirectly
-      const originalDateNow = Date.now;
-      let callCount = 0;
-      const callTimes: number[] = [];
+      jest.useFakeTimers();
 
-      Date.now = jest.fn(() => {
-        callCount++;
-        // Simulate time passing - first call is start, second is after delay
-        return originalDateNow() + (callCount * 100);
-      });
+      const promise = retryFetch(mockFetch);
+      await jest.runAllTimersAsync();
+      const result = await promise;
+
+      jest.useRealTimers();
+
+      // The fetch should have succeeded after retry
+      expect(result.status).toBe(200);
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('should respect Retry-After header (HTTP date format) for 429 responses', async () => {
+      // Set a future date 3 seconds from now
+      const futureDate = new Date(Date.now() + 3000);
+      const headers = new Headers();
+      headers.set('retry-after', futureDate.toUTCString());
+
+      const mockResponse429 = {
+        ok: false,
+        status: 429,
+        headers,
+        text: async () => 'too many requests',
+      } as unknown as Response;
+
+      const mockResponse200 = {
+        ok: true,
+        status: 200,
+        text: async () => 'success',
+      } as unknown as Response;
+
+      const mockFetch = jest
+        .fn()
+        .mockResolvedValueOnce(mockResponse429)
+        .mockResolvedValueOnce(mockResponse200);
 
       jest.useFakeTimers();
 
@@ -182,11 +208,131 @@ describe('Retry Utils', () => {
       const result = await promise;
 
       jest.useRealTimers();
-      Date.now = originalDateNow;
 
       // The fetch should have succeeded after retry
       expect(result.status).toBe(200);
       expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('should handle invalid Retry-After header gracefully', async () => {
+      const headers = new Headers();
+      headers.set('retry-after', 'invalid-value');
+
+      const mockResponse429 = {
+        ok: false,
+        status: 429,
+        headers,
+        text: async () => 'too many requests',
+      } as unknown as Response;
+
+      const mockResponse200 = {
+        ok: true,
+        status: 200,
+        text: async () => 'success',
+      } as unknown as Response;
+
+      const mockFetch = jest
+        .fn()
+        .mockResolvedValueOnce(mockResponse429)
+        .mockResolvedValueOnce(mockResponse200);
+
+      jest.useFakeTimers();
+
+      const promise = retryFetch(mockFetch);
+      await jest.runAllTimersAsync();
+      const result = await promise;
+
+      jest.useRealTimers();
+
+      // Should still succeed using default backoff
+      expect(result.status).toBe(200);
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('should ignore past Retry-After dates', async () => {
+      // Set a past date
+      const pastDate = new Date(Date.now() - 10000);
+      const headers = new Headers();
+      headers.set('retry-after', pastDate.toUTCString());
+
+      const mockResponse429 = {
+        ok: false,
+        status: 429,
+        headers,
+        text: async () => 'too many requests',
+      } as unknown as Response;
+
+      const mockResponse200 = {
+        ok: true,
+        status: 200,
+        text: async () => 'success',
+      } as unknown as Response;
+
+      const mockFetch = jest
+        .fn()
+        .mockResolvedValueOnce(mockResponse429)
+        .mockResolvedValueOnce(mockResponse200);
+
+      jest.useFakeTimers();
+
+      const promise = retryFetch(mockFetch);
+      await jest.runAllTimersAsync();
+      const result = await promise;
+
+      jest.useRealTimers();
+
+      // Should still succeed using default backoff (past date ignored)
+      expect(result.status).toBe(200);
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('should cap Retry-After at maxDelayMs to prevent unexpectedly long waits', async () => {
+      const headers = new Headers();
+      // Set a very large Retry-After value (1 hour = 3600 seconds)
+      headers.set('retry-after', '3600');
+
+      const mockResponse429 = {
+        ok: false,
+        status: 429,
+        headers,
+        text: async () => 'too many requests',
+      } as unknown as Response;
+
+      const mockResponse200 = {
+        ok: true,
+        status: 200,
+        text: async () => 'success',
+      } as unknown as Response;
+
+      const mockFetch = jest
+        .fn()
+        .mockResolvedValueOnce(mockResponse429)
+        .mockResolvedValueOnce(mockResponse200);
+
+      const delayValues: number[] = [];
+      const originalSetTimeout = global.setTimeout;
+
+      jest.useFakeTimers();
+      jest.spyOn(global, 'setTimeout').mockImplementation((callback, delay) => {
+        delayValues.push(delay as number);
+        // Execute immediately for test
+        if (typeof callback === 'function') {
+          Promise.resolve().then(() => callback());
+        }
+        return 0 as unknown as NodeJS.Timeout;
+      });
+
+      const promise = retryFetch(mockFetch, { maxDelayMs: 5000 }); // 5 second max
+      await jest.runAllTimersAsync();
+      const result = await promise;
+
+      jest.useRealTimers();
+
+      expect(result.status).toBe(200);
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      // The delay should be capped at maxDelayMs (5000ms) plus jitter (±10%)
+      // So max possible is 5500ms (5000 + 10% jitter)
+      expect(delayValues[0]).toBeLessThanOrEqual(5500);
     });
 
     it('should not retry on 401 Unauthorized', async () => {

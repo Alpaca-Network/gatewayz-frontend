@@ -42,18 +42,22 @@ function calculateBackoffDelay(
   );
 
   // Honor Retry-After header if present (for 429 responses)
+  // Cap at maxDelayMs to prevent unexpectedly long waits from large Retry-After values
   if (retryAfterHeader) {
     const numericRetry = Number(retryAfterHeader);
     if (!Number.isNaN(numericRetry) && numericRetry > 0) {
-      // Retry-After is in seconds, convert to milliseconds
-      baseDelay = Math.max(baseDelay, numericRetry * 1000);
+      // Retry-After is in seconds, convert to milliseconds and cap at maxDelayMs
+      const retryDelayMs = Math.min(numericRetry * 1000, options.maxDelayMs);
+      baseDelay = Math.max(baseDelay, retryDelayMs);
     } else {
       // Try parsing as HTTP date
       const retryDate = Date.parse(retryAfterHeader);
       if (!Number.isNaN(retryDate)) {
         const headerWait = retryDate - Date.now();
         if (headerWait > 0) {
-          baseDelay = Math.max(baseDelay, headerWait);
+          // Cap at maxDelayMs to prevent unexpectedly long waits
+          const cappedWait = Math.min(headerWait, options.maxDelayMs);
+          baseDelay = Math.max(baseDelay, cappedWait);
         }
       }
     }
