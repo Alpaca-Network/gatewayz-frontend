@@ -67,6 +67,11 @@ export function AppHeader() {
         description: authError || "Please try again",
         variant: "destructive",
       });
+    } else if (status === "unauthenticated") {
+      // Reset refs when user cancels login or Privy state becomes invalid
+      // This ensures subsequent sign-in attempts will show toasts correctly
+      authToastShownRef.current = false;
+      slowAuthToastShownRef.current = false;
     }
   }, [status, toast, pathname, authError]);
 

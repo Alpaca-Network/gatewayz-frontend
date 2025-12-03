@@ -71,7 +71,10 @@ export function AuthStatusOverlay({
   useEffect(() => {
     if (status === "authenticating") {
       setVisible(true);
-      setDisplayStartTime(Date.now());
+      // Only set start time once to prevent infinite re-render loop
+      if (!displayStartTime) {
+        setDisplayStartTime(Date.now());
+      }
     } else if (visible && displayStartTime) {
       // Ensure minimum display time before hiding
       const elapsed = Date.now() - displayStartTime;

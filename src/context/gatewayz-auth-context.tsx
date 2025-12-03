@@ -1353,26 +1353,26 @@ export function GatewayzAuthProvider({
   // Track elapsed time during authentication for progressive UI feedback
   useEffect(() => {
     if (status === "authenticating") {
-      // Start tracking time when auth begins
-      if (!authStartTime) {
-        setAuthStartTime(Date.now());
-        setAuthPhase("connecting");
-      }
+      // Always start fresh timing when entering authenticating state
+      // This handles quick re-attempts where previous timeout was cancelled
+      const startTime = Date.now();
+      setAuthStartTime(startTime);
+      setAuthElapsedMs(0);
+      setAuthPhase("connecting");
 
       // Update elapsed time every 500ms for smooth progress display
+      // Use the local startTime variable to avoid stale closure issues
       const interval = setInterval(() => {
-        if (authStartTime) {
-          const elapsed = Date.now() - authStartTime;
-          setAuthElapsedMs(elapsed);
+        const elapsed = Date.now() - startTime!;
+        setAuthElapsedMs(elapsed);
 
-          // Update phase based on elapsed time and retry count
-          if (authRetryCountRef.current > 1) {
-            setAuthPhase("retrying");
-          } else if (elapsed > AUTH_VERY_SLOW_THRESHOLD_MS) {
-            setAuthPhase("syncing"); // Backend sync phase
-          } else if (elapsed > AUTH_SLOW_THRESHOLD_MS) {
-            setAuthPhase("verifying"); // Token verification phase
-          }
+        // Update phase based on elapsed time and retry count
+        if (authRetryCountRef.current > 1) {
+          setAuthPhase("retrying");
+        } else if (elapsed > AUTH_VERY_SLOW_THRESHOLD_MS) {
+          setAuthPhase("syncing"); // Backend sync phase
+        } else if (elapsed > AUTH_SLOW_THRESHOLD_MS) {
+          setAuthPhase("verifying"); // Token verification phase
         }
       }, 500);
 
@@ -1393,7 +1393,7 @@ export function GatewayzAuthProvider({
       }, 1000);
       return () => clearTimeout(resetTimeout);
     }
-  }, [status, authStartTime]);
+  }, [status]);
 
   // Compute auth timing info for consumers
   const authTiming = useMemo<AuthTimingInfo>(() => ({
