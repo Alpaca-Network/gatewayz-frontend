@@ -342,7 +342,7 @@ export async function POST(request: NextRequest) {
           'Cache-Control': 'no-cache',
           'Connection': 'keep-alive',
           'X-Redirected-From': 'ai-sdk-completions',
-          'X-Redirect-Reason': 'fireworks-format',
+          'X-Redirect-Reason': reason,
         },
       });
     }
