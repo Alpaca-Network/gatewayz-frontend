@@ -7,10 +7,18 @@ import { NextRequest, NextResponse } from "next/server";
 // =============================================================================
 
 // Sentry endpoint - the tunnel forwards events here
+// Must match exactly "sentry.io" or end with ".sentry.io" to prevent SSRF via domains like "evil-sentry.io"
 const SENTRY_HOST = "sentry.io";
 // Allow any Sentry project ID that's numeric (validation happens via DSN)
 // The DSN in the envelope must match the DSN configured in the Sentry SDK
 const SENTRY_PROJECT_ID_PATTERN = /^\d+$/;
+
+// CORS headers for cross-origin requests
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+};
 
 // Rate limiting configuration
 const RATE_LIMIT_CONFIG = {
@@ -81,7 +89,8 @@ function parseEnvelope(body: string): { projectId: string; host: string } | null
     }
 
     const dsnUrl = new URL(header.dsn);
-    const projectId = dsnUrl.pathname.replace("/", "");
+    // Extract first path segment as project ID (handles /123 and /123/foo cases)
+    const projectId = dsnUrl.pathname.replace(/^\/+/, "").split("/")[0];
     const host = dsnUrl.hostname;
 
     return { projectId, host };
@@ -99,6 +108,7 @@ export async function POST(request: NextRequest) {
       return new NextResponse("Too Many Requests", {
         status: 429,
         headers: {
+          ...CORS_HEADERS,
           "Retry-After": String(retryAfter || 60),
           "X-RateLimit-Limit": String(RATE_LIMIT_CONFIG.maxRequestsPerMinute),
           "X-RateLimit-Remaining": "0",
@@ -112,19 +122,21 @@ export async function POST(request: NextRequest) {
 
     if (!envelope) {
       console.warn("[Sentry Tunnel] Invalid envelope format");
-      return new NextResponse("Invalid envelope", { status: 400 });
+      return new NextResponse("Invalid envelope", { status: 400, headers: CORS_HEADERS });
     }
 
     // Validate project ID format (security check - must be numeric)
     if (!SENTRY_PROJECT_ID_PATTERN.test(envelope.projectId)) {
       console.warn("[Sentry Tunnel] Invalid project ID format:", envelope.projectId);
-      return new NextResponse("Invalid project", { status: 403 });
+      return new NextResponse("Invalid project", { status: 403, headers: CORS_HEADERS });
     }
 
-    // Validate host (security check)
-    if (!envelope.host.endsWith(SENTRY_HOST)) {
+    // Validate host (security check - must be exactly "sentry.io" or "*.sentry.io")
+    // This prevents SSRF via malicious domains like "evil-sentry.io"
+    const isValidHost = envelope.host === SENTRY_HOST || envelope.host.endsWith(`.${SENTRY_HOST}`);
+    if (!isValidHost) {
       console.warn("[Sentry Tunnel] Invalid Sentry host:", envelope.host);
-      return new NextResponse("Invalid host", { status: 403 });
+      return new NextResponse("Invalid host", { status: 403, headers: CORS_HEADERS });
     }
 
     // Build upstream URL
@@ -147,12 +159,13 @@ export async function POST(request: NextRequest) {
     return new NextResponse(upstreamResponse.body, {
       status: upstreamResponse.status,
       headers: {
+        ...CORS_HEADERS,
         "Content-Type": "application/json",
       },
     });
   } catch (error) {
     console.error("[Sentry Tunnel] Error:", error);
-    return new NextResponse("Internal Server Error", { status: 500 });
+    return new NextResponse("Internal Server Error", { status: 500, headers: CORS_HEADERS });
   }
 }
 
@@ -160,10 +173,6 @@ export async function POST(request: NextRequest) {
 export async function OPTIONS() {
   return new NextResponse(null, {
     status: 200,
-    headers: {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
-    },
+    headers: CORS_HEADERS,
   });
 }
