@@ -325,13 +325,17 @@ export async function POST(request: NextRequest) {
       const completionsUrl = new URL('/api/chat/completions', request.url);
       searchParams.forEach((value, key) => completionsUrl.searchParams.set(key, value));
 
+      // Update the body with the resolved API key (important for guest users where
+      // 'guest' was resolved to GUEST_API_KEY) to ensure consistent authentication
+      const forwardedBody = { ...body, apiKey };
+
       const forwardedResponse = await fetch(completionsUrl.toString(), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${apiKey}`,
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify(forwardedBody),
       });
 
       // Return the response from the flexible completions route
