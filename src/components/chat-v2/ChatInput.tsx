@@ -10,15 +10,8 @@ import { useChatStream } from "@/lib/hooks/use-chat-stream";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/lib/store/auth-store";
-import {
-  incrementGuestMessageCount,
-  hasReachedGuestLimit,
-  getRemainingGuestMessages,
-  getGuestMessageLimit
-} from "@/lib/guest-chat";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { usePrivy } from "@privy-io/react-auth";
-import Link from "next/link";
 
 // Helper for file to base64
 const fileToBase64 = (file: File): Promise<string> => {
@@ -57,8 +50,7 @@ export function ChatInput() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
   const [selectedAudio, setSelectedAudio] = useState<string | null>(null);
-  const [guestMessageCount, setGuestMessageCount] = useState(0);
-  const [showGuestLimitWarning, setShowGuestLimitWarning] = useState(false);
+  const [showSignInWarning, setShowSignInWarning] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
@@ -98,17 +90,16 @@ export function ChatInput() {
         return;
     }
 
-    // Guest mode: Check message limit
+    // Block unauthenticated users - require sign in to use chat
     if (!isAuthenticated) {
-      if (hasReachedGuestLimit()) {
-        setShowGuestLimitWarning(true);
-        toast({
-          title: "Guest limit reached",
-          description: `You've reached the ${getGuestMessageLimit()}-message limit. Sign up to continue chatting!`,
-          variant: "destructive",
-        });
-        return;
-      }
+      setShowSignInWarning(true);
+      toast({
+        title: "Sign in required",
+        description: "Create a free account to start chatting with AI models!",
+        variant: "destructive",
+      });
+      login();
+      return;
     }
 
     // Capture current input values before any async operations
@@ -189,33 +180,6 @@ export function ChatInput() {
             }
         }
 
-        // Guest mode: Increment message count after successful send
-        if (!isAuthenticated) {
-          const newCount = incrementGuestMessageCount();
-          setGuestMessageCount(newCount);
-
-          // Dispatch event to update counter display
-          window.dispatchEvent(new Event('guest-count-updated'));
-
-          // Show warning when approaching limit
-          const remaining = getRemainingGuestMessages();
-
-          if (remaining === 0) {
-            // Show banner when limit is reached
-            setShowGuestLimitWarning(true);
-            toast({
-              title: "Guest limit reached!",
-              description: `You've used all ${getGuestMessageLimit()} free messages. Sign up to continue chatting!`,
-              variant: "destructive",
-            });
-          } else if (remaining <= 3) {
-            // Show warning toast when approaching limit
-            toast({
-              title: `${remaining} ${remaining === 1 ? 'message' : 'messages'} remaining`,
-              description: "Sign up to continue chatting without limits!",
-            });
-          }
-        }
     } catch (e) {
         toast({ title: "Failed to send message", variant: "destructive" });
     }
@@ -275,24 +239,23 @@ export function ChatInput() {
   return (
     <div className="w-full p-4 border-t bg-background">
       <div className="max-w-4xl mx-auto">
-        {/* Guest Limit Warning */}
-        {!isAuthenticated && showGuestLimitWarning && (
-          <Alert className="mb-3 border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20">
+        {/* Sign In Required Warning */}
+        {!isAuthenticated && showSignInWarning && (
+          <Alert className="mb-3 border-primary bg-primary/5 dark:bg-primary/10">
             <AlertDescription className="flex items-center justify-between">
               <span className="text-sm">
-                You've reached your {getGuestMessageLimit()}-message limit.{" "}
                 <button
                   onClick={login}
                   className="font-semibold underline hover:no-underline"
                 >
-                  Sign up
+                  Sign in
                 </button>{" "}
-                to continue chatting!
+                to start chatting with AI models. It's free!
               </span>
               <Button
                 size="sm"
                 variant="ghost"
-                onClick={() => setShowGuestLimitWarning(false)}
+                onClick={() => setShowSignInWarning(false)}
                 className="h-6 px-2"
               >
                 <X className="h-4 w-4" />
