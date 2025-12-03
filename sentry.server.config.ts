@@ -22,28 +22,80 @@ const getRelease = () => {
   }
 };
 
+// Server-side rate limiting state
+const serverRateLimitState = {
+  eventCount: 0,
+  windowStart: Date.now(),
+  recentMessages: new Map<string, number>(),
+};
+
+const SERVER_RATE_LIMIT_CONFIG = {
+  maxEventsPerMinute: 50,  // Server can handle slightly more
+  windowMs: 60000,
+  dedupeWindowMs: 5000,    // Shorter dedupe window on server
+};
+
+function shouldServerRateLimit(event: Sentry.ErrorEvent): boolean {
+  const now = Date.now();
+
+  if (now - serverRateLimitState.windowStart > SERVER_RATE_LIMIT_CONFIG.windowMs) {
+    serverRateLimitState.eventCount = 0;
+    serverRateLimitState.windowStart = now;
+    for (const [key, timestamp] of serverRateLimitState.recentMessages) {
+      if (now - timestamp > SERVER_RATE_LIMIT_CONFIG.dedupeWindowMs) {
+        serverRateLimitState.recentMessages.delete(key);
+      }
+    }
+  }
+
+  if (serverRateLimitState.eventCount >= SERVER_RATE_LIMIT_CONFIG.maxEventsPerMinute) {
+    console.warn('[Sentry Server] Rate limit exceeded, dropping event');
+    return true;
+  }
+
+  const messageKey = event.message ||
+    event.exception?.values?.[0]?.value ||
+    'unknown';
+  const lastSent = serverRateLimitState.recentMessages.get(messageKey.slice(0, 100));
+  if (lastSent && now - lastSent < SERVER_RATE_LIMIT_CONFIG.dedupeWindowMs) {
+    return true;
+  }
+
+  serverRateLimitState.eventCount++;
+  serverRateLimitState.recentMessages.set(messageKey.slice(0, 100), now);
+  return false;
+}
+
 Sentry.init({
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
 
   // Release tracking for associating errors with specific versions
   release: getRelease(),
 
-  // Adjust this value in production, or use tracesSampler for greater control
-  tracesSampleRate: 1.0,
+  // REDUCED: Sample only 10% of transactions to avoid rate limits
+  tracesSampleRate: 0.1,
 
   // Setting this option to true will print useful information to the console while you're setting up Sentry.
   debug: false,
 
+  // Limit breadcrumbs to reduce payload size
+  maxBreadcrumbs: 50,
+
   integrations: [
-    // send console.log, console.warn, and console.error calls as logs to Sentry
-    Sentry.consoleLoggingIntegration({ levels: ["log", "warn", "error"] }),
+    // REMOVED: consoleLoggingIntegration was sending every console.log/warn/error to Sentry
+    // This was a major source of 429 rate limit errors
+    // Re-enable only for debugging: Sentry.consoleLoggingIntegration({ levels: ["error"] }),
   ],
 
-  // Enable logs
-  enableLogs: true,
+  // DISABLED: enableLogs was causing excessive event volume
+  enableLogs: false,
 
-  // Filter out non-blocking wallet extension errors from Privy
+  // Filter out non-blocking wallet extension errors from Privy AND apply rate limiting
   beforeSend(event, hint) {
+    // Apply rate limiting first
+    if (shouldServerRateLimit(event)) {
+      return null;
+    }
     const error = hint.originalException;
     const errorMessage = typeof error === 'string' ? error : error instanceof Error ? error.message : '';
     const normalizedMessage = (errorMessage || '').toLowerCase();
