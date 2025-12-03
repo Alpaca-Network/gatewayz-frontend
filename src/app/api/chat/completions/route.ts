@@ -236,28 +236,14 @@ export async function POST(request: NextRequest) {
     const isExplicitGuestRequest = apiKey === 'guest';
     const isMissingApiKey = !apiKey || apiKey.trim() === '';
 
-    // For explicit guest requests, use a special guest API key from environment
-    if (isExplicitGuestRequest) {
-      apiKey = process.env.GUEST_API_KEY || '';
-      if (!apiKey) {
-        console.warn('[API Completions] Guest API key not configured in environment');
-        return NextResponse.json(
-          { error: 'Guest mode is not available. Please sign up to use chat.' },
-          { status: 403 }
-        );
-      }
-      console.log('[API Completions] Using guest API key for explicit guest request');
-    } else if (isMissingApiKey) {
-      // Missing API key for authenticated user - return 401 to trigger re-authentication
-      console.warn('[API Completions] Missing API key for authenticated request');
-      return NextResponse.json(
-        {
-          error: 'Authentication required',
-          detail: 'API key is missing or invalid. Please log in again.',
-          code: 'MISSING_API_KEY'
-        },
-        { status: 401 }
-      );
+    // Default guest API key for unauthenticated users
+    // This key should have limited rate limits on the backend
+    const DEFAULT_GUEST_API_KEY = 'gatewayz-guest-demo-key';
+
+    // For explicit guest requests or missing API key, use the guest API key
+    if (isExplicitGuestRequest || isMissingApiKey) {
+      apiKey = process.env.GUEST_API_KEY || DEFAULT_GUEST_API_KEY;
+      console.log('[API Completions] Using guest API key for unauthenticated request');
     }
 
     // Resolve router models to actual model IDs

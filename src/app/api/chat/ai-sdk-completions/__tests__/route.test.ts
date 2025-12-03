@@ -89,7 +89,17 @@ describe('AI SDK Completions Route', () => {
       expect(data.error).toContain('model is required');
     });
 
-    it('should return 401 if API key is missing', async () => {
+    it('should use default guest API key when API key is missing', async () => {
+      const { streamText } = require('ai');
+      const { createOpenAI: createOpenAIMock } = require('@ai-sdk/openai');
+
+      streamText.mockReturnValue({
+        fullStream: (async function* () {
+          yield { type: 'text-delta', text: 'Hello', id: '1' };
+          yield { type: 'finish', finishReason: 'stop' };
+        })(),
+      });
+
       const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
         method: 'POST',
         body: JSON.stringify({
@@ -100,11 +110,15 @@ describe('AI SDK Completions Route', () => {
       });
 
       const response = await POST(request);
-      expect(response.status).toBe(401);
+      // Should succeed using default guest API key
+      expect(response.status).toBe(200);
 
-      const data = await response.json();
-      expect(data.error).toContain('Authentication required');
-      expect(data.code).toBe('MISSING_API_KEY');
+      // Verify the default guest API key was used
+      expect(createOpenAIMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          apiKey: 'gatewayz-guest-demo-key',
+        })
+      );
     });
 
     it('should accept API key from Authorization header', async () => {
@@ -192,9 +206,19 @@ describe('AI SDK Completions Route', () => {
       delete process.env.GUEST_API_KEY;
     });
 
-    it('should return 403 for explicit guest request when GUEST_API_KEY not configured', async () => {
+    it('should use default guest API key for explicit guest request when GUEST_API_KEY not configured', async () => {
       // Ensure GUEST_API_KEY is not set
       delete process.env.GUEST_API_KEY;
+
+      const { streamText } = require('ai');
+      const { createOpenAI: createOpenAIMock } = require('@ai-sdk/openai');
+
+      streamText.mockReturnValue({
+        fullStream: (async function* () {
+          yield { type: 'text-delta', text: 'Hello', id: '1' };
+          yield { type: 'finish', finishReason: 'stop' };
+        })(),
+      });
 
       const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
         method: 'POST',
@@ -206,11 +230,15 @@ describe('AI SDK Completions Route', () => {
       });
 
       const response = await POST(request);
-      expect(response.status).toBe(401);
+      // Should succeed using default guest API key
+      expect(response.status).toBe(200);
 
-      const data = await response.json();
-      expect(data.error).toBe('Please sign in to use the chat feature');
-      expect(data.code).toBe('GUEST_NOT_CONFIGURED');
+      // Verify the default guest API key was used
+      expect(createOpenAIMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          apiKey: 'gatewayz-guest-demo-key',
+        })
+      );
     });
   });
 
