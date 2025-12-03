@@ -36,12 +36,12 @@ const rateLimitState = {
 
 // Rate limiting configuration
 const RATE_LIMIT_CONFIG = {
-  maxEventsPerMinute: 30,        // Max events per minute (Sentry's limit is ~60/min)
+  maxEventsPerMinute: 20,        // Max events per minute (reduced to avoid 429s)
   windowMs: 60000,               // 1 minute window
-  dedupeWindowMs: 10000,         // Don't send same message within 10 seconds
-  maxBreadcrumbs: 50,            // Limit breadcrumbs to reduce payload size
+  dedupeWindowMs: 30000,         // Don't send same message within 30 seconds (increased)
+  maxBreadcrumbs: 30,            // Limit breadcrumbs to reduce payload size
   cleanupIntervalMs: 30000,      // Cleanup stale entries every 30 seconds
-  maxMapSize: 100,               // Maximum entries in deduplication map
+  maxMapSize: 50,                // Maximum entries in deduplication map
 };
 
 /**
@@ -179,9 +179,10 @@ Sentry.init({
   // Setting this option to true will print useful information to the console while you're setting up Sentry.
   debug: false,
 
-  // REDUCED: Only capture replays on errors, not all sessions
-  replaysOnErrorSampleRate: 0.5,  // Reduced from 1.0
-  replaysSessionSampleRate: 0.05, // Reduced from 0.1
+  // REDUCED: Only capture replays on errors, disable session replays to reduce 429s
+  // Session replays send continuous data which contributes to rate limiting
+  replaysOnErrorSampleRate: 0.1,  // Reduced from 0.5 - only 10% of error sessions
+  replaysSessionSampleRate: 0,    // Disabled - was causing too many requests
 
   // Limit breadcrumbs to reduce payload size
   maxBreadcrumbs: RATE_LIMIT_CONFIG.maxBreadcrumbs,
