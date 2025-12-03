@@ -1,7 +1,7 @@
 /**
  * Unit tests for use-chat-stream.ts
  *
- * Tests the Fireworks model routing logic
+ * Tests the Fireworks and DeepSeek model routing logic
  */
 
 describe('useChatStream routing logic', () => {
@@ -11,10 +11,19 @@ describe('useChatStream routing logic', () => {
    */
   function getRouteForModel(modelValue: string, sourceGateway?: string): 'completions' | 'ai-sdk' {
     const modelLower = modelValue.toLowerCase();
+    const gatewayLower = (sourceGateway || '').toLowerCase();
+
     const isFireworksModel = modelLower.includes('fireworks') ||
                               modelLower.includes('accounts/fireworks') ||
-                              (sourceGateway?.toLowerCase() === 'fireworks');
-    return isFireworksModel ? 'completions' : 'ai-sdk';
+                              gatewayLower === 'fireworks';
+
+    // Only route to flexible completions if model is from DeepSeek gateway directly
+    // Models like 'openrouter/deepseek/deepseek-r1' should use AI SDK since OpenRouter normalizes the format
+    // When a gateway is explicitly set (e.g., 'together', 'openrouter'), defer to that gateway's format
+    const isDirectDeepSeekGateway = gatewayLower === 'deepseek' ||
+                                     (modelLower.startsWith('deepseek/') && gatewayLower === '');
+
+    return (isFireworksModel || isDirectDeepSeekGateway) ? 'completions' : 'ai-sdk';
   }
 
   describe('Fireworks model detection', () => {
@@ -51,6 +60,35 @@ describe('useChatStream routing logic', () => {
       expect(getRouteForModel('gpt-4o', 'openai')).toBe('ai-sdk');
       expect(getRouteForModel('claude-3-opus', 'anthropic')).toBe('ai-sdk');
       expect(getRouteForModel('deepseek-r1', 'openrouter')).toBe('ai-sdk');
+    });
+  });
+
+  describe('DeepSeek model detection', () => {
+    test('should route direct DeepSeek gateway models to completions endpoint', () => {
+      // Direct DeepSeek gateway returns Responses API format, needs flexible route
+      expect(getRouteForModel('deepseek/deepseek-r1')).toBe('completions');
+      expect(getRouteForModel('deepseek/deepseek-chat')).toBe('completions');
+      expect(getRouteForModel('DeepSeek/DeepSeek-R1')).toBe('completions');
+    });
+
+    test('should route models with deepseek sourceGateway to completions endpoint', () => {
+      expect(getRouteForModel('deepseek-r1', 'deepseek')).toBe('completions');
+      expect(getRouteForModel('deepseek-chat', 'DeepSeek')).toBe('completions');
+    });
+
+    test('should route DeepSeek models from other providers to AI SDK endpoint', () => {
+      // DeepSeek through OpenRouter/Together/etc normalizes the format, so use AI SDK
+      expect(getRouteForModel('openrouter/deepseek/deepseek-r1')).toBe('ai-sdk');
+      expect(getRouteForModel('together/deepseek-r1')).toBe('ai-sdk');
+      expect(getRouteForModel('huggingface/deepseek-ai/DeepSeek-R1')).toBe('ai-sdk');
+    });
+
+    test('should route DeepSeek with non-deepseek sourceGateway to AI SDK endpoint', () => {
+      expect(getRouteForModel('deepseek-r1', 'openrouter')).toBe('ai-sdk');
+      expect(getRouteForModel('deepseek-chat', 'together')).toBe('ai-sdk');
+      // Even with deepseek/ prefix, explicit gateway should override
+      expect(getRouteForModel('deepseek/deepseek-r1', 'together')).toBe('ai-sdk');
+      expect(getRouteForModel('deepseek/deepseek-r1', 'openrouter')).toBe('ai-sdk');
     });
   });
 
