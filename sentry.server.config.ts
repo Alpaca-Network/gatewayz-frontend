@@ -27,25 +27,66 @@ const serverRateLimitState = {
   eventCount: 0,
   windowStart: Date.now(),
   recentMessages: new Map<string, number>(),
+  lastCleanup: Date.now(),
 };
 
 const SERVER_RATE_LIMIT_CONFIG = {
   maxEventsPerMinute: 50,  // Server can handle slightly more
   windowMs: 60000,
   dedupeWindowMs: 5000,    // Shorter dedupe window on server
+  cleanupIntervalMs: 30000,
+  maxMapSize: 100,
 };
+
+function cleanupServerStaleEntries(): void {
+  const now = Date.now();
+  if (now - serverRateLimitState.lastCleanup < SERVER_RATE_LIMIT_CONFIG.cleanupIntervalMs) {
+    return;
+  }
+  serverRateLimitState.lastCleanup = now;
+
+  for (const [key, timestamp] of serverRateLimitState.recentMessages) {
+    if (now - timestamp > SERVER_RATE_LIMIT_CONFIG.dedupeWindowMs) {
+      serverRateLimitState.recentMessages.delete(key);
+    }
+  }
+
+  if (serverRateLimitState.recentMessages.size > SERVER_RATE_LIMIT_CONFIG.maxMapSize) {
+    const entries = Array.from(serverRateLimitState.recentMessages.entries())
+      .sort((a, b) => a[1] - b[1]);
+    const toRemove = entries.slice(0, entries.length - SERVER_RATE_LIMIT_CONFIG.maxMapSize);
+    for (const [key] of toRemove) {
+      serverRateLimitState.recentMessages.delete(key);
+    }
+  }
+}
+
+function shouldFilterServerEvent(errorMessage: string): boolean {
+  const normalizedMessage = (errorMessage || '').toLowerCase();
+
+  const isWalletExtensionError =
+    normalizedMessage.includes('chrome.runtime.sendmessage') ||
+    normalizedMessage.includes('runtime.sendmessage') ||
+    (normalizedMessage.includes('extension id') && normalizedMessage.includes('from a webpage'));
+
+  const isWalletConnectRelayError =
+    normalizedMessage.includes('walletconnect') ||
+    normalizedMessage.includes('requestrelay') ||
+    normalizedMessage.includes('websocket error 1006') ||
+    normalizedMessage.includes('explorer-api.walletconnect.com') ||
+    normalizedMessage.includes('relay.walletconnect.com');
+
+  return isWalletExtensionError || isWalletConnectRelayError;
+}
 
 function shouldServerRateLimit(event: Sentry.ErrorEvent): boolean {
   const now = Date.now();
 
+  cleanupServerStaleEntries();
+
   if (now - serverRateLimitState.windowStart > SERVER_RATE_LIMIT_CONFIG.windowMs) {
     serverRateLimitState.eventCount = 0;
     serverRateLimitState.windowStart = now;
-    for (const [key, timestamp] of serverRateLimitState.recentMessages) {
-      if (now - timestamp > SERVER_RATE_LIMIT_CONFIG.dedupeWindowMs) {
-        serverRateLimitState.recentMessages.delete(key);
-      }
-    }
   }
 
   if (serverRateLimitState.eventCount >= SERVER_RATE_LIMIT_CONFIG.maxEventsPerMinute) {
@@ -95,32 +136,21 @@ Sentry.init({
   // DISABLED: enableLogs was causing excessive event volume
   enableLogs: false,
 
-  // Filter out non-blocking wallet extension errors from Privy AND apply rate limiting
+  // Filter out non-blocking errors FIRST, then apply rate limiting
+  // This prevents filtered events from consuming rate limit quota
   beforeSend(event, hint) {
-    // Apply rate limiting first
-    if (shouldServerRateLimit(event)) {
-      return null;
-    }
     const error = hint.originalException;
     const errorMessage = typeof error === 'string' ? error : error instanceof Error ? error.message : '';
-    const normalizedMessage = (errorMessage || '').toLowerCase();
 
-    const isWalletExtensionError =
-      normalizedMessage.includes('chrome.runtime.sendmessage') ||
-      normalizedMessage.includes('runtime.sendmessage') ||
-      (normalizedMessage.includes('extension id') && normalizedMessage.includes('from a webpage'));
+    // Filter BEFORE rate limiting to avoid wasting quota
+    if (shouldFilterServerEvent(errorMessage)) {
+      console.warn('[Sentry] Filtered out non-blocking wallet/extension error:', errorMessage);
+      return null;
+    }
 
-    const isWalletConnectRelayError =
-      normalizedMessage.includes('walletconnect') ||
-      normalizedMessage.includes('requestrelay') ||
-      normalizedMessage.includes('websocket error 1006') ||
-      normalizedMessage.includes('explorer-api.walletconnect.com') ||
-      normalizedMessage.includes('relay.walletconnect.com');
-
-    if (isWalletExtensionError || isWalletConnectRelayError) {
-      const label = isWalletConnectRelayError ? 'WalletConnect relay error' : 'Privy wallet extension error';
-      console.warn(`[Sentry] Filtered out non-blocking ${label}:`, errorMessage);
-      return null; // Don't send this error to Sentry
+    // Apply rate limiting only for events that pass filtering
+    if (shouldServerRateLimit(event)) {
+      return null;
     }
 
     return event;

@@ -31,6 +31,7 @@ const rateLimitState = {
   eventCount: 0,
   windowStart: Date.now(),
   recentMessages: new Map<string, number>(), // message hash -> last sent timestamp
+  lastCleanup: Date.now(), // Track last cleanup to prevent unbounded growth
 };
 
 // Rate limiting configuration
@@ -39,46 +40,40 @@ const RATE_LIMIT_CONFIG = {
   windowMs: 60000,               // 1 minute window
   dedupeWindowMs: 10000,         // Don't send same message within 10 seconds
   maxBreadcrumbs: 50,            // Limit breadcrumbs to reduce payload size
+  cleanupIntervalMs: 30000,      // Cleanup stale entries every 30 seconds
+  maxMapSize: 100,               // Maximum entries in deduplication map
 };
 
 /**
- * Check if we should rate limit this event
- * Returns true if the event should be dropped
+ * Cleanup stale entries from the deduplication map
+ * Called periodically to prevent unbounded memory growth
  */
-function shouldRateLimit(event: Sentry.ErrorEvent): boolean {
+function cleanupStaleEntries(): void {
   const now = Date.now();
 
-  // Reset window if expired
-  if (now - rateLimitState.windowStart > RATE_LIMIT_CONFIG.windowMs) {
-    rateLimitState.eventCount = 0;
-    rateLimitState.windowStart = now;
-    // Clean up old deduplication entries
-    for (const [key, timestamp] of rateLimitState.recentMessages) {
-      if (now - timestamp > RATE_LIMIT_CONFIG.dedupeWindowMs) {
-        rateLimitState.recentMessages.delete(key);
-      }
+  // Only cleanup if enough time has passed
+  if (now - rateLimitState.lastCleanup < RATE_LIMIT_CONFIG.cleanupIntervalMs) {
+    return;
+  }
+
+  rateLimitState.lastCleanup = now;
+
+  // Remove entries older than dedupeWindowMs
+  for (const [key, timestamp] of rateLimitState.recentMessages) {
+    if (now - timestamp > RATE_LIMIT_CONFIG.dedupeWindowMs) {
+      rateLimitState.recentMessages.delete(key);
     }
   }
 
-  // Check rate limit
-  if (rateLimitState.eventCount >= RATE_LIMIT_CONFIG.maxEventsPerMinute) {
-    console.warn('[Sentry] Rate limit exceeded, dropping event');
-    return true;
+  // If still too large, remove oldest entries
+  if (rateLimitState.recentMessages.size > RATE_LIMIT_CONFIG.maxMapSize) {
+    const entries = Array.from(rateLimitState.recentMessages.entries())
+      .sort((a, b) => a[1] - b[1]); // Sort by timestamp ascending
+    const toRemove = entries.slice(0, entries.length - RATE_LIMIT_CONFIG.maxMapSize);
+    for (const [key] of toRemove) {
+      rateLimitState.recentMessages.delete(key);
+    }
   }
-
-  // Deduplication check - create a simple hash of the event
-  const messageKey = createEventKey(event);
-  const lastSent = rateLimitState.recentMessages.get(messageKey);
-  if (lastSent && now - lastSent < RATE_LIMIT_CONFIG.dedupeWindowMs) {
-    console.debug('[Sentry] Duplicate event within deduplication window, dropping');
-    return true;
-  }
-
-  // Update state
-  rateLimitState.eventCount++;
-  rateLimitState.recentMessages.set(messageKey, now);
-
-  return false;
 }
 
 /**
@@ -91,6 +86,84 @@ function createEventKey(event: Sentry.ErrorEvent): string {
     'unknown';
   const type = event.exception?.values?.[0]?.type || 'message';
   return `${type}:${message.slice(0, 100)}`;
+}
+
+/**
+ * Check if event should be filtered out (wallet errors, etc.)
+ * Called BEFORE rate limiting to avoid wasting quota on filtered events
+ */
+function shouldFilterEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): boolean {
+  const error = hint.originalException;
+  const errorMessage = typeof error === 'string' ? error : error instanceof Error ? error.message : '';
+  const stackFrames = event.exception?.values?.[0]?.stacktrace?.frames;
+
+  // Filter out chrome.runtime.sendMessage errors from Privy wallet provider (inpage.js)
+  if (
+    errorMessage.includes('chrome.runtime.sendMessage') ||
+    errorMessage.includes('runtime.sendMessage') ||
+    (errorMessage.includes('Extension ID') && errorMessage.includes('from a webpage'))
+  ) {
+    if (stackFrames?.some(frame =>
+      frame.filename?.includes('inpage.js') ||
+      frame.filename?.includes('privy') ||
+      frame.function?.includes('Zt')
+    )) {
+      console.warn('[Sentry] Filtered out non-blocking Privy wallet extension error:', errorMessage);
+      return true;
+    }
+  }
+
+  // Filter out wallet extension removeListener errors
+  if (errorMessage.includes('removeListener') || errorMessage.includes('stopListeners')) {
+    if (stackFrames?.some(frame =>
+      frame.filename?.includes('inpage.js') ||
+      frame.filename?.includes('app:///') ||
+      frame.function?.includes('stopListeners')
+    )) {
+      console.warn('[Sentry] Filtered out wallet extension removeListener error');
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Check if we should rate limit this event
+ * Returns true if the event should be dropped
+ * Note: Only call this AFTER shouldFilterEvent returns false
+ */
+function shouldRateLimit(event: Sentry.ErrorEvent): boolean {
+  const now = Date.now();
+
+  // Periodic cleanup to prevent unbounded memory growth
+  cleanupStaleEntries();
+
+  // Reset window if expired
+  if (now - rateLimitState.windowStart > RATE_LIMIT_CONFIG.windowMs) {
+    rateLimitState.eventCount = 0;
+    rateLimitState.windowStart = now;
+  }
+
+  // Check rate limit
+  if (rateLimitState.eventCount >= RATE_LIMIT_CONFIG.maxEventsPerMinute) {
+    console.warn('[Sentry] Rate limit exceeded, dropping event');
+    return true;
+  }
+
+  // Deduplication check
+  const messageKey = createEventKey(event);
+  const lastSent = rateLimitState.recentMessages.get(messageKey);
+  if (lastSent && now - lastSent < RATE_LIMIT_CONFIG.dedupeWindowMs) {
+    console.debug('[Sentry] Duplicate event within deduplication window, dropping');
+    return true;
+  }
+
+  // Update state only for events that will be sent
+  rateLimitState.eventCount++;
+  rateLimitState.recentMessages.set(messageKey, now);
+
+  return false;
 }
 
 Sentry.init({
@@ -129,46 +202,17 @@ Sentry.init({
   // Re-enable only for debugging specific issues
   enableLogs: false,
 
-  // Filter out non-blocking wallet extension errors from Privy AND apply rate limiting
+  // Filter out non-blocking errors FIRST, then apply rate limiting
+  // This prevents filtered events from consuming rate limit quota
   beforeSend(event, hint) {
-    // Apply rate limiting first
-    if (shouldRateLimit(event)) {
+    // Filter out wallet errors BEFORE rate limiting to avoid wasting quota
+    if (shouldFilterEvent(event, hint)) {
       return null;
     }
 
-    const error = hint.originalException;
-    const errorMessage = typeof error === 'string' ? error : error instanceof Error ? error.message : '';
-    const stackFrames = event.exception?.values?.[0]?.stacktrace?.frames;
-
-    // Filter out chrome.runtime.sendMessage errors from Privy wallet provider (inpage.js)
-    // These are non-blocking and occur when Privy tries to detect wallet extensions
-    if (
-      errorMessage.includes('chrome.runtime.sendMessage') ||
-      errorMessage.includes('runtime.sendMessage') ||
-      (errorMessage.includes('Extension ID') && errorMessage.includes('from a webpage'))
-    ) {
-      // Check if error originates from Privy's inpage.js or wallet provider code
-      if (stackFrames?.some(frame =>
-        frame.filename?.includes('inpage.js') ||
-        frame.filename?.includes('privy') ||
-        frame.function?.includes('Zt') // Minified function name from inpage.js
-      )) {
-        console.warn('[Sentry] Filtered out non-blocking Privy wallet extension error:', errorMessage);
-        return null; // Don't send this error to Sentry
-      }
-    }
-
-    // Filter out wallet extension removeListener errors (JAVASCRIPT-NEXTJS-2)
-    // These occur when wallet extensions (MetaMask, Phantom, etc.) clean up listeners
-    if (errorMessage.includes('removeListener') || errorMessage.includes('stopListeners')) {
-      if (stackFrames?.some(frame =>
-        frame.filename?.includes('inpage.js') ||
-        frame.filename?.includes('app:///') ||
-        frame.function?.includes('stopListeners')
-      )) {
-        console.warn('[Sentry] Filtered out wallet extension removeListener error');
-        return null;
-      }
+    // Apply rate limiting only for events that pass filtering
+    if (shouldRateLimit(event)) {
+      return null;
     }
 
     return event;
