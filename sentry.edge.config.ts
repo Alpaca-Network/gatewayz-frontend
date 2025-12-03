@@ -31,16 +31,21 @@ function shouldEdgeRateLimit(event: Sentry.ErrorEvent): boolean {
     return true;
   }
 
-  const messageKey = event.message ||
+  // Include exception type in deduplication key to avoid incorrectly
+  // deduplicating different error types with the same message
+  const message = event.message ||
     event.exception?.values?.[0]?.value ||
+    event.exception?.values?.[0]?.type ||
     'unknown';
-  const lastSent = edgeRateLimitState.recentMessages.get(messageKey.slice(0, 100));
+  const type = event.exception?.values?.[0]?.type || 'message';
+  const messageKey = `${type}:${message.slice(0, 100)}`;
+  const lastSent = edgeRateLimitState.recentMessages.get(messageKey);
   if (lastSent && now - lastSent < EDGE_RATE_LIMIT_CONFIG.dedupeWindowMs) {
     return true;
   }
 
   edgeRateLimitState.eventCount++;
-  edgeRateLimitState.recentMessages.set(messageKey.slice(0, 100), now);
+  edgeRateLimitState.recentMessages.set(messageKey, now);
   return false;
 }
 

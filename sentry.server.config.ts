@@ -53,16 +53,21 @@ function shouldServerRateLimit(event: Sentry.ErrorEvent): boolean {
     return true;
   }
 
-  const messageKey = event.message ||
+  // Include exception type in deduplication key to avoid incorrectly
+  // deduplicating different error types with the same message
+  const message = event.message ||
     event.exception?.values?.[0]?.value ||
+    event.exception?.values?.[0]?.type ||
     'unknown';
-  const lastSent = serverRateLimitState.recentMessages.get(messageKey.slice(0, 100));
+  const type = event.exception?.values?.[0]?.type || 'message';
+  const messageKey = `${type}:${message.slice(0, 100)}`;
+  const lastSent = serverRateLimitState.recentMessages.get(messageKey);
   if (lastSent && now - lastSent < SERVER_RATE_LIMIT_CONFIG.dedupeWindowMs) {
     return true;
   }
 
   serverRateLimitState.eventCount++;
-  serverRateLimitState.recentMessages.set(messageKey.slice(0, 100), now);
+  serverRateLimitState.recentMessages.set(messageKey, now);
   return false;
 }
 
