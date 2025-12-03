@@ -125,17 +125,20 @@ export function useChatStream() {
 
         // Models/providers that need the flexible completions route:
         // - Fireworks: returns non-OpenAI format
-        // - DeepSeek: returns OpenAI Responses API format (object: "response.chunk")
+        // - DeepSeek (direct gateway only): returns OpenAI Responses API format (object: "response.chunk")
         //   instead of Chat Completions format (choices[].delta) which AI SDK expects
+        //   Note: DeepSeek through OpenRouter/Together/etc. is normalized by those gateways, so they use AI SDK
         const isFireworksModel = modelLower.includes('fireworks') ||
                                   modelLower.includes('accounts/fireworks') ||
                                   gatewayLower === 'fireworks';
 
-        const isDeepSeekModel = modelLower.includes('deepseek') ||
-                                 gatewayLower === 'deepseek';
+        // Only route to flexible completions if model is from DeepSeek gateway directly
+        // Models like 'openrouter/deepseek/deepseek-r1' should use AI SDK since OpenRouter normalizes the format
+        const isDirectDeepSeekGateway = gatewayLower === 'deepseek' ||
+                                         (modelLower.startsWith('deepseek/') && !modelLower.includes('openrouter'));
 
         // Use regular completions route for models with non-standard formats
-        const useFlexibleRoute = isFireworksModel || isDeepSeekModel;
+        const useFlexibleRoute = isFireworksModel || isDirectDeepSeekGateway;
         const url = useFlexibleRoute
             ? `/api/chat/completions?session_id=${sessionId}`
             : `/api/chat/ai-sdk-completions?session_id=${sessionId}`;
