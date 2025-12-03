@@ -339,8 +339,8 @@ describe('Chat Completions API Route', () => {
   });
 
   describe('Authentication', () => {
-    test('should return 401 if no API key provided (missing authentication)', async () => {
-      // When no API key is provided, it should return 401 to trigger re-authentication
+    test('should use default guest API key when no API key provided', async () => {
+      // When no API key is provided, use default guest API key
       delete process.env.GUEST_API_KEY;
 
       const requestBody = {
@@ -349,13 +349,29 @@ describe('Chat Completions API Route', () => {
         stream: true,
       };
 
+      const mockChunks = [
+        'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n',
+        'data: [DONE]\n\n',
+      ];
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({
+          'content-type': 'text/event-stream',
+        }),
+        body: createMockStream(mockChunks),
+      });
+
       const request = createMockRequest(requestBody);
       const response = await POST(request);
 
-      expect(response.status).toBe(401);
-      const body = await response.json();
-      expect(body.error).toBe('Authentication required');
-      expect(body.detail).toBe('API key is missing or invalid. Please log in again.');
+      // Should succeed using default guest API key
+      expect(response.status).toBe(200);
+
+      // Verify the default guest API key was used
+      const fetchCall = (global.fetch as jest.Mock).mock.calls[0];
+      expect(fetchCall[1].headers['Authorization']).toBe('Bearer gatewayz-guest-demo-key');
     });
 
     test('should use GUEST_API_KEY when explicit guest request and GUEST_API_KEY is configured', async () => {
@@ -394,7 +410,7 @@ describe('Chat Completions API Route', () => {
       delete process.env.GUEST_API_KEY;
     });
 
-    test('should return 403 for explicit guest request when GUEST_API_KEY not configured', async () => {
+    test('should use default guest API key for explicit guest request when GUEST_API_KEY not configured', async () => {
       // Ensure GUEST_API_KEY is not set
       delete process.env.GUEST_API_KEY;
 
@@ -405,12 +421,29 @@ describe('Chat Completions API Route', () => {
         apiKey: 'guest', // Explicit guest request
       };
 
+      const mockChunks = [
+        'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n',
+        'data: [DONE]\n\n',
+      ];
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({
+          'content-type': 'text/event-stream',
+        }),
+        body: createMockStream(mockChunks),
+      });
+
       const request = createMockRequest(requestBody);
       const response = await POST(request);
 
-      expect(response.status).toBe(403);
-      const body = await response.json();
-      expect(body.error).toBe('Guest mode is not available. Please sign up to use chat.');
+      // Should succeed using default guest API key
+      expect(response.status).toBe(200);
+
+      // Verify the default guest API key was used
+      const fetchCall = (global.fetch as jest.Mock).mock.calls[0];
+      expect(fetchCall[1].headers['Authorization']).toBe('Bearer gatewayz-guest-demo-key');
     });
 
     test('should accept API key from Authorization header', async () => {
