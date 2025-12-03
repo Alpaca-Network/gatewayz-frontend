@@ -84,15 +84,16 @@ export function ErrorSuppressor() {
       }
     };
 
-    window.addEventListener('error', handleGlobalError, true);
-    window.addEventListener('unhandledrejection', handleUnhandledRejection, true);
+    // Register in bubble phase (not capture) to let Sentry handlers run first
+    window.addEventListener('error', handleGlobalError);
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
 
     // Cleanup on unmount
     return () => {
       console.error = originalError;
       console.warn = originalWarn;
-      window.removeEventListener('error', handleGlobalError, true);
-      window.removeEventListener('unhandledrejection', handleUnhandledRejection, true);
+      window.removeEventListener('error', handleGlobalError);
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
     };
   }, []);
 
