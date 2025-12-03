@@ -134,8 +134,9 @@ export function useChatStream() {
 
         // Only route to flexible completions if model is from DeepSeek gateway directly
         // Models like 'openrouter/deepseek/deepseek-r1' should use AI SDK since OpenRouter normalizes the format
+        // When a gateway is explicitly set (e.g., 'together', 'openrouter'), defer to that gateway's format
         const isDirectDeepSeekGateway = gatewayLower === 'deepseek' ||
-                                         (modelLower.startsWith('deepseek/') && !modelLower.includes('openrouter'));
+                                         (modelLower.startsWith('deepseek/') && gatewayLower === '');
 
         // Use regular completions route for models with non-standard formats
         const useFlexibleRoute = isFireworksModel || isDirectDeepSeekGateway;
