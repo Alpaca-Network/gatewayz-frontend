@@ -295,19 +295,20 @@ export async function POST(request: NextRequest) {
     // DeepSeek through normalizing gateways (OpenRouter/Together) normalizes the format to OpenAI Chat Completions.
     // Direct DeepSeek API (model starts with 'deepseek/') uses Responses API format which AI SDK can't parse.
     //
-    // IMPORTANT: The model ID prefix is the authoritative source for routing decisions.
+    // IMPORTANT: Only redirect when we're CERTAIN it's direct DeepSeek API access:
+    // - 'deepseek/deepseek-r1' -> definitely direct DeepSeek API -> needs flexible route
     // - 'openrouter/deepseek/deepseek-r1' -> normalized by OpenRouter -> AI SDK can handle
-    // - 'deepseek/deepseek-r1' -> direct DeepSeek API -> needs flexible completions route
-    // - 'deepseek-r1' with gateway='openrouter' -> normalized -> AI SDK can handle
+    // - 'deepseek-r1' (no prefix) -> could be from any gateway, let AI SDK try
+    // - 'deepseek-r1' with gateway='deepseek' -> direct DeepSeek -> needs flexible route
+    const startsWithDeepSeek = modelLower.startsWith('deepseek/');
     const normalizingGateways = ['openrouter', 'together', 'groq', 'cerebras', 'anyscale'];
     const hasExplicitNormalizingPrefix = normalizingGateways.some(g => modelLower.startsWith(`${g}/`));
-    const startsWithDeepSeek = modelLower.startsWith('deepseek/');
-    const isDeepSeekModel = modelLower.includes('deepseek');
 
-    // Model needs flexible route if it's DeepSeek and NOT normalized
-    const isNormalizedByGateway = hasExplicitNormalizingPrefix ||
-                                   (!startsWithDeepSeek && normalizingGateways.includes(gatewayLower));
-    const isDeepSeekNeedingFlexible = isDeepSeekModel && !isNormalizedByGateway;
+    // Only redirect if:
+    // 1. Model explicitly starts with 'deepseek/' (direct API) AND doesn't have normalizing prefix, OR
+    // 2. Gateway is explicitly 'deepseek'
+    const isDirectDeepSeekGateway = gatewayLower === 'deepseek';
+    const isDeepSeekNeedingFlexible = (startsWithDeepSeek && !hasExplicitNormalizingPrefix) || isDirectDeepSeekGateway;
 
     const needsFlexibleRoute = isFireworksModel || isDeepSeekNeedingFlexible;
 

@@ -139,21 +139,20 @@ export function useChatStream() {
         // Models like 'openrouter/deepseek/deepseek-r1' have the gateway prefix and are normalized
         // Models like 'deepseek/deepseek-r1' (no gateway prefix or sourceGateway) need flexible route
         //
-        // IMPORTANT: The model ID prefix is the authoritative source for routing decisions.
-        // - 'openrouter/deepseek/deepseek-r1' -> normalized by OpenRouter -> AI SDK
-        // - 'deepseek/deepseek-r1' -> direct DeepSeek API -> flexible completions (even if sourceGateway defaults to 'openrouter')
-        // - 'deepseek-r1' with sourceGateway='openrouter' -> normalized by OpenRouter -> AI SDK
+        // IMPORTANT: Only redirect when we're CERTAIN it's direct DeepSeek API access:
+        // - 'deepseek/deepseek-r1' -> definitely direct DeepSeek API -> needs flexible route
+        // - 'openrouter/deepseek/deepseek-r1' -> normalized by OpenRouter -> AI SDK can handle
+        // - 'deepseek-r1' (no prefix) -> could be from any gateway, let AI SDK try
+        // - 'deepseek-r1' with sourceGateway='deepseek' -> direct DeepSeek -> needs flexible route
+        const startsWithDeepSeek = modelLower.startsWith('deepseek/');
         const normalizingGateways = ['openrouter', 'together', 'groq', 'cerebras', 'anyscale'];
         const hasExplicitNormalizingPrefix = normalizingGateways.some(g => modelLower.startsWith(`${g}/`));
-        const startsWithDeepSeek = modelLower.startsWith('deepseek/');
-        const isDeepSeekModel = modelLower.includes('deepseek');
 
-        // Model is normalized if:
-        // 1. It explicitly starts with a normalizing gateway prefix (e.g., 'openrouter/deepseek/...'), OR
-        // 2. It doesn't start with 'deepseek/' but has a normalizing sourceGateway (e.g., 'deepseek-r1' with sourceGateway='openrouter')
-        const isNormalizedByGateway = hasExplicitNormalizingPrefix ||
-                                       (!startsWithDeepSeek && normalizingGateways.includes(gatewayLower));
-        const isDeepSeekNeedingFlexible = isDeepSeekModel && !isNormalizedByGateway;
+        // Only redirect if:
+        // 1. Model explicitly starts with 'deepseek/' (direct API) AND doesn't have normalizing prefix, OR
+        // 2. sourceGateway is explicitly 'deepseek'
+        const isDirectDeepSeekGateway = gatewayLower === 'deepseek';
+        const isDeepSeekNeedingFlexible = (startsWithDeepSeek && !hasExplicitNormalizingPrefix) || isDirectDeepSeekGateway;
 
         // Use regular completions route for models with non-standard formats
         const useFlexibleRoute = isFireworksModel || isDeepSeekNeedingFlexible;
