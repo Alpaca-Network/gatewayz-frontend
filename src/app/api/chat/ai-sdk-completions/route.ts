@@ -272,8 +272,12 @@ export async function POST(request: NextRequest) {
       if (!apiKey) {
         console.warn('[AI SDK Route] Guest API key not configured in environment');
         return new Response(
-          JSON.stringify({ error: 'Guest mode is not available. Please sign up to use chat.' }),
-          { status: 403, headers: { 'Content-Type': 'application/json' } }
+          JSON.stringify({
+            error: 'Please sign in to use the chat feature',
+            detail: 'Create a free account to start chatting with AI models. Free models are available after sign-up!',
+            code: 'GUEST_NOT_CONFIGURED'
+          }),
+          { status: 401, headers: { 'Content-Type': 'application/json' } }
         );
       }
       console.log('[AI SDK Route] Using guest API key for explicit guest request');
