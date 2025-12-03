@@ -6,6 +6,7 @@ import { useEffect } from 'react';
  * Suppresses known third-party errors that don't affect functionality
  * - Statsig analytics blocked by ad blockers (ERR_BLOCKED_BY_CLIENT)
  * - Privy wallet extension communication errors
+ * - Browser wallet extension ethereum property conflicts
  */
 export function ErrorSuppressor() {
   useEffect(() => {
@@ -49,10 +50,49 @@ export function ErrorSuppressor() {
       }
     };
 
+    // Global error handler to catch uncaught errors from browser extensions
+    const handleGlobalError = (event: ErrorEvent) => {
+      const errorMessage = event.message || '';
+      const errorFilename = event.filename || '';
+
+      // Suppress errors from wallet extensions trying to redefine ethereum property
+      if (
+        errorMessage.includes('Cannot redefine property') &&
+        errorMessage.includes('ethereum')
+      ) {
+        event.preventDefault();
+        return true;
+      }
+
+      // Suppress errors originating from evmAsk.js (wallet extension script)
+      if (errorFilename.includes('evmAsk')) {
+        event.preventDefault();
+        return true;
+      }
+
+      return false;
+    };
+
+    // Global unhandled rejection handler for promise-based extension errors
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      const reason = event.reason?.message || String(event.reason) || '';
+
+      // Suppress message channel errors from extensions
+      if (reason.includes('message channel closed')) {
+        event.preventDefault();
+        return;
+      }
+    };
+
+    window.addEventListener('error', handleGlobalError, true);
+    window.addEventListener('unhandledrejection', handleUnhandledRejection, true);
+
     // Cleanup on unmount
     return () => {
       console.error = originalError;
       console.warn = originalWarn;
+      window.removeEventListener('error', handleGlobalError, true);
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection, true);
     };
   }, []);
 
