@@ -94,39 +94,22 @@ export function SearchBar({ autoOpenOnFocus = true }: SearchBarProps) {
         const fetchModels = async () => {
             setLoading(true);
             try {
-                const [openrouterRes, portkeyRes, featherlessRes, chutesRes, fireworksRes, togetherRes, groqRes] = await Promise.allSettled([
-                    fetch(`/api/models?gateway=openrouter`),
-                    fetch(`/api/models?gateway=portkey`),
-                    fetch(`/api/models?gateway=featherless`),
-                    fetch(`/api/models?gateway=chutes`),
-                    fetch(`/api/models?gateway=fireworks`),
-                    fetch(`/api/models?gateway=together`),
-                    fetch(`/api/models?gateway=groq`)
-                ]);
+                // Single API call to fetch models from all gateways
+                // This replaces 7 individual gateway calls to fix N+1 API performance issue
+                const response = await fetch(`/api/models?gateway=all&limit=1000`);
 
-                const getData = async (result: PromiseSettledResult<Response>, gatewayLabel: string) => {
-                    if (result.status === 'fulfilled' && result.value) {
-                        const payload = await safeParseJson<{ data?: Model[] }>(
-                            result.value,
-                            `[SearchBar] ${gatewayLabel}`
-                        );
-                        return payload?.data || [];
-                    }
-                    return [];
-                };
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch models: ${response.status}`);
+                }
 
-                const [openrouterData, portkeyData, featherlessData, chutesData, fireworksData, togetherData, groqData] = await Promise.all([
-                    getData(openrouterRes, 'openrouter'),
-                    getData(portkeyRes, 'portkey'),
-                    getData(featherlessRes, 'featherless'),
-                    getData(chutesRes, 'chutes'),
-                    getData(fireworksRes, 'fireworks'),
-                    getData(togetherRes, 'together'),
-                    getData(groqRes, 'groq')
-                ]);
+                const payload = await safeParseJson<{ data?: Model[] }>(
+                    response,
+                    '[SearchBar] all-gateways'
+                );
 
-                const combinedModels = [...openrouterData, ...portkeyData, ...featherlessData, ...chutesData, ...fireworksData, ...togetherData, ...groqData];
+                const combinedModels = payload?.data || [];
 
+                // Deduplicate models by ID (backend should handle this, but extra safety)
                 const uniqueModelsMap = new Map();
                 combinedModels.forEach((model: any) => {
                     if (!uniqueModelsMap.has(model.id)) {
@@ -145,6 +128,8 @@ export function SearchBar({ autoOpenOnFocus = true }: SearchBarProps) {
             } catch (error) {
                 if (!cancelled) {
                     console.log('Failed to fetch models:', error);
+                    // Fallback to static models on error
+                    setAllModels(staticModelsList);
                 }
             } finally {
                 if (!cancelled) {
