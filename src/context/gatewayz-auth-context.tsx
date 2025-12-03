@@ -36,6 +36,20 @@ type AuthError = {
   raw?: unknown;
 };
 
+// Auth timing information for progressive UI feedback
+export interface AuthTimingInfo {
+  startTime: number | null;
+  elapsedMs: number;
+  retryCount: number;
+  maxRetries: number;
+  isSlowAuth: boolean; // true if auth is taking longer than expected
+  phase: "idle" | "connecting" | "verifying" | "syncing" | "retrying" | "complete" | "error";
+}
+
+// Thresholds for auth timing feedback
+const AUTH_SLOW_THRESHOLD_MS = 5000; // Show "slow" message after 5 seconds
+const AUTH_VERY_SLOW_THRESHOLD_MS = 15000; // Show "very slow" message after 15 seconds
+
 // Auth state machine for clear state transitions
 const AUTH_STATE_TRANSITIONS: Record<AuthStatus, AuthStatus[]> = {
   idle: ["unauthenticated", "authenticating", "authenticated"],
@@ -58,6 +72,7 @@ interface GatewayzAuthContextValue {
   privyReady: boolean;
   privyAuthenticated: boolean;
   error: string | null;
+  authTiming: AuthTimingInfo;
   login: () => Promise<void> | void;
   logout: () => Promise<void> | void;
   refresh: (options?: { force?: boolean }) => Promise<void>;
@@ -191,6 +206,9 @@ export function GatewayzAuthProvider({
     return getUserData();
   });
   const [error, setError] = useState<string | null>(null);
+  const [authPhase, setAuthPhase] = useState<AuthTimingInfo["phase"]>("idle");
+  const [authStartTime, setAuthStartTime] = useState<number | null>(null);
+  const [authElapsedMs, setAuthElapsedMs] = useState(0);
 
   const syncInFlightRef = useRef(false);
   const syncPromiseRef = useRef<Promise<void> | null>(null);
@@ -1332,6 +1350,61 @@ export function GatewayzAuthProvider({
     };
   }, [syncWithBackend]);
 
+  // Track elapsed time during authentication for progressive UI feedback
+  useEffect(() => {
+    if (status === "authenticating") {
+      // Start tracking time when auth begins
+      if (!authStartTime) {
+        setAuthStartTime(Date.now());
+        setAuthPhase("connecting");
+      }
+
+      // Update elapsed time every 500ms for smooth progress display
+      const interval = setInterval(() => {
+        if (authStartTime) {
+          const elapsed = Date.now() - authStartTime;
+          setAuthElapsedMs(elapsed);
+
+          // Update phase based on elapsed time and retry count
+          if (authRetryCountRef.current > 1) {
+            setAuthPhase("retrying");
+          } else if (elapsed > AUTH_VERY_SLOW_THRESHOLD_MS) {
+            setAuthPhase("syncing"); // Backend sync phase
+          } else if (elapsed > AUTH_SLOW_THRESHOLD_MS) {
+            setAuthPhase("verifying"); // Token verification phase
+          }
+        }
+      }, 500);
+
+      return () => clearInterval(interval);
+    } else {
+      // Reset timing when auth completes or fails
+      if (status === "authenticated") {
+        setAuthPhase("complete");
+      } else if (status === "error") {
+        setAuthPhase("error");
+      } else {
+        setAuthPhase("idle");
+      }
+      // Keep startTime and elapsedMs for a moment so UI can show completion
+      const resetTimeout = setTimeout(() => {
+        setAuthStartTime(null);
+        setAuthElapsedMs(0);
+      }, 1000);
+      return () => clearTimeout(resetTimeout);
+    }
+  }, [status, authStartTime]);
+
+  // Compute auth timing info for consumers
+  const authTiming = useMemo<AuthTimingInfo>(() => ({
+    startTime: authStartTime,
+    elapsedMs: authElapsedMs,
+    retryCount: authRetryCountRef.current,
+    maxRetries: MAX_AUTH_RETRIES,
+    isSlowAuth: authElapsedMs > AUTH_SLOW_THRESHOLD_MS,
+    phase: authPhase,
+  }), [authStartTime, authElapsedMs, authPhase]);
+
   // Memoize login/logout to avoid inline function recreation
   const login = useCallback(async () => {
     // Let Privy handle its own login flow - don't intercept errors here
@@ -1354,6 +1427,7 @@ export function GatewayzAuthProvider({
       privyReady,
       privyAuthenticated: authenticated,
       error,
+      authTiming,
       login,
       logout,
       refresh: (options) => syncWithBackend(options),
@@ -1362,6 +1436,7 @@ export function GatewayzAuthProvider({
     [
       apiKey,
       authenticated,
+      authTiming,
       enableBetaRedirect,
       error,
       login,
