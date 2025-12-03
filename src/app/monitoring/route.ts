@@ -76,12 +76,21 @@ function checkRateLimit(): { limited: boolean; retryAfter?: number } {
 }
 
 /**
- * Parse Sentry envelope to extract DSN and validate project
+ * Parse Sentry envelope header to extract DSN and validate project.
+ * Only decodes the first line (header) to preserve binary data in the rest of the envelope.
  */
-function parseEnvelope(body: string): { projectId: string; host: string } | null {
+function parseEnvelopeHeader(buffer: ArrayBuffer): { projectId: string; host: string } | null {
   try {
-    // Sentry envelopes have a header as the first line
-    const headerLine = body.split("\n")[0];
+    const bytes = new Uint8Array(buffer);
+    // Find the first newline to extract only the header line
+    let newlineIndex = bytes.indexOf(10); // 10 = '\n'
+    if (newlineIndex === -1) {
+      newlineIndex = bytes.length;
+    }
+
+    // Decode only the header portion as UTF-8
+    const decoder = new TextDecoder("utf-8");
+    const headerLine = decoder.decode(bytes.slice(0, newlineIndex));
     const header = JSON.parse(headerLine);
 
     if (!header.dsn) {
@@ -116,9 +125,9 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Read and parse envelope
-    const body = await request.text();
-    const envelope = parseEnvelope(body);
+    // Read body as ArrayBuffer to preserve binary data (e.g., session replays)
+    const buffer = await request.arrayBuffer();
+    const envelope = parseEnvelopeHeader(buffer);
 
     if (!envelope) {
       console.warn("[Sentry Tunnel] Invalid envelope format");
@@ -142,10 +151,10 @@ export async function POST(request: NextRequest) {
     // Build upstream URL
     const upstreamUrl = `https://${envelope.host}/api/${envelope.projectId}/envelope/`;
 
-    // Forward to Sentry
+    // Forward to Sentry (use original buffer to preserve binary data)
     const upstreamResponse = await fetch(upstreamUrl, {
       method: "POST",
-      body,
+      body: buffer,
       headers: {
         "Content-Type": "application/x-sentry-envelope",
       },
