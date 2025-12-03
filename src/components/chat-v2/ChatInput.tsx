@@ -10,6 +10,12 @@ import { useChatStream } from "@/lib/hooks/use-chat-stream";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/lib/store/auth-store";
+import {
+  incrementGuestMessageCount,
+  hasReachedGuestLimit,
+  getRemainingGuestMessages,
+  getGuestMessageLimit
+} from "@/lib/guest-chat";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { usePrivy } from "@privy-io/react-auth";
 
@@ -50,7 +56,8 @@ export function ChatInput() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
   const [selectedAudio, setSelectedAudio] = useState<string | null>(null);
-  const [showSignInWarning, setShowSignInWarning] = useState(false);
+  const [guestMessageCount, setGuestMessageCount] = useState(0);
+  const [showGuestLimitWarning, setShowGuestLimitWarning] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
@@ -90,16 +97,17 @@ export function ChatInput() {
         return;
     }
 
-    // Block unauthenticated users - require sign in to use chat
+    // Guest mode: Check daily message limit
     if (!isAuthenticated) {
-      setShowSignInWarning(true);
-      toast({
-        title: "Sign in required",
-        description: "Create a free account to start chatting with AI models!",
-        variant: "destructive",
-      });
-      login();
-      return;
+      if (hasReachedGuestLimit()) {
+        setShowGuestLimitWarning(true);
+        toast({
+          title: "Daily limit reached",
+          description: `You've used all ${getGuestMessageLimit()} messages for today. Sign up to continue chatting!`,
+          variant: "destructive",
+        });
+        return;
+      }
     }
 
     // Capture current input values before any async operations
@@ -180,10 +188,37 @@ export function ChatInput() {
             }
         }
 
+        // Guest mode: Increment daily message count after successful send
+        if (!isAuthenticated) {
+          const newCount = incrementGuestMessageCount();
+          setGuestMessageCount(newCount);
+
+          // Dispatch event to update counter display
+          window.dispatchEvent(new Event('guest-count-updated'));
+
+          // Show warning when approaching limit
+          const remaining = getRemainingGuestMessages();
+
+          if (remaining === 0) {
+            // Show banner when limit is reached
+            setShowGuestLimitWarning(true);
+            toast({
+              title: "Daily limit reached!",
+              description: `You've used all ${getGuestMessageLimit()} messages for today. Sign up to continue chatting!`,
+              variant: "destructive",
+            });
+          } else if (remaining <= 3) {
+            // Show warning toast when approaching limit
+            toast({
+              title: `${remaining} ${remaining === 1 ? 'message' : 'messages'} remaining today`,
+              description: "Sign up to chat without daily limits!",
+            });
+          }
+        }
     } catch (e) {
         toast({ title: "Failed to send message", variant: "destructive" });
     }
-  }, [inputValue, selectedImage, selectedVideo, selectedAudio, isStreaming, selectedModel, activeSessionId, messages, setInputValue, setActiveSessionId, createSession, streamMessage, toast, isAuthenticated]);
+  }, [inputValue, selectedImage, selectedVideo, selectedAudio, isStreaming, selectedModel, activeSessionId, messages, setInputValue, setActiveSessionId, createSession, streamMessage, toast, isAuthenticated, login]);
 
   // Expose send function for prompt auto-send from WelcomeScreen
   useEffect(() => {
@@ -239,23 +274,24 @@ export function ChatInput() {
   return (
     <div className="w-full p-4 border-t bg-background">
       <div className="max-w-4xl mx-auto">
-        {/* Sign In Required Warning */}
-        {!isAuthenticated && showSignInWarning && (
-          <Alert className="mb-3 border-primary bg-primary/5 dark:bg-primary/10">
+        {/* Guest Daily Limit Warning */}
+        {!isAuthenticated && showGuestLimitWarning && (
+          <Alert className="mb-3 border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20">
             <AlertDescription className="flex items-center justify-between">
               <span className="text-sm">
+                You've reached your daily limit of {getGuestMessageLimit()} messages.{" "}
                 <button
                   onClick={login}
                   className="font-semibold underline hover:no-underline"
                 >
-                  Sign in
+                  Sign up
                 </button>{" "}
-                to start chatting with AI models. It's free!
+                to chat without limits!
               </span>
               <Button
                 size="sm"
                 variant="ghost"
-                onClick={() => setShowSignInWarning(false)}
+                onClick={() => setShowGuestLimitWarning(false)}
                 className="h-6 px-2"
               >
                 <X className="h-4 w-4" />
