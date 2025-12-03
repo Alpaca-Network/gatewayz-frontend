@@ -138,11 +138,21 @@ export function useChatStream() {
         // through a gateway that normalizes the format (OpenRouter, Together, etc.)
         // Models like 'openrouter/deepseek/deepseek-r1' have the gateway prefix and are normalized
         // Models like 'deepseek/deepseek-r1' (no gateway prefix or sourceGateway) need flexible route
+        //
+        // IMPORTANT: Only redirect when we're CERTAIN it's direct DeepSeek API access:
+        // - 'deepseek/deepseek-r1' -> definitely direct DeepSeek API -> needs flexible route
+        // - 'openrouter/deepseek/deepseek-r1' -> normalized by OpenRouter -> AI SDK can handle
+        // - 'deepseek-r1' (no prefix) -> could be from any gateway, let AI SDK try
+        // - 'deepseek-r1' with sourceGateway='deepseek' -> direct DeepSeek -> needs flexible route
+        const startsWithDeepSeek = modelLower.startsWith('deepseek/');
         const normalizingGateways = ['openrouter', 'together', 'groq', 'cerebras', 'anyscale'];
-        const isNormalizedByGateway = normalizingGateways.includes(gatewayLower) ||
-                                       normalizingGateways.some(g => modelLower.startsWith(`${g}/`));
-        const isDeepSeekModel = modelLower.includes('deepseek');
-        const isDeepSeekNeedingFlexible = isDeepSeekModel && !isNormalizedByGateway;
+        const hasExplicitNormalizingPrefix = normalizingGateways.some(g => modelLower.startsWith(`${g}/`));
+
+        // Only redirect if:
+        // 1. Model explicitly starts with 'deepseek/' (direct API) AND doesn't have normalizing prefix, OR
+        // 2. sourceGateway is explicitly 'deepseek'
+        const isDirectDeepSeekGateway = gatewayLower === 'deepseek';
+        const isDeepSeekNeedingFlexible = (startsWithDeepSeek && !hasExplicitNormalizingPrefix) || isDirectDeepSeekGateway;
 
         // Use regular completions route for models with non-standard formats
         const useFlexibleRoute = isFireworksModel || isDeepSeekNeedingFlexible;
