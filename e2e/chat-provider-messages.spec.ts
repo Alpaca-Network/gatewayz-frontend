@@ -167,9 +167,10 @@ async function sendMessageAndWaitForResponse(
   const input = page.locator('input[placeholder*="message" i], input[enterkeyhint="send"]').first();
   await input.fill(message);
 
-  // Get initial assistant message count - assistant messages have a Bot icon and prose content
-  // Selector targets: div with flex gap-3 containing Bot avatar + prose content
-  const assistantMessageSelector = 'div.prose.prose-sm';
+  // Assistant messages are identified by having a Bot icon (lucide-bot SVG) in their container
+  // This is more robust than relying on CSS styling classes
+  // The message structure is: div.flex > Avatar(with Bot icon) + div(with prose content)
+  const assistantMessageSelector = 'div.flex:has(svg.lucide-bot) div.prose';
   const initialMessageCount = await page.locator(assistantMessageSelector).count();
 
   // Click send button
@@ -196,7 +197,7 @@ async function sendMessageAndWaitForResponse(
       }
     }
 
-    // Check for assistant response - prose content after the Bot avatar
+    // Check for assistant response - messages with Bot icon
     const assistantMessages = await page.locator(assistantMessageSelector).all();
 
     if (assistantMessages.length > initialMessageCount) {
@@ -207,9 +208,14 @@ async function sendMessageAndWaitForResponse(
       if (content && content.length > 0) {
         lastContent = content;
 
-        // Check if streaming is complete (no bouncing dots indicator)
-        const streamingIndicator = await page.locator('.animate-bounce').count();
-        if (streamingIndicator === 0 && content.length > 10) {
+        // Check if streaming is complete by looking for the streaming indicator dots
+        // The streaming indicator shows "● ● ●" with animate-bounce class
+        // We check for any element with text containing the dot pattern within the message container
+        const parentContainer = page.locator('div.flex:has(svg.lucide-bot)').last();
+        const streamingDots = parentContainer.locator('span.animate-bounce');
+        const isStreaming = await streamingDots.count() > 0;
+
+        if (!isStreaming && content.length > 10) {
           // Response is complete
           break;
         }
@@ -258,7 +264,8 @@ async function createNewChatSession(page: Page) {
 
   if (await newChatButton.count() > 0 && await newChatButton.isVisible()) {
     await newChatButton.click();
-    await page.waitForTimeout(500);
+    // Wait for chat UI to be ready after creating new session
+    await waitForChatReady(page);
   } else {
     // If no button, navigate to /chat directly
     await page.goto('/chat');
