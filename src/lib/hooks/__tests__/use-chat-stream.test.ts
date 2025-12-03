@@ -13,6 +13,10 @@ describe('useChatStream routing logic', () => {
     const modelLower = modelValue.toLowerCase();
     const gatewayLower = (sourceGateway || '').toLowerCase();
 
+    // Models/providers that need the flexible completions route:
+    // - Fireworks: returns non-OpenAI format (object: "response.chunk" with output array)
+    //   This includes any model served through Fireworks gateway, regardless of original provider
+    //   Examples: 'accounts/fireworks/models/deepseek-r1-0528', 'fireworks/llama-3.3-70b'
     const isFireworksModel = modelLower.includes('fireworks') ||
                               modelLower.includes('accounts/fireworks') ||
                               gatewayLower === 'fireworks';
