@@ -26,7 +26,7 @@ function createEmptyCache(): SessionCacheData {
   return {
     sessions: [],
     recentModels: [],
-    defaultModel: 'accounts/fireworks/models/deepseek-r1',
+    defaultModel: 'fireworks/deepseek-r1',
     lastSync: now,
     expiresAt: now + CACHE_TTL_MS
   };
@@ -75,7 +75,7 @@ export function getCachedDefaultModel(): string | null {
       return null;
     }
 
-    return data.defaultModel || 'accounts/fireworks/models/deepseek-r1';
+    return data.defaultModel || 'fireworks/deepseek-r1';
   } catch (error) {
     console.warn('[SessionCache] Failed to read cached default model:', error);
     return null;
@@ -249,7 +249,7 @@ export function getSessionCacheStats(): {
       return {
         sessionCount: 0,
         cachedModels: [],
-        defaultModel: 'accounts/fireworks/models/deepseek-r1',
+        defaultModel: 'fireworks/deepseek-r1',
         lastSync: null,
         isExpired: true
       };
@@ -261,7 +261,7 @@ export function getSessionCacheStats(): {
     return {
       sessionCount: data.sessions?.length || 0,
       cachedModels: data.recentModels || [],
-      defaultModel: data.defaultModel || 'accounts/fireworks/models/deepseek-r1',
+      defaultModel: data.defaultModel || 'fireworks/deepseek-r1',
       lastSync: new Date(data.lastSync),
       isExpired
     };
@@ -270,7 +270,7 @@ export function getSessionCacheStats(): {
     return {
       sessionCount: 0,
       cachedModels: [],
-      defaultModel: 'accounts/fireworks/models/deepseek-r1',
+      defaultModel: 'fireworks/deepseek-r1',
       lastSync: null,
       isExpired: true
     };

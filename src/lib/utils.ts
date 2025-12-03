@@ -26,6 +26,7 @@ export const extractTokenValue = (str: string): string | null => {
  * Handles various formats returned by different gateway APIs:
  * - @google/models/gemini-pro-latest → google/gemini-pro-latest
  * - @openrouter/qwen/qwen3-32b → openrouter/qwen/qwen3-32b
+ * - accounts/fireworks/models/deepseek-r1 → fireworks/deepseek-r1
  * - google/gemini-pro → google/gemini-pro (no change)
  * - gemini-pro → gemini-pro (no change)
  *
@@ -33,6 +34,14 @@ export const extractTokenValue = (str: string): string | null => {
  */
 export const normalizeModelId = (modelId: string): string => {
   if (!modelId) return modelId;
+
+  // Handle accounts/provider/models/model-name format → provider/model-name
+  // This is the format used by Fireworks API (e.g., accounts/fireworks/models/deepseek-r1)
+  const accountsProviderMatch = modelId.match(/^accounts\/([a-z0-9-]+)\/models\/(.+)$/i);
+  if (accountsProviderMatch) {
+    const [, provider, model] = accountsProviderMatch;
+    return `${provider}/${model}`;
+  }
 
   // Handle @provider/models/model-name format → provider/model-name
   const atProviderMatch = modelId.match(/^@([a-z0-9-]+)\/models\/(.+)$/i);

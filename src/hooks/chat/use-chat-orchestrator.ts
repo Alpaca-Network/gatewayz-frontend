@@ -39,7 +39,7 @@ export function useChatOrchestrator(
   options: UseChatOrchestratorOptions = {}
 ): UseChatOrchestratorReturn {
   const {
-    defaultModel = 'accounts/fireworks/models/deepseek-r1',
+    defaultModel = 'fireworks/deepseek-r1',
     onAuthRequired,
     onError,
   } = options;
