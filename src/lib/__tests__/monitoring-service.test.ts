@@ -134,6 +134,93 @@ describe('Monitoring Service', () => {
 
         setTimeoutSpy.mockRestore();
       });
+
+      it('should respect Retry-After header in HTTP-date format', async () => {
+        // Set up HTTP-date 5 seconds in the future
+        const futureDate = new Date(Date.now() + 5000);
+        const httpDate = futureDate.toUTCString();
+
+        const headers = new Headers();
+        headers.set('retry-after', httpDate);
+
+        const mockResponse429 = {
+          ok: false,
+          status: 429,
+          headers,
+        };
+
+        const mockResponse200 = {
+          ok: true,
+          status: 200,
+          json: async () => ({ data: 'success' }),
+        };
+
+        mockFetch
+          .mockResolvedValueOnce(mockResponse429)
+          .mockResolvedValueOnce(mockResponse200);
+
+        const setTimeoutSpy = jest.spyOn(global, 'setTimeout');
+
+        const promise = monitoringService.getHealthStats();
+        await jest.runAllTimersAsync();
+        const result = await promise;
+
+        expect(result).toEqual({ data: 'success' });
+
+        // Verify the delay was based on HTTP-date (should be around 5000ms + jitter)
+        const retryCall = setTimeoutSpy.mock.calls.find(
+          call => typeof call[1] === 'number' && call[1] > 500
+        );
+        expect(retryCall).toBeDefined();
+        // Should be roughly 5000ms + jitter (up to 500ms), allow timing variance
+        expect(retryCall![1]).toBeGreaterThanOrEqual(4000);
+        expect(retryCall![1]).toBeLessThanOrEqual(6000);
+
+        setTimeoutSpy.mockRestore();
+      });
+
+      it('should cap HTTP-date Retry-After at MAX_RETRY_DELAY_MS', async () => {
+        // Set up HTTP-date 1 hour in the future
+        const futureDate = new Date(Date.now() + 3600000);
+        const httpDate = futureDate.toUTCString();
+
+        const headers = new Headers();
+        headers.set('retry-after', httpDate);
+
+        const mockResponse429 = {
+          ok: false,
+          status: 429,
+          headers,
+        };
+
+        const mockResponse200 = {
+          ok: true,
+          status: 200,
+          json: async () => ({ data: 'success' }),
+        };
+
+        mockFetch
+          .mockResolvedValueOnce(mockResponse429)
+          .mockResolvedValueOnce(mockResponse200);
+
+        const setTimeoutSpy = jest.spyOn(global, 'setTimeout');
+
+        const promise = monitoringService.getHealthStats();
+        await jest.runAllTimersAsync();
+        const result = await promise;
+
+        expect(result).toEqual({ data: 'success' });
+
+        // Verify the delay was capped at MAX_RETRY_DELAY_MS (10000) + jitter (500)
+        const retryCall = setTimeoutSpy.mock.calls.find(
+          call => typeof call[1] === 'number' && call[1] > 500
+        );
+        expect(retryCall).toBeDefined();
+        expect(retryCall![1]).toBeLessThanOrEqual(10500);
+        expect(retryCall![1]).toBeLessThan(3600000);
+
+        setTimeoutSpy.mockRestore();
+      });
     });
 
     describe('502/503/504 Server Error Handling', () => {

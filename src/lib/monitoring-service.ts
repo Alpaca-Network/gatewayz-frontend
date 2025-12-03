@@ -45,11 +45,24 @@ function calculateRetryDelay(
 
   // Honor Retry-After header if present, but cap at MAX_RETRY_DELAY_MS
   // to prevent unexpectedly long waits from large server-provided values
+  // Supports both numeric seconds and HTTP-date format per RFC 7231
   if (retryAfterHeader) {
     const numericRetry = Number(retryAfterHeader);
     if (!Number.isNaN(numericRetry) && numericRetry > 0) {
+      // Retry-After is in seconds, convert to milliseconds and cap
       const retryDelayMs = Math.min(numericRetry * 1000, MAX_RETRY_DELAY_MS);
       waitTime = Math.max(waitTime, retryDelayMs);
+    } else {
+      // Try parsing as HTTP-date format (e.g., "Wed, 21 Oct 2015 07:28:00 GMT")
+      const retryDate = Date.parse(retryAfterHeader);
+      if (!Number.isNaN(retryDate)) {
+        const headerWait = retryDate - Date.now();
+        if (headerWait > 0) {
+          // Cap at MAX_RETRY_DELAY_MS to prevent unexpectedly long waits
+          const cappedWait = Math.min(headerWait, MAX_RETRY_DELAY_MS);
+          waitTime = Math.max(waitTime, cappedWait);
+        }
+      }
     }
   }
 
