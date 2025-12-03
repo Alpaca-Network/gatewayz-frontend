@@ -206,10 +206,11 @@ describe('AI SDK Completions Route', () => {
       });
 
       const response = await POST(request);
-      expect(response.status).toBe(403);
+      expect(response.status).toBe(401);
 
       const data = await response.json();
-      expect(data.error).toBe('Guest mode is not available. Please sign up to use chat.');
+      expect(data.error).toBe('Please sign in to use the chat feature');
+      expect(data.code).toBe('GUEST_NOT_CONFIGURED');
     });
   });
 

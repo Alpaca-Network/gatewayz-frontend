@@ -231,7 +231,15 @@ export async function* streamChatResponse(
     // Handle 401 Unauthorized - trigger auth refresh and retry
     if (response.status === 401) {
       const errorMessage = errorData.detail || errorData.error?.message || 'Authentication required';
+      const errorCode = errorData.code;
       devError('401 Unauthorized - triggering auth refresh');
+
+      // Check if this is a guest user who needs to sign up
+      if (errorCode === 'GUEST_NOT_CONFIGURED') {
+        throw new Error(
+          'Please sign in to use the chat feature. Create a free account to get started!'
+        );
+      }
 
       // Only retry auth refresh once to prevent infinite loops
       if (retryCount === 0 && typeof window !== 'undefined') {

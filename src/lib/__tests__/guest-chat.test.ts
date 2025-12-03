@@ -22,9 +22,12 @@ import {
 import type { ChatSession, ChatMessage } from '../chat-history';
 
 // Storage keys (must match those in guest-chat.ts)
-const GUEST_MESSAGE_COUNT_KEY = 'gatewayz_guest_message_count';
+const GUEST_MESSAGE_DATA_KEY = 'gatewayz_guest_message_data';
 const GUEST_SESSIONS_KEY = 'gatewayz_guest_sessions';
 const GUEST_MESSAGES_KEY = 'gatewayz_guest_messages';
+
+// Helper to get today's date string in the format used by guest-chat.ts
+const getTodayDateString = () => new Date().toISOString().split('T')[0];
 
 describe('Guest Chat Utilities', () => {
   beforeEach(() => {
@@ -42,44 +45,64 @@ describe('Guest Chat Utilities', () => {
         expect(getGuestMessageCount()).toBe(0);
       });
 
-      it('should return stored count', () => {
-        localStorage.setItem(GUEST_MESSAGE_COUNT_KEY, '5');
+      it('should return stored count for today', () => {
+        const today = getTodayDateString();
+        localStorage.setItem(GUEST_MESSAGE_DATA_KEY, JSON.stringify({ count: 5, date: today }));
         expect(getGuestMessageCount()).toBe(5);
       });
 
-      it('should return 0 and clear storage for corrupted values', () => {
-        localStorage.setItem(GUEST_MESSAGE_COUNT_KEY, 'invalid');
+      it('should return 0 and reset storage for a different day (daily reset)', () => {
+        const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        localStorage.setItem(GUEST_MESSAGE_DATA_KEY, JSON.stringify({ count: 5, date: yesterday }));
         expect(getGuestMessageCount()).toBe(0);
-        expect(localStorage.getItem(GUEST_MESSAGE_COUNT_KEY)).toBeNull();
+        // Should have reset to today's date with count 0
+        const stored = JSON.parse(localStorage.getItem(GUEST_MESSAGE_DATA_KEY) || '{}');
+        expect(stored.count).toBe(0);
+        expect(stored.date).toBe(getTodayDateString());
+      });
+
+      it('should return 0 and reset storage for corrupted values', () => {
+        localStorage.setItem(GUEST_MESSAGE_DATA_KEY, 'invalid json');
+        expect(getGuestMessageCount()).toBe(0);
+        const stored = JSON.parse(localStorage.getItem(GUEST_MESSAGE_DATA_KEY) || '{}');
+        expect(stored.count).toBe(0);
+        expect(stored.date).toBe(getTodayDateString());
       });
     });
 
     describe('incrementGuestMessageCount', () => {
       it('should increment from 0', () => {
         expect(incrementGuestMessageCount()).toBe(1);
-        expect(localStorage.getItem(GUEST_MESSAGE_COUNT_KEY)).toBe('1');
+        const stored = JSON.parse(localStorage.getItem(GUEST_MESSAGE_DATA_KEY) || '{}');
+        expect(stored.count).toBe(1);
+        expect(stored.date).toBe(getTodayDateString());
       });
 
       it('should increment existing count', () => {
-        localStorage.setItem(GUEST_MESSAGE_COUNT_KEY, '5');
+        const today = getTodayDateString();
+        localStorage.setItem(GUEST_MESSAGE_DATA_KEY, JSON.stringify({ count: 5, date: today }));
         expect(incrementGuestMessageCount()).toBe(6);
-        expect(localStorage.getItem(GUEST_MESSAGE_COUNT_KEY)).toBe('6');
+        const stored = JSON.parse(localStorage.getItem(GUEST_MESSAGE_DATA_KEY) || '{}');
+        expect(stored.count).toBe(6);
       });
     });
 
     describe('hasReachedGuestLimit', () => {
       it('should return false when under limit', () => {
-        localStorage.setItem(GUEST_MESSAGE_COUNT_KEY, '5');
+        const today = getTodayDateString();
+        localStorage.setItem(GUEST_MESSAGE_DATA_KEY, JSON.stringify({ count: 5, date: today }));
         expect(hasReachedGuestLimit()).toBe(false);
       });
 
       it('should return true when at limit', () => {
-        localStorage.setItem(GUEST_MESSAGE_COUNT_KEY, '10');
+        const today = getTodayDateString();
+        localStorage.setItem(GUEST_MESSAGE_DATA_KEY, JSON.stringify({ count: 10, date: today }));
         expect(hasReachedGuestLimit()).toBe(true);
       });
 
       it('should return true when over limit', () => {
-        localStorage.setItem(GUEST_MESSAGE_COUNT_KEY, '15');
+        const today = getTodayDateString();
+        localStorage.setItem(GUEST_MESSAGE_DATA_KEY, JSON.stringify({ count: 15, date: today }));
         expect(hasReachedGuestLimit()).toBe(true);
       });
     });
@@ -90,21 +113,24 @@ describe('Guest Chat Utilities', () => {
       });
 
       it('should return remaining count', () => {
-        localStorage.setItem(GUEST_MESSAGE_COUNT_KEY, '7');
+        const today = getTodayDateString();
+        localStorage.setItem(GUEST_MESSAGE_DATA_KEY, JSON.stringify({ count: 7, date: today }));
         expect(getRemainingGuestMessages()).toBe(3);
       });
 
       it('should return 0 when at or over limit', () => {
-        localStorage.setItem(GUEST_MESSAGE_COUNT_KEY, '12');
+        const today = getTodayDateString();
+        localStorage.setItem(GUEST_MESSAGE_DATA_KEY, JSON.stringify({ count: 12, date: today }));
         expect(getRemainingGuestMessages()).toBe(0);
       });
     });
 
     describe('resetGuestMessageCount', () => {
       it('should remove the count from storage', () => {
-        localStorage.setItem(GUEST_MESSAGE_COUNT_KEY, '5');
+        const today = getTodayDateString();
+        localStorage.setItem(GUEST_MESSAGE_DATA_KEY, JSON.stringify({ count: 5, date: today }));
         resetGuestMessageCount();
-        expect(localStorage.getItem(GUEST_MESSAGE_COUNT_KEY)).toBeNull();
+        expect(localStorage.getItem(GUEST_MESSAGE_DATA_KEY)).toBeNull();
       });
     });
 
@@ -403,15 +429,16 @@ describe('Guest Chat Utilities', () => {
   describe('Utility Functions', () => {
     describe('clearGuestChatData', () => {
       it('should clear all guest data', () => {
+        const today = getTodayDateString();
         localStorage.setItem(GUEST_SESSIONS_KEY, JSON.stringify([{ id: -1 }]));
         localStorage.setItem(GUEST_MESSAGES_KEY, JSON.stringify({ '-1': [] }));
-        localStorage.setItem(GUEST_MESSAGE_COUNT_KEY, '5');
+        localStorage.setItem(GUEST_MESSAGE_DATA_KEY, JSON.stringify({ count: 5, date: today }));
 
         clearGuestChatData();
 
         expect(localStorage.getItem(GUEST_SESSIONS_KEY)).toBeNull();
         expect(localStorage.getItem(GUEST_MESSAGES_KEY)).toBeNull();
-        expect(localStorage.getItem(GUEST_MESSAGE_COUNT_KEY)).toBeNull();
+        expect(localStorage.getItem(GUEST_MESSAGE_DATA_KEY)).toBeNull();
       });
     });
 

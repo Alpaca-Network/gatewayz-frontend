@@ -6,30 +6,62 @@
 
 import type { ChatSession, ChatMessage } from './chat-history';
 
-const GUEST_MESSAGE_COUNT_KEY = 'gatewayz_guest_message_count';
-const GUEST_MESSAGE_LIMIT = 10;
+const GUEST_MESSAGE_DATA_KEY = 'gatewayz_guest_message_data';
+const GUEST_DAILY_MESSAGE_LIMIT = 10;
 const GUEST_SESSIONS_KEY = 'gatewayz_guest_sessions';
 const GUEST_MESSAGES_KEY = 'gatewayz_guest_messages';
 const GUEST_SESSION_TTL_DAYS = 7; // Sessions expire after 7 days
 const MAX_GUEST_SESSIONS = 20; // Maximum number of guest sessions to store
 
 /**
- * Get the current guest message count
+ * Data structure for tracking daily guest messages
+ */
+interface GuestMessageData {
+  count: number;
+  date: string; // ISO date string (YYYY-MM-DD)
+}
+
+/**
+ * Get today's date as ISO string (YYYY-MM-DD)
+ */
+function getTodayDateString(): string {
+  return new Date().toISOString().split('T')[0];
+}
+
+/**
+ * Get the guest message data, resetting if it's a new day
+ */
+function getGuestMessageData(): GuestMessageData {
+  if (typeof window === 'undefined') return { count: 0, date: getTodayDateString() };
+
+  try {
+    const stored = localStorage.getItem(GUEST_MESSAGE_DATA_KEY);
+    if (!stored) return { count: 0, date: getTodayDateString() };
+
+    const data: GuestMessageData = JSON.parse(stored);
+    const today = getTodayDateString();
+
+    // Reset count if it's a new day
+    if (data.date !== today) {
+      const newData = { count: 0, date: today };
+      localStorage.setItem(GUEST_MESSAGE_DATA_KEY, JSON.stringify(newData));
+      return newData;
+    }
+
+    return data;
+  } catch {
+    // Handle corrupted data
+    const newData = { count: 0, date: getTodayDateString() };
+    localStorage.setItem(GUEST_MESSAGE_DATA_KEY, JSON.stringify(newData));
+    return newData;
+  }
+}
+
+/**
+ * Get the current guest message count for today
  */
 export function getGuestMessageCount(): number {
-  if (typeof window === 'undefined') return 0;
-
-  const count = localStorage.getItem(GUEST_MESSAGE_COUNT_KEY);
-  if (!count) return 0;
-
-  const parsed = parseInt(count, 10);
-  // Handle corrupted values - return 0 and clear if NaN
-  if (isNaN(parsed)) {
-    localStorage.removeItem(GUEST_MESSAGE_COUNT_KEY);
-    return 0;
-  }
-
-  return parsed;
+  return getGuestMessageData().count;
 }
 
 /**
@@ -39,25 +71,25 @@ export function getGuestMessageCount(): number {
 export function incrementGuestMessageCount(): number {
   if (typeof window === 'undefined') return 0;
 
-  const current = getGuestMessageCount();
-  const newCount = current + 1;
-  localStorage.setItem(GUEST_MESSAGE_COUNT_KEY, newCount.toString());
-  return newCount;
+  const data = getGuestMessageData();
+  const newData = { count: data.count + 1, date: data.date };
+  localStorage.setItem(GUEST_MESSAGE_DATA_KEY, JSON.stringify(newData));
+  return newData.count;
 }
 
 /**
- * Check if guest has reached the message limit
+ * Check if guest has reached the daily message limit
  */
 export function hasReachedGuestLimit(): boolean {
-  return getGuestMessageCount() >= GUEST_MESSAGE_LIMIT;
+  return getGuestMessageCount() >= GUEST_DAILY_MESSAGE_LIMIT;
 }
 
 /**
- * Get remaining guest messages
+ * Get remaining guest messages for today
  */
 export function getRemainingGuestMessages(): number {
   const count = getGuestMessageCount();
-  const remaining = GUEST_MESSAGE_LIMIT - count;
+  const remaining = GUEST_DAILY_MESSAGE_LIMIT - count;
   return Math.max(0, remaining);
 }
 
@@ -66,7 +98,7 @@ export function getRemainingGuestMessages(): number {
  */
 export function resetGuestMessageCount(): void {
   if (typeof window === 'undefined') return;
-  localStorage.removeItem(GUEST_MESSAGE_COUNT_KEY);
+  localStorage.removeItem(GUEST_MESSAGE_DATA_KEY);
 }
 
 /**
@@ -77,10 +109,10 @@ export function isGuestMode(isAuthenticated: boolean): boolean {
 }
 
 /**
- * Get the guest message limit constant
+ * Get the daily guest message limit constant
  */
 export function getGuestMessageLimit(): number {
-  return GUEST_MESSAGE_LIMIT;
+  return GUEST_DAILY_MESSAGE_LIMIT;
 }
 
 // ============================================================================
@@ -311,7 +343,7 @@ export function clearGuestChatData(): void {
   try {
     localStorage.removeItem(GUEST_SESSIONS_KEY);
     localStorage.removeItem(GUEST_MESSAGES_KEY);
-    localStorage.removeItem(GUEST_MESSAGE_COUNT_KEY);
+    localStorage.removeItem(GUEST_MESSAGE_DATA_KEY);
   } catch (error) {
     console.error('[GuestChat] Failed to clear chat data:', error);
   }

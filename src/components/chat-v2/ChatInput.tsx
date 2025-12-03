@@ -18,7 +18,6 @@ import {
 } from "@/lib/guest-chat";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { usePrivy } from "@privy-io/react-auth";
-import Link from "next/link";
 
 // Helper for file to base64
 const fileToBase64 = (file: File): Promise<string> => {
@@ -98,13 +97,13 @@ export function ChatInput() {
         return;
     }
 
-    // Guest mode: Check message limit
+    // Guest mode: Check daily message limit
     if (!isAuthenticated) {
       if (hasReachedGuestLimit()) {
         setShowGuestLimitWarning(true);
         toast({
-          title: "Guest limit reached",
-          description: `You've reached the ${getGuestMessageLimit()}-message limit. Sign up to continue chatting!`,
+          title: "Daily limit reached",
+          description: `You've used all ${getGuestMessageLimit()} messages for today. Sign up to continue chatting!`,
           variant: "destructive",
         });
         return;
@@ -189,7 +188,7 @@ export function ChatInput() {
             }
         }
 
-        // Guest mode: Increment message count after successful send
+        // Guest mode: Increment daily message count after successful send
         if (!isAuthenticated) {
           const newCount = incrementGuestMessageCount();
           setGuestMessageCount(newCount);
@@ -204,22 +203,22 @@ export function ChatInput() {
             // Show banner when limit is reached
             setShowGuestLimitWarning(true);
             toast({
-              title: "Guest limit reached!",
-              description: `You've used all ${getGuestMessageLimit()} free messages. Sign up to continue chatting!`,
+              title: "Daily limit reached!",
+              description: `You've used all ${getGuestMessageLimit()} messages for today. Sign up to continue chatting!`,
               variant: "destructive",
             });
           } else if (remaining <= 3) {
             // Show warning toast when approaching limit
             toast({
-              title: `${remaining} ${remaining === 1 ? 'message' : 'messages'} remaining`,
-              description: "Sign up to continue chatting without limits!",
+              title: `${remaining} ${remaining === 1 ? 'message' : 'messages'} remaining today`,
+              description: "Sign up to chat without daily limits!",
             });
           }
         }
     } catch (e) {
         toast({ title: "Failed to send message", variant: "destructive" });
     }
-  }, [inputValue, selectedImage, selectedVideo, selectedAudio, isStreaming, selectedModel, activeSessionId, messages, setInputValue, setActiveSessionId, createSession, streamMessage, toast, isAuthenticated]);
+  }, [inputValue, selectedImage, selectedVideo, selectedAudio, isStreaming, selectedModel, activeSessionId, messages, setInputValue, setActiveSessionId, createSession, streamMessage, toast, isAuthenticated, login]);
 
   // Expose send function for prompt auto-send from WelcomeScreen
   useEffect(() => {
@@ -275,19 +274,19 @@ export function ChatInput() {
   return (
     <div className="w-full p-4 border-t bg-background">
       <div className="max-w-4xl mx-auto">
-        {/* Guest Limit Warning */}
+        {/* Guest Daily Limit Warning */}
         {!isAuthenticated && showGuestLimitWarning && (
           <Alert className="mb-3 border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20">
             <AlertDescription className="flex items-center justify-between">
               <span className="text-sm">
-                You've reached your {getGuestMessageLimit()}-message limit.{" "}
+                You've reached your daily limit of {getGuestMessageLimit()} messages.{" "}
                 <button
                   onClick={login}
                   className="font-semibold underline hover:no-underline"
                 >
                   Sign up
                 </button>{" "}
-                to continue chatting!
+                to chat without limits!
               </span>
               <Button
                 size="sm"

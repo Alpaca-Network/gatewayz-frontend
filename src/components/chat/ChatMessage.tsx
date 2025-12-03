@@ -8,9 +8,10 @@
 import React, { memo } from 'react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Card } from '@/components/ui/card';
-import { Bot, User, Copy, RotateCcw } from 'lucide-react';
+import { Bot, User, Copy, RotateCcw, LogIn } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import dynamic from 'next/dynamic';
+import { usePrivy } from '@privy-io/react-auth';
 
 // Lazy load heavy components - enable SSR to prevent hydration mismatch
 const ReactMarkdown = dynamic(() => import('react-markdown'), { ssr: true });
@@ -45,6 +46,41 @@ const contentEquals = (a: string | any[], b: string | any[]): boolean => {
     return JSON.stringify(a) === JSON.stringify(b);
   }
   return false;
+};
+
+// Check if error is related to authentication/sign-in
+const isAuthError = (error: string): boolean => {
+  const lowerError = error.toLowerCase();
+  return (
+    lowerError.includes('sign in') ||
+    lowerError.includes('sign up') ||
+    lowerError.includes('log in') ||
+    lowerError.includes('authentication') ||
+    lowerError.includes('create a free account')
+  );
+};
+
+// Error display component with sign-in button for auth errors
+const ErrorDisplay = ({ error }: { error: string }) => {
+  const { login } = usePrivy();
+  const showSignIn = isAuthError(error);
+
+  return (
+    <div className="mt-2 p-3 bg-destructive/10 border border-destructive/20 rounded text-sm text-destructive">
+      <p className="mb-0">{error}</p>
+      {showSignIn && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="mt-2 border-destructive/30 hover:bg-destructive/10"
+          onClick={() => login()}
+        >
+          <LogIn className="h-4 w-4 mr-2" />
+          Sign in to continue
+        </Button>
+      )}
+    </div>
+  );
 };
 
 /**
@@ -176,9 +212,7 @@ export const ChatMessage = memo<ChatMessageProps>(
 
             {/* Error display */}
             {hasError && error && (
-              <div className="mt-2 p-2 bg-destructive/10 border border-destructive/20 rounded text-sm text-destructive">
-                {error}
-              </div>
+              <ErrorDisplay error={error} />
             )}
 
             {/* Streaming indicator */}
