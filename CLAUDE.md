@@ -539,6 +539,8 @@ TIER_CONFIG = {
 - `NEXT_PUBLIC_STATSIG_CLIENT_KEY` - Statsig feature flag key
 - `HF_API_KEY` / `NEXT_PUBLIC_HF_API_KEY` - Hugging Face API auth
 - `NEAR_API_KEY` / `NEXT_PUBLIC_NEAR_API_KEY` - NEAR API auth
+- `PICA_SECRET_KEY` - Pica toolkit API key for AI-powered tool execution (https://app.picaos.ai/settings/api-keys)
+- `OPENAI_API_KEY` - OpenAI API key (required for Pica integration)
 
 ---
 
