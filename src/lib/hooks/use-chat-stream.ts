@@ -125,21 +125,25 @@ export function useChatStream() {
 
         // Models/providers that need the flexible completions route:
         // - Fireworks: returns non-OpenAI format
-        // - DeepSeek (direct gateway only): returns OpenAI Responses API format (object: "response.chunk")
+        // - DeepSeek: returns OpenAI Responses API format (object: "response.chunk")
         //   instead of Chat Completions format (choices[].delta) which AI SDK expects
-        //   Note: DeepSeek through OpenRouter/Together/etc. is normalized by those gateways, so they use AI SDK
+        //   Note: Only DeepSeek models through normalizing gateways (OpenRouter, Together) use AI SDK
         const isFireworksModel = modelLower.includes('fireworks') ||
                                   modelLower.includes('accounts/fireworks') ||
                                   gatewayLower === 'fireworks';
 
-        // Only route to flexible completions if model is from DeepSeek gateway directly
-        // Models like 'openrouter/deepseek/deepseek-r1' should use AI SDK since OpenRouter normalizes the format
-        // When a gateway is explicitly set (e.g., 'together', 'openrouter'), defer to that gateway's format
-        const isDirectDeepSeekGateway = gatewayLower === 'deepseek' ||
-                                         (modelLower.startsWith('deepseek/') && gatewayLower === '');
+        // DeepSeek models need flexible completions route UNLESS they're explicitly routed
+        // through a gateway that normalizes the format (OpenRouter, Together, etc.)
+        // Models like 'openrouter/deepseek/deepseek-r1' have the gateway prefix and are normalized
+        // Models like 'deepseek/deepseek-r1' (no gateway prefix or sourceGateway) need flexible route
+        const normalizingGateways = ['openrouter', 'together', 'groq', 'cerebras', 'anyscale'];
+        const isNormalizedByGateway = normalizingGateways.includes(gatewayLower) ||
+                                       normalizingGateways.some(g => modelLower.startsWith(`${g}/`));
+        const isDeepSeekModel = modelLower.includes('deepseek');
+        const isDeepSeekNeedingFlexible = isDeepSeekModel && !isNormalizedByGateway;
 
         // Use regular completions route for models with non-standard formats
-        const useFlexibleRoute = isFireworksModel || isDirectDeepSeekGateway;
+        const useFlexibleRoute = isFireworksModel || isDeepSeekNeedingFlexible;
         const url = useFlexibleRoute
             ? `/api/chat/completions?session_id=${sessionId}`
             : `/api/chat/ai-sdk-completions?session_id=${sessionId}`;
