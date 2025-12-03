@@ -321,8 +321,12 @@ export async function POST(request: NextRequest) {
       console.log(`[AI SDK Route] Redirecting to flexible completions route (${reason}): ${modelId}`);
 
       // Forward the request to /api/chat/completions instead
+      // SECURITY: Use a hardcoded trusted origin to prevent SSRF via Host header spoofing.
+      // We use the app's known internal URL or fall back to localhost for local dev.
+      const trustedOrigin = process.env.NEXT_PUBLIC_APP_URL ||
+                            (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
       const searchParams = new URL(request.url).searchParams;
-      const completionsUrl = new URL('/api/chat/completions', request.url);
+      const completionsUrl = new URL('/api/chat/completions', trustedOrigin);
       searchParams.forEach((value, key) => completionsUrl.searchParams.set(key, value));
 
       // Update the body with the resolved API key (important for guest users where
