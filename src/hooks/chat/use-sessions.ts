@@ -157,7 +157,7 @@ export function useSessions(options: UseSessionsOptions = {}): UseSessionsReturn
         headers: getAuthHeaders(),
         body: JSON.stringify({
           title: title || 'New Chat',
-          model: model || 'deepseek/deepseek-r1',
+          model: model || 'accounts/fireworks/models/deepseek-r1',
         }),
         timeout: SESSION_CREATION_TIMEOUT,
       });

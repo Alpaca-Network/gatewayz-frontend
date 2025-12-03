@@ -21,10 +21,10 @@ const ModelSelect = dynamic(() => import("@/components/chat/model-select").then(
 });
 
 const DEFAULT_MODEL: ModelOption = {
-  value: "deepseek/deepseek-r1",
+  value: "accounts/fireworks/models/deepseek-r1",
   label: "DeepSeek R1",
   category: "Reasoning",
-  sourceGateway: "openrouter",
+  sourceGateway: "fireworks",
   developer: "DeepSeek",
   modalities: ["Text"],
 };
