@@ -93,6 +93,10 @@ describe('Utils', () => {
       expect(normalizeModelId('google/models/gemini-pro')).toBe('google/gemini-pro')
     })
 
+    it('should handle accounts/provider/models/model-name format', () => {
+      expect(normalizeModelId('accounts/fireworks/models/deepseek-r1')).toBe('fireworks/deepseek-r1')
+    })
+
     it('should handle simple model names', () => {
       expect(normalizeModelId('gpt-4')).toBe('gpt-4')
     })
