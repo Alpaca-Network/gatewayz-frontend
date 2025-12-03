@@ -25,10 +25,21 @@ describe('useChatStream routing logic', () => {
     // through a gateway that normalizes the format (OpenRouter, Together, etc.)
     // Models like 'openrouter/deepseek/deepseek-r1' have the gateway prefix and are normalized
     // Models like 'deepseek/deepseek-r1' (no gateway prefix or sourceGateway) need flexible route
+    //
+    // IMPORTANT: The model ID prefix is the authoritative source for routing decisions.
+    // - 'openrouter/deepseek/deepseek-r1' -> normalized by OpenRouter -> AI SDK
+    // - 'deepseek/deepseek-r1' -> direct DeepSeek API -> flexible completions (even if sourceGateway defaults to 'openrouter')
+    // - 'deepseek-r1' with sourceGateway='openrouter' -> normalized by OpenRouter -> AI SDK
     const normalizingGateways = ['openrouter', 'together', 'groq', 'cerebras', 'anyscale'];
-    const isNormalizedByGateway = normalizingGateways.includes(gatewayLower) ||
-                                   normalizingGateways.some(g => modelLower.startsWith(`${g}/`));
+    const hasExplicitNormalizingPrefix = normalizingGateways.some(g => modelLower.startsWith(`${g}/`));
+    const startsWithDeepSeek = modelLower.startsWith('deepseek/');
     const isDeepSeekModel = modelLower.includes('deepseek');
+
+    // Model is normalized if:
+    // 1. It explicitly starts with a normalizing gateway prefix (e.g., 'openrouter/deepseek/...'), OR
+    // 2. It doesn't start with 'deepseek/' but has a normalizing sourceGateway (e.g., 'deepseek-r1' with sourceGateway='openrouter')
+    const isNormalizedByGateway = hasExplicitNormalizingPrefix ||
+                                   (!startsWithDeepSeek && normalizingGateways.includes(gatewayLower));
     const isDeepSeekNeedingFlexible = isDeepSeekModel && !isNormalizedByGateway;
 
     return (isFireworksModel || isDeepSeekNeedingFlexible) ? 'completions' : 'ai-sdk';
@@ -98,12 +109,18 @@ describe('useChatStream routing logic', () => {
       expect(getRouteForModel('chutes/deepseek-r1')).toBe('completions');
     });
 
-    test('should route DeepSeek with non-deepseek sourceGateway to AI SDK endpoint', () => {
+    test('should route DeepSeek without deepseek/ prefix but with normalizing sourceGateway to AI SDK endpoint', () => {
+      // When model ID doesn't start with 'deepseek/' but has a normalizing gateway, use AI SDK
       expect(getRouteForModel('deepseek-r1', 'openrouter')).toBe('ai-sdk');
       expect(getRouteForModel('deepseek-chat', 'together')).toBe('ai-sdk');
-      // Even with deepseek/ prefix, explicit gateway should override
-      expect(getRouteForModel('deepseek/deepseek-r1', 'together')).toBe('ai-sdk');
-      expect(getRouteForModel('deepseek/deepseek-r1', 'openrouter')).toBe('ai-sdk');
+    });
+
+    test('should route DeepSeek with deepseek/ prefix to completions even with sourceGateway', () => {
+      // Model ID starting with 'deepseek/' indicates direct DeepSeek API access
+      // The sourceGateway might be defaulted, so we trust the model ID prefix
+      expect(getRouteForModel('deepseek/deepseek-r1', 'together')).toBe('completions');
+      expect(getRouteForModel('deepseek/deepseek-r1', 'openrouter')).toBe('completions');
+      expect(getRouteForModel('deepseek/deepseek-chat', 'groq')).toBe('completions');
     });
   });
 

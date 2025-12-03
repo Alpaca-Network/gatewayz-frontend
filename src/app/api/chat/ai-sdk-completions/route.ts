@@ -291,12 +291,25 @@ export async function POST(request: NextRequest) {
     // Check for Fireworks models (return Responses API format)
     const isFireworksModel = modelLower.includes('fireworks') || modelLower.includes('accounts/fireworks');
 
-    // Check for DeepSeek direct gateway (when using deepseek/ prefix without another gateway)
-    // DeepSeek through OpenRouter/Together normalizes the format, but direct DeepSeek API uses Responses format
-    const isDirectDeepSeekGateway = gatewayLower === 'deepseek' ||
-                                     (modelLower.startsWith('deepseek/') && !gatewayLower);
+    // Check for DeepSeek direct gateway
+    // DeepSeek through normalizing gateways (OpenRouter/Together) normalizes the format to OpenAI Chat Completions.
+    // Direct DeepSeek API (model starts with 'deepseek/') uses Responses API format which AI SDK can't parse.
+    //
+    // IMPORTANT: The model ID prefix is the authoritative source for routing decisions.
+    // - 'openrouter/deepseek/deepseek-r1' -> normalized by OpenRouter -> AI SDK can handle
+    // - 'deepseek/deepseek-r1' -> direct DeepSeek API -> needs flexible completions route
+    // - 'deepseek-r1' with gateway='openrouter' -> normalized -> AI SDK can handle
+    const normalizingGateways = ['openrouter', 'together', 'groq', 'cerebras', 'anyscale'];
+    const hasExplicitNormalizingPrefix = normalizingGateways.some(g => modelLower.startsWith(`${g}/`));
+    const startsWithDeepSeek = modelLower.startsWith('deepseek/');
+    const isDeepSeekModel = modelLower.includes('deepseek');
 
-    const needsFlexibleRoute = isFireworksModel || isDirectDeepSeekGateway;
+    // Model needs flexible route if it's DeepSeek and NOT normalized
+    const isNormalizedByGateway = hasExplicitNormalizingPrefix ||
+                                   (!startsWithDeepSeek && normalizingGateways.includes(gatewayLower));
+    const isDeepSeekNeedingFlexible = isDeepSeekModel && !isNormalizedByGateway;
+
+    const needsFlexibleRoute = isFireworksModel || isDeepSeekNeedingFlexible;
 
     if (needsFlexibleRoute) {
       const reason = isFireworksModel ? 'fireworks-format' : 'deepseek-direct-format';

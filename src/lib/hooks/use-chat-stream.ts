@@ -138,10 +138,21 @@ export function useChatStream() {
         // through a gateway that normalizes the format (OpenRouter, Together, etc.)
         // Models like 'openrouter/deepseek/deepseek-r1' have the gateway prefix and are normalized
         // Models like 'deepseek/deepseek-r1' (no gateway prefix or sourceGateway) need flexible route
+        //
+        // IMPORTANT: The model ID prefix is the authoritative source for routing decisions.
+        // - 'openrouter/deepseek/deepseek-r1' -> normalized by OpenRouter -> AI SDK
+        // - 'deepseek/deepseek-r1' -> direct DeepSeek API -> flexible completions (even if sourceGateway defaults to 'openrouter')
+        // - 'deepseek-r1' with sourceGateway='openrouter' -> normalized by OpenRouter -> AI SDK
         const normalizingGateways = ['openrouter', 'together', 'groq', 'cerebras', 'anyscale'];
-        const isNormalizedByGateway = normalizingGateways.includes(gatewayLower) ||
-                                       normalizingGateways.some(g => modelLower.startsWith(`${g}/`));
+        const hasExplicitNormalizingPrefix = normalizingGateways.some(g => modelLower.startsWith(`${g}/`));
+        const startsWithDeepSeek = modelLower.startsWith('deepseek/');
         const isDeepSeekModel = modelLower.includes('deepseek');
+
+        // Model is normalized if:
+        // 1. It explicitly starts with a normalizing gateway prefix (e.g., 'openrouter/deepseek/...'), OR
+        // 2. It doesn't start with 'deepseek/' but has a normalizing sourceGateway (e.g., 'deepseek-r1' with sourceGateway='openrouter')
+        const isNormalizedByGateway = hasExplicitNormalizingPrefix ||
+                                       (!startsWithDeepSeek && normalizingGateways.includes(gatewayLower));
         const isDeepSeekNeedingFlexible = isDeepSeekModel && !isNormalizedByGateway;
 
         // Use regular completions route for models with non-standard formats
