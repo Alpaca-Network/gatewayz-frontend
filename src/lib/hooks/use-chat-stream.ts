@@ -117,20 +117,30 @@ export function useChatStream() {
         }
 
         // Determine which route to use based on model/provider
-        // Fireworks models return a non-OpenAI format that the AI SDK can't parse,
+        // Some providers return non-standard OpenAI formats that the AI SDK can't parse,
         // so we route them through the regular completions endpoint which has
         // more flexible format handling in streaming.ts
         const modelLower = model.value.toLowerCase();
+        const gatewayLower = model.sourceGateway?.toLowerCase() || '';
+
+        // Models/providers that need the flexible completions route:
+        // - Fireworks: returns non-OpenAI format
+        // - DeepSeek: returns OpenAI Responses API format (object: "response.chunk")
+        //   instead of Chat Completions format (choices[].delta) which AI SDK expects
         const isFireworksModel = modelLower.includes('fireworks') ||
                                   modelLower.includes('accounts/fireworks') ||
-                                  (model.sourceGateway?.toLowerCase() === 'fireworks');
+                                  gatewayLower === 'fireworks';
 
-        // Use regular completions route for Fireworks, AI SDK route for others
-        const url = isFireworksModel
+        const isDeepSeekModel = modelLower.includes('deepseek') ||
+                                 gatewayLower === 'deepseek';
+
+        // Use regular completions route for models with non-standard formats
+        const useFlexibleRoute = isFireworksModel || isDeepSeekModel;
+        const url = useFlexibleRoute
             ? `/api/chat/completions?session_id=${sessionId}`
             : `/api/chat/ai-sdk-completions?session_id=${sessionId}`;
 
-        console.log('[Chat Stream] Using', isFireworksModel ? 'completions' : 'AI SDK', 'route for model:', model.value);
+        console.log('[Chat Stream] Using', useFlexibleRoute ? 'completions (flexible)' : 'AI SDK', 'route for model:', model.value);
 
         try {
             // 4. Stream Loop
