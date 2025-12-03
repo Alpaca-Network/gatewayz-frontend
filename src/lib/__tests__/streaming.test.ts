@@ -578,4 +578,159 @@ describe('streamChatResponse', () => {
       expect(contentChunks[0].content).toBe('Response');
     });
   });
+
+  describe('Fireworks Format Handling', () => {
+    test('should handle Fireworks response.chunk format with output array', async () => {
+      // Fireworks uses a response.chunk format with output array
+      const mockChunks = [
+        'data: {"id":"abc123","object":"response.chunk","created":1234567890,"model":"accounts/fireworks/models/deepseek-r1","output":[{"index":0,"role":"assistant"}]}\n\n',
+        'data: {"id":"abc123","object":"response.chunk","created":1234567890,"model":"accounts/fireworks/models/deepseek-r1","output":[{"index":0,"content":"The fastest"}]}\n\n',
+        'data: {"id":"abc123","object":"response.chunk","created":1234567890,"model":"accounts/fireworks/models/deepseek-r1","output":[{"index":0,"content":" animal"}]}\n\n',
+        'data: {"id":"abc123","object":"response.chunk","created":1234567890,"model":"accounts/fireworks/models/deepseek-r1","output":[{"index":0,"content":" is the cheetah.","finish_reason":"stop"}]}\n\n',
+        'data: [DONE]\n\n',
+      ];
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Map([['content-type', 'text/event-stream']]),
+        body: createMockStream(mockChunks),
+      });
+
+      const chunks = await collectChunks(
+        streamChatResponse(
+          '/api/chat/completions',
+          'test-key',
+          { model: 'accounts/fireworks/models/deepseek-r1', messages: [], stream: true }
+        )
+      );
+
+      const contentChunks = chunks.filter(c => c.content);
+      expect(contentChunks.length).toBe(3);
+      expect(contentChunks[0].content).toBe('The fastest');
+      expect(contentChunks[1].content).toBe(' animal');
+      expect(contentChunks[2].content).toBe(' is the cheetah.');
+
+      // Last content chunk should also have done flag due to finish_reason
+      expect(contentChunks[2].done).toBe(true);
+    });
+
+    test('should handle Fireworks output with nested delta object', async () => {
+      // Some Fireworks models may nest content in a delta object within output
+      const mockChunks = [
+        'data: {"output":[{"index":0,"delta":{"content":"Hello from Fireworks"}}]}\n\n',
+        'data: {"output":[{"index":0,"delta":{"content":"!","finish_reason":"stop"}}]}\n\n',
+        'data: [DONE]\n\n',
+      ];
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Map([['content-type', 'text/event-stream']]),
+        body: createMockStream(mockChunks),
+      });
+
+      const chunks = await collectChunks(
+        streamChatResponse(
+          '/api/chat/completions',
+          'test-key',
+          { model: 'fireworks/deepseek-r1', messages: [], stream: true }
+        )
+      );
+
+      const contentChunks = chunks.filter(c => c.content);
+      expect(contentChunks.length).toBe(2);
+      expect(contentChunks[0].content).toBe('Hello from Fireworks');
+      expect(contentChunks[1].content).toBe('!');
+    });
+
+    test('should handle Fireworks output with text field', async () => {
+      const mockChunks = [
+        'data: {"output":[{"index":0,"text":"Response text"}]}\n\n',
+        'data: {"output":[{"index":0,"finish_reason":"stop"}]}\n\n',
+        'data: [DONE]\n\n',
+      ];
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Map([['content-type', 'text/event-stream']]),
+        body: createMockStream(mockChunks),
+      });
+
+      const chunks = await collectChunks(
+        streamChatResponse(
+          '/api/chat/completions',
+          'test-key',
+          { model: 'fireworks/model', messages: [], stream: true }
+        )
+      );
+
+      const contentChunks = chunks.filter(c => c.content);
+      expect(contentChunks.length).toBe(1);
+      expect(contentChunks[0].content).toBe('Response text');
+    });
+
+    test('should handle Fireworks output with reasoning_content', async () => {
+      // DeepSeek R1 on Fireworks may include reasoning_content
+      const mockChunks = [
+        'data: {"output":[{"index":0,"reasoning_content":"Let me think about this..."}]}\n\n',
+        'data: {"output":[{"index":0,"content":"The answer is 42.","finish_reason":"stop"}]}\n\n',
+        'data: [DONE]\n\n',
+      ];
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Map([['content-type', 'text/event-stream']]),
+        body: createMockStream(mockChunks),
+      });
+
+      const chunks = await collectChunks(
+        streamChatResponse(
+          '/api/chat/completions',
+          'test-key',
+          { model: 'accounts/fireworks/models/deepseek-r1-0528', messages: [], stream: true }
+        )
+      );
+
+      const reasoningChunks = chunks.filter(c => c.reasoning);
+      expect(reasoningChunks.length).toBe(1);
+      expect(reasoningChunks[0].reasoning).toBe('Let me think about this...');
+
+      const contentChunks = chunks.filter(c => c.content);
+      expect(contentChunks.length).toBe(1);
+      expect(contentChunks[0].content).toBe('The answer is 42.');
+    });
+
+    test('should skip Fireworks chunks with only role (no content)', async () => {
+      // Initial chunks often only contain role, these should be skipped
+      const mockChunks = [
+        'data: {"output":[{"index":0,"role":"assistant"}]}\n\n',
+        'data: {"output":[{"index":0,"role":"assistant"}]}\n\n',
+        'data: {"output":[{"index":0,"content":"Actual content"}]}\n\n',
+        'data: [DONE]\n\n',
+      ];
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Map([['content-type', 'text/event-stream']]),
+        body: createMockStream(mockChunks),
+      });
+
+      const chunks = await collectChunks(
+        streamChatResponse(
+          '/api/chat/completions',
+          'test-key',
+          { model: 'fireworks/model', messages: [], stream: true }
+        )
+      );
+
+      // Should only have one content chunk, role-only chunks should be skipped
+      const contentChunks = chunks.filter(c => c.content);
+      expect(contentChunks.length).toBe(1);
+      expect(contentChunks[0].content).toBe('Actual content');
+    });
+  });
 });
