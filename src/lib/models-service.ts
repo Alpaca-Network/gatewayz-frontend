@@ -396,6 +396,18 @@ function normalizeModel(model: any, gateway: string): any {
   };
 }
 
+// Helper function to determine the base URL for API requests
+// On client-side (browser), use Next.js API route to avoid CORS issues
+// On server-side, use direct backend URL for better performance
+function getApiBaseUrl(): string {
+  if (typeof window !== 'undefined') {
+    // Client-side: use Next.js API route to proxy requests (avoids CORS)
+    return '';
+  }
+  // Server-side: use direct backend URL
+  return API_BASE_URL;
+}
+
 // Helper function to fetch models from a specific gateway
 async function fetchModelsFromGateway(gateway: string, limit?: number): Promise<any[]> {
   const allModels: any[] = [];
@@ -408,16 +420,24 @@ async function fetchModelsFromGateway(gateway: string, limit?: number): Promise<
   let hasMore = true;
   let pageCount = 0;
 
+  // Determine base URL based on runtime environment
+  const baseUrl = getApiBaseUrl();
+  const isClientSide = typeof window !== 'undefined';
+
   while (hasMore && pageCount < 10) {
     pageCount++;
     const offsetParam = offset > 0 ? `&offset=${offset}` : '';
     const limitParam = `limit=${requestLimit}${offsetParam}`;
 
-    // Try both v1/models and /models endpoints using Promise.race for fast fallback
-    const urls = [
-      `${API_BASE_URL}/v1/models?gateway=${gateway}&${limitParam}`,
-      `${API_BASE_URL}/models?gateway=${gateway}&${limitParam}`
-    ];
+    // Build URLs based on environment
+    // Client-side: use Next.js API route (/api/models) to avoid CORS
+    // Server-side: try both v1/models and /models endpoints using Promise.race for fast fallback
+    const urls = isClientSide
+      ? [`/api/models?gateway=${gateway}&${limitParam}`]
+      : [
+          `${baseUrl}/v1/models?gateway=${gateway}&${limitParam}`,
+          `${baseUrl}/models?gateway=${gateway}&${limitParam}`
+        ];
 
     const maxRetries = 3;
     let retryCount = 0;
@@ -434,19 +454,24 @@ async function fetchModelsFromGateway(gateway: string, limit?: number): Promise<
 
         const headers = buildHeaders(gateway);
 
-        // Try both endpoints in parallel, use first successful response
+        // Build fetch options - include Next.js caching only on server-side
+        const fetchOptions: RequestInit = {
+          method: 'GET',
+          headers,
+          signal: AbortSignal.timeout(timeoutMs)
+        };
+
+        // Add Next.js specific caching options only on server-side
+        if (!isClientSide) {
+          (fetchOptions as any).next = {
+            revalidate: 300,
+            tags: [`models:gateway:${gateway}`, 'models:all']
+          };
+        }
+
+        // Try endpoints in parallel (server-side) or single endpoint (client-side)
         const response = await Promise.race(
-          urls.map((url) =>
-            fetch(url, {
-              method: 'GET',
-              headers,
-              next: {
-                revalidate: 300,
-                tags: [`models:gateway:${gateway}`, 'models:all']
-              },
-              signal: AbortSignal.timeout(timeoutMs)
-            })
-          )
+          urls.map((url) => fetch(url, fetchOptions))
         );
 
         // Handle rate limit errors with retry
