@@ -22,7 +22,9 @@ export async function POST(request: NextRequest) {
     const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout for backend auth
 
     try {
-      // Wrap fetch in retry logic for 502/503/504 errors
+      // Wrap fetch in retry logic for 429/502/503/504 errors
+      // - 429: Rate limiting from backend
+      // - 502/503/504: Transient server errors
       // Increased retry delay to give backend time to recover under load
       const response = await retryFetch(
         () =>
@@ -39,7 +41,7 @@ export async function POST(request: NextRequest) {
           initialDelayMs: 1000, // Increased from 500ms to give backend more recovery time
           maxDelayMs: 10000, // Increased from 5s to 10s
           backoffMultiplier: 2,
-          retryableStatuses: [502, 503, 504],
+          retryableStatuses: [429, 502, 503, 504],
         }
       );
 

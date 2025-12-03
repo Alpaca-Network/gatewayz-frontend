@@ -13,7 +13,11 @@ export interface RetryOptions {
 }
 
 /**
- * Default retry configuration for 502/503/504 errors
+ * Default retry configuration for 429/502/503/504 errors
+ * - 429: Too Many Requests (rate limiting)
+ * - 502: Bad Gateway
+ * - 503: Service Unavailable
+ * - 504: Gateway Timeout
  */
 export const DEFAULT_RETRY_OPTIONS: Required<RetryOptions> = {
   maxRetries: 3,
@@ -21,7 +25,7 @@ export const DEFAULT_RETRY_OPTIONS: Required<RetryOptions> = {
   maxDelayMs: 10000,
   backoffMultiplier: 2,
   jitterFactor: 0.1,
-  retryableStatuses: [502, 503, 504],
+  retryableStatuses: [429, 502, 503, 504],
 };
 
 /**
@@ -29,14 +33,37 @@ export const DEFAULT_RETRY_OPTIONS: Required<RetryOptions> = {
  */
 function calculateBackoffDelay(
   attempt: number,
-  options: Required<RetryOptions>
+  options: Required<RetryOptions>,
+  retryAfterHeader?: string | null
 ): number {
-  const baseDelay = Math.min(
+  let baseDelay = Math.min(
     options.initialDelayMs * Math.pow(options.backoffMultiplier, attempt),
     options.maxDelayMs
   );
 
-  // Add jitter: ±10% of base delay
+  // Honor Retry-After header if present (for 429 responses)
+  // Cap at maxDelayMs to prevent unexpectedly long waits from large Retry-After values
+  if (retryAfterHeader) {
+    const numericRetry = Number(retryAfterHeader);
+    if (!Number.isNaN(numericRetry) && numericRetry > 0) {
+      // Retry-After is in seconds, convert to milliseconds and cap at maxDelayMs
+      const retryDelayMs = Math.min(numericRetry * 1000, options.maxDelayMs);
+      baseDelay = Math.max(baseDelay, retryDelayMs);
+    } else {
+      // Try parsing as HTTP date
+      const retryDate = Date.parse(retryAfterHeader);
+      if (!Number.isNaN(retryDate)) {
+        const headerWait = retryDate - Date.now();
+        if (headerWait > 0) {
+          // Cap at maxDelayMs to prevent unexpectedly long waits
+          const cappedWait = Math.min(headerWait, options.maxDelayMs);
+          baseDelay = Math.max(baseDelay, cappedWait);
+        }
+      }
+    }
+  }
+
+  // Add jitter: ±10% of base delay (prevents thundering herd)
   const jitter = baseDelay * options.jitterFactor * (Math.random() * 2 - 1);
   const delayMs = Math.max(0, baseDelay + jitter);
 
@@ -77,12 +104,12 @@ export async function retryFetch(
       const response = await fn();
       lastResponse = response;
 
-      // Don't retry on success or client errors (4xx)
-      if (response.ok || (response.status >= 400 && response.status < 500)) {
+      // Don't retry on success
+      if (response.ok) {
         return response;
       }
 
-      // Check if status is retryable
+      // Check if status is retryable (handles 429, 502, 503, 504)
       if (!isRetryableStatus(response.status, config.retryableStatuses)) {
         return response;
       }
@@ -95,8 +122,13 @@ export async function retryFetch(
         return response;
       }
 
-      // Calculate delay and retry
-      const delayMs = calculateBackoffDelay(attempt, config);
+      // Get Retry-After header for 429 responses
+      const retryAfterHeader = response.status === 429
+        ? response.headers.get('retry-after')
+        : null;
+
+      // Calculate delay and retry (respects Retry-After header for 429)
+      const delayMs = calculateBackoffDelay(attempt, config, retryAfterHeader);
       console.warn(
         `[retry] Retrying after ${response.status} error (attempt ${attempt + 1}/${config.maxRetries}, delay: ${delayMs}ms)`
       );

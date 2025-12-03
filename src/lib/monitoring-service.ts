@@ -7,6 +7,7 @@
  * - Optional authentication via Bearer token
  * - Automatic fallback to unauthenticated requests on 401 errors
  * - Rate limit handling with exponential backoff (429 errors)
+ * - Gateway/server error handling with retry (502/503/504 errors)
  * - Type-safe request/response handling
  * - Consistent error handling
  *
@@ -21,8 +22,8 @@
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
 
-// Rate limit retry configuration
-const MAX_RATE_LIMIT_RETRIES = 3;
+// Retry configuration for rate limits (429) and server errors (502/503/504)
+const MAX_RETRIES = 3;
 const BASE_RETRY_DELAY_MS = 1000;
 const MAX_RETRY_DELAY_MS = 10000;
 
@@ -42,11 +43,26 @@ function calculateRetryDelay(
     MAX_RETRY_DELAY_MS
   );
 
-  // Honor Retry-After header if present
+  // Honor Retry-After header if present, but cap at MAX_RETRY_DELAY_MS
+  // to prevent unexpectedly long waits from large server-provided values
+  // Supports both numeric seconds and HTTP-date format per RFC 7231
   if (retryAfterHeader) {
     const numericRetry = Number(retryAfterHeader);
     if (!Number.isNaN(numericRetry) && numericRetry > 0) {
-      waitTime = Math.max(waitTime, numericRetry * 1000);
+      // Retry-After is in seconds, convert to milliseconds and cap
+      const retryDelayMs = Math.min(numericRetry * 1000, MAX_RETRY_DELAY_MS);
+      waitTime = Math.max(waitTime, retryDelayMs);
+    } else {
+      // Try parsing as HTTP-date format (e.g., "Wed, 21 Oct 2015 07:28:00 GMT")
+      const retryDate = Date.parse(retryAfterHeader);
+      if (!Number.isNaN(retryDate)) {
+        const headerWait = retryDate - Date.now();
+        if (headerWait > 0) {
+          // Cap at MAX_RETRY_DELAY_MS to prevent unexpectedly long waits
+          const cappedWait = Math.min(headerWait, MAX_RETRY_DELAY_MS);
+          waitTime = Math.max(waitTime, cappedWait);
+        }
+      }
     }
   }
 
@@ -58,7 +74,7 @@ function calculateRetryDelay(
 interface FetchOptions {
   apiKey?: string;
   retryWithoutAuth?: boolean;
-  rateLimitRetryCount?: number;
+  retryCount?: number;
 }
 
 /**
@@ -73,7 +89,7 @@ async function fetchWithOptionalAuth<T>(
   url: string,
   options: FetchOptions = {}
 ): Promise<T> {
-  const { apiKey, retryWithoutAuth = true, rateLimitRetryCount = 0 } = options;
+  const { apiKey, retryWithoutAuth = true, retryCount = 0 } = options;
 
   const headers: HeadersInit = {};
 
@@ -87,13 +103,13 @@ async function fetchWithOptionalAuth<T>(
 
     // Handle 429 - Rate limit with retry
     if (response.status === 429) {
-      if (rateLimitRetryCount < MAX_RATE_LIMIT_RETRIES) {
+      if (retryCount < MAX_RETRIES) {
         const retryAfter = response.headers.get('retry-after');
-        const delayMs = calculateRetryDelay(rateLimitRetryCount, retryAfter);
+        const delayMs = calculateRetryDelay(retryCount, retryAfter);
 
         console.warn(
           `[monitoring-service] Rate limited (429), retrying in ${delayMs}ms ` +
-          `(attempt ${rateLimitRetryCount + 1}/${MAX_RATE_LIMIT_RETRIES})`
+          `(attempt ${retryCount + 1}/${MAX_RETRIES})`
         );
 
         await sleep(delayMs);
@@ -102,13 +118,48 @@ async function fetchWithOptionalAuth<T>(
         return fetchWithOptionalAuth<T>(url, {
           apiKey,
           retryWithoutAuth,
-          rateLimitRetryCount: rateLimitRetryCount + 1
+          retryCount: retryCount + 1
         });
       }
 
       // Max retries exceeded
       console.error('[monitoring-service] Rate limit exceeded after max retries');
       throw new Error('Rate limit exceeded. Please try again later.');
+    }
+
+    // Handle 502/503/504 - Gateway/Server errors with retry
+    if (response.status === 502 || response.status === 503 || response.status === 504) {
+      const statusName = response.status === 504 ? 'Gateway Timeout' :
+                         response.status === 503 ? 'Service Unavailable' : 'Bad Gateway';
+
+      if (retryCount < MAX_RETRIES) {
+        // Use longer delays for server errors (they often indicate overload)
+        const baseDelay = BASE_RETRY_DELAY_MS * 2; // Start with 2 seconds for server errors
+        const waitTime = Math.min(
+          baseDelay * Math.pow(2, retryCount),
+          MAX_RETRY_DELAY_MS
+        );
+        const jitter = Math.floor(Math.random() * 500);
+        const delayMs = waitTime + jitter;
+
+        console.warn(
+          `[monitoring-service] ${statusName} (${response.status}), retrying in ${delayMs}ms ` +
+          `(attempt ${retryCount + 1}/${MAX_RETRIES})`
+        );
+
+        await sleep(delayMs);
+
+        // Retry with incremented retry count
+        return fetchWithOptionalAuth<T>(url, {
+          apiKey,
+          retryWithoutAuth,
+          retryCount: retryCount + 1
+        });
+      }
+
+      // Max retries exceeded
+      console.error(`[monitoring-service] ${statusName} error after max retries`);
+      throw new Error(`${statusName}. The service is temporarily unavailable. Please try again later.`);
     }
 
     // Handle 401 - Invalid or expired API key
@@ -119,7 +170,7 @@ async function fetchWithOptionalAuth<T>(
       return fetchWithOptionalAuth<T>(url, {
         apiKey: undefined,
         retryWithoutAuth: false, // Prevent infinite retry loop
-        rateLimitRetryCount: 0 // Reset rate limit counter for new auth state
+        retryCount: 0 // Reset retry counter for new auth state
       });
     }
 
