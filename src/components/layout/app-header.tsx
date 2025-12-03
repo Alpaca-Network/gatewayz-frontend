@@ -29,13 +29,14 @@ const getWalletAddress = (user: any) => {
 };
 
 export function AppHeader() {
-  const { privyUser: user, login, logout, status } = useGatewayzAuth();
+  const { privyUser: user, login, logout, status, authTiming, error: authError } = useGatewayzAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { toast } = useToast();
   const pathname = usePathname();
   const walletAddress = useMemo(() => getWalletAddress(user), [user]);
   const isAuthenticating = status === "authenticating";
   const authToastShownRef = useRef(false);
+  const slowAuthToastShownRef = useRef(false);
 
   // Show toast when authentication starts and completes
   // Skip showing toast on chat page to avoid clutter
@@ -53,19 +54,44 @@ export function AppHeader() {
       });
     } else if (status === "authenticated") {
       authToastShownRef.current = false;
+      slowAuthToastShownRef.current = false;
       toast({
         title: "Signed in successfully",
         description: "Welcome back!",
       });
     } else if (status === "error") {
       authToastShownRef.current = false;
+      slowAuthToastShownRef.current = false;
       toast({
         title: "Sign in failed",
-        description: "Please try again",
+        description: authError || "Please try again",
         variant: "destructive",
       });
+    } else if (status === "unauthenticated") {
+      // Reset refs when user cancels login or Privy state becomes invalid
+      // This ensures subsequent sign-in attempts will show toasts correctly
+      authToastShownRef.current = false;
+      slowAuthToastShownRef.current = false;
     }
-  }, [status, toast, pathname]);
+  }, [status, toast, pathname, authError]);
+
+  // Show additional toast when auth is taking too long
+  useEffect(() => {
+    if (pathname === "/chat") {
+      return;
+    }
+
+    // Show slow auth warning after 10 seconds
+    if (status === "authenticating" && authTiming.elapsedMs > 10000 && !slowAuthToastShownRef.current) {
+      slowAuthToastShownRef.current = true;
+      toast({
+        title: "Backend is slow",
+        description: authTiming.retryCount > 1
+          ? `Retry attempt ${authTiming.retryCount} of ${authTiming.maxRetries}...`
+          : "Please wait while we connect to our servers...",
+      });
+    }
+  }, [status, authTiming, toast, pathname]);
 
   const formatAddress = (address: string) => {
     if (!address) return '';
@@ -393,7 +419,13 @@ export function AppHeader() {
                           setMobileMenuOpen(false);
                         }}
                       >
-                        {isAuthenticating ? "Connecting..." : "Sign In"}
+                        {isAuthenticating
+                          ? authTiming.isSlowAuth
+                            ? authTiming.retryCount > 1
+                              ? `Retrying (${authTiming.retryCount}/${authTiming.maxRetries})...`
+                              : "Backend slow, please wait..."
+                            : "Connecting..."
+                          : "Sign In"}
                       </Button>
                     </>
                   )}
