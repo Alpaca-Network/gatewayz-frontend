@@ -424,13 +424,19 @@ async function fetchModelsFromGateway(gateway: string, limit?: number): Promise<
   const baseUrl = getApiBaseUrl();
   const isClientSide = typeof window !== 'undefined';
 
-  while (hasMore && pageCount < 10) {
+  // On client-side, pagination is handled by the server (via /api/models route)
+  // so we only make a single request without offset. The server-side getModelsForGateway
+  // handles all pagination internally before returning results.
+  const maxPages = isClientSide ? 1 : 10;
+
+  while (hasMore && pageCount < maxPages) {
     pageCount++;
-    const offsetParam = offset > 0 ? `&offset=${offset}` : '';
+    // Only include offset for server-side requests (client requests don't paginate)
+    const offsetParam = (!isClientSide && offset > 0) ? `&offset=${offset}` : '';
     const limitParam = `limit=${requestLimit}${offsetParam}`;
 
     // Build URLs based on environment
-    // Client-side: use Next.js API route (/api/models) to avoid CORS
+    // Client-side: use Next.js API route (/api/models) to avoid CORS - single request, no pagination
     // Server-side: try both v1/models and /models endpoints using Promise.race for fast fallback
     const urls = isClientSide
       ? [`/api/models?gateway=${gateway}&${limitParam}`]
