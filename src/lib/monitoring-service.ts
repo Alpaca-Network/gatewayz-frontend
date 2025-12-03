@@ -43,11 +43,13 @@ function calculateRetryDelay(
     MAX_RETRY_DELAY_MS
   );
 
-  // Honor Retry-After header if present
+  // Honor Retry-After header if present, but cap at MAX_RETRY_DELAY_MS
+  // to prevent unexpectedly long waits from large server-provided values
   if (retryAfterHeader) {
     const numericRetry = Number(retryAfterHeader);
     if (!Number.isNaN(numericRetry) && numericRetry > 0) {
-      waitTime = Math.max(waitTime, numericRetry * 1000);
+      const retryDelayMs = Math.min(numericRetry * 1000, MAX_RETRY_DELAY_MS);
+      waitTime = Math.max(waitTime, retryDelayMs);
     }
   }
 

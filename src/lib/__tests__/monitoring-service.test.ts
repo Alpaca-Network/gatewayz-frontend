@@ -90,6 +90,50 @@ describe('Monitoring Service', () => {
         expect(result).toEqual({ data: 'success' });
         expect(mockFetch).toHaveBeenCalledTimes(2);
       });
+
+      it('should cap Retry-After at MAX_RETRY_DELAY_MS to prevent long waits', async () => {
+        // Large Retry-After value (1 hour = 3600 seconds)
+        const headers = new Headers();
+        headers.set('retry-after', '3600');
+
+        const mockResponse429 = {
+          ok: false,
+          status: 429,
+          headers,
+        };
+
+        const mockResponse200 = {
+          ok: true,
+          status: 200,
+          json: async () => ({ data: 'success' }),
+        };
+
+        mockFetch
+          .mockResolvedValueOnce(mockResponse429)
+          .mockResolvedValueOnce(mockResponse200);
+
+        // Track setTimeout calls to verify delay is capped
+        const setTimeoutSpy = jest.spyOn(global, 'setTimeout');
+
+        const promise = monitoringService.getHealthStats();
+        await jest.runAllTimersAsync();
+        const result = await promise;
+
+        expect(result).toEqual({ data: 'success' });
+
+        // Find the retry delay setTimeout call (should be capped at ~10000ms + jitter, not 3600000ms)
+        // MAX_RETRY_DELAY_MS is 10000, plus up to 500ms jitter
+        const retryCall = setTimeoutSpy.mock.calls.find(
+          call => typeof call[1] === 'number' && call[1] > 500
+        );
+        expect(retryCall).toBeDefined();
+        // Delay should be at most MAX_RETRY_DELAY_MS (10000) + jitter (500) = 10500ms
+        // NOT 3600000ms (1 hour)
+        expect(retryCall![1]).toBeLessThanOrEqual(10500);
+        expect(retryCall![1]).toBeLessThan(3600000);
+
+        setTimeoutSpy.mockRestore();
+      });
     });
 
     describe('502/503/504 Server Error Handling', () => {
