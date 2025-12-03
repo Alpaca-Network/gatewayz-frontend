@@ -124,8 +124,10 @@ export function useChatStream() {
         const gatewayLower = model.sourceGateway?.toLowerCase() || '';
 
         // Models/providers that need the flexible completions route:
-        // - Fireworks: returns non-OpenAI format
-        // - DeepSeek (direct gateway only): returns OpenAI Responses API format (object: "response.chunk")
+        // - Fireworks: returns non-OpenAI format (object: "response.chunk" with output array)
+        //   This includes any model served through Fireworks gateway, regardless of original provider
+        //   Examples: 'accounts/fireworks/models/deepseek-r1-0528', 'fireworks/llama-3.3-70b'
+        // - DeepSeek (direct gateway only): returns OpenAI Responses API format
         //   instead of Chat Completions format (choices[].delta) which AI SDK expects
         //   Note: DeepSeek through OpenRouter/Together/etc. is normalized by those gateways, so they use AI SDK
         const isFireworksModel = modelLower.includes('fireworks') ||

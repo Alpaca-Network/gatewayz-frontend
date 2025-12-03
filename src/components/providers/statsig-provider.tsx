@@ -123,6 +123,8 @@ function StatsigProviderInternal({ children }: { children: React.ReactNode }) {
   // Includes auto-capture and session replay plugins for automatic event tracking
   // Only initialize if SDK key is present
   // disableStorage: false enables localStorage caching which persists feature flags across sessions
+  // Note: The 429 rate limit errors on /monitoring endpoint are from Statsig's servers
+  // and are handled gracefully by the SDK - they don't affect application functionality
   const { client } = useClientAsyncInit(
     sdkKey || 'disabled',
     { userID: userId },
