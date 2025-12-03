@@ -75,7 +75,13 @@ export function ErrorSuppressor() {
 
     // Global unhandled rejection handler for promise-based extension errors
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
-      const reason = event.reason?.message || String(event.reason) || '';
+      let reason = '';
+      try {
+        reason = event.reason?.message || `${event.reason}` || '';
+      } catch {
+        // Handle cases like Symbol values that can't be converted
+        return;
+      }
 
       // Suppress message channel errors from extensions
       if (reason.includes('message channel closed')) {
