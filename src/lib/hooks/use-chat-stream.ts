@@ -116,11 +116,21 @@ export function useChatStream() {
              else if (modelValue.includes('deepinfra') || modelValue.includes('wizardlm')) requestBody.portkey_provider = 'deepinfra';
         }
 
-        // Use AI SDK route for all models
-        // This enables proper streaming and chain-of-thought support via Vercel AI SDK
-        const url = `/api/chat/ai-sdk-completions?session_id=${sessionId}`;
+        // Determine which route to use based on model/provider
+        // Fireworks models return a non-OpenAI format that the AI SDK can't parse,
+        // so we route them through the regular completions endpoint which has
+        // more flexible format handling in streaming.ts
+        const modelLower = model.value.toLowerCase();
+        const isFireworksModel = modelLower.includes('fireworks') ||
+                                  modelLower.includes('accounts/fireworks') ||
+                                  (model.sourceGateway?.toLowerCase() === 'fireworks');
 
-        console.log('[Chat Stream] Using AI SDK route for model:', model.value);
+        // Use regular completions route for Fireworks, AI SDK route for others
+        const url = isFireworksModel
+            ? `/api/chat/completions?session_id=${sessionId}`
+            : `/api/chat/ai-sdk-completions?session_id=${sessionId}`;
+
+        console.log('[Chat Stream] Using', isFireworksModel ? 'completions' : 'AI SDK', 'route for model:', model.value);
 
         try {
             // 4. Stream Loop

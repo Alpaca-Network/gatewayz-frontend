@@ -598,17 +598,22 @@ export async function* streamChatResponse(
 
             let chunk: StreamChunk | null = null;
 
-            // Handle backend response format with "output" array
+            // Handle backend response format with "output" array (Fireworks, etc.)
             const output = data.output?.[0];
             if (output && typeof output === 'object') {
               const outputRecord = output as Record<string, unknown>;
-              const contentText = toPlainText(outputRecord.content ?? outputRecord.output_text);
+
+              // Fireworks may nest content in a "delta" object within output
+              const deltaInOutput = outputRecord.delta as Record<string, unknown> | undefined;
+              const contentSource = deltaInOutput || outputRecord;
+
+              const contentText = toPlainText(contentSource.content ?? contentSource.output_text ?? contentSource.text);
               const reasoningText =
-                toPlainText(outputRecord.reasoning_content) ||
-                toPlainText(outputRecord.reasoning) ||
-                toPlainText(outputRecord.thinking) ||
-                toPlainText(outputRecord.analysis);
-              const finishReason = outputRecord.finish_reason;
+                toPlainText(contentSource.reasoning_content) ||
+                toPlainText(contentSource.reasoning) ||
+                toPlainText(contentSource.thinking) ||
+                toPlainText(contentSource.analysis);
+              const finishReason = outputRecord.finish_reason || (deltaInOutput as Record<string, unknown>)?.finish_reason;
 
               // Log when reasoning fields are present
               if (outputRecord.reasoning || outputRecord.thinking || outputRecord.analysis) {
