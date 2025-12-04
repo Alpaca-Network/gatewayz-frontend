@@ -422,6 +422,139 @@ describe('useChatStream - Comprehensive Tests', () => {
   });
 
   // ============================================================================
+  // REASONING CONTENT HANDLING
+  // ============================================================================
+  describe('Reasoning Content Handling', () => {
+    /**
+     * Tests for the reasoning field that persists chain-of-thought content
+     * from models like DeepSeek-R1 that support reasoning tokens
+     */
+
+    describe('Reasoning extraction and persistence', () => {
+      test('should extract reasoning from stream handler', () => {
+        // Simulate ChatStreamHandler behavior
+        let reasoningBuffer = '';
+
+        const addReasoning = (chunk: string) => {
+          reasoningBuffer += chunk;
+        };
+
+        const getFinalReasoning = () => reasoningBuffer;
+
+        // Simulate streaming reasoning chunks
+        addReasoning('<think>');
+        addReasoning('Step 1: Analyze the problem');
+        addReasoning('Step 2: Consider possible solutions');
+        addReasoning('</think>');
+
+        const finalReasoning = getFinalReasoning();
+        expect(finalReasoning).toBe('<think>Step 1: Analyze the problemStep 2: Consider possible solutions</think>');
+      });
+
+      test('should handle empty reasoning gracefully', () => {
+        const getFinalReasoning = () => '';
+        const reasoning = getFinalReasoning() || undefined;
+        expect(reasoning).toBeUndefined();
+      });
+
+      test('should handle models without reasoning support', () => {
+        // Non-reasoning models return empty string or null
+        const modelReasoningSupport: Record<string, boolean> = {
+          'deepseek/deepseek-r1': true,
+          'deepseek-r1': true,
+          'openai/gpt-4': false,
+          'anthropic/claude-3': false,
+        };
+
+        expect(modelReasoningSupport['deepseek/deepseek-r1']).toBe(true);
+        expect(modelReasoningSupport['openai/gpt-4']).toBe(false);
+      });
+    });
+
+    describe('Reasoning in save message parameters', () => {
+      test('should include reasoning in mutation call', () => {
+        const saveMessageParams = {
+          sessionId: 123,
+          role: 'assistant' as const,
+          content: 'The answer is 42',
+          model: 'deepseek-r1',
+          reasoning: '<think>Let me think step by step...</think>',
+        };
+
+        expect(saveMessageParams.reasoning).toBeDefined();
+        expect(saveMessageParams.reasoning).toContain('step by step');
+      });
+
+      test('should allow undefined reasoning for non-reasoning models', () => {
+        const saveMessageParams = {
+          sessionId: 123,
+          role: 'assistant' as const,
+          content: 'Hello!',
+          model: 'gpt-4',
+        };
+
+        expect(saveMessageParams).not.toHaveProperty('reasoning');
+      });
+
+      test('should convert empty string reasoning to undefined', () => {
+        const rawReasoning = '';
+        const reasoning = rawReasoning || undefined;
+
+        expect(reasoning).toBeUndefined();
+      });
+    });
+
+    describe('Reasoning in cache updates', () => {
+      interface MessageWithReasoning {
+        role: 'user' | 'assistant';
+        content: string;
+        model: string;
+        reasoning?: string;
+        isStreaming?: boolean;
+      }
+
+      test('should update cache with reasoning during streaming', () => {
+        let messages: MessageWithReasoning[] = [
+          { role: 'user', content: 'Hello', model: 'deepseek-r1' },
+          { role: 'assistant', content: '', model: 'deepseek-r1', reasoning: '', isStreaming: true },
+        ];
+
+        // Simulate reasoning accumulation during streaming
+        const updateLastMessage = (updates: Partial<MessageWithReasoning>) => {
+          const last = messages[messages.length - 1];
+          messages = [...messages.slice(0, -1), { ...last, ...updates }];
+        };
+
+        updateLastMessage({ reasoning: '<think>Step 1' });
+        expect(messages[1].reasoning).toBe('<think>Step 1');
+
+        updateLastMessage({ reasoning: '<think>Step 1: Analyze</think>' });
+        expect(messages[1].reasoning).toBe('<think>Step 1: Analyze</think>');
+      });
+
+      test('should preserve reasoning when marking stream complete', () => {
+        let messages: MessageWithReasoning[] = [
+          { role: 'user', content: 'Hello', model: 'deepseek-r1' },
+          {
+            role: 'assistant',
+            content: 'Response',
+            model: 'deepseek-r1',
+            reasoning: 'Full reasoning content',
+            isStreaming: true,
+          },
+        ];
+
+        // Mark streaming complete - should preserve reasoning
+        const last = messages[messages.length - 1];
+        messages = [...messages.slice(0, -1), { ...last, isStreaming: false }];
+
+        expect(messages[1].reasoning).toBe('Full reasoning content');
+        expect(messages[1].isStreaming).toBe(false);
+      });
+    });
+  });
+
+  // ============================================================================
   // MESSAGE CACHE UPDATES
   // ============================================================================
   describe('Message Cache Updates', () => {

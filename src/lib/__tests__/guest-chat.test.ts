@@ -424,6 +424,136 @@ describe('Guest Chat Utilities', () => {
   });
 
   // ============================================================================
+  // Reasoning Support Tests
+  // ============================================================================
+  describe('Message with Reasoning', () => {
+    const createMockMessageWithReasoning = (
+      role: 'user' | 'assistant',
+      content: string,
+      reasoning?: string
+    ) => ({
+      role,
+      content,
+      model: 'deepseek-r1',
+      reasoning,
+      created_at: new Date().toISOString(),
+    });
+
+    describe('saveGuestMessage with reasoning', () => {
+      it('should save assistant message with reasoning', () => {
+        const message = createMockMessageWithReasoning(
+          'assistant',
+          'The answer is 42.',
+          '<think>Let me calculate step by step...</think>'
+        );
+        const result = saveGuestMessage(-1, message);
+
+        expect(result.content).toBe('The answer is 42.');
+        expect(result.reasoning).toBe('<think>Let me calculate step by step...</think>');
+        expect(result.model).toBe('deepseek-r1');
+
+        const stored = JSON.parse(localStorage.getItem(GUEST_MESSAGES_KEY) || '{}');
+        expect(stored['-1'][0].reasoning).toBe('<think>Let me calculate step by step...</think>');
+      });
+
+      it('should save message without reasoning when not provided', () => {
+        const message = createMockMessageWithReasoning('assistant', 'Simple response');
+        const result = saveGuestMessage(-1, message);
+
+        expect(result.content).toBe('Simple response');
+        expect(result.reasoning).toBeUndefined();
+
+        const stored = JSON.parse(localStorage.getItem(GUEST_MESSAGES_KEY) || '{}');
+        expect(stored['-1'][0].reasoning).toBeUndefined();
+      });
+
+      it('should preserve reasoning when retrieving messages', () => {
+        // Save a message with reasoning
+        const message = createMockMessageWithReasoning(
+          'assistant',
+          'Response',
+          'Thinking process here'
+        );
+        saveGuestMessage(-1, message);
+
+        // Retrieve and verify
+        const messages = getGuestMessages(-1);
+        expect(messages).toHaveLength(1);
+        expect(messages[0].reasoning).toBe('Thinking process here');
+      });
+
+      it('should handle multiple messages with mixed reasoning', () => {
+        // User message (no reasoning)
+        saveGuestMessage(-1, createMockMessageWithReasoning('user', 'What is 2+2?'));
+
+        // Assistant message with reasoning
+        saveGuestMessage(
+          -1,
+          createMockMessageWithReasoning('assistant', '4', 'Simple arithmetic')
+        );
+
+        // Another user message
+        saveGuestMessage(-1, createMockMessageWithReasoning('user', 'And 3+3?'));
+
+        // Assistant message without reasoning
+        saveGuestMessage(-1, createMockMessageWithReasoning('assistant', '6'));
+
+        const messages = getGuestMessages(-1);
+        expect(messages).toHaveLength(4);
+
+        // User messages don't have reasoning
+        expect(messages[0].reasoning).toBeUndefined();
+        expect(messages[2].reasoning).toBeUndefined();
+
+        // First assistant has reasoning, second doesn't
+        expect(messages[1].reasoning).toBe('Simple arithmetic');
+        expect(messages[3].reasoning).toBeUndefined();
+      });
+    });
+
+    describe('getGuestDataForMigration with reasoning', () => {
+      it('should include reasoning in migration data', () => {
+        const session = {
+          id: -1,
+          user_id: -1,
+          title: 'Test',
+          model: 'deepseek-r1',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          is_active: true,
+          _storedAt: Date.now(),
+        };
+        const messages = [
+          {
+            id: -1,
+            session_id: -1,
+            role: 'user',
+            content: 'Question',
+            created_at: new Date().toISOString(),
+          },
+          {
+            id: -2,
+            session_id: -1,
+            role: 'assistant',
+            content: 'Answer',
+            reasoning: 'My thought process',
+            created_at: new Date().toISOString(),
+          },
+        ];
+
+        localStorage.setItem(GUEST_SESSIONS_KEY, JSON.stringify([session]));
+        localStorage.setItem(GUEST_MESSAGES_KEY, JSON.stringify({ '-1': messages }));
+
+        const result = getGuestDataForMigration();
+
+        expect(result).toHaveLength(1);
+        expect(result[0].messages).toHaveLength(2);
+        expect(result[0].messages[1].reasoning).toBe('My thought process');
+      });
+    });
+  });
+
+  // ============================================================================
   // Utility Functions Tests
   // ============================================================================
   describe('Utility Functions', () => {
