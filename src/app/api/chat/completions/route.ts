@@ -87,17 +87,12 @@ async function processCompletion(
             await sleep(waitTime);
           }
 
-          // Build headers - only include Authorization if we have a valid API key
-          const fetchHeaders: Record<string, string> = {
-            'Content-Type': 'application/json',
-          };
-          if (apiKey && apiKey.trim() !== '') {
-            fetchHeaders['Authorization'] = `Bearer ${apiKey}`;
-          }
-
           const response = await fetch(targetUrl, {
             method: 'POST',
-            headers: fetchHeaders,
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${apiKey}`,
+            },
             body: JSON.stringify(body),
             signal: abortController.signal,
           });
@@ -241,12 +236,12 @@ export async function POST(request: NextRequest) {
     const isExplicitGuestRequest = apiKey === 'guest';
     const isMissingApiKey = !apiKey || apiKey.trim() === '';
 
-    // For guest/anonymous requests, we send requests without an API key
-    // The backend handles anonymous requests with relaxed rate limiting (is_anonymous=True)
-    // This avoids all guests sharing a single rate-limited API key which caused 429 errors
+    // For guest/anonymous requests, use a guest API key
+    // The backend now has increased rate limits to handle this better
     if (isExplicitGuestRequest || isMissingApiKey) {
-      apiKey = ''; // Empty string signals anonymous request to backend
-      console.log('[API Completions] Processing anonymous/guest request (no API key)');
+      // Use environment variable or fallback - backend rate limits are now more generous
+      apiKey = process.env.GUEST_API_KEY || 'gatewayz-guest-demo-key';
+      console.log('[API Completions] Using guest API key for unauthenticated request');
     }
 
     // Resolve router models to actual model IDs
@@ -331,18 +326,13 @@ export async function POST(request: NextRequest) {
             'Authorization': apiKey ? apiKey.substring(0, 20) + '...' : 'none'
           });
 
-          // Build headers - only include Authorization if we have a valid API key
-          const headers: Record<string, string> = {
-            'Content-Type': 'application/json',
-            'Accept': 'text/event-stream',
-          };
-          if (apiKey && apiKey.trim() !== '') {
-            headers['Authorization'] = `Bearer ${apiKey}`;
-          }
-
           const response = await fetch(targetUrl, {
             method: 'POST',
-            headers,
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${apiKey}`,
+              'Accept': 'text/event-stream',
+            },
             body: JSON.stringify(body),
             signal: abortController.signal,
           });

@@ -265,14 +265,12 @@ export async function POST(request: NextRequest) {
     // Determine if this is an explicit guest request vs missing/invalid API key
     const isExplicitGuestRequest = apiKey === 'guest';
     const isMissingApiKey = !apiKey || apiKey.trim() === '';
-    const isAnonymousRequest = isExplicitGuestRequest || isMissingApiKey;
 
-    // For guest/anonymous requests, we don't send an API key at all
-    // The backend handles anonymous requests with relaxed rate limiting (is_anonymous=True)
-    // This avoids all guests sharing a single rate-limited API key which caused 429 errors
-    if (isAnonymousRequest) {
-      apiKey = ''; // Will be handled below to not send Authorization header
-      console.log('[AI SDK Route] Processing anonymous/guest request (no API key)');
+    // For guest/anonymous requests, use a guest API key
+    // The backend now has increased rate limits to handle this better
+    if (isExplicitGuestRequest || isMissingApiKey) {
+      apiKey = process.env.GUEST_API_KEY || 'gatewayz-guest-demo-key';
+      console.log('[AI SDK Route] Using guest API key for unauthenticated request');
     }
 
     // Resolve router models to actual model IDs
@@ -309,11 +307,10 @@ export async function POST(request: NextRequest) {
     const isDirectDeepSeekGateway = gatewayLower === 'deepseek';
     const isDeepSeekNeedingFlexible = (startsWithDeepSeek && !hasExplicitNormalizingPrefix) || isDirectDeepSeekGateway;
 
-    // Anonymous requests need to go through the completions route since AI SDK requires an API key
-    const needsFlexibleRoute = isFireworksModel || isDeepSeekNeedingFlexible || isAnonymousRequest;
+    const needsFlexibleRoute = isFireworksModel || isDeepSeekNeedingFlexible;
 
     if (needsFlexibleRoute) {
-      const reason = isAnonymousRequest ? 'anonymous-request' : (isFireworksModel ? 'fireworks-format' : 'deepseek-direct-format');
+      const reason = isFireworksModel ? 'fireworks-format' : 'deepseek-direct-format';
       console.log(`[AI SDK Route] Redirecting to flexible completions route (${reason}): ${modelId}`);
 
       // Forward the request to /api/chat/completions instead
@@ -325,20 +322,15 @@ export async function POST(request: NextRequest) {
       const completionsUrl = new URL('/api/chat/completions', trustedOrigin);
       searchParams.forEach((value, key) => completionsUrl.searchParams.set(key, value));
 
-      // Update the body with the API key if available
-      const forwardedBody = { ...body, apiKey: apiKey || undefined };
-
-      // Build headers - only include Authorization if we have a valid API key
-      const forwardHeaders: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-      if (apiKey && apiKey.trim() !== '') {
-        forwardHeaders['Authorization'] = `Bearer ${apiKey}`;
-      }
+      // Update the body with the resolved API key
+      const forwardedBody = { ...body, apiKey };
 
       const forwardedResponse = await fetch(completionsUrl.toString(), {
         method: 'POST',
-        headers: forwardHeaders,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
         body: JSON.stringify(forwardedBody),
       });
 
