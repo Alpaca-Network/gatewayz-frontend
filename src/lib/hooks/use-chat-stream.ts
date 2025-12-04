@@ -202,14 +202,17 @@ export function useChatStream() {
 
             // 5. Finalize
             const finalContent = streamHandlerRef.current.getFinalContent();
+            const finalReasoning = streamHandlerRef.current.getFinalReasoning();
 
             // Save Assistant Message - for authenticated users OR guest sessions (negative IDs)
             // Guest messages are saved to localStorage, authenticated to backend
+            // Include reasoning if present so it persists when chat is reloaded
             saveMessage.mutate({
                  sessionId,
                  role: 'assistant',
                  content: finalContent,
-                 model: model.value
+                 model: model.value,
+                 reasoning: finalReasoning || undefined
             });
             
             // Mark isStreaming false

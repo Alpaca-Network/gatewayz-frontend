@@ -437,7 +437,8 @@ export class ChatHistoryAPI {
     role: 'user' | 'assistant',
     content: string | any[],
     model?: string,
-    tokens?: number
+    tokens?: number,
+    reasoning?: string
   ): Promise<ChatMessage> {
     // Use batching for non-critical saves (assistant messages)
     // User messages are saved immediately for better UX
@@ -450,6 +451,7 @@ export class ChatHistoryAPI {
         content,
         model,
         tokens,
+        reasoning,
         timestamp: Date.now(),
       });
 
@@ -461,12 +463,13 @@ export class ChatHistoryAPI {
         content,
         model,
         tokens,
+        reasoning,
         created_at: new Date().toISOString(),
       };
     }
 
     // Save immediately for user messages
-    return await this.saveMessageImmediate(sessionId, role, content, model, tokens);
+    return await this.saveMessageImmediate(sessionId, role, content, model, tokens, reasoning);
   }
 
   /**
@@ -477,7 +480,8 @@ export class ChatHistoryAPI {
     role: 'user' | 'assistant',
     content: string | any[],
     model?: string,
-    tokens?: number
+    tokens?: number,
+    reasoning?: string
   ): Promise<ChatMessage> {
     // Use unified timeout configuration for message saves
     const { controller, timeoutId } = createTimeoutController(TIMEOUT_CONFIG.chat.messagesSave);
@@ -502,7 +506,8 @@ export class ChatHistoryAPI {
           role,
           content,
           model: model || '',
-          tokens: tokens || 0
+          tokens: tokens || 0,
+          reasoning: reasoning || undefined
         }),
         signal: controller.signal
       });
@@ -564,7 +569,8 @@ export class ChatHistoryAPI {
             msg.role,
             msg.content,
             msg.model,
-            msg.tokens
+            msg.tokens,
+            msg.reasoning
           );
           results.push({ success: true, messageId: saved.id });
         } catch (error) {

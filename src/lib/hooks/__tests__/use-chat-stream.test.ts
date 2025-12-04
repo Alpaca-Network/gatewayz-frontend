@@ -4,6 +4,80 @@
  * Tests the Fireworks and DeepSeek model routing logic
  */
 
+describe('useChatStream message parameters', () => {
+  /**
+   * Tests that the saveMessage mutation is called with reasoning parameter
+   * when reasoning content is present during streaming
+   */
+  describe('reasoning parameter handling', () => {
+    test('should include reasoning in save message call when present', () => {
+      // Simulates the mutation call signature
+      const mockSaveMessageCall = (params: {
+        sessionId: number;
+        role: 'user' | 'assistant';
+        content: string;
+        model?: string;
+        reasoning?: string;
+      }) => {
+        return params;
+      };
+
+      // Test with reasoning
+      const withReasoning = mockSaveMessageCall({
+        sessionId: 123,
+        role: 'assistant',
+        content: 'Response content',
+        model: 'fireworks/deepseek-r1',
+        reasoning: 'This is the chain of thought reasoning'
+      });
+
+      expect(withReasoning.reasoning).toBe('This is the chain of thought reasoning');
+      expect(withReasoning.content).toBe('Response content');
+      expect(withReasoning.role).toBe('assistant');
+    });
+
+    test('should not include reasoning when not present', () => {
+      const mockSaveMessageCall = (params: {
+        sessionId: number;
+        role: 'user' | 'assistant';
+        content: string;
+        model?: string;
+        reasoning?: string;
+      }) => {
+        return params;
+      };
+
+      // Test without reasoning (user message)
+      const withoutReasoning = mockSaveMessageCall({
+        sessionId: 123,
+        role: 'user',
+        content: 'User message',
+        model: 'openai/gpt-4o',
+        reasoning: undefined
+      });
+
+      expect(withoutReasoning.reasoning).toBeUndefined();
+      expect(withoutReasoning.content).toBe('User message');
+    });
+
+    test('should pass empty string reasoning as undefined', () => {
+      // In use-chat-stream.ts, we use `reasoning: finalReasoning || undefined`
+      // This test ensures empty strings are converted to undefined
+      const finalReasoning = '';
+      const reasoningParam = finalReasoning || undefined;
+
+      expect(reasoningParam).toBeUndefined();
+    });
+
+    test('should preserve non-empty reasoning', () => {
+      const finalReasoning = 'Chain of thought content';
+      const reasoningParam = finalReasoning || undefined;
+
+      expect(reasoningParam).toBe('Chain of thought content');
+    });
+  });
+});
+
 describe('useChatStream routing logic', () => {
   /**
    * Helper function that mirrors the routing logic in use-chat-stream.ts

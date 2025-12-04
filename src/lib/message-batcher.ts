@@ -12,6 +12,7 @@ export interface BatchedMessage {
   content: string | any[];
   model?: string;
   tokens?: number;
+  reasoning?: string;
   timestamp: number;
 }
 
