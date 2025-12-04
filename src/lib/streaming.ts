@@ -125,17 +125,22 @@ export async function* streamChatResponse(
   try {
     devLog('[Streaming] Initiating fetch request to:', url);
     devLog('[Streaming] Request body:', requestBody);
-    devLog('[Streaming] API Key prefix:', apiKey.substring(0, 20) + '...');
+    devLog('[Streaming] API Key:', apiKey ? apiKey.substring(0, 20) + '...' : '(anonymous)');
+
+    // Build headers - only include Authorization if we have a valid API key
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Accept': 'text/event-stream',
+    };
+    if (apiKey && apiKey.trim() !== '') {
+      headers['Authorization'] = `Bearer ${apiKey}`;
+    }
 
     let response: Response;
     try {
       response = await fetch(url, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-          'Accept': 'text/event-stream',
-        },
+        headers,
         body: JSON.stringify(requestBody),
         signal: controller.signal,
       });

@@ -87,12 +87,17 @@ async function processCompletion(
             await sleep(waitTime);
           }
 
+          // Build headers - only include Authorization if we have a valid API key
+          const fetchHeaders: Record<string, string> = {
+            'Content-Type': 'application/json',
+          };
+          if (apiKey && apiKey.trim() !== '') {
+            fetchHeaders['Authorization'] = `Bearer ${apiKey}`;
+          }
+
           const response = await fetch(targetUrl, {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${apiKey}`,
-            },
+            headers: fetchHeaders,
             body: JSON.stringify(body),
             signal: abortController.signal,
           });
@@ -326,13 +331,18 @@ export async function POST(request: NextRequest) {
             'Authorization': apiKey ? apiKey.substring(0, 20) + '...' : 'none'
           });
 
+          // Build headers - only include Authorization if we have a valid API key
+          const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+            'Accept': 'text/event-stream',
+          };
+          if (apiKey && apiKey.trim() !== '') {
+            headers['Authorization'] = `Bearer ${apiKey}`;
+          }
+
           const response = await fetch(targetUrl, {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${apiKey}`,
-              'Accept': 'text/event-stream',
-            },
+            headers,
             body: JSON.stringify(body),
             signal: abortController.signal,
           });
