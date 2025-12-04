@@ -175,18 +175,9 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
     };
 
     // Handle regular errors (not promise rejections) that might be triggered by wallet extensions
+    // Note: "Cannot redefine property: ethereum" errors are handled by ErrorSuppressor component
+    // which is loaded earlier in the component tree (layout.tsx) to avoid duplicate handling
     const errorListener = (event: ErrorEvent) => {
-      // Handle "Cannot redefine property: ethereum" errors from wallet extensions
-      // This happens when multiple wallet extensions conflict (e.g., MetaMask + another wallet)
-      // or when a wallet extension conflicts with Privy's wallet integration
-      if (event.message?.includes("Cannot redefine property: ethereum") ||
-          event.message?.includes("Cannot redefine property") && event.filename?.includes("evmAsk")) {
-        console.warn("[Auth] Wallet extension conflict detected (non-blocking):", event.message);
-        // Prevent the error from appearing in console - it's a known extension conflict
-        event.preventDefault();
-        return;
-      }
-
       // Handle Privy-specific errors
       const privyErrorType = classifyPrivyError(event.message);
       if (privyErrorType) {
