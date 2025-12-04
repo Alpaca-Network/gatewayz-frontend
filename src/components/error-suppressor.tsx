@@ -26,6 +26,9 @@ export function ErrorSuppressor() {
       /inpage.*sendMessage/i,
       /\/monitoring.*429/i,            // Sentry tunnel rate limit errors
       /Too Many Requests.*monitoring/i, // Alternative format
+      /Cannot read properties of undefined.*removeListener/i, // Wallet extension cleanup errors
+      /inpage\.js.*removeListener/i,    // Wallet extension inpage.js errors
+      /stopListeners/i,                 // Wallet extension stopListeners errors
     ];
 
     // Override console.error
@@ -72,6 +75,24 @@ export function ErrorSuppressor() {
         return true;
       }
 
+      // Suppress removeListener errors from wallet extension inpage.js
+      if (
+        errorFilename.includes('inpage.js') &&
+        (errorMessage.includes('removeListener') || errorMessage.includes('stopListeners'))
+      ) {
+        event.preventDefault();
+        return true;
+      }
+
+      // Suppress TypeError related to removeListener from extensions
+      if (
+        errorMessage.includes('Cannot read properties of undefined') &&
+        errorMessage.includes('removeListener')
+      ) {
+        event.preventDefault();
+        return true;
+      }
+
       return false;
     };
 
@@ -87,6 +108,12 @@ export function ErrorSuppressor() {
 
       // Suppress message channel errors from extensions
       if (reason.includes('message channel closed')) {
+        event.preventDefault();
+        return;
+      }
+
+      // Suppress removeListener errors from wallet extensions
+      if (reason.includes('removeListener') || reason.includes('stopListeners')) {
         event.preventDefault();
         return;
       }

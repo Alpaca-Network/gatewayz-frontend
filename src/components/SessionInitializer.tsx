@@ -42,10 +42,14 @@ async function fetchUserDataOptimized(token: string): Promise<UserData | null> {
     return cached;
   }
 
+  const startTime = Date.now();
   try {
     console.log("[SessionInit] Fetching user data from backend with token:", token.substring(0, 20) + "...");
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout for user fetch
+    const timeoutId = setTimeout(() => {
+      console.error("[SessionInit] User data fetch timed out after 10 seconds");
+      controller.abort();
+    }, 10000); // Increased to 10 second timeout for user fetch
 
     const userResponse = await fetch("/api/user/me", {
       headers: {
@@ -56,6 +60,8 @@ async function fetchUserDataOptimized(token: string): Promise<UserData | null> {
     });
 
     clearTimeout(timeoutId);
+    const duration = Date.now() - startTime;
+    console.log(`[SessionInit] User data fetch completed in ${duration}ms`);
 
     if (userResponse.ok) {
       const userData = await userResponse.json() as UserData;
@@ -82,9 +88,32 @@ async function fetchUserDataOptimized(token: string): Promise<UserData | null> {
     }
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
+    const duration = Date.now() - startTime;
 
     if (errorMsg.includes("aborted") || errorMsg.includes("timeout")) {
-      console.error("[SessionInit] User data fetch timeout - network may be slow");
+      console.error(`[SessionInit] User data fetch timeout after ${duration}ms - network may be slow`);
+
+      // Send timeout event to Sentry for monitoring
+      if (typeof window !== 'undefined' && duration > 8000) {
+        import('@sentry/nextjs').then((Sentry) => {
+          Sentry.captureMessage("Authentication timeout - stuck in authenticating state", {
+            level: 'error',
+            tags: {
+              error_type: 'auth_timeout',
+              duration_ms: duration.toString(),
+            },
+            contexts: {
+              auth: {
+                timeout_threshold: '10000ms',
+                actual_duration: `${duration}ms`,
+                endpoint: '/api/user/me',
+              },
+            },
+          });
+        }).catch(() => {
+          // Silently fail if Sentry is unavailable
+        });
+      }
     } else {
       console.error("[SessionInit] Error fetching user data:", error);
     }
