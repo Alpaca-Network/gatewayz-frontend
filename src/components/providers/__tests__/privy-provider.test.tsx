@@ -532,5 +532,8 @@ describe('PrivyProviderWrapper', () => {
 
       consoleSpy.mockRestore();
     });
+
+    // Note: "Cannot redefine property: ethereum" errors are handled by ErrorSuppressor component
+    // which is loaded earlier in the component tree (layout.tsx) to centralize error suppression
   });
 });

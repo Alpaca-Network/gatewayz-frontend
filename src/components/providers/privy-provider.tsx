@@ -175,6 +175,8 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
     };
 
     // Handle regular errors (not promise rejections) that might be triggered by wallet extensions
+    // Note: "Cannot redefine property: ethereum" errors are handled by ErrorSuppressor component
+    // which is loaded earlier in the component tree (layout.tsx) to avoid duplicate handling
     const errorListener = (event: ErrorEvent) => {
       // Handle Privy-specific errors
       const privyErrorType = classifyPrivyError(event.message);
