@@ -84,19 +84,68 @@ export function ChatLayout() {
 
    const { data: activeMessages = [], isLoading: messagesLoading } = useSessionMessages(activeSessionId);
 
-   // Handle URL message parameter - populate input on mount
+   // Track if we've already processed the URL message parameter
+   const urlMessageProcessedRef = useRef(false);
+
+   // Handle URL message parameter - populate input and auto-send on mount
    useEffect(() => {
        const messageParam = searchParams.get('message');
-       if (messageParam) {
+       const modelParam = searchParams.get('model');
+
+       if (messageParam && !urlMessageProcessedRef.current) {
+           urlMessageProcessedRef.current = true;
+
+           // Set model from URL if provided
+           if (modelParam) {
+               // Create a minimal ModelOption from the URL parameter
+               const modelParts = modelParam.split('/');
+               const modelLabel = modelParts.length > 1 ? modelParts[modelParts.length - 1] : modelParam;
+               const gateway = modelParts.length > 1 ? modelParts[0] : undefined;
+
+               setSelectedModel({
+                   value: modelParam,
+                   label: modelLabel.split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+                   category: 'General',
+                   sourceGateway: gateway,
+                   developer: gateway ? gateway.charAt(0).toUpperCase() + gateway.slice(1) : undefined,
+                   modalities: ['Text']
+               });
+           }
+
+           // Set pending prompt immediately to show optimistic UI
+           setPendingPrompt(messageParam);
+           // Set the input value
            setInputValue(messageParam);
-           // Clean up URL parameter after reading it
+
+           // Clean up URL parameters after reading them
            if (typeof window !== 'undefined') {
                const url = new URL(window.location.href);
                url.searchParams.delete('message');
+               url.searchParams.delete('model');
                window.history.replaceState({}, '', url.toString());
            }
+
+           // Auto-send the message after a short delay to ensure ChatInput is mounted
+           // Use multiple retries with increasing delays to handle slow component mounting
+           const attemptSend = (retryCount: number = 0) => {
+               if (typeof window !== 'undefined' && (window as any).__chatInputSend) {
+                   (window as any).__chatInputSend();
+               } else if (retryCount < 10) {
+                   // Retry with exponential backoff: 50ms, 100ms, 200ms, etc.
+                   setTimeout(() => attemptSend(retryCount + 1), 50 * Math.pow(2, retryCount));
+               } else {
+                   console.warn('[ChatLayout] __chatInputSend not available after retries for URL message');
+                   // Clear pending prompt to avoid stuck optimistic UI
+                   setPendingPrompt(null);
+               }
+           };
+
+           // Start attempting to send after initial render
+           requestAnimationFrame(() => {
+               attemptSend(0);
+           });
        }
-   }, [searchParams, setInputValue]);
+   }, [searchParams, setInputValue, setSelectedModel]);
 
    // Clear pending prompt once we have real messages OR when session changes
    useEffect(() => {
