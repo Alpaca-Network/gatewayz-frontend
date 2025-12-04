@@ -231,13 +231,15 @@ export const useSaveMessage = () => {
             role,
             content,
             model,
-            tokens
+            tokens,
+            reasoning
         }: {
             sessionId: number,
             role: 'user' | 'assistant',
             content: string | any[],
             model?: string,
-            tokens?: number
+            tokens?: number,
+            reasoning?: string
         }) => {
             // For guest sessions (negative IDs), save to localStorage
             if (sessionId < 0) {
@@ -246,6 +248,7 @@ export const useSaveMessage = () => {
                     content,
                     model,
                     tokens,
+                    reasoning,
                     created_at: new Date().toISOString()
                 });
             }
@@ -253,7 +256,7 @@ export const useSaveMessage = () => {
             // Get API at execution time to avoid stale closure issues on mobile
             const api = getChatApiNow();
             if (!api) throw new Error("Not authenticated");
-            return api.saveMessage(sessionId, role, content, model, tokens);
+            return api.saveMessage(sessionId, role, content, model, tokens, reasoning);
         },
         onSuccess: (savedMessage, variables) => {
             // Don't invalidate chat-messages - this would trigger a refetch that overwrites
