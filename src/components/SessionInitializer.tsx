@@ -43,11 +43,14 @@ async function fetchUserDataOptimized(token: string): Promise<UserData | null> {
   }
 
   const startTime = Date.now();
+  const controller = new AbortController();
+  let timeoutId: NodeJS.Timeout | undefined;
+
   try {
     console.log("[SessionInit] Fetching user data from backend with token:", token.substring(0, 20) + "...");
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => {
-      console.error("[SessionInit] User data fetch timed out after 10 seconds");
+
+    // Set timeout with controller abort
+    timeoutId = setTimeout(() => {
       controller.abort();
     }, 10000); // Increased to 10 second timeout for user fetch
 
@@ -59,7 +62,10 @@ async function fetchUserDataOptimized(token: string): Promise<UserData | null> {
       signal: controller.signal,
     });
 
+    // Clear timeout immediately after fetch completes (before any await)
     clearTimeout(timeoutId);
+    timeoutId = undefined;
+
     const duration = Date.now() - startTime;
     console.log(`[SessionInit] User data fetch completed in ${duration}ms`);
 
@@ -87,6 +93,12 @@ async function fetchUserDataOptimized(token: string): Promise<UserData | null> {
       return null;
     }
   } catch (error) {
+    // Clear timeout if it hasn't been cleared yet
+    if (timeoutId !== undefined) {
+      clearTimeout(timeoutId);
+      timeoutId = undefined;
+    }
+
     const errorMsg = error instanceof Error ? error.message : String(error);
     const duration = Date.now() - startTime;
 

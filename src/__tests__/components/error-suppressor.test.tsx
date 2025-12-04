@@ -112,10 +112,12 @@ describe('ErrorSuppressor', () => {
       addEventListenerSpy.mockRestore();
     });
 
-    it('should handle wallet extension errors via ErrorEvent', () => {
+    it('should handle wallet extension errors via ErrorEvent without preventDefault', () => {
       const preventDefaultSpy = jest.fn();
 
       render(<ErrorSuppressor />);
+
+      errorLogs = [];
 
       const errorEvent = new ErrorEvent('error', {
         message: "Cannot read properties of undefined (reading 'removeListener')",
@@ -129,8 +131,10 @@ describe('ErrorSuppressor', () => {
 
       window.dispatchEvent(errorEvent);
 
-      // Event should be prevented
-      expect(preventDefaultSpy).toHaveBeenCalled();
+      // Event should NOT be prevented (align with privy-provider design)
+      // but console logging should still be suppressed
+      expect(preventDefaultSpy).not.toHaveBeenCalled();
+      expect(errorLogs).toEqual([]);
     });
 
     it('should handle unhandled rejections from wallet extensions', () => {

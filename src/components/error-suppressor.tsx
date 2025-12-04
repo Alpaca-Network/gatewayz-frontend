@@ -75,22 +75,25 @@ export function ErrorSuppressor() {
         return true;
       }
 
-      // Suppress removeListener errors from wallet extension inpage.js
+      // For removeListener/stopListeners errors from wallet extensions:
+      // Don't call preventDefault() to align with privy-provider.tsx design (line 191-192)
+      // which explicitly avoids preventDefault for wallet errors to let Privy handle recovery.
+      // Just log suppression via console.error override which is already handled above.
       if (
         errorFilename.includes('inpage.js') &&
         (errorMessage.includes('removeListener') || errorMessage.includes('stopListeners'))
       ) {
-        event.preventDefault();
-        return true;
+        // Don't preventDefault - just return to suppress console logging via override
+        return false;
       }
 
-      // Suppress TypeError related to removeListener from extensions
+      // Same for TypeError related to removeListener from extensions
       if (
         errorMessage.includes('Cannot read properties of undefined') &&
         errorMessage.includes('removeListener')
       ) {
-        event.preventDefault();
-        return true;
+        // Don't preventDefault - just return to suppress console logging via override
+        return false;
       }
 
       return false;
