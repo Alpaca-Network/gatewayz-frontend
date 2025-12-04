@@ -86,6 +86,8 @@ export function ChatLayout() {
 
    // Track if we've already processed the URL message parameter
    const urlMessageProcessedRef = useRef(false);
+   // Track pending timeout IDs for cleanup
+   const pendingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
    // Handle URL message parameter - populate input and auto-send on mount
    useEffect(() => {
@@ -102,9 +104,16 @@ export function ChatLayout() {
                const modelLabel = modelParts.length > 1 ? modelParts[modelParts.length - 1] : modelParam;
                const gateway = modelParts.length > 1 ? modelParts[0] : undefined;
 
+               // Format label: replace dashes/underscores with spaces and capitalize each word
+               const formattedLabel = modelLabel
+                   .replace(/[-_]/g, ' ')
+                   .split(' ')
+                   .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1))
+                   .join(' ');
+
                setSelectedModel({
                    value: modelParam,
-                   label: modelLabel.split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+                   label: formattedLabel,
                    category: 'General',
                    sourceGateway: gateway,
                    developer: gateway ? gateway.charAt(0).toUpperCase() + gateway.slice(1) : undefined,
@@ -126,13 +135,14 @@ export function ChatLayout() {
            }
 
            // Auto-send the message after a short delay to ensure ChatInput is mounted
-           // Use multiple retries with increasing delays to handle slow component mounting
+           // Use multiple retries with capped exponential backoff to handle slow component mounting
            const attemptSend = (retryCount: number = 0) => {
                if (typeof window !== 'undefined' && (window as any).__chatInputSend) {
                    (window as any).__chatInputSend();
                } else if (retryCount < 10) {
-                   // Retry with exponential backoff: 50ms, 100ms, 200ms, etc.
-                   setTimeout(() => attemptSend(retryCount + 1), 50 * Math.pow(2, retryCount));
+                   // Retry with exponential backoff capped at 500ms: 50ms, 100ms, 200ms, 400ms, 500ms...
+                   const delay = Math.min(50 * Math.pow(2, retryCount), 500);
+                   pendingTimeoutRef.current = setTimeout(() => attemptSend(retryCount + 1), delay);
                } else {
                    console.warn('[ChatLayout] __chatInputSend not available after retries for URL message');
                    // Clear pending prompt to avoid stuck optimistic UI
@@ -145,6 +155,14 @@ export function ChatLayout() {
                attemptSend(0);
            });
        }
+
+       // Cleanup function to cancel any pending timeouts on unmount
+       return () => {
+           if (pendingTimeoutRef.current) {
+               clearTimeout(pendingTimeoutRef.current);
+               pendingTimeoutRef.current = null;
+           }
+       };
    }, [searchParams, setInputValue, setSelectedModel]);
 
    // Clear pending prompt once we have real messages OR when session changes
