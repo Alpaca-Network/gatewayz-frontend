@@ -24,6 +24,8 @@ export function ErrorSuppressor() {
       /Cannot redefine property.*ethereum/i,
       /evmAsk.*ethereum/i,
       /inpage.*sendMessage/i,
+      /\/monitoring.*429/i,            // Sentry tunnel rate limit errors
+      /Too Many Requests.*monitoring/i, // Alternative format
     ];
 
     // Override console.error
