@@ -15,7 +15,7 @@ export async function POST(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { role, content, model, tokens } = body;
+    const { role, content, model, tokens, reasoning } = body;
 
     // Clean the session ID (remove 'api-' prefix if present)
     const cleanSessionId = id.startsWith('api-') ? id.replace('api-', '') : id;
@@ -30,13 +30,17 @@ export async function POST(
       );
     }
 
-    const messageData = {
+    // Build message data, only include reasoning if present
+    const messageData: Record<string, any> = {
       role: role,
       content: content,
       model: model || '',
       tokens: tokens || 0,
       created_at: new Date().toISOString()
     };
+    if (reasoning) {
+      messageData.reasoning = reasoning;
+    }
 
     const url = `${CHAT_HISTORY_API_URL}/v1/chat/sessions/${cleanSessionId}/messages`;
 

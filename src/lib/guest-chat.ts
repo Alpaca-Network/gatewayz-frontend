@@ -280,6 +280,7 @@ export function deleteGuestSession(sessionId: number): void {
 
 /**
  * Save a message to a guest session
+ * Supports optional reasoning field for chain-of-thought models
  */
 export function saveGuestMessage(
   sessionId: number,
