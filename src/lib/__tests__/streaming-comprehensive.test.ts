@@ -72,20 +72,35 @@ async function collectChunks(
 }
 
 /**
+ * Helper to create a Headers-like object that supports .get()
+ */
+function createMockHeaders(headersMap: [string, string][]): Headers {
+  const headers = new Headers();
+  for (const [key, value] of headersMap) {
+    headers.set(key, value);
+  }
+  return headers;
+}
+
+/**
  * Helper to create a successful mock response
  */
-function createSuccessResponse(chunks: string[]) {
+function createSuccessResponse(chunks: string[], additionalHeaders?: [string, string][]) {
+  const headersArray: [string, string][] = [['content-type', 'text/event-stream']];
+  if (additionalHeaders) {
+    headersArray.push(...additionalHeaders);
+  }
   return {
     ok: true,
     status: 200,
-    headers: new Map([['content-type', 'text/event-stream']]),
+    headers: createMockHeaders(headersArray),
     body: createMockStream(chunks),
   };
 }
 
 describe('Streaming - Comprehensive Tests', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();  // Reset mock implementations in addition to call history
     jest.useFakeTimers({ advanceTimers: true });
   });
 
@@ -183,7 +198,7 @@ describe('Streaming - Comprehensive Tests', () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: false,
         status: 401,
-        headers: new Map(),
+        headers: createMockHeaders([]),
         json: async () => ({ detail: 'Session expired' }),
       });
 
@@ -264,7 +279,7 @@ describe('Streaming - Comprehensive Tests', () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: false,
         status: 401,
-        headers: new Map(),
+        headers: createMockHeaders([]),
         json: async () => ({ code: 'GUEST_NOT_CONFIGURED', detail: 'Guest not configured' }),
       });
 
@@ -287,7 +302,7 @@ describe('Streaming - Comprehensive Tests', () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: false,
         status: 429,
-        headers: new Map([['retry-after', '1']]),
+        headers: createMockHeaders([['retry-after', '1']]),
         json: async () => ({ detail: 'Rate limit exceeded' }),
       });
 
@@ -329,7 +344,7 @@ describe('Streaming - Comprehensive Tests', () => {
         (global.fetch as jest.Mock).mockResolvedValueOnce({
           ok: false,
           status: 429,
-          headers: new Map([['retry-after', '1']]),
+          headers: createMockHeaders([['retry-after', '1']]),
           json: async () => ({ detail: 'Rate limit exceeded' }),
         });
       }
@@ -355,7 +370,7 @@ describe('Streaming - Comprehensive Tests', () => {
 
       // Should have made 4 fetch calls
       expect(global.fetch).toHaveBeenCalledTimes(4);
-    });
+    }, 30000); // Extended timeout for retry tests with exponential backoff
 
     test('should handle burst limit with longer backoff', async () => {
       jest.useRealTimers();
@@ -364,7 +379,7 @@ describe('Streaming - Comprehensive Tests', () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: false,
         status: 429,
-        headers: new Map(),
+        headers: createMockHeaders([]),
         json: async () => ({ detail: 'Burst limit exceeded' }),
       });
 
@@ -384,7 +399,7 @@ describe('Streaming - Comprehensive Tests', () => {
       expect(retryChunk).toBeDefined();
       // Burst limit should have longer delay (3s base instead of 1.5s)
       expect(retryChunk!.retryAfterMs).toBeGreaterThanOrEqual(3000);
-    });
+    }, 15000); // Extended timeout for burst limit retry test
 
     test('should handle concurrency limit with longer backoff', async () => {
       jest.useRealTimers();
@@ -393,7 +408,7 @@ describe('Streaming - Comprehensive Tests', () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: false,
         status: 429,
-        headers: new Map(),
+        headers: createMockHeaders([]),
         json: async () => ({ detail: 'Concurrency limit reached' }),
       });
 
@@ -413,7 +428,7 @@ describe('Streaming - Comprehensive Tests', () => {
       expect(retryChunk).toBeDefined();
       // Concurrency limit should have longer delay (3s base)
       expect(retryChunk!.retryAfterMs).toBeGreaterThanOrEqual(3000);
-    });
+    }, 15000); // Extended timeout for concurrency limit retry test
 
     test('should respect retry-after header value', async () => {
       jest.useRealTimers();
@@ -422,7 +437,7 @@ describe('Streaming - Comprehensive Tests', () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: false,
         status: 429,
-        headers: new Map([['retry-after', '5']]), // 5 seconds
+        headers: createMockHeaders([['retry-after', '5']]), // 5 seconds
         json: async () => ({ detail: 'Rate limit exceeded' }),
       });
 
@@ -442,7 +457,7 @@ describe('Streaming - Comprehensive Tests', () => {
       expect(retryChunk).toBeDefined();
       // Should respect the 5 second retry-after (5000ms)
       expect(retryChunk!.retryAfterMs).toBeGreaterThanOrEqual(5000);
-    });
+    }, 15000); // Extended timeout for retry-after test
 
     test('should fail after max retries exceeded', async () => {
       jest.useRealTimers();
@@ -453,7 +468,7 @@ describe('Streaming - Comprehensive Tests', () => {
         (global.fetch as jest.Mock).mockResolvedValueOnce({
           ok: false,
           status: 429,
-          headers: new Map([['retry-after', '0.01']]), // Very short retry
+          headers: createMockHeaders([['retry-after', '0.01']]), // Very short retry
           json: async () => ({ detail: 'Rate limit exceeded' }),
         });
       }
@@ -472,7 +487,7 @@ describe('Streaming - Comprehensive Tests', () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: false,
         status: 429,
-        headers: new Map([['retry-after', '0.1']]), // Very small value
+        headers: createMockHeaders([['retry-after', '0.1']]), // Very small value
         json: async () => ({ detail: 'Rate limit exceeded' }),
       });
 
@@ -491,7 +506,7 @@ describe('Streaming - Comprehensive Tests', () => {
       expect(retryChunk).toBeDefined();
       // Should enforce minimum 1.5s delay
       expect(retryChunk!.retryAfterMs).toBeGreaterThanOrEqual(1500);
-    });
+    }, 10000); // Extended timeout for minimum delay test
   });
 
   // ============================================================================
@@ -505,7 +520,7 @@ describe('Streaming - Comprehensive Tests', () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: false,
         status: 503,
-        headers: new Map(),
+        headers: createMockHeaders([]),
         json: async () => ({ detail: 'Service temporarily unavailable' }),
       });
 
@@ -523,7 +538,7 @@ describe('Streaming - Comprehensive Tests', () => {
 
       expect(chunks.filter(c => c.content).length).toBe(1);
       expect(global.fetch).toHaveBeenCalledTimes(2);
-    });
+    }, 15000); // Extended timeout for 503 retry test
 
     test('should retry on 504 gateway timeout', async () => {
       jest.useRealTimers();
@@ -532,7 +547,7 @@ describe('Streaming - Comprehensive Tests', () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: false,
         status: 504,
-        headers: new Map(),
+        headers: createMockHeaders([]),
         json: async () => ({ detail: 'Gateway timeout' }),
       });
 
@@ -550,7 +565,7 @@ describe('Streaming - Comprehensive Tests', () => {
 
       expect(chunks.filter(c => c.content).length).toBe(1);
       expect(global.fetch).toHaveBeenCalledTimes(2);
-    });
+    }, 15000); // Extended timeout for 504 retry test
   });
 
   // ============================================================================
@@ -567,7 +582,7 @@ describe('Streaming - Comprehensive Tests', () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
         status: 200,
-        headers: new Map([['content-type', 'text/event-stream']]),
+        headers: createMockHeaders([['content-type', 'text/event-stream']]),
         body: createMockStream([
           'data: {"choices":[{"delta":{"content":"Recovered"}}]}\n\n',
           'data: [DONE]\n\n',
@@ -588,7 +603,7 @@ describe('Streaming - Comprehensive Tests', () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
         status: 200,
-        headers: new Map([['content-type', 'text/event-stream']]),
+        headers: createMockHeaders([['content-type', 'text/event-stream']]),
         body: createMockStream([
           'data: {"choices":[{"delta":{"content":"OK"}}]}\n\n',
           'data: [DONE]\n\n',
@@ -609,7 +624,7 @@ describe('Streaming - Comprehensive Tests', () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
         status: 200,
-        headers: new Map([['content-type', 'text/event-stream']]),
+        headers: createMockHeaders([['content-type', 'text/event-stream']]),
         body: createMockStream([
           'data: {"choices":[{"delta":{"content":"OK"}}]}\n\n',
           'data: [DONE]\n\n',
@@ -721,7 +736,7 @@ describe('Streaming - Comprehensive Tests', () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: false,
         status: 400,
-        headers: new Map(),
+        headers: createMockHeaders([]),
         json: async () => ({ detail: 'Invalid parameters' }),
       });
 
@@ -736,7 +751,7 @@ describe('Streaming - Comprehensive Tests', () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: false,
         status: 400,
-        headers: new Map(),
+        headers: createMockHeaders([]),
         json: async () => ({ detail: 'Your trial has expired. Please upgrade.' }),
       });
 
@@ -751,7 +766,7 @@ describe('Streaming - Comprehensive Tests', () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: false,
         status: 403,
-        headers: new Map(),
+        headers: createMockHeaders([]),
         json: async () => ({ detail: 'Access forbidden' }),
       });
 
@@ -766,7 +781,7 @@ describe('Streaming - Comprehensive Tests', () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: false,
         status: 404,
-        headers: new Map(),
+        headers: createMockHeaders([]),
         json: async () => ({ detail: 'Model gpt-5 not found' }),
       });
 
@@ -781,7 +796,7 @@ describe('Streaming - Comprehensive Tests', () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: false,
         status: 500,
-        headers: new Map(),
+        headers: createMockHeaders([]),
         json: async () => ({ detail: 'Internal server error' }),
       });
 
@@ -796,7 +811,7 @@ describe('Streaming - Comprehensive Tests', () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: false,
         status: 400,
-        headers: new Map(),
+        headers: createMockHeaders([]),
         json: async () => ({ detail: 'Upstream rejected: model unavailable' }),
       });
 
@@ -959,17 +974,13 @@ describe('Streaming - Comprehensive Tests', () => {
         'data: [DONE]\n\n',
       ];
 
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        headers: new Map([
-          ['content-type', 'text/event-stream'],
+      (global.fetch as jest.Mock).mockResolvedValueOnce(
+        createSuccessResponse(mockChunks, [
           ['X-Backend-Time', '150.5'],
           ['X-Network-Time', '25.3'],
           ['X-Response-Time', '175.8'],
-        ]),
-        body: createMockStream(mockChunks),
-      });
+        ])
+      );
 
       const chunks = await collectChunks(
         streamChatResponse('/api/chat/completions', 'test-key', { model: 'gpt-4', messages: [], stream: true })
