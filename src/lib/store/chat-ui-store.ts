@@ -19,10 +19,10 @@ export const useChatUIStore = create<ChatUIState>((set) => ({
   mobileSidebarOpen: false,
   inputValue: '',
   selectedModel: {
-      value: 'fireworks/deepseek-r1',
+      value: 'openrouter/deepseek/deepseek-r1',
       label: 'DeepSeek R1',
       category: 'Reasoning',
-      sourceGateway: 'fireworks',
+      sourceGateway: 'openrouter',
       developer: 'DeepSeek',
       modalities: ['Text']
   },
