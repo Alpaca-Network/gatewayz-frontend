@@ -191,7 +191,7 @@ export const ChatMessage = memo<ChatMessageProps>(
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   components={{
-                    code: ({ inline, className, children, ...props }: any) => {
+                    code: ({ inline, className, children, node, ...props }: any) => {
                       return !inline ? (
                         <pre className="bg-muted p-3 rounded-md overflow-x-auto">
                           <code className={className} {...props}>
