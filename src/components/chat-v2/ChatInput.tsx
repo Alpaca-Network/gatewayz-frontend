@@ -86,13 +86,15 @@ export function ChatInput() {
 
   const handleSend = useCallback(async () => {
     // IMPORTANT: Use fresh state from Zustand store to avoid stale closures
-    // This is critical for preloaded message clicks where inputValue was just set
-    const freshInputValue = useChatUIStore.getState().inputValue;
+    // This is critical for preloaded message clicks where inputValue and selectedModel were just set
+    const storeState = useChatUIStore.getState();
+    const freshInputValue = storeState.inputValue;
+    const freshSelectedModel = storeState.selectedModel;
     // Also check the actual input field as a fallback for typing scenarios
     const currentInputValue = freshInputValue || inputRef.current?.value || inputValue;
 
     if ((!currentInputValue.trim() && !selectedImage && !selectedVideo && !selectedAudio) || isStreaming) return;
-    if (!selectedModel) {
+    if (!freshSelectedModel) {
         toast({ title: "No model selected", variant: "destructive" });
         return;
     }
@@ -134,7 +136,7 @@ export function ChatInput() {
       try {
         const newSession = await createSession.mutateAsync({
             title: generateSessionTitle(messageText),
-            model: selectedModel.value
+            model: freshSelectedModel.value
         });
         sessionId = newSession.id;
         setActiveSessionId(sessionId);
@@ -166,7 +168,7 @@ export function ChatInput() {
         await streamMessage({
             sessionId,
             content,
-            model: selectedModel,
+            model: freshSelectedModel,
             messagesHistory: currentMessages
         });
 

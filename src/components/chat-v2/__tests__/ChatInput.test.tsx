@@ -37,15 +37,35 @@ const mockStreamMessage = jest.fn();
 const mockCreateSession = { mutateAsync: jest.fn() };
 const mockToast = jest.fn();
 
-jest.mock('@/lib/store/chat-ui-store', () => ({
-  useChatUIStore: () => ({
-    activeSessionId: null,
+// Store state for getState() mock - mutable reference for tests
+const mockStoreState = {
+  activeSessionId: null as number | null,
+  selectedModel: { value: 'test-model', label: 'Test Model' } as { value: string; label: string },
+  inputValue: '',
+};
+
+// Helper to reset store state
+const resetMockStoreState = () => {
+  mockStoreState.activeSessionId = null;
+  mockStoreState.selectedModel = { value: 'test-model', label: 'Test Model' };
+  mockStoreState.inputValue = '';
+};
+
+jest.mock('@/lib/store/chat-ui-store', () => {
+  // Create the mock inside the factory to avoid hoisting issues
+  const useChatUIStore = () => ({
+    activeSessionId: mockStoreState.activeSessionId,
     setActiveSessionId: mockSetActiveSessionId,
-    selectedModel: { value: 'test-model', label: 'Test Model' },
-    inputValue: '',
+    selectedModel: mockStoreState.selectedModel,
+    inputValue: mockStoreState.inputValue,
     setInputValue: mockSetInputValue,
-  }),
-}));
+  });
+
+  // Add getState method to the function
+  useChatUIStore.getState = () => mockStoreState;
+
+  return { useChatUIStore };
+});
 
 jest.mock('@/lib/hooks/use-chat-queries', () => ({
   useCreateSession: () => mockCreateSession,
@@ -203,6 +223,96 @@ describe('ChatInput handleSend stability', () => {
     // This tests that we're not recreating it on every render
     await waitFor(() => {
       expect((window as any).__chatInputSend).toBe(firstRef);
+    });
+  });
+});
+
+describe('ChatInput race condition handling', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    delete (window as any).__chatInputSend;
+    // Reset mock store state
+    resetMockStoreState();
+  });
+
+  afterEach(() => {
+    delete (window as any).__chatInputSend;
+  });
+
+  it('should use fresh model from store.getState() to avoid stale closure', async () => {
+    // Setup: Mock a successful session creation
+    mockCreateSession.mutateAsync.mockResolvedValue({ id: 1 });
+    mockStreamMessage.mockResolvedValue(undefined);
+
+    render(<ChatInput />);
+
+    // Simulate URL parameter scenario: model is updated in store AFTER component mounts
+    // but BEFORE handleSend is called
+    const urlModel = { value: 'openai/gpt-4o', label: 'GPT-4o' };
+    mockStoreState.selectedModel = urlModel;
+    mockStoreState.inputValue = 'Test message from URL';
+
+    // Call the exposed send function (simulating auto-send from ChatLayout)
+    const sendFn = (window as any).__chatInputSend;
+    expect(sendFn).toBeDefined();
+
+    await sendFn();
+
+    // Verify that streamMessage was called with the FRESH model from store
+    // (not the stale 'test-model' from the component's initial render)
+    await waitFor(() => {
+      expect(mockStreamMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: expect.objectContaining({ value: 'openai/gpt-4o' }),
+        })
+      );
+    });
+  });
+
+  it('should use fresh inputValue from store.getState() to avoid stale closure', async () => {
+    // Setup: Mock a successful session creation
+    mockCreateSession.mutateAsync.mockResolvedValue({ id: 1 });
+    mockStreamMessage.mockResolvedValue(undefined);
+
+    render(<ChatInput />);
+
+    // Simulate URL parameter scenario: inputValue is set in store AFTER component mounts
+    mockStoreState.inputValue = 'Fresh message from URL parameter';
+
+    // Call the exposed send function
+    const sendFn = (window as any).__chatInputSend;
+    await sendFn();
+
+    // Verify session was created with the fresh message
+    await waitFor(() => {
+      expect(mockCreateSession.mutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: expect.stringContaining('Fresh message'),
+        })
+      );
+    });
+  });
+
+  it('should create session with fresh model value from store', async () => {
+    mockCreateSession.mutateAsync.mockResolvedValue({ id: 1 });
+    mockStreamMessage.mockResolvedValue(undefined);
+
+    render(<ChatInput />);
+
+    // Update store state to simulate URL parameter
+    mockStoreState.selectedModel = { value: 'anthropic/claude-3', label: 'Claude 3' };
+    mockStoreState.inputValue = 'Test';
+
+    const sendFn = (window as any).__chatInputSend;
+    await sendFn();
+
+    // Verify session creation used the fresh model value
+    await waitFor(() => {
+      expect(mockCreateSession.mutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: 'anthropic/claude-3',
+        })
+      );
     });
   });
 });
