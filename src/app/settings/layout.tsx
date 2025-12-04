@@ -29,7 +29,7 @@ export default function SettingsLayout({
 
   return (
     <SidebarProvider>
-      <div className="relative flex h-[calc(100vh-130px)]">
+      <div className="relative flex h-[calc(100vh-130px)] overflow-hidden">
         <Sidebar
           variant="sidebar"
           collapsible="icon"
