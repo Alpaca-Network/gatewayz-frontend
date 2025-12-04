@@ -115,7 +115,7 @@ export async function* streamChatResponse(
   apiKey: string,
   requestBody: Record<string, unknown>,
   retryCount = 0,
-  maxRetries = 5
+  maxRetries = 7  // Increased from 5 for better 429 handling
 ): AsyncGenerator<StreamChunk> {
   // Client-side timeout for the fetch request (10 minutes for streaming)
   // Increased to accommodate reasoning models, slow providers, and models with large context windows
@@ -125,7 +125,7 @@ export async function* streamChatResponse(
   try {
     devLog('[Streaming] Initiating fetch request to:', url);
     devLog('[Streaming] Request body:', requestBody);
-    devLog('[Streaming] API Key prefix:', apiKey.substring(0, 20) + '...');
+    devLog('[Streaming] API Key prefix:', apiKey ? apiKey.substring(0, 20) + '...' : 'none');
 
     let response: Response;
     try {
@@ -344,8 +344,11 @@ export async function* streamChatResponse(
       if (retryCount < maxRetries) {
         const retryAfterHeader = response.headers.get('retry-after');
         const isConcurrencyLimit = detailMessage.toLowerCase().includes('concurrency');
-        const baseDelay = isConcurrencyLimit ? 4000 : 1000;
-        const maxDelay = isConcurrencyLimit ? 20000 : 8000;
+        const isBurstLimit = detailMessage.toLowerCase().includes('burst');
+
+        // Use longer delays for burst/concurrency limits as they need more time to recover
+        const baseDelay = (isConcurrencyLimit || isBurstLimit) ? 3000 : 1500;
+        const maxDelay = (isConcurrencyLimit || isBurstLimit) ? 30000 : 15000;
 
         let waitTime = Math.min(baseDelay * Math.pow(2, retryCount), maxDelay);
 
@@ -364,11 +367,11 @@ export async function* streamChatResponse(
           }
         }
 
-        waitTime = Math.max(waitTime, 1000); // Ensure a minimum delay
-        const jitter = Math.floor(Math.random() * 250);
+        waitTime = Math.max(waitTime, 1500); // Ensure a minimum delay of 1.5s
+        const jitter = Math.floor(Math.random() * 500); // Increased jitter
         waitTime += jitter;
 
-        devLog(`Rate limit hit, retrying in ${waitTime}ms (attempt ${retryCount + 1}/${maxRetries})...`);
+        devLog(`Rate limit hit (${isBurstLimit ? 'burst' : isConcurrencyLimit ? 'concurrency' : 'standard'}), retrying in ${waitTime}ms (attempt ${retryCount + 1}/${maxRetries})...`);
         if (detailMessage) {
           devLog('Rate limit detail:', detailMessage);
         }
