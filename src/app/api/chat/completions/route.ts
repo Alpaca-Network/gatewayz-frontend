@@ -236,14 +236,12 @@ export async function POST(request: NextRequest) {
     const isExplicitGuestRequest = apiKey === 'guest';
     const isMissingApiKey = !apiKey || apiKey.trim() === '';
 
-    // Default guest API key for unauthenticated users
-    // This key should have limited rate limits on the backend
-    const DEFAULT_GUEST_API_KEY = 'gatewayz-guest-demo-key';
-
-    // For explicit guest requests or missing API key, use the guest API key
+    // For guest/anonymous requests, we send requests without an API key
+    // The backend handles anonymous requests with relaxed rate limiting (is_anonymous=True)
+    // This avoids all guests sharing a single rate-limited API key which caused 429 errors
     if (isExplicitGuestRequest || isMissingApiKey) {
-      apiKey = process.env.GUEST_API_KEY || DEFAULT_GUEST_API_KEY;
-      console.log('[API Completions] Using guest API key for unauthenticated request');
+      apiKey = ''; // Empty string signals anonymous request to backend
+      console.log('[API Completions] Processing anonymous/guest request (no API key)');
     }
 
     // Resolve router models to actual model IDs

@@ -48,9 +48,11 @@ export function useChatStream() {
         // This pattern ensures we always get the latest auth state at execution time.
         const { apiKey: storeApiKey, isAuthenticated } = useAuthStore.getState();
         // Try store first, fall back to localStorage for auth state desync fix
-        // For guest users, we use a special placeholder since they don't have API keys
-        const apiKey = storeApiKey || getApiKey() || (isAuthenticated ? null : 'guest');
-        if (!apiKey) throw new Error("No API Key");
+        // For guest users, we use an empty string to signal anonymous request to backend
+        // The backend handles anonymous requests without rate limiting (is_anonymous=True)
+        const apiKey = storeApiKey || getApiKey() || (isAuthenticated ? null : '');
+        // Allow empty string for anonymous requests - only throw if authenticated but no key
+        if (apiKey === null) throw new Error("No API Key");
 
         setIsStreaming(true);
         setStreamError(null);
