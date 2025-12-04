@@ -12,6 +12,7 @@ import { Bot, User, Copy, RotateCcw, LogIn } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import dynamic from 'next/dynamic';
 import { usePrivy } from '@privy-io/react-auth';
+import remarkGfm from 'remark-gfm';
 
 // Lazy load heavy components - enable SSR to prevent hydration mismatch
 const ReactMarkdown = dynamic(() => import('react-markdown'), { ssr: true });
@@ -188,6 +189,7 @@ export const ChatMessage = memo<ChatMessageProps>(
                 <p className="whitespace-pre-wrap m-0">{displayContent}</p>
               ) : (
                 <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
                   components={{
                     code: ({ inline, className, children, ...props }: any) => {
                       return !inline ? (
@@ -203,6 +205,24 @@ export const ChatMessage = memo<ChatMessageProps>(
                       );
                     },
                     p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                    table: ({ children }) => (
+                      <div className="overflow-x-auto my-4">
+                        <table className="min-w-full border-collapse border border-border">
+                          {children}
+                        </table>
+                      </div>
+                    ),
+                    thead: ({ children }) => (
+                      <thead className="bg-muted/50">{children}</thead>
+                    ),
+                    th: ({ children }) => (
+                      <th className="border border-border px-3 py-2 text-left font-semibold">
+                        {children}
+                      </th>
+                    ),
+                    td: ({ children }) => (
+                      <td className="border border-border px-3 py-2">{children}</td>
+                    ),
                   }}
                 >
                   {displayContent}
