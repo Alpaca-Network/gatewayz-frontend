@@ -532,5 +532,34 @@ describe('PrivyProviderWrapper', () => {
 
       consoleSpy.mockRestore();
     });
+
+    it('should handle "Cannot redefine property: ethereum" errors from wallet extensions', () => {
+      process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app-id-12345';
+      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+
+      render(
+        <PrivyProviderWrapper>
+          <div>Test Child</div>
+        </PrivyProviderWrapper>
+      );
+
+      // Create a mock ErrorEvent with the ethereum property conflict error
+      const mockEvent = new ErrorEvent('error', {
+        message: 'Uncaught TypeError: Cannot redefine property: ethereum',
+        filename: 'evmAsk.js',
+      });
+      const preventDefaultSpy = jest.spyOn(mockEvent, 'preventDefault');
+
+      window.dispatchEvent(mockEvent);
+
+      // This error should be caught and prevented from appearing in console
+      expect(preventDefaultSpy).toHaveBeenCalled();
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('[Auth] Wallet extension conflict detected'),
+        expect.any(String)
+      );
+
+      consoleSpy.mockRestore();
+    });
   });
 });
