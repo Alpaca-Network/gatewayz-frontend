@@ -38,9 +38,9 @@ const rateLimitState = {
 };
 
 /**
- * Check if request should be rate limited
+ * Check if request would be rate limited (without consuming quota)
  */
-function checkRateLimit(): { limited: boolean; retryAfter?: number } {
+function isRateLimited(): { limited: boolean; retryAfter?: number } {
   const now = Date.now();
 
   // Reset minute window if expired
@@ -68,11 +68,15 @@ function checkRateLimit(): { limited: boolean; retryAfter?: number } {
     return { limited: true, retryAfter: 1 };
   }
 
-  // Increment counters
+  return { limited: false };
+}
+
+/**
+ * Consume rate limit quota (call only after request validation passes)
+ */
+function consumeRateLimitQuota(): void {
   rateLimitState.minuteCount++;
   rateLimitState.secondCount++;
-
-  return { limited: false };
 }
 
 /**
@@ -110,8 +114,8 @@ function parseEnvelopeHeader(buffer: ArrayBuffer): { projectId: string; host: st
 
 export async function POST(request: NextRequest) {
   try {
-    // Check rate limit first
-    const { limited, retryAfter } = checkRateLimit();
+    // Check rate limit first (without consuming quota yet)
+    const { limited, retryAfter } = isRateLimited();
     if (limited) {
       console.warn("[Sentry Tunnel] Rate limit exceeded, rejecting request");
       return new NextResponse("Too Many Requests", {
@@ -129,6 +133,7 @@ export async function POST(request: NextRequest) {
     const buffer = await request.arrayBuffer();
     const envelope = parseEnvelopeHeader(buffer);
 
+    // Validate envelope - invalid requests don't consume rate limit quota
     if (!envelope) {
       console.warn("[Sentry Tunnel] Invalid envelope format");
       return new NextResponse("Invalid envelope", { status: 400, headers: CORS_HEADERS });
@@ -147,6 +152,10 @@ export async function POST(request: NextRequest) {
       console.warn("[Sentry Tunnel] Invalid Sentry host:", envelope.host);
       return new NextResponse("Invalid host", { status: 403, headers: CORS_HEADERS });
     }
+
+    // Only consume rate limit quota after all validation passes
+    // This prevents DoS attacks using malformed requests to exhaust quota
+    consumeRateLimitQuota();
 
     // Build upstream URL
     const upstreamUrl = `https://${envelope.host}/api/${envelope.projectId}/envelope/`;
