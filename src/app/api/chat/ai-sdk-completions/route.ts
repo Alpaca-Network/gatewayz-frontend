@@ -469,7 +469,9 @@ export async function POST(request: NextRequest) {
             // Log all part types for debugging empty content issues
             partTypesReceived.push(part.type);
 
-            // Handle different part types from AI SDK
+            // Handle different part types from AI SDK fullStream
+            // Note: fullStream uses text-delta/reasoning-delta (TextStreamPart types)
+            // This is different from UIMessageStream which uses text-start/text-delta/text-end
             if (part.type === 'text-delta') {
               // Regular text content
               contentReceived = true;
@@ -545,9 +547,16 @@ export async function POST(request: NextRequest) {
                 controller.enqueue(encoder.encode(sseMessage));
               }
             }
-            // Silently ignore boundary markers (text-start, text-end, reasoning-start, reasoning-end)
-            // These don't contain content but are normal AI SDK behavior
-            // Also ignore step-start, step-finish, tool-* parts as they don't affect text output
+            // Silently ignore boundary markers and lifecycle events:
+            // - text-start, text-end: Text content boundaries (UIMessageStream format)
+            // - reasoning-start, reasoning-end: Reasoning boundaries
+            // - step-start, step-finish: Multi-step completion tracking
+            // - tool-call, tool-result, tool-error: Tool invocation events
+            // - tool-input-start, tool-input-delta, tool-input-end: Tool input streaming
+            // - source, file: Content source references
+            // - raw: Raw provider output
+            // - abort: Stream aborted
+            // These don't contain text/reasoning content but are normal AI SDK behavior
           }
 
           // Check if we received any content - if not, send an error message
@@ -562,7 +571,8 @@ export async function POST(request: NextRequest) {
             if (!errorMessage) {
               if (partTypesReceived.length === 0) {
                 errorMessage = `Model "${modelId}" returned an empty response. The model may be unavailable or rate limited. Please try again.`;
-              } else if (partTypesReceived.every(t => t === 'finish' || t === 'step-finish')) {
+              } else if (partTypesReceived.every(t => t === 'finish' || t === 'step-finish' || t === 'step-start')) {
+                // Only received lifecycle events, no actual content
                 errorMessage = `Model "${modelId}" completed without generating any content. This may indicate the model is overloaded or the request was blocked. Please try again or select a different model.`;
               } else {
                 errorMessage = `No response received from model "${modelId}". Part types received: ${partTypesReceived.slice(0, 5).join(', ')}. The model may not be properly configured or may not support the requested features.`;

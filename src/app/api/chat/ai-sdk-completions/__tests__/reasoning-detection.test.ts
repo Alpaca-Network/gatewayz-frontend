@@ -32,7 +32,8 @@ describe('Reasoning Detection', () => {
     const { streamText } = require('ai');
     streamText.mockReturnValue({
       fullStream: (async function* () {
-        yield { type: 'text-delta', text: 'Test', id: '1' };
+        // AI SDK fullStream uses 'text-delta' type
+        yield { type: 'text-delta', text: 'Test' };
         yield { type: 'finish', finishReason: 'stop' };
       })(),
     });
