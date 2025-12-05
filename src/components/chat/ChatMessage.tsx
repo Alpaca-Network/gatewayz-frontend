@@ -104,6 +104,7 @@ const ModelNameWithCopy = ({ model }: { model: string }) => {
 
   return (
     <button
+      type="button"
       onClick={handleCopy}
       className="flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer group"
       title={`Copy model: ${shortName}`}
