@@ -18,6 +18,10 @@ import { useSessionMessages } from "@/lib/hooks/use-chat-queries";
 import { GuestChatCounter } from "@/components/chat/guest-chat-counter";
 import { useNetworkStatus } from "@/hooks/use-network-status";
 
+// Reduced timeout for pending prompt - 15 seconds is more reasonable
+// If the stream hasn't started by then, something is likely wrong
+const PENDING_PROMPT_TIMEOUT_MS = 15000;
+
 // Pool of prompts to randomly select from
 const ALL_PROMPTS = [
     { title: "What model is better for coding?", subtitle: "Compare different AI models for programming tasks" },
@@ -76,11 +80,8 @@ function WelcomeScreen({ onPromptSelect }: { onPromptSelect: (txt: string) => vo
 export function ChatLayout() {
    useAuthSync(); // Trigger auth sync
    const { isAuthenticated, isLoading: authLoading } = useAuthStore();
-   const { selectedModel, setSelectedModel, activeSessionId, setActiveSessionId, setInputValue, mobileSidebarOpen, setMobileSidebarOpen } = useChatUIStore();
+   const { selectedModel, setSelectedModel, activeSessionId, setActiveSessionId, setInputValue, mobileSidebarOpen, setMobileSidebarOpen, pendingPrompt, setPendingPrompt, isRetrying } = useChatUIStore();
    const searchParams = useSearchParams();
-
-   // Track if user has clicked a prompt (to immediately hide welcome screen)
-   const [pendingPrompt, setPendingPrompt] = useState<string | null>(null);
 
    const { data: activeMessages = [], isLoading: messagesLoading } = useSessionMessages(activeSessionId);
 
@@ -170,7 +171,7 @@ export function ChatLayout() {
        if (pendingPrompt && activeMessages.length > 0) {
            setPendingPrompt(null);
        }
-   }, [pendingPrompt, activeMessages.length]);
+   }, [pendingPrompt, activeMessages.length, setPendingPrompt]);
 
    // Track the previous session ID to detect user-initiated session switches
    const prevSessionIdRef = useRef<number | null>(activeSessionId);
@@ -189,22 +190,25 @@ export function ChatLayout() {
        if (pendingPrompt && prevSessionId !== null && activeSessionId !== null && prevSessionId !== activeSessionId) {
            setPendingPrompt(null);
        }
-   }, [activeSessionId, pendingPrompt]);
+   }, [activeSessionId, pendingPrompt, setPendingPrompt]);
 
    // Timeout to clear pending prompt if send fails silently (e.g., network error)
    // This prevents the optimistic UI from being stuck indefinitely
+   // Note: This is a safety net - the ChatInput should clear pendingPrompt on errors
    useEffect(() => {
        if (!pendingPrompt) return;
+       // Don't timeout if we're in a retry state (rate limit handling)
+       if (isRetrying) return;
 
        const timeoutId = setTimeout(() => {
-           // If we still have a pending prompt after 30 seconds, something went wrong
+           // If we still have a pending prompt after timeout, something went wrong
            // Clear it to allow the user to try again
-           console.warn('[ChatLayout] Pending prompt timed out, clearing optimistic UI');
+           console.warn('[ChatLayout] Pending prompt timed out after', PENDING_PROMPT_TIMEOUT_MS, 'ms, clearing optimistic UI');
            setPendingPrompt(null);
-       }, 30000);
+       }, PENDING_PROMPT_TIMEOUT_MS);
 
        return () => clearTimeout(timeoutId);
-   }, [pendingPrompt]);
+   }, [pendingPrompt, isRetrying, setPendingPrompt]);
 
    // Handle prompt selection from welcome screen - auto-send the message
    const handlePromptSelect = (text: string) => {
