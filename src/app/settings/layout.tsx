@@ -29,7 +29,7 @@ export default function SettingsLayout({
 
   return (
     <SidebarProvider>
-      <div className="relative flex h-[calc(100vh-130px)] overflow-hidden">
+      <div className="relative flex flex-1 min-h-0 overflow-hidden">
         <Sidebar
           variant="sidebar"
           collapsible="icon"
@@ -39,9 +39,9 @@ export default function SettingsLayout({
             <SidebarGroup>
               <nav className="flex flex-col space-y-1">
                 {navItems.map((item) => (
-                   <Link 
-                    key={item.href} 
-                    href={item.href} 
+                   <Link
+                    key={item.href}
+                    href={item.href}
                     className={cn(
                       "px-3 py-2 rounded-md text-sm",
                       pathname === item.href
@@ -57,7 +57,7 @@ export default function SettingsLayout({
           </SidebarContent>
         </Sidebar>
 
-        <SidebarInset className="flex-1 overflow-auto">
+        <SidebarInset className="flex-1 overflow-y-auto overflow-x-hidden">
           <div className="p-4 sm:p-6 lg:p-8">
             <div className="flex items-center gap-2 mb-6 lg:hidden">
                 <SidebarTrigger />
