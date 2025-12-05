@@ -458,3 +458,255 @@ After backend standardization, the following frontend code becomes unnecessary:
 ### Total Frontend Code Reduction
 - Estimated 400+ lines of format handling code
 - Simpler, more maintainable streaming implementation
+
+---
+
+## Code Coverage Requirements
+
+### Backend Coverage Targets (Python - pytest-cov)
+
+All new streaming normalization code must meet the following coverage requirements before merge:
+
+| Component | Target Coverage | Rationale |
+|-----------|----------------|-----------|
+| `StreamNormalizer` class | **95%+** | Critical path - all streaming flows through here |
+| Provider-specific normalizers | **100%** | Each normalizer must have complete test coverage |
+| `normalize_reasoning()` | **100%** | All reasoning field aliases must be tested |
+| `create_error_chunk()` | **100%** | Error handling must be bulletproof |
+| Edge case handlers | **90%+** | Malformed input, empty chunks, etc. |
+
+#### Required Test Categories
+
+```python
+# 1. Unit Tests - Each normalizer function (target: 100% line coverage)
+class TestStreamNormalizer:
+    def test_openai_passthrough(self): ...
+    def test_anthropic_text_delta(self): ...
+    def test_anthropic_thinking_delta(self): ...
+    def test_gemini_candidates(self): ...
+    def test_fireworks_output_array(self): ...
+    def test_deepseek_reasoning_field(self): ...
+    def test_qwen_thinking_field(self): ...
+    def test_qwen_inner_thought_field(self): ...
+    def test_empty_chunk_handling(self): ...
+    def test_malformed_chunk_handling(self): ...
+    def test_missing_fields_handling(self): ...
+
+# 2. Integration Tests - Real provider format samples
+class TestProviderIntegration:
+    @pytest.mark.parametrize("provider,sample_file", [...])
+    def test_real_provider_samples(self, provider, sample_file): ...
+
+# 3. Property-Based Tests - Fuzzing with hypothesis
+from hypothesis import given, strategies as st
+
+class TestNormalizerRobustness:
+    @given(st.dictionaries(st.text(), st.text()))
+    def test_arbitrary_input_doesnt_crash(self, chunk): ...
+```
+
+#### Codecov Configuration
+
+Add to `codecov.yml` in backend repo:
+
+```yaml
+coverage:
+  status:
+    project:
+      default:
+        target: 85%
+        threshold: 2%
+    patch:
+      default:
+        target: 95%  # New code must have 95%+ coverage
+        threshold: 0%
+
+  # Require coverage for streaming module
+  flags:
+    streaming:
+      paths:
+        - src/streaming/
+      target: 95%
+
+comment:
+  layout: "diff, flags, files"
+  behavior: default
+  require_changes: true
+```
+
+### Frontend Coverage Targets (TypeScript - Jest)
+
+After backend standardization, frontend streaming code should maintain coverage:
+
+| Component | Current Coverage | Target After Cleanup |
+|-----------|-----------------|---------------------|
+| `streaming.ts` | ~75% | **90%+** (simplified code) |
+| `ai-sdk-completions/route.ts` | ~80% | **90%+** (no format detection) |
+| SSE parsing | ~70% | **95%+** (single format) |
+
+#### Existing Frontend Tests to Update
+
+```typescript
+// __tests__/streaming.test.ts - Update after backend standardization
+describe('streamChatResponse', () => {
+  // REMOVE: Format detection tests (handled by backend)
+  // KEEP: Error handling, retry logic, timeout tests
+  // ADD: Validation that only standard format is accepted
+
+  it('should reject non-standard chunk formats', async () => {
+    // After backend standardization, frontend should only accept OpenAI format
+  });
+});
+
+// __tests__/route.test.ts - Remove provider-specific tests
+describe('AI SDK Completions Route', () => {
+  // REMOVE: Fireworks/DeepSeek redirect tests
+  // KEEP: Authentication, error handling, streaming setup
+});
+```
+
+#### Jest Coverage Thresholds
+
+Update `jest.config.js`:
+
+```javascript
+module.exports = {
+  coverageThreshold: {
+    global: {
+      branches: 80,
+      functions: 85,
+      lines: 85,
+      statements: 85,
+    },
+    './src/lib/streaming.ts': {
+      branches: 90,
+      functions: 95,
+      lines: 90,
+      statements: 90,
+    },
+    './src/app/api/chat/ai-sdk-completions/route.ts': {
+      branches: 85,
+      functions: 90,
+      lines: 85,
+      statements: 85,
+    },
+  },
+};
+```
+
+### CI/CD Coverage Gates
+
+#### GitHub Actions Workflow
+
+```yaml
+# .github/workflows/coverage.yml
+name: Coverage Check
+
+on: [pull_request]
+
+jobs:
+  backend-coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Backend Tests with Coverage
+        run: |
+          pytest --cov=src/streaming --cov-report=xml --cov-fail-under=95
+      - uses: codecov/codecov-action@v4
+        with:
+          flags: streaming
+          fail_ci_if_error: true
+
+  frontend-coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Frontend Tests with Coverage
+        run: |
+          pnpm test --coverage --coverageReporters=lcov
+      - uses: codecov/codecov-action@v4
+        with:
+          flags: frontend
+          fail_ci_if_error: true
+```
+
+### Coverage Reporting Dashboard
+
+Track coverage trends in Codecov with the following views:
+
+1. **Streaming Module Coverage** - Backend normalization code
+2. **Provider Coverage Matrix** - Each provider normalizer's coverage
+3. **Frontend Streaming Coverage** - Client-side parsing code
+4. **Week-over-Week Trends** - Ensure coverage doesn't regress
+
+### Pre-Merge Checklist
+
+Before any streaming-related PR can be merged:
+
+- [ ] Backend StreamNormalizer coverage ≥95%
+- [ ] All provider normalizers have 100% coverage
+- [ ] All reasoning field aliases tested
+- [ ] Error handling paths covered
+- [ ] Frontend streaming.ts coverage ≥90%
+- [ ] No coverage regression from baseline
+- [ ] Codecov status checks pass
+- [ ] Integration tests pass with real provider samples
+
+---
+
+## Additional Comments & Clarifications
+
+### Why Backend Normalization vs Frontend?
+
+**Rationale**: Normalizing at the backend level provides:
+
+1. **Single Source of Truth** - One place to maintain format translation
+2. **Frontend Simplicity** - React/Next.js code stays lean
+3. **Mobile/SDK Support** - Future mobile apps get normalized streams automatically
+4. **Testing Efficiency** - Backend tests can mock provider responses deterministically
+5. **Performance** - Python async streaming is efficient; no double-parsing
+
+### Backward Compatibility
+
+The backend should support a transition period:
+
+```python
+# Feature flag for gradual rollout
+NORMALIZE_STREAMING = os.getenv("NORMALIZE_STREAMING", "false") == "true"
+
+async def stream_completion(provider, model, messages):
+    async for chunk in provider.stream(messages):
+        if NORMALIZE_STREAMING:
+            yield normalize(chunk)
+        else:
+            yield chunk  # Legacy behavior
+```
+
+### Monitoring & Alerting
+
+Add observability for the normalization layer:
+
+```python
+from prometheus_client import Counter, Histogram
+
+normalization_count = Counter(
+    'stream_normalization_total',
+    'Total chunks normalized',
+    ['provider', 'success']
+)
+
+normalization_latency = Histogram(
+    'stream_normalization_seconds',
+    'Time to normalize a chunk',
+    ['provider']
+)
+```
+
+### Documentation Requirements
+
+Each provider normalizer must include:
+
+1. **Input Format Example** - Real sample from provider
+2. **Output Format Example** - Normalized result
+3. **Edge Cases** - Known quirks or variations
+4. **Test Fixtures** - Saved provider responses for testing
