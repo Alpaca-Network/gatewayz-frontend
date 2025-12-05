@@ -15,7 +15,7 @@ interface ReleaseWeek {
 
 const releaseNotes: ReleaseWeek[] = [
   {
-    weekOf: "December 2-5, 2025",
+    weekOf: "December 5th, 2025",
     features: [
       "Streaming Standardization: Implemented unified streaming response format across the backend with stream_normalizer to standardize all provider responses",
       "CI/CD Pipeline: Added GitHub Actions workflow and scripts to test subrepos",
@@ -86,7 +86,7 @@ export default function ReleasesPage() {
             <Card key={index} className="overflow-hidden">
               <CardHeader className="bg-muted/50">
                 <CardTitle className="text-xl lg:text-2xl">
-                  Week of {release.weekOf}
+                  {release.weekOf}
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-6 space-y-6">
@@ -99,7 +99,7 @@ export default function ReleasesPage() {
                     <ul className="space-y-2">
                       {release.features.map((feature, i) => (
                         <li key={i} className="flex items-start gap-2">
-                          <span className="text-green-600 dark:text-green-400 mt-1">+</span>
+                          <span className="text-green-600 dark:text-green-400 text-sm">+</span>
                           <span className="text-sm">{feature}</span>
                         </li>
                       ))}
@@ -122,7 +122,7 @@ export default function ReleasesPage() {
                           <ul className="space-y-1 ml-4">
                             {category.items.map((item, j) => (
                               <li key={j} className="flex items-start gap-2">
-                                <span className="text-blue-600 dark:text-blue-400 mt-1">-</span>
+                                <span className="text-blue-600 dark:text-blue-400 text-sm">-</span>
                                 <span className="text-sm">{item}</span>
                               </li>
                             ))}
@@ -142,7 +142,7 @@ export default function ReleasesPage() {
                     <ul className="space-y-2">
                       {release.infrastructure.map((item, i) => (
                         <li key={i} className="flex items-start gap-2">
-                          <span className="text-purple-600 dark:text-purple-400 mt-1">*</span>
+                          <span className="text-purple-600 dark:text-purple-400 text-sm">*</span>
                           <span className="text-sm">{item}</span>
                         </li>
                       ))}
@@ -159,7 +159,7 @@ export default function ReleasesPage() {
                     <ul className="space-y-2">
                       {release.documentation.map((item, i) => (
                         <li key={i} className="flex items-start gap-2">
-                          <span className="text-orange-600 dark:text-orange-400 mt-1">#</span>
+                          <span className="text-orange-600 dark:text-orange-400 text-sm">#</span>
                           <span className="text-sm">{item}</span>
                         </li>
                       ))}
