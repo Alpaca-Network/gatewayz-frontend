@@ -22,6 +22,30 @@ export const extractTokenValue = (str: string): string | null => {
 };
 
 /**
+ * Shorten model name by removing the gateway prefix
+ * Converts gateway/provider/model format to provider/model format
+ * Examples:
+ * - "OpenRouter/deepseek/Deepseek-r1" → "deepseek/Deepseek-r1"
+ * - "openrouter/openai/gpt-4o" → "openai/gpt-4o"
+ * - "fireworks/meta-llama/llama-3" → "meta-llama/llama-3"
+ * - "deepseek/deepseek-r1" → "deepseek/deepseek-r1" (no change if only 2 parts)
+ * - "gpt-4o" → "gpt-4o" (no change if no slash)
+ */
+export const shortenModelName = (modelId: string): string => {
+  if (!modelId) return modelId;
+
+  const parts = modelId.split('/');
+
+  // If there are 3+ parts (gateway/provider/model), remove the first part (gateway)
+  if (parts.length >= 3) {
+    return parts.slice(1).join('/');
+  }
+
+  // Return as-is if already short (provider/model or just model)
+  return modelId;
+};
+
+/**
  * Normalize model IDs to consistent format
  * Handles various formats returned by different gateway APIs:
  * - @google/models/gemini-pro-latest → google/gemini-pro-latest
