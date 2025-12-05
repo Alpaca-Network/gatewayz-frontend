@@ -95,7 +95,7 @@ describe('AI SDK Completions Route', () => {
 
       streamText.mockReturnValue({
         fullStream: (async function* () {
-          yield { type: 'text-delta', text: 'Hello', id: '1' };
+          yield { type: 'text-delta', text: 'Hello' };
           yield { type: 'finish', finishReason: 'stop' };
         })(),
       });
@@ -125,7 +125,7 @@ describe('AI SDK Completions Route', () => {
       const { streamText } = require('ai');
       streamText.mockReturnValue({
         fullStream: (async function* () {
-          yield { type: 'text-delta', text: 'Hello', id: '1' };
+          yield { type: 'text-delta', text: 'Hello' };
           yield { type: 'finish', finishReason: 'stop' };
         })(),
       });
@@ -150,7 +150,7 @@ describe('AI SDK Completions Route', () => {
       const { streamText } = require('ai');
       streamText.mockReturnValue({
         fullStream: (async function* () {
-          yield { type: 'text-delta', text: 'Hello', id: '1' };
+          yield { type: 'text-delta', text: 'Hello' };
           yield { type: 'finish', finishReason: 'stop' };
         })(),
       });
@@ -178,7 +178,7 @@ describe('AI SDK Completions Route', () => {
 
       streamText.mockReturnValue({
         fullStream: (async function* () {
-          yield { type: 'text-delta', text: 'Hello', id: '1' };
+          yield { type: 'text-delta', text: 'Hello' };
           yield { type: 'finish', finishReason: 'stop' };
         })(),
       });
@@ -215,7 +215,7 @@ describe('AI SDK Completions Route', () => {
 
       streamText.mockReturnValue({
         fullStream: (async function* () {
-          yield { type: 'text-delta', text: 'Hello', id: '1' };
+          yield { type: 'text-delta', text: 'Hello' };
           yield { type: 'finish', finishReason: 'stop' };
         })(),
       });
@@ -247,7 +247,7 @@ describe('AI SDK Completions Route', () => {
       const { streamText } = require('ai');
       streamText.mockReturnValue({
         fullStream: (async function* () {
-          yield { type: 'text-delta', text: 'Hello', id: '1' };
+          yield { type: 'text-delta', text: 'Hello' };
           yield { type: 'finish', finishReason: 'stop' };
         })(),
       });
@@ -270,7 +270,7 @@ describe('AI SDK Completions Route', () => {
       const { streamText } = require('ai');
       streamText.mockReturnValue({
         fullStream: (async function* () {
-          yield { type: 'text-delta', text: 'Hello', id: '1' };
+          yield { type: 'text-delta', text: 'Hello' };
           yield { type: 'finish', finishReason: 'stop' };
         })(),
       });
@@ -292,7 +292,7 @@ describe('AI SDK Completions Route', () => {
       const { streamText } = require('ai');
       streamText.mockReturnValue({
         fullStream: (async function* () {
-          yield { type: 'text-delta', text: 'Hello', id: '1' };
+          yield { type: 'text-delta', text: 'Hello' };
           yield { type: 'finish', finishReason: 'stop' };
         })(),
       });
@@ -315,7 +315,7 @@ describe('AI SDK Completions Route', () => {
       const { streamText } = require('ai');
       streamText.mockReturnValue({
         fullStream: (async function* () {
-          yield { type: 'text-delta', text: 'Hello', id: '1' };
+          yield { type: 'text-delta', text: 'Hello' };
           yield { type: 'finish', finishReason: 'stop' };
         })(),
       });
@@ -338,7 +338,7 @@ describe('AI SDK Completions Route', () => {
       const { streamText } = require('ai');
       streamText.mockReturnValue({
         fullStream: (async function* () {
-          yield { type: 'text-delta', text: 'Hello', id: '1' };
+          yield { type: 'text-delta', text: 'Hello' };
           yield { type: 'finish', finishReason: 'stop' };
         })(),
       });
@@ -382,7 +382,7 @@ describe('AI SDK Completions Route', () => {
         const { streamText } = require('ai');
         streamText.mockReturnValue({
           fullStream: (async function* () {
-            yield { type: 'text-delta', text: 'Hello', id: '1' };
+            yield { type: 'text-delta', text: 'Hello' };
             yield { type: 'finish', finishReason: 'stop' };
           })(),
         });
@@ -403,12 +403,13 @@ describe('AI SDK Completions Route', () => {
   });
 
   describe('SSE Stream Formatting', () => {
-    it('should format text-delta as SSE with OpenAI structure', async () => {
+    it('should format text as SSE with OpenAI structure', async () => {
       const { streamText } = require('ai');
       streamText.mockReturnValue({
         fullStream: (async function* () {
-          yield { type: 'text-delta', text: 'Hello', id: '1' };
-          yield { type: 'text-delta', text: ' World', id: '1' };
+          // AI SDK fullStream uses 'text-delta' type
+          yield { type: 'text-delta', text: 'Hello' };
+          yield { type: 'text-delta', text: ' World' };
           yield { type: 'finish', finishReason: 'stop' };
         })(),
       });
@@ -434,12 +435,13 @@ describe('AI SDK Completions Route', () => {
       expect(text).toContain('data: [DONE]');
     });
 
-    it('should format reasoning-delta as SSE with reasoning_content field', async () => {
+    it('should format reasoning as SSE with reasoning_content field', async () => {
       const { streamText } = require('ai');
       streamText.mockReturnValue({
         fullStream: (async function* () {
-          yield { type: 'reasoning-delta', text: 'Thinking...', id: '1' };
-          yield { type: 'text-delta', text: 'Answer', id: '1' };
+          // AI SDK fullStream uses 'reasoning-delta' and 'text-delta' types
+          yield { type: 'reasoning-delta', text: 'Thinking...' };
+          yield { type: 'text-delta', text: 'Answer' };
           yield { type: 'finish', finishReason: 'stop' };
         })(),
       });
@@ -463,7 +465,7 @@ describe('AI SDK Completions Route', () => {
       const { streamText } = require('ai');
       streamText.mockReturnValue({
         fullStream: (async function* () {
-          yield { type: 'text-delta', text: 'Hello', id: '1' };
+          yield { type: 'text-delta', text: 'Hello' };
           yield { type: 'finish', finishReason: 'stop' };
         })(),
       });
@@ -533,7 +535,7 @@ describe('AI SDK Completions Route', () => {
 
       streamText.mockReturnValue({
         fullStream: (async function* () {
-          yield { type: 'text-delta', text: 'Hello', id: '1' };
+          yield { type: 'text-delta', text: 'Hello' };
           yield { type: 'finish', finishReason: 'stop' };
         })(),
       });

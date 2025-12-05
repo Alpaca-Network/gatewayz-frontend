@@ -32,9 +32,10 @@ describe('AI SDK Streaming Integration', () => {
       const { streamText } = require('ai');
       streamText.mockReturnValue({
         fullStream: (async function* () {
-          yield { type: 'text-delta', text: 'Hello', id: '1' };
-          yield { type: 'text-delta', text: ' world', id: '1' };
-          yield { type: 'text-delta', text: '!', id: '1' };
+          // AI SDK fullStream uses 'text-delta' type for text content
+          yield { type: 'text-delta', text: 'Hello' };
+          yield { type: 'text-delta', text: ' world' };
+          yield { type: 'text-delta', text: '!' };
           yield { type: 'finish', finishReason: 'stop' };
         })(),
       });
@@ -79,10 +80,11 @@ describe('AI SDK Streaming Integration', () => {
       const { streamText } = require('ai');
       streamText.mockReturnValue({
         fullStream: (async function* () {
-          yield { type: 'reasoning-delta', text: 'Let me think...', id: '1' };
-          yield { type: 'reasoning-delta', text: ' analyzing...', id: '1' };
-          yield { type: 'text-delta', text: 'The answer is', id: '1' };
-          yield { type: 'text-delta', text: ' 42', id: '1' };
+          // AI SDK fullStream uses 'reasoning-delta' for chain-of-thought
+          yield { type: 'reasoning-delta', text: 'Let me think...' };
+          yield { type: 'reasoning-delta', text: ' analyzing...' };
+          yield { type: 'text-delta', text: 'The answer is' };
+          yield { type: 'text-delta', text: ' 42' };
           yield { type: 'finish', finishReason: 'stop' };
         })(),
       });
@@ -121,10 +123,11 @@ describe('AI SDK Streaming Integration', () => {
       const { streamText } = require('ai');
       streamText.mockReturnValue({
         fullStream: (async function* () {
-          yield { type: 'reasoning-delta', text: 'Analyzing...', id: '1' };
-          yield { type: 'text-delta', text: 'First,', id: '1' };
-          yield { type: 'reasoning-delta', text: 'Considering...', id: '1' };
-          yield { type: 'text-delta', text: ' second', id: '1' };
+          // AI SDK fullStream uses 'reasoning-delta' and 'text-delta' types
+          yield { type: 'reasoning-delta', text: 'Analyzing...' };
+          yield { type: 'text-delta', text: 'First,' };
+          yield { type: 'reasoning-delta', text: 'Considering...' };
+          yield { type: 'text-delta', text: ' second' };
           yield { type: 'finish', finishReason: 'stop' };
         })(),
       });
@@ -154,7 +157,7 @@ describe('AI SDK Streaming Integration', () => {
       const { streamText } = require('ai');
       streamText.mockReturnValue({
         fullStream: (async function* () {
-          yield { type: 'text-delta', text: 'Test', id: '1' };
+          yield { type: 'text-delta', text: 'Test' };
           yield { type: 'finish', finishReason: 'stop' };
         })(),
       });
@@ -193,8 +196,8 @@ describe('AI SDK Streaming Integration', () => {
       const { streamText } = require('ai');
       streamText.mockReturnValue({
         fullStream: (async function* () {
-          yield { type: 'text-delta', text: 'Test "quoted" text', id: '1' };
-          yield { type: 'text-delta', text: 'Line\nbreak', id: '1' };
+          yield { type: 'text-delta', text: 'Test "quoted" text' };
+          yield { type: 'text-delta', text: 'Line\nbreak' };
           yield { type: 'finish', finishReason: 'stop' };
         })(),
       });
@@ -232,7 +235,7 @@ describe('AI SDK Streaming Integration', () => {
       const { streamText } = require('ai');
       streamText.mockReturnValue({
         fullStream: (async function* () {
-          yield { type: 'text-delta', text: 'Starting...', id: '1' };
+          yield { type: 'text-delta', text: 'Starting...' };
           throw new Error('Stream error occurred');
         })(),
       });
@@ -260,11 +263,10 @@ describe('AI SDK Streaming Integration', () => {
     it('should handle large number of chunks efficiently', async () => {
       const { streamText } = require('ai');
 
-      // Generate 1000 chunks
+      // Generate 1000 chunks - AI SDK fullStream uses 'text-delta' type
       const chunks = Array.from({ length: 1000 }, (_, i) => ({
-        type: 'text-delta' as const,
+        type: 'text' as const,
         text: `chunk${i} `,
-        id: '1',
       }));
       chunks.push({ type: 'finish' as const, finishReason: 'stop' });
 
@@ -312,7 +314,7 @@ describe('AI SDK Streaming Integration', () => {
         const { streamText } = require('ai');
         streamText.mockReturnValue({
           fullStream: (async function* () {
-            yield { type: 'text-delta', text: 'Response', id: '1' };
+            yield { type: 'text-delta', text: 'Response' };
             yield { type: 'finish', finishReason: 'stop' };
           })(),
         });
