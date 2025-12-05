@@ -207,86 +207,97 @@ export function useStreaming(options: UseStreamingOptions = {}): UseStreamingRet
       let buffer = '';
       let hasReceivedContent = false;
 
-      while (true) {
-        // Reset chunk timeout
-        if (timeoutRef.current) {
-          clearTimeout(timeoutRef.current);
-        }
-        timeoutRef.current = setTimeout(() => {
-          cleanup();
-          setStatus('error', { error: 'Stream timeout - no data received' });
-          onError?.('Stream timeout - no data received');
-        }, CHUNK_TIMEOUT);
+      try {
+        while (true) {
+          // Reset chunk timeout
+          if (timeoutRef.current) {
+            clearTimeout(timeoutRef.current);
+          }
+          timeoutRef.current = setTimeout(() => {
+            cleanup();
+            setStatus('error', { error: 'Stream timeout - no data received' });
+            onError?.('Stream timeout - no data received');
+          }, CHUNK_TIMEOUT);
 
-        const { done, value } = await reader.read();
+          const { done, value } = await reader.read();
 
-        if (done) {
-          cleanup();
+          if (done) {
+            cleanup();
 
-          if (!hasReceivedContent) {
-            const error = 'No response received from model';
-            setStatus('error', { error });
-            onError?.(error);
+            if (!hasReceivedContent) {
+              const error = 'No response received from model';
+              setStatus('error', { error });
+              onError?.(error);
+              return;
+            }
+
+            setStatus('complete', { endTime: Date.now() });
+            onChunk({ done: true });
+            onComplete?.();
             return;
           }
 
-          setStatus('complete', { endTime: Date.now() });
-          onChunk({ done: true });
-          onComplete?.();
-          return;
-        }
+          buffer += decoder.decode(value, { stream: true });
 
-        buffer += decoder.decode(value, { stream: true });
+          // Process SSE events
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || ''; // Keep incomplete line in buffer
 
-        // Process SSE events
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || ''; // Keep incomplete line in buffer
+          for (const line of lines) {
+            if (!line.trim() || line.startsWith(':')) continue;
 
-        for (const line of lines) {
-          if (!line.trim() || line.startsWith(':')) continue;
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6).trim();
 
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6).trim();
-
-            if (data === '[DONE]') {
-              continue;
-            }
-
-            try {
-              const parsed = JSON.parse(data);
-              const chunk = parseStreamChunk(parsed);
-
-              if (chunk.content || chunk.reasoning) {
-                // Record first token time
-                if (!hasReceivedContent) {
-                  hasReceivedContent = true;
-                  setStreamState(prev => ({
-                    ...prev,
-                    firstTokenTime: Date.now(),
-                  }));
-                  onChunk({ status: 'first_token' });
-                }
-
-                // Accumulate content
-                if (chunk.content) {
-                  setStreamState(prev => ({
-                    ...prev,
-                    content: prev.content + chunk.content,
-                  }));
-                }
-                if (chunk.reasoning) {
-                  setStreamState(prev => ({
-                    ...prev,
-                    reasoning: prev.reasoning + chunk.reasoning,
-                  }));
-                }
-
-                onChunk(chunk);
+              if (data === '[DONE]') {
+                continue;
               }
-            } catch (parseError) {
-              console.warn('[useStreaming] Failed to parse chunk:', data);
+
+              try {
+                const parsed = JSON.parse(data);
+                const chunk = parseStreamChunk(parsed);
+
+                if (chunk.content || chunk.reasoning) {
+                  // Record first token time
+                  if (!hasReceivedContent) {
+                    hasReceivedContent = true;
+                    setStreamState(prev => ({
+                      ...prev,
+                      firstTokenTime: Date.now(),
+                    }));
+                    onChunk({ status: 'first_token' });
+                  }
+
+                  // Accumulate content
+                  if (chunk.content) {
+                    setStreamState(prev => ({
+                      ...prev,
+                      content: prev.content + chunk.content,
+                    }));
+                  }
+                  if (chunk.reasoning) {
+                    setStreamState(prev => ({
+                      ...prev,
+                      reasoning: prev.reasoning + chunk.reasoning,
+                    }));
+                  }
+
+                  onChunk(chunk);
+                }
+              } catch (parseError) {
+                console.warn('[useStreaming] Failed to parse chunk:', data);
+              }
             }
           }
+        }
+      } finally {
+        // Always release the reader lock, even if an error occurs
+        // This prevents resource leaks when streams are aborted
+        try {
+          reader.releaseLock();
+        } catch (lockError) {
+          // Ignore errors from releasing already-released locks
+          console.debug('[useStreaming] Reader lock already released');
         }
       }
     } catch (err) {
