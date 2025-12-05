@@ -22,14 +22,14 @@ export const extractTokenValue = (str: string): string | null => {
 };
 
 /**
- * Shorten model name by removing the gateway prefix
+ * Shorten model name by removing the gateway prefix and converting to lowercase
  * Converts gateway/provider/model format to provider/model format
  * Examples:
- * - "OpenRouter/deepseek/Deepseek-r1" → "deepseek/Deepseek-r1"
+ * - "OpenRouter/deepseek/Deepseek-r1" → "deepseek/deepseek-r1"
  * - "openrouter/openai/gpt-4o" → "openai/gpt-4o"
  * - "fireworks/meta-llama/llama-3" → "meta-llama/llama-3"
- * - "deepseek/deepseek-r1" → "deepseek/deepseek-r1" (no change if only 2 parts)
- * - "gpt-4o" → "gpt-4o" (no change if no slash)
+ * - "deepseek/Deepseek-R1" → "deepseek/deepseek-r1" (lowercase even if only 2 parts)
+ * - "GPT-4o" → "gpt-4o" (lowercase even if no slash)
  */
 export const shortenModelName = (modelId: string): string => {
   if (!modelId) return modelId;
@@ -38,11 +38,11 @@ export const shortenModelName = (modelId: string): string => {
 
   // If there are 3+ parts (gateway/provider/model), remove the first part (gateway)
   if (parts.length >= 3) {
-    return parts.slice(1).join('/');
+    return parts.slice(1).join('/').toLowerCase();
   }
 
-  // Return as-is if already short (provider/model or just model)
-  return modelId;
+  // Return lowercase version
+  return modelId.toLowerCase();
 };
 
 /**

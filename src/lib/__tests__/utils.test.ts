@@ -160,11 +160,11 @@ describe('Utils', () => {
   })
 
   describe('shortenModelName', () => {
-    it('should remove gateway prefix from 3-part model names', () => {
-      expect(shortenModelName('OpenRouter/deepseek/Deepseek-r1')).toBe('deepseek/Deepseek-r1')
+    it('should remove gateway prefix from 3-part model names and lowercase', () => {
+      expect(shortenModelName('OpenRouter/deepseek/Deepseek-r1')).toBe('deepseek/deepseek-r1')
     })
 
-    it('should remove gateway prefix (lowercase)', () => {
+    it('should remove gateway prefix and lowercase', () => {
       expect(shortenModelName('openrouter/openai/gpt-4o')).toBe('openai/gpt-4o')
     })
 
@@ -172,16 +172,16 @@ describe('Utils', () => {
       expect(shortenModelName('fireworks/meta-llama/llama-3')).toBe('meta-llama/llama-3')
     })
 
-    it('should not modify 2-part model names', () => {
-      expect(shortenModelName('deepseek/deepseek-r1')).toBe('deepseek/deepseek-r1')
+    it('should lowercase 2-part model names', () => {
+      expect(shortenModelName('deepseek/Deepseek-R1')).toBe('deepseek/deepseek-r1')
     })
 
-    it('should not modify single part model names', () => {
-      expect(shortenModelName('gpt-4o')).toBe('gpt-4o')
+    it('should lowercase single part model names', () => {
+      expect(shortenModelName('GPT-4o')).toBe('gpt-4o')
     })
 
-    it('should handle 4+ part paths by removing only first part', () => {
-      expect(shortenModelName('openrouter/near/deepseek-ai/deepseek-v3')).toBe('near/deepseek-ai/deepseek-v3')
+    it('should handle 4+ part paths by removing only first part and lowercase', () => {
+      expect(shortenModelName('openrouter/near/deepseek-ai/DeepSeek-V3')).toBe('near/deepseek-ai/deepseek-v3')
     })
 
     it('should return empty string as-is', () => {
