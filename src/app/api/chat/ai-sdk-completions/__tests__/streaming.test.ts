@@ -265,7 +265,7 @@ describe('AI SDK Streaming Integration', () => {
 
       // Generate 1000 chunks - AI SDK fullStream uses 'text-delta' type
       const chunks = Array.from({ length: 1000 }, (_, i) => ({
-        type: 'text' as const,
+        type: 'text-delta' as const,
         text: `chunk${i} `,
       }));
       chunks.push({ type: 'finish' as const, finishReason: 'stop' });
