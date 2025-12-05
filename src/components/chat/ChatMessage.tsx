@@ -8,7 +8,7 @@
 import React, { memo, useState } from 'react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Card } from '@/components/ui/card';
-import { Bot, User, Copy, RotateCcw, LogIn, Check } from 'lucide-react';
+import { Bot, User, Copy, RotateCcw, LogIn, Check, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import dynamic from 'next/dynamic';
 import { usePrivy } from '@privy-io/react-auth';
@@ -29,6 +29,7 @@ export interface ChatMessageProps {
   image?: string;
   video?: string;
   audio?: string;
+  document?: { data: string; name: string; type: string };
   isStreaming?: boolean;
   model?: string;
   error?: string;
@@ -130,6 +131,7 @@ export const ChatMessage = memo<ChatMessageProps>(
     image,
     video,
     audio,
+    document,
     isStreaming,
     model,
     error,
@@ -145,6 +147,7 @@ export const ChatMessage = memo<ChatMessageProps>(
     let displayImage = image;
     let displayVideo = video;
     let displayAudio = audio;
+    let displayDocument = document;
 
     if (Array.isArray(content)) {
       content.forEach(part => {
@@ -156,6 +159,8 @@ export const ChatMessage = memo<ChatMessageProps>(
           displayVideo = part.video_url?.url;
         } else if (part.type === 'audio_url') {
           displayAudio = part.audio_url?.url;
+        } else if (part.type === 'document' && part.document) {
+          displayDocument = part.document;
         }
       });
     } else {
@@ -208,6 +213,23 @@ export const ChatMessage = memo<ChatMessageProps>(
             {displayAudio && (
               <div className="mb-3">
                 <audio src={displayAudio} controls className="w-full" />
+              </div>
+            )}
+
+            {/* Document attachment */}
+            {displayDocument && (
+              <div className="mb-3">
+                <div className={`flex items-center gap-3 p-3 rounded-md ${isUser ? 'bg-blue-700/30' : 'bg-muted'}`}>
+                  <FileText className="h-8 w-8 flex-shrink-0" />
+                  <div className="flex flex-col min-w-0 flex-1">
+                    <span className={`font-medium truncate ${isUser ? 'text-white' : 'text-foreground'}`} title={displayDocument.name}>
+                      {displayDocument.name}
+                    </span>
+                    <span className={`text-xs ${isUser ? 'text-blue-200' : 'text-muted-foreground'}`}>
+                      {displayDocument.type.split('/')[1]?.toUpperCase() || 'Document'}
+                    </span>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -337,6 +359,8 @@ export const ChatMessage = memo<ChatMessageProps>(
       prevProps.image === nextProps.image &&
       prevProps.video === nextProps.video &&
       prevProps.audio === nextProps.audio &&
+      prevProps.document?.name === nextProps.document?.name &&
+      prevProps.document?.type === nextProps.document?.type &&
       prevProps.error === nextProps.error &&
       prevProps.hasError === nextProps.hasError
     );

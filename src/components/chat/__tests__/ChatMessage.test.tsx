@@ -132,6 +132,8 @@ jest.mock('lucide-react', () => ({
   Copy: () => <span data-testid="copy-icon">Copy</span>,
   RotateCcw: () => <span data-testid="regenerate-icon">Regenerate</span>,
   LogIn: () => <span data-testid="login-icon">LogIn</span>,
+  Check: () => <span data-testid="check-icon">Check</span>,
+  FileText: () => <span data-testid="file-text-icon">FileText</span>,
 }));
 
 describe('ChatMessage', () => {
@@ -286,6 +288,56 @@ describe('ChatMessage', () => {
       expect(screen.getByText('Check this image')).toBeInTheDocument();
       const img = screen.getByAltText('Uploaded');
       expect(img).toHaveAttribute('src', 'https://example.com/array-image.png');
+    });
+
+    it('should render document attachments', () => {
+      const documentData = {
+        data: 'data:application/pdf;base64,JVBERi0xLjQ=',
+        name: 'test-document.pdf',
+        type: 'application/pdf',
+      };
+
+      render(<ChatMessage {...defaultProps} document={documentData} />);
+
+      expect(screen.getByTestId('file-text-icon')).toBeInTheDocument();
+      expect(screen.getByText('test-document.pdf')).toBeInTheDocument();
+      expect(screen.getByText('PDF')).toBeInTheDocument();
+    });
+
+    it('should render document attachments for user messages with correct styling', () => {
+      const documentData = {
+        data: 'data:text/plain;base64,SGVsbG8gV29ybGQ=',
+        name: 'notes.txt',
+        type: 'text/plain',
+      };
+
+      const { container } = render(<ChatMessage {...defaultProps} role="user" document={documentData} />);
+
+      expect(screen.getByText('notes.txt')).toBeInTheDocument();
+      expect(screen.getByText('PLAIN')).toBeInTheDocument();
+      // Check user message document styling
+      const docContainer = container.querySelector('.bg-blue-700\\/30');
+      expect(docContainer).toBeInTheDocument();
+    });
+
+    it('should handle array content with document type', () => {
+      const arrayContent = [
+        { type: 'text', text: 'Here is the document' },
+        {
+          type: 'document',
+          document: {
+            data: 'data:application/pdf;base64,JVBERi0xLjQ=',
+            name: 'report.pdf',
+            type: 'application/pdf',
+          },
+        },
+      ];
+
+      render(<ChatMessage {...defaultProps} content={arrayContent} />);
+
+      expect(screen.getByText('Here is the document')).toBeInTheDocument();
+      expect(screen.getByText('report.pdf')).toBeInTheDocument();
+      expect(screen.getByText('PDF')).toBeInTheDocument();
     });
   });
 
