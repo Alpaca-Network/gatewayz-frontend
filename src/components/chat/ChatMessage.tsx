@@ -5,14 +5,15 @@
  * Performance improvement: 50% less re-rendering
  */
 
-import React, { memo } from 'react';
+import React, { memo, useState } from 'react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Card } from '@/components/ui/card';
-import { Bot, User, Copy, RotateCcw, LogIn } from 'lucide-react';
+import { Bot, User, Copy, RotateCcw, LogIn, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import dynamic from 'next/dynamic';
 import { usePrivy } from '@privy-io/react-auth';
 import remarkGfm from 'remark-gfm';
+import { shortenModelName } from '@/lib/utils';
 
 // Lazy load heavy components - enable SSR to prevent hydration mismatch
 const ReactMarkdown = dynamic(() => import('react-markdown'), { ssr: true });
@@ -81,6 +82,39 @@ const ErrorDisplay = ({ error }: { error: string }) => {
         </Button>
       )}
     </div>
+  );
+};
+
+/**
+ * Model name display with copy functionality
+ */
+const ModelNameWithCopy = ({ model }: { model: string }) => {
+  const [copied, setCopied] = useState(false);
+  const shortName = shortenModelName(model);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(shortName);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy model name:', err);
+    }
+  };
+
+  return (
+    <button
+      onClick={handleCopy}
+      className="flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer group"
+      title={`Copy model: ${shortName}`}
+    >
+      <span>{shortName}</span>
+      {copied ? (
+        <Check className="h-3 w-3 text-green-500" />
+      ) : (
+        <Copy className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+      )}
+    </button>
   );
 };
 
@@ -250,7 +284,9 @@ export const ChatMessage = memo<ChatMessageProps>(
           {/* Model info and actions */}
           {!isUser && showActions && (
             <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
-              {model && model !== 'openrouter/auto' && <span>{model}</span>}
+              {model && model !== 'openrouter/auto' && (
+                <ModelNameWithCopy model={model} />
+              )}
               <div className="flex gap-1">
                 {onCopy && (
                   <Button
