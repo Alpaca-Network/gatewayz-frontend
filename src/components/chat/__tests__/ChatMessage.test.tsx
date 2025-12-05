@@ -398,16 +398,31 @@ describe('ChatMessage', () => {
   });
 
   describe('Model display', () => {
-    it('should display model name for assistant messages', () => {
-      render(<ChatMessage {...defaultProps} model="gpt-4" showActions={true} onCopy={() => {}} />);
+    it('should display formatted model name for assistant messages', () => {
+      render(<ChatMessage {...defaultProps} model="deepseek/deepseek-r1" showActions={true} onCopy={() => {}} />);
 
-      expect(screen.getByText('gpt-4')).toBeInTheDocument();
+      // Should display formatted as "Provider / Model"
+      expect(screen.getByText('DeepSeek / DeepSeek-R1')).toBeInTheDocument();
+    });
+
+    it('should format provider/model correctly', () => {
+      render(<ChatMessage {...defaultProps} model="openai/gpt-4" showActions={true} onCopy={() => {}} />);
+
+      expect(screen.getByText('OpenAI / GPT-4')).toBeInTheDocument();
+    });
+
+    it('should handle gateway/provider/model format', () => {
+      render(<ChatMessage {...defaultProps} model="fireworks/anthropic/claude-3-opus" showActions={true} onCopy={() => {}} />);
+
+      // Should skip gateway and show "Provider / Model"
+      expect(screen.getByText('Anthropic / Claude-3-Opus')).toBeInTheDocument();
     });
 
     it('should not display "openrouter/auto" model', () => {
       render(<ChatMessage {...defaultProps} model="openrouter/auto" showActions={true} onCopy={() => {}} />);
 
       expect(screen.queryByText('openrouter/auto')).not.toBeInTheDocument();
+      expect(screen.queryByText('Openrouter / Auto')).not.toBeInTheDocument();
     });
   });
 

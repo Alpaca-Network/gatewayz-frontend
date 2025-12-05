@@ -61,6 +61,74 @@ const isAuthError = (error: string): boolean => {
   );
 };
 
+// Format model name to "Provider / Model Name" format
+const formatModelName = (modelId: string): string => {
+  if (!modelId) return '';
+
+  // Split by slash to get provider and model parts
+  const parts = modelId.split('/');
+
+  if (parts.length === 1) {
+    // Single part - just capitalize
+    return capitalizeWords(parts[0]);
+  }
+
+  if (parts.length === 2) {
+    // Format: provider/model -> "Provider / Model"
+    return `${capitalizeWords(parts[0])} / ${capitalizeWords(parts[1])}`;
+  }
+
+  if (parts.length >= 3) {
+    // Format: gateway/provider/model -> "Provider / Model" (skip gateway)
+    return `${capitalizeWords(parts[1])} / ${capitalizeWords(parts[2])}`;
+  }
+
+  return modelId;
+};
+
+// Helper to capitalize words and handle common abbreviations
+const capitalizeWords = (str: string): string => {
+  // Handle common model name patterns
+  const specialCases: Record<string, string> = {
+    'gpt': 'GPT',
+    'gpt-4': 'GPT-4',
+    'gpt-4o': 'GPT-4o',
+    'gpt-3.5': 'GPT-3.5',
+    'o1': 'o1',
+    'o3': 'o3',
+    'claude': 'Claude',
+    'llama': 'Llama',
+    'gemini': 'Gemini',
+    'deepseek': 'DeepSeek',
+    'deepseek-r1': 'DeepSeek-R1',
+    'deepseek-v3': 'DeepSeek-V3',
+    'qwen': 'Qwen',
+    'openai': 'OpenAI',
+    'anthropic': 'Anthropic',
+    'google': 'Google',
+    'meta': 'Meta',
+    'mistral': 'Mistral',
+    'fireworks': 'Fireworks',
+    'together': 'Together',
+    'groq': 'Groq',
+    'perplexity': 'Perplexity',
+    'cohere': 'Cohere',
+    'ai21': 'AI21',
+    'gatewayz': 'GatewayZ',
+  };
+
+  const lowerStr = str.toLowerCase();
+  if (specialCases[lowerStr]) {
+    return specialCases[lowerStr];
+  }
+
+  // Default: capitalize first letter of each word separated by dash
+  return str
+    .split('-')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join('-');
+};
+
 // Error display component with sign-in button for auth errors
 const ErrorDisplay = ({ error }: { error: string }) => {
   const { login } = usePrivy();
@@ -250,31 +318,31 @@ export const ChatMessage = memo<ChatMessageProps>(
           {/* Model info and actions */}
           {!isUser && showActions && (
             <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
-              {model && model !== 'openrouter/auto' && <span>{model}</span>}
-              <div className="flex gap-1">
-                {onCopy && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6"
-                    onClick={onCopy}
-                    title="Copy message"
-                  >
-                    <Copy className="h-3 w-3" />
-                  </Button>
-                )}
-                {onRegenerate && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6"
-                    onClick={onRegenerate}
-                    title="Regenerate response"
-                  >
-                    <RotateCcw className="h-3 w-3" />
-                  </Button>
-                )}
-              </div>
+              {model && model !== 'openrouter/auto' && (
+                <span>{formatModelName(model)}</span>
+              )}
+              {onCopy && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={onCopy}
+                  title="Copy message"
+                >
+                  <Copy className="h-3 w-3" />
+                </Button>
+              )}
+              {onRegenerate && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={onRegenerate}
+                  title="Regenerate response"
+                >
+                  <RotateCcw className="h-3 w-3" />
+                </Button>
+              )}
             </div>
           )}
         </div>
