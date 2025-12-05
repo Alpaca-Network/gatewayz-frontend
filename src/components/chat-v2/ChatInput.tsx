@@ -45,10 +45,10 @@ const generateSessionTitle = (text: string, maxLength: number = 30): string => {
 };
 
 export function ChatInput() {
-  const { activeSessionId, setActiveSessionId, selectedModel, inputValue, setInputValue } = useChatUIStore();
+  const { activeSessionId, setActiveSessionId, selectedModel, inputValue, setInputValue, setPendingPrompt, setIsRetrying } = useChatUIStore();
   const { data: messages = [], isLoading: isHistoryLoading } = useSessionMessages(activeSessionId);
   const createSession = useCreateSession();
-  const { isStreaming, streamMessage } = useChatStream();
+  const { isStreaming, streamMessage, streamError } = useChatStream();
   const { toast } = useToast();
   const { isAuthenticated } = useAuthStore();
   const { login } = usePrivy();
@@ -66,6 +66,23 @@ export function ChatInput() {
 
   // Derive input empty state directly from inputValue to avoid desync issues
   const isInputEmpty = !inputValue.trim();
+
+  // Clear pending prompt when streaming fails
+  // This ensures the optimistic UI is cleared immediately on error
+  useEffect(() => {
+    if (streamError) {
+      console.warn('[ChatInput] Stream error detected, clearing pending prompt:', streamError);
+      setPendingPrompt(null);
+      setIsRetrying(false);
+    }
+  }, [streamError, setPendingPrompt, setIsRetrying]);
+
+  // Clear isRetrying state when streaming completes successfully
+  useEffect(() => {
+    if (!isStreaming) {
+      setIsRetrying(false);
+    }
+  }, [isStreaming, setIsRetrying]);
 
   // Expose focus method for external use (e.g., welcome screen prompt selection)
   const focusInput = useCallback(() => {
@@ -218,9 +235,11 @@ export function ChatInput() {
           }
         }
     } catch (e) {
+        // Clear pending prompt on error so user can try again
+        setPendingPrompt(null);
         toast({ title: "Failed to send message", variant: "destructive" });
     }
-  }, [inputValue, selectedImage, selectedVideo, selectedAudio, isStreaming, selectedModel, activeSessionId, messages, setInputValue, setActiveSessionId, createSession, streamMessage, toast, isAuthenticated, login]);
+  }, [inputValue, selectedImage, selectedVideo, selectedAudio, isStreaming, selectedModel, activeSessionId, messages, setInputValue, setActiveSessionId, createSession, streamMessage, toast, isAuthenticated, login, setPendingPrompt]);
 
   // Expose send function for prompt auto-send from WelcomeScreen
   useEffect(() => {

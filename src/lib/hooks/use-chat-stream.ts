@@ -4,6 +4,7 @@ import { streamChatResponse } from '@/lib/streaming';
 import { ChatStreamHandler } from '@/lib/chat-stream-handler';
 import { useSaveMessage } from '@/lib/hooks/use-chat-queries';
 import { useAuthStore } from '@/lib/store/auth-store';
+import { useChatUIStore } from '@/lib/store/chat-ui-store';
 import { getApiKey } from '@/lib/api';
 import { ModelOption } from '@/components/chat/model-select';
 import { ChatMessage } from '@/lib/chat-history';
@@ -226,6 +227,19 @@ export function useChatStream() {
                     });
                 }
 
+                // Handle rate limit retry status - notify UI that we're retrying
+                if (chunk.status === 'rate_limit_retry') {
+                    debugLog('Rate limit retry', { retryAfterMs: chunk.retryAfterMs });
+                    // Set isRetrying flag in store to prevent timeout from clearing pendingPrompt
+                    useChatUIStore.getState().setIsRetrying(true);
+                    continue; // Skip to next chunk
+                }
+
+                // Clear retry state when we start receiving content
+                if (chunk.content || chunk.reasoning) {
+                    useChatUIStore.getState().setIsRetrying(false);
+                }
+
                 if (chunk.content) {
                     totalContentLength += String(chunk.content).length;
                     streamHandlerRef.current.processContentWithThinking(String(chunk.content));
@@ -320,6 +334,8 @@ export function useChatStream() {
             });
         } finally {
             setIsStreaming(false);
+            // Ensure retry state is cleared
+            useChatUIStore.getState().setIsRetrying(false);
         }
 
     }, [queryClient, saveMessage]);
