@@ -242,8 +242,15 @@ export async function POST(request: NextRequest) {
 
     // For explicit guest requests or missing API key, use the guest API key
     if (isExplicitGuestRequest || isMissingApiKey) {
-      apiKey = process.env.GUEST_API_KEY || DEFAULT_GUEST_API_KEY;
-      console.log('[API Completions] Using guest API key for unauthenticated request');
+      const guestKey = process.env.GUEST_API_KEY || DEFAULT_GUEST_API_KEY;
+      console.log('[API Completions] Guest mode detected:', {
+        isExplicitGuestRequest,
+        isMissingApiKey,
+        hasEnvGuestKey: !!process.env.GUEST_API_KEY,
+        usingKey: guestKey.substring(0, 15) + '...',
+        willBeAnonymous: !process.env.GUEST_API_KEY // If no env key, backend will treat as anonymous
+      });
+      apiKey = guestKey;
     }
 
     // Resolve router models to actual model IDs

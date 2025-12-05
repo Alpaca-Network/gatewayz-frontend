@@ -8,6 +8,21 @@ import { getApiKey } from '@/lib/api';
 import { ModelOption } from '@/components/chat/model-select';
 import { ChatMessage } from '@/lib/chat-history';
 
+// Debug logging helper - always logs in development, logs errors in production
+const debugLog = (message: string, data?: any) => {
+    const timestamp = new Date().toISOString();
+    const prefix = `[ChatStream ${timestamp}]`;
+    if (process.env.NODE_ENV === 'development') {
+        console.log(prefix, message, data !== undefined ? data : '');
+    }
+};
+
+const debugError = (message: string, data?: any) => {
+    const timestamp = new Date().toISOString();
+    const prefix = `[ChatStream ERROR ${timestamp}]`;
+    console.error(prefix, message, data !== undefined ? data : '');
+};
+
 // Helper to extract image/video/audio from content array for display
 const extractMediaFromContent = (content: any): { image?: string; video?: string; audio?: string } => {
     if (!Array.isArray(content)) return {};
@@ -42,15 +57,37 @@ export function useChatStream() {
         model: ModelOption,
         messagesHistory: any[]
     }) => {
+        debugLog('streamMessage called', { sessionId, model: model.value, messagesHistoryLength: messagesHistory.length });
+
         // IMPORTANT: Use getState() for imperative access to avoid stale closure issues
         // The previous approach captured storeApiKey at render time, which could be null
         // even when auth had completed but the component hadn't re-rendered yet.
         // This pattern ensures we always get the latest auth state at execution time.
         const { apiKey: storeApiKey, isAuthenticated } = useAuthStore.getState();
+        const localStorageApiKey = getApiKey();
+
+        debugLog('Auth state check', {
+            hasStoreApiKey: !!storeApiKey,
+            storeApiKeyPrefix: storeApiKey ? storeApiKey.substring(0, 15) + '...' : 'none',
+            hasLocalStorageApiKey: !!localStorageApiKey,
+            localStorageApiKeyPrefix: localStorageApiKey ? localStorageApiKey.substring(0, 15) + '...' : 'none',
+            isAuthenticated
+        });
+
         // Try store first, fall back to localStorage for auth state desync fix
         // For guest users, we use a special placeholder since they don't have API keys
-        const apiKey = storeApiKey || getApiKey() || (isAuthenticated ? null : 'guest');
-        if (!apiKey) throw new Error("No API Key");
+        const apiKey = storeApiKey || localStorageApiKey || (isAuthenticated ? null : 'guest');
+
+        debugLog('Final API key decision', {
+            apiKeySource: storeApiKey ? 'store' : localStorageApiKey ? 'localStorage' : 'guest-fallback',
+            apiKeyPrefix: apiKey ? apiKey.substring(0, 15) + '...' : 'none',
+            isGuest: apiKey === 'guest'
+        });
+
+        if (!apiKey) {
+            debugError('No API key available - throwing error');
+            throw new Error("No API Key");
+        }
 
         setIsStreaming(true);
         setStreamError(null);
@@ -160,18 +197,46 @@ export function useChatStream() {
             ? `/api/chat/completions?session_id=${sessionId}`
             : `/api/chat/ai-sdk-completions?session_id=${sessionId}`;
 
+        debugLog('Route selection', {
+            useFlexibleRoute,
+            isFireworksModel,
+            isDeepSeekNeedingFlexible,
+            url,
+            model: model.value
+        });
         console.log('[Chat Stream] Using', useFlexibleRoute ? 'completions (flexible)' : 'AI SDK', 'route for model:', model.value);
 
         try {
             // 4. Stream Loop
             let lastUpdate = Date.now();
+            let chunkCount = 0;
+            let totalContentLength = 0;
+
+            debugLog('Starting stream loop', { url, apiKeyPrefix: apiKey.substring(0, 15) + '...' });
 
             for await (const chunk of streamChatResponse(url, apiKey, requestBody)) {
+                chunkCount++;
+
+                if (chunkCount === 1) {
+                    debugLog('First chunk received', {
+                        hasContent: !!chunk.content,
+                        hasReasoning: !!chunk.reasoning,
+                        isDone: chunk.done,
+                        status: chunk.status
+                    });
+                }
+
                 if (chunk.content) {
+                    totalContentLength += String(chunk.content).length;
                     streamHandlerRef.current.processContentWithThinking(String(chunk.content));
                 }
                 if (chunk.reasoning) {
                     streamHandlerRef.current.addReasoning(String(chunk.reasoning));
+                }
+
+                // Log every 10th chunk for debugging
+                if (chunkCount % 10 === 0) {
+                    debugLog('Stream progress', { chunkCount, totalContentLength });
                 }
 
                 // Throttle UI updates (every 50ms) - use requestAnimationFrame timing
@@ -204,6 +269,13 @@ export function useChatStream() {
             const finalContent = streamHandlerRef.current.getFinalContent();
             const finalReasoning = streamHandlerRef.current.getFinalReasoning();
 
+            debugLog('Stream completed successfully', {
+                totalChunks: chunkCount,
+                finalContentLength: finalContent.length,
+                hasReasoning: !!finalReasoning,
+                reasoningLength: finalReasoning?.length || 0
+            });
+
             // Save Assistant Message - for authenticated users OR guest sessions (negative IDs)
             // Guest messages are saved to localStorage, authenticated to backend
             // Include reasoning if present for proper persistence and display on reload
@@ -214,7 +286,7 @@ export function useChatStream() {
                  model: model.value,
                  reasoning: finalReasoning || undefined
             });
-            
+
             // Mark isStreaming false
             queryClient.setQueryData(['chat-messages', sessionId], (old: any[] | undefined) => {
                 if (!old) return [];
@@ -223,6 +295,11 @@ export function useChatStream() {
             });
 
         } catch (e) {
+            debugError("Streaming failed", {
+                error: e instanceof Error ? e.message : String(e),
+                errorType: e instanceof Error ? e.constructor.name : typeof e,
+                stack: e instanceof Error ? e.stack : undefined
+            });
             console.error("Streaming failed", e);
             const errorMessage = e instanceof Error ? e.message : "Failed to complete response";
             setStreamError(errorMessage);

@@ -5,22 +5,25 @@
 import { requestAuthRefresh, getApiKey } from '@/lib/api';
 import { StreamCoordinator } from '@/lib/stream-coordinator';
 
-// OPTIMIZATION: Dev-only logging helpers to remove console logs from production
+// Logging helpers - enabled in development OR when NEXT_PUBLIC_DEBUG_STREAMING is set
+// To enable in production for debugging, set NEXT_PUBLIC_DEBUG_STREAMING=true in Vercel
+const isDebugEnabled = process.env.NODE_ENV === 'development' ||
+                       process.env.NEXT_PUBLIC_DEBUG_STREAMING === 'true';
+
 const devLog = (...args: any[]) => {
-    if (process.env.NODE_ENV === 'development') {
-        console.log(...args);
+    if (isDebugEnabled) {
+        console.log('[Streaming]', ...args);
     }
 };
 
 const devError = (...args: any[]) => {
-    if (process.env.NODE_ENV === 'development') {
-        console.error(...args);
-    }
+    // Always log errors, but add prefix for streaming errors
+    console.error('[Streaming ERROR]', ...args);
 };
 
 const devWarn = (...args: any[]) => {
-    if (process.env.NODE_ENV === 'development') {
-        console.warn(...args);
+    if (isDebugEnabled) {
+        console.warn('[Streaming WARN]', ...args);
     }
 };
 
