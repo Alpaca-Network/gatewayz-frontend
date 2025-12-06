@@ -31,14 +31,18 @@ export interface StreamChunk {
   content?: string;
   reasoning?: string;
   done?: boolean;
-  status?: 'rate_limit_retry' | 'first_token' | 'timing_info';
+  status?: 'rate_limit_retry' | 'first_token' | 'timing_info' | 'stream_started' | 'waiting';
   retryAfterMs?: number;
+
+  // Waiting status message for progressive feedback
+  waitingMessage?: string;
 
   // Performance timing metadata
   timingMetadata?: {
     backendTimeMs?: number;
     networkTimeMs?: number;
     totalTimeMs?: number;
+    prepTimeMs?: number;  // Backend preparation time before streaming
   };
 }
 
@@ -479,12 +483,17 @@ export async function* streamChatResponse(
     );
   }
 
+  // PERF: Immediately signal that streaming has started (optimistic UI)
+  // This gives users immediate feedback that the request was received
+  yield { status: 'stream_started' };
+
   // Extract timing headers for performance tracking
   const backendTimeStr = response.headers.get('X-Backend-Time');
   const networkTimeStr = response.headers.get('X-Network-Time');
   const totalTimeStr = response.headers.get('X-Response-Time');
+  const prepTimeStr = response.headers.get('X-Prep-Time-Ms');
 
-  if (backendTimeStr || networkTimeStr || totalTimeStr) {
+  if (backendTimeStr || networkTimeStr || totalTimeStr || prepTimeStr) {
     // Yield timing metadata as first chunk (doesn't affect UI, just for tracking)
     yield {
       status: 'timing_info',
@@ -492,6 +501,7 @@ export async function* streamChatResponse(
         backendTimeMs: backendTimeStr ? parseFloat(backendTimeStr) : undefined,
         networkTimeMs: networkTimeStr ? parseFloat(networkTimeStr) : undefined,
         totalTimeMs: totalTimeStr ? parseFloat(totalTimeStr) : undefined,
+        prepTimeMs: prepTimeStr ? parseFloat(prepTimeStr) : undefined,
       }
     };
   }
@@ -520,10 +530,11 @@ export async function* streamChatResponse(
     devLog(`[Streaming] Router model "${requestedModelId}" was resolved to "${resolvedModelId}"`);
   }
 
-  // Per-chunk timeout to detect stalled streams (30 seconds)
-  // This resets on each chunk and prevents hanging if backend stops sending
-  const chunkTimeoutMs = 30000;
-  const firstChunkTimeoutMs = 10000; // First chunk must arrive within 10 seconds
+  // Per-chunk timeout to detect stalled streams
+  // PERF: Reduced first chunk timeout from 10s to 15s to accommodate slower models
+  // while still failing fast for truly unresponsive providers
+  const chunkTimeoutMs = 30000;  // 30 seconds for subsequent chunks
+  const firstChunkTimeoutMs = 15000; // 15 seconds for first chunk (models can be slow to start)
   let chunkTimeoutId: NodeJS.Timeout | null = null;
 
   const resetChunkTimeout = () => {
@@ -535,13 +546,15 @@ export async function* streamChatResponse(
     chunkTimeoutId = setTimeout(() => {
       const timeoutMsg = firstChunkReceived
         ? 'Stream chunk timeout - no data received for 30 seconds'
-        : 'First chunk timeout - backend did not start streaming within 10 seconds. This usually means the model is unavailable, overloaded, or the backend is not responding properly.';
+        : `First chunk timeout - the AI model did not start responding within ${firstChunkTimeoutMs / 1000} seconds. ` +
+          'This may indicate the model is overloaded or unavailable. Try again or select a different model.';
       devError('[Streaming]', timeoutMsg);
       console.error('[Streaming] Timeout Details:', {
         firstChunkReceived,
         chunkCount,
-        url: requestBody?.model,
-        gateway: requestBody?.gateway
+        model: requestBody?.model,
+        gateway: requestBody?.gateway,
+        timeoutMs,
       });
       reader.cancel(`Stream timeout: ${timeoutMsg}`);
     }, timeoutMs);
