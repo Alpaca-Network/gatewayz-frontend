@@ -334,8 +334,11 @@ export default function ModelsClient({
   const loadMoreRef = React.useRef<HTMLDivElement>(null);
 
   // Update models when initialModels changes (e.g., when deferred models finish loading)
+  // Only update if initialModels has MORE models than current state
+  // This prevents server-side data (which may be incomplete due to timeouts) from overwriting
+  // client-fetched data that has all gateways loaded
   useEffect(() => {
-    if (initialModels.length > 0 && initialModels.length !== models.length) {
+    if (initialModels.length > 0 && initialModels.length > models.length) {
       console.log(`[Models] Updating models from ${models.length} to ${initialModels.length}`);
       setModels(initialModels);
     }

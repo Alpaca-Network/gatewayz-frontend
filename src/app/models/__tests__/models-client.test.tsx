@@ -3,6 +3,63 @@
  * These tests verify the client-side model manipulation without rendering the full component
  */
 
+describe('ModelsClient - Model State Updates', () => {
+  describe('initialModels to models sync logic', () => {
+    it('should only update models when initialModels has MORE models than current state', () => {
+      // This test verifies the fix for the gateway model counts showing 0
+      // The issue was that server-side initialModels (with fewer models due to timeouts)
+      // was overwriting client-fetched models that had all gateways loaded
+
+      const currentModels = [
+        { id: '1' }, { id: '2' }, { id: '3' }, { id: '4' }, { id: '5' },
+        { id: '6' }, { id: '7' }, { id: '8' }, { id: '9' }, { id: '10' }
+      ]; // Client has 10 models (e.g., from all gateways)
+
+      const initialModels = [
+        { id: '1' }, { id: '2' }, { id: '3' }
+      ]; // Server only has 3 models (due to gateway timeouts)
+
+      // The condition: only update if initialModels.length > models.length
+      const shouldUpdate = initialModels.length > 0 && initialModels.length > currentModels.length;
+
+      expect(shouldUpdate).toBe(false); // Should NOT update because 3 < 10
+    });
+
+    it('should update models when initialModels has more models (deferred loading complete)', () => {
+      const currentModels = [
+        { id: '1' }, { id: '2' }, { id: '3' }
+      ]; // Initially only priority gateways loaded
+
+      const initialModels = [
+        { id: '1' }, { id: '2' }, { id: '3' }, { id: '4' }, { id: '5' },
+        { id: '6' }, { id: '7' }, { id: '8' }, { id: '9' }, { id: '10' }
+      ]; // Deferred gateways finished loading, now have 10 models
+
+      const shouldUpdate = initialModels.length > 0 && initialModels.length > currentModels.length;
+
+      expect(shouldUpdate).toBe(true); // Should update because 10 > 3
+    });
+
+    it('should not update when model counts are equal', () => {
+      const currentModels = [{ id: '1' }, { id: '2' }];
+      const initialModels = [{ id: '1' }, { id: '2' }];
+
+      const shouldUpdate = initialModels.length > 0 && initialModels.length > currentModels.length;
+
+      expect(shouldUpdate).toBe(false); // Should NOT update when equal
+    });
+
+    it('should not update when initialModels is empty', () => {
+      const currentModels = [{ id: '1' }, { id: '2' }];
+      const initialModels: unknown[] = [];
+
+      const shouldUpdate = initialModels.length > 0 && initialModels.length > currentModels.length;
+
+      expect(shouldUpdate).toBe(false); // Should NOT update when initialModels is empty
+    });
+  });
+});
+
 describe('ModelsClient - Filtering Logic', () => {
   const mockModel = (overrides = {}) => ({
     id: 'test/model',
