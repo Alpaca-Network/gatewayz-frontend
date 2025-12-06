@@ -36,10 +36,10 @@ const rateLimitState = {
 
 // Rate limiting configuration
 const RATE_LIMIT_CONFIG = {
-  maxEventsPerMinute: 20,        // Max events per minute (reduced to avoid 429s)
+  maxEventsPerMinute: 10,        // REDUCED: Max events per minute (was 20, still hitting 429s)
   windowMs: 60000,               // 1 minute window
-  dedupeWindowMs: 30000,         // Don't send same message within 30 seconds (increased)
-  maxBreadcrumbs: 30,            // Limit breadcrumbs to reduce payload size
+  dedupeWindowMs: 60000,         // INCREASED: Don't send same message within 60 seconds (was 30s)
+  maxBreadcrumbs: 20,            // REDUCED: Limit breadcrumbs to reduce payload size (was 30)
   cleanupIntervalMs: 30000,      // Cleanup stale entries every 30 seconds
   maxMapSize: 50,                // Maximum entries in deduplication map
 };
@@ -95,6 +95,7 @@ function createEventKey(event: Sentry.ErrorEvent): string {
 function shouldFilterEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): boolean {
   const error = hint.originalException;
   const errorMessage = typeof error === 'string' ? error : error instanceof Error ? error.message : '';
+  const eventMessage = event.message || '';
   const stackFrames = event.exception?.values?.[0]?.stacktrace?.frames;
 
   // Filter out chrome.runtime.sendMessage errors from Privy wallet provider (inpage.js)
@@ -108,7 +109,7 @@ function shouldFilterEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): bo
       frame.filename?.includes('privy') ||
       frame.function?.includes('Zt')
     )) {
-      console.warn('[Sentry] Filtered out non-blocking Privy wallet extension error:', errorMessage);
+      console.debug('[Sentry] Filtered out non-blocking Privy wallet extension error');
       return true;
     }
   }
@@ -120,9 +121,32 @@ function shouldFilterEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): bo
       frame.filename?.includes('app:///') ||
       frame.function?.includes('stopListeners')
     )) {
-      console.warn('[Sentry] Filtered out wallet extension removeListener error');
+      console.debug('[Sentry] Filtered out wallet extension removeListener error');
       return true;
     }
+  }
+
+  // Filter out pending prompt timeout warnings (these are informational, not errors)
+  if (
+    errorMessage.includes('Pending prompt timed out') ||
+    eventMessage.includes('Pending prompt timed out') ||
+    errorMessage.includes('timed out after') ||
+    eventMessage.includes('clearing optimistic UI')
+  ) {
+    console.debug('[Sentry] Filtered out pending prompt timeout warning (informational)');
+    return true;
+  }
+
+  // Filter out WalletConnect relay errors (non-critical)
+  const errorMessageLower = errorMessage.toLowerCase();
+  if (
+    errorMessageLower.includes('walletconnect') ||
+    errorMessageLower.includes('relay.walletconnect.com') ||
+    errorMessageLower.includes('websocket error 1006') ||
+    errorMessageLower.includes('explorer-api.walletconnect')
+  ) {
+    console.debug('[Sentry] Filtered out non-critical WalletConnect relay error');
+    return true;
   }
 
   return false;
@@ -172,28 +196,27 @@ Sentry.init({
   // Release tracking for associating errors with specific versions
   release: getRelease(),
 
-  // REDUCED: Sample only 10% of transactions to avoid rate limits
+  // REDUCED: Sample only 5% of transactions to avoid rate limits
   // Increase to 0.5 or 1.0 only for debugging specific issues
-  tracesSampleRate: 0.1,
+  tracesSampleRate: 0.05,  // REDUCED from 0.1 to 0.05
 
   // Setting this option to true will print useful information to the console while you're setting up Sentry.
   debug: false,
 
-  // REDUCED: Only capture replays on errors, disable session replays to reduce 429s
+  // DISABLED: Replays completely disabled to reduce 429s
   // Session replays send continuous data which contributes to rate limiting
-  replaysOnErrorSampleRate: 0.1,  // Reduced from 0.5 - only 10% of error sessions
-  replaysSessionSampleRate: 0,    // Disabled - was causing too many requests
+  replaysOnErrorSampleRate: 0,    // DISABLED - was 0.1, causing 429s
+  replaysSessionSampleRate: 0,    // Already disabled
 
   // Limit breadcrumbs to reduce payload size
   maxBreadcrumbs: RATE_LIMIT_CONFIG.maxBreadcrumbs,
 
-  // You can remove this option if you're not planning to use the Sentry Session Replay feature:
+  // DISABLED: Replay integration completely removed to prevent 429s
+  // Replay was sending too many events to Sentry causing rate limit errors
   integrations: [
-    Sentry.replayIntegration({
-      // Additional Replay configuration goes in here, for example:
-      maskAllText: true,
-      blockAllMedia: true,
-    }),
+    // REMOVED: Replay integration completely disabled
+    // Sentry.replayIntegration({ maskAllText: true, blockAllMedia: true }),
+
     // REMOVED: consoleLoggingIntegration was sending every console.log/warn/error to Sentry
     // This was a major source of 429 rate limit errors
     // Re-enable only for debugging: Sentry.consoleLoggingIntegration({ levels: ["error"] }),
