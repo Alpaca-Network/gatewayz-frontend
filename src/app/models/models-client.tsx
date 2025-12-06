@@ -1211,10 +1211,13 @@ export default function ModelsClient({
 
           {/* End of results */}
           {!hasMore && filteredModels.length > 0 && (
-            <div className="flex items-center justify-center py-8">
+            <div className="flex flex-col items-center justify-center py-8 gap-2">
               <div className="text-sm text-muted-foreground">
                 Showing all {filteredModels.length} models
               </div>
+              <Link href="/releases" className="text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors">
+                What's new
+              </Link>
             </div>
           )}
           </div>
