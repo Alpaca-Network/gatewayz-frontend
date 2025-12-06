@@ -21,10 +21,11 @@ const CORS_HEADERS = {
 };
 
 // Rate limiting configuration
+// AGGRESSIVE: Reduced to prevent 429 errors from Sentry
 const RATE_LIMIT_CONFIG = {
-  maxRequestsPerMinute: 50, // Sentry's typical limit is ~60/min, stay under
+  maxRequestsPerMinute: 15, // REDUCED from 50 - client sends max 10/min, allow some buffer
   windowMs: 60000, // 1 minute window
-  maxRequestsPerSecond: 5, // Burst limit per second
+  maxRequestsPerSecond: 2,  // REDUCED from 5 - prevent bursts
   secondWindowMs: 1000,
 };
 
