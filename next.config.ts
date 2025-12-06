@@ -190,8 +190,8 @@ const sentryWebpackPluginOptions = {
   sourcemaps: {
     // Don't fail the build if source maps can't be uploaded
     ignore: ['node_modules/**'],
-    // Suppress "couldn't determine source map" warnings
-    deleteSourcemapsAfterUpload: true,
+    // Delete source maps after upload to clean up build artifacts
+    filesToDeleteAfterUpload: ['**/*.js.map'],
   },
 
   // Release tracking
