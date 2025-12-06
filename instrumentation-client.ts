@@ -138,11 +138,12 @@ function shouldFilterEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): bo
   }
 
   // Filter out WalletConnect relay errors (non-critical)
+  const errorMessageLower = errorMessage.toLowerCase();
   if (
-    errorMessage.includes('walletconnect') ||
-    errorMessage.includes('relay.walletconnect.com') ||
-    errorMessage.includes('WebSocket error 1006') ||
-    errorMessage.includes('explorer-api.walletconnect')
+    errorMessageLower.includes('walletconnect') ||
+    errorMessageLower.includes('relay.walletconnect.com') ||
+    errorMessageLower.includes('websocket error 1006') ||
+    errorMessageLower.includes('explorer-api.walletconnect')
   ) {
     console.debug('[Sentry] Filtered out non-critical WalletConnect relay error');
     return true;
