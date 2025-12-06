@@ -8,6 +8,7 @@
  * - Error handling with retry
  * - Performance metrics (TTFT, TPS)
  * - Auth refresh coordination
+ * - Adaptive timeouts for mobile networks
  */
 
 import { useState, useCallback, useRef } from 'react';
@@ -19,16 +20,38 @@ import {
   createInitialStreamState,
 } from './types';
 import { getApiKey } from '@/lib/auth';
+import { getAdaptiveTimeout } from '@/lib/network-timeouts';
 
 // =============================================================================
 // CONSTANTS
 // =============================================================================
 
 const COMPLETIONS_ENDPOINT = '/api/chat/completions';
-const STREAM_TIMEOUT = 600_000; // 10 minutes max
-const FIRST_CHUNK_TIMEOUT = 30_000; // 30 seconds for first chunk
-const CHUNK_TIMEOUT = 60_000; // 60 seconds between chunks
+// Base timeout values - actual timeouts are calculated adaptively based on network conditions
+const BASE_STREAM_TIMEOUT = 600_000; // 10 minutes max base
+const BASE_FIRST_CHUNK_TIMEOUT = 30_000; // 30 seconds base for first chunk
+const BASE_CHUNK_TIMEOUT = 60_000; // 60 seconds base between chunks
 const MAX_RETRIES = 2;
+
+// Helper to get adaptive timeouts based on network conditions and device type
+const getStreamTimeout = () => getAdaptiveTimeout(BASE_STREAM_TIMEOUT, {
+  mobileMultiplier: 1.5,  // 15 minutes on mobile
+  slowNetworkMultiplier: 2.0,  // 20 minutes on slow networks
+  maxMs: 1200000,  // Cap at 20 minutes
+});
+
+const getFirstChunkTimeout = () => getAdaptiveTimeout(BASE_FIRST_CHUNK_TIMEOUT, {
+  mobileMultiplier: 2.0,  // 60 seconds on mobile (mobile networks have higher initial latency)
+  slowNetworkMultiplier: 3.0,  // 90 seconds on slow networks
+  maxMs: 120000,  // Cap at 2 minutes
+});
+
+const getChunkTimeout = () => getAdaptiveTimeout(BASE_CHUNK_TIMEOUT, {
+  mobileMultiplier: 2.0,  // 2 minutes on mobile
+  slowNetworkMultiplier: 2.5,  // 2.5 minutes on slow networks
+  hiddenMultiplier: 1.5,  // 90 seconds in background tabs
+  maxMs: 180000,  // Cap at 3 minutes
+});
 
 // =============================================================================
 // TYPES
@@ -131,14 +154,15 @@ export function useStreaming(options: UseStreamingOptions = {}): UseStreamingRet
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
-    // Set initial timeout for first chunk
+    // Set initial timeout for first chunk (adaptive for mobile networks)
+    const firstChunkTimeout = getFirstChunkTimeout();
     timeoutRef.current = setTimeout(() => {
       if (streamState.status === 'connecting') {
         cleanup();
         setStatus('error', { error: 'Connection timeout - no response from model' });
         onError?.('Connection timeout - no response from model');
       }
-    }, FIRST_CHUNK_TIMEOUT);
+    }, firstChunkTimeout);
 
     try {
       // Include session_id in query params
@@ -207,9 +231,12 @@ export function useStreaming(options: UseStreamingOptions = {}): UseStreamingRet
       let buffer = '';
       let hasReceivedContent = false;
 
+      // Calculate adaptive chunk timeout once at stream start
+      const chunkTimeout = getChunkTimeout();
+
       try {
         while (true) {
-          // Reset chunk timeout
+          // Reset chunk timeout (adaptive for mobile networks)
           if (timeoutRef.current) {
             clearTimeout(timeoutRef.current);
           }
@@ -217,7 +244,7 @@ export function useStreaming(options: UseStreamingOptions = {}): UseStreamingRet
             cleanup();
             setStatus('error', { error: 'Stream timeout - no data received' });
             onError?.('Stream timeout - no data received');
-          }, CHUNK_TIMEOUT);
+          }, chunkTimeout);
 
           const { done, value } = await reader.read();
 

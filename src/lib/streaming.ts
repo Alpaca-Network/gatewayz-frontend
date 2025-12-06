@@ -4,6 +4,7 @@
 
 import { requestAuthRefresh, getApiKey } from '@/lib/api';
 import { StreamCoordinator } from '@/lib/stream-coordinator';
+import { getAdaptiveTimeout } from '@/lib/network-timeouts';
 
 // Logging helpers - enabled in development OR when NEXT_PUBLIC_DEBUG_STREAMING is set
 // To enable in production for debugging, set NEXT_PUBLIC_DEBUG_STREAMING=true in Vercel
@@ -122,8 +123,15 @@ export async function* streamChatResponse(
 ): AsyncGenerator<StreamChunk> {
   // Client-side timeout for the fetch request (10 minutes for streaming)
   // Increased to accommodate reasoning models, slow providers, and models with large context windows
+  // Uses adaptive timeout to handle mobile network conditions (2G/3G, high latency, background tabs)
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 600000);
+  const baseStreamTimeoutMs = 600000; // 10 minutes base
+  const adaptiveStreamTimeout = getAdaptiveTimeout(baseStreamTimeoutMs, {
+    mobileMultiplier: 1.5,  // 15 minutes on mobile
+    slowNetworkMultiplier: 2.0,  // 20 minutes on slow networks
+    maxMs: 1200000,  // Cap at 20 minutes
+  });
+  const timeoutId = setTimeout(() => controller.abort(), adaptiveStreamTimeout);
 
   try {
     devLog('[Streaming] Initiating fetch request to:', url);
@@ -511,10 +519,26 @@ export async function* streamChatResponse(
     devLog(`[Streaming] Router model "${requestedModelId}" was resolved to "${resolvedModelId}"`);
   }
 
-  // Per-chunk timeout to detect stalled streams (30 seconds)
+  // Per-chunk timeout to detect stalled streams
   // This resets on each chunk and prevents hanging if backend stops sending
-  const chunkTimeoutMs = 30000;
-  const firstChunkTimeoutMs = 10000; // First chunk must arrive within 10 seconds
+  // Uses adaptive timeouts for mobile networks (2G/3G can have high latency spikes)
+  const baseChunkTimeoutMs = 30000; // 30 seconds base
+  const baseFirstChunkTimeoutMs = 10000; // 10 seconds base for first chunk
+
+  // Calculate adaptive timeouts once at stream start
+  const adaptiveChunkTimeout = getAdaptiveTimeout(baseChunkTimeoutMs, {
+    mobileMultiplier: 2.0,  // 60 seconds on mobile
+    slowNetworkMultiplier: 2.5,  // 75 seconds on slow networks
+    hiddenMultiplier: 1.5,  // 45 seconds in background tabs
+    maxMs: 90000,  // Cap at 90 seconds
+  });
+  const adaptiveFirstChunkTimeout = getAdaptiveTimeout(baseFirstChunkTimeoutMs, {
+    mobileMultiplier: 3.0,  // 30 seconds on mobile (mobile networks often have longer initial latency)
+    slowNetworkMultiplier: 4.0,  // 40 seconds on slow networks
+    hiddenMultiplier: 1.5,  // 15 seconds in background tabs
+    maxMs: 60000,  // Cap at 60 seconds
+  });
+
   let chunkTimeoutId: NodeJS.Timeout | null = null;
 
   const resetChunkTimeout = () => {
@@ -522,11 +546,11 @@ export async function* streamChatResponse(
       clearTimeout(chunkTimeoutId);
     }
     // Use shorter timeout for first chunk, longer for subsequent chunks
-    const timeoutMs = firstChunkReceived ? chunkTimeoutMs : firstChunkTimeoutMs;
+    const timeoutMs = firstChunkReceived ? adaptiveChunkTimeout : adaptiveFirstChunkTimeout;
     chunkTimeoutId = setTimeout(() => {
       const timeoutMsg = firstChunkReceived
-        ? 'Stream chunk timeout - no data received for 30 seconds'
-        : 'First chunk timeout - backend did not start streaming within 10 seconds. This usually means the model is unavailable, overloaded, or the backend is not responding properly.';
+        ? `Stream chunk timeout - no data received for ${Math.round(adaptiveChunkTimeout / 1000)} seconds`
+        : `First chunk timeout - backend did not start streaming within ${Math.round(adaptiveFirstChunkTimeout / 1000)} seconds. This usually means the model is unavailable, overloaded, or the backend is not responding properly.`;
       devError('[Streaming]', timeoutMsg);
       console.error('[Streaming] Timeout Details:', {
         firstChunkReceived,
@@ -548,7 +572,7 @@ export async function* streamChatResponse(
       // Mark first chunk as received for timeout adjustment
       if (!firstChunkReceived && value) {
         firstChunkReceived = true;
-        devLog('[Streaming] First chunk received - adjusting timeout to 30 seconds for subsequent chunks');
+        devLog(`[Streaming] First chunk received - adjusting timeout to ${Math.round(adaptiveChunkTimeout / 1000)} seconds for subsequent chunks`);
       }
 
       // Clear the chunk timeout when we receive data
