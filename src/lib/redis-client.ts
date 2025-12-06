@@ -6,6 +6,7 @@
  * - Error handling
  * - Connection pooling
  * - Environment-based configuration
+ * - Graceful degradation during build time (no Redis required)
  */
 
 import type { RedisOptions } from 'ioredis';
@@ -16,27 +17,48 @@ if (typeof window === 'undefined') {
   Redis = require('ioredis');
 }
 
+// Track if Redis connection has permanently failed (e.g., auth errors)
+// This prevents repeated connection attempts during build/runtime
+let redisConnectionFailed = false;
+let redisFailureReason: string | null = null;
+
+/**
+ * Check if we're in a build environment where Redis might not be available
+ */
+function isBuildTime(): boolean {
+  return process.env.NEXT_PHASE === 'phase-production-build' ||
+         process.env.NODE_ENV === 'production' && !process.env.VERCEL_ENV;
+}
+
 /**
  * Get Redis connection options (shared between URL and object configs)
  */
 function getRedisOptions(): Partial<RedisOptions> {
   return {
-    // Connection settings
+    // Connection settings - use lazyConnect to prevent immediate connection
+    // This allows graceful handling when Redis is unavailable at build time
+    lazyConnect: true,
+
     retryStrategy: (times: number) => {
+      // During build time, don't retry at all
+      if (isBuildTime()) {
+        return null; // Stop retrying
+      }
+      // At runtime, limit retries to avoid infinite loops with bad credentials
+      if (times > 3) {
+        return null; // Stop retrying after 3 attempts
+      }
       const delay = Math.min(times * 50, 2000);
       return delay;
     },
 
     // Performance settings
-    maxRetriesPerRequest: 3,
+    maxRetriesPerRequest: 1, // Reduced to fail fast on auth errors
     enableReadyCheck: true,
 
-    // Timeouts
-    connectTimeout: 10000,
-    commandTimeout: 5000,
-
-    // Connection pooling
-    lazyConnect: false,
+    // Timeouts - shorter for faster failure detection
+    connectTimeout: 5000,
+    commandTimeout: 3000,
   };
 }
 
@@ -76,8 +98,25 @@ if (typeof window === 'undefined') {
 let redisClient: import('ioredis').default | null = null;
 
 /**
+ * Check if an error is a fatal authentication/configuration error
+ * These errors won't be resolved by retrying
+ */
+function isFatalRedisError(error: Error): boolean {
+  const message = error.message || '';
+  return (
+    message.includes('WRONGPASS') ||
+    message.includes('NOAUTH') ||
+    message.includes('AUTH failed') ||
+    message.includes('invalid username-password') ||
+    message.includes('user is disabled') ||
+    message.includes('ENOTFOUND') || // DNS resolution failed
+    message.includes('ECONNREFUSED') // Connection refused (no server)
+  );
+}
+
+/**
  * Get or create Redis client singleton
- * Returns null if running in browser environment
+ * Returns null if running in browser environment or if Redis is unavailable
  */
 export function getRedisClient(): import('ioredis').default | null {
   // Return null if running in browser
@@ -85,36 +124,64 @@ export function getRedisClient(): import('ioredis').default | null {
     return null;
   }
 
+  // If we've already determined Redis connection has permanently failed, don't retry
+  if (redisConnectionFailed) {
+    return null;
+  }
+
   if (!redisClient) {
-    // Create Redis client based on config type
-    if ('url' in REDIS_CONFIG) {
-      // URL format with options
-      redisClient = new Redis(REDIS_CONFIG.url, REDIS_CONFIG.options);
-    } else {
-      // Object format
-      redisClient = new Redis(REDIS_CONFIG);
+    try {
+      // Create Redis client based on config type
+      if ('url' in REDIS_CONFIG) {
+        // URL format with options
+        redisClient = new Redis(REDIS_CONFIG.url, REDIS_CONFIG.options);
+      } else {
+        // Object format
+        redisClient = new Redis(REDIS_CONFIG);
+      }
+
+      // Connection event handlers
+      redisClient.on('connect', () => {
+        console.log('[Redis] Connected successfully');
+        // Reset failure state on successful connection
+        redisConnectionFailed = false;
+        redisFailureReason = null;
+      });
+
+      redisClient.on('ready', () => {
+        console.log('[Redis] Ready to accept commands');
+      });
+
+      redisClient.on('error', (error: Error) => {
+        console.error('[Redis] Connection error:', error.message);
+
+        // Mark as permanently failed for fatal errors
+        if (isFatalRedisError(error)) {
+          redisConnectionFailed = true;
+          redisFailureReason = error.message;
+          console.warn(`[Redis] Fatal error detected, disabling Redis: ${error.message}`);
+
+          // Clean up the failed client
+          if (redisClient) {
+            redisClient.disconnect();
+            redisClient = null;
+          }
+        }
+      });
+
+      redisClient.on('close', () => {
+        console.log('[Redis] Connection closed');
+      });
+
+      redisClient.on('reconnecting', () => {
+        console.log('[Redis] Attempting to reconnect...');
+      });
+    } catch (error) {
+      console.error('[Redis] Failed to create client:', error);
+      redisConnectionFailed = true;
+      redisFailureReason = error instanceof Error ? error.message : 'Unknown error';
+      return null;
     }
-
-    // Connection event handlers
-    redisClient.on('connect', () => {
-      console.log('[Redis] Connected successfully');
-    });
-
-    redisClient.on('ready', () => {
-      console.log('[Redis] Ready to accept commands');
-    });
-
-    redisClient.on('error', (error) => {
-      console.error('[Redis] Connection error:', error);
-    });
-
-    redisClient.on('close', () => {
-      console.log('[Redis] Connection closed');
-    });
-
-    redisClient.on('reconnecting', () => {
-      console.log('[Redis] Attempting to reconnect...');
-    });
   }
 
   return redisClient;
@@ -122,10 +189,16 @@ export function getRedisClient(): import('ioredis').default | null {
 
 /**
  * Check if Redis is available and connected
+ * This function handles connection failures gracefully
  */
 export async function isRedisAvailable(): Promise<boolean> {
   // Return false if running in browser
   if (typeof window !== 'undefined') {
+    return false;
+  }
+
+  // Return false if we've already determined Redis has failed
+  if (redisConnectionFailed) {
     return false;
   }
 
@@ -134,10 +207,36 @@ export async function isRedisAvailable(): Promise<boolean> {
     if (!client) {
       return false;
     }
+
+    // With lazyConnect, we need to explicitly connect first
+    // This will throw on auth errors, which we catch below
+    if (client.status === 'wait') {
+      await client.connect();
+    }
+
     await client.ping();
     return true;
   } catch (error) {
-    console.error('[Redis] Availability check failed:', error);
+    const err = error as Error;
+    console.error('[Redis] Availability check failed:', err.message);
+
+    // Mark as permanently failed for fatal errors
+    if (isFatalRedisError(err)) {
+      redisConnectionFailed = true;
+      redisFailureReason = err.message;
+      console.warn(`[Redis] Fatal error during availability check, disabling Redis: ${err.message}`);
+
+      // Clean up the failed client
+      if (redisClient) {
+        try {
+          redisClient.disconnect();
+        } catch {
+          // Ignore disconnect errors
+        }
+        redisClient = null;
+      }
+    }
+
     return false;
   }
 }
@@ -154,6 +253,16 @@ export async function closeRedisConnection(): Promise<void> {
 }
 
 /**
+ * Check if Redis has been disabled due to fatal errors
+ */
+export function isRedisDisabled(): { disabled: boolean; reason: string | null } {
+  return {
+    disabled: redisConnectionFailed,
+    reason: redisFailureReason,
+  };
+}
+
+/**
  * Redis client status information
  */
 export function getRedisStatus(): {
@@ -161,6 +270,8 @@ export function getRedisStatus(): {
   ready: boolean;
   host: string;
   port: number;
+  disabled: boolean;
+  disabledReason: string | null;
 } {
   // Return disconnected status if running in browser
   if (typeof window !== 'undefined' || !REDIS_CONFIG) {
@@ -169,10 +280,13 @@ export function getRedisStatus(): {
       ready: false,
       host: 'localhost',
       port: 6379,
+      disabled: redisConnectionFailed,
+      disabledReason: redisFailureReason,
     };
   }
 
-  const client = redisClient || getRedisClient();
+  // Don't try to get client if Redis is disabled
+  const client = redisConnectionFailed ? null : (redisClient || getRedisClient());
 
   // Extract host and port from config
   let host = 'localhost';
@@ -197,6 +311,8 @@ export function getRedisStatus(): {
     ready: client ? client.status === 'ready' : false,
     host,
     port,
+    disabled: redisConnectionFailed,
+    disabledReason: redisFailureReason,
   };
 }
 
