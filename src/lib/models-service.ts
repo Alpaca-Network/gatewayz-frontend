@@ -558,6 +558,7 @@ function getStaticFallbackModels(gateway: string): any[] {
     'alpaca-network': 'alpaca',
     'near': 'near',
     'alibaba': 'alibaba',
+    'qwen': 'alibaba', // Qwen models belong to Alibaba Cloud
     // Add more mappings as needed
   };
 
@@ -571,10 +572,10 @@ function getStaticFallbackModels(gateway: string): any[] {
   } else {
     // Get models for specific gateway by filtering by developer field
     // This maps gateway names to their corresponding developer identifiers
-    const gatewayToDeveloper: Record<string, string> = {
-      'alpaca': 'alpaca-network',
-      'near': 'near',
-      'alibaba': 'alibaba',
+    const gatewayToDeveloper: Record<string, string[]> = {
+      'alpaca': ['alpaca-network'],
+      'near': ['near'],
+      'alibaba': ['alibaba', 'qwen'], // Alibaba Cloud models use 'qwen' as developer in static data
       // Add more mappings as needed for other gateways
     };
 
@@ -582,8 +583,8 @@ function getStaticFallbackModels(gateway: string): any[] {
 
     // If we have a specific developer mapping, filter by developer field
     if (gatewayToDeveloper[gateway]) {
-      const developerName = gatewayToDeveloper[gateway];
-      gatewayModels = models.filter(m => m.developer === developerName);
+      const developerNames = gatewayToDeveloper[gateway];
+      gatewayModels = models.filter(m => developerNames.includes(m.developer));
     } else {
       // For gateways without specific mappings, distribute models evenly as before
       const allGateways = [
