@@ -1,7 +1,45 @@
 "use client";
 
+// Web Speech API types for TypeScript
+interface SpeechRecognitionEvent extends Event {
+  resultIndex: number;
+  results: SpeechRecognitionResultList;
+}
+
+interface SpeechRecognitionErrorEvent extends Event {
+  error: string;
+  message: string;
+}
+
+interface SpeechRecognitionResult {
+  isFinal: boolean;
+  0: {
+    transcript: string;
+    confidence: number;
+  };
+}
+
+interface SpeechRecognitionResultList {
+  length: number;
+  item(index: number): SpeechRecognitionResult;
+  [index: number]: SpeechRecognitionResult;
+}
+
+interface SpeechRecognition extends EventTarget {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onstart: ((this: SpeechRecognition, ev: Event) => void) | null;
+  onresult: ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => void) | null;
+  onerror: ((this: SpeechRecognition, ev: SpeechRecognitionErrorEvent) => void) | null;
+  onend: ((this: SpeechRecognition, ev: Event) => void) | null;
+  start(): void;
+  stop(): void;
+  abort(): void;
+}
+
 import { useState, useRef, useCallback, useEffect } from "react";
-import { Send, Image as ImageIcon, Video as VideoIcon, Mic as AudioIcon, X, RefreshCw } from "lucide-react";
+import { Send, Image as ImageIcon, Video as VideoIcon, Mic, X, RefreshCw, Paperclip, FileText, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useChatUIStore } from "@/lib/store/chat-ui-store";
@@ -18,6 +56,12 @@ import {
 } from "@/lib/guest-chat";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { usePrivy } from "@privy-io/react-auth";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 // Helper for file to base64
 const fileToBase64 = (file: File): Promise<string> => {
@@ -55,13 +99,16 @@ export function ChatInput() {
 
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
-  const [selectedAudio, setSelectedAudio] = useState<string | null>(null);
+  const [selectedDocument, setSelectedDocument] = useState<string | null>(null);
+  const [selectedDocumentName, setSelectedDocumentName] = useState<string | null>(null);
   const [guestMessageCount, setGuestMessageCount] = useState(0);
   const [showGuestLimitWarning, setShowGuestLimitWarning] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [speechRecognition, setSpeechRecognition] = useState<SpeechRecognition | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
-  const audioInputRef = useRef<HTMLInputElement>(null);
+  const documentInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Derive input empty state directly from inputValue to avoid desync issues
@@ -93,7 +140,7 @@ export function ChatInput() {
     // Also check the actual input field as a fallback for typing scenarios
     const currentInputValue = freshInputValue || inputRef.current?.value || inputValue;
 
-    if ((!currentInputValue.trim() && !selectedImage && !selectedVideo && !selectedAudio) || isStreaming) return;
+    if ((!currentInputValue.trim() && !selectedImage && !selectedVideo && !selectedDocument) || isStreaming) return;
     if (!freshSelectedModel) {
         toast({ title: "No model selected", variant: "destructive" });
         return;
@@ -116,7 +163,7 @@ export function ChatInput() {
     const messageText = currentInputValue;
     const currentImage = selectedImage;
     const currentVideo = selectedVideo;
-    const currentAudio = selectedAudio;
+    const currentDocument = selectedDocument;
 
     // Clear input immediately for better UX
     setInputValue("");
@@ -126,7 +173,8 @@ export function ChatInput() {
     }
     setSelectedImage(null);
     setSelectedVideo(null);
-    setSelectedAudio(null);
+    setSelectedDocument(null);
+    setSelectedDocumentName(null);
 
     let sessionId = activeSessionId;
     // Create a snapshot of messages BEFORE session creation to avoid race conditions
@@ -147,7 +195,7 @@ export function ChatInput() {
         setInputValue(messageText);
         setSelectedImage(currentImage);
         setSelectedVideo(currentVideo);
-        setSelectedAudio(currentAudio);
+        setSelectedDocument(currentDocument);
         toast({ title: "Failed to create session", variant: "destructive" });
         return;
       }
@@ -155,12 +203,12 @@ export function ChatInput() {
 
     // Combine message and attachments
     let content: any = messageText;
-    if (currentImage || currentVideo || currentAudio) {
+    if (currentImage || currentVideo || currentDocument) {
         content = [
             { type: "text", text: messageText },
             ...(currentImage ? [{ type: "image_url", image_url: { url: currentImage } }] : []),
             ...(currentVideo ? [{ type: "video_url", video_url: { url: currentVideo } }] : []),
-            ...(currentAudio ? [{ type: "audio_url", audio_url: { url: currentAudio } }] : [])
+            ...(currentDocument ? [{ type: "file_url", file_url: { url: currentDocument } }] : [])
         ];
     }
 
@@ -220,7 +268,7 @@ export function ChatInput() {
     } catch (e) {
         toast({ title: "Failed to send message", variant: "destructive" });
     }
-  }, [inputValue, selectedImage, selectedVideo, selectedAudio, isStreaming, selectedModel, activeSessionId, messages, setInputValue, setActiveSessionId, createSession, streamMessage, toast, isAuthenticated, login]);
+  }, [inputValue, selectedImage, selectedVideo, selectedDocument, isStreaming, selectedModel, activeSessionId, messages, setInputValue, setActiveSessionId, createSession, streamMessage, toast, isAuthenticated, login]);
 
   // Expose send function for prompt auto-send from WelcomeScreen
   useEffect(() => {
@@ -260,18 +308,107 @@ export function ChatInput() {
       if (videoInputRef.current) videoInputRef.current.value = '';
   };
 
-  const handleAudioSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleDocumentSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
       try {
           const base64 = await fileToBase64(file);
-          setSelectedAudio(base64);
+          setSelectedDocument(base64);
+          setSelectedDocumentName(file.name);
       } catch (e) {
-          toast({ title: "Failed to load audio", variant: "destructive" });
+          toast({ title: "Failed to load document", variant: "destructive" });
       }
       // Reset input so the same file can be selected again
-      if (audioInputRef.current) audioInputRef.current.value = '';
+      if (documentInputRef.current) documentInputRef.current.value = '';
   };
+
+  // Speech Recognition for transcription
+  const startRecording = useCallback(() => {
+    const SpeechRecognitionAPI = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecognitionAPI) {
+      toast({
+        title: "Speech recognition not supported",
+        description: "Your browser doesn't support speech recognition. Try using Chrome or Edge.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const recognition = new SpeechRecognitionAPI();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+
+    recognition.onstart = () => {
+      setIsRecording(true);
+    };
+
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
+      let finalTranscript = '';
+      let interimTranscript = '';
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          finalTranscript += transcript;
+        } else {
+          interimTranscript += transcript;
+        }
+      }
+
+      if (finalTranscript) {
+        // Append final transcript to input
+        const currentValue = useChatUIStore.getState().inputValue;
+        const separator = currentValue && !currentValue.endsWith(' ') ? ' ' : '';
+        setInputValue(currentValue + separator + finalTranscript);
+      }
+    };
+
+    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+      console.error('Speech recognition error:', event.error);
+      setIsRecording(false);
+      setSpeechRecognition(null);
+
+      if (event.error === 'not-allowed') {
+        toast({
+          title: "Microphone access denied",
+          description: "Please allow microphone access to use voice input.",
+          variant: "destructive"
+        });
+      } else if (event.error !== 'aborted') {
+        toast({
+          title: "Speech recognition error",
+          description: `Error: ${event.error}`,
+          variant: "destructive"
+        });
+      }
+    };
+
+    recognition.onend = () => {
+      setIsRecording(false);
+      setSpeechRecognition(null);
+    };
+
+    recognition.start();
+    setSpeechRecognition(recognition);
+  }, [toast, setInputValue]);
+
+  const stopRecording = useCallback(() => {
+    if (speechRecognition) {
+      speechRecognition.stop();
+      setSpeechRecognition(null);
+      setIsRecording(false);
+    }
+  }, [speechRecognition]);
+
+  const toggleRecording = useCallback(() => {
+    if (isRecording) {
+      stopRecording();
+    } else {
+      startRecording();
+    }
+  }, [isRecording, startRecording, stopRecording]);
 
   return (
     <div className="w-full p-4 border-t bg-background">
@@ -316,10 +453,11 @@ export function ChatInput() {
                     <Button size="icon" variant="destructive" className="absolute -top-1 -right-1 h-4 w-4 rounded-full" onClick={() => setSelectedVideo(null)}><X className="h-3 w-3" /></Button>
                 </div>
             )}
-            {selectedAudio && (
-                <div className="relative flex items-center justify-center h-16 w-16 bg-muted rounded">
-                    <AudioIcon className="h-6 w-6 text-muted-foreground" />
-                    <Button size="icon" variant="destructive" className="absolute -top-1 -right-1 h-4 w-4 rounded-full" onClick={() => setSelectedAudio(null)}><X className="h-3 w-3" /></Button>
+            {selectedDocument && (
+                <div className="relative flex items-center justify-center h-16 px-3 bg-muted rounded gap-2">
+                    <FileText className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                    <span className="text-xs text-muted-foreground truncate max-w-[100px]">{selectedDocumentName}</span>
+                    <Button size="icon" variant="destructive" className="absolute -top-1 -right-1 h-4 w-4 rounded-full" onClick={() => { setSelectedDocument(null); setSelectedDocumentName(null); }}><X className="h-3 w-3" /></Button>
                 </div>
             )}
         </div>
@@ -328,17 +466,45 @@ export function ChatInput() {
             {/* Hidden Inputs */}
             <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageSelect} className="hidden" />
             <input ref={videoInputRef} type="file" accept="video/*" onChange={handleVideoSelect} className="hidden" />
-            <input ref={audioInputRef} type="file" accept="audio/*" onChange={handleAudioSelect} className="hidden" />
+            <input ref={documentInputRef} type="file" accept=".pdf,.doc,.docx,.txt,.md,.csv,.json,.xml" onChange={handleDocumentSelect} className="hidden" />
 
             <div className="flex gap-1">
-                <Button size="icon" variant="ghost" onClick={() => fileInputRef.current?.click()} title="Upload image">
-                    <ImageIcon className="h-5 w-5 text-muted-foreground" />
-                </Button>
-                <Button size="icon" variant="ghost" onClick={() => videoInputRef.current?.click()} title="Upload video">
-                    <VideoIcon className="h-5 w-5 text-muted-foreground" />
-                </Button>
-                <Button size="icon" variant="ghost" onClick={() => audioInputRef.current?.click()} title="Upload audio">
-                    <AudioIcon className="h-5 w-5 text-muted-foreground" />
+                {/* Combined "Add photos & files" dropdown */}
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button size="icon" variant="ghost" title="Add photos & files">
+                            <Paperclip className="h-5 w-5 text-muted-foreground" />
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" side="top">
+                        <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
+                            <ImageIcon className="h-4 w-4 mr-2" />
+                            Upload image
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => videoInputRef.current?.click()}>
+                            <VideoIcon className="h-4 w-4 mr-2" />
+                            Upload video
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => documentInputRef.current?.click()}>
+                            <FileText className="h-4 w-4 mr-2" />
+                            Upload document
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+
+                {/* Microphone button for speech-to-text */}
+                <Button
+                    size="icon"
+                    variant={isRecording ? "destructive" : "ghost"}
+                    onClick={toggleRecording}
+                    title={isRecording ? "Stop recording" : "Start voice input"}
+                    className={cn(isRecording && "animate-pulse")}
+                >
+                    {isRecording ? (
+                        <Square className="h-4 w-4" />
+                    ) : (
+                        <Mic className="h-5 w-5 text-muted-foreground" />
+                    )}
                 </Button>
             </div>
 
