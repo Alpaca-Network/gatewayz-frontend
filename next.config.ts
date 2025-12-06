@@ -56,7 +56,7 @@ const nextConfig: NextConfig = {
   experimental: {
     // Enable server-side chunking
     serverActions: {
-      bodySizeLimit: '2mb',
+      bodySizeLimit: '10mb',
     },
     // Fix for layout router mounting errors in Next.js 15
     optimizePackageImports: ['lucide-react', '@radix-ui/react-icons'],
