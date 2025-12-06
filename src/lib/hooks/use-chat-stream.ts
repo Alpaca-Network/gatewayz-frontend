@@ -211,6 +211,8 @@ export function useChatStream() {
             let lastUpdate = Date.now();
             let chunkCount = 0;
             let totalContentLength = 0;
+            // PERF: Track first UI update to bypass throttle for immediate first-chunk display
+            let isFirstUIUpdate = true;
 
             debugLog('Starting stream loop', { url, apiKeyPrefix: apiKey.substring(0, 15) + '...' });
 
@@ -239,9 +241,10 @@ export function useChatStream() {
                     debugLog('Stream progress', { chunkCount, totalContentLength });
                 }
 
-                // Throttle UI updates (every 50ms) - use requestAnimationFrame timing
+                // Throttle UI updates (every 50ms) - EXCEPT for first chunk (immediate display)
+                // PERF: First chunk bypasses throttle for faster perceived response time
                 const now = Date.now();
-                if (now - lastUpdate > 50 || chunk.done) {
+                if (isFirstUIUpdate || now - lastUpdate > 50 || chunk.done) {
                     const currentContent = streamHandlerRef.current.getFinalContent();
                     const currentReasoning = streamHandlerRef.current.getFinalReasoning();
 
@@ -258,6 +261,7 @@ export function useChatStream() {
                         }];
                     });
                     lastUpdate = now;
+                    isFirstUIUpdate = false; // PERF: Only bypass throttle for first update
 
                     // Yield to the event loop to allow React to re-render
                     // This is critical for real-time streaming updates
