@@ -1,4 +1,7 @@
 {
+  "git": {
+    "submodules": false
+  },
   "redirects": [
     {
       "source": "/deck",

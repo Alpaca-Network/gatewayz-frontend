@@ -117,6 +117,13 @@ const nextConfig: NextConfig = {
       managedPaths: [],
     };
 
+    // Suppress webpack "big strings" cache serialization warnings in build output
+    // These warnings are informational and don't affect functionality
+    config.infrastructureLogging = {
+      ...config.infrastructureLogging,
+      level: 'error',
+    };
+
     return config;
   },
 };
@@ -154,8 +161,8 @@ const sentryWebpackPluginOptions = {
   org: "alpaca-network",
   project: "javascript-nextjs",
 
-  // Only print logs for uploading source maps in CI
-  silent: !process.env.CI,
+  // Suppress all Sentry plugin logs during build (reduces noise in Vercel logs)
+  silent: true,
 
   // For all available options, see:
   // https://docs.sentry.io/platforms/javascript/guides/nextjs/manual-setup/
@@ -180,6 +187,14 @@ const sentryWebpackPluginOptions = {
   // https://docs.sentry.io/product/crons/
   // https://vercel.com/docs/cron-jobs
   automaticVercelMonitors: true,
+
+  // Suppress source map upload warnings for client bundles where source maps are intentionally hidden
+  sourcemaps: {
+    // Don't fail the build if source maps can't be uploaded
+    ignore: ['node_modules/**'],
+    // Delete source maps after upload to clean up build artifacts
+    filesToDeleteAfterUpload: ['**/*.js.map'],
+  },
 
   // Release tracking
   // Automatically associates source maps with the release they were built for

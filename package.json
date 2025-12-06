@@ -149,5 +149,18 @@
     "tsx": "^4.20.6",
     "typescript": "^5.9.3",
     "webpack-dev-server": "^5.2.2"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@vercel/speed-insights",
+      "bufferutil",
+      "core-js",
+      "cypress",
+      "esbuild",
+      "keccak",
+      "sharp",
+      "unrs-resolver",
+      "utf-8-validate"
+    ]
   }
 }
