@@ -103,10 +103,12 @@ const nextConfig: NextConfig = {
       );
     }
 
-    // Ignore warnings about require.extensions and module casing
+    // Ignore warnings about require.extensions, module casing, and sourcemaps
     config.ignoreWarnings = [
       /require\.extensions is not supported by webpack/,
       /There are multiple modules with names that only differ in casing/,
+      /could not determine a source map reference/,
+      /Could not auto-detect referenced sourcemap/,
     ];
 
     // Fix module casing issues on Windows
