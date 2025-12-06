@@ -115,18 +115,8 @@ const nextConfig: NextConfig = {
       managedPaths: [],
     };
 
-    // Optimize cache serialization to handle large strings (fixes Vercel build warnings)
-    // This increases the threshold for "big strings" warnings from 10KB to 200KB
-    config.cache = {
-      ...config.cache,
-      ...(config.cache?.type === 'filesystem' && {
-        type: 'filesystem',
-        compression: 'gzip',
-        profile: false,
-      }),
-    };
-
-    // Suppress big string serialization warnings
+    // Suppress webpack "big strings" cache serialization warnings in build output
+    // These warnings are informational and don't affect functionality
     config.infrastructureLogging = {
       ...config.infrastructureLogging,
       level: 'error',
