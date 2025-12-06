@@ -3,7 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 interface ReleaseWeek {
-  weekOf: string;
+  date: string;
   features: string[];
   bugFixes: {
     category: string;
@@ -15,7 +15,7 @@ interface ReleaseWeek {
 
 const releaseNotes: ReleaseWeek[] = [
   {
-    weekOf: "December 5th, 2025",
+    date: "December 5, 2025",
     features: [
       "Streaming Standardization: Implemented unified streaming response format across the backend with stream_normalizer to standardize all provider responses",
       "CI/CD Pipeline: Added GitHub Actions workflow and scripts to test subrepos",
@@ -86,7 +86,7 @@ export default function ReleasesPage() {
             <Card key={index} className="overflow-hidden">
               <CardHeader className="bg-muted/50">
                 <CardTitle className="text-xl lg:text-2xl">
-                  {release.weekOf}
+                  {release.date}
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-6 space-y-6">
@@ -119,7 +119,7 @@ export default function ReleasesPage() {
                           <h4 className="text-sm font-medium text-muted-foreground mb-2">
                             {category.category}
                           </h4>
-                          <ul className="space-y-1 ml-4">
+                          <ul className="space-y-1">
                             {category.items.map((item, j) => (
                               <li key={j} className="flex items-start gap-2">
                                 <span className="text-blue-600 dark:text-blue-400 text-sm">-</span>
