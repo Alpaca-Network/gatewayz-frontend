@@ -197,6 +197,16 @@ jest.mock('ofetch', () => ({
   default: jest.fn(),
 }))
 
+// Mock uint8arrays library (ESM module used by @walletconnect)
+jest.mock('uint8arrays', () => ({
+  compare: jest.fn(),
+  concat: jest.fn(),
+  equals: jest.fn(),
+  fromString: jest.fn(),
+  toString: jest.fn(),
+  __esModule: true,
+}))
+
 // Mock next/server NextResponse to use our Response mock
 jest.mock('next/server', () => {
   const actualModule = jest.requireActual('next/server')
