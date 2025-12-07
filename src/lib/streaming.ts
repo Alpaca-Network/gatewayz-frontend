@@ -233,12 +233,26 @@ export async function* streamChatResponse(
 
     // Handle 401 Unauthorized - trigger auth refresh and retry
     if (response.status === 401) {
-      const errorMessage = errorData.detail || errorData.error?.message || 'Authentication required';
+      // Extract error message from various response formats:
+      // - FastAPI: { detail: "message" }
+      // - OpenAI: { error: { message: "message" } }
+      // - Custom: { error: "message", message: "user message" }
+      const errorMessage = errorData.detail ||
+                          errorData.error?.message ||
+                          (typeof errorData.error === 'string' ? errorData.error : null) ||
+                          errorData.message ||
+                          'Authentication required';
       const errorCode = errorData.code;
       devError('401 Unauthorized - triggering auth refresh');
 
       // Check if this is a guest user who needs to sign up
-      if (errorCode === 'GUEST_NOT_CONFIGURED') {
+      // Handle both explicit code and error message patterns
+      const isGuestModeError = errorCode === 'GUEST_NOT_CONFIGURED' ||
+                               errorMessage.toLowerCase().includes('guest mode') ||
+                               errorMessage.toLowerCase().includes('sign up') ||
+                               errorMessage.toLowerCase().includes('create a free account');
+
+      if (isGuestModeError) {
         throw new Error(
           'Please sign in to use the chat feature. Create a free account to get started!'
         );
@@ -271,9 +285,13 @@ export async function* streamChatResponse(
         }
       }
 
-      throw new Error(
-        errorMessage + '. Your session has expired. Please sign in again to continue.'
-      );
+      // Provide a user-friendly error message based on the error type
+      const isInvalidKey = errorMessage.toLowerCase().includes('invalid') ||
+                          errorMessage.toLowerCase().includes('api key');
+      const suffix = isInvalidKey
+        ? '. Please sign in again to continue.'
+        : '. Your session has expired. Please sign in again to continue.';
+      throw new Error(errorMessage + suffix);
     }
 
     // Handle 403 Forbidden - invalid or expired API key

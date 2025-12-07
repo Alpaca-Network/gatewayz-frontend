@@ -197,7 +197,7 @@ describe('streamChatResponse', () => {
   });
 
   describe('Error Handling', () => {
-    test('should handle 401 authentication errors', async () => {
+    test('should handle 401 authentication errors with invalid API key', async () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: false,
         status: 401,
@@ -213,7 +213,51 @@ describe('streamChatResponse', () => {
             { model: 'openrouter/auto', messages: [], stream: true }
           )
         )
-      ).rejects.toThrow(/Invalid API key.*Your session has expired/);
+      ).rejects.toThrow(/Invalid API key.*Please sign in again/);
+    });
+
+    test('should handle 401 guest mode not available error', async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        headers: new Map(),
+        json: async () => ({
+          error: 'Guest mode not available',
+          message: 'Guest mode is not available. Sign up for a free account to continue.'
+        }),
+      });
+
+      await expect(
+        collectChunks(
+          streamChatResponse(
+            '/api/chat/completions',
+            'guest',
+            { model: 'openrouter/auto', messages: [], stream: true }
+          )
+        )
+      ).rejects.toThrow(/Please sign in to use the chat feature/);
+    });
+
+    test('should handle 401 with GUEST_NOT_CONFIGURED code', async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        headers: new Map(),
+        json: async () => ({
+          detail: 'Guest access not configured',
+          code: 'GUEST_NOT_CONFIGURED'
+        }),
+      });
+
+      await expect(
+        collectChunks(
+          streamChatResponse(
+            '/api/chat/completions',
+            'guest',
+            { model: 'openrouter/auto', messages: [], stream: true }
+          )
+        )
+      ).rejects.toThrow(/Please sign in to use the chat feature/);
     });
 
     test('should handle 400 bad request errors', async () => {
