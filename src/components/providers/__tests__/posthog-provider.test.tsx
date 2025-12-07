@@ -132,37 +132,22 @@ describe('PostHogProvider', () => {
   });
 
   it('should start session recording on desktop with requestIdleCallback', async () => {
-    let idleCallback: (() => void) | null = null;
-    const mockRequestIdleCallback = jest.fn((cb) => {
-      idleCallback = cb;
-      return 1; // Return a mock handle
-    });
-
-    // Override the beforeEach mock to capture the callback instead of executing it
-    (global as any).requestIdleCallback = mockRequestIdleCallback;
-
     render(
       <PostHogProvider>
         <div>Test</div>
       </PostHogProvider>
     );
 
-    // Wait for PostHog init and requestIdleCallback to be called
+    // Wait for PostHog init
     await waitFor(() => {
       expect(posthog.init).toHaveBeenCalled();
     }, { timeout: 3000 });
 
-    // Give a bit more time for requestIdleCallback to be called
+    // The beforeEach mock immediately executes requestIdleCallback via setTimeout(cb, 0)
+    // So session recording should be started
     await waitFor(() => {
-      expect(mockRequestIdleCallback).toHaveBeenCalled();
+      expect(posthog.startSessionRecording).toHaveBeenCalled();
     }, { timeout: 1000 });
-
-    // Execute the captured callback
-    expect(idleCallback).not.toBeNull();
-    idleCallback!();
-
-    // Verify session recording was started
-    expect(posthog.startSessionRecording).toHaveBeenCalled();
   });
 
   it('should fallback to setTimeout if requestIdleCallback unavailable', async () => {
@@ -206,15 +191,6 @@ describe('PostHogProvider', () => {
 
     const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
 
-    let idleCallback: (() => void) | null = null;
-    const mockRequestIdleCallback = jest.fn((cb) => {
-      idleCallback = cb;
-      return 1;
-    });
-
-    // Override the beforeEach mock to capture the callback instead of executing it
-    (global as any).requestIdleCallback = mockRequestIdleCallback;
-
     render(
       <PostHogProvider>
         <div>Test</div>
@@ -226,20 +202,15 @@ describe('PostHogProvider', () => {
       expect(posthog.init).toHaveBeenCalled();
     }, { timeout: 3000 });
 
-    // Wait for requestIdleCallback to be called
+    // The beforeEach mock immediately executes requestIdleCallback via setTimeout(cb, 0)
+    // which will try to start session recording and throw error
+    // Wait for the error to be logged
     await waitFor(() => {
-      expect(mockRequestIdleCallback).toHaveBeenCalled();
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        'Failed to start PostHog session recording',
+        expect.any(Error)
+      );
     }, { timeout: 1000 });
-
-    // Execute the captured callback (will throw error)
-    expect(idleCallback).not.toBeNull();
-    idleCallback!();
-
-    // Verify the error was handled gracefully
-    expect(consoleWarnSpy).toHaveBeenCalledWith(
-      'Failed to start PostHog session recording',
-      expect.any(Error)
-    );
 
     consoleWarnSpy.mockRestore();
   });

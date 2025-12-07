@@ -767,6 +767,13 @@ export function GatewayzAuthProvider({
           return;
         }
 
+        // Check if max retries exceeded before incrementing
+        if (authRetryCountRef.current >= MAX_AUTH_RETRIES && !options?.resetRetryCount) {
+          console.log(`[Auth] Max retries (${MAX_AUTH_RETRIES}) exceeded, aborting sync`);
+          syncInFlightRef.current = false;
+          return;
+        }
+
         // Increment retry count
         authRetryCountRef.current += 1;
         console.log(`[Auth] Sync attempt ${authRetryCountRef.current}/${MAX_AUTH_RETRIES}`);
