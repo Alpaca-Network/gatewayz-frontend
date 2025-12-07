@@ -71,6 +71,7 @@ global.Request = class Request {
     // Store input for NextRequest to use
     this._input = input
     this._init = init
+    this._body = init?.body
 
     // Define read-only url getter
     Object.defineProperty(this, 'url', {
@@ -99,8 +100,55 @@ global.Request = class Request {
       enumerable: true
     })
   }
+
+  async json() {
+    if (typeof this._body === 'string') {
+      return JSON.parse(this._body)
+    }
+    return this._body
+  }
+
+  async text() {
+    if (typeof this._body === 'string') {
+      return this._body
+    }
+    return JSON.stringify(this._body)
+  }
 }
-global.Response = class Response {}
+
+global.Response = class Response {
+  constructor(body, init = {}) {
+    this.body = body
+    this.status = init.status || 200
+    this.statusText = init.statusText || 'OK'
+    this.headers = new Headers(init.headers || {})
+    this.ok = this.status >= 200 && this.status < 300
+  }
+
+  async json() {
+    if (typeof this.body === 'string') {
+      return JSON.parse(this.body)
+    }
+    return this.body
+  }
+
+  async text() {
+    if (typeof this.body === 'string') {
+      return this.body
+    }
+    return JSON.stringify(this.body)
+  }
+
+  static json(data, init = {}) {
+    return new Response(JSON.stringify(data), {
+      ...init,
+      headers: {
+        ...init.headers,
+        'Content-Type': 'application/json'
+      }
+    })
+  }
+}
 
 // Mock lucide-react icons
 jest.mock('lucide-react', () => ({
