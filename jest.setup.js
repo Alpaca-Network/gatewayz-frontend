@@ -165,3 +165,19 @@ jest.mock('jose', () => ({
   jwtVerify: jest.fn(),
   SignJWT: jest.fn(),
 }))
+
+// Mock next/server NextResponse to use our Response mock
+jest.mock('next/server', () => {
+  const actualModule = jest.requireActual('next/server')
+
+  class MockNextResponse extends global.Response {
+    constructor(body, init) {
+      super(body, init)
+    }
+  }
+
+  return {
+    ...actualModule,
+    NextResponse: MockNextResponse
+  }
+})
