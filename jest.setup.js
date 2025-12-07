@@ -126,16 +126,40 @@ global.Response = class Response {
   }
 
   async json() {
-    if (typeof this.body === 'string') {
-      return JSON.parse(this.body)
-    }
-    return this.body
+    const text = await this.text()
+    return JSON.parse(text)
   }
 
   async text() {
+    // Handle string body
     if (typeof this.body === 'string') {
       return this.body
     }
+
+    // Handle ReadableStream (for SSE and streaming responses)
+    if (this.body && typeof this.body.getReader === 'function') {
+      const reader = this.body.getReader()
+      const decoder = new TextDecoder()
+      let result = ''
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          result += decoder.decode(value, { stream: true })
+        }
+        return result
+      } finally {
+        reader.releaseLock()
+      }
+    }
+
+    // Handle other types (objects, null, etc.)
+    if (this.body === null || this.body === undefined) {
+      return ''
+    }
+
+    // Fallback to JSON stringify
     return JSON.stringify(this.body)
   }
 
