@@ -90,6 +90,33 @@ jobs:
           fail_ci_if_error: false
           verbose: true
 
+  pytest:
+    name: Python Tests
+    runs-on: ubuntu-latest
+    needs: [check-merge-conflicts]
+    if: needs.check-merge-conflicts.outputs.has-conflicts == 'false'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install pytest pytest-cov
+
+      - name: Run pytest with coverage
+        run: pytest --cov --cov-branch --cov-report=xml
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
@@ -363,7 +390,7 @@ jobs:
   ci-success:
     name: CI Success
     runs-on: ubuntu-latest
-    needs: [check-merge-conflicts, resolve-conflicts, test, lint, typecheck, build, e2e]
+    needs: [check-merge-conflicts, resolve-conflicts, test, pytest, lint, typecheck, build, e2e]
     if: always()
 
     steps:
@@ -384,6 +411,11 @@ jobs:
           # Test jobs are skipped if conflicts exist, otherwise must pass
           if [[ "${{ needs.test.result }}" != "skipped" ]] && [[ "${{ needs.test.result }}" == "failure" ]]; then
             echo "Test job failed"
+            exit 1
+          fi
+
+          if [[ "${{ needs.pytest.result }}" != "skipped" ]] && [[ "${{ needs.pytest.result }}" == "failure" ]]; then
+            echo "Python test job failed"
             exit 1
           fi
 
