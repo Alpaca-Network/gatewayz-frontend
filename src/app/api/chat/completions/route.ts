@@ -249,7 +249,7 @@ export async function POST(request: NextRequest) {
       const guestKey = process.env.GUEST_API_KEY;
       const clientIP = getClientIP(request);
 
-      // Check guest rate limit (10 messages per 24 hours per IP)
+      // Check guest rate limit (3 messages per 24 hours per IP)
       const rateLimitCheck = checkGuestRateLimit(clientIP);
 
       if (!rateLimitCheck.allowed) {
@@ -291,11 +291,14 @@ export async function POST(request: NextRequest) {
         });
       }
 
+      // Increment rate limit counter immediately to prevent abuse via failed requests
+      const rateLimitResult = incrementGuestRateLimit(clientIP);
+
       console.log('[API Completions] Guest mode detected:', {
         isExplicitGuestRequest,
         isMissingApiKey,
         clientIP,
-        remaining: rateLimitCheck.remaining,
+        remaining: rateLimitResult.remaining,
         usingKey: guestKey.substring(0, 15) + '...'
       });
       apiKey = guestKey;
@@ -527,17 +530,6 @@ export async function POST(request: NextRequest) {
           profiler.endRequest(requestId);
           console.log(`[API Proxy] Request ${requestId} complete. Total time: ${(performance.now() - requestStartTime).toFixed(2)}ms`);
 
-          // Increment guest rate limit counter on successful response
-          if (isGuestRequest) {
-            const clientIP = getClientIP(request);
-            const rateLimitResult = incrementGuestRateLimit(clientIP);
-            console.log('[API Completions] Guest rate limit incremented:', {
-              clientIP,
-              remaining: rateLimitResult.remaining,
-              success: rateLimitResult.success,
-            });
-          }
-
           // Calculate timing metrics for performance tracking
           const totalTime = performance.now() - requestStartTime;
           const backendTime = backendResponseTime; // Time it took for backend to respond
@@ -605,17 +597,6 @@ export async function POST(request: NextRequest) {
       profiler.endRequest(requestId);
       console.log(`[API Proxy] Request ${requestId} complete. Total time: ${(performance.now() - requestStartTime).toFixed(2)}ms`);
 
-      // Increment guest rate limit counter on successful response
-      if (isGuestRequest) {
-        const clientIP = getClientIP(request);
-        const rateLimitResult = incrementGuestRateLimit(clientIP);
-        console.log('[API Completions] Guest rate limit incremented (non-streaming):', {
-          clientIP,
-          remaining: rateLimitResult.remaining,
-          success: rateLimitResult.success,
-        });
-      }
-
       // Build response headers
       const responseHeaders: Record<string, string> = {
         'Content-Type': 'application/json',
@@ -640,17 +621,6 @@ export async function POST(request: NextRequest) {
 
     // Handle streaming response from processCompletion
     if ('stream' in result) {
-      // Increment guest rate limit counter on successful response
-      if (isGuestRequest) {
-        const clientIP = getClientIP(request);
-        const rateLimitResult = incrementGuestRateLimit(clientIP);
-        console.log('[API Completions] Guest rate limit incremented (processCompletion stream):', {
-          clientIP,
-          remaining: rateLimitResult.remaining,
-          success: rateLimitResult.success,
-        });
-      }
-
       // Build response headers
       const streamHeaders: Record<string, string> = {
         'Content-Type': 'text/event-stream',
