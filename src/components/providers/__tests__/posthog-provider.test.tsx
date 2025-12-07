@@ -132,8 +132,13 @@ describe('PostHogProvider', () => {
   });
 
   it('should start session recording on desktop with requestIdleCallback', async () => {
-    // Use fake timers to control async behavior
-    jest.useFakeTimers();
+    let idleCallback: (() => void) | null = null;
+
+    // Mock requestIdleCallback to capture the callback
+    (global as any).requestIdleCallback = jest.fn((cb) => {
+      idleCallback = cb;
+      return 1; // Return a mock handle
+    });
 
     render(
       <PostHogProvider>
@@ -141,22 +146,23 @@ describe('PostHogProvider', () => {
       </PostHogProvider>
     );
 
-    // Fast-forward past the 100ms init timeout
-    jest.advanceTimersByTime(100);
-
+    // Wait for PostHog init (happens after 100ms timeout)
     await waitFor(() => {
       expect(posthog.init).toHaveBeenCalled();
-    });
+    }, { timeout: 3000 });
 
-    // Fast-forward to allow requestIdleCallback to execute
-    jest.runAllTimers();
-
-    // Wait for requestIdleCallback
+    // Wait for requestIdleCallback to be called
     await waitFor(() => {
       expect(global.requestIdleCallback).toHaveBeenCalled();
-    });
+    }, { timeout: 3000 });
 
-    jest.useRealTimers();
+    // Execute the captured callback
+    if (idleCallback) {
+      idleCallback();
+    }
+
+    // Verify session recording was started
+    expect(posthog.startSessionRecording).toHaveBeenCalled();
   });
 
   it('should fallback to setTimeout if requestIdleCallback unavailable', async () => {
@@ -200,8 +206,13 @@ describe('PostHogProvider', () => {
 
     const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
 
-    // Use fake timers to control async behavior
-    jest.useFakeTimers();
+    let idleCallback: (() => void) | null = null;
+
+    // Mock requestIdleCallback to capture the callback
+    (global as any).requestIdleCallback = jest.fn((cb) => {
+      idleCallback = cb;
+      return 1;
+    });
 
     render(
       <PostHogProvider>
@@ -209,23 +220,28 @@ describe('PostHogProvider', () => {
       </PostHogProvider>
     );
 
-    // Fast-forward past the 100ms init timeout
-    jest.advanceTimersByTime(100);
-
+    // Wait for PostHog init
     await waitFor(() => {
       expect(posthog.init).toHaveBeenCalled();
-    });
+    }, { timeout: 3000 });
 
-    // Fast-forward to allow requestIdleCallback to execute
-    jest.runAllTimers();
-
-    // Wait for session recording attempt
+    // Wait for requestIdleCallback to be called
     await waitFor(() => {
       expect(global.requestIdleCallback).toHaveBeenCalled();
-    });
+    }, { timeout: 3000 });
+
+    // Execute the captured callback (will throw error)
+    if (idleCallback) {
+      idleCallback();
+    }
+
+    // Verify the error was handled gracefully
+    expect(consoleWarnSpy).toHaveBeenCalledWith(
+      'Failed to start PostHog session recording',
+      expect.any(Error)
+    );
 
     consoleWarnSpy.mockRestore();
-    jest.useRealTimers();
   });
 
   it('should cleanup timeout on unmount', () => {

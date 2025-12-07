@@ -13,3 +13,11 @@ jest.mock('lucide-react', () => ({
   Menu: () => 'Menu',
   Copy: () => 'Copy',
 }))
+
+// Mock jose library (ESM module causing issues in Jest)
+jest.mock('jose', () => ({
+  compactDecrypt: jest.fn(),
+  compactVerify: jest.fn(),
+  jwtVerify: jest.fn(),
+  SignJWT: jest.fn(),
+}))
