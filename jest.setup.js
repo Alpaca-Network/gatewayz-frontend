@@ -65,12 +65,39 @@ global.Headers = class Headers {
   }
 }
 
+// Minimal Request mock - NextRequest will handle the actual implementation
 global.Request = class Request {
-  constructor(input, init) {
-    this.url = typeof input === 'string' ? input : input.url
-    this.method = init?.method || 'GET'
-    this.headers = new Headers(init?.headers || {})
-    this.body = init?.body
+  constructor(input, init = {}) {
+    // Store input for NextRequest to use
+    this._input = input
+    this._init = init
+
+    // Define read-only url getter
+    Object.defineProperty(this, 'url', {
+      get() {
+        return typeof input === 'string' ? input : input?.url || ''
+      },
+      enumerable: true
+    })
+
+    // Define read-only method getter
+    Object.defineProperty(this, 'method', {
+      get() {
+        return init?.method || 'GET'
+      },
+      enumerable: true
+    })
+
+    // Define read-only headers getter
+    Object.defineProperty(this, 'headers', {
+      get() {
+        if (!this._headers) {
+          this._headers = new Headers(init?.headers || {})
+        }
+        return this._headers
+      },
+      enumerable: true
+    })
   }
 }
 global.Response = class Response {}
