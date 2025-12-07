@@ -37,7 +37,7 @@ global.Headers = class Headers {
   }
 
   get(name) {
-    return this.map.get(name.toLowerCase())
+    return this.map.get(name.toLowerCase()) || null
   }
 
   has(name) {
