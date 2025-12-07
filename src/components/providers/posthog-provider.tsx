@@ -19,8 +19,8 @@ export function PostHogProvider({ children }: PostHogProviderProps) {
       return;
     }
 
-    // Detect if on mobile to disable expensive features
-    const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+    // Detect if on mobile to disable expensive features (safe during client-side only)
+    const isMobile = window.innerWidth < 768;
 
     // Use timeout to prevent PostHog from blocking page load on slow networks
     const initTimeout = setTimeout(() => {

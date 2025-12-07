@@ -259,6 +259,10 @@ export function GatewayzAuthProvider({
     authTimeoutRef.current = setTimeout(() => {
       console.error(`[Auth] Authentication timeout - stuck in authenticating state for ${AUTHENTICATING_TIMEOUT_MS / 1000}s`);
 
+      // Always clear sync state to prevent being stuck
+      syncInFlightRef.current = false;
+      syncPromiseRef.current = null;
+
       // Check if we can retry
       if (authRetryCountRef.current < MAX_AUTH_RETRIES) {
         console.log(`[Auth] Auto-retrying authentication (attempt ${authRetryCountRef.current + 1}/${MAX_AUTH_RETRIES})`);
@@ -275,20 +279,20 @@ export function GatewayzAuthProvider({
           },
         });
 
-        // Reset sync state to allow retry
-        syncInFlightRef.current = false;
-        syncPromiseRef.current = null;
-
         // Dispatch refresh event to trigger retry
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new Event(AUTH_REFRESH_EVENT));
         }
       } else {
-        // Max retries reached
-        setAuthStatus("error", "timeout");
-        setError("Authentication timeout - please check your connection and try again");
+        // Max retries reached - transition to unauthenticated instead of error
+        // This allows the user to manually retry login
+        setAuthStatus("unauthenticated", "timeout - max retries");
+        setError("Authentication timeout - please try signing in again");
 
-        Sentry.captureMessage("Authentication timeout - max retries exceeded", {
+        // Clear any stuck credentials
+        clearStoredCredentials();
+
+        Sentry.captureMessage("Authentication timeout - stuck in authenticating state", {
           level: 'error',
           tags: {
             auth_error: 'authenticating_timeout',
@@ -300,7 +304,7 @@ export function GatewayzAuthProvider({
         });
       }
     }, AUTHENTICATING_TIMEOUT_MS);
-  }, [clearAuthTimeout, setAuthStatus]);
+  }, [clearAuthTimeout, setAuthStatus, clearStoredCredentials]);
 
   const updateStateFromStorage = useCallback(() => {
     const key = getApiKey();
