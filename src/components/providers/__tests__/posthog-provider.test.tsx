@@ -133,12 +133,13 @@ describe('PostHogProvider', () => {
 
   it('should start session recording on desktop with requestIdleCallback', async () => {
     let idleCallback: (() => void) | null = null;
-
-    // Override the beforeEach mock to capture the callback instead of executing it
-    (global as any).requestIdleCallback = jest.fn((cb) => {
+    const mockRequestIdleCallback = jest.fn((cb) => {
       idleCallback = cb;
       return 1; // Return a mock handle
     });
+
+    // Override the beforeEach mock to capture the callback instead of executing it
+    (global as any).requestIdleCallback = mockRequestIdleCallback;
 
     render(
       <PostHogProvider>
@@ -149,7 +150,7 @@ describe('PostHogProvider', () => {
     // Wait for PostHog init and requestIdleCallback to be called
     await waitFor(() => {
       expect(posthog.init).toHaveBeenCalled();
-      expect(global.requestIdleCallback).toHaveBeenCalled();
+      expect(mockRequestIdleCallback).toHaveBeenCalled();
     }, { timeout: 3000 });
 
     // Execute the captured callback
@@ -202,12 +203,13 @@ describe('PostHogProvider', () => {
     const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
 
     let idleCallback: (() => void) | null = null;
-
-    // Override the beforeEach mock to capture the callback instead of executing it
-    (global as any).requestIdleCallback = jest.fn((cb) => {
+    const mockRequestIdleCallback = jest.fn((cb) => {
       idleCallback = cb;
       return 1;
     });
+
+    // Override the beforeEach mock to capture the callback instead of executing it
+    (global as any).requestIdleCallback = mockRequestIdleCallback;
 
     render(
       <PostHogProvider>
@@ -218,7 +220,7 @@ describe('PostHogProvider', () => {
     // Wait for PostHog init and requestIdleCallback to be called
     await waitFor(() => {
       expect(posthog.init).toHaveBeenCalled();
-      expect(global.requestIdleCallback).toHaveBeenCalled();
+      expect(mockRequestIdleCallback).toHaveBeenCalled();
     }, { timeout: 3000 });
 
     // Execute the captured callback (will throw error)
