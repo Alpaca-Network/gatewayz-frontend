@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { format, isToday, isYesterday } from "date-fns";
-import { Plus, Search, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { SquarePen, Search, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -137,13 +137,14 @@ export function ChatSidebar({ className, onClose }: { className?: string; onClos
   return (
     <div className={cn("flex flex-col h-full bg-background border-r", className)}>
       <div className="p-4 border-b space-y-4">
-        <Button 
-            className="w-full justify-start gap-2" 
+        <Button
+            variant="secondary"
+            className="w-full justify-start gap-2 bg-secondary hover:bg-secondary/80"
             onClick={handleCreateNew}
             disabled={createSession.isPending}
         >
-          <Plus className="w-4 h-4" />
-          New Chat
+          <SquarePen className="w-4 h-4" />
+          New chat
         </Button>
         <div className="relative">
           <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
