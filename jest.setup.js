@@ -190,6 +190,13 @@ jest.mock('jose', () => ({
   SignJWT: jest.fn(),
 }))
 
+// Mock ofetch library (ESM module causing issues in Jest)
+jest.mock('ofetch', () => ({
+  ofetch: jest.fn(),
+  __esModule: true,
+  default: jest.fn(),
+}))
+
 // Mock next/server NextResponse to use our Response mock
 jest.mock('next/server', () => {
   const actualModule = jest.requireActual('next/server')
