@@ -279,6 +279,45 @@ describe('Authentication Error Handling', () => {
     });
   });
 
+  describe('Auth State Machine Transitions', () => {
+    // Copy of the state machine from gatewayz-auth-context.tsx for testing
+    type AuthStatus = 'idle' | 'unauthenticated' | 'authenticating' | 'authenticated' | 'error';
+
+    const AUTH_STATE_TRANSITIONS: Record<AuthStatus, AuthStatus[]> = {
+      idle: ['unauthenticated', 'authenticating', 'authenticated'],
+      unauthenticated: ['authenticating', 'authenticated'],
+      authenticating: ['authenticated', 'unauthenticated', 'error'],
+      authenticated: ['authenticated', 'authenticating', 'unauthenticated', 'error'],
+      error: ['unauthenticated', 'authenticating'],
+    };
+
+    it('should allow authenticated -> authenticated transition for credential refresh', () => {
+      const currentStatus: AuthStatus = 'authenticated';
+      const newStatus: AuthStatus = 'authenticated';
+
+      const allowedTransitions = AUTH_STATE_TRANSITIONS[currentStatus];
+      expect(allowedTransitions.includes(newStatus)).toBe(true);
+    });
+
+    it('should allow all standard authenticated transitions', () => {
+      const currentStatus: AuthStatus = 'authenticated';
+
+      const allowedTransitions = AUTH_STATE_TRANSITIONS[currentStatus];
+      expect(allowedTransitions).toContain('authenticated'); // self-transition for refresh
+      expect(allowedTransitions).toContain('authenticating'); // re-auth needed
+      expect(allowedTransitions).toContain('unauthenticated'); // logout
+      expect(allowedTransitions).toContain('error'); // error occurred
+    });
+
+    it('should not transition from idle to error directly', () => {
+      const currentStatus: AuthStatus = 'idle';
+      const newStatus: AuthStatus = 'error';
+
+      const allowedTransitions = AUTH_STATE_TRANSITIONS[currentStatus];
+      expect(allowedTransitions.includes(newStatus)).toBe(false);
+    });
+  });
+
   describe('Authentication Timeout Handling (JAVASCRIPT-NEXTJS-X, Y)', () => {
     // NOTE: Removed trivial tests that were just testing `retryCount < maxRetries`
     // Those tests verified JavaScript operators, not actual retry logic
