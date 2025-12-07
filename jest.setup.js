@@ -17,35 +17,35 @@ global.fetch = jest.fn(() =>
   })
 )
 
-// Mock Headers class with basic implementation
+// Mock Headers class with case-insensitive header names (like real HTTP headers)
 global.Headers = class Headers {
   constructor(init) {
     this.map = new Map()
     if (init) {
       if (init instanceof Headers) {
-        init.forEach((value, key) => this.map.set(key, value))
+        init.forEach((value, key) => this.map.set(key.toLowerCase(), value))
       } else if (Array.isArray(init)) {
-        init.forEach(([key, value]) => this.map.set(key, value))
+        init.forEach(([key, value]) => this.map.set(key.toLowerCase(), value))
       } else if (typeof init === 'object') {
-        Object.entries(init).forEach(([key, value]) => this.map.set(key, value))
+        Object.entries(init).forEach(([key, value]) => this.map.set(key.toLowerCase(), value))
       }
     }
   }
 
   set(name, value) {
-    this.map.set(name, value)
+    this.map.set(name.toLowerCase(), value)
   }
 
   get(name) {
-    return this.map.get(name)
+    return this.map.get(name.toLowerCase())
   }
 
   has(name) {
-    return this.map.has(name)
+    return this.map.has(name.toLowerCase())
   }
 
   delete(name) {
-    this.map.delete(name)
+    this.map.delete(name.toLowerCase())
   }
 
   forEach(callback) {
