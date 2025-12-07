@@ -749,8 +749,9 @@ export function GatewayzAuthProvider({
         return syncPromiseRef.current;
       }
 
-      // Reset retry count on forced refresh
-      if (options?.force) {
+      // Reset retry count on user-initiated actions (login/logout)
+      // But NOT on automatic retries to prevent infinite loops
+      if (options?.force && options?.resetRetryCount !== false) {
         authRetryCountRef.current = 0;
       }
 
@@ -1323,6 +1324,15 @@ export function GatewayzAuthProvider({
 
     // If Privy user is authenticated, always sync with backend
     if (authenticated && user) {
+      // Reset retry counter on new login (when user changes)
+      // This allows users to retry after hitting max retries
+      const currentUserId = lastSyncedPrivyIdRef.current;
+      const newUserId = user.id;
+      if (currentUserId !== newUserId) {
+        console.log("[Auth] New Privy user detected, resetting retry counter");
+        authRetryCountRef.current = 0;
+      }
+
       syncWithBackend();
       return;
     }
@@ -1350,7 +1360,8 @@ export function GatewayzAuthProvider({
   useEffect(() => {
     const handler = () => {
       console.log("[Auth] Received refresh event");
-      syncWithBackend({ force: true }).catch((err) => {
+      // Use force but don't reset retry counter to prevent infinite loops
+      syncWithBackend({ force: true, resetRetryCount: false }).catch((err) => {
         console.error("[Auth] Error refreshing auth:", err);
       });
     };
