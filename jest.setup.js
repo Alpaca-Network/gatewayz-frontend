@@ -65,7 +65,14 @@ global.Headers = class Headers {
   }
 }
 
-global.Request = class Request {}
+global.Request = class Request {
+  constructor(input, init) {
+    this.url = typeof input === 'string' ? input : input.url
+    this.method = init?.method || 'GET'
+    this.headers = new Headers(init?.headers || {})
+    this.body = init?.body
+  }
+}
 global.Response = class Response {}
 
 // Mock lucide-react icons

@@ -705,7 +705,7 @@ export function GatewayzAuthProvider({
   );
 
   const syncWithBackend = useCallback(
-    async (options?: { force?: boolean }) => {
+    async (options?: { force?: boolean; resetRetryCount?: boolean }) => {
       if (!privyReady) {
         return;
       }
