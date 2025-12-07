@@ -530,17 +530,6 @@ export async function POST(request: NextRequest) {
           profiler.endRequest(requestId);
           console.log(`[API Proxy] Request ${requestId} complete. Total time: ${(performance.now() - requestStartTime).toFixed(2)}ms`);
 
-          // Increment guest rate limit counter on successful response
-          if (isGuestRequest) {
-            const clientIP = getClientIP(request);
-            const rateLimitResult = incrementGuestRateLimit(clientIP);
-            console.log('[API Completions] Guest rate limit incremented:', {
-              clientIP,
-              remaining: rateLimitResult.remaining,
-              success: rateLimitResult.success,
-            });
-          }
-
           // Calculate timing metrics for performance tracking
           const totalTime = performance.now() - requestStartTime;
           const backendTime = backendResponseTime; // Time it took for backend to respond
