@@ -81,6 +81,42 @@ describe('Guest Rate Limiter', () => {
       });
       expect(getClientIP(request)).toBe('5.5.5.5');
     });
+
+    it('should extract IP from x-client-ip header', () => {
+      const request = createMockRequest({
+        'x-client-ip': '172.16.0.1',
+      });
+      expect(getClientIP(request)).toBe('172.16.0.1');
+    });
+
+    it('should extract IP from x-cluster-client-ip header', () => {
+      const request = createMockRequest({
+        'x-cluster-client-ip': '172.16.0.2',
+      });
+      expect(getClientIP(request)).toBe('172.16.0.2');
+    });
+
+    it('should extract IP from true-client-ip header', () => {
+      const request = createMockRequest({
+        'true-client-ip': '172.16.0.3',
+      });
+      expect(getClientIP(request)).toBe('172.16.0.3');
+    });
+
+    it('should skip "unknown" IP value and check next header', () => {
+      const request = createMockRequest({
+        'x-forwarded-for': 'unknown',
+        'x-real-ip': '8.8.8.8',
+      });
+      expect(getClientIP(request)).toBe('8.8.8.8');
+    });
+
+    it('should handle whitespace in IP addresses', () => {
+      const request = createMockRequest({
+        'x-forwarded-for': '  192.168.1.1  ,  10.0.0.1  ',
+      });
+      expect(getClientIP(request)).toBe('192.168.1.1');
+    });
   });
 
   describe('checkGuestRateLimit', () => {
@@ -250,6 +286,59 @@ describe('Guest Rate Limiter', () => {
       ips.forEach(ip => {
         expect(checkGuestRateLimit(ip).remaining).toBe(3);
       });
+    });
+  });
+
+  describe('Window expiration', () => {
+    it('should reset limit when window expires in checkGuestRateLimit', () => {
+      const ip = '192.168.1.200';
+
+      // Make 2 requests
+      incrementGuestRateLimit(ip);
+      incrementGuestRateLimit(ip);
+
+      // Verify limit is reduced
+      expect(checkGuestRateLimit(ip).remaining).toBe(1);
+
+      // Mock time to simulate window expiration (24 hours later)
+      const originalDateNow = Date.now;
+      const startTime = Date.now();
+      Date.now = jest.fn(() => startTime + 24 * 60 * 60 * 1000 + 1000); // 24 hours + 1 second
+
+      // Check rate limit should show full limit again
+      const result = checkGuestRateLimit(ip);
+      expect(result.allowed).toBe(true);
+      expect(result.remaining).toBe(3);
+      expect(result.resetInMs).toBe(24 * 60 * 60 * 1000); // Full 24 hours
+
+      // Restore Date.now
+      Date.now = originalDateNow;
+    });
+
+    it('should reset limit when window expires in incrementGuestRateLimit', () => {
+      const ip = '192.168.1.201';
+
+      // Use all 3 requests
+      for (let i = 0; i < 3; i++) {
+        incrementGuestRateLimit(ip);
+      }
+
+      // Verify limit is exhausted
+      expect(checkGuestRateLimit(ip).remaining).toBe(0);
+      expect(checkGuestRateLimit(ip).allowed).toBe(false);
+
+      // Mock time to simulate window expiration
+      const originalDateNow = Date.now;
+      const startTime = Date.now();
+      Date.now = jest.fn(() => startTime + 24 * 60 * 60 * 1000 + 1000);
+
+      // Increment should succeed with new window
+      const result = incrementGuestRateLimit(ip);
+      expect(result.success).toBe(true);
+      expect(result.remaining).toBe(2); // 3 - 1 = 2
+
+      // Restore Date.now
+      Date.now = originalDateNow;
     });
   });
 
