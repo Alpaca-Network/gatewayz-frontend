@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
-import { Send, Image as ImageIcon, Video as VideoIcon, Mic as AudioIcon, X, RefreshCw, Plus } from "lucide-react";
+import { Send, Image as ImageIcon, Video as VideoIcon, Mic as AudioIcon, X, RefreshCw, Plus, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -62,12 +62,14 @@ export function ChatInput() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
   const [selectedAudio, setSelectedAudio] = useState<string | null>(null);
+  const [selectedDocument, setSelectedDocument] = useState<string | null>(null);
   const [guestMessageCount, setGuestMessageCount] = useState(0);
   const [showGuestLimitWarning, setShowGuestLimitWarning] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
+  const documentInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Derive input empty state directly from inputValue to avoid desync issues
@@ -99,7 +101,7 @@ export function ChatInput() {
     // Also check the actual input field as a fallback for typing scenarios
     const currentInputValue = freshInputValue || inputRef.current?.value || inputValue;
 
-    if ((!currentInputValue.trim() && !selectedImage && !selectedVideo && !selectedAudio) || isStreaming) return;
+    if ((!currentInputValue.trim() && !selectedImage && !selectedVideo && !selectedAudio && !selectedDocument) || isStreaming) return;
     if (!freshSelectedModel) {
         toast({ title: "No model selected", variant: "destructive" });
         return;
@@ -123,6 +125,7 @@ export function ChatInput() {
     const currentImage = selectedImage;
     const currentVideo = selectedVideo;
     const currentAudio = selectedAudio;
+    const currentDocument = selectedDocument;
 
     // Clear input immediately for better UX
     setInputValue("");
@@ -133,6 +136,7 @@ export function ChatInput() {
     setSelectedImage(null);
     setSelectedVideo(null);
     setSelectedAudio(null);
+    setSelectedDocument(null);
 
     let sessionId = activeSessionId;
     // Create a snapshot of messages BEFORE session creation to avoid race conditions
@@ -154,6 +158,7 @@ export function ChatInput() {
         setSelectedImage(currentImage);
         setSelectedVideo(currentVideo);
         setSelectedAudio(currentAudio);
+        setSelectedDocument(currentDocument);
         toast({ title: "Failed to create session", variant: "destructive" });
         return;
       }
@@ -161,12 +166,13 @@ export function ChatInput() {
 
     // Combine message and attachments
     let content: any = messageText;
-    if (currentImage || currentVideo || currentAudio) {
+    if (currentImage || currentVideo || currentAudio || currentDocument) {
         content = [
             { type: "text", text: messageText },
             ...(currentImage ? [{ type: "image_url", image_url: { url: currentImage } }] : []),
             ...(currentVideo ? [{ type: "video_url", video_url: { url: currentVideo } }] : []),
-            ...(currentAudio ? [{ type: "audio_url", audio_url: { url: currentAudio } }] : [])
+            ...(currentAudio ? [{ type: "audio_url", audio_url: { url: currentAudio } }] : []),
+            ...(currentDocument ? [{ type: "file_url", file_url: { url: currentDocument } }] : [])
         ];
     }
 
@@ -226,7 +232,7 @@ export function ChatInput() {
     } catch (e) {
         toast({ title: "Failed to send message", variant: "destructive" });
     }
-  }, [inputValue, selectedImage, selectedVideo, selectedAudio, isStreaming, selectedModel, activeSessionId, messages, setInputValue, setActiveSessionId, createSession, streamMessage, toast, isAuthenticated, login]);
+  }, [inputValue, selectedImage, selectedVideo, selectedAudio, selectedDocument, isStreaming, selectedModel, activeSessionId, messages, setInputValue, setActiveSessionId, createSession, streamMessage, toast, isAuthenticated, login]);
 
   // Expose send function for prompt auto-send from WelcomeScreen
   useEffect(() => {
@@ -279,6 +285,19 @@ export function ChatInput() {
       if (audioInputRef.current) audioInputRef.current.value = '';
   };
 
+  const handleDocumentSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      try {
+          const base64 = await fileToBase64(file);
+          setSelectedDocument(base64);
+      } catch (e) {
+          toast({ title: "Failed to load document", variant: "destructive" });
+      }
+      // Reset input so the same file can be selected again
+      if (documentInputRef.current) documentInputRef.current.value = '';
+  };
+
   return (
     <div className="w-full p-4 border-t bg-background">
       <div className="max-w-4xl mx-auto">
@@ -328,6 +347,12 @@ export function ChatInput() {
                     <Button size="icon" variant="destructive" className="absolute -top-1 -right-1 h-4 w-4 rounded-full" onClick={() => setSelectedAudio(null)}><X className="h-3 w-3" /></Button>
                 </div>
             )}
+            {selectedDocument && (
+                <div className="relative flex items-center justify-center h-16 w-16 bg-muted rounded">
+                    <FileText className="h-6 w-6 text-muted-foreground" />
+                    <Button size="icon" variant="destructive" className="absolute -top-1 -right-1 h-4 w-4 rounded-full" onClick={() => setSelectedDocument(null)}><X className="h-3 w-3" /></Button>
+                </div>
+            )}
         </div>
 
         <div className="flex gap-2 items-center bg-muted p-2 rounded-lg border">
@@ -335,8 +360,9 @@ export function ChatInput() {
             <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageSelect} className="hidden" />
             <input ref={videoInputRef} type="file" accept="video/*" onChange={handleVideoSelect} className="hidden" />
             <input ref={audioInputRef} type="file" accept="audio/*" onChange={handleAudioSelect} className="hidden" />
+            <input ref={documentInputRef} type="file" accept=".pdf,.doc,.docx,.txt,.md,.csv,.json,.xml" onChange={handleDocumentSelect} className="hidden" />
 
-            {/* Attachment dropdown - combines Image, Video, and Audio uploads */}
+            {/* Attachment dropdown - combines all upload options */}
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                     <Button size="icon" variant="ghost" title="Add attachment">
@@ -346,15 +372,19 @@ export function ChatInput() {
                 <DropdownMenuContent align="start" side="top">
                     <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
                         <ImageIcon className="h-4 w-4 mr-2" />
-                        Upload image
+                        Images
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => videoInputRef.current?.click()}>
                         <VideoIcon className="h-4 w-4 mr-2" />
-                        Upload video
+                        Video
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => audioInputRef.current?.click()}>
                         <AudioIcon className="h-4 w-4 mr-2" />
-                        Upload audio
+                        Audio
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => documentInputRef.current?.click()}>
+                        <FileText className="h-4 w-4 mr-2" />
+                        Documents
                     </DropdownMenuItem>
                 </DropdownMenuContent>
             </DropdownMenu>
