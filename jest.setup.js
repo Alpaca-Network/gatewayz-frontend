@@ -13,9 +13,58 @@ global.fetch = jest.fn(() =>
     status: 200,
     json: async () => ({}),
     text: async () => '',
+    headers: new Map(),
   })
 )
-global.Headers = class Headers {}
+
+// Mock Headers class with basic implementation
+global.Headers = class Headers {
+  constructor(init) {
+    this.map = new Map()
+    if (init) {
+      if (init instanceof Headers) {
+        init.forEach((value, key) => this.map.set(key, value))
+      } else if (Array.isArray(init)) {
+        init.forEach(([key, value]) => this.map.set(key, value))
+      } else if (typeof init === 'object') {
+        Object.entries(init).forEach(([key, value]) => this.map.set(key, value))
+      }
+    }
+  }
+
+  set(name, value) {
+    this.map.set(name, value)
+  }
+
+  get(name) {
+    return this.map.get(name)
+  }
+
+  has(name) {
+    return this.map.has(name)
+  }
+
+  delete(name) {
+    this.map.delete(name)
+  }
+
+  forEach(callback) {
+    this.map.forEach((value, key) => callback(value, key, this))
+  }
+
+  entries() {
+    return this.map.entries()
+  }
+
+  keys() {
+    return this.map.keys()
+  }
+
+  values() {
+    return this.map.values()
+  }
+}
+
 global.Request = class Request {}
 global.Response = class Response {}
 
