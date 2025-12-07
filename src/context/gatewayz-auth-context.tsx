@@ -51,6 +51,8 @@ const AUTH_SLOW_THRESHOLD_MS = 5000; // Show "slow" message after 5 seconds
 const AUTH_VERY_SLOW_THRESHOLD_MS = 15000; // Show "very slow" message after 15 seconds
 
 // Auth state machine for clear state transitions
+// Note: same-state transitions (e.g., authenticated -> authenticated) are handled
+// as no-ops in setAuthStatus before reaching the state machine validation
 const AUTH_STATE_TRANSITIONS: Record<AuthStatus, AuthStatus[]> = {
   idle: ["unauthenticated", "authenticating", "authenticated"],
   unauthenticated: ["authenticating", "authenticated"],
@@ -222,6 +224,11 @@ export function GatewayzAuthProvider({
   // Helper function to validate and set auth status with state machine
   const setAuthStatus = useCallback((newStatus: AuthStatus, reason?: string) => {
     setStatus((currentStatus) => {
+      // Skip if already in the same state (no-op transition)
+      if (currentStatus === newStatus) {
+        return currentStatus;
+      }
+
       const allowedTransitions = AUTH_STATE_TRANSITIONS[currentStatus];
 
       if (!allowedTransitions.includes(newStatus)) {
