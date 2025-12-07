@@ -132,20 +132,31 @@ describe('PostHogProvider', () => {
   });
 
   it('should start session recording on desktop with requestIdleCallback', async () => {
+    // Use fake timers to control async behavior
+    jest.useFakeTimers();
+
     render(
       <PostHogProvider>
         <div>Test</div>
       </PostHogProvider>
     );
 
+    // Fast-forward past the 100ms init timeout
+    jest.advanceTimersByTime(100);
+
     await waitFor(() => {
       expect(posthog.init).toHaveBeenCalled();
     });
+
+    // Fast-forward to allow requestIdleCallback to execute
+    jest.runAllTimers();
 
     // Wait for requestIdleCallback
     await waitFor(() => {
       expect(global.requestIdleCallback).toHaveBeenCalled();
     });
+
+    jest.useRealTimers();
   });
 
   it('should fallback to setTimeout if requestIdleCallback unavailable', async () => {
@@ -189,15 +200,24 @@ describe('PostHogProvider', () => {
 
     const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
 
+    // Use fake timers to control async behavior
+    jest.useFakeTimers();
+
     render(
       <PostHogProvider>
         <div>Test</div>
       </PostHogProvider>
     );
 
+    // Fast-forward past the 100ms init timeout
+    jest.advanceTimersByTime(100);
+
     await waitFor(() => {
       expect(posthog.init).toHaveBeenCalled();
     });
+
+    // Fast-forward to allow requestIdleCallback to execute
+    jest.runAllTimers();
 
     // Wait for session recording attempt
     await waitFor(() => {
@@ -205,6 +225,7 @@ describe('PostHogProvider', () => {
     });
 
     consoleWarnSpy.mockRestore();
+    jest.useRealTimers();
   });
 
   it('should cleanup timeout on unmount', () => {

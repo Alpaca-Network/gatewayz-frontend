@@ -253,6 +253,17 @@ export function GatewayzAuthProvider({
     }
   }, []);
 
+  // Clear stored credentials
+  const clearStoredCredentials = useCallback(() => {
+    removeApiKey();
+    setApiKey(null);
+    setUserData(null);
+    lastSyncedPrivyIdRef.current = null;
+    upgradeAttemptedRef.current = false;
+    authRetryCountRef.current = 0;
+    clearAuthTimeout();
+  }, [clearAuthTimeout]);
+
   // Set authenticating timeout guard with automatic retry
   const setAuthTimeout = useCallback(() => {
     clearAuthTimeout();
@@ -315,16 +326,6 @@ export function GatewayzAuthProvider({
       setAuthStatus("authenticated", "from storage");
     }
   }, [setAuthStatus]);
-
-  const clearStoredCredentials = useCallback(() => {
-    removeApiKey();
-    setApiKey(null);
-    setUserData(null);
-    lastSyncedPrivyIdRef.current = null;
-    upgradeAttemptedRef.current = false;
-    authRetryCountRef.current = 0;
-    clearAuthTimeout();
-  }, [clearAuthTimeout]);
 
   const upgradeApiKeyIfNeeded = useCallback(
     async (authData: AuthResponse) => {
