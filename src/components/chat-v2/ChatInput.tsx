@@ -1,9 +1,15 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
-import { Send, Image as ImageIcon, Video as VideoIcon, Mic as AudioIcon, X, RefreshCw } from "lucide-react";
+import { Send, Image as ImageIcon, Video as VideoIcon, Mic as AudioIcon, X, RefreshCw, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useChatUIStore } from "@/lib/store/chat-ui-store";
 import { useCreateSession, useSessionMessages } from "@/lib/hooks/use-chat-queries";
 import { useChatStream } from "@/lib/hooks/use-chat-stream";
@@ -330,33 +336,59 @@ export function ChatInput() {
             <input ref={videoInputRef} type="file" accept="video/*" onChange={handleVideoSelect} className="hidden" />
             <input ref={audioInputRef} type="file" accept="audio/*" onChange={handleAudioSelect} className="hidden" />
 
-            <div className="flex gap-1">
-                <Button size="icon" variant="ghost" onClick={() => fileInputRef.current?.click()} title="Upload image">
-                    <ImageIcon className="h-5 w-5 text-muted-foreground" />
-                </Button>
-                <Button size="icon" variant="ghost" onClick={() => videoInputRef.current?.click()} title="Upload video">
-                    <VideoIcon className="h-5 w-5 text-muted-foreground" />
-                </Button>
-                <Button size="icon" variant="ghost" onClick={() => audioInputRef.current?.click()} title="Upload audio">
-                    <AudioIcon className="h-5 w-5 text-muted-foreground" />
-                </Button>
-            </div>
+            {/* Attachment dropdown - combines Image, Video, and Audio uploads */}
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button size="icon" variant="ghost" title="Add attachment">
+                        <Plus className="h-5 w-5 text-muted-foreground" />
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" side="top">
+                    <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
+                        <ImageIcon className="h-4 w-4 mr-2" />
+                        Upload image
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => videoInputRef.current?.click()}>
+                        <VideoIcon className="h-4 w-4 mr-2" />
+                        Upload video
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => audioInputRef.current?.click()}>
+                        <AudioIcon className="h-4 w-4 mr-2" />
+                        Upload audio
+                    </DropdownMenuItem>
+                </DropdownMenuContent>
+            </DropdownMenu>
 
-            <Input
-                ref={inputRef}
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        handleSend();
-                    }
-                }}
-                placeholder="Type a message..."
-                className="flex-1 border-0 bg-background focus-visible:ring-0"
-                disabled={isStreaming}
-                enterKeyHint="send"
-            />
+            {/* Input container with microphone inside */}
+            <div className="relative flex-1 flex items-center">
+                <Input
+                    ref={inputRef}
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            handleSend();
+                        }
+                    }}
+                    placeholder="Type a message..."
+                    className="flex-1 border-0 bg-background focus-visible:ring-0 pr-10"
+                    disabled={isStreaming}
+                    enterKeyHint="send"
+                />
+                {/* Microphone button - inside input, hidden when typing */}
+                {isInputEmpty && (
+                    <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => audioInputRef.current?.click()}
+                        title="Upload audio"
+                        className="absolute right-1 h-8 w-8"
+                    >
+                        <AudioIcon className="h-4 w-4 text-muted-foreground" />
+                    </Button>
+                )}
+            </div>
 
             <Button
                 type="button"
