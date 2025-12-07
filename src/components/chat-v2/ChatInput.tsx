@@ -29,6 +29,54 @@ const fileToBase64 = (file: File): Promise<string> => {
     });
 };
 
+// Maximum raw image file size (10MB)
+const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
+
+// Helper to compress images before upload to avoid 413 errors
+const compressImage = (file: File, maxWidth = 1920, maxHeight = 1920, quality = 0.85): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+
+        if (!ctx) {
+            reject(new Error('Failed to get canvas context'));
+            return;
+        }
+
+        img.onload = () => {
+            let { width, height } = img;
+
+            // Calculate new dimensions maintaining aspect ratio
+            if (width > maxWidth || height > maxHeight) {
+                const ratio = Math.min(maxWidth / width, maxHeight / height);
+                width = Math.round(width * ratio);
+                height = Math.round(height * ratio);
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+            ctx.drawImage(img, 0, 0, width, height);
+
+            // Use JPEG for photos (smaller), PNG for images with transparency
+            const mimeType = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+            const compressedDataUrl = canvas.toDataURL(mimeType, quality);
+
+            // Clean up object URL
+            URL.revokeObjectURL(img.src);
+
+            resolve(compressedDataUrl);
+        };
+
+        img.onerror = () => {
+            URL.revokeObjectURL(img.src);
+            reject(new Error('Failed to load image'));
+        };
+
+        img.src = URL.createObjectURL(file);
+    });
+};
+
 // Helper to generate smart session title (truncates at word boundary)
 const generateSessionTitle = (text: string, maxLength: number = 30): string => {
     if (!text.trim()) return "New Chat";
@@ -237,9 +285,22 @@ export function ChatInput() {
   const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
+
+      // Validate file size before processing
+      if (file.size > MAX_IMAGE_SIZE) {
+          toast({
+              title: "Image too large",
+              description: "Please select an image under 10MB",
+              variant: "destructive"
+          });
+          if (fileInputRef.current) fileInputRef.current.value = '';
+          return;
+      }
+
       try {
-          const base64 = await fileToBase64(file);
-          setSelectedImage(base64);
+          // Compress image to avoid 413 payload too large errors
+          const compressedBase64 = await compressImage(file);
+          setSelectedImage(compressedBase64);
       } catch (e) {
           toast({ title: "Failed to load image", variant: "destructive" });
       }
