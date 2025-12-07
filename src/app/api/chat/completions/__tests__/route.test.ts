@@ -24,12 +24,17 @@ jest.mock('@/lib/performance-profiler', () => ({
   generateRequestId: jest.fn(() => 'test-request-id'),
 }));
 
+// Import guest rate limiter to reset between tests
+import { clearAllRateLimitsForTesting } from '@/lib/guest-rate-limiter';
+
 // Mock fetch globally
 global.fetch = jest.fn();
 
 describe('Chat Completions API Route', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // Clear guest rate limits between tests
+    clearAllRateLimitsForTesting();
   });
 
   afterEach(() => {
@@ -522,6 +527,243 @@ describe('Chat Completions API Route', () => {
       expect(response.status).toBe(502);
       const body = await response.json();
       expect(body.details).toContain('Could not connect');
+    });
+  });
+
+  describe('Guest Rate Limiting', () => {
+    /**
+     * Helper to create a mock request with IP headers for rate limiting tests
+     */
+    function createMockRequestWithIP(body: any, ip: string, apiKey?: string): NextRequest {
+      const headers = new Headers();
+      headers.set('content-type', 'application/json');
+      headers.set('x-forwarded-for', ip);
+
+      if (apiKey) {
+        headers.set('authorization', `Bearer ${apiKey}`);
+      }
+
+      const request = new NextRequest('http://localhost:3000/api/chat/completions', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+      });
+
+      return request;
+    }
+
+    test('should return 429 when guest exceeds daily limit', async () => {
+      // Set GUEST_API_KEY for this test
+      process.env.GUEST_API_KEY = 'test-guest-key';
+
+      const requestBody = {
+        model: 'openrouter/auto',
+        messages: [{ role: 'user', content: 'Hello' }],
+        stream: true,
+        apiKey: 'guest',
+      };
+
+      const mockChunks = [
+        'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n',
+        'data: [DONE]\n\n',
+      ];
+
+      // Make 3 successful requests (the daily limit)
+      for (let i = 0; i < 3; i++) {
+        (global.fetch as jest.Mock).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: new Headers({
+            'content-type': 'text/event-stream',
+          }),
+          body: createMockStream(mockChunks),
+        });
+
+        const request = createMockRequestWithIP(requestBody, '192.168.1.50');
+        const response = await POST(request);
+        expect(response.status).toBe(200);
+      }
+
+      // 4th request should be rate limited
+      const request = createMockRequestWithIP(requestBody, '192.168.1.50');
+      const response = await POST(request);
+
+      expect(response.status).toBe(429);
+      const body = await response.json();
+      expect(body.code).toBe('GUEST_RATE_LIMIT_EXCEEDED');
+      expect(body.message).toContain('free messages');
+      expect(body.remaining).toBe(0);
+      expect(body.limit).toBe(3);
+
+      // Clean up
+      delete process.env.GUEST_API_KEY;
+    });
+
+    test('should track different IPs separately for guest rate limiting', async () => {
+      // Set GUEST_API_KEY for this test
+      process.env.GUEST_API_KEY = 'test-guest-key';
+
+      const requestBody = {
+        model: 'openrouter/auto',
+        messages: [{ role: 'user', content: 'Hello' }],
+        stream: true,
+        apiKey: 'guest',
+      };
+
+      const mockChunks = [
+        'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n',
+        'data: [DONE]\n\n',
+      ];
+
+      // Use 2 requests from IP1
+      for (let i = 0; i < 2; i++) {
+        (global.fetch as jest.Mock).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: new Headers({
+            'content-type': 'text/event-stream',
+          }),
+          body: createMockStream(mockChunks),
+        });
+
+        const request = createMockRequestWithIP(requestBody, '10.0.0.1');
+        const response = await POST(request);
+        expect(response.status).toBe(200);
+      }
+
+      // IP2 should still have full limit
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({
+          'content-type': 'text/event-stream',
+        }),
+        body: createMockStream(mockChunks),
+      });
+
+      const request = createMockRequestWithIP(requestBody, '10.0.0.2');
+      const response = await POST(request);
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get('X-RateLimit-Remaining')).toBe('2');
+
+      // Clean up
+      delete process.env.GUEST_API_KEY;
+    });
+
+    test('should include rate limit headers for guest requests', async () => {
+      // Set GUEST_API_KEY for this test
+      process.env.GUEST_API_KEY = 'test-guest-key';
+
+      const requestBody = {
+        model: 'openrouter/auto',
+        messages: [{ role: 'user', content: 'Hello' }],
+        stream: true,
+        apiKey: 'guest',
+      };
+
+      const mockChunks = [
+        'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n',
+        'data: [DONE]\n\n',
+      ];
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({
+          'content-type': 'text/event-stream',
+        }),
+        body: createMockStream(mockChunks),
+      });
+
+      const request = createMockRequestWithIP(requestBody, '192.168.1.60');
+      const response = await POST(request);
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get('X-RateLimit-Limit')).toBe('3');
+      expect(response.headers.get('X-RateLimit-Remaining')).toBe('2');
+      expect(response.headers.get('X-RateLimit-Reset')).toBeTruthy();
+
+      // Clean up
+      delete process.env.GUEST_API_KEY;
+    });
+
+    test('should not apply rate limiting to authenticated requests', async () => {
+      const requestBody = {
+        model: 'openrouter/auto',
+        messages: [{ role: 'user', content: 'Hello' }],
+        stream: true,
+        apiKey: 'real-user-api-key', // Not a guest
+      };
+
+      const mockChunks = [
+        'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n',
+        'data: [DONE]\n\n',
+      ];
+
+      // Make 5 requests (more than guest limit of 3)
+      for (let i = 0; i < 5; i++) {
+        (global.fetch as jest.Mock).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: new Headers({
+            'content-type': 'text/event-stream',
+          }),
+          body: createMockStream(mockChunks),
+        });
+
+        const request = createMockRequestWithIP(requestBody, '192.168.1.70');
+        const response = await POST(request);
+
+        // All should succeed - no rate limiting for authenticated users
+        expect(response.status).toBe(200);
+        // Should NOT have rate limit headers for authenticated requests
+        expect(response.headers.get('X-RateLimit-Limit')).toBeNull();
+      }
+    });
+
+    test('should return rate limit info in 429 response headers', async () => {
+      // Set GUEST_API_KEY for this test
+      process.env.GUEST_API_KEY = 'test-guest-key';
+
+      const requestBody = {
+        model: 'openrouter/auto',
+        messages: [{ role: 'user', content: 'Hello' }],
+        stream: true,
+        apiKey: 'guest',
+      };
+
+      const mockChunks = [
+        'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n',
+        'data: [DONE]\n\n',
+      ];
+
+      // Exhaust the limit (3 requests)
+      for (let i = 0; i < 3; i++) {
+        (global.fetch as jest.Mock).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: new Headers({
+            'content-type': 'text/event-stream',
+          }),
+          body: createMockStream(mockChunks),
+        });
+
+        const request = createMockRequestWithIP(requestBody, '192.168.1.80');
+        await POST(request);
+      }
+
+      // Rate limited request
+      const request = createMockRequestWithIP(requestBody, '192.168.1.80');
+      const response = await POST(request);
+
+      expect(response.status).toBe(429);
+      expect(response.headers.get('X-RateLimit-Limit')).toBe('3');
+      expect(response.headers.get('X-RateLimit-Remaining')).toBe('0');
+      expect(response.headers.get('Retry-After')).toBeTruthy();
+
+      // Clean up
+      delete process.env.GUEST_API_KEY;
     });
   });
 });
