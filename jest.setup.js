@@ -207,6 +207,14 @@ jest.mock('uint8arrays', () => ({
   __esModule: true,
 }))
 
+// Mock @coinbase/wallet-sdk library (ESM module)
+jest.mock('@coinbase/wallet-sdk', () => ({
+  CoinbaseWalletSDK: jest.fn().mockImplementation(() => ({
+    makeWeb3Provider: jest.fn(),
+  })),
+  __esModule: true,
+}))
+
 // Mock next/server NextResponse to use our Response mock
 jest.mock('next/server', () => {
   const actualModule = jest.requireActual('next/server')
