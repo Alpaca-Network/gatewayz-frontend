@@ -10,6 +10,10 @@ on:
     branches:
       - '**'
 
+permissions:
+  contents: read
+  actions: write
+
 jobs:
   # Check for merge conflicts first
   check-merge-conflicts:
@@ -402,36 +406,36 @@ jobs:
             exit 1
           fi
 
+          # Helper function to check if retry was triggered
+          RETRY_MSG=""
+          if [[ "${{ needs.retry-failed.result }}" == "success" ]]; then
+            RETRY_MSG=" (retry has been triggered)"
+          fi
+
           # Test jobs are skipped if conflicts exist, otherwise must pass
           if [[ "${{ needs.test.result }}" != "skipped" ]] && [[ "${{ needs.test.result }}" == "failure" ]]; then
-            echo "Test job failed"
+            echo "Test job failed${RETRY_MSG}"
             exit 1
           fi
 
           if [[ "${{ needs.lint.result }}" != "skipped" ]] && [[ "${{ needs.lint.result }}" == "failure" ]]; then
-            echo "Lint job failed"
+            echo "Lint job failed${RETRY_MSG}"
             exit 1
           fi
 
           if [[ "${{ needs.typecheck.result }}" != "skipped" ]] && [[ "${{ needs.typecheck.result }}" == "failure" ]]; then
-            echo "Typecheck job failed"
+            echo "Typecheck job failed${RETRY_MSG}"
             exit 1
           fi
 
           if [[ "${{ needs.build.result }}" != "skipped" ]] && [[ "${{ needs.build.result }}" == "failure" ]]; then
-            echo "Build job failed"
+            echo "Build job failed${RETRY_MSG}"
             exit 1
           fi
 
           if [[ "${{ needs.e2e.result }}" != "skipped" ]] && [[ "${{ needs.e2e.result }}" == "failure" ]]; then
-            echo "E2E tests failed"
+            echo "E2E tests failed${RETRY_MSG}"
             exit 1
-          fi
-
-          # retry-failed job is optional (only runs on failure, first attempt only)
-          # We don't fail CI if retry-failed itself fails - it's a best-effort retry
-          if [[ "${{ needs.retry-failed.result }}" == "success" ]]; then
-            echo "Note: Failed jobs were automatically re-triggered"
           fi
 
           echo "All CI checks passed successfully"
