@@ -280,7 +280,10 @@ export function GatewayzAuthProvider({
 
       // Check if we can retry
       if (authRetryCountRef.current < MAX_AUTH_RETRIES) {
-        console.log(`[Auth] Auto-retrying authentication (attempt ${authRetryCountRef.current + 1}/${MAX_AUTH_RETRIES})`);
+        // Increment retry counter before dispatching retry event
+        authRetryCountRef.current += 1;
+
+        console.log(`[Auth] Auto-retrying authentication (attempt ${authRetryCountRef.current}/${MAX_AUTH_RETRIES})`);
         setError("Authentication is taking longer than expected - retrying...");
 
         Sentry.captureMessage("Authentication timeout - auto-retrying", {
