@@ -254,13 +254,17 @@ export function GatewayzAuthProvider({
   }, []);
 
   // Clear stored credentials
-  const clearStoredCredentials = useCallback(() => {
+  const clearStoredCredentials = useCallback((resetRetryCounter = true) => {
     removeApiKey();
     setApiKey(null);
     setUserData(null);
     lastSyncedPrivyIdRef.current = null;
     upgradeAttemptedRef.current = false;
-    authRetryCountRef.current = 0;
+    // Only reset retry counter if explicitly requested (default true)
+    // This prevents infinite retry loops when max retries are reached
+    if (resetRetryCounter) {
+      authRetryCountRef.current = 0;
+    }
     clearAuthTimeout();
   }, [clearAuthTimeout]);
 
@@ -300,8 +304,8 @@ export function GatewayzAuthProvider({
         setAuthStatus("unauthenticated", "timeout - max retries");
         setError("Authentication timeout - please try signing in again");
 
-        // Clear any stuck credentials
-        clearStoredCredentials();
+        // Clear any stuck credentials but keep retry counter to prevent infinite loop
+        clearStoredCredentials(false);
 
         Sentry.captureMessage("Authentication timeout - stuck in authenticating state", {
           level: 'error',
