@@ -51,12 +51,13 @@ const AUTH_SLOW_THRESHOLD_MS = 5000; // Show "slow" message after 5 seconds
 const AUTH_VERY_SLOW_THRESHOLD_MS = 15000; // Show "very slow" message after 15 seconds
 
 // Auth state machine for clear state transitions
-// Note: authenticated -> authenticated is allowed for credential refresh/reconfirmation scenarios
+// Note: same-state transitions (e.g., authenticated -> authenticated) are handled
+// as no-ops in setAuthStatus before reaching the state machine validation
 const AUTH_STATE_TRANSITIONS: Record<AuthStatus, AuthStatus[]> = {
   idle: ["unauthenticated", "authenticating", "authenticated"],
   unauthenticated: ["authenticating", "authenticated"],
   authenticating: ["authenticated", "unauthenticated", "error"],
-  authenticated: ["authenticated", "authenticating", "unauthenticated", "error"],
+  authenticated: ["authenticating", "unauthenticated", "error"],
   error: ["unauthenticated", "authenticating"],
 };
 
