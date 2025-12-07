@@ -253,11 +253,30 @@ export function GatewayzAuthProvider({
     }
   }, []);
 
+  // Clear stored credentials
+  const clearStoredCredentials = useCallback((resetRetryCounter = true) => {
+    removeApiKey();
+    setApiKey(null);
+    setUserData(null);
+    lastSyncedPrivyIdRef.current = null;
+    upgradeAttemptedRef.current = false;
+    // Only reset retry counter if explicitly requested (default true)
+    // This prevents infinite retry loops when max retries are reached
+    if (resetRetryCounter) {
+      authRetryCountRef.current = 0;
+    }
+    clearAuthTimeout();
+  }, [clearAuthTimeout]);
+
   // Set authenticating timeout guard with automatic retry
   const setAuthTimeout = useCallback(() => {
     clearAuthTimeout();
     authTimeoutRef.current = setTimeout(() => {
       console.error(`[Auth] Authentication timeout - stuck in authenticating state for ${AUTHENTICATING_TIMEOUT_MS / 1000}s`);
+
+      // Always clear sync state to prevent being stuck
+      syncInFlightRef.current = false;
+      syncPromiseRef.current = null;
 
       // Check if we can retry
       if (authRetryCountRef.current < MAX_AUTH_RETRIES) {
@@ -275,20 +294,21 @@ export function GatewayzAuthProvider({
           },
         });
 
-        // Reset sync state to allow retry
-        syncInFlightRef.current = false;
-        syncPromiseRef.current = null;
-
         // Dispatch refresh event to trigger retry
+        // Note: syncWithBackend will increment authRetryCountRef when it handles this event
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new Event(AUTH_REFRESH_EVENT));
         }
       } else {
-        // Max retries reached
-        setAuthStatus("error", "timeout");
-        setError("Authentication timeout - please check your connection and try again");
+        // Max retries reached - transition to unauthenticated instead of error
+        // This allows the user to manually retry login
+        setAuthStatus("unauthenticated", "timeout - max retries");
+        setError("Authentication timeout - please try signing in again");
 
-        Sentry.captureMessage("Authentication timeout - max retries exceeded", {
+        // Clear any stuck credentials but keep retry counter to prevent infinite loop
+        clearStoredCredentials(false);
+
+        Sentry.captureMessage("Authentication timeout - stuck in authenticating state", {
           level: 'error',
           tags: {
             auth_error: 'authenticating_timeout',
@@ -300,7 +320,7 @@ export function GatewayzAuthProvider({
         });
       }
     }, AUTHENTICATING_TIMEOUT_MS);
-  }, [clearAuthTimeout, setAuthStatus]);
+  }, [clearAuthTimeout, setAuthStatus, clearStoredCredentials]);
 
   const updateStateFromStorage = useCallback(() => {
     const key = getApiKey();
@@ -311,16 +331,6 @@ export function GatewayzAuthProvider({
       setAuthStatus("authenticated", "from storage");
     }
   }, [setAuthStatus]);
-
-  const clearStoredCredentials = useCallback(() => {
-    removeApiKey();
-    setApiKey(null);
-    setUserData(null);
-    lastSyncedPrivyIdRef.current = null;
-    upgradeAttemptedRef.current = false;
-    authRetryCountRef.current = 0;
-    clearAuthTimeout();
-  }, [clearAuthTimeout]);
 
   const upgradeApiKeyIfNeeded = useCallback(
     async (authData: AuthResponse) => {
@@ -696,7 +706,7 @@ export function GatewayzAuthProvider({
   );
 
   const syncWithBackend = useCallback(
-    async (options?: { force?: boolean }) => {
+    async (options?: { force?: boolean; resetRetryCount?: boolean }) => {
       if (!privyReady) {
         return;
       }
@@ -740,8 +750,9 @@ export function GatewayzAuthProvider({
         return syncPromiseRef.current;
       }
 
-      // Reset retry count on forced refresh
-      if (options?.force) {
+      // Reset retry count on user-initiated actions (login/logout)
+      // But NOT on automatic retries to prevent infinite loops
+      if (options?.force && options?.resetRetryCount !== false) {
         authRetryCountRef.current = 0;
       }
 
@@ -753,6 +764,13 @@ export function GatewayzAuthProvider({
 
         if (wasInFlight && !options?.force) {
           console.log("[Auth] Sync already in flight (race detected), skipping");
+          return;
+        }
+
+        // Check if max retries exceeded before incrementing
+        if (authRetryCountRef.current >= MAX_AUTH_RETRIES && !options?.resetRetryCount) {
+          console.log(`[Auth] Max retries (${MAX_AUTH_RETRIES}) exceeded, aborting sync`);
+          syncInFlightRef.current = false;
           return;
         }
 
@@ -1314,6 +1332,15 @@ export function GatewayzAuthProvider({
 
     // If Privy user is authenticated, always sync with backend
     if (authenticated && user) {
+      // Reset retry counter on new login (when user changes)
+      // This allows users to retry after hitting max retries
+      const currentUserId = lastSyncedPrivyIdRef.current;
+      const newUserId = user.id;
+      if (currentUserId !== newUserId) {
+        console.log("[Auth] New Privy user detected, resetting retry counter");
+        authRetryCountRef.current = 0;
+      }
+
       syncWithBackend();
       return;
     }
@@ -1341,7 +1368,8 @@ export function GatewayzAuthProvider({
   useEffect(() => {
     const handler = () => {
       console.log("[Auth] Received refresh event");
-      syncWithBackend({ force: true }).catch((err) => {
+      // Use force but don't reset retry counter to prevent infinite loops
+      syncWithBackend({ force: true, resetRetryCount: false }).catch((err) => {
         console.error("[Auth] Error refreshing auth:", err);
       });
     };
