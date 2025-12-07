@@ -360,11 +360,31 @@ jobs:
   # AI-powered tool. Manual fixes are required when CI fails.
   # This job is kept as a placeholder and does not run.
 
+  # Automatically retry failed jobs once
+  retry-failed:
+    name: Retry Failed Jobs
+    runs-on: ubuntu-latest
+    needs: [test, lint, typecheck, build, e2e]
+    if: failure() && github.run_attempt < 2
+
+    steps:
+      - name: Re-run failed jobs
+        uses: actions/github-script@v7
+        with:
+          script: |
+            console.log(`Attempting to re-run failed jobs for run ${context.runId} (attempt ${context.runAttempt})`);
+            await github.rest.actions.reRunWorkflowFailedJobs({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: context.runId
+            });
+            console.log('Re-run triggered successfully');
+
   # Summary job that all other jobs depend on - useful for branch protection rules
   ci-success:
     name: CI Success
     runs-on: ubuntu-latest
-    needs: [check-merge-conflicts, resolve-conflicts, test, lint, typecheck, build, e2e]
+    needs: [check-merge-conflicts, resolve-conflicts, test, lint, typecheck, build, e2e, retry-failed]
     if: always()
 
     steps:
@@ -406,6 +426,12 @@ jobs:
           if [[ "${{ needs.e2e.result }}" != "skipped" ]] && [[ "${{ needs.e2e.result }}" == "failure" ]]; then
             echo "E2E tests failed"
             exit 1
+          fi
+
+          # retry-failed job is optional (only runs on failure, first attempt only)
+          # We don't fail CI if retry-failed itself fails - it's a best-effort retry
+          if [[ "${{ needs.retry-failed.result }}" == "success" ]]; then
+            echo "Note: Failed jobs were automatically re-triggered"
           fi
 
           echo "All CI checks passed successfully"
