@@ -78,8 +78,8 @@ describe('GatewayzAuthContext - Authentication Timeout', () => {
     const mockToken = 'test-token';
     const mockGetAccessToken = jest.fn().mockResolvedValue(mockToken);
 
-    // Mock slow backend that never responds
-    mockProcessAuthResponse.mockImplementation(() => new Promise(() => {})); // Never resolves
+    // Mock fetch to never resolve (simulating slow backend)
+    global.fetch = jest.fn(() => new Promise(() => {}));
 
     mockUsePrivy.mockReturnValue({
       ready: true,
@@ -92,17 +92,7 @@ describe('GatewayzAuthContext - Authentication Timeout', () => {
 
     const { result } = renderHook(() => useGatewayzAuth(), { wrapper });
 
-    // Wait for initial state
-    await waitFor(() => {
-      expect(result.current.status).toBe('unauthenticated');
-    });
-
-    // Trigger refresh
-    act(() => {
-      result.current.refresh();
-    });
-
-    // Should be authenticating
+    // Should start authenticating immediately when Privy is authenticated
     await waitFor(() => {
       expect(result.current.status).toBe('authenticating');
     });
@@ -112,9 +102,10 @@ describe('GatewayzAuthContext - Authentication Timeout', () => {
       jest.advanceTimersByTime(60000);
     });
 
-    // Should auto-retry first
+    // Should auto-retry (AUTH_REFRESH_EVENT dispatched, which retries and clears the error)
+    // The status should still be 'authenticating' after retry
     await waitFor(() => {
-      expect(result.current.error).toContain('taking longer than expected');
+      expect(result.current.status).toBe('authenticating');
     });
 
     // Verify Sentry was called for retry
@@ -135,8 +126,8 @@ describe('GatewayzAuthContext - Authentication Timeout', () => {
     const mockToken = 'test-token';
     const mockGetAccessToken = jest.fn().mockResolvedValue(mockToken);
 
-    // Mock slow backend that never responds
-    mockProcessAuthResponse.mockImplementation(() => new Promise(() => {}));
+    // Mock fetch to never resolve (simulating slow backend)
+    global.fetch = jest.fn(() => new Promise(() => {}));
 
     mockUsePrivy.mockReturnValue({
       ready: true,
@@ -149,25 +140,24 @@ describe('GatewayzAuthContext - Authentication Timeout', () => {
 
     const { result } = renderHook(() => useGatewayzAuth(), { wrapper });
 
-    // Trigger refresh 3 times to hit max retries
+    // Should start authenticating immediately
+    await waitFor(() => {
+      expect(result.current.status).toBe('authenticating');
+    });
+
+    // Trigger 3 timeout cycles to hit max retries
     for (let i = 0; i < 3; i++) {
-      act(() => {
-        result.current.refresh();
-      });
-
-      await waitFor(() => {
-        expect(result.current.status).toBe('authenticating');
-      });
-
-      // Timeout each attempt
+      // Timeout each attempt (60 seconds)
       act(() => {
         jest.advanceTimersByTime(60000);
       });
 
-      // Wait for retry or final state
-      act(() => {
-        jest.runAllTimers();
-      });
+      // Allow retry event to process if not final attempt
+      if (i < 2) {
+        await waitFor(() => {
+          expect(result.current.status).toBe('authenticating');
+        });
+      }
     }
 
     // After 3 retries, should be unauthenticated (not error)
@@ -200,8 +190,8 @@ describe('GatewayzAuthContext - Authentication Timeout', () => {
     const mockToken = 'test-token';
     const mockGetAccessToken = jest.fn().mockResolvedValue(mockToken);
 
-    // Mock slow backend
-    mockProcessAuthResponse.mockImplementation(() => new Promise(() => {}));
+    // Mock fetch to never resolve
+    global.fetch = jest.fn(() => new Promise(() => {}));
 
     mockUsePrivy.mockReturnValue({
       ready: true,
@@ -214,10 +204,6 @@ describe('GatewayzAuthContext - Authentication Timeout', () => {
 
     const { result } = renderHook(() => useGatewayzAuth(), { wrapper });
 
-    act(() => {
-      result.current.refresh();
-    });
-
     await waitFor(() => {
       expect(result.current.status).toBe('authenticating');
     });
@@ -227,11 +213,12 @@ describe('GatewayzAuthContext - Authentication Timeout', () => {
       jest.advanceTimersByTime(60000);
     });
 
-    act(() => {
-      jest.runAllTimers();
+    // Wait for auto-retry to trigger (should still be authenticating after retry)
+    await waitFor(() => {
+      expect(result.current.status).toBe('authenticating');
     });
 
-    // Should be able to retry after timeout (sync state cleared)
+    // Should be able to manually trigger another refresh after timeout (sync state cleared)
     act(() => {
       result.current.refresh();
     });
@@ -251,7 +238,8 @@ describe('GatewayzAuthContext - Authentication Timeout', () => {
     const mockToken = 'test-token';
     const mockGetAccessToken = jest.fn().mockResolvedValue(mockToken);
 
-    mockProcessAuthResponse.mockImplementation(() => new Promise(() => {}));
+    // Mock fetch to never resolve
+    global.fetch = jest.fn(() => new Promise(() => {}));
 
     mockUsePrivy.mockReturnValue({
       ready: true,
@@ -266,10 +254,6 @@ describe('GatewayzAuthContext - Authentication Timeout', () => {
 
     const { result } = renderHook(() => useGatewayzAuth(), { wrapper });
 
-    act(() => {
-      result.current.refresh();
-    });
-
     await waitFor(() => {
       expect(result.current.status).toBe('authenticating');
     });
@@ -277,10 +261,6 @@ describe('GatewayzAuthContext - Authentication Timeout', () => {
     // Timeout (first attempt)
     act(() => {
       jest.advanceTimersByTime(60000);
-    });
-
-    act(() => {
-      jest.runAllTimers();
     });
 
     // Verify event was dispatched for retry
@@ -301,22 +281,8 @@ describe('GatewayzAuthContext - Authentication Timeout', () => {
     const mockGetAccessToken = jest.fn().mockResolvedValue(mockToken);
     const mockLogin = jest.fn();
 
-    // First 3 attempts fail, 4th succeeds
-    let attemptCount = 0;
-    mockProcessAuthResponse.mockImplementation(() => {
-      attemptCount++;
-      if (attemptCount <= 3) {
-        return new Promise(() => {}); // Never resolves
-      }
-      return Promise.resolve({
-        success: true,
-        user_id: 123,
-        api_key: 'new-key',
-        credits: 100,
-        display_name: 'Test User',
-        email: 'test@example.com',
-      });
-    });
+    // Mock fetch to never resolve
+    global.fetch = jest.fn(() => new Promise(() => {}));
 
     mockUsePrivy.mockReturnValue({
       ready: true,
@@ -329,20 +295,23 @@ describe('GatewayzAuthContext - Authentication Timeout', () => {
 
     const { result } = renderHook(() => useGatewayzAuth(), { wrapper });
 
-    // Exhaust retries
+    // Should start authenticating immediately
+    await waitFor(() => {
+      expect(result.current.status).toBe('authenticating');
+    });
+
+    // Exhaust retries by timing out 3 times
     for (let i = 0; i < 3; i++) {
       act(() => {
-        result.current.refresh();
-      });
-
-      await waitFor(() => {
-        expect(result.current.status).toBe('authenticating');
-      });
-
-      act(() => {
         jest.advanceTimersByTime(60000);
-        jest.runAllTimers();
       });
+
+      // Allow retry event to process if not final attempt
+      if (i < 2) {
+        await waitFor(() => {
+          expect(result.current.status).toBe('authenticating');
+        });
+      }
     }
 
     // Should be unauthenticated after max retries

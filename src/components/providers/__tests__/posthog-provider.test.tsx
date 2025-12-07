@@ -1,4 +1,4 @@
-import { render, waitFor } from '@testing-library/react';
+import { render, waitFor, act } from '@testing-library/react';
 import { PostHogProvider } from '../posthog-provider';
 import posthog from 'posthog-js';
 
@@ -20,6 +20,12 @@ describe('PostHogProvider', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+
+    // Reset posthog mocks to default implementations
+    (posthog.init as jest.Mock).mockImplementation(() => {});
+    (posthog.startSessionRecording as jest.Mock).mockImplementation(() => {});
+    (posthog.capture as jest.Mock).mockImplementation(() => {});
+
     process.env = {
       ...originalEnv,
       NEXT_PUBLIC_POSTHOG_KEY: 'test-key',
@@ -132,22 +138,31 @@ describe('PostHogProvider', () => {
   });
 
   it('should start session recording on desktop with requestIdleCallback', async () => {
+    jest.useFakeTimers();
+
     render(
       <PostHogProvider>
         <div>Test</div>
       </PostHogProvider>
     );
 
-    // Wait for PostHog init
-    await waitFor(() => {
-      expect(posthog.init).toHaveBeenCalled();
-    }, { timeout: 3000 });
+    // Fast-forward to trigger initialization (100ms delay in provider)
+    act(() => {
+      jest.advanceTimersByTime(100);
+    });
 
-    // The beforeEach mock immediately executes requestIdleCallback via setTimeout(cb, 0)
-    // So session recording should be started
-    await waitFor(() => {
-      expect(posthog.startSessionRecording).toHaveBeenCalled();
-    }, { timeout: 1000 });
+    // Verify PostHog was initialized
+    expect(posthog.init).toHaveBeenCalled();
+
+    // Fast-forward all pending timers (requestIdleCallback setTimeout)
+    act(() => {
+      jest.runAllTimers();
+    });
+
+    // Session recording should be started
+    expect(posthog.startSessionRecording).toHaveBeenCalled();
+
+    jest.useRealTimers();
   });
 
   it('should fallback to setTimeout if requestIdleCallback unavailable', async () => {
@@ -185,11 +200,19 @@ describe('PostHogProvider', () => {
   });
 
   it('should handle session recording start errors gracefully', async () => {
+    // Reset the init mock to succeed
+    (posthog.init as jest.Mock).mockImplementation(() => {
+      // Init succeeds without throwing
+    });
+
+    // Mock startSessionRecording to throw
     (posthog.startSessionRecording as jest.Mock).mockImplementation(() => {
       throw new Error('Recording failed');
     });
 
     const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
+
+    jest.useFakeTimers();
 
     render(
       <PostHogProvider>
@@ -197,22 +220,26 @@ describe('PostHogProvider', () => {
       </PostHogProvider>
     );
 
-    // Wait for PostHog init
-    await waitFor(() => {
-      expect(posthog.init).toHaveBeenCalled();
-    }, { timeout: 3000 });
+    // Fast-forward to trigger initialization (100ms delay in provider)
+    act(() => {
+      jest.advanceTimersByTime(100);
+    });
 
-    // The beforeEach mock immediately executes requestIdleCallback via setTimeout(cb, 0)
-    // which will try to start session recording and throw error
-    // Wait for the error to be logged
-    await waitFor(() => {
-      expect(consoleWarnSpy).toHaveBeenCalledWith(
-        'Failed to start PostHog session recording',
-        expect.any(Error)
-      );
-    }, { timeout: 1000 });
+    expect(posthog.init).toHaveBeenCalled();
+
+    // Fast-forward requestIdleCallback setTimeout(cb, 0)
+    act(() => {
+      jest.advanceTimersByTime(1);
+    });
+
+    // Verify the error was logged
+    expect(consoleWarnSpy).toHaveBeenCalledWith(
+      'Failed to start PostHog session recording',
+      expect.any(Error)
+    );
 
     consoleWarnSpy.mockRestore();
+    jest.useRealTimers();
   });
 
   it('should cleanup timeout on unmount', () => {
