@@ -134,7 +134,7 @@ describe('PostHogProvider', () => {
   it('should start session recording on desktop with requestIdleCallback', async () => {
     let idleCallback: (() => void) | null = null;
 
-    // Mock requestIdleCallback to capture the callback
+    // Override the beforeEach mock to capture the callback instead of executing it
     (global as any).requestIdleCallback = jest.fn((cb) => {
       idleCallback = cb;
       return 1; // Return a mock handle
@@ -146,20 +146,15 @@ describe('PostHogProvider', () => {
       </PostHogProvider>
     );
 
-    // Wait for PostHog init (happens after 100ms timeout)
+    // Wait for PostHog init and requestIdleCallback to be called
     await waitFor(() => {
       expect(posthog.init).toHaveBeenCalled();
-    }, { timeout: 3000 });
-
-    // Wait for requestIdleCallback to be called
-    await waitFor(() => {
       expect(global.requestIdleCallback).toHaveBeenCalled();
     }, { timeout: 3000 });
 
     // Execute the captured callback
-    if (idleCallback) {
-      idleCallback();
-    }
+    expect(idleCallback).not.toBeNull();
+    idleCallback!();
 
     // Verify session recording was started
     expect(posthog.startSessionRecording).toHaveBeenCalled();
@@ -208,7 +203,7 @@ describe('PostHogProvider', () => {
 
     let idleCallback: (() => void) | null = null;
 
-    // Mock requestIdleCallback to capture the callback
+    // Override the beforeEach mock to capture the callback instead of executing it
     (global as any).requestIdleCallback = jest.fn((cb) => {
       idleCallback = cb;
       return 1;
@@ -220,20 +215,15 @@ describe('PostHogProvider', () => {
       </PostHogProvider>
     );
 
-    // Wait for PostHog init
+    // Wait for PostHog init and requestIdleCallback to be called
     await waitFor(() => {
       expect(posthog.init).toHaveBeenCalled();
-    }, { timeout: 3000 });
-
-    // Wait for requestIdleCallback to be called
-    await waitFor(() => {
       expect(global.requestIdleCallback).toHaveBeenCalled();
     }, { timeout: 3000 });
 
     // Execute the captured callback (will throw error)
-    if (idleCallback) {
-      idleCallback();
-    }
+    expect(idleCallback).not.toBeNull();
+    idleCallback!();
 
     // Verify the error was handled gracefully
     expect(consoleWarnSpy).toHaveBeenCalledWith(
