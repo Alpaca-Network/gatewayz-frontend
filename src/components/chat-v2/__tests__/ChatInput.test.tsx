@@ -9,6 +9,8 @@ jest.mock('lucide-react', () => ({
   Mic: () => <span data-testid="mic-icon">Mic</span>,
   X: () => <span data-testid="x-icon">X</span>,
   RefreshCw: () => <span data-testid="refresh-icon">Refresh</span>,
+  Plus: () => <span data-testid="plus-icon">Plus</span>,
+  FileText: () => <span data-testid="file-text-icon">FileText</span>,
 }));
 
 // Mock the UI components
@@ -24,6 +26,14 @@ jest.mock('@/components/ui/input', () => ({
   Input: React.forwardRef(({ disabled, enterKeyHint, ...props }: any, ref: any) => (
     <input ref={ref} disabled={disabled} enterKeyHint={enterKeyHint} data-testid="input" {...props} />
   )),
+}));
+
+// Mock DropdownMenu components
+jest.mock('@/components/ui/dropdown-menu', () => ({
+  DropdownMenu: ({ children }: any) => <div data-testid="dropdown-menu">{children}</div>,
+  DropdownMenuTrigger: ({ children, asChild }: any) => <div data-testid="dropdown-trigger">{children}</div>,
+  DropdownMenuContent: ({ children }: any) => <div data-testid="dropdown-content">{children}</div>,
+  DropdownMenuItem: ({ children, onClick }: any) => <div data-testid="dropdown-item" onClick={onClick}>{children}</div>,
 }));
 
 jest.mock('@/lib/utils', () => ({
