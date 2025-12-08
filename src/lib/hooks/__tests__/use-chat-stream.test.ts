@@ -2,7 +2,149 @@
  * Unit tests for use-chat-stream.ts
  *
  * Tests the Fireworks and DeepSeek model routing logic
+ * Tests media extraction from content arrays
  */
+
+/**
+ * Helper to extract image/video/audio/document from content array for display
+ * Mirrors the extractMediaFromContent function in use-chat-stream.ts
+ */
+const extractMediaFromContent = (content: any): { image?: string; video?: string; audio?: string; document?: string } => {
+  if (!Array.isArray(content)) return {};
+  const result: { image?: string; video?: string; audio?: string; document?: string } = {};
+  for (const part of content) {
+    if (part.type === 'image_url' && part.image_url?.url) {
+      result.image = part.image_url.url;
+    } else if (part.type === 'video_url' && part.video_url?.url) {
+      result.video = part.video_url.url;
+    } else if (part.type === 'audio_url' && part.audio_url?.url) {
+      result.audio = part.audio_url.url;
+    } else if (part.type === 'file_url' && part.file_url?.url) {
+      result.document = part.file_url.url;
+    }
+  }
+  return result;
+};
+
+describe('extractMediaFromContent', () => {
+  describe('basic extraction', () => {
+    test('should return empty object for non-array content', () => {
+      expect(extractMediaFromContent('Hello world')).toEqual({});
+      expect(extractMediaFromContent(null)).toEqual({});
+      expect(extractMediaFromContent(undefined)).toEqual({});
+      expect(extractMediaFromContent(123)).toEqual({});
+      expect(extractMediaFromContent({})).toEqual({});
+    });
+
+    test('should return empty object for empty array', () => {
+      expect(extractMediaFromContent([])).toEqual({});
+    });
+
+    test('should extract image_url', () => {
+      const content = [
+        { type: 'text', text: 'Check this' },
+        { type: 'image_url', image_url: { url: 'https://example.com/image.png' } }
+      ];
+      expect(extractMediaFromContent(content)).toEqual({
+        image: 'https://example.com/image.png'
+      });
+    });
+
+    test('should extract video_url', () => {
+      const content = [
+        { type: 'text', text: 'Watch this' },
+        { type: 'video_url', video_url: { url: 'https://example.com/video.mp4' } }
+      ];
+      expect(extractMediaFromContent(content)).toEqual({
+        video: 'https://example.com/video.mp4'
+      });
+    });
+
+    test('should extract audio_url', () => {
+      const content = [
+        { type: 'text', text: 'Listen to this' },
+        { type: 'audio_url', audio_url: { url: 'https://example.com/audio.mp3' } }
+      ];
+      expect(extractMediaFromContent(content)).toEqual({
+        audio: 'https://example.com/audio.mp3'
+      });
+    });
+
+    test('should extract file_url (document)', () => {
+      const content = [
+        { type: 'text', text: 'Read this document' },
+        { type: 'file_url', file_url: { url: 'https://example.com/document.pdf' } }
+      ];
+      expect(extractMediaFromContent(content)).toEqual({
+        document: 'https://example.com/document.pdf'
+      });
+    });
+  });
+
+  describe('multiple media types', () => {
+    test('should extract all media types from content', () => {
+      const content = [
+        { type: 'text', text: 'Check everything' },
+        { type: 'image_url', image_url: { url: 'https://example.com/image.png' } },
+        { type: 'video_url', video_url: { url: 'https://example.com/video.mp4' } },
+        { type: 'audio_url', audio_url: { url: 'https://example.com/audio.mp3' } },
+        { type: 'file_url', file_url: { url: 'https://example.com/doc.pdf' } }
+      ];
+      expect(extractMediaFromContent(content)).toEqual({
+        image: 'https://example.com/image.png',
+        video: 'https://example.com/video.mp4',
+        audio: 'https://example.com/audio.mp3',
+        document: 'https://example.com/doc.pdf'
+      });
+    });
+
+    test('should use last value when multiple of same type', () => {
+      const content = [
+        { type: 'image_url', image_url: { url: 'https://example.com/first.png' } },
+        { type: 'image_url', image_url: { url: 'https://example.com/second.png' } }
+      ];
+      expect(extractMediaFromContent(content)).toEqual({
+        image: 'https://example.com/second.png'
+      });
+    });
+  });
+
+  describe('edge cases', () => {
+    test('should handle malformed image_url', () => {
+      const content = [
+        { type: 'image_url' }, // Missing image_url property
+        { type: 'image_url', image_url: {} }, // Missing url
+        { type: 'image_url', image_url: { url: '' } } // Empty url
+      ];
+      expect(extractMediaFromContent(content)).toEqual({});
+    });
+
+    test('should handle malformed file_url', () => {
+      const content = [
+        { type: 'file_url' }, // Missing file_url property
+        { type: 'file_url', file_url: {} }, // Missing url
+        { type: 'file_url', file_url: { url: '' } } // Empty url
+      ];
+      expect(extractMediaFromContent(content)).toEqual({});
+    });
+
+    test('should ignore unknown types', () => {
+      const content = [
+        { type: 'unknown', data: 'something' },
+        { type: 'custom_type', custom: { url: 'https://example.com' } }
+      ];
+      expect(extractMediaFromContent(content)).toEqual({});
+    });
+
+    test('should handle text-only content array', () => {
+      const content = [
+        { type: 'text', text: 'Hello' },
+        { type: 'text', text: 'World' }
+      ];
+      expect(extractMediaFromContent(content)).toEqual({});
+    });
+  });
+});
 
 describe('useChatStream routing logic', () => {
   /**

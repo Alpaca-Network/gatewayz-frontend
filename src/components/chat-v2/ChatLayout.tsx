@@ -69,6 +69,9 @@ function WelcomeScreen({ onPromptSelect }: { onPromptSelect: (txt: string) => vo
                      </Card>
                  ))}
              </div>
+             <a href="/releases" className="mt-8 text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors">
+                 What's new
+             </a>
         </div>
     )
 }

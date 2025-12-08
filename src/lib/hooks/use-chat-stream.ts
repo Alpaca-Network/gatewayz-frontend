@@ -23,10 +23,10 @@ const debugError = (message: string, data?: any) => {
     console.error(prefix, message, data !== undefined ? data : '');
 };
 
-// Helper to extract image/video/audio from content array for display
-const extractMediaFromContent = (content: any): { image?: string; video?: string; audio?: string } => {
+// Helper to extract image/video/audio/document from content array for display
+const extractMediaFromContent = (content: any): { image?: string; video?: string; audio?: string; document?: string } => {
     if (!Array.isArray(content)) return {};
-    const result: { image?: string; video?: string; audio?: string } = {};
+    const result: { image?: string; video?: string; audio?: string; document?: string } = {};
     for (const part of content) {
         if (part.type === 'image_url' && part.image_url?.url) {
             result.image = part.image_url.url;
@@ -34,6 +34,8 @@ const extractMediaFromContent = (content: any): { image?: string; video?: string
             result.video = part.video_url.url;
         } else if (part.type === 'audio_url' && part.audio_url?.url) {
             result.audio = part.audio_url.url;
+        } else if (part.type === 'file_url' && part.file_url?.url) {
+            result.document = part.file_url.url;
         }
     }
     return result;
@@ -101,7 +103,7 @@ export function useChatStream() {
 
         // 1. Save User Message with full content (including attachments)
         // Store the actual content for display, not a placeholder
-        const userMsg: Partial<ChatMessage> & { image?: string; video?: string; audio?: string } = {
+        const userMsg: Partial<ChatMessage> & { image?: string; video?: string; audio?: string; document?: string } = {
             role: 'user',
             content: content, // Store full content (string or array)
             model: model.value,

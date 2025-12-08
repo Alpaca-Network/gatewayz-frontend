@@ -1,7 +1,45 @@
 "use client";
 
+// Web Speech API types for TypeScript
+interface SpeechRecognitionEvent extends Event {
+  resultIndex: number;
+  results: SpeechRecognitionResultList;
+}
+
+interface SpeechRecognitionErrorEvent extends Event {
+  error: string;
+  message: string;
+}
+
+interface SpeechRecognitionResult {
+  isFinal: boolean;
+  0: {
+    transcript: string;
+    confidence: number;
+  };
+}
+
+interface SpeechRecognitionResultList {
+  length: number;
+  item(index: number): SpeechRecognitionResult;
+  [index: number]: SpeechRecognitionResult;
+}
+
+interface SpeechRecognition extends EventTarget {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onstart: ((this: SpeechRecognition, ev: Event) => void) | null;
+  onresult: ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => void) | null;
+  onerror: ((this: SpeechRecognition, ev: SpeechRecognitionErrorEvent) => void) | null;
+  onend: ((this: SpeechRecognition, ev: Event) => void) | null;
+  start(): void;
+  stop(): void;
+  abort(): void;
+}
+
 import { useState, useRef, useCallback, useEffect } from "react";
-import { Send, Image as ImageIcon, Video as VideoIcon, Mic as AudioIcon, X, RefreshCw, Plus, FileText } from "lucide-react";
+import { Send, Image as ImageIcon, Video as VideoIcon, Mic, Mic as AudioIcon, X, RefreshCw, Paperclip, FileText, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -111,8 +149,11 @@ export function ChatInput() {
   const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
   const [selectedAudio, setSelectedAudio] = useState<string | null>(null);
   const [selectedDocument, setSelectedDocument] = useState<string | null>(null);
+  const [selectedDocumentName, setSelectedDocumentName] = useState<string | null>(null);
   const [guestMessageCount, setGuestMessageCount] = useState(0);
   const [showGuestLimitWarning, setShowGuestLimitWarning] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [speechRecognition, setSpeechRecognition] = useState<SpeechRecognition | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
@@ -174,6 +215,7 @@ export function ChatInput() {
     const currentVideo = selectedVideo;
     const currentAudio = selectedAudio;
     const currentDocument = selectedDocument;
+    const currentDocumentName = selectedDocumentName;
 
     // Clear input immediately for better UX
     setInputValue("");
@@ -185,6 +227,7 @@ export function ChatInput() {
     setSelectedVideo(null);
     setSelectedAudio(null);
     setSelectedDocument(null);
+    setSelectedDocumentName(null);
 
     let sessionId = activeSessionId;
     // Create a snapshot of messages BEFORE session creation to avoid race conditions
@@ -207,6 +250,7 @@ export function ChatInput() {
         setSelectedVideo(currentVideo);
         setSelectedAudio(currentAudio);
         setSelectedDocument(currentDocument);
+        setSelectedDocumentName(currentDocumentName);
         toast({ title: "Failed to create session", variant: "destructive" });
         return;
       }
@@ -372,12 +416,138 @@ export function ChatInput() {
       try {
           const base64 = await fileToBase64(file);
           setSelectedDocument(base64);
+          setSelectedDocumentName(file.name);
       } catch (e) {
           toast({ title: "Failed to load document", variant: "destructive" });
       }
       // Reset input so the same file can be selected again
       if (documentInputRef.current) documentInputRef.current.value = '';
   };
+
+  // Speech Recognition for transcription
+  const startRecording = useCallback(() => {
+    // Prevent race condition: check if already recording before starting
+    // Use ref for synchronous check to avoid state timing issues
+    if (isRecording || speechRecognition) {
+      return;
+    }
+
+    const SpeechRecognitionAPI = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecognitionAPI) {
+      toast({
+        title: "Speech recognition not supported",
+        description: "Your browser doesn't support speech recognition. Try using Chrome or Edge.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Set recording state BEFORE creating recognition to prevent race conditions
+    // This ensures double-clicks are blocked even before onstart fires
+    setIsRecording(true);
+
+    const recognition = new SpeechRecognitionAPI();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+
+    recognition.onstart = () => {
+      // State already set above, but confirm it
+      setIsRecording(true);
+    };
+
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
+      let finalTranscript = '';
+      let interimTranscript = '';
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          finalTranscript += transcript;
+        } else {
+          interimTranscript += transcript;
+        }
+      }
+
+      if (finalTranscript) {
+        // Append final transcript to input
+        const currentValue = useChatUIStore.getState().inputValue;
+        const separator = currentValue && !currentValue.endsWith(' ') ? ' ' : '';
+        setInputValue(currentValue + separator + finalTranscript);
+      }
+    };
+
+    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+      console.error('Speech recognition error:', event.error);
+      setIsRecording(false);
+      setSpeechRecognition(null);
+
+      if (event.error === 'not-allowed') {
+        toast({
+          title: "Microphone access denied",
+          description: "Please allow microphone access to use voice input.",
+          variant: "destructive"
+        });
+      } else if (event.error !== 'aborted') {
+        toast({
+          title: "Speech recognition error",
+          description: `Error: ${event.error}`,
+          variant: "destructive"
+        });
+      }
+    };
+
+    recognition.onend = () => {
+      setIsRecording(false);
+      setSpeechRecognition(null);
+    };
+
+    try {
+      recognition.start();
+      setSpeechRecognition(recognition);
+    } catch (error) {
+      // Handle synchronous errors from recognition.start()
+      // This can happen when audio context is blocked by browser policy
+      console.error('Speech recognition start failed:', error);
+      setIsRecording(false);
+      setSpeechRecognition(null);
+      toast({
+        title: "Failed to start speech recognition",
+        description: "Your browser blocked the microphone. Please check your permissions.",
+        variant: "destructive"
+      });
+    }
+  }, [toast, setInputValue, isRecording, speechRecognition]);
+
+  const stopRecording = useCallback(() => {
+    if (speechRecognition) {
+      speechRecognition.stop();
+      setSpeechRecognition(null);
+      setIsRecording(false);
+    }
+  }, [speechRecognition]);
+
+  const toggleRecording = useCallback(() => {
+    if (isRecording) {
+      stopRecording();
+    } else {
+      startRecording();
+    }
+  }, [isRecording, startRecording, stopRecording]);
+
+  // Cleanup speech recognition on component unmount
+  useEffect(() => {
+    return () => {
+      if (speechRecognition) {
+        try {
+          speechRecognition.abort();
+        } catch {
+          // Ignore errors during cleanup
+        }
+      }
+    };
+  }, [speechRecognition]);
 
   return (
     <div className="w-full p-4 border-t bg-background">
@@ -429,9 +599,10 @@ export function ChatInput() {
                 </div>
             )}
             {selectedDocument && (
-                <div className="relative flex items-center justify-center h-16 w-16 bg-muted rounded">
-                    <FileText className="h-6 w-6 text-muted-foreground" />
-                    <Button size="icon" variant="destructive" className="absolute -top-1 -right-1 h-4 w-4 rounded-full" onClick={() => setSelectedDocument(null)}><X className="h-3 w-3" /></Button>
+                <div className="relative flex items-center justify-center h-16 px-3 bg-muted rounded gap-2">
+                    <FileText className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                    <span className="text-xs text-muted-foreground truncate max-w-[100px]">{selectedDocumentName}</span>
+                    <Button size="icon" variant="destructive" className="absolute -top-1 -right-1 h-4 w-4 rounded-full" onClick={() => { setSelectedDocument(null); setSelectedDocumentName(null); }}><X className="h-3 w-3" /></Button>
                 </div>
             )}
         </div>
@@ -443,63 +614,65 @@ export function ChatInput() {
             <input ref={audioInputRef} type="file" accept="audio/*" onChange={handleAudioSelect} className="hidden" />
             <input ref={documentInputRef} type="file" accept=".pdf,.doc,.docx,.txt,.md,.csv,.json,.xml" onChange={handleDocumentSelect} className="hidden" />
 
-            {/* Attachment dropdown - combines all upload options */}
-            <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                    <Button size="icon" variant="ghost" title="Add attachment">
-                        <Plus className="h-5 w-5 text-muted-foreground" />
-                    </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" side="top">
-                    <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
-                        <ImageIcon className="h-4 w-4 mr-2" />
-                        Images
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => videoInputRef.current?.click()}>
-                        <VideoIcon className="h-4 w-4 mr-2" />
-                        Video
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => audioInputRef.current?.click()}>
-                        <AudioIcon className="h-4 w-4 mr-2" />
-                        Audio
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => documentInputRef.current?.click()}>
-                        <FileText className="h-4 w-4 mr-2" />
-                        Documents
-                    </DropdownMenuItem>
-                </DropdownMenuContent>
-            </DropdownMenu>
+            <div className="flex gap-1">
+                {/* Combined "Add photos & files" dropdown */}
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button size="icon" variant="ghost" title="Add photos & files">
+                            <Paperclip className="h-5 w-5 text-muted-foreground" />
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" side="top">
+                        <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
+                            <ImageIcon className="h-4 w-4 mr-2" />
+                            Upload image
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => videoInputRef.current?.click()}>
+                            <VideoIcon className="h-4 w-4 mr-2" />
+                            Upload video
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => audioInputRef.current?.click()}>
+                            <AudioIcon className="h-4 w-4 mr-2" />
+                            Upload audio
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => documentInputRef.current?.click()}>
+                            <FileText className="h-4 w-4 mr-2" />
+                            Upload document
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
 
-            {/* Input container with microphone inside */}
-            <div className="relative flex-1 flex items-center">
-                <Input
-                    ref={inputRef}
-                    value={inputValue}
-                    onChange={(e) => setInputValue(e.target.value)}
-                    onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !e.shiftKey) {
-                            e.preventDefault();
-                            handleSend();
-                        }
-                    }}
-                    placeholder="Type a message..."
-                    className="flex-1 border-0 bg-background focus-visible:ring-0 pr-10"
-                    disabled={isStreaming}
-                    enterKeyHint="send"
-                />
-                {/* Microphone button - inside input, hidden when typing */}
-                {isInputEmpty && (
-                    <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => audioInputRef.current?.click()}
-                        title="Upload audio"
-                        className="absolute right-1 h-8 w-8"
-                    >
-                        <AudioIcon className="h-4 w-4 text-muted-foreground" />
-                    </Button>
-                )}
+                {/* Microphone button for speech-to-text */}
+                <Button
+                    size="icon"
+                    variant={isRecording ? "destructive" : "ghost"}
+                    onClick={toggleRecording}
+                    title={isRecording ? "Stop recording" : "Start voice input"}
+                    className={cn(isRecording && "animate-pulse")}
+                >
+                    {isRecording ? (
+                        <Square className="h-4 w-4" />
+                    ) : (
+                        <Mic className="h-5 w-5 text-muted-foreground" />
+                    )}
+                </Button>
             </div>
+
+            <Input
+                ref={inputRef}
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSend();
+                    }
+                }}
+                placeholder="Type a message..."
+                className="flex-1 border-0 bg-background focus-visible:ring-0"
+                disabled={isStreaming}
+                enterKeyHint="send"
+            />
 
             <Button
                 type="button"

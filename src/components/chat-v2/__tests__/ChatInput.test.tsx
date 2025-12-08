@@ -11,6 +11,8 @@ jest.mock('lucide-react', () => ({
   RefreshCw: () => <span data-testid="refresh-icon">Refresh</span>,
   Plus: () => <span data-testid="plus-icon">Plus</span>,
   FileText: () => <span data-testid="file-text-icon">FileText</span>,
+  Paperclip: () => <span data-testid="paperclip-icon">Paperclip</span>,
+  Square: () => <span data-testid="square-icon">Square</span>,
 }));
 
 // Mock the UI components
@@ -340,14 +342,14 @@ describe('ChatInput attachment dropdown', () => {
     delete (window as any).__chatInputSend;
   });
 
-  it('should render the attachment dropdown with plus icon', () => {
+  it('should render the attachment dropdown with paperclip icon', () => {
     render(<ChatInput />);
 
     // Check for dropdown menu structure
     expect(screen.getByTestId('dropdown-menu')).toBeInTheDocument();
     expect(screen.getByTestId('dropdown-trigger')).toBeInTheDocument();
     expect(screen.getByTestId('dropdown-content')).toBeInTheDocument();
-    expect(screen.getByTestId('plus-icon')).toBeInTheDocument();
+    expect(screen.getByTestId('paperclip-icon')).toBeInTheDocument();
   });
 
   it('should render all four attachment options in dropdown', () => {
@@ -369,10 +371,10 @@ describe('ChatInput attachment dropdown', () => {
 
     // Use getAllByText since icons have text too, then verify dropdown items have text
     const dropdownItems = screen.getAllByTestId('dropdown-item');
-    expect(dropdownItems[0]).toHaveTextContent('Images');
-    expect(dropdownItems[1]).toHaveTextContent('Video');
-    expect(dropdownItems[2]).toHaveTextContent('Audio');
-    expect(dropdownItems[3]).toHaveTextContent('Documents');
+    expect(dropdownItems[0]).toHaveTextContent('Upload image');
+    expect(dropdownItems[1]).toHaveTextContent('Upload video');
+    expect(dropdownItems[2]).toHaveTextContent('Upload audio');
+    expect(dropdownItems[3]).toHaveTextContent('Upload document');
   });
 });
 
@@ -389,32 +391,31 @@ describe('ChatInput microphone button visibility', () => {
     delete (window as any).__chatInputSend;
   });
 
-  it('should show microphone button when input is empty', () => {
+  it('should show speech-to-text mic button and audio upload in dropdown', () => {
     mockStoreState.inputValue = '';
     render(<ChatInput />);
 
-    // There should be mic icons visible (one in dropdown, one in input area)
+    // There should be 2 mic icons: one for speech-to-text button, one in dropdown for audio upload
     const micIcons = screen.getAllByTestId('mic-icon');
-    expect(micIcons.length).toBeGreaterThanOrEqual(2);
+    expect(micIcons).toHaveLength(2);
   });
 
-  it('should hide microphone button inside input when user is typing', () => {
+  it('should always show speech-to-text mic button regardless of input', () => {
     mockStoreState.inputValue = 'Hello world';
     render(<ChatInput />);
 
-    // When input has text, only the dropdown mic icon should be visible (1 instead of 2)
+    // Speech-to-text mic button is always visible (plus audio in dropdown)
     const micIcons = screen.getAllByTestId('mic-icon');
-    // Only one mic icon in the dropdown
-    expect(micIcons).toHaveLength(1);
+    expect(micIcons).toHaveLength(2);
   });
 
-  it('should show microphone button when input has only whitespace', () => {
+  it('should show mic buttons when input has only whitespace', () => {
     mockStoreState.inputValue = '   ';
     render(<ChatInput />);
 
-    // Whitespace-only input is considered empty, so mic should be visible
+    // Mic buttons should be visible
     const micIcons = screen.getAllByTestId('mic-icon');
-    expect(micIcons.length).toBeGreaterThanOrEqual(2);
+    expect(micIcons).toHaveLength(2);
   });
 });
 
@@ -736,5 +737,310 @@ describe('ChatInput error message extraction', () => {
         })
       );
     });
+  });
+});
+
+describe('ChatInput speech recognition', () => {
+  let mockRecognition: any;
+  let originalSpeechRecognition: any;
+  let originalWebkitSpeechRecognition: any;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    resetMockStoreState();
+    delete (window as any).__chatInputFocus;
+    delete (window as any).__chatInputSend;
+
+    // Save original values
+    originalSpeechRecognition = (window as any).SpeechRecognition;
+    originalWebkitSpeechRecognition = (window as any).webkitSpeechRecognition;
+
+    // Create mock recognition instance
+    mockRecognition = {
+      continuous: false,
+      interimResults: false,
+      lang: '',
+      onstart: null,
+      onresult: null,
+      onerror: null,
+      onend: null,
+      start: jest.fn(),
+      stop: jest.fn(),
+      abort: jest.fn(),
+    };
+
+    // Mock the SpeechRecognition constructor
+    const MockSpeechRecognition = jest.fn(() => mockRecognition);
+    (window as any).SpeechRecognition = MockSpeechRecognition;
+    (window as any).webkitSpeechRecognition = MockSpeechRecognition;
+  });
+
+  afterEach(() => {
+    delete (window as any).__chatInputFocus;
+    delete (window as any).__chatInputSend;
+    // Restore original values
+    (window as any).SpeechRecognition = originalSpeechRecognition;
+    (window as any).webkitSpeechRecognition = originalWebkitSpeechRecognition;
+  });
+
+  it('should show toast when speech recognition is not supported', () => {
+    // Remove speech recognition support
+    delete (window as any).SpeechRecognition;
+    delete (window as any).webkitSpeechRecognition;
+
+    render(<ChatInput />);
+
+    // Find and click the microphone button (outside dropdown)
+    const buttons = screen.getAllByTestId('button');
+    // The mic button should be the second button in the control area (after paperclip dropdown)
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]') || btn.querySelector('[data-testid="square-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    expect(mockToast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Speech recognition not supported',
+        variant: 'destructive',
+      })
+    );
+  });
+
+  it('should start speech recognition when mic button is clicked', () => {
+    render(<ChatInput />);
+
+    // Find and click the microphone button
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    expect(mockRecognition.start).toHaveBeenCalled();
+    expect(mockRecognition.continuous).toBe(true);
+    expect(mockRecognition.interimResults).toBe(true);
+    expect(mockRecognition.lang).toBe('en-US');
+  });
+
+  it('should stop speech recognition when mic button is clicked while recording', async () => {
+    render(<ChatInput />);
+
+    // Find and click the microphone button to start
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // Simulate onstart callback
+    if (mockRecognition.onstart) {
+      mockRecognition.onstart();
+    }
+
+    await waitFor(() => {
+      // Now the button should show the stop icon (square)
+      const stopButton = screen.getAllByTestId('button').find(btn => btn.querySelector('[data-testid="square-icon"]'));
+      expect(stopButton).toBeDefined();
+    });
+
+    // Click again to stop
+    const stopButton = screen.getAllByTestId('button').find(btn => btn.querySelector('[data-testid="square-icon"]'));
+    if (stopButton) {
+      fireEvent.click(stopButton);
+    }
+
+    expect(mockRecognition.stop).toHaveBeenCalled();
+  });
+
+  it('should prevent race condition by blocking double-clicks', () => {
+    render(<ChatInput />);
+
+    // Find and click the microphone button twice quickly
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+      fireEvent.click(micButton); // Second click should be blocked
+    }
+
+    // start() should only be called once due to race condition protection
+    expect(mockRecognition.start).toHaveBeenCalledTimes(1);
+  });
+
+  it('should handle speech recognition results', async () => {
+    render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // Simulate a result event
+    const mockResultEvent = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'Hello world', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(mockResultEvent);
+    }
+
+    // Check that setInputValue was called with the transcript
+    expect(mockSetInputValue).toHaveBeenCalledWith('Hello world');
+  });
+
+  it('should show toast on microphone access denied error', () => {
+    render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // Simulate error event
+    if (mockRecognition.onerror) {
+      mockRecognition.onerror({ error: 'not-allowed', message: 'Permission denied' });
+    }
+
+    expect(mockToast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Microphone access denied',
+        variant: 'destructive',
+      })
+    );
+  });
+
+  it('should show toast on speech recognition error (not aborted)', () => {
+    render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // Simulate error event
+    if (mockRecognition.onerror) {
+      mockRecognition.onerror({ error: 'network', message: 'Network error' });
+    }
+
+    expect(mockToast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Speech recognition error',
+        variant: 'destructive',
+      })
+    );
+  });
+
+  it('should not show toast when error is aborted', () => {
+    render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // Simulate aborted error event (should not show toast)
+    if (mockRecognition.onerror) {
+      mockRecognition.onerror({ error: 'aborted', message: 'Aborted' });
+    }
+
+    // Toast should not be called for 'aborted' error
+    expect(mockToast).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Speech recognition error',
+      })
+    );
+  });
+
+  it('should cleanup speech recognition on unmount', () => {
+    const { unmount } = render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // Unmount the component
+    unmount();
+
+    // abort() should be called during cleanup
+    expect(mockRecognition.abort).toHaveBeenCalled();
+  });
+
+  it('should append transcript with space separator when input has content', () => {
+    // Set initial input value
+    mockStoreState.inputValue = 'Existing text';
+
+    render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // Simulate a result event
+    const mockResultEvent = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'new words', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(mockResultEvent);
+    }
+
+    // Check that setInputValue was called with proper spacing
+    expect(mockSetInputValue).toHaveBeenCalledWith('Existing text new words');
+  });
+
+  it('should handle synchronous start() errors and reset state', () => {
+    // Make start() throw synchronously
+    mockRecognition.start.mockImplementation(() => {
+      throw new Error('Audio context blocked');
+    });
+
+    render(<ChatInput />);
+
+    // Find and click the microphone button
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // Should show toast about failure
+    expect(mockToast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Failed to start speech recognition',
+        variant: 'destructive',
+      })
+    );
+
+    // Button should still show mic icon (not square) because isRecording was reset
+    const micButtons = screen.getAllByTestId('button').filter(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    expect(micButtons.length).toBeGreaterThan(0);
   });
 });

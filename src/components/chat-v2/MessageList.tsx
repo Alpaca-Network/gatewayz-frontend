@@ -133,6 +133,7 @@ export function MessageList({ sessionId, messages, isLoading, pendingPrompt }: M
           image={msg.image}
           video={msg.video}
           audio={msg.audio}
+          document={msg.document}
           isStreaming={msg.isStreaming}
           model={msg.model}
           error={msg.error}
