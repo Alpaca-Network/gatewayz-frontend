@@ -3,6 +3,13 @@ import { profiler, generateRequestId } from '@/lib/performance-profiler';
 import { normalizeModelId } from '@/lib/utils';
 import { API_BASE_URL } from '@/lib/config';
 import { handleApiError } from '@/app/api/middleware/error-handler';
+import {
+  getClientIP,
+  checkGuestRateLimit,
+  incrementGuestRateLimit,
+  formatResetTime,
+  getGuestDailyLimit,
+} from '@/lib/guest-rate-limiter';
 
 /**
  * Calculate retry delay for rate limit errors with exponential backoff
@@ -235,20 +242,64 @@ export async function POST(request: NextRequest) {
     // Determine if this is an explicit guest request vs missing/invalid API key
     const isExplicitGuestRequest = apiKey === 'guest';
     const isMissingApiKey = !apiKey || apiKey.trim() === '';
+    const isGuestRequest = isExplicitGuestRequest || isMissingApiKey;
 
-    // Default guest API key for unauthenticated users
-    // This key should have limited rate limits on the backend
-    const DEFAULT_GUEST_API_KEY = 'gatewayz-guest-demo-key';
+    // For explicit guest requests or missing API key, check rate limit and use the guest API key
+    if (isGuestRequest) {
+      const guestKey = process.env.GUEST_API_KEY;
+      const clientIP = getClientIP(request);
 
-    // For explicit guest requests or missing API key, use the guest API key
-    if (isExplicitGuestRequest || isMissingApiKey) {
-      const guestKey = process.env.GUEST_API_KEY || DEFAULT_GUEST_API_KEY;
+      // Check guest rate limit (3 messages per 24 hours per IP)
+      const rateLimitCheck = checkGuestRateLimit(clientIP);
+
+      if (!rateLimitCheck.allowed) {
+        // Guest has exceeded daily limit
+        const resetTime = formatResetTime(rateLimitCheck.resetInMs);
+        console.warn(`[API Completions] Guest rate limit exceeded for IP: ${clientIP}`);
+
+        return new Response(JSON.stringify({
+          error: 'Daily limit reached',
+          code: 'GUEST_RATE_LIMIT_EXCEEDED',
+          message: `You've used all ${getGuestDailyLimit()} free messages for today. Sign up for a free account to continue chatting!`,
+          detail: `Your guest message limit will reset in ${resetTime}.`,
+          remaining: 0,
+          limit: rateLimitCheck.limit,
+          resetInMs: rateLimitCheck.resetInMs,
+        }), {
+          status: 429,
+          headers: {
+            'Content-Type': 'application/json',
+            'X-RateLimit-Limit': String(rateLimitCheck.limit),
+            'X-RateLimit-Remaining': '0',
+            'X-RateLimit-Reset': String(Math.ceil(rateLimitCheck.resetInMs / 1000)),
+            'Retry-After': String(Math.ceil(rateLimitCheck.resetInMs / 1000)),
+          },
+        });
+      }
+
+      if (!guestKey) {
+        // Guest mode is not configured - return a helpful error
+        console.warn('[API Completions] Guest mode attempted but GUEST_API_KEY not configured');
+        return new Response(JSON.stringify({
+          error: 'Guest mode not available',
+          code: 'GUEST_NOT_CONFIGURED',
+          message: 'Please sign in to use the chat feature. Create a free account to get started!',
+          detail: 'Guest chat is temporarily unavailable. Sign up for a free account to continue.'
+        }), {
+          status: 401,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Increment rate limit counter immediately to prevent abuse via failed requests
+      const rateLimitResult = incrementGuestRateLimit(clientIP);
+
       console.log('[API Completions] Guest mode detected:', {
         isExplicitGuestRequest,
         isMissingApiKey,
-        hasEnvGuestKey: !!process.env.GUEST_API_KEY,
-        usingKey: guestKey.substring(0, 15) + '...',
-        willBeAnonymous: !process.env.GUEST_API_KEY // If no env key, backend will treat as anonymous
+        clientIP,
+        remaining: rateLimitResult.remaining,
+        usingKey: guestKey.substring(0, 15) + '...'
       });
       apiKey = guestKey;
     }
@@ -483,17 +534,29 @@ export async function POST(request: NextRequest) {
           const totalTime = performance.now() - requestStartTime;
           const backendTime = backendResponseTime; // Time it took for backend to respond
 
+          // Build response headers
+          const responseHeaders: Record<string, string> = {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'X-Request-ID': requestId,
+            'X-Response-Time': `${totalTime.toFixed(2)}ms`,
+            'X-Backend-Time': `${backendTime.toFixed(2)}ms`,
+            'X-Network-Time': `${(totalTime - backendTime).toFixed(2)}ms`,
+          };
+
+          // Add guest rate limit headers if applicable
+          if (isGuestRequest) {
+            const clientIP = getClientIP(request);
+            const rateLimitInfo = checkGuestRateLimit(clientIP);
+            responseHeaders['X-RateLimit-Limit'] = String(rateLimitInfo.limit);
+            responseHeaders['X-RateLimit-Remaining'] = String(rateLimitInfo.remaining);
+            responseHeaders['X-RateLimit-Reset'] = String(Math.ceil(rateLimitInfo.resetInMs / 1000));
+          }
+
           return new Response(wrappedStream, {
             status: response.status,
-            headers: {
-              'Content-Type': 'text/event-stream',
-              'Cache-Control': 'no-cache',
-              'Connection': 'keep-alive',
-              'X-Request-ID': requestId,
-              'X-Response-Time': `${totalTime.toFixed(2)}ms`,
-              'X-Backend-Time': `${backendTime.toFixed(2)}ms`,
-              'X-Network-Time': `${(totalTime - backendTime).toFixed(2)}ms`,
-            },
+            headers: responseHeaders,
           });
         } catch (fetchError) {
           clearTimeout(timeoutId);
@@ -533,26 +596,50 @@ export async function POST(request: NextRequest) {
     if ('data' in result) {
       profiler.endRequest(requestId);
       console.log(`[API Proxy] Request ${requestId} complete. Total time: ${(performance.now() - requestStartTime).toFixed(2)}ms`);
-      
+
+      // Build response headers
+      const responseHeaders: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'X-Request-ID': requestId,
+        'X-Response-Time': `${(performance.now() - requestStartTime).toFixed(2)}ms`,
+      };
+
+      // Add guest rate limit headers if applicable
+      if (isGuestRequest) {
+        const clientIP = getClientIP(request);
+        const rateLimitInfo = checkGuestRateLimit(clientIP);
+        responseHeaders['X-RateLimit-Limit'] = String(rateLimitInfo.limit);
+        responseHeaders['X-RateLimit-Remaining'] = String(rateLimitInfo.remaining);
+        responseHeaders['X-RateLimit-Reset'] = String(Math.ceil(rateLimitInfo.resetInMs / 1000));
+      }
+
       return new Response(JSON.stringify(result.data), {
         status: result.status,
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Request-ID': requestId,
-          'X-Response-Time': `${(performance.now() - requestStartTime).toFixed(2)}ms`,
-        },
+        headers: responseHeaders,
       });
     }
 
     // Handle streaming response from processCompletion
     if ('stream' in result) {
+      // Build response headers
+      const streamHeaders: Record<string, string> = {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      };
+
+      // Add guest rate limit headers if applicable
+      if (isGuestRequest) {
+        const clientIP = getClientIP(request);
+        const rateLimitInfo = checkGuestRateLimit(clientIP);
+        streamHeaders['X-RateLimit-Limit'] = String(rateLimitInfo.limit);
+        streamHeaders['X-RateLimit-Remaining'] = String(rateLimitInfo.remaining);
+        streamHeaders['X-RateLimit-Reset'] = String(Math.ceil(rateLimitInfo.resetInMs / 1000));
+      }
+
       return new Response(result.stream, {
         status: result.status,
-        headers: {
-          'Content-Type': 'text/event-stream',
-          'Cache-Control': 'no-cache',
-          'Connection': 'keep-alive',
-        },
+        headers: streamHeaders,
       });
     }
   } catch (error) {

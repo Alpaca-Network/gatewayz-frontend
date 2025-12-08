@@ -7,7 +7,7 @@
 import type { ChatSession, ChatMessage } from './chat-history';
 
 const GUEST_MESSAGE_DATA_KEY = 'gatewayz_guest_message_data';
-const GUEST_DAILY_MESSAGE_LIMIT = 10;
+const GUEST_DAILY_MESSAGE_LIMIT = 3;
 const GUEST_SESSIONS_KEY = 'gatewayz_guest_sessions';
 const GUEST_MESSAGES_KEY = 'gatewayz_guest_messages';
 const GUEST_SESSION_TTL_DAYS = 7; // Sessions expire after 7 days

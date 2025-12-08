@@ -12,10 +12,10 @@
 const https = require('https');
 
 // Configuration
-const SENTRY_ORG = 'your-org-slug'; // Replace with your Sentry organization slug
-const SENTRY_PROJECT = 'your-project-slug'; // Replace with your Sentry project slug
-const SENTRY_AUTH_TOKEN = process.env.SENTRY_AUTH_TOKEN;
-const DAYS_BACK = 7; // Analyze errors from the last N days
+const SENTRY_ORG = process.env.SENTRY_ORG || 'alpaca-network'; // Replace with your Sentry organization slug
+const SENTRY_PROJECT = process.env.SENTRY_PROJECT || 'javascript-nextjs'; // Replace with your Sentry project slug
+const SENTRY_AUTH_TOKEN = process.env.SENTRY_AUTH_TOKEN || process.env.SENTRY_ACCESS_TOKEN;
+const DAYS_BACK = 1; // Analyze errors from the last N days (changed to 1 for last 24h)
 
 if (!SENTRY_AUTH_TOKEN) {
   console.error('Error: SENTRY_AUTH_TOKEN environment variable is required');
@@ -76,7 +76,7 @@ async function fetchIssues() {
   startDate.setDate(startDate.getDate() - DAYS_BACK);
   const startDateStr = startDate.toISOString();
 
-  const path = `/api/0/projects/${SENTRY_ORG}/${SENTRY_PROJECT}/issues/?query=&statsPeriod=${DAYS_BACK}d&sort=freq`;
+  const path = `/api/0/projects/${SENTRY_ORG}/${SENTRY_PROJECT}/issues/?query=&statsPeriod=24h&sort=freq`;
 
   return await sentryRequest(path);
 }

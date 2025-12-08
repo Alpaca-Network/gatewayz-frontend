@@ -266,13 +266,25 @@ export async function POST(request: NextRequest) {
     const isExplicitGuestRequest = apiKey === 'guest';
     const isMissingApiKey = !apiKey || apiKey.trim() === '';
 
-    // Default guest API key for unauthenticated users
-    // This key should have limited rate limits on the backend
-    const DEFAULT_GUEST_API_KEY = 'gatewayz-guest-demo-key';
-
-    // For explicit guest requests, use the guest API key from environment or default
+    // For explicit guest requests or missing API key, use the guest API key from environment
     if (isExplicitGuestRequest || isMissingApiKey) {
-      apiKey = process.env.GUEST_API_KEY || DEFAULT_GUEST_API_KEY;
+      const guestKey = process.env.GUEST_API_KEY;
+
+      if (!guestKey) {
+        // Guest mode is not configured - return a helpful error
+        console.warn('[AI SDK Route] Guest mode attempted but GUEST_API_KEY not configured');
+        return new Response(JSON.stringify({
+          error: 'Guest mode not available',
+          code: 'GUEST_NOT_CONFIGURED',
+          message: 'Please sign in to use the chat feature. Create a free account to get started!',
+          detail: 'Guest chat is temporarily unavailable. Sign up for a free account to continue.'
+        }), {
+          status: 401,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      apiKey = guestKey;
       console.log('[AI SDK Route] Using guest API key for unauthenticated request');
     }
 
