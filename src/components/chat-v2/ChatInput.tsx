@@ -412,6 +412,19 @@ export function ChatInput() {
     }
   }, [isRecording, startRecording, stopRecording]);
 
+  // Cleanup speech recognition on component unmount
+  useEffect(() => {
+    return () => {
+      if (speechRecognition) {
+        try {
+          speechRecognition.abort();
+        } catch {
+          // Ignore errors during cleanup
+        }
+      }
+    };
+  }, [speechRecognition]);
+
   return (
     <div className="w-full p-4 border-t bg-background">
       <div className="max-w-4xl mx-auto">
