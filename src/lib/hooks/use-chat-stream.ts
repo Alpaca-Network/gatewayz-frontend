@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
+import { flushSync } from 'react-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { streamChatResponse } from '@/lib/streaming';
 import { ChatStreamHandler } from '@/lib/chat-stream-handler';
@@ -247,21 +248,25 @@ export function useChatStream() {
                     const currentContent = streamHandlerRef.current.getFinalContent();
                     const currentReasoning = streamHandlerRef.current.getFinalReasoning();
 
-                    queryClient.setQueryData(['chat-messages', sessionId], (old: any[] | undefined) => {
-                        if (!old) return [];
-                        const last = old[old.length - 1];
-                        if (last.role !== 'assistant') return old;
+                    // Use flushSync to force React to render immediately instead of batching
+                    // This is critical for real-time streaming updates in React 18+
+                    flushSync(() => {
+                        queryClient.setQueryData(['chat-messages', sessionId], (old: any[] | undefined) => {
+                            if (!old) return [];
+                            const last = old[old.length - 1];
+                            if (last.role !== 'assistant') return old;
 
-                        return [...old.slice(0, -1), {
-                            ...last,
-                            content: currentContent,
-                            reasoning: currentReasoning,
-                            isStreaming: true, // Ensure streaming flag stays true during updates
-                        }];
+                            return [...old.slice(0, -1), {
+                                ...last,
+                                content: currentContent,
+                                reasoning: currentReasoning,
+                                isStreaming: true, // Ensure streaming flag stays true during updates
+                            }];
+                        });
                     });
                     lastUpdate = now;
 
-                    // Yield to the event loop to allow React to re-render
+                    // Yield to the event loop to allow the browser to paint
                     // This is critical for real-time streaming updates
                     await new Promise(resolve => setTimeout(resolve, 0));
                 }
@@ -290,10 +295,12 @@ export function useChatStream() {
             });
 
             // Mark isStreaming false
-            queryClient.setQueryData(['chat-messages', sessionId], (old: any[] | undefined) => {
-                if (!old) return [];
-                const last = old[old.length - 1];
-                return [...old.slice(0, -1), { ...last, isStreaming: false }];
+            flushSync(() => {
+                queryClient.setQueryData(['chat-messages', sessionId], (old: any[] | undefined) => {
+                    if (!old) return [];
+                    const last = old[old.length - 1];
+                    return [...old.slice(0, -1), { ...last, isStreaming: false }];
+                });
             });
 
         } catch (e) {
@@ -307,18 +314,20 @@ export function useChatStream() {
             setStreamError(errorMessage);
 
             // Mark the assistant message as failed with error metadata, not appended to content
-            queryClient.setQueryData(['chat-messages', sessionId], (old: any[] | undefined) => {
-                if (!old) return [];
-                const last = old[old.length - 1];
-                if (last.role !== 'assistant') return old;
+            flushSync(() => {
+                queryClient.setQueryData(['chat-messages', sessionId], (old: any[] | undefined) => {
+                    if (!old) return [];
+                    const last = old[old.length - 1];
+                    if (last.role !== 'assistant') return old;
 
-                return [...old.slice(0, -1), {
-                    ...last,
-                    content: last.content || '', // Keep existing content if any
-                    isStreaming: false,
-                    error: errorMessage, // Store error separately, not in content
-                    hasError: true
-                }];
+                    return [...old.slice(0, -1), {
+                        ...last,
+                        content: last.content || '', // Keep existing content if any
+                        isStreaming: false,
+                        error: errorMessage, // Store error separately, not in content
+                        hasError: true
+                    }];
+                });
             });
         } finally {
             setIsStreaming(false);
