@@ -426,6 +426,12 @@ export function ChatInput() {
 
   // Speech Recognition for transcription
   const startRecording = useCallback(() => {
+    // Prevent race condition: check if already recording before starting
+    // Use ref for synchronous check to avoid state timing issues
+    if (isRecording || speechRecognition) {
+      return;
+    }
+
     const SpeechRecognitionAPI = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
     if (!SpeechRecognitionAPI) {
@@ -437,12 +443,17 @@ export function ChatInput() {
       return;
     }
 
+    // Set recording state BEFORE creating recognition to prevent race conditions
+    // This ensures double-clicks are blocked even before onstart fires
+    setIsRecording(true);
+
     const recognition = new SpeechRecognitionAPI();
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.lang = 'en-US';
 
     recognition.onstart = () => {
+      // State already set above, but confirm it
       setIsRecording(true);
     };
 
@@ -494,7 +505,7 @@ export function ChatInput() {
 
     recognition.start();
     setSpeechRecognition(recognition);
-  }, [toast, setInputValue]);
+  }, [toast, setInputValue, isRecording, speechRecognition]);
 
   const stopRecording = useCallback(() => {
     if (speechRecognition) {

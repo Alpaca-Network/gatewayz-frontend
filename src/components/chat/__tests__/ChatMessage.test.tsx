@@ -132,6 +132,8 @@ jest.mock('lucide-react', () => ({
   Copy: () => <span data-testid="copy-icon">Copy</span>,
   RotateCcw: () => <span data-testid="regenerate-icon">Regenerate</span>,
   LogIn: () => <span data-testid="login-icon">LogIn</span>,
+  Check: () => <span data-testid="check-icon">Check</span>,
+  FileText: () => <span data-testid="file-text-icon">FileText</span>,
 }));
 
 describe('ChatMessage', () => {
@@ -286,6 +288,49 @@ describe('ChatMessage', () => {
       expect(screen.getByText('Check this image')).toBeInTheDocument();
       const img = screen.getByAltText('Uploaded');
       expect(img).toHaveAttribute('src', 'https://example.com/array-image.png');
+    });
+
+    it('should render document attachments', () => {
+      render(<ChatMessage {...defaultProps} document="https://example.com/document.pdf" />);
+
+      const link = screen.getByRole('link');
+      expect(link).toBeInTheDocument();
+      expect(link).toHaveAttribute('href', 'https://example.com/document.pdf');
+      expect(link).toHaveAttribute('target', '_blank');
+      expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+      expect(screen.getByTestId('file-text-icon')).toBeInTheDocument();
+      expect(screen.getByText('Attached document')).toBeInTheDocument();
+    });
+
+    it('should handle array content with file_url', () => {
+      const arrayContent = [
+        { type: 'text', text: 'Check this document' },
+        { type: 'file_url', file_url: { url: 'https://example.com/report.pdf' } },
+      ];
+
+      render(<ChatMessage {...defaultProps} content={arrayContent} />);
+
+      expect(screen.getByText('Check this document')).toBeInTheDocument();
+      const link = screen.getByRole('link');
+      expect(link).toHaveAttribute('href', 'https://example.com/report.pdf');
+    });
+
+    it('should apply correct styling for document in user message', () => {
+      const { container } = render(
+        <ChatMessage {...defaultProps} role="user" document="https://example.com/doc.pdf" />
+      );
+
+      const link = screen.getByRole('link');
+      expect(link).toHaveClass('border-white/20');
+    });
+
+    it('should apply correct styling for document in assistant message', () => {
+      const { container } = render(
+        <ChatMessage {...defaultProps} role="assistant" document="https://example.com/doc.pdf" />
+      );
+
+      const link = screen.getByRole('link');
+      expect(link).toHaveClass('border-border');
     });
   });
 
