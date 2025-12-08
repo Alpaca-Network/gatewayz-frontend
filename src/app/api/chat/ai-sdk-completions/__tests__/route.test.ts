@@ -412,6 +412,148 @@ describe('AI SDK Completions Route', () => {
       expect(text).toContain('data: [DONE]');
     });
 
+    it('should handle text-start/text-end format for vision models', async () => {
+      const { streamText } = require('ai');
+      streamText.mockReturnValue({
+        fullStream: (async function* () {
+          // Vision models (like gpt-5-image) use text-start/text-end format
+          yield { type: 'start' };
+          yield { type: 'step-start' };
+          yield { type: 'text-start' };
+          yield { type: 'text-end', text: 'This is a complete response from a vision model' };
+          yield { type: 'step-finish' };
+          yield { type: 'finish', finishReason: 'stop' };
+        })(),
+      });
+
+      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
+        method: 'POST',
+        body: JSON.stringify({
+          model: 'gpt-5-image',
+          messages: [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: 'What is in this image?' },
+                { type: 'image_url', image_url: { url: 'data:image/png;base64,abc123' } }
+              ]
+            }
+          ],
+          apiKey: 'test-key',
+        }),
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(200);
+      expect(response.headers.get('Content-Type')).toBe('text/event-stream');
+
+      const text = await response.text();
+      expect(text).toContain('"content":"This is a complete response from a vision model"');
+      expect(text).toContain('data: [DONE]');
+    });
+
+    it('should handle text-start/text-end with text-delta mixed format', async () => {
+      const { streamText } = require('ai');
+      streamText.mockReturnValue({
+        fullStream: (async function* () {
+          // Some models may mix formats
+          yield { type: 'start' };
+          yield { type: 'text-start' };
+          yield { type: 'text-delta', text: 'Streaming ' };
+          yield { type: 'text-delta', text: 'partial ' };
+          yield { type: 'text-end', text: 'complete' };
+          yield { type: 'finish', finishReason: 'stop' };
+        })(),
+      });
+
+      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
+        method: 'POST',
+        body: JSON.stringify({
+          model: 'gpt-4o',
+          messages: [{ role: 'user', content: 'Test' }],
+          apiKey: 'test-key',
+        }),
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(200);
+
+      const text = await response.text();
+      // Should contain content from both text-delta and text-end
+      expect(text).toContain('"content":"Streaming "');
+      expect(text).toContain('"content":"partial "');
+      expect(text).toContain('"content":"complete"');
+    });
+
+    it('should handle empty text-end gracefully', async () => {
+      const { streamText } = require('ai');
+      streamText.mockReturnValue({
+        fullStream: (async function* () {
+          yield { type: 'start' };
+          yield { type: 'text-start' };
+          yield { type: 'text-delta', text: 'Some content' };
+          yield { type: 'text-end' }; // No text field
+          yield { type: 'finish', finishReason: 'stop' };
+        })(),
+      });
+
+      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
+        method: 'POST',
+        body: JSON.stringify({
+          model: 'gpt-4',
+          messages: [{ role: 'user', content: 'Test' }],
+          apiKey: 'test-key',
+        }),
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(200);
+
+      const text = await response.text();
+      // Should include content from text-delta
+      expect(text).toContain('"content":"Some content"');
+      // Should complete successfully even with empty text-end
+      expect(text).toContain('data: [DONE]');
+    });
+
+    it('should handle step markers without failing', async () => {
+      const { streamText } = require('ai');
+      streamText.mockReturnValue({
+        fullStream: (async function* () {
+          // Multi-step completion format
+          yield { type: 'start' };
+          yield { type: 'step-start' };
+          yield { type: 'text-start' };
+          yield { type: 'text-delta', text: 'Step 1 content' };
+          yield { type: 'text-end' };
+          yield { type: 'step-finish' };
+          yield { type: 'step-start' };
+          yield { type: 'text-start' };
+          yield { type: 'text-delta', text: 'Step 2 content' };
+          yield { type: 'text-end' };
+          yield { type: 'step-finish' };
+          yield { type: 'finish', finishReason: 'stop' };
+        })(),
+      });
+
+      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
+        method: 'POST',
+        body: JSON.stringify({
+          model: 'o1-preview',
+          messages: [{ role: 'user', content: 'Complex reasoning task' }],
+          apiKey: 'test-key',
+        }),
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(200);
+
+      const text = await response.text();
+      expect(text).toContain('"content":"Step 1 content"');
+      expect(text).toContain('"content":"Step 2 content"');
+      expect(text).toContain('data: [DONE]');
+    });
+
     it('should format reasoning as SSE with reasoning_content field', async () => {
       const { streamText } = require('ai');
       streamText.mockReturnValue({
@@ -463,6 +605,49 @@ describe('AI SDK Completions Route', () => {
   });
 
   describe('Error Handling', () => {
+    it('should handle stream with no content (vision model error case)', async () => {
+      const { streamText } = require('ai');
+      streamText.mockReturnValue({
+        fullStream: (async function* () {
+          // Reproduce the gpt-5-image error: all markers but no actual content
+          yield { type: 'start' };
+          yield { type: 'step-start' };
+          yield { type: 'text-start' };
+          yield { type: 'text-end' }; // Empty text-end, no text field
+          yield { type: 'step-finish' };
+          yield { type: 'finish', finishReason: 'stop' };
+        })(),
+      });
+
+      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
+        method: 'POST',
+        body: JSON.stringify({
+          model: 'gpt-5-image',
+          messages: [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: 'What is in this image?' },
+                { type: 'image_url', image_url: { url: 'data:image/png;base64,abc123' } }
+              ]
+            }
+          ],
+          apiKey: 'test-key',
+        }),
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(200);
+
+      const text = await response.text();
+      // Should contain error message about no content
+      expect(text).toContain('"finish_reason":"error"');
+      expect(text).toContain('error');
+      expect(text).toContain('gpt-5-image');
+      // Should include the part types that were received in error message
+      expect(text).toMatch(/start.*step-start.*text-start/);
+    });
+
     it('should handle streamText errors gracefully', async () => {
       const { streamText } = require('ai');
       streamText.mockImplementation(() => {
