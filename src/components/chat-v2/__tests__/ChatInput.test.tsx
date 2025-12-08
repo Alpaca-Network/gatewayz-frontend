@@ -1015,4 +1015,32 @@ describe('ChatInput speech recognition', () => {
     // Check that setInputValue was called with proper spacing
     expect(mockSetInputValue).toHaveBeenCalledWith('Existing text new words');
   });
+
+  it('should handle synchronous start() errors and reset state', () => {
+    // Make start() throw synchronously
+    mockRecognition.start.mockImplementation(() => {
+      throw new Error('Audio context blocked');
+    });
+
+    render(<ChatInput />);
+
+    // Find and click the microphone button
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // Should show toast about failure
+    expect(mockToast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Failed to start speech recognition',
+        variant: 'destructive',
+      })
+    );
+
+    // Button should still show mic icon (not square) because isRecording was reset
+    const micButtons = screen.getAllByTestId('button').filter(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    expect(micButtons.length).toBeGreaterThan(0);
+  });
 });

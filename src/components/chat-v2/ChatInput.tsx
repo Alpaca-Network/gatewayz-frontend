@@ -503,8 +503,21 @@ export function ChatInput() {
       setSpeechRecognition(null);
     };
 
-    recognition.start();
-    setSpeechRecognition(recognition);
+    try {
+      recognition.start();
+      setSpeechRecognition(recognition);
+    } catch (error) {
+      // Handle synchronous errors from recognition.start()
+      // This can happen when audio context is blocked by browser policy
+      console.error('Speech recognition start failed:', error);
+      setIsRecording(false);
+      setSpeechRecognition(null);
+      toast({
+        title: "Failed to start speech recognition",
+        description: "Your browser blocked the microphone. Please check your permissions.",
+        variant: "destructive"
+      });
+    }
   }, [toast, setInputValue, isRecording, speechRecognition]);
 
   const stopRecording = useCallback(() => {
