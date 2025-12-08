@@ -26,8 +26,11 @@ let redisFailureReason: string | null = null;
  * Check if we're in a build environment where Redis might not be available
  */
 function isBuildTime(): boolean {
-  return process.env.NEXT_PHASE === 'phase-production-build' ||
-         process.env.NODE_ENV === 'production' && !process.env.VERCEL_ENV;
+  // Note: Parentheses are important here for correct operator precedence
+  return (
+    process.env.NEXT_PHASE === 'phase-production-build' ||
+    (process.env.NODE_ENV === 'production' && !process.env.VERCEL_ENV && !process.env.RAILWAY_ENVIRONMENT)
+  );
 }
 
 /**
@@ -96,6 +99,8 @@ if (typeof window === 'undefined') {
 
 // Singleton Redis client instance
 let redisClient: import('ioredis').default | null = null;
+// Flag to prevent concurrent cleanup operations
+let isCleaningUp = false;
 
 /**
  * Check if an error is a fatal authentication/configuration error
@@ -161,10 +166,18 @@ export function getRedisClient(): import('ioredis').default | null {
           redisFailureReason = error.message;
           console.warn(`[Redis] Fatal error detected, disabling Redis: ${error.message}`);
 
-          // Clean up the failed client
-          if (redisClient) {
-            redisClient.disconnect();
+          // Clean up the failed client (with guard against concurrent cleanup)
+          if (redisClient && !isCleaningUp) {
+            isCleaningUp = true;
+            const clientToCleanup = redisClient;
             redisClient = null;
+            try {
+              clientToCleanup.disconnect();
+            } catch {
+              // Ignore disconnect errors
+            } finally {
+              isCleaningUp = false;
+            }
           }
         }
       });

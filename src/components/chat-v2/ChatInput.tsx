@@ -164,6 +164,7 @@ export function ChatInput() {
     const currentImage = selectedImage;
     const currentVideo = selectedVideo;
     const currentDocument = selectedDocument;
+    const currentDocumentName = selectedDocumentName;
 
     // Clear input immediately for better UX
     setInputValue("");
@@ -196,6 +197,7 @@ export function ChatInput() {
         setSelectedImage(currentImage);
         setSelectedVideo(currentVideo);
         setSelectedDocument(currentDocument);
+        setSelectedDocumentName(currentDocumentName);
         toast({ title: "Failed to create session", variant: "destructive" });
         return;
       }

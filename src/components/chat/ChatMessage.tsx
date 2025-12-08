@@ -8,7 +8,7 @@
 import React, { memo, useState } from 'react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Card } from '@/components/ui/card';
-import { Bot, User, Copy, RotateCcw, LogIn, Check } from 'lucide-react';
+import { Bot, User, Copy, RotateCcw, LogIn, Check, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import dynamic from 'next/dynamic';
 import { usePrivy } from '@privy-io/react-auth';
@@ -29,6 +29,7 @@ export interface ChatMessageProps {
   image?: string;
   video?: string;
   audio?: string;
+  document?: string;
   isStreaming?: boolean;
   model?: string;
   error?: string;
@@ -130,6 +131,7 @@ export const ChatMessage = memo<ChatMessageProps>(
     image,
     video,
     audio,
+    document,
     isStreaming,
     model,
     error,
@@ -145,6 +147,7 @@ export const ChatMessage = memo<ChatMessageProps>(
     let displayImage = image;
     let displayVideo = video;
     let displayAudio = audio;
+    let displayDocument = document;
 
     if (Array.isArray(content)) {
       content.forEach(part => {
@@ -156,6 +159,8 @@ export const ChatMessage = memo<ChatMessageProps>(
           displayVideo = part.video_url?.url;
         } else if (part.type === 'audio_url') {
           displayAudio = part.audio_url?.url;
+        } else if (part.type === 'file_url') {
+          displayDocument = part.file_url?.url;
         }
       });
     } else {
@@ -208,6 +213,25 @@ export const ChatMessage = memo<ChatMessageProps>(
             {displayAudio && (
               <div className="mb-3">
                 <audio src={displayAudio} controls className="w-full" />
+              </div>
+            )}
+
+            {/* Document attachment */}
+            {displayDocument && (
+              <div className="mb-3">
+                <a
+                  href={displayDocument}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`flex items-center gap-2 p-2 rounded-md border ${
+                    isUser
+                      ? 'border-white/20 hover:bg-white/10'
+                      : 'border-border hover:bg-muted'
+                  } transition-colors`}
+                >
+                  <FileText className="h-5 w-5 flex-shrink-0" />
+                  <span className="text-sm truncate">Attached document</span>
+                </a>
               </div>
             )}
 
@@ -337,6 +361,7 @@ export const ChatMessage = memo<ChatMessageProps>(
       prevProps.image === nextProps.image &&
       prevProps.video === nextProps.video &&
       prevProps.audio === nextProps.audio &&
+      prevProps.document === nextProps.document &&
       prevProps.error === nextProps.error &&
       prevProps.hasError === nextProps.hasError
     );
