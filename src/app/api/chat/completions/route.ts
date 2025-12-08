@@ -327,7 +327,7 @@ export async function POST(request: NextRequest) {
       messageCount: body.messages?.length || 0,
       stream: body.stream,
       hasApiKey: !!apiKey,
-      isGuestRequest: isExplicitGuestRequest,
+      isGuestRequest,
       apiKeyPrefix: apiKey ? apiKey.substring(0, 10) + '...' : 'none',
     });
 

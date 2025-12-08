@@ -765,5 +765,112 @@ describe('Chat Completions API Route', () => {
       // Clean up
       delete process.env.GUEST_API_KEY;
     });
+
+    test('should treat missing API key as guest request', async () => {
+      // Set GUEST_API_KEY for this test
+      process.env.GUEST_API_KEY = 'test-guest-key';
+
+      const requestBody = {
+        model: 'openrouter/auto',
+        messages: [{ role: 'user', content: 'Hello' }],
+        stream: true,
+        // No apiKey provided - should be treated as guest
+      };
+
+      const mockChunks = [
+        'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n',
+        'data: [DONE]\n\n',
+      ];
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({
+          'content-type': 'text/event-stream',
+        }),
+        body: createMockStream(mockChunks),
+      });
+
+      const request = createMockRequestWithIP(requestBody, '192.168.1.90');
+      const response = await POST(request);
+
+      // Should succeed using GUEST_API_KEY
+      expect(response.status).toBe(200);
+
+      // Verify the guest API key was used
+      const fetchCall = (global.fetch as jest.Mock).mock.calls[0];
+      expect(fetchCall[1].headers['Authorization']).toBe('Bearer test-guest-key');
+
+      // Should have rate limit headers for guest request
+      expect(response.headers.get('X-RateLimit-Limit')).toBe('3');
+
+      // Clean up
+      delete process.env.GUEST_API_KEY;
+    });
+
+    test('should return 401 when missing API key and GUEST_API_KEY not configured', async () => {
+      // Ensure GUEST_API_KEY is not set
+      delete process.env.GUEST_API_KEY;
+
+      const requestBody = {
+        model: 'openrouter/auto',
+        messages: [{ role: 'user', content: 'Hello' }],
+        stream: true,
+        // No apiKey provided
+      };
+
+      const request = createMockRequestWithIP(requestBody, '192.168.1.91');
+      const response = await POST(request);
+
+      // Should return 401 with GUEST_NOT_CONFIGURED error
+      expect(response.status).toBe(401);
+      const data = await response.json();
+      expect(data.code).toBe('GUEST_NOT_CONFIGURED');
+    });
+
+    test('should include detail field in 429 response', async () => {
+      // Set GUEST_API_KEY for this test
+      process.env.GUEST_API_KEY = 'test-guest-key';
+
+      const requestBody = {
+        model: 'openrouter/auto',
+        messages: [{ role: 'user', content: 'Hello' }],
+        stream: true,
+        apiKey: 'guest',
+      };
+
+      const mockChunks = [
+        'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n',
+        'data: [DONE]\n\n',
+      ];
+
+      // Exhaust the limit
+      for (let i = 0; i < 3; i++) {
+        (global.fetch as jest.Mock).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: new Headers({
+            'content-type': 'text/event-stream',
+          }),
+          body: createMockStream(mockChunks),
+        });
+
+        const request = createMockRequestWithIP(requestBody, '192.168.1.92');
+        await POST(request);
+      }
+
+      // Rate limited request
+      const request = createMockRequestWithIP(requestBody, '192.168.1.92');
+      const response = await POST(request);
+
+      expect(response.status).toBe(429);
+      const body = await response.json();
+      expect(body.detail).toContain('reset');
+      expect(body.resetInMs).toBeDefined();
+      expect(typeof body.resetInMs).toBe('number');
+
+      // Clean up
+      delete process.env.GUEST_API_KEY;
+    });
   });
 });
