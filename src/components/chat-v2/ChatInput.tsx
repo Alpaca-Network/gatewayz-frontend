@@ -39,9 +39,15 @@ interface SpeechRecognition extends EventTarget {
 }
 
 import { useState, useRef, useCallback, useEffect } from "react";
-import { Send, Image as ImageIcon, Video as VideoIcon, Mic, X, RefreshCw, Paperclip, FileText, Square } from "lucide-react";
+import { Send, Image as ImageIcon, Video as VideoIcon, Mic, Mic as AudioIcon, X, RefreshCw, Paperclip, FileText, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useChatUIStore } from "@/lib/store/chat-ui-store";
 import { useCreateSession, useSessionMessages } from "@/lib/hooks/use-chat-queries";
 import { useChatStream } from "@/lib/hooks/use-chat-stream";
@@ -56,12 +62,6 @@ import {
 } from "@/lib/guest-chat";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { usePrivy } from "@privy-io/react-auth";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 
 // Helper for file to base64
 const fileToBase64 = (file: File): Promise<string> => {
@@ -70,6 +70,54 @@ const fileToBase64 = (file: File): Promise<string> => {
         reader.onload = () => resolve(reader.result as string);
         reader.onerror = () => reject(new Error('Failed to read file'));
         reader.readAsDataURL(file);
+    });
+};
+
+// Maximum raw image file size (10MB)
+const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
+
+// Helper to compress images before upload to avoid 413 errors
+const compressImage = (file: File, maxWidth = 1920, maxHeight = 1920, quality = 0.85): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+
+        if (!ctx) {
+            reject(new Error('Failed to get canvas context'));
+            return;
+        }
+
+        img.onload = () => {
+            let { width, height } = img;
+
+            // Calculate new dimensions maintaining aspect ratio
+            if (width > maxWidth || height > maxHeight) {
+                const ratio = Math.min(maxWidth / width, maxHeight / height);
+                width = Math.round(width * ratio);
+                height = Math.round(height * ratio);
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+            ctx.drawImage(img, 0, 0, width, height);
+
+            // Use JPEG for photos (smaller), PNG for images with transparency
+            const mimeType = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+            const compressedDataUrl = canvas.toDataURL(mimeType, quality);
+
+            // Clean up object URL
+            URL.revokeObjectURL(img.src);
+
+            resolve(compressedDataUrl);
+        };
+
+        img.onerror = () => {
+            URL.revokeObjectURL(img.src);
+            reject(new Error('Failed to load image'));
+        };
+
+        img.src = URL.createObjectURL(file);
     });
 };
 
@@ -99,6 +147,7 @@ export function ChatInput() {
 
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
+  const [selectedAudio, setSelectedAudio] = useState<string | null>(null);
   const [selectedDocument, setSelectedDocument] = useState<string | null>(null);
   const [selectedDocumentName, setSelectedDocumentName] = useState<string | null>(null);
   const [guestMessageCount, setGuestMessageCount] = useState(0);
@@ -108,6 +157,7 @@ export function ChatInput() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -140,7 +190,7 @@ export function ChatInput() {
     // Also check the actual input field as a fallback for typing scenarios
     const currentInputValue = freshInputValue || inputRef.current?.value || inputValue;
 
-    if ((!currentInputValue.trim() && !selectedImage && !selectedVideo && !selectedDocument) || isStreaming) return;
+    if ((!currentInputValue.trim() && !selectedImage && !selectedVideo && !selectedAudio && !selectedDocument) || isStreaming) return;
     if (!freshSelectedModel) {
         toast({ title: "No model selected", variant: "destructive" });
         return;
@@ -163,6 +213,7 @@ export function ChatInput() {
     const messageText = currentInputValue;
     const currentImage = selectedImage;
     const currentVideo = selectedVideo;
+    const currentAudio = selectedAudio;
     const currentDocument = selectedDocument;
     const currentDocumentName = selectedDocumentName;
 
@@ -174,6 +225,7 @@ export function ChatInput() {
     }
     setSelectedImage(null);
     setSelectedVideo(null);
+    setSelectedAudio(null);
     setSelectedDocument(null);
     setSelectedDocumentName(null);
 
@@ -196,6 +248,7 @@ export function ChatInput() {
         setInputValue(messageText);
         setSelectedImage(currentImage);
         setSelectedVideo(currentVideo);
+        setSelectedAudio(currentAudio);
         setSelectedDocument(currentDocument);
         setSelectedDocumentName(currentDocumentName);
         toast({ title: "Failed to create session", variant: "destructive" });
@@ -205,11 +258,12 @@ export function ChatInput() {
 
     // Combine message and attachments
     let content: any = messageText;
-    if (currentImage || currentVideo || currentDocument) {
+    if (currentImage || currentVideo || currentAudio || currentDocument) {
         content = [
             { type: "text", text: messageText },
             ...(currentImage ? [{ type: "image_url", image_url: { url: currentImage } }] : []),
             ...(currentVideo ? [{ type: "video_url", video_url: { url: currentVideo } }] : []),
+            ...(currentAudio ? [{ type: "audio_url", audio_url: { url: currentAudio } }] : []),
             ...(currentDocument ? [{ type: "file_url", file_url: { url: currentDocument } }] : [])
         ];
     }
@@ -268,9 +322,29 @@ export function ChatInput() {
           }
         }
     } catch (e) {
-        toast({ title: "Failed to send message", variant: "destructive" });
+        const errorMessage = e instanceof Error ? e.message : "Failed to send message";
+
+        // Check if the error is auth-related (guest mode not available or session expired)
+        const isAuthError = errorMessage.toLowerCase().includes('sign in') ||
+                           errorMessage.toLowerCase().includes('sign up') ||
+                           errorMessage.toLowerCase().includes('create a free account') ||
+                           errorMessage.toLowerCase().includes('session expired') ||
+                           errorMessage.toLowerCase().includes('authentication');
+
+        if (isAuthError && !isAuthenticated) {
+          // Show the login modal for auth-related errors
+          toast({
+            title: "Sign in required",
+            description: "Create a free account to use the chat feature.",
+            variant: "destructive"
+          });
+          // Trigger Privy login modal
+          login();
+        } else {
+          toast({ title: errorMessage, variant: "destructive" });
+        }
     }
-  }, [inputValue, selectedImage, selectedVideo, selectedDocument, isStreaming, selectedModel, activeSessionId, messages, setInputValue, setActiveSessionId, createSession, streamMessage, toast, isAuthenticated, login]);
+  }, [inputValue, selectedImage, selectedVideo, selectedAudio, selectedDocument, isStreaming, selectedModel, activeSessionId, messages, setInputValue, setActiveSessionId, createSession, streamMessage, toast, isAuthenticated, login]);
 
   // Expose send function for prompt auto-send from WelcomeScreen
   useEffect(() => {
@@ -287,9 +361,22 @@ export function ChatInput() {
   const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
+
+      // Validate file size before processing
+      if (file.size > MAX_IMAGE_SIZE) {
+          toast({
+              title: "Image too large",
+              description: "Please select an image under 10MB",
+              variant: "destructive"
+          });
+          if (fileInputRef.current) fileInputRef.current.value = '';
+          return;
+      }
+
       try {
-          const base64 = await fileToBase64(file);
-          setSelectedImage(base64);
+          // Compress image to avoid 413 payload too large errors
+          const compressedBase64 = await compressImage(file);
+          setSelectedImage(compressedBase64);
       } catch (e) {
           toast({ title: "Failed to load image", variant: "destructive" });
       }
@@ -308,6 +395,19 @@ export function ChatInput() {
       }
       // Reset input so the same file can be selected again
       if (videoInputRef.current) videoInputRef.current.value = '';
+  };
+
+  const handleAudioSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      try {
+          const base64 = await fileToBase64(file);
+          setSelectedAudio(base64);
+      } catch (e) {
+          toast({ title: "Failed to load audio", variant: "destructive" });
+      }
+      // Reset input so the same file can be selected again
+      if (audioInputRef.current) audioInputRef.current.value = '';
   };
 
   const handleDocumentSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -468,6 +568,12 @@ export function ChatInput() {
                     <Button size="icon" variant="destructive" className="absolute -top-1 -right-1 h-4 w-4 rounded-full" onClick={() => setSelectedVideo(null)}><X className="h-3 w-3" /></Button>
                 </div>
             )}
+            {selectedAudio && (
+                <div className="relative flex items-center justify-center h-16 w-16 bg-muted rounded">
+                    <AudioIcon className="h-6 w-6 text-muted-foreground" />
+                    <Button size="icon" variant="destructive" className="absolute -top-1 -right-1 h-4 w-4 rounded-full" onClick={() => setSelectedAudio(null)}><X className="h-3 w-3" /></Button>
+                </div>
+            )}
             {selectedDocument && (
                 <div className="relative flex items-center justify-center h-16 px-3 bg-muted rounded gap-2">
                     <FileText className="h-5 w-5 text-muted-foreground flex-shrink-0" />
@@ -481,6 +587,7 @@ export function ChatInput() {
             {/* Hidden Inputs */}
             <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageSelect} className="hidden" />
             <input ref={videoInputRef} type="file" accept="video/*" onChange={handleVideoSelect} className="hidden" />
+            <input ref={audioInputRef} type="file" accept="audio/*" onChange={handleAudioSelect} className="hidden" />
             <input ref={documentInputRef} type="file" accept=".pdf,.doc,.docx,.txt,.md,.csv,.json,.xml" onChange={handleDocumentSelect} className="hidden" />
 
             <div className="flex gap-1">
@@ -499,6 +606,10 @@ export function ChatInput() {
                         <DropdownMenuItem onClick={() => videoInputRef.current?.click()}>
                             <VideoIcon className="h-4 w-4 mr-2" />
                             Upload video
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => audioInputRef.current?.click()}>
+                            <AudioIcon className="h-4 w-4 mr-2" />
+                            Upload audio
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => documentInputRef.current?.click()}>
                             <FileText className="h-4 w-4 mr-2" />

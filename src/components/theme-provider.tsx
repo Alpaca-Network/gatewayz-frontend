@@ -70,7 +70,12 @@ export function ThemeProvider({
     }
 
     mediaQuery.addEventListener("change", handleChange)
-    return () => mediaQuery.removeEventListener("change", handleChange)
+    return () => {
+      // Guard against mediaQuery being undefined during cleanup
+      if (mediaQuery && typeof mediaQuery.removeEventListener === 'function') {
+        mediaQuery.removeEventListener("change", handleChange)
+      }
+    }
   }, [theme])
 
   const handleSetTheme = React.useCallback(

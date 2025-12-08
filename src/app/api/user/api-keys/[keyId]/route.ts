@@ -11,14 +11,14 @@ import { proxyFetch } from "@/lib/proxy-fetch";
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { keyId: string } }
+  { params }: { params: Promise<{ keyId: string }> }
 ) {
   try {
     const { key: apiKey, error } = await validateApiKey(request);
     if (error) return error;
 
     const body = await request.json();
-    const { keyId } = params;
+    const { keyId } = await params;
 
     console.log(`[API /api/user/api-keys/${keyId} DELETE] Proxying delete API key request to backend`);
 

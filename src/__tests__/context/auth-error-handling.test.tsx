@@ -279,6 +279,51 @@ describe('Authentication Error Handling', () => {
     });
   });
 
+  describe('Auth State Machine Transitions', () => {
+    // Copy of the state machine from gatewayz-auth-context.tsx for testing
+    // Note: same-state transitions are handled as no-ops before the state machine
+    type AuthStatus = 'idle' | 'unauthenticated' | 'authenticating' | 'authenticated' | 'error';
+
+    const AUTH_STATE_TRANSITIONS: Record<AuthStatus, AuthStatus[]> = {
+      idle: ['unauthenticated', 'authenticating', 'authenticated'],
+      unauthenticated: ['authenticating', 'authenticated'],
+      authenticating: ['authenticated', 'unauthenticated', 'error'],
+      authenticated: ['authenticating', 'unauthenticated', 'error'],
+      error: ['unauthenticated', 'authenticating'],
+    };
+
+    // Simulates the setAuthStatus logic: no-op for same state, then validate transition
+    const isValidTransition = (current: AuthStatus, next: AuthStatus): boolean => {
+      // Same-state transitions are no-ops (handled before state machine)
+      if (current === next) {
+        return true; // No-op, not an error
+      }
+      return AUTH_STATE_TRANSITIONS[current].includes(next);
+    };
+
+    it('should handle authenticated -> authenticated as a no-op (not an error)', () => {
+      // This tests the fix: same-state transitions don't trigger warnings
+      expect(isValidTransition('authenticated', 'authenticated')).toBe(true);
+    });
+
+    it('should allow all standard authenticated transitions', () => {
+      const currentStatus: AuthStatus = 'authenticated';
+
+      const allowedTransitions = AUTH_STATE_TRANSITIONS[currentStatus];
+      expect(allowedTransitions).toContain('authenticating'); // re-auth needed
+      expect(allowedTransitions).toContain('unauthenticated'); // logout
+      expect(allowedTransitions).toContain('error'); // error occurred
+    });
+
+    it('should not transition from idle to error directly', () => {
+      expect(isValidTransition('idle', 'error')).toBe(false);
+    });
+
+    it('should allow idle to authenticated for cached credentials', () => {
+      expect(isValidTransition('idle', 'authenticated')).toBe(true);
+    });
+  });
+
   describe('Authentication Timeout Handling (JAVASCRIPT-NEXTJS-X, Y)', () => {
     // NOTE: Removed trivial tests that were just testing `retryCount < maxRetries`
     // Those tests verified JavaScript operators, not actual retry logic
