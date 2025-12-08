@@ -502,28 +502,11 @@ describe('ChatInput hidden file inputs', () => {
 });
 
 describe('ChatInput auth error handling', () => {
-  const mockLogin = jest.fn();
-
   beforeEach(() => {
     jest.clearAllMocks();
     resetMockStoreState();
     delete (window as any).__chatInputFocus;
     delete (window as any).__chatInputSend;
-
-    // Override usePrivy mock with a trackable login function
-    jest.mock('@privy-io/react-auth', () => ({
-      usePrivy: () => ({
-        login: mockLogin,
-      }),
-    }));
-
-    // Override auth store for unauthenticated user
-    jest.mock('@/lib/store/auth-store', () => ({
-      useAuthStore: () => ({
-        isAuthenticated: false,
-        isLoading: false,
-      }),
-    }));
   });
 
   afterEach(() => {
@@ -581,6 +564,177 @@ describe('ChatInput auth error handling', () => {
         lowerError.includes('authentication');
 
       expect(isAuthError).toBe(true);
+    });
+  });
+
+  it('should show toast with error message when streamMessage throws an error', async () => {
+    // Setup: Mock streamMessage to throw an error
+    const errorMessage = 'Network connection failed';
+    mockStreamMessage.mockRejectedValueOnce(new Error(errorMessage));
+    mockCreateSession.mutateAsync.mockResolvedValue({ id: 1 });
+
+    // Set up state for a valid send
+    mockStoreState.inputValue = 'Test message';
+    mockStoreState.selectedModel = { value: 'test-model', label: 'Test Model' };
+
+    render(<ChatInput />);
+
+    // Call the exposed send function
+    const sendFn = (window as any).__chatInputSend;
+    expect(sendFn).toBeDefined();
+
+    await sendFn();
+
+    // Verify toast was called with the error message
+    await waitFor(() => {
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: errorMessage,
+          variant: 'destructive',
+        })
+      );
+    });
+  });
+
+  it('should show toast when createSession throws an error', async () => {
+    // Setup: Mock createSession to throw an error
+    mockCreateSession.mutateAsync.mockRejectedValueOnce(new Error('Session creation failed'));
+
+    // Set up state for a valid send (no active session, so it will try to create one)
+    mockStoreState.activeSessionId = null;
+    mockStoreState.inputValue = 'Test message';
+    mockStoreState.selectedModel = { value: 'test-model', label: 'Test Model' };
+
+    render(<ChatInput />);
+
+    // Call the exposed send function
+    const sendFn = (window as any).__chatInputSend;
+    await sendFn();
+
+    // Verify toast was called for session creation failure
+    await waitFor(() => {
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Failed to create session',
+          variant: 'destructive',
+        })
+      );
+    });
+
+    // Verify inputValue was restored after failure
+    expect(mockSetInputValue).toHaveBeenCalledWith('Test message');
+  });
+
+  it('should not send when no model is selected', async () => {
+    // Set up state with input but no model
+    mockStoreState.inputValue = 'Test message';
+    mockStoreState.selectedModel = null as any;
+
+    render(<ChatInput />);
+
+    // Call the exposed send function
+    const sendFn = (window as any).__chatInputSend;
+    await sendFn();
+
+    // Verify toast was called with no model error
+    await waitFor(() => {
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'No model selected',
+          variant: 'destructive',
+        })
+      );
+    });
+
+    // Verify streamMessage was NOT called
+    expect(mockStreamMessage).not.toHaveBeenCalled();
+  });
+
+  it('should not send when input is empty', async () => {
+    // Set up state with empty input
+    mockStoreState.inputValue = '';
+    mockStoreState.selectedModel = { value: 'test-model', label: 'Test Model' };
+
+    render(<ChatInput />);
+
+    // Call the exposed send function
+    const sendFn = (window as any).__chatInputSend;
+    await sendFn();
+
+    // Verify streamMessage was NOT called (early return)
+    expect(mockStreamMessage).not.toHaveBeenCalled();
+    expect(mockCreateSession.mutateAsync).not.toHaveBeenCalled();
+  });
+
+  it('should not send when input has only whitespace', async () => {
+    // Set up state with whitespace-only input
+    mockStoreState.inputValue = '   \t\n  ';
+    mockStoreState.selectedModel = { value: 'test-model', label: 'Test Model' };
+
+    render(<ChatInput />);
+
+    // Call the exposed send function
+    const sendFn = (window as any).__chatInputSend;
+    await sendFn();
+
+    // Verify streamMessage was NOT called (early return)
+    expect(mockStreamMessage).not.toHaveBeenCalled();
+    expect(mockCreateSession.mutateAsync).not.toHaveBeenCalled();
+  });
+});
+
+describe('ChatInput error message extraction', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    resetMockStoreState();
+    delete (window as any).__chatInputSend;
+  });
+
+  afterEach(() => {
+    delete (window as any).__chatInputSend;
+  });
+
+  it('should extract error message from Error object', async () => {
+    const errorMessage = 'Specific error occurred';
+    mockStreamMessage.mockRejectedValueOnce(new Error(errorMessage));
+    mockCreateSession.mutateAsync.mockResolvedValue({ id: 1 });
+
+    mockStoreState.inputValue = 'Test';
+    mockStoreState.selectedModel = { value: 'test-model', label: 'Test' };
+
+    render(<ChatInput />);
+
+    const sendFn = (window as any).__chatInputSend;
+    await sendFn();
+
+    await waitFor(() => {
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: errorMessage,
+        })
+      );
+    });
+  });
+
+  it('should use fallback message for non-Error thrown values', async () => {
+    // Throw a string instead of Error object
+    mockStreamMessage.mockRejectedValueOnce('String error');
+    mockCreateSession.mutateAsync.mockResolvedValue({ id: 1 });
+
+    mockStoreState.inputValue = 'Test';
+    mockStoreState.selectedModel = { value: 'test-model', label: 'Test' };
+
+    render(<ChatInput />);
+
+    const sendFn = (window as any).__chatInputSend;
+    await sendFn();
+
+    await waitFor(() => {
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Failed to send message',
+        })
+      );
     });
   });
 });
