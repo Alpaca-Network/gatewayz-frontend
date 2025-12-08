@@ -278,7 +278,27 @@ export function ChatInput() {
           }
         }
     } catch (e) {
-        toast({ title: "Failed to send message", variant: "destructive" });
+        const errorMessage = e instanceof Error ? e.message : "Failed to send message";
+
+        // Check if the error is auth-related (guest mode not available or session expired)
+        const isAuthError = errorMessage.toLowerCase().includes('sign in') ||
+                           errorMessage.toLowerCase().includes('sign up') ||
+                           errorMessage.toLowerCase().includes('create a free account') ||
+                           errorMessage.toLowerCase().includes('session expired') ||
+                           errorMessage.toLowerCase().includes('authentication');
+
+        if (isAuthError && !isAuthenticated) {
+          // Show the login modal for auth-related errors
+          toast({
+            title: "Sign in required",
+            description: "Create a free account to use the chat feature.",
+            variant: "destructive"
+          });
+          // Trigger Privy login modal
+          login();
+        } else {
+          toast({ title: errorMessage, variant: "destructive" });
+        }
     }
   }, [inputValue, selectedImage, selectedVideo, selectedAudio, selectedDocument, isStreaming, selectedModel, activeSessionId, messages, setInputValue, setActiveSessionId, createSession, streamMessage, toast, isAuthenticated, login]);
 
