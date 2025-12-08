@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { ModelData } from '@/app/rankings/page';
 
 interface TokenStackedBarChartProps {
@@ -9,9 +9,16 @@ interface TokenStackedBarChartProps {
 }
 
 const TokenStackedBarChart = ({ rankingData }: TokenStackedBarChartProps) => {
+  // Start with false, will update on client mount to prevent hydration mismatch
+  // This ensures SSR and initial client render match
   const [isMobile, setIsMobile] = useState(false);
+  const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
+    // Mark as client-side mounted
+    setIsClient(true);
+
+    // Only check window width on client-side
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
     checkMobile();
     window.addEventListener('resize', checkMobile);
@@ -87,7 +94,7 @@ const TokenStackedBarChart = ({ rankingData }: TokenStackedBarChartProps) => {
           <Bar dataKey="tokens" radius={[8, 8, 0, 0]}>
             {chartData.map((entry, index) => (
               // eslint-disable-next-line react/no-array-index-key
-              <Bar key={index} dataKey="tokens" fill={entry.color} />
+              <Cell key={index} fill={entry.color} />
             ))}
           </Bar>
         </BarChart>
