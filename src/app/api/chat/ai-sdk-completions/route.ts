@@ -482,10 +482,11 @@ export async function POST(request: NextRequest) {
             partTypesReceived.push(part.type);
 
             // Handle different part types from AI SDK fullStream
-            // Note: fullStream uses text-delta/reasoning-delta (TextStreamPart types)
-            // This is different from UIMessageStream which uses text-start/text-delta/text-end
+            // Note: fullStream can return both TextStreamPart (text-delta/reasoning-delta)
+            // and UIMessageStream formats (text-start/text-delta/text-end)
+            // Some models (like gpt-5-image with images) use UIMessageStream format
             if (part.type === 'text-delta') {
-              // Regular text content
+              // Regular text content (TextStreamPart or UIMessageStream format)
               contentReceived = true;
               const sseData = {
                 choices: [{
@@ -497,6 +498,32 @@ export async function POST(request: NextRequest) {
               };
               const sseMessage = `data: ${JSON.stringify(sseData)}\n\n`;
               controller.enqueue(encoder.encode(sseMessage));
+            } else if (part.type === 'start') {
+              // Stream started - this is a marker event, no content yet
+              console.log('[AI SDK Route] Stream started (fullStream marker)');
+            } else if (part.type === 'text-start') {
+              // Text content started - no content to send yet
+              console.log('[AI SDK Route] Text stream started');
+            } else if (part.type === 'text-end') {
+              // Text content ended - contains full accumulated text
+              // For models that don't stream deltas (like some vision models),
+              // text-end may contain the complete response
+              if ('text' in part && typeof part.text === 'string' && part.text.length > 0) {
+                contentReceived = true;
+                const sseData = {
+                  choices: [{
+                    delta: {
+                      content: part.text
+                    },
+                    finish_reason: null
+                  }]
+                };
+                const sseMessage = `data: ${JSON.stringify(sseData)}\n\n`;
+                controller.enqueue(encoder.encode(sseMessage));
+                console.log('[AI SDK Route] Text stream ended with full content (length:', part.text.length, ')');
+              } else {
+                console.log('[AI SDK Route] Text stream ended (no content in text-end part)');
+              }
             } else if (part.type === 'reasoning-delta') {
               // Chain-of-thought reasoning
               contentReceived = true;
@@ -558,11 +585,15 @@ export async function POST(request: NextRequest) {
                 const sseMessage = `data: ${JSON.stringify(sseData)}\n\n`;
                 controller.enqueue(encoder.encode(sseMessage));
               }
+            } else if (part.type === 'step-start') {
+              // Multi-step completion started - just a marker
+              console.log('[AI SDK Route] Step started');
+            } else if (part.type === 'step-finish') {
+              // Multi-step completion finished - just a marker
+              console.log('[AI SDK Route] Step finished');
             }
-            // Silently ignore boundary markers and lifecycle events:
-            // - text-start, text-end: Text content boundaries (UIMessageStream format)
+            // Silently ignore other boundary markers and lifecycle events:
             // - reasoning-start, reasoning-end: Reasoning boundaries
-            // - step-start, step-finish: Multi-step completion tracking
             // - tool-call, tool-result, tool-error: Tool invocation events
             // - tool-input-start, tool-input-delta, tool-input-end: Tool input streaming
             // - source, file: Content source references
