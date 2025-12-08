@@ -252,9 +252,9 @@ export function useChatStream() {
                     // This is critical for real-time streaming updates in React 18+
                     flushSync(() => {
                         queryClient.setQueryData(['chat-messages', sessionId], (old: any[] | undefined) => {
-                            if (!old) return [];
+                            if (!old || old.length === 0) return old || [];
                             const last = old[old.length - 1];
-                            if (last.role !== 'assistant') return old;
+                            if (!last || last.role !== 'assistant') return old;
 
                             return [...old.slice(0, -1), {
                                 ...last,
@@ -297,8 +297,9 @@ export function useChatStream() {
             // Mark isStreaming false
             flushSync(() => {
                 queryClient.setQueryData(['chat-messages', sessionId], (old: any[] | undefined) => {
-                    if (!old) return [];
+                    if (!old || old.length === 0) return old || [];
                     const last = old[old.length - 1];
+                    if (!last) return old;
                     return [...old.slice(0, -1), { ...last, isStreaming: false }];
                 });
             });
@@ -316,9 +317,9 @@ export function useChatStream() {
             // Mark the assistant message as failed with error metadata, not appended to content
             flushSync(() => {
                 queryClient.setQueryData(['chat-messages', sessionId], (old: any[] | undefined) => {
-                    if (!old) return [];
+                    if (!old || old.length === 0) return old || [];
                     const last = old[old.length - 1];
-                    if (last.role !== 'assistant') return old;
+                    if (!last || last.role !== 'assistant') return old;
 
                     return [...old.slice(0, -1), {
                         ...last,
