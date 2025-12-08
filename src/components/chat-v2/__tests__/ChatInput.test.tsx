@@ -11,6 +11,8 @@ jest.mock('lucide-react', () => ({
   RefreshCw: () => <span data-testid="refresh-icon">Refresh</span>,
   Plus: () => <span data-testid="plus-icon">Plus</span>,
   FileText: () => <span data-testid="file-text-icon">FileText</span>,
+  Paperclip: () => <span data-testid="paperclip-icon">Paperclip</span>,
+  Square: () => <span data-testid="square-icon">Square</span>,
 }));
 
 // Mock the UI components
@@ -340,14 +342,14 @@ describe('ChatInput attachment dropdown', () => {
     delete (window as any).__chatInputSend;
   });
 
-  it('should render the attachment dropdown with plus icon', () => {
+  it('should render the attachment dropdown with paperclip icon', () => {
     render(<ChatInput />);
 
     // Check for dropdown menu structure
     expect(screen.getByTestId('dropdown-menu')).toBeInTheDocument();
     expect(screen.getByTestId('dropdown-trigger')).toBeInTheDocument();
     expect(screen.getByTestId('dropdown-content')).toBeInTheDocument();
-    expect(screen.getByTestId('plus-icon')).toBeInTheDocument();
+    expect(screen.getByTestId('paperclip-icon')).toBeInTheDocument();
   });
 
   it('should render all four attachment options in dropdown', () => {
@@ -369,10 +371,10 @@ describe('ChatInput attachment dropdown', () => {
 
     // Use getAllByText since icons have text too, then verify dropdown items have text
     const dropdownItems = screen.getAllByTestId('dropdown-item');
-    expect(dropdownItems[0]).toHaveTextContent('Images');
-    expect(dropdownItems[1]).toHaveTextContent('Video');
-    expect(dropdownItems[2]).toHaveTextContent('Audio');
-    expect(dropdownItems[3]).toHaveTextContent('Documents');
+    expect(dropdownItems[0]).toHaveTextContent('Upload image');
+    expect(dropdownItems[1]).toHaveTextContent('Upload video');
+    expect(dropdownItems[2]).toHaveTextContent('Upload audio');
+    expect(dropdownItems[3]).toHaveTextContent('Upload document');
   });
 });
 
@@ -389,32 +391,31 @@ describe('ChatInput microphone button visibility', () => {
     delete (window as any).__chatInputSend;
   });
 
-  it('should show microphone button when input is empty', () => {
+  it('should show speech-to-text mic button and audio upload in dropdown', () => {
     mockStoreState.inputValue = '';
     render(<ChatInput />);
 
-    // There should be mic icons visible (one in dropdown, one in input area)
+    // There should be 2 mic icons: one for speech-to-text button, one in dropdown for audio upload
     const micIcons = screen.getAllByTestId('mic-icon');
-    expect(micIcons.length).toBeGreaterThanOrEqual(2);
+    expect(micIcons).toHaveLength(2);
   });
 
-  it('should hide microphone button inside input when user is typing', () => {
+  it('should always show speech-to-text mic button regardless of input', () => {
     mockStoreState.inputValue = 'Hello world';
     render(<ChatInput />);
 
-    // When input has text, only the dropdown mic icon should be visible (1 instead of 2)
+    // Speech-to-text mic button is always visible (plus audio in dropdown)
     const micIcons = screen.getAllByTestId('mic-icon');
-    // Only one mic icon in the dropdown
-    expect(micIcons).toHaveLength(1);
+    expect(micIcons).toHaveLength(2);
   });
 
-  it('should show microphone button when input has only whitespace', () => {
+  it('should show mic buttons when input has only whitespace', () => {
     mockStoreState.inputValue = '   ';
     render(<ChatInput />);
 
-    // Whitespace-only input is considered empty, so mic should be visible
+    // Mic buttons should be visible
     const micIcons = screen.getAllByTestId('mic-icon');
-    expect(micIcons.length).toBeGreaterThanOrEqual(2);
+    expect(micIcons).toHaveLength(2);
   });
 });
 
