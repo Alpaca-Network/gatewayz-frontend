@@ -9,9 +9,16 @@ interface TokenStackedBarChartProps {
 }
 
 const TokenStackedBarChart = ({ rankingData }: TokenStackedBarChartProps) => {
+  // Start with false, will update on client mount to prevent hydration mismatch
+  // This ensures SSR and initial client render match
   const [isMobile, setIsMobile] = useState(false);
+  const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
+    // Mark as client-side mounted
+    setIsClient(true);
+
+    // Only check window width on client-side
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
     checkMobile();
     window.addEventListener('resize', checkMobile);
