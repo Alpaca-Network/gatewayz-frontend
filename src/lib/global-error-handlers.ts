@@ -85,7 +85,7 @@ function shouldRateLimitMessage(messageKey: string): boolean {
  */
 export function rateLimitedCaptureMessage(
   message: string,
-  level?: 'fatal' | 'error' | 'warning' | 'info' | 'debug'
+  options?: Parameters<typeof Sentry.captureMessage>[1]
 ): void {
   const messageKey = message.slice(0, 100);
 
@@ -93,7 +93,7 @@ export function rateLimitedCaptureMessage(
     return;
   }
 
-  Sentry.captureMessage(message, level);
+  Sentry.captureMessage(message, options);
 }
 
 /**

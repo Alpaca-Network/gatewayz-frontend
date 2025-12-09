@@ -1,13 +1,6 @@
 import * as Sentry from "@sentry/nextjs";
 import { initializeGlobalErrorHandlers } from "./src/lib/global-error-handlers";
 
-// Type alias for transaction events (not exported from @sentry/nextjs)
-// Based on @sentry/core TransactionEvent type
-type TransactionEventLike = {
-  transaction?: string;
-  type?: 'transaction';
-};
-
 // Get release information
 const getRelease = () => {
   if (process.env.NEXT_PUBLIC_SENTRY_RELEASE) {
@@ -95,7 +88,7 @@ function cleanupStaleEntries(): void {
 }
 
 /**
- * Create a unique key for deduplication
+ * Create a unique key for error event deduplication
  */
 function createEventKey(event: Sentry.ErrorEvent): string {
   const message = event.message ||
@@ -104,6 +97,30 @@ function createEventKey(event: Sentry.ErrorEvent): string {
     'unknown';
   const type = event.exception?.values?.[0]?.type || 'message';
   return `${type}:${message.slice(0, 100)}`;
+}
+
+/**
+ * Transaction event interface for type safety
+ * Using custom interface since Sentry's TransactionEvent isn't exported in newer versions
+ */
+interface TransactionEventLike {
+  transaction?: string;
+  contexts?: {
+    trace?: {
+      op?: string;
+    };
+  };
+}
+
+/**
+ * Create a unique key for transaction deduplication
+ * Uses transaction name instead of error message
+ */
+function createTransactionKey(event: TransactionEventLike): string {
+  // Use the transaction name as the key
+  const transactionName = event.transaction || 'unknown';
+  const op = event.contexts?.trace?.op || 'unknown-op';
+  return `txn:${op}:${transactionName.slice(0, 100)}`;
 }
 
 /**
@@ -171,7 +188,7 @@ function shouldFilterEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): bo
 }
 
 /**
- * Check if we should rate limit this event
+ * Check if we should rate limit this error event
  * Returns true if the event should be dropped
  * Note: Only call this AFTER shouldFilterEvent returns false
  */
@@ -206,16 +223,6 @@ function shouldRateLimit(event: Sentry.ErrorEvent): boolean {
   rateLimitState.recentMessages.set(messageKey, now);
 
   return false;
-}
-
-/**
- * Create a unique key for transaction deduplication
- * Uses transaction name instead of error message
- */
-function createTransactionKey(event: TransactionEventLike): string {
-  // Use the transaction name as the key
-  const transactionName = event.transaction || 'unknown';
-  return `transaction:${transactionName.slice(0, 100)}`;
 }
 
 /**

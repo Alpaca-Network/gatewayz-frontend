@@ -34,6 +34,22 @@ export const TEST_TIMESTAMPS = {
 } as const;
 
 /**
+ * Test API key patterns for different key types
+ * These are FAKE test values, not real credentials
+ * ggignore - GitGuardian should ignore these test values
+ */
+export const TEST_API_KEYS = {
+  /** Fake temporary API key pattern - not a real credential */
+  TEMP: 'gw_temp_test_fake_key',
+  /** Fake live/permanent API key pattern - not a real credential */
+  LIVE: 'gw_live_test_fake_key',
+  /** Another temp key for testing - not a real credential */
+  TEMP_ALT: 'gw_temp_test_alt_key',
+  /** Another live key for testing - not a real credential */
+  LIVE_ALT: 'gw_live_test_alt_key',
+} as const;
+
+/**
  * Test user data
  */
 export const TEST_USER = {
