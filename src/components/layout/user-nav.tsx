@@ -1,11 +1,5 @@
-
 "use client";
 
-import {
-  Avatar,
-  AvatarFallback,
-  AvatarImage,
-} from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -16,23 +10,20 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { usePrivy } from "@privy-io/react-auth";
 import { useToast } from "@/hooks/use-toast";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useEffect } from "react";
-import { Copy, ExternalLink } from "lucide-react";
+import { Copy } from "lucide-react";
 import { useTier } from "@/hooks/use-tier";
+import { useGatewayzAuth } from "@/context/gatewayz-auth-context";
 
 interface UserNavProps {
   user: any; // Privy user object
 }
 
 export function UserNav({ user }: UserNavProps) {
-  const { logout } = usePrivy();
+  const { logout } = useGatewayzAuth();
   const { toast } = useToast();
-  const router = useRouter();
-  const { tier, tierInfo, userData } = useTier();
+  const { tier, userData } = useTier();
 
   const handleSignOut = async () => {
     try {

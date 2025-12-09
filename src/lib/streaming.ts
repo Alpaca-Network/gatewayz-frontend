@@ -507,6 +507,7 @@ export async function* streamChatResponse(
   let chunkCount = 0;
   let contentChunkCount = 0;  // Track chunks with actual content
   let receivedDoneSignal = false;
+  let yieldedDoneSignal = false;  // Track if we've already yielded a done signal
   let firstChunkReceived = false;
   let isFirstContentChunk = true; // Track first content token for TTFT
 
@@ -729,10 +730,24 @@ export async function* streamChatResponse(
             // Check for error object in the response (also handles finish_reason: 'error')
             if (data.error && typeof data.error === 'object') {
               const errorObj = data.error as Record<string, unknown>;
+
+              // Log the full error object for debugging
+              devError('[Streaming] Received error object in stream:', JSON.stringify(errorObj, null, 2));
+
+              // Try multiple common error message formats
               const errorMessage =
                 (typeof errorObj.message === 'string' && errorObj.message) ||
                 (typeof errorObj.detail === 'string' && errorObj.detail) ||
-                'Stream error occurred';
+                (typeof errorObj.error === 'string' && errorObj.error) ||
+                (typeof errorObj.text === 'string' && errorObj.text) ||
+                (typeof errorObj.reason === 'string' && errorObj.reason) ||
+                // If error has a code/type, include it in the message
+                (errorObj.code && errorObj.type
+                  ? `${errorObj.type}: ${errorObj.code}`
+                  : (typeof errorObj.code === 'string' && `Error code: ${errorObj.code}`)) ||
+                (typeof errorObj.type === 'string' && `Error type: ${errorObj.type}`) ||
+                // Last resort: stringify the entire error object so we can see what it contains
+                `Stream error: ${JSON.stringify(errorObj)}`;
 
               // Check if it's a trial expiration error
               if (errorMessage.toLowerCase().includes('trial has expired') ||
@@ -837,16 +852,30 @@ export async function* streamChatResponse(
                   isFirstToken: chunk.status === 'first_token',
                   contentChunkCount
                 });
+
+                // Track if we've yielded a done signal to avoid duplicates at stream end
+                if (chunk.done) {
+                  yieldedDoneSignal = true;
+                }
                 yield chunk;
               } else {
                 devLog('[Streaming] Skipping empty chunk');
               }
             } else {
-              // Check if the data has error indicators
+              // Check if the data has error indicators at the top level
+              // Some APIs return errors directly without a nested error object
               if (data.error || data.detail || data.message) {
-                const errorMsg = data.error?.message || data.detail || data.message;
-                devError('[Streaming] Possible error in SSE data:', errorMsg);
-                console.error('[Streaming] Backend may have returned an error:', data);
+                const errorObj = typeof data.error === 'object' ? data.error as Record<string, unknown> : null;
+                const errorMsg =
+                  (errorObj && typeof errorObj.message === 'string' && errorObj.message) ||
+                  (typeof data.error === 'string' && data.error) ||
+                  (typeof data.detail === 'string' && data.detail) ||
+                  (typeof data.message === 'string' && data.message) ||
+                  JSON.stringify(data.error || data.detail || data.message);
+                devError('[Streaming] Error in SSE data:', errorMsg);
+                console.error('[Streaming] Backend returned an error:', JSON.stringify(data, null, 2));
+                // Throw the error so it's properly handled instead of silently ignored
+                throw new StreamingError(`Stream error: ${errorMsg}`);
               }
               devWarn('[Streaming] No chunk created from SSE data. This may indicate an unsupported response format or an error from the backend.');
               devWarn('[Streaming] Unrecognized data structure:', data);
@@ -868,16 +897,11 @@ export async function* streamChatResponse(
       // Break out of the outer while loop if we received [DONE] signal
       if (receivedDoneSignal) {
         devLog('[Streaming] Breaking out of read loop due to [DONE] signal');
-        // Yield a final done chunk to signal completion to the UI
-        yield { done: true };
         break;
       }
     }
 
-    // If we exited the loop normally (stream closed by server), also yield done
-    devLog('[Streaming] Stream ended normally, yielding final done signal');
-
-    // Important: Log if we received any content at all
+    // Check if we received any content at all (applies to both [DONE] and natural stream end)
     if (contentChunkCount === 0) {
       // Use resolved model name in error message for clarity
       const modelDisplayName = requestedModelId && requestedModelId !== resolvedModelId
@@ -893,10 +917,15 @@ export async function* streamChatResponse(
       throw new Error(errorMsg);
     }
 
-    // Final signal to indicate stream is complete
-    yield { done: true };
-
-    devLog('[Streaming] Stream completed successfully with', contentChunkCount, 'content chunks from', chunkCount, 'total SSE lines');
+    // Yield final done signal only if we haven't already yielded one
+    // This can happen from: finish_reason, [DONE] signal, or event-based done types
+    devLog('[Streaming] Stream completed', receivedDoneSignal ? 'via [DONE] signal' : 'naturally', 'with', contentChunkCount, 'content chunks from', chunkCount, 'total SSE lines');
+    if (!yieldedDoneSignal) {
+      devLog('[Streaming] Yielding final done signal');
+      yield { done: true };
+    } else {
+      devLog('[Streaming] Skipping final done signal - already yielded');
+    }
   } catch (error) {
     clearTimeout(timeoutId);
 
