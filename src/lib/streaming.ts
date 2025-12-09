@@ -868,16 +868,11 @@ export async function* streamChatResponse(
       // Break out of the outer while loop if we received [DONE] signal
       if (receivedDoneSignal) {
         devLog('[Streaming] Breaking out of read loop due to [DONE] signal');
-        // Yield a final done chunk to signal completion to the UI
-        yield { done: true };
         break;
       }
     }
 
-    // If we exited the loop normally (stream closed by server), also yield done
-    devLog('[Streaming] Stream ended normally, yielding final done signal');
-
-    // Important: Log if we received any content at all
+    // Check if we received any content at all (applies to both [DONE] and natural stream end)
     if (contentChunkCount === 0) {
       // Use resolved model name in error message for clarity
       const modelDisplayName = requestedModelId && requestedModelId !== resolvedModelId
@@ -893,10 +888,9 @@ export async function* streamChatResponse(
       throw new Error(errorMsg);
     }
 
-    // Final signal to indicate stream is complete
+    // Yield final done signal only once (whether from [DONE] signal or natural stream end)
+    devLog('[Streaming] Stream completed', receivedDoneSignal ? 'via [DONE] signal' : 'naturally', 'with', contentChunkCount, 'content chunks from', chunkCount, 'total SSE lines');
     yield { done: true };
-
-    devLog('[Streaming] Stream completed successfully with', contentChunkCount, 'content chunks from', chunkCount, 'total SSE lines');
   } catch (error) {
     clearTimeout(timeoutId);
 
