@@ -161,6 +161,9 @@ export function ChatInput() {
   const documentInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Ref for synchronous recording state check to prevent race conditions on rapid clicks
+  const isRecordingRef = useRef(false);
+
   // Derive input empty state directly from inputValue to avoid desync issues
   const isInputEmpty = !inputValue.trim();
 
@@ -426,9 +429,9 @@ export function ChatInput() {
 
   // Speech Recognition for transcription
   const startRecording = useCallback(() => {
-    // Prevent race condition: check if already recording before starting
-    // Use ref for synchronous check to avoid state timing issues
-    if (isRecording || speechRecognition) {
+    // Prevent race condition: use ref for synchronous check to avoid state timing issues
+    // State updates are asynchronous, so rapid double-clicks could bypass state-based guards
+    if (isRecordingRef.current) {
       return;
     }
 
@@ -443,8 +446,8 @@ export function ChatInput() {
       return;
     }
 
-    // Set recording state BEFORE creating recognition to prevent race conditions
-    // This ensures double-clicks are blocked even before onstart fires
+    // Set ref IMMEDIATELY to block any concurrent calls (synchronous update)
+    isRecordingRef.current = true;
     setIsRecording(true);
 
     const recognition = new SpeechRecognitionAPI();
@@ -452,9 +455,13 @@ export function ChatInput() {
     recognition.interimResults = true;
     recognition.lang = 'en-US';
 
+    // Set speechRecognition state BEFORE starting to ensure error handlers have access
+    setSpeechRecognition(recognition);
+
     recognition.onstart = () => {
-      // State already set above, but confirm it
+      // Confirm state is set (should already be set above)
       setIsRecording(true);
+      isRecordingRef.current = true;
     };
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
@@ -480,6 +487,7 @@ export function ChatInput() {
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
       console.error('Speech recognition error:', event.error);
+      isRecordingRef.current = false;
       setIsRecording(false);
       setSpeechRecognition(null);
 
@@ -499,17 +507,18 @@ export function ChatInput() {
     };
 
     recognition.onend = () => {
+      isRecordingRef.current = false;
       setIsRecording(false);
       setSpeechRecognition(null);
     };
 
     try {
       recognition.start();
-      setSpeechRecognition(recognition);
     } catch (error) {
       // Handle synchronous errors from recognition.start()
       // This can happen when audio context is blocked by browser policy
       console.error('Speech recognition start failed:', error);
+      isRecordingRef.current = false;
       setIsRecording(false);
       setSpeechRecognition(null);
       toast({
@@ -518,12 +527,13 @@ export function ChatInput() {
         variant: "destructive"
       });
     }
-  }, [toast, setInputValue, isRecording, speechRecognition]);
+  }, [toast, setInputValue]);
 
   const stopRecording = useCallback(() => {
     if (speechRecognition) {
       speechRecognition.stop();
       setSpeechRecognition(null);
+      isRecordingRef.current = false;
       setIsRecording(false);
     }
   }, [speechRecognition]);

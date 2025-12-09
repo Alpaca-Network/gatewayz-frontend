@@ -77,7 +77,7 @@ function cleanupStaleEntries(): void {
 }
 
 /**
- * Create a unique key for deduplication
+ * Create a unique key for error event deduplication
  */
 function createEventKey(event: Sentry.ErrorEvent): string {
   const message = event.message ||
@@ -86,6 +86,29 @@ function createEventKey(event: Sentry.ErrorEvent): string {
     'unknown';
   const type = event.exception?.values?.[0]?.type || 'message';
   return `${type}:${message.slice(0, 100)}`;
+}
+
+/**
+ * Transaction event interface for type safety
+ * Using custom interface since Sentry's TransactionEvent isn't exported in newer versions
+ */
+interface TransactionEventLike {
+  transaction?: string;
+  contexts?: {
+    trace?: {
+      op?: string;
+    };
+  };
+}
+
+/**
+ * Create a unique key for transaction deduplication
+ * Transactions don't have error-specific properties, so use transaction name
+ */
+function createTransactionKey(event: TransactionEventLike): string {
+  const name = event.transaction || 'unknown-transaction';
+  const op = event.contexts?.trace?.op || 'unknown-op';
+  return `txn:${op}:${name.slice(0, 100)}`;
 }
 
 /**
@@ -153,7 +176,7 @@ function shouldFilterEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): bo
 }
 
 /**
- * Check if we should rate limit this event
+ * Check if we should rate limit this error event
  * Returns true if the event should be dropped
  * Note: Only call this AFTER shouldFilterEvent returns false
  */
@@ -186,6 +209,43 @@ function shouldRateLimit(event: Sentry.ErrorEvent): boolean {
   // Update state only for events that will be sent
   rateLimitState.eventCount++;
   rateLimitState.recentMessages.set(messageKey, now);
+
+  return false;
+}
+
+/**
+ * Check if we should rate limit this transaction
+ * Uses transaction-specific key generation to avoid the "unknown" key bug
+ */
+function shouldRateLimitTransaction(event: TransactionEventLike): boolean {
+  const now = Date.now();
+
+  // Periodic cleanup to prevent unbounded memory growth
+  cleanupStaleEntries();
+
+  // Reset window if expired
+  if (now - rateLimitState.windowStart > RATE_LIMIT_CONFIG.windowMs) {
+    rateLimitState.eventCount = 0;
+    rateLimitState.windowStart = now;
+  }
+
+  // Check rate limit
+  if (rateLimitState.eventCount >= RATE_LIMIT_CONFIG.maxEventsPerMinute) {
+    console.warn('[Sentry] Rate limit exceeded, dropping transaction');
+    return true;
+  }
+
+  // Deduplication check using transaction-specific key
+  const transactionKey = createTransactionKey(event);
+  const lastSent = rateLimitState.recentMessages.get(transactionKey);
+  if (lastSent && now - lastSent < RATE_LIMIT_CONFIG.dedupeWindowMs) {
+    console.debug('[Sentry] Duplicate transaction within deduplication window, dropping');
+    return true;
+  }
+
+  // Update state only for transactions that will be sent
+  rateLimitState.eventCount++;
+  rateLimitState.recentMessages.set(transactionKey, now);
 
   return false;
 }
@@ -244,8 +304,8 @@ Sentry.init({
 
   // Also rate limit transactions to prevent 429s
   beforeSendTransaction(event) {
-    // Apply same rate limiting to transactions
-    if (shouldRateLimit(event as unknown as Sentry.ErrorEvent)) {
+    // Apply transaction-specific rate limiting (uses transaction name, not error message)
+    if (shouldRateLimitTransaction(event)) {
       return null;
     }
     return event;
