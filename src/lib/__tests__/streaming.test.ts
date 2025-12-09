@@ -605,6 +605,31 @@ describe('streamChatResponse', () => {
     });
 
     test('should extract error from standalone code field', async () => {
+      // Use a non-rate-limit error code to test the "Error code:" fallback
+      // Rate limit errors are handled specially with user-friendly messages
+      const mockChunks = [
+        'data: {"error":{"code":"context_length_exceeded"}}\n\n',
+      ];
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Map([['content-type', 'text/event-stream']]),
+        body: createMockStream(mockChunks),
+      });
+
+      await expect(
+        collectChunks(
+          streamChatResponse(
+            '/api/chat/completions',
+            'test-key',
+            { model: 'openrouter/auto', messages: [], stream: true }
+          )
+        )
+      ).rejects.toThrow(/Error code: context_length_exceeded/);
+    });
+
+    test('should convert rate_limit_exceeded code to user-friendly message', async () => {
       const mockChunks = [
         'data: {"error":{"code":"rate_limit_exceeded"}}\n\n',
       ];
@@ -625,7 +650,7 @@ describe('streamChatResponse', () => {
             { model: 'openrouter/auto', messages: [], stream: true }
           )
         )
-      ).rejects.toThrow(/Rate limit exceeded/);
+      ).rejects.toThrow(/Rate limit exceeded.*temporarily unavailable/);
     });
 
     test('should extract error from standalone type field', async () => {
