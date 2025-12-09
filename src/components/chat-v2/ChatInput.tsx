@@ -427,6 +427,9 @@ export function ChatInput() {
       if (documentInputRef.current) documentInputRef.current.value = '';
   };
 
+  // Ref to track current recognition instance for race condition prevention
+  const currentRecognitionRef = useRef<SpeechRecognition | null>(null);
+
   // Speech Recognition for transcription
   const startRecording = useCallback(() => {
     // Prevent race condition: use ref for synchronous check to avoid state timing issues
@@ -454,6 +457,9 @@ export function ChatInput() {
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.lang = 'en-US';
+
+    // Track this recognition instance to prevent stale handlers from corrupting state
+    currentRecognitionRef.current = recognition;
 
     // Set speechRecognition state BEFORE starting to ensure error handlers have access
     setSpeechRecognition(recognition);
@@ -486,10 +492,16 @@ export function ChatInput() {
     };
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+      // Only handle error if this is still the current recognition instance
+      // This prevents stale handlers from corrupting state of a new recording
+      if (currentRecognitionRef.current !== recognition) {
+        return;
+      }
       console.error('Speech recognition error:', event.error);
       isRecordingRef.current = false;
       setIsRecording(false);
       setSpeechRecognition(null);
+      currentRecognitionRef.current = null;
 
       if (event.error === 'not-allowed') {
         toast({
@@ -507,9 +519,15 @@ export function ChatInput() {
     };
 
     recognition.onend = () => {
+      // Only clean up state if this is still the current recognition instance
+      // This prevents an old recognition's onend from corrupting a new recording's state
+      if (currentRecognitionRef.current !== recognition) {
+        return;
+      }
       isRecordingRef.current = false;
       setIsRecording(false);
       setSpeechRecognition(null);
+      currentRecognitionRef.current = null;
     };
 
     try {
@@ -521,6 +539,7 @@ export function ChatInput() {
       isRecordingRef.current = false;
       setIsRecording(false);
       setSpeechRecognition(null);
+      currentRecognitionRef.current = null;
       toast({
         title: "Failed to start speech recognition",
         description: "Your browser blocked the microphone. Please check your permissions.",
@@ -531,6 +550,9 @@ export function ChatInput() {
 
   const stopRecording = useCallback(() => {
     if (speechRecognition) {
+      // Clear the current recognition ref BEFORE stopping to prevent onend handler
+      // from running (since we're intentionally stopping)
+      currentRecognitionRef.current = null;
       speechRecognition.stop();
       setSpeechRecognition(null);
       isRecordingRef.current = false;

@@ -6,6 +6,8 @@ version: 2
 # Ignore test files that contain fake API keys for testing
 paths-ignore:
   - "**/__tests__/**"
+  - "**/src/__tests__/**"
+  - "src/__tests__/**"
   - "**/*.test.ts"
   - "**/*.test.tsx"
   - "**/*.spec.ts"
@@ -13,3 +15,5 @@ paths-ignore:
   - "**/test/**"
   - "**/tests/**"
   - "**/TEMP_API_KEY_*.md"
+  - "**/test-constants.ts"
+  - "**/mock-fetch.ts"

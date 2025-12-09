@@ -459,6 +459,8 @@ describe('streamChatResponse', () => {
 
     test('should extract error message from unknown error object structure', async () => {
       // Simulate backend returning completely non-standard error structure
+      // When no message/detail/error/text/reason/code/type fields exist,
+      // but status is present, it should return "HTTP {status} error"
       const mockChunks = [
         'data: {"choices":[{"delta":{"content":"Start"}}]}\n\n',
         'data: {"error":{"unknown_field":"data","status":500}}\n\n',
@@ -471,7 +473,33 @@ describe('streamChatResponse', () => {
         body: createMockStream(mockChunks),
       });
 
-      // Should stringify the error object since we can't extract a known message field
+      // With status field present, it should extract "HTTP 500 error"
+      await expect(
+        collectChunks(
+          streamChatResponse(
+            '/api/chat/completions',
+            'test-key',
+            { model: 'openrouter/auto', messages: [], stream: true }
+          )
+        )
+      ).rejects.toThrow(/HTTP 500 error/);
+    });
+
+    test('should stringify unknown error object without status', async () => {
+      // Simulate backend returning completely non-standard error structure without status
+      const mockChunks = [
+        'data: {"choices":[{"delta":{"content":"Start"}}]}\n\n',
+        'data: {"error":{"unknown_field":"data","other_field":123}}\n\n',
+      ];
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Map([['content-type', 'text/event-stream']]),
+        body: createMockStream(mockChunks),
+      });
+
+      // Should stringify the error object since we can't extract a known field
       await expect(
         collectChunks(
           streamChatResponse(
