@@ -335,14 +335,29 @@ export function GatewayzAuthProvider({
   const upgradeApiKeyIfNeeded = useCallback(
     async (authData: AuthResponse) => {
       const currentKey = getApiKey();
+
+      console.log("[Auth] upgradeApiKeyIfNeeded called", {
+        has_current_key: !!currentKey,
+        is_temp_key: currentKey?.startsWith(TEMP_API_KEY_PREFIX),
+        current_key_prefix: currentKey?.substring(0, 15) + "...",
+      });
+
       if (!currentKey || !currentKey.startsWith(TEMP_API_KEY_PREFIX)) {
+        console.log("[Auth] No upgrade needed - not a temp key");
         return;
       }
 
       try {
         const credits = Math.floor(authData.credits ?? 0);
+        console.log("[Auth] Checking upgrade eligibility:", {
+          credits,
+          is_new_user: authData.is_new_user,
+          eligible: credits > 10 && !authData.is_new_user,
+        });
+
         // Skip upgrade if insufficient credits or new user
         if (credits <= 10 || authData.is_new_user) {
+          console.log("[Auth] Skipping upgrade - insufficient credits or new user");
           return;
         }
 
@@ -366,6 +381,8 @@ export function GatewayzAuthProvider({
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
 
+            console.log("[Auth] Fetching upgraded API keys from /api/user/api-keys");
+
             const response = await fetch("/api/user/api-keys", {
               method: "GET",
               headers: {
@@ -376,6 +393,11 @@ export function GatewayzAuthProvider({
             });
 
             clearTimeout(timeoutId);
+
+            console.log("[Auth] API keys fetch response:", {
+              status: response.status,
+              ok: response.ok,
+            });
 
             if (!response.ok) {
               console.error("[Auth] Unable to fetch upgraded API keys:", response.status);
@@ -400,6 +422,16 @@ export function GatewayzAuthProvider({
             const data = await response.json();
             const keys: Array<{ api_key?: string; is_primary?: boolean; environment_tag?: string }> =
               Array.isArray(data?.keys) ? data.keys : [];
+
+            console.log("[Auth] Received API keys response:", {
+              total_keys: keys.length,
+              keys_summary: keys.map(k => ({
+                is_temp: k.api_key?.startsWith(TEMP_API_KEY_PREFIX),
+                is_primary: k.is_primary,
+                environment: k.environment_tag,
+                prefix: k.api_key?.substring(0, 15) + "...",
+              })),
+            });
 
         // Find preferred key with better short-circuit logic
         let preferredKey: { api_key?: string; is_primary?: boolean; environment_tag?: string } | undefined;
@@ -441,10 +473,16 @@ export function GatewayzAuthProvider({
         }
 
         if (preferredKey.api_key === currentKey) {
+          console.log("[Auth] Preferred key is same as current key - no upgrade needed");
           return;
         }
 
-        console.log("[Auth] Upgrading stored API key to live key");
+        console.log("[Auth] Upgrading stored API key to live key:", {
+          from_prefix: currentKey.substring(0, 15) + "...",
+          to_prefix: preferredKey.api_key.substring(0, 15) + "...",
+          is_primary: preferredKey.is_primary,
+          environment: preferredKey.environment_tag,
+        });
         saveApiKey(preferredKey.api_key);
 
         const storedUser = getUserData();
@@ -1076,6 +1114,30 @@ export function GatewayzAuthProvider({
         // Check if we got a temporary API key
         if (authData.api_key?.startsWith(TEMP_API_KEY_PREFIX)) {
           console.warn("[Auth] Received temporary API key, will need to upgrade");
+          console.warn("[Auth] Temp key details:", {
+            user_id: authData.user_id,
+            credits: authData.credits,
+            is_new_user: authData.is_new_user,
+            tier: authData.tier,
+            key_prefix: authData.api_key.substring(0, 15) + "...",
+            had_existing_live_key: !!existingLiveKey,
+          });
+
+          // Log to Sentry for tracking temp key issuance
+          Sentry.captureMessage("Temporary API key received during authentication", {
+            level: 'warning',
+            tags: {
+              auth_issue: 'temp_key_received',
+            },
+            extra: {
+              user_id: authData.user_id,
+              credits: authData.credits,
+              is_new_user: authData.is_new_user,
+              tier: authData.tier,
+              had_existing_live_key: !!existingLiveKey,
+              key_prefix: authData.api_key.substring(0, 15),
+            },
+          });
 
           // CRITICAL FIX: If we had a live key before and backend returned a temp key,
           // restore the live key instead of using the temp key
@@ -1085,6 +1147,12 @@ export function GatewayzAuthProvider({
           }
         } else {
           console.log("[Auth] Received permanent API key");
+          console.log("[Auth] Permanent key details:", {
+            user_id: authData.user_id,
+            credits: authData.credits,
+            tier: authData.tier,
+            key_prefix: authData.api_key.substring(0, 15) + "...",
+          });
         }
 
         // Clear timeout guard and reset retry count on success
