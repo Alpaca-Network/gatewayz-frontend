@@ -895,6 +895,22 @@ export async function* streamChatResponse(
 
                 devError('[Streaming] Error in SSE data:', errorMsg);
                 console.error('[Streaming] Backend returned an error:', JSON.stringify(data, null, 2));
+
+                // Check if it's a trial expiration error
+                if (errorMsg.toLowerCase().includes('trial has expired') ||
+                    errorMsg.toLowerCase().includes('insufficient credits')) {
+                  throw new StreamingError(
+                    'Trial credits have been used up. You can still use FREE models! Look for models with the "FREE" badge in the model selector, or add credits to use premium models.'
+                  );
+                }
+
+                // Handle "upstream rejected" errors with the actual backend message
+                if (errorMsg.toLowerCase().includes('upstream rejected')) {
+                  throw new StreamingError(
+                    `Backend error: ${errorMsg}. This may be a temporary issue with the model provider. Please try again or select a different model.`
+                  );
+                }
+
                 // Throw the error so it's properly handled instead of silently ignored
                 throw new StreamingError(`Stream error: ${errorMsg}`);
               }

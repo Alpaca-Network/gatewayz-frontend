@@ -667,6 +667,52 @@ describe('streamChatResponse', () => {
         )
       ).rejects.toThrow(/Invalid API key format/);
     });
+
+    test('should handle top-level trial expired error with user-friendly message', async () => {
+      const mockChunks = [
+        'data: {"detail":"Your trial has expired. Please upgrade."}\n\n',
+      ];
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Map([['content-type', 'text/event-stream']]),
+        body: createMockStream(mockChunks),
+      });
+
+      await expect(
+        collectChunks(
+          streamChatResponse(
+            '/api/chat/completions',
+            'test-key',
+            { model: 'openrouter/auto', messages: [], stream: true }
+          )
+        )
+      ).rejects.toThrow(/Trial credits have been used up.*FREE models/);
+    });
+
+    test('should handle top-level upstream rejected error with retry suggestion', async () => {
+      const mockChunks = [
+        'data: {"message":"upstream rejected the request"}\n\n',
+      ];
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Map([['content-type', 'text/event-stream']]),
+        body: createMockStream(mockChunks),
+      });
+
+      await expect(
+        collectChunks(
+          streamChatResponse(
+            '/api/chat/completions',
+            'test-key',
+            { model: 'openrouter/auto', messages: [], stream: true }
+          )
+        )
+      ).rejects.toThrow(/Backend error.*upstream rejected.*try again/i);
+    });
   });
 
   describe('Alternative Response Formats', () => {
