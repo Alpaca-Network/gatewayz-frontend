@@ -134,19 +134,13 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
       const reasonStr = reason?.message ?? String(reason);
 
       // Handle rate limit errors
+      // Note: We intentionally do NOT send 429s to Sentry because:
+      // 1. They are expected during high traffic or rapid auth attempts
+      // 2. We handle them gracefully with the RateLimitHandler UI component
+      // 3. Sending them creates noise in Sentry without actionable insights
       if (reason?.status === 429 || reasonStr?.includes("429")) {
-        console.warn("Caught 429 error globally");
+        console.warn("[Auth] Rate limit (429) detected - showing user notification");
         setShowRateLimit(true);
-
-        // Capture rate limit error to Sentry
-        Sentry.captureMessage("Authentication rate limit exceeded (429)", {
-          level: 'warning',
-          tags: {
-            auth_error: 'rate_limit_exceeded',
-            http_status: 429,
-          },
-        });
-
         event.preventDefault();
         return;
       }
@@ -208,17 +202,11 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
   const handleAuthError = useMemo(
     () => (error?: { status?: number; message?: string }) => {
       if (!error) return;
+      // Handle rate limit errors gracefully with UI - no Sentry logging needed
+      // as these are expected during high traffic and handled by RateLimitHandler
       if (error.status === 429 || error.message?.includes("429")) {
+        console.warn("[Auth] Rate limit (429) from Privy - showing user notification");
         setShowRateLimit(true);
-
-        // Capture rate limit error to Sentry
-        Sentry.captureMessage("Authentication rate limit exceeded (429)", {
-          level: 'warning',
-          tags: {
-            auth_error: 'rate_limit_exceeded',
-            http_status: 429,
-          },
-        });
       }
     },
     []
