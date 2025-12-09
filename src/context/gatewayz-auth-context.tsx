@@ -339,7 +339,7 @@ export function GatewayzAuthProvider({
       console.log("[Auth] upgradeApiKeyIfNeeded called", {
         has_current_key: !!currentKey,
         is_temp_key: currentKey?.startsWith(TEMP_API_KEY_PREFIX),
-        current_key_prefix: currentKey?.substring(0, 15) + "...",
+        current_key_prefix: currentKey ? currentKey.substring(0, 15) + "..." : "none",
       });
 
       if (!currentKey || !currentKey.startsWith(TEMP_API_KEY_PREFIX)) {
@@ -429,7 +429,7 @@ export function GatewayzAuthProvider({
                 is_temp: k.api_key?.startsWith(TEMP_API_KEY_PREFIX),
                 is_primary: k.is_primary,
                 environment: k.environment_tag,
-                prefix: k.api_key?.substring(0, 15) + "...",
+                prefix: k.api_key ? k.api_key.substring(0, 15) + "..." : "none",
               })),
             });
 
@@ -472,10 +472,10 @@ export function GatewayzAuthProvider({
           return;
         }
 
-        if (preferredKey.api_key === currentKey) {
-          console.log("[Auth] Preferred key is same as current key - no upgrade needed");
-          return;
-        }
+        // Note: This condition is always false because:
+        // - currentKey starts with TEMP_API_KEY_PREFIX (checked at line 345)
+        // - preferredKey.api_key does NOT start with TEMP_API_KEY_PREFIX (selected at lines 440-442)
+        // Therefore, they can never be equal. Removed dead code.
 
         console.log("[Auth] Upgrading stored API key to live key:", {
           from_prefix: currentKey.substring(0, 15) + "...",
