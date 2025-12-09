@@ -3,6 +3,15 @@
 
 version: 2
 
+secret:
+  # Ignore specific fake API keys used in tests
+  # These are NOT real secrets - they are test fixtures
+  ignored-matches:
+    - name: "Fake temp API key in tests"
+      match: "gw_temp_abc123def"
+    - name: "Fake live API key in tests"
+      match: "gw_live_xyz789abc"
+
 # Ignore test files that contain fake API keys for testing
 paths-ignore:
   - "**/__tests__/**"
