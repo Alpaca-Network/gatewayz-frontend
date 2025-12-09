@@ -34,12 +34,12 @@ const rateLimitState = {
   lastCleanup: Date.now(), // Track last cleanup to prevent unbounded growth
 };
 
-// Rate limiting configuration
+// Rate limiting configuration - AGGRESSIVELY reduced to prevent 429 errors
 const RATE_LIMIT_CONFIG = {
-  maxEventsPerMinute: 10,        // REDUCED: Max events per minute (was 20, still hitting 429s)
+  maxEventsPerMinute: 5,         // REDUCED: Max events per minute (was 10, still hitting 429s)
   windowMs: 60000,               // 1 minute window
-  dedupeWindowMs: 60000,         // INCREASED: Don't send same message within 60 seconds (was 30s)
-  maxBreadcrumbs: 20,            // REDUCED: Limit breadcrumbs to reduce payload size (was 30)
+  dedupeWindowMs: 120000,        // INCREASED: Don't send same message within 2 minutes (was 60s)
+  maxBreadcrumbs: 10,            // REDUCED: Limit breadcrumbs to reduce payload size (was 20)
   cleanupIntervalMs: 30000,      // Cleanup stale entries every 30 seconds
   maxMapSize: 50,                // Maximum entries in deduplication map
 };
@@ -196,9 +196,9 @@ Sentry.init({
   // Release tracking for associating errors with specific versions
   release: getRelease(),
 
-  // REDUCED: Sample only 5% of transactions to avoid rate limits
-  // Increase to 0.5 or 1.0 only for debugging specific issues
-  tracesSampleRate: 0.05,  // REDUCED from 0.1 to 0.05
+  // REDUCED: Sample only 1% of transactions to avoid rate limits
+  // Increase to 0.05 or 0.1 only for debugging specific issues
+  tracesSampleRate: 0.01,  // REDUCED from 0.05 to 0.01
 
   // Setting this option to true will print useful information to the console while you're setting up Sentry.
   debug: false,
@@ -239,6 +239,15 @@ Sentry.init({
       return null;
     }
 
+    return event;
+  },
+
+  // Also rate limit transactions to prevent 429s
+  beforeSendTransaction(event) {
+    // Apply same rate limiting to transactions
+    if (shouldRateLimit(event as unknown as Sentry.ErrorEvent)) {
+      return null;
+    }
     return event;
   },
 });
