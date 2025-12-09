@@ -74,11 +74,14 @@ export const useSessionMessages = (sessionId: number | null) => {
   return useQuery({
     queryKey: ['chat-messages', sessionId],
     queryFn: async () => {
+      console.log('[useSessionMessages] Fetching messages for session:', sessionId, 'isAuthenticated:', isAuthenticated);
       if (!sessionId) return [];
 
       // For guest users (negative session IDs), return from localStorage
       if (!isAuthenticated || sessionId < 0) {
-        return getGuestMessages(sessionId);
+        const messages = getGuestMessages(sessionId);
+        console.log('[useSessionMessages] Guest messages loaded:', messages.length, 'messages for session', sessionId);
+        return messages;
       }
 
       if (!api) return [];

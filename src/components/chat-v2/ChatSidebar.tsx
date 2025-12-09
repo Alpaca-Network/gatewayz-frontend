@@ -128,6 +128,7 @@ export function ChatSidebar({ className, onClose }: { className?: string; onClos
 
   // Handle session selection with proper sequencing to avoid race condition
   const handleSessionSelect = (sessionId: number) => {
+      console.log('[ChatSidebar] Session selected:', sessionId, 'isAuthenticated:', isAuthenticated);
       setActiveSessionId(sessionId);
       // Use setTimeout to ensure state update completes before closing sidebar
       setTimeout(() => {
