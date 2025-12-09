@@ -865,13 +865,34 @@ export async function* streamChatResponse(
               // Check if the data has error indicators at the top level
               // Some APIs return errors directly without a nested error object
               if (data.error || data.detail || data.message) {
-                const errorObj = typeof data.error === 'object' ? data.error as Record<string, unknown> : null;
-                const errorMsg =
-                  (errorObj && typeof errorObj.message === 'string' && errorObj.message) ||
-                  (typeof data.error === 'string' && data.error) ||
-                  (typeof data.detail === 'string' && data.detail) ||
-                  (typeof data.message === 'string' && data.message) ||
-                  JSON.stringify(data.error || data.detail || data.message);
+                let errorMsg: string;
+                
+                if (typeof data.error === 'object' && data.error !== null) {
+                  // Use the same comprehensive error extraction logic as the nested error handler above
+                  const errorObj = data.error as Record<string, unknown>;
+                  devError('[Streaming] Top-level error object in SSE data:', JSON.stringify(errorObj, null, 2));
+                  errorMsg =
+                    (typeof errorObj.message === 'string' && errorObj.message) ||
+                    (typeof errorObj.detail === 'string' && errorObj.detail) ||
+                    (typeof errorObj.error === 'string' && errorObj.error) ||
+                    (typeof errorObj.text === 'string' && errorObj.text) ||
+                    (typeof errorObj.reason === 'string' && errorObj.reason) ||
+                    // If error has a code/type, include it in the message
+                    (errorObj.code && errorObj.type
+                      ? `${errorObj.type}: ${errorObj.code}`
+                      : (typeof errorObj.code === 'string' && `Error code: ${errorObj.code}`)) ||
+                    (typeof errorObj.type === 'string' && `Error type: ${errorObj.type}`) ||
+                    // Last resort: stringify the entire error object so we can see what it contains
+                    JSON.stringify(errorObj);
+                } else {
+                  // Handle string error or top-level detail/message fields
+                  errorMsg =
+                    (typeof data.error === 'string' && data.error) ||
+                    (typeof data.detail === 'string' && data.detail) ||
+                    (typeof data.message === 'string' && data.message) ||
+                    JSON.stringify(data.error || data.detail || data.message);
+                }
+                
                 devError('[Streaming] Error in SSE data:', errorMsg);
                 console.error('[Streaming] Backend returned an error:', JSON.stringify(data, null, 2));
                 // Throw the error so it's properly handled instead of silently ignored
