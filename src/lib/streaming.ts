@@ -866,7 +866,7 @@ export async function* streamChatResponse(
               // Some APIs return errors directly without a nested error object
               if (data.error || data.detail || data.message) {
                 let errorMsg: string;
-                
+
                 if (typeof data.error === 'object' && data.error !== null) {
                   // Use the same comprehensive error extraction logic as the nested error handler above
                   const errorObj = data.error as Record<string, unknown>;
@@ -892,7 +892,7 @@ export async function* streamChatResponse(
                     (typeof data.message === 'string' && data.message) ||
                     JSON.stringify(data.error || data.detail || data.message);
                 }
-                
+
                 devError('[Streaming] Error in SSE data:', errorMsg);
                 console.error('[Streaming] Backend returned an error:', JSON.stringify(data, null, 2));
                 // Throw the error so it's properly handled instead of silently ignored
