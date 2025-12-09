@@ -142,7 +142,7 @@ describe('Authentication Error Handling', () => {
   describe('Temporary API Key Upgrade (JAVASCRIPT-NEXTJS-14)', () => {
     it('should log temp key details to Sentry when detected', () => {
       const authData = {
-        api_key: 'gw_temp_abc123def',
+        api_key: 'gw_temp_abc123def', // ggignore
         user_id: TEST_USER.ID,
         credits: 100,
         is_new_user: false,
@@ -243,8 +243,8 @@ describe('Authentication Error Handling', () => {
     });
 
     it('should log upgrade details when upgrading API key', () => {
-      const currentKey = 'gw_temp_abc123def';
-      const liveApiKey = 'gw_live_xyz789abc';
+      const currentKey = 'gw_temp_abc123def'; // ggignore
+      const liveApiKey = 'gw_live_xyz789abc'; // ggignore
 
       const upgradeDetails = {
         from_prefix: currentKey.substring(0, 15) + '...',

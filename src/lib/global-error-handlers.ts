@@ -18,6 +18,93 @@
 
 import * as Sentry from '@sentry/nextjs';
 
+// =============================================================================
+// RATE LIMITING FOR captureMessage CALLS
+// Prevents 429 errors from Sentry by limiting message frequency
+// NOTE: beforeSend hook doesn't apply to captureMessage, so we need manual limiting
+// =============================================================================
+
+const messageRateLimitState = {
+  messageCount: 0,
+  windowStart: Date.now(),
+  recentMessages: new Map<string, number>(),
+};
+
+const MESSAGE_RATE_LIMIT_CONFIG = {
+  maxMessagesPerMinute: 3,    // Very aggressive limit for messages
+  windowMs: 60000,            // 1 minute window
+  dedupeWindowMs: 300000,     // Don't send same message within 5 minutes
+};
+
+/**
+ * Check if a message should be rate limited
+ * Returns true if the message should NOT be sent
+ */
+function shouldRateLimitMessage(messageKey: string): boolean {
+  const now = Date.now();
+
+  // Reset window if expired
+  if (now - messageRateLimitState.windowStart > MESSAGE_RATE_LIMIT_CONFIG.windowMs) {
+    messageRateLimitState.messageCount = 0;
+    messageRateLimitState.windowStart = now;
+  }
+
+  // Check rate limit
+  if (messageRateLimitState.messageCount >= MESSAGE_RATE_LIMIT_CONFIG.maxMessagesPerMinute) {
+    console.debug('[GlobalErrorHandlers] Rate limit exceeded for captureMessage, dropping');
+    return true;
+  }
+
+  // Deduplication check
+  const lastSent = messageRateLimitState.recentMessages.get(messageKey);
+  if (lastSent && now - lastSent < MESSAGE_RATE_LIMIT_CONFIG.dedupeWindowMs) {
+    console.debug('[GlobalErrorHandlers] Duplicate message within deduplication window, dropping');
+    return true;
+  }
+
+  // Update state
+  messageRateLimitState.messageCount++;
+  messageRateLimitState.recentMessages.set(messageKey, now);
+
+  // Cleanup old entries to prevent memory growth
+  if (messageRateLimitState.recentMessages.size > 50) {
+    const entries = Array.from(messageRateLimitState.recentMessages.entries())
+      .sort((a, b) => a[1] - b[1]);
+    const toRemove = entries.slice(0, entries.length - 50);
+    for (const [key] of toRemove) {
+      messageRateLimitState.recentMessages.delete(key);
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Rate-limited version of Sentry.captureMessage
+ * Use this instead of direct Sentry.captureMessage calls
+ */
+export function rateLimitedCaptureMessage(
+  message: string,
+  level?: 'fatal' | 'error' | 'warning' | 'info' | 'debug'
+): void {
+  const messageKey = message.slice(0, 100);
+
+  if (shouldRateLimitMessage(messageKey)) {
+    return;
+  }
+
+  Sentry.captureMessage(message, level);
+}
+
+/**
+ * Reset the message rate limit state (for testing only)
+ */
+export function resetMessageRateLimitForTesting(): void {
+  messageRateLimitState.messageCount = 0;
+  messageRateLimitState.windowStart = Date.now();
+  messageRateLimitState.recentMessages.clear();
+}
+
 /**
  * Initialize global error handlers
  *
@@ -123,22 +210,20 @@ export function initializeGlobalErrorHandlers(): void {
 
         console.warn(`[ResourceError] Failed to load ${resourceType}:`, resourceUrl);
 
-        // Only report critical resource failures (not images, which are common)
-        if (resourceType !== 'img') {
-          Sentry.captureMessage(`Failed to load ${resourceType}: ${resourceUrl}`, {
-            level: 'warning',
-            tags: {
-              error_type: 'resource_error',
-              resource_type: resourceType,
-            },
-            contexts: {
-              resource: {
-                type: resourceType,
-                url: resourceUrl,
-              },
-            },
-          });
-        }
+        // DISABLED: Resource error reporting was contributing to 429 rate limit errors
+        // Only add a breadcrumb for debugging, don't send separate events
+        Sentry.addBreadcrumb({
+          category: 'resource-error',
+          message: `Failed to load ${resourceType}: ${resourceUrl}`,
+          level: 'warning',
+          data: {
+            resource_type: resourceType,
+            url: resourceUrl,
+          },
+        });
+
+        // NOTE: Removed captureMessage call to prevent 429 errors
+        // Resource errors will still be visible in breadcrumbs when other errors occur
       }
     },
     true // Use capture phase to catch resource errors

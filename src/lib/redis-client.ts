@@ -24,13 +24,11 @@ let redisFailureReason: string | null = null;
 
 /**
  * Check if we're in a build environment where Redis might not be available
+ * Only checks NEXT_PHASE to avoid incorrectly disabling retries in production
+ * environments other than Vercel/Railway (AWS, GCP, Azure, self-hosted, etc.)
  */
 function isBuildTime(): boolean {
-  // Note: Parentheses are important here for correct operator precedence
-  return (
-    process.env.NEXT_PHASE === 'phase-production-build' ||
-    (process.env.NODE_ENV === 'production' && !process.env.VERCEL_ENV && !process.env.RAILWAY_ENVIRONMENT)
-  );
+  return process.env.NEXT_PHASE === 'phase-production-build';
 }
 
 /**
