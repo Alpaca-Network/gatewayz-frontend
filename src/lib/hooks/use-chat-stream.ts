@@ -242,9 +242,9 @@ export function useChatStream() {
                     debugLog('Stream progress', { chunkCount, totalContentLength });
                 }
 
-                // Throttle UI updates (every 50ms) - use requestAnimationFrame timing
+                // Throttle UI updates (every 16ms = ~60fps) for smooth streaming
                 const now = Date.now();
-                if (now - lastUpdate > 50 || chunk.done) {
+                if (now - lastUpdate > 16 || chunk.done) {
                     const currentContent = streamHandlerRef.current.getFinalContent();
                     const currentReasoning = streamHandlerRef.current.getFinalReasoning();
 
@@ -266,9 +266,16 @@ export function useChatStream() {
                     });
                     lastUpdate = now;
 
-                    // Yield to the event loop to allow the browser to paint
-                    // This is critical for real-time streaming updates
-                    await new Promise(resolve => setTimeout(resolve, 0));
+                    // Yield to allow the browser to paint
+                    // Use requestAnimationFrame with setTimeout fallback for background tabs
+                    // RAF pauses when tab is backgrounded, so we race with a timeout
+                    await new Promise(resolve => {
+                        const timeoutId = setTimeout(resolve, 16);
+                        requestAnimationFrame(() => {
+                            clearTimeout(timeoutId);
+                            resolve(undefined);
+                        });
+                    });
                 }
             }
 
