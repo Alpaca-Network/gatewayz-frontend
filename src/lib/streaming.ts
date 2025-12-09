@@ -729,10 +729,54 @@ export async function* streamChatResponse(
             // Check for error object in the response (also handles finish_reason: 'error')
             if (data.error && typeof data.error === 'object') {
               const errorObj = data.error as Record<string, unknown>;
-              const errorMessage =
+
+              // Extract error message from various possible locations
+              // Priority: message > detail > code > type > stringified object
+              let errorMessage =
                 (typeof errorObj.message === 'string' && errorObj.message) ||
                 (typeof errorObj.detail === 'string' && errorObj.detail) ||
-                'Stream error occurred';
+                (typeof errorObj.code === 'string' && errorObj.code) ||
+                (typeof errorObj.type === 'string' && errorObj.type) ||
+                '';
+
+              // Handle cases where message might be nested or in a different format
+              if (!errorMessage) {
+                // Check for nested error object
+                if (errorObj.error && typeof errorObj.error === 'object') {
+                  const nestedError = errorObj.error as Record<string, unknown>;
+                  errorMessage =
+                    (typeof nestedError.message === 'string' && nestedError.message) ||
+                    (typeof nestedError.detail === 'string' && nestedError.detail) ||
+                    '';
+                }
+                // Check for status code in error object
+                if (!errorMessage && typeof errorObj.status === 'number') {
+                  errorMessage = `HTTP ${errorObj.status} error`;
+                }
+                // Last resort: stringify the error object for debugging
+                if (!errorMessage) {
+                  devError('[Streaming] Error object without extractable message:', errorObj);
+                  errorMessage = `Stream error: ${JSON.stringify(errorObj).slice(0, 200)}`;
+                }
+              }
+
+              // Detect rate limit / 429 errors from error type or message
+              const errorType = String(errorObj.type || '').toLowerCase();
+              const errorCode = String(errorObj.code || '').toLowerCase();
+              const isRateLimitError =
+                errorType.includes('rate_limit') ||
+                errorType.includes('too_many') ||
+                errorCode.includes('rate_limit') ||
+                errorCode === '429' ||
+                errorMessage.toLowerCase().includes('rate limit') ||
+                errorMessage.toLowerCase().includes('too many requests') ||
+                (typeof errorObj.status === 'number' && errorObj.status === 429);
+
+              if (isRateLimitError) {
+                throw new StreamingError(
+                  'Rate limit exceeded. The AI provider is temporarily unavailable due to high demand. Please wait a moment and try again.'
+                );
+              }
 
               // Check if it's a trial expiration error
               if (errorMessage.toLowerCase().includes('trial has expired') ||
@@ -806,7 +850,26 @@ export async function* streamChatResponse(
                   const errorMessage =
                     (typeof data.error?.message === 'string' && data.error.message) ||
                     (typeof data.message === 'string' && data.message) ||
+                    (typeof data.error?.type === 'string' && data.error.type) ||
                     'Response stream error';
+
+                  // Detect rate limit errors in response.error events
+                  const errorType = String(data.error?.type || '').toLowerCase();
+                  const errorCode = String(data.error?.code || '').toLowerCase();
+                  const isRateLimitError =
+                    errorType.includes('rate_limit') ||
+                    errorType.includes('too_many') ||
+                    errorCode.includes('rate_limit') ||
+                    errorCode === '429' ||
+                    errorMessage.toLowerCase().includes('rate limit') ||
+                    errorMessage.toLowerCase().includes('too many requests');
+
+                  if (isRateLimitError) {
+                    throw new StreamingError(
+                      'Rate limit exceeded. The AI provider is temporarily unavailable due to high demand. Please wait a moment and try again.'
+                    );
+                  }
+
                   throw new StreamingError(errorMessage);
                 }
                 default:
