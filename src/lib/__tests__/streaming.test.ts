@@ -431,6 +431,81 @@ describe('streamChatResponse', () => {
       const contentChunks = chunks.filter(c => c.content);
       expect(contentChunks.length).toBe(1);
     });
+
+    test('should extract error message from non-standard error object formats', async () => {
+      // Simulate backend returning error with 'error' field instead of 'message'
+      const mockChunks = [
+        'data: {"choices":[{"delta":{"content":"Start"}}]}\n\n',
+        'data: {"error":{"error":"Some provider error","code":"provider_error"}}\n\n',
+      ];
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Map([['content-type', 'text/event-stream']]),
+        body: createMockStream(mockChunks),
+      });
+
+      await expect(
+        collectChunks(
+          streamChatResponse(
+            '/api/chat/completions',
+            'test-key',
+            { model: 'openrouter/auto', messages: [], stream: true }
+          )
+        )
+      ).rejects.toThrow(/Some provider error/);
+    });
+
+    test('should extract error message from unknown error object structure', async () => {
+      // Simulate backend returning completely non-standard error structure
+      const mockChunks = [
+        'data: {"choices":[{"delta":{"content":"Start"}}]}\n\n',
+        'data: {"error":{"unknown_field":"data","status":500}}\n\n',
+      ];
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Map([['content-type', 'text/event-stream']]),
+        body: createMockStream(mockChunks),
+      });
+
+      // Should stringify the error object since we can't extract a known message field
+      await expect(
+        collectChunks(
+          streamChatResponse(
+            '/api/chat/completions',
+            'test-key',
+            { model: 'openrouter/auto', messages: [], stream: true }
+          )
+        )
+      ).rejects.toThrow(/unknown_field.*data/);
+    });
+
+    test('should handle top-level error indicator in stream data', async () => {
+      // Simulate backend returning top-level error/detail fields
+      const mockChunks = [
+        'data: {"detail":"Rate limit exceeded from provider"}\n\n',
+      ];
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Map([['content-type', 'text/event-stream']]),
+        body: createMockStream(mockChunks),
+      });
+
+      await expect(
+        collectChunks(
+          streamChatResponse(
+            '/api/chat/completions',
+            'test-key',
+            { model: 'openrouter/auto', messages: [], stream: true }
+          )
+        )
+      ).rejects.toThrow(/Rate limit exceeded from provider/);
+    });
   });
 
   describe('Alternative Response Formats', () => {

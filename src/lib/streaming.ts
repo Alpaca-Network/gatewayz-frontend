@@ -730,10 +730,24 @@ export async function* streamChatResponse(
             // Check for error object in the response (also handles finish_reason: 'error')
             if (data.error && typeof data.error === 'object') {
               const errorObj = data.error as Record<string, unknown>;
+
+              // Log the full error object for debugging
+              devError('[Streaming] Received error object in stream:', JSON.stringify(errorObj, null, 2));
+
+              // Try multiple common error message formats
               const errorMessage =
                 (typeof errorObj.message === 'string' && errorObj.message) ||
                 (typeof errorObj.detail === 'string' && errorObj.detail) ||
-                'Stream error occurred';
+                (typeof errorObj.error === 'string' && errorObj.error) ||
+                (typeof errorObj.text === 'string' && errorObj.text) ||
+                (typeof errorObj.reason === 'string' && errorObj.reason) ||
+                // If error has a code/type, include it in the message
+                (errorObj.code && errorObj.type
+                  ? `${errorObj.type}: ${errorObj.code}`
+                  : (typeof errorObj.code === 'string' && `Error code: ${errorObj.code}`)) ||
+                (typeof errorObj.type === 'string' && `Error type: ${errorObj.type}`) ||
+                // Last resort: stringify the entire error object so we can see what it contains
+                `Stream error: ${JSON.stringify(errorObj)}`;
 
               // Check if it's a trial expiration error
               if (errorMessage.toLowerCase().includes('trial has expired') ||
@@ -848,11 +862,20 @@ export async function* streamChatResponse(
                 devLog('[Streaming] Skipping empty chunk');
               }
             } else {
-              // Check if the data has error indicators
+              // Check if the data has error indicators at the top level
+              // Some APIs return errors directly without a nested error object
               if (data.error || data.detail || data.message) {
-                const errorMsg = data.error?.message || data.detail || data.message;
-                devError('[Streaming] Possible error in SSE data:', errorMsg);
-                console.error('[Streaming] Backend may have returned an error:', data);
+                const errorObj = typeof data.error === 'object' ? data.error as Record<string, unknown> : null;
+                const errorMsg =
+                  (errorObj && typeof errorObj.message === 'string' && errorObj.message) ||
+                  (typeof data.error === 'string' && data.error) ||
+                  (typeof data.detail === 'string' && data.detail) ||
+                  (typeof data.message === 'string' && data.message) ||
+                  JSON.stringify(data.error || data.detail || data.message);
+                devError('[Streaming] Error in SSE data:', errorMsg);
+                console.error('[Streaming] Backend returned an error:', JSON.stringify(data, null, 2));
+                // Throw the error so it's properly handled instead of silently ignored
+                throw new StreamingError(`Stream error: ${errorMsg}`);
               }
               devWarn('[Streaming] No chunk created from SSE data. This may indicate an unsupported response format or an error from the backend.');
               devWarn('[Streaming] Unrecognized data structure:', data);
