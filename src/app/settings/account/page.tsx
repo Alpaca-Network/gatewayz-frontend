@@ -17,7 +17,7 @@ interface StripePaymentMethod {
 }
 
 export default function AccountPage() {
-  const { user: privyUser, logout } = usePrivy();
+  const { user: privyUser } = usePrivy();
   const [mounted, setMounted] = useState(false);
   const [stripePaymentMethods, setStripePaymentMethods] = useState<StripePaymentMethod[]>([]);
   const [loadingStripe, setLoadingStripe] = useState(false);
