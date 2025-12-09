@@ -364,31 +364,20 @@ jobs:
   # AI-powered tool. Manual fixes are required when CI fails.
   # This job is kept as a placeholder and does not run.
 
-  # Automatically retry failed jobs once
-  retry-failed:
-    name: Retry Failed Jobs
-    runs-on: ubuntu-latest
-    needs: [test, lint, typecheck, build, e2e]
-    if: failure() && github.run_attempt < 2
-
-    steps:
-      - name: Re-run failed jobs
-        uses: actions/github-script@v7
-        with:
-          script: |
-            console.log(`Attempting to re-run failed jobs for run ${context.runId} (attempt ${context.runAttempt})`);
-            await github.rest.actions.reRunWorkflowFailedJobs({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              run_id: context.runId
-            });
-            console.log('Re-run triggered successfully');
+  # Note: Automatic retry of failed jobs has been removed.
+  # The previous implementation caused "This workflow is already running" errors
+  # because the retry job itself was part of the same workflow run.
+  #
+  # GitHub Actions does not support re-running failed jobs from within
+  # the same workflow run. To retry failed jobs:
+  # 1. Use the GitHub UI "Re-run failed jobs" button
+  # 2. Or configure branch protection to require passing checks before merge
 
   # Summary job that all other jobs depend on - useful for branch protection rules
   ci-success:
     name: CI Success
     runs-on: ubuntu-latest
-    needs: [check-merge-conflicts, resolve-conflicts, test, lint, typecheck, build, e2e, retry-failed]
+    needs: [check-merge-conflicts, resolve-conflicts, test, lint, typecheck, build, e2e]
     if: always()
 
     steps:
@@ -406,35 +395,29 @@ jobs:
             exit 1
           fi
 
-          # Helper function to check if retry was triggered
-          RETRY_MSG=""
-          if [[ "${{ needs.retry-failed.result }}" == "success" ]]; then
-            RETRY_MSG=" (retry has been triggered)"
-          fi
-
           # Test jobs are skipped if conflicts exist, otherwise must pass
           if [[ "${{ needs.test.result }}" != "skipped" ]] && [[ "${{ needs.test.result }}" == "failure" ]]; then
-            echo "Test job failed${RETRY_MSG}"
+            echo "Test job failed"
             exit 1
           fi
 
           if [[ "${{ needs.lint.result }}" != "skipped" ]] && [[ "${{ needs.lint.result }}" == "failure" ]]; then
-            echo "Lint job failed${RETRY_MSG}"
+            echo "Lint job failed"
             exit 1
           fi
 
           if [[ "${{ needs.typecheck.result }}" != "skipped" ]] && [[ "${{ needs.typecheck.result }}" == "failure" ]]; then
-            echo "Typecheck job failed${RETRY_MSG}"
+            echo "Typecheck job failed"
             exit 1
           fi
 
           if [[ "${{ needs.build.result }}" != "skipped" ]] && [[ "${{ needs.build.result }}" == "failure" ]]; then
-            echo "Build job failed${RETRY_MSG}"
+            echo "Build job failed"
             exit 1
           fi
 
           if [[ "${{ needs.e2e.result }}" != "skipped" ]] && [[ "${{ needs.e2e.result }}" == "failure" ]]; then
-            echo "E2E tests failed${RETRY_MSG}"
+            echo "E2E tests failed"
             exit 1
           fi
 
