@@ -100,8 +100,9 @@ describe('streamChatResponse', () => {
       expect(contentChunks[0].content).toBe('Hello');
       expect(contentChunks[1].content).toBe(' world');
 
+      // Verify exactly one done signal is emitted (not duplicated)
       const doneChunks = chunks.filter(c => c.done);
-      expect(doneChunks.length).toBeGreaterThan(0);
+      expect(doneChunks.length).toBe(1);
     });
 
     test('should handle reasoning content', async () => {
