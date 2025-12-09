@@ -105,6 +105,58 @@ describe('streamChatResponse', () => {
       expect(doneChunks.length).toBe(1);
     });
 
+    test('should emit exactly one done signal regardless of stream end method', async () => {
+      // Test case 1: Stream ends with [DONE] signal
+      const mockChunksWithDone = [
+        'data: {"choices":[{"delta":{"content":"Hello"}}]}\n\n',
+        'data: [DONE]\n\n',
+      ];
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Map([['content-type', 'text/event-stream']]),
+        body: createMockStream(mockChunksWithDone),
+      });
+
+      const chunksWithDone = await collectChunks(
+        streamChatResponse(
+          '/api/chat/completions',
+          'test-api-key',
+          { model: 'openrouter/auto', messages: [], stream: true }
+        )
+      );
+
+      // Count done signals - must be exactly 1
+      const doneSignalsWithDone = chunksWithDone.filter(c => c.done === true);
+      expect(doneSignalsWithDone.length).toBe(1);
+
+      // Test case 2: Stream ends with finish_reason (no [DONE])
+      const mockChunksWithFinish = [
+        'data: {"choices":[{"delta":{"content":"World"}}]}\n\n',
+        'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n',
+      ];
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Map([['content-type', 'text/event-stream']]),
+        body: createMockStream(mockChunksWithFinish),
+      });
+
+      const chunksWithFinish = await collectChunks(
+        streamChatResponse(
+          '/api/chat/completions',
+          'test-api-key',
+          { model: 'openrouter/auto', messages: [], stream: true }
+        )
+      );
+
+      // Count done signals - must be exactly 1
+      const doneSignalsWithFinish = chunksWithFinish.filter(c => c.done === true);
+      expect(doneSignalsWithFinish.length).toBe(1);
+    });
+
     test('should handle reasoning content', async () => {
       const mockChunks = [
         'data: {"choices":[{"delta":{"reasoning":"Let me think..."}}]}\n\n',
@@ -614,6 +666,10 @@ describe('streamChatResponse', () => {
 
       // Last content chunk should also have done flag due to finish_reason
       expect(contentChunks[2].done).toBe(true);
+
+      // Verify exactly one done signal (not duplicated)
+      const doneChunks = chunks.filter(c => c.done === true);
+      expect(doneChunks.length).toBe(1);
     });
 
     test('should handle Fireworks output with nested delta object', async () => {
