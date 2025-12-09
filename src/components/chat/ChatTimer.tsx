@@ -5,47 +5,55 @@ import { Clock } from "lucide-react";
 import { useChatUIStore } from "@/lib/store/chat-ui-store";
 
 /**
- * Formats elapsed time in seconds to a human-readable string
- * - Under 60 seconds: "Xs" (e.g., "5s", "45s")
- * - 60+ seconds: "Xm Ys" (e.g., "1m 30s", "2m 5s")
+ * Formats elapsed time in milliseconds to a human-readable string
+ * - Under 1 second: "Xms" (e.g., "500ms", "750ms")
+ * - 1-60 seconds: "X.XXs" (e.g., "1.50s", "45.25s")
+ * - 60+ seconds: "Xm X.XXs" (e.g., "1m 30.50s", "2m 5.25s")
  */
-function formatElapsedTime(seconds: number): string {
-  if (seconds < 60) {
-    return `${seconds}s`;
+function formatElapsedTime(ms: number): string {
+  if (ms < 1000) {
+    return `${ms}ms`;
   }
-  const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  return `${mins}m ${secs}s`;
+
+  const totalSeconds = ms / 1000;
+
+  if (totalSeconds < 60) {
+    return `${totalSeconds.toFixed(2)}s`;
+  }
+
+  const mins = Math.floor(totalSeconds / 60);
+  const secs = totalSeconds % 60;
+  return `${mins}m ${secs.toFixed(2)}s`;
 }
 
 /**
  * ChatTimer Component
  * Displays elapsed time since a message was sent while streaming is active.
- * Updates every second and shows a clock icon with the elapsed time.
+ * Updates every 100ms and shows a clock icon with the elapsed time in milliseconds.
  */
 export function ChatTimer() {
   const messageStartTime = useChatUIStore((state) => state.messageStartTime);
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [elapsedMs, setElapsedMs] = useState(0);
 
   useEffect(() => {
     // If no start time, reset and don't run timer
     if (!messageStartTime) {
-      setElapsedSeconds(0);
+      setElapsedMs(0);
       return;
     }
 
     // Calculate initial elapsed time
     const calculateElapsed = () => {
-      return Math.floor((Date.now() - messageStartTime) / 1000);
+      return Date.now() - messageStartTime;
     };
 
     // Set initial value
-    setElapsedSeconds(calculateElapsed());
+    setElapsedMs(calculateElapsed());
 
-    // Update every second
+    // Update every 100ms for smooth millisecond display
     const interval = setInterval(() => {
-      setElapsedSeconds(calculateElapsed());
-    }, 1000);
+      setElapsedMs(calculateElapsed());
+    }, 100);
 
     return () => clearInterval(interval);
   }, [messageStartTime]);
@@ -58,7 +66,7 @@ export function ChatTimer() {
   return (
     <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
       <Clock className="h-3 w-3" />
-      <span>{formatElapsedTime(elapsedSeconds)}</span>
+      <span>{formatElapsedTime(elapsedMs)}</span>
     </div>
   );
 }
