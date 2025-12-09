@@ -1,6 +1,8 @@
 # GitGuardian configuration
 # https://docs.gitguardian.com/internal-repositories-monitoring/integrations/git_hooks/pre_commit
 
+version: 2
+
 # Ignore test files that contain fake API keys for testing
 paths-ignore:
   - "**/__tests__/**"
@@ -10,7 +12,4 @@ paths-ignore:
   - "**/*.spec.tsx"
   - "**/test/**"
   - "**/tests/**"
-
-# Ignore documentation files
-  - "**/*.md"
   - "TEMP_API_KEY_*.md"
