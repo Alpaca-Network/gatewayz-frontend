@@ -34,12 +34,10 @@ import { useChatUIStore } from "@/lib/store/chat-ui-store";
 import { ChatSession } from "@/lib/chat-history";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
-import { useAuthStore } from "@/lib/store/auth-store";
 
 export function ChatSidebar({ className, onClose }: { className?: string; onClose?: () => void }) {
   const { data: sessions = [], isLoading } = useChatSessions();
   const { activeSessionId, setActiveSessionId, selectedModel } = useChatUIStore();
-  const { isAuthenticated } = useAuthStore();
   const createSession = useCreateSession();
   const deleteSession = useDeleteSession();
   const updateSession = useUpdateSession();
@@ -130,7 +128,6 @@ export function ChatSidebar({ className, onClose }: { className?: string; onClos
 
   // Handle session selection with proper sequencing to avoid race condition
   const handleSessionSelect = (sessionId: number) => {
-      console.log('[ChatSidebar] Session selected:', sessionId, 'isAuthenticated:', isAuthenticated);
       setActiveSessionId(sessionId);
       // Use setTimeout to ensure state update completes before closing sidebar
       setTimeout(() => {
