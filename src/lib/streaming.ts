@@ -507,6 +507,7 @@ export async function* streamChatResponse(
   let chunkCount = 0;
   let contentChunkCount = 0;  // Track chunks with actual content
   let receivedDoneSignal = false;
+  let yieldedDoneSignal = false;  // Track if we've already yielded a done signal
   let firstChunkReceived = false;
   let isFirstContentChunk = true; // Track first content token for TTFT
 
@@ -837,6 +838,11 @@ export async function* streamChatResponse(
                   isFirstToken: chunk.status === 'first_token',
                   contentChunkCount
                 });
+
+                // Track if we've yielded a done signal to avoid duplicates at stream end
+                if (chunk.done) {
+                  yieldedDoneSignal = true;
+                }
                 yield chunk;
               } else {
                 devLog('[Streaming] Skipping empty chunk');
@@ -888,9 +894,15 @@ export async function* streamChatResponse(
       throw new Error(errorMsg);
     }
 
-    // Yield final done signal only once (whether from [DONE] signal or natural stream end)
+    // Yield final done signal only if we haven't already yielded one
+    // This can happen from: finish_reason, [DONE] signal, or event-based done types
     devLog('[Streaming] Stream completed', receivedDoneSignal ? 'via [DONE] signal' : 'naturally', 'with', contentChunkCount, 'content chunks from', chunkCount, 'total SSE lines');
-    yield { done: true };
+    if (!yieldedDoneSignal) {
+      devLog('[Streaming] Yielding final done signal');
+      yield { done: true };
+    } else {
+      devLog('[Streaming] Skipping final done signal - already yielded');
+    }
   } catch (error) {
     clearTimeout(timeoutId);
 
