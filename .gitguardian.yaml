@@ -12,4 +12,4 @@ paths-ignore:
   - "**/*.spec.tsx"
   - "**/test/**"
   - "**/tests/**"
-  - "TEMP_API_KEY_*.md"
+  - "**/TEMP_API_KEY_*.md"
