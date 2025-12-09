@@ -1,6 +1,13 @@
 import * as Sentry from "@sentry/nextjs";
 import { initializeGlobalErrorHandlers } from "./src/lib/global-error-handlers";
 
+// Type alias for transaction events (not exported from @sentry/nextjs)
+// Based on @sentry/core TransactionEvent type
+type TransactionEventLike = {
+  transaction?: string;
+  type?: 'transaction';
+};
+
 // Get release information
 const getRelease = () => {
   if (process.env.NEXT_PUBLIC_SENTRY_RELEASE) {
@@ -26,12 +33,20 @@ const getRelease = () => {
 // Prevents 429 errors from Sentry by limiting event frequency
 // =============================================================================
 
-// Rate limiting state
+// Rate limiting state for error events
 const rateLimitState = {
   eventCount: 0,
   windowStart: Date.now(),
   recentMessages: new Map<string, number>(), // message hash -> last sent timestamp
   lastCleanup: Date.now(), // Track last cleanup to prevent unbounded growth
+};
+
+// Separate rate limiting state for transactions
+const transactionRateLimitState = {
+  eventCount: 0,
+  windowStart: Date.now(),
+  recentTransactions: new Map<string, number>(), // transaction name -> last sent timestamp
+  lastCleanup: Date.now(),
 };
 
 // Rate limiting configuration - AGGRESSIVELY reduced to prevent 429 errors
@@ -42,6 +57,9 @@ const RATE_LIMIT_CONFIG = {
   maxBreadcrumbs: 10,            // REDUCED: Limit breadcrumbs to reduce payload size (was 20)
   cleanupIntervalMs: 30000,      // Cleanup stale entries every 30 seconds
   maxMapSize: 50,                // Maximum entries in deduplication map
+  // Transaction-specific limits (more lenient since we already have low sample rate)
+  maxTransactionsPerMinute: 10,  // Allow more transactions than errors
+  transactionDedupeWindowMs: 30000, // 30 seconds for transaction deduplication
 };
 
 /**
@@ -190,6 +208,84 @@ function shouldRateLimit(event: Sentry.ErrorEvent): boolean {
   return false;
 }
 
+/**
+ * Create a unique key for transaction deduplication
+ * Uses transaction name instead of error message
+ */
+function createTransactionKey(event: TransactionEventLike): string {
+  // Use the transaction name as the key
+  const transactionName = event.transaction || 'unknown';
+  return `transaction:${transactionName.slice(0, 100)}`;
+}
+
+/**
+ * Cleanup stale transaction entries
+ */
+function cleanupStaleTransactionEntries(): void {
+  const now = Date.now();
+
+  // Only cleanup if enough time has passed
+  if (now - transactionRateLimitState.lastCleanup < RATE_LIMIT_CONFIG.cleanupIntervalMs) {
+    return;
+  }
+
+  transactionRateLimitState.lastCleanup = now;
+
+  // Remove entries older than dedupeWindowMs
+  for (const [key, timestamp] of transactionRateLimitState.recentTransactions) {
+    if (now - timestamp > RATE_LIMIT_CONFIG.transactionDedupeWindowMs) {
+      transactionRateLimitState.recentTransactions.delete(key);
+    }
+  }
+
+  // If still too large, remove oldest entries
+  if (transactionRateLimitState.recentTransactions.size > RATE_LIMIT_CONFIG.maxMapSize) {
+    const entries = Array.from(transactionRateLimitState.recentTransactions.entries())
+      .sort((a, b) => a[1] - b[1]);
+    const toRemove = entries.slice(0, entries.length - RATE_LIMIT_CONFIG.maxMapSize);
+    for (const [key] of toRemove) {
+      transactionRateLimitState.recentTransactions.delete(key);
+    }
+  }
+}
+
+/**
+ * Check if we should rate limit this transaction
+ * Returns true if the transaction should be dropped
+ */
+function shouldRateLimitTransaction(event: TransactionEventLike): boolean {
+  const now = Date.now();
+
+  // Periodic cleanup to prevent unbounded memory growth
+  cleanupStaleTransactionEntries();
+
+  // Reset window if expired
+  if (now - transactionRateLimitState.windowStart > RATE_LIMIT_CONFIG.windowMs) {
+    transactionRateLimitState.eventCount = 0;
+    transactionRateLimitState.windowStart = now;
+  }
+
+  // Check rate limit
+  if (transactionRateLimitState.eventCount >= RATE_LIMIT_CONFIG.maxTransactionsPerMinute) {
+    console.warn('[Sentry] Transaction rate limit exceeded, dropping transaction');
+    return true;
+  }
+
+  // Deduplication check using transaction-specific key
+  const transactionKey = createTransactionKey(event);
+  const lastSent = transactionRateLimitState.recentTransactions.get(transactionKey);
+  if (lastSent && now - lastSent < RATE_LIMIT_CONFIG.transactionDedupeWindowMs) {
+    console.debug('[Sentry] Duplicate transaction within deduplication window, dropping');
+    return true;
+  }
+
+  // Update state only for transactions that will be sent
+  transactionRateLimitState.eventCount++;
+  transactionRateLimitState.recentTransactions.set(transactionKey, now);
+
+  return false;
+}
+
 Sentry.init({
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
 
@@ -244,8 +340,8 @@ Sentry.init({
 
   // Also rate limit transactions to prevent 429s
   beforeSendTransaction(event) {
-    // Apply same rate limiting to transactions
-    if (shouldRateLimit(event as unknown as Sentry.ErrorEvent)) {
+    // Apply transaction-specific rate limiting (uses transaction name, not error message)
+    if (shouldRateLimitTransaction(event)) {
       return null;
     }
     return event;
