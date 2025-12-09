@@ -1,4 +1,4 @@
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
@@ -83,9 +83,9 @@ const SuccessPopup = ({ open, onOpenChange, userEmail }: SuccessPopupProps) => {
           <DialogTitle className="text-3xl font-bold text-center text-gray-900">
             You're on the list!
           </DialogTitle>
-          <p className="text-base text-gray-600">
+          <DialogDescription className="text-base text-gray-600">
             Welcome to the Gatewayz beta waitlist. We'll notify you as soon as beta spots open.
-          </p>
+          </DialogDescription>
         </DialogHeader>
         
         <div className="text-center space-y-6 pt-2">

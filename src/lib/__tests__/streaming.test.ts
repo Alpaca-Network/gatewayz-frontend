@@ -100,8 +100,61 @@ describe('streamChatResponse', () => {
       expect(contentChunks[0].content).toBe('Hello');
       expect(contentChunks[1].content).toBe(' world');
 
+      // Verify exactly one done signal is emitted (not duplicated)
       const doneChunks = chunks.filter(c => c.done);
-      expect(doneChunks.length).toBeGreaterThan(0);
+      expect(doneChunks.length).toBe(1);
+    });
+
+    test('should emit exactly one done signal regardless of stream end method', async () => {
+      // Test case 1: Stream ends with [DONE] signal
+      const mockChunksWithDone = [
+        'data: {"choices":[{"delta":{"content":"Hello"}}]}\n\n',
+        'data: [DONE]\n\n',
+      ];
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Map([['content-type', 'text/event-stream']]),
+        body: createMockStream(mockChunksWithDone),
+      });
+
+      const chunksWithDone = await collectChunks(
+        streamChatResponse(
+          '/api/chat/completions',
+          'test-api-key',
+          { model: 'openrouter/auto', messages: [], stream: true }
+        )
+      );
+
+      // Count done signals - must be exactly 1
+      const doneSignalsWithDone = chunksWithDone.filter(c => c.done === true);
+      expect(doneSignalsWithDone.length).toBe(1);
+
+      // Test case 2: Stream ends with finish_reason (no [DONE])
+      const mockChunksWithFinish = [
+        'data: {"choices":[{"delta":{"content":"World"}}]}\n\n',
+        'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n',
+      ];
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Map([['content-type', 'text/event-stream']]),
+        body: createMockStream(mockChunksWithFinish),
+      });
+
+      const chunksWithFinish = await collectChunks(
+        streamChatResponse(
+          '/api/chat/completions',
+          'test-api-key',
+          { model: 'openrouter/auto', messages: [], stream: true }
+        )
+      );
+
+      // Count done signals - must be exactly 1
+      const doneSignalsWithFinish = chunksWithFinish.filter(c => c.done === true);
+      expect(doneSignalsWithFinish.length).toBe(1);
     });
 
     test('should handle reasoning content', async () => {
@@ -378,6 +431,81 @@ describe('streamChatResponse', () => {
       const contentChunks = chunks.filter(c => c.content);
       expect(contentChunks.length).toBe(1);
     });
+
+    test('should extract error message from non-standard error object formats', async () => {
+      // Simulate backend returning error with 'error' field instead of 'message'
+      const mockChunks = [
+        'data: {"choices":[{"delta":{"content":"Start"}}]}\n\n',
+        'data: {"error":{"error":"Some provider error","code":"provider_error"}}\n\n',
+      ];
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Map([['content-type', 'text/event-stream']]),
+        body: createMockStream(mockChunks),
+      });
+
+      await expect(
+        collectChunks(
+          streamChatResponse(
+            '/api/chat/completions',
+            'test-key',
+            { model: 'openrouter/auto', messages: [], stream: true }
+          )
+        )
+      ).rejects.toThrow(/Some provider error/);
+    });
+
+    test('should extract error message from unknown error object structure', async () => {
+      // Simulate backend returning completely non-standard error structure
+      const mockChunks = [
+        'data: {"choices":[{"delta":{"content":"Start"}}]}\n\n',
+        'data: {"error":{"unknown_field":"data","status":500}}\n\n',
+      ];
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Map([['content-type', 'text/event-stream']]),
+        body: createMockStream(mockChunks),
+      });
+
+      // Should stringify the error object since we can't extract a known message field
+      await expect(
+        collectChunks(
+          streamChatResponse(
+            '/api/chat/completions',
+            'test-key',
+            { model: 'openrouter/auto', messages: [], stream: true }
+          )
+        )
+      ).rejects.toThrow(/unknown_field.*data/);
+    });
+
+    test('should handle top-level error indicator in stream data', async () => {
+      // Simulate backend returning top-level error/detail fields
+      const mockChunks = [
+        'data: {"detail":"Rate limit exceeded from provider"}\n\n',
+      ];
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Map([['content-type', 'text/event-stream']]),
+        body: createMockStream(mockChunks),
+      });
+
+      await expect(
+        collectChunks(
+          streamChatResponse(
+            '/api/chat/completions',
+            'test-key',
+            { model: 'openrouter/auto', messages: [], stream: true }
+          )
+        )
+      ).rejects.toThrow(/Rate limit exceeded from provider/);
+    });
   });
 
   describe('Alternative Response Formats', () => {
@@ -613,6 +741,10 @@ describe('streamChatResponse', () => {
 
       // Last content chunk should also have done flag due to finish_reason
       expect(contentChunks[2].done).toBe(true);
+
+      // Verify exactly one done signal (not duplicated)
+      const doneChunks = chunks.filter(c => c.done === true);
+      expect(doneChunks.length).toBe(1);
     });
 
     test('should handle Fireworks output with nested delta object', async () => {
