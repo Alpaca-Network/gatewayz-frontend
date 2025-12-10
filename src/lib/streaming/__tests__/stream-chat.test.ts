@@ -18,14 +18,16 @@ import {
 } from '../errors';
 
 // Mock the dependencies
-jest.mock('@/lib/api', () => ({
-  requestAuthRefresh: jest.fn(),
-  getApiKey: jest.fn(),
+jest.mock('@/lib/stream-coordinator', () => ({
+  StreamCoordinator: {
+    handleAuthError: jest.fn().mockResolvedValue(undefined),
+    getApiKey: jest.fn().mockReturnValue('new-api-key'),
+    reset: jest.fn(),
+  },
 }));
 
-jest.mock('@/lib/stream-coordinator', () => ({
-  StreamCoordinator: jest.fn(),
-}));
+// Import the mocked module to configure it in tests
+import { StreamCoordinator } from '@/lib/stream-coordinator';
 
 // Helper to create SSE response bodies
 function createSSEResponse(chunks: string[]): ReadableStream<Uint8Array> {
@@ -442,6 +444,60 @@ describe('streamChatResponse', () => {
       expect(chunks.find((c) => c.content)?.content).toBe('Recovered');
     }, 10000);
 
+    it('should retry on ECONNRESET error', async () => {
+      const econnresetError = new Error('read ECONNRESET');
+      global.fetch = jest
+        .fn()
+        .mockRejectedValueOnce(econnresetError)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          body: createSSEResponse([
+            JSON.stringify({ choices: [{ delta: { content: 'Recovered' }, finish_reason: null }] }),
+            JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }] }),
+          ]),
+        });
+
+      const generator = streamChatResponse(
+        'https://api.test.com/v1/chat/completions',
+        'test-api-key',
+        { model: 'gpt-4', messages: [] },
+        0,
+        2
+      );
+
+      const chunks = await collectChunks(generator);
+      expect(chunks.find((c) => c.content)?.content).toBe('Recovered');
+    }, 10000);
+
+    it('should retry on ETIMEDOUT error', async () => {
+      const etimedoutError = new Error('connect ETIMEDOUT');
+      global.fetch = jest
+        .fn()
+        .mockRejectedValueOnce(etimedoutError)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          body: createSSEResponse([
+            JSON.stringify({ choices: [{ delta: { content: 'Recovered' }, finish_reason: null }] }),
+            JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }] }),
+          ]),
+        });
+
+      const generator = streamChatResponse(
+        'https://api.test.com/v1/chat/completions',
+        'test-api-key',
+        { model: 'gpt-4', messages: [] },
+        0,
+        2
+      );
+
+      const chunks = await collectChunks(generator);
+      expect(chunks.find((c) => c.content)?.content).toBe('Recovered');
+    }, 10000);
+
     it('should throw after max network retries', async () => {
       global.fetch = jest.fn().mockRejectedValue(new TypeError('Network failure'));
 
@@ -498,6 +554,133 @@ describe('streamChatResponse', () => {
       );
 
       await expect(collectChunks(generator)).rejects.toThrow(/not readable/);
+    });
+  });
+
+  describe('SSE error field handling', () => {
+    it('should throw StreamingError when finish_reason is error', async () => {
+      // Response with finish_reason: 'error' produces error field in parsed chunk
+      const sseChunks = [
+        JSON.stringify({ choices: [{ delta: { content: 'Hello' }, finish_reason: null }] }),
+        JSON.stringify({ choices: [{ finish_reason: 'error' }] }),
+      ];
+
+      global.fetch = jest.fn().mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        body: createSSEResponse(sseChunks),
+      });
+
+      const generator = streamChatResponse(
+        'https://api.test.com/v1/chat/completions',
+        'test-api-key',
+        { model: 'gpt-4', messages: [] }
+      );
+
+      await expect(collectChunks(generator)).rejects.toThrow(/error/i);
+    });
+  });
+
+  describe('401 auth refresh with StreamCoordinator', () => {
+    beforeEach(() => {
+      // Reset mocks before each test
+      jest.clearAllMocks();
+      (StreamCoordinator.handleAuthError as jest.Mock).mockResolvedValue(undefined);
+      (StreamCoordinator.getApiKey as jest.Mock).mockReturnValue('new-api-key');
+    });
+
+    it('should use StreamCoordinator for 401 auth refresh', async () => {
+      // Save original window
+      const originalWindow = global.window;
+      // @ts-ignore - Simulate browser environment
+      global.window = {};
+
+      // First call returns 401, second call succeeds with new key
+      global.fetch = jest
+        .fn()
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 401,
+          headers: new Headers(),
+          json: jest.fn().mockResolvedValue({ detail: 'Unauthorized' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          body: createSSEResponse([
+            JSON.stringify({ choices: [{ delta: { content: 'Success' }, finish_reason: null }] }),
+            JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }] }),
+          ]),
+        });
+
+      const generator = streamChatResponse(
+        'https://api.test.com/v1/chat/completions',
+        'old-api-key',
+        { model: 'gpt-4', messages: [] },
+        0,
+        2
+      );
+
+      const chunks = await collectChunks(generator);
+
+      // Verify StreamCoordinator was called
+      expect(StreamCoordinator.handleAuthError).toHaveBeenCalled();
+      expect(StreamCoordinator.getApiKey).toHaveBeenCalled();
+
+      // Verify we got success content
+      expect(chunks.find((c) => c.content)?.content).toBe('Success');
+
+      // Restore window
+      global.window = originalWindow;
+    }, 15000);
+
+    it('should throw AuthenticationError when StreamCoordinator returns no API key', async () => {
+      // Save original window
+      const originalWindow = global.window;
+      // @ts-ignore - Simulate browser environment
+      global.window = {};
+
+      // Configure StreamCoordinator to return null
+      (StreamCoordinator.getApiKey as jest.Mock).mockReturnValue(null);
+
+      global.fetch = jest.fn().mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        headers: new Headers(),
+        json: jest.fn().mockResolvedValue({ detail: 'Unauthorized' }),
+      });
+
+      const generator = streamChatResponse(
+        'https://api.test.com/v1/chat/completions',
+        'test-api-key',
+        { model: 'gpt-4', messages: [] },
+        0,
+        2
+      );
+
+      await expect(collectChunks(generator)).rejects.toThrow(/session has expired/);
+
+      // Restore window
+      global.window = originalWindow;
+    }, 10000);
+
+    it('should throw special message for GUEST_NOT_CONFIGURED code', async () => {
+      global.fetch = jest.fn().mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        headers: new Headers(),
+        json: jest.fn().mockResolvedValue({ code: 'GUEST_NOT_CONFIGURED' }),
+      });
+
+      const generator = streamChatResponse(
+        'https://api.test.com/v1/chat/completions',
+        'test-api-key',
+        { model: 'gpt-4', messages: [] }
+      );
+
+      await expect(collectChunks(generator)).rejects.toThrow(/sign in/);
     });
   });
 });

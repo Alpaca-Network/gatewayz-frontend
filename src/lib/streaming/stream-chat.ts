@@ -9,7 +9,6 @@
  * This file is kept for backwards compatibility during migration.
  */
 
-import { requestAuthRefresh, getApiKey } from '@/lib/api';
 import { StreamCoordinator } from '@/lib/stream-coordinator';
 import type { StreamChunk, StreamConfig } from './types';
 import { parseSSEBuffer } from './sse-parser';
@@ -106,16 +105,23 @@ async function handleHttpError(
         );
       }
 
-      // Attempt auth refresh on first try
+      // Attempt auth refresh on first try using StreamCoordinator for concurrency handling
       if (retryCount === 0 && typeof window !== 'undefined') {
         devLog('Attempting auth refresh for 401 error...');
 
         try {
-          await requestAuthRefresh();
-          const newApiKey = getApiKey();
+          // Use StreamCoordinator to handle concurrent 401 errors and prevent multiple refreshes
+          await StreamCoordinator.handleAuthError();
+          const newApiKey = StreamCoordinator.getApiKey();
 
-          if (newApiKey && newApiKey !== apiKey) {
-            devLog('Got new API key after refresh, retrying...');
+          if (newApiKey) {
+            // Add backoff delay to allow backend state to propagate after refresh
+            const backoffDelay = 1000 * Math.pow(2, retryCount); // 1s, 2s, 4s, etc.
+            devLog(`Waiting ${backoffDelay}ms before retry after auth refresh...`);
+            await sleep(backoffDelay);
+
+            devLog('Retrying with refreshed credentials...');
+            // Retry even if key is unchanged - backend state may have been updated
             return streamGenerator(url, newApiKey, requestBody, 1, maxRetries);
           }
         } catch (refreshError) {
@@ -259,7 +265,9 @@ export async function* streamChatResponse(
         (fetchError instanceof Error &&
           (fetchError.message.includes('fetch') ||
             fetchError.message.includes('network') ||
-            fetchError.message.includes('ECONNREFUSED')))
+            fetchError.message.includes('ECONNREFUSED') ||
+            fetchError.message.includes('ECONNRESET') ||
+            fetchError.message.includes('ETIMEDOUT')))
       ) {
         if (retryCount < maxRetries) {
           const waitTime =
@@ -365,6 +373,14 @@ export async function* streamChatResponse(
 
         // Yield parsed chunks
         for (const chunk of chunks) {
+          // Handle error chunks from SSE parsing (e.g., finish_reason: 'error')
+          if (chunk.error) {
+            throw new StreamingError(chunk.error.message, {
+              type: chunk.error.type,
+              code: chunk.error.code,
+            });
+          }
+
           if (chunk.content || chunk.reasoning) {
             contentChunkCount++;
 

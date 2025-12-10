@@ -182,6 +182,16 @@ describe('parseSSEChunk', () => {
   });
 
   describe('finish_reason consistency', () => {
+    it('should return error object for finish_reason error (OpenAI)', () => {
+      const json = JSON.stringify({
+        choices: [{ finish_reason: 'error' }],
+      });
+      const result = parseSSEChunk(json);
+      expect(result?.error).toBeDefined();
+      expect(result?.error?.type).toBe('finish_error');
+      expect(result?.error?.message).toContain('error');
+    });
+
     it('should mark done for finish_reason stop (OpenAI)', () => {
       const json = JSON.stringify({
         choices: [{ delta: { content: 'End' }, finish_reason: 'stop' }],
