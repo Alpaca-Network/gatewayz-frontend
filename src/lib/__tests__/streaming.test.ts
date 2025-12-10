@@ -616,6 +616,7 @@ describe('streamChatResponse', () => {
         body: createMockStream(mockChunks),
       });
 
+      // rate_limit_exceeded errors now return a user-friendly message
       await expect(
         collectChunks(
           streamChatResponse(
@@ -624,7 +625,7 @@ describe('streamChatResponse', () => {
             { model: 'openrouter/auto', messages: [], stream: true }
           )
         )
-      ).rejects.toThrow(/Error code: rate_limit_exceeded/);
+      ).rejects.toThrow(/Rate limit exceeded/);
     });
 
     test('should extract error from standalone type field', async () => {
