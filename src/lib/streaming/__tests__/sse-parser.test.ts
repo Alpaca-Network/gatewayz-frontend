@@ -144,9 +144,82 @@ describe('parseSSEChunk', () => {
       expect(() => parseSSEChunk(json)).toThrow(/Backend error/);
     });
 
+    it('should handle rate limit errors by code', () => {
+      const json = JSON.stringify({
+        error: { code: 'rate_limit_exceeded' },
+      });
+      expect(() => parseSSEChunk(json)).toThrow(/Rate limit exceeded/);
+    });
+
+    it('should handle rate limit errors by type', () => {
+      const json = JSON.stringify({
+        error: { type: 'rate_limit', message: 'Too many requests' },
+      });
+      expect(() => parseSSEChunk(json)).toThrow(/Rate limit exceeded/);
+    });
+
+    it('should handle rate limit errors by status 429', () => {
+      const json = JSON.stringify({
+        error: { status: 429, message: 'Slow down' },
+      });
+      expect(() => parseSSEChunk(json)).toThrow(/Rate limit exceeded/);
+    });
+
     it('should return null for unparseable JSON', () => {
       const result = parseSSEChunk('{invalid json}');
       expect(result).toBeNull();
+    });
+
+    it('should NOT treat top-level message as error (false positive prevention)', () => {
+      // Some providers use 'message' for legitimate content
+      const json = JSON.stringify({
+        message: 'This is content, not an error',
+        choices: [{ delta: { content: 'Hello' } }],
+      });
+      const result = parseSSEChunk(json);
+      expect(result?.content).toBe('Hello');
+    });
+  });
+
+  describe('finish_reason consistency', () => {
+    it('should mark done for finish_reason stop (OpenAI)', () => {
+      const json = JSON.stringify({
+        choices: [{ delta: { content: 'End' }, finish_reason: 'stop' }],
+      });
+      const result = parseSSEChunk(json);
+      expect(result?.done).toBe(true);
+    });
+
+    it('should mark done for finish_reason length (OpenAI)', () => {
+      const json = JSON.stringify({
+        choices: [{ delta: { content: 'Truncated' }, finish_reason: 'length' }],
+      });
+      const result = parseSSEChunk(json);
+      expect(result?.done).toBe(true);
+    });
+
+    it('should mark done for finish_reason end_turn (OpenAI)', () => {
+      const json = JSON.stringify({
+        choices: [{ delta: { content: 'Done' }, finish_reason: 'end_turn' }],
+      });
+      const result = parseSSEChunk(json);
+      expect(result?.done).toBe(true);
+    });
+
+    it('should mark done for finish_reason stop (Fireworks)', () => {
+      const json = JSON.stringify({
+        output: [{ delta: { content: 'End' }, finish_reason: 'stop' }],
+      });
+      const result = parseSSEChunk(json);
+      expect(result?.done).toBe(true);
+    });
+
+    it('should mark done for finish_reason length (Fireworks)', () => {
+      const json = JSON.stringify({
+        output: [{ delta: { content: 'Truncated' }, finish_reason: 'length' }],
+      });
+      const result = parseSSEChunk(json);
+      expect(result?.done).toBe(true);
     });
   });
 });

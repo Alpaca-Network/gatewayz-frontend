@@ -108,6 +108,16 @@ function extractError(errorObj: Record<string, unknown>): { message: string; typ
 }
 
 /**
+ * Check if a finish_reason indicates stream completion.
+ * Treat all finish reasons as done to be consistent across providers.
+ */
+function isFinishReasonDone(finishReason: unknown): boolean {
+  if (!finishReason) return false;
+  // Any non-null finish_reason indicates the stream is complete
+  return true;
+}
+
+/**
  * Parse Fireworks/Responses API format.
  * Format: { output: [{ delta: { content, reasoning_content }, finish_reason }] }
  */
@@ -127,7 +137,7 @@ function parseFireworksFormat(data: Record<string, unknown>): ParsedSSEData | nu
   return {
     content: content || undefined,
     reasoning: reasoning || undefined,
-    done: !!finishReason,
+    done: isFinishReasonDone(finishReason),
   };
 }
 
@@ -158,7 +168,7 @@ function parseOpenAIFormat(data: Record<string, unknown>): ParsedSSEData | null 
     return {
       content: content || undefined,
       reasoning: reasoning || undefined,
-      done: finishReason === 'stop' || finishReason === 'end_turn',
+      done: isFinishReasonDone(finishReason),
     };
   }
 
@@ -235,14 +245,40 @@ function parseEventFormat(data: Record<string, unknown>): ParsedSSEData | null {
 
 /**
  * Check for error objects in the response data.
+ * Only checks explicit error fields to avoid false positives with legitimate content fields.
  */
 function checkForError(data: Record<string, unknown>): ParsedSSEData | null {
-  // Check for nested error object
-  if (data.error && typeof data.error === 'object') {
-    const errorInfo = extractError(data.error as Record<string, unknown>);
+  // Only check for explicit error object - don't treat top-level 'message' as error
+  // since some providers use 'message' for legitimate content
+  if (!data.error) return null;
+
+  // Handle nested error object
+  if (typeof data.error === 'object') {
+    const errorObj = data.error as Record<string, unknown>;
+    const errorInfo = extractError(errorObj);
 
     // Check for known error patterns
     const lowerMessage = errorInfo.message.toLowerCase();
+    const errorCode = (errorInfo.code || '').toLowerCase();
+    const errorType = (errorInfo.type || '').toLowerCase();
+
+    // Check for rate limit errors
+    if (
+      errorCode.includes('rate_limit') ||
+      errorType.includes('rate_limit') ||
+      lowerMessage.includes('rate limit') ||
+      lowerMessage.includes('too many requests') ||
+      errorObj.status === 429
+    ) {
+      return {
+        error: {
+          message: 'Rate limit exceeded. The model is temporarily unavailable due to high demand. Please try again in a moment.',
+          type: 'rate_limit',
+          code: errorInfo.code || 'rate_limit_exceeded',
+        },
+      };
+    }
+
     if (lowerMessage.includes('trial has expired') || lowerMessage.includes('insufficient credits')) {
       return {
         error: {
@@ -264,15 +300,14 @@ function checkForError(data: Record<string, unknown>): ParsedSSEData | null {
     return { error: errorInfo };
   }
 
-  // Check for top-level error indicators
-  if (data.error || data.detail || data.message) {
-    const msg =
-      (typeof data.error === 'string' && data.error) ||
-      (typeof data.detail === 'string' && data.detail) ||
-      (typeof data.message === 'string' && data.message) ||
-      JSON.stringify(data.error || data.detail || data.message);
+  // Handle string error
+  if (typeof data.error === 'string') {
+    return { error: { message: `Stream error: ${data.error}` } };
+  }
 
-    return { error: { message: `Stream error: ${msg}` } };
+  // Check for detail field (commonly used for HTTP errors)
+  if (typeof data.detail === 'string') {
+    return { error: { message: `Stream error: ${data.detail}` } };
   }
 
   return null;
