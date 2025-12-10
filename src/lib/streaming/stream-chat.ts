@@ -11,7 +11,7 @@
 
 import { requestAuthRefresh, getApiKey } from '@/lib/api';
 import { StreamCoordinator } from '@/lib/stream-coordinator';
-import type { StreamChunk, StreamConfig, DEFAULT_STREAM_CONFIG } from './types';
+import type { StreamChunk, StreamConfig } from './types';
 import { parseSSEBuffer } from './sse-parser';
 import {
   StreamingError,

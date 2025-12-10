@@ -305,12 +305,8 @@ function checkForError(data: Record<string, unknown>): ParsedSSEData | null {
     return { error: { message: `Stream error: ${data.error}` } };
   }
 
-  // Check for detail field (commonly used for HTTP errors)
-  if (typeof data.detail === 'string') {
-    return { error: { message: `Stream error: ${data.detail}` } };
-  }
-
-  return null;
+  // data.error exists but is neither object nor string - unusual case
+  return { error: { message: `Stream error: ${JSON.stringify(data.error)}` } };
 }
 
 /**
