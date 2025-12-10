@@ -106,8 +106,9 @@ export function PricingSection() {
       }
 
       if (tier.id === 'enterprise') {
-        // Open contact form or email
-        window.location.href = 'mailto:sales@gatewayz.ai?subject=Enterprise Inquiry';
+        // Open contact form or email - use window.open for mailto links for better cross-browser support
+        window.open('mailto:sales@gatewayz.ai?subject=Enterprise Inquiry', '_self');
+        setIsLoading(null);
         return;
       }
 

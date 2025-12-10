@@ -597,7 +597,7 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className="w-full sm:w-[250px] justify-between bg-muted/30 hover:bg-muted/50 touch-manipulation"
+          className="w-full sm:w-[280px] justify-between bg-muted/30 hover:bg-muted/50 touch-manipulation"
           onMouseEnter={handlePrefetchModels}
         >
           {selectedModel ? (
@@ -616,7 +616,7 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[95vw] sm:w-[400px] max-w-[400px] p-0">
+      <PopoverContent className="w-[95vw] sm:w-[450px] max-w-[450px] p-0">
         <Command shouldFilter={false}>
           <CommandInput
             placeholder="Search model..."

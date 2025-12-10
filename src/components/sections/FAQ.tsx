@@ -90,7 +90,7 @@ export default function FAQ() {
           <p className="text-sm text-muted-foreground mb-2">
             Still have questions?{" "}
             <a
-              href="/contact"
+              href="mailto:sales@gatewayz.ai?subject=Question about Gatewayz"
               className="text-primary hover:text-primary/80 font-semibold"
             >
               Contact our team →

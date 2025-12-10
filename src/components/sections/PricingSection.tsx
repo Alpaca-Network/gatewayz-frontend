@@ -70,7 +70,7 @@ const tiers = [
 export function PricingSection() {
   const handleClick = (tierName: string) => {
     if (tierName === "Enterprise") {
-      window.location.href = "/contact";
+      window.open('mailto:sales@gatewayz.ai?subject=Enterprise Inquiry', '_self');
     } else {
       document.getElementById("waitlist")?.scrollIntoView({ behavior: "smooth" });
     }

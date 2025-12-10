@@ -5,9 +5,11 @@ import Link from 'next/link';
 import { Twitter } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
+import { usePrivy } from '@privy-io/react-auth';
 
 export function AppFooter() {
   const pathname = usePathname();
+  const { user } = usePrivy();
   const [isChatPage, setIsChatPage] = useState(false);
   const [isModelsPage, setIsModelsPage] = useState(false);
   const [showFooter, setShowFooter] = useState(false);
@@ -75,9 +77,15 @@ export function AppFooter() {
                 </a>
               </li>
               <li>
-                <a href="#pricing" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                  Pricing
-                </a>
+                {user ? (
+                  <Link href="/settings/credits" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                    Pricing
+                  </Link>
+                ) : (
+                  <a href="#pricing" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                    Pricing
+                  </a>
+                )}
               </li>
               <li>
                 <Link href="https://docs.gatewayz.ai/" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
@@ -103,21 +111,19 @@ export function AppFooter() {
             </ul>
           </div>
 
-          {/*<div>
-            <h3 className="font-semibold mb-4 text-gray-900">Company</h3>
+          <div>
+            <h3 className="font-semibold mb-4 text-foreground">Company</h3>
             <ul className="space-y-2">
               <li>
-                <Link href="/about" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">
-                  About
-                </Link>
-              </li>
-              <li>
-                <Link href="/contact" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">
+                <Link
+                  href="mailto:sales@gatewayz.ai?subject=General Inquiry"
+                  className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                >
                   Contact
                 </Link>
               </li>
             </ul>
-          </div>*/}
+          </div>
 
           <div>
             <h3 className="font-semibold mb-4 text-foreground">Connect</h3>
