@@ -6,11 +6,13 @@ interface ChatUIState {
   mobileSidebarOpen: boolean;
   inputValue: string;
   selectedModel: ModelOption | null;
+  messageStartTime: number | null; // Unix timestamp when message was sent
 
   setActiveSessionId: (id: number | null) => void;
   setMobileSidebarOpen: (open: boolean) => void;
   setInputValue: (val: string) => void;
   setSelectedModel: (model: ModelOption | null) => void;
+  setMessageStartTime: (time: number | null) => void;
   resetChatState: () => void;
 }
 
@@ -26,14 +28,17 @@ export const useChatUIStore = create<ChatUIState>((set) => ({
       developer: 'DeepSeek',
       modalities: ['Text']
   },
-  
+  messageStartTime: null,
+
   setActiveSessionId: (id) => set({ activeSessionId: id }),
   setMobileSidebarOpen: (open) => set({ mobileSidebarOpen: open }),
   setInputValue: (val) => set({ inputValue: val }),
   setSelectedModel: (model) => set({ selectedModel: model }),
+  setMessageStartTime: (time) => set({ messageStartTime: time }),
   resetChatState: () => set({
     activeSessionId: null,
     inputValue: '',
-    mobileSidebarOpen: false
+    mobileSidebarOpen: false,
+    messageStartTime: null
   }),
 }));
