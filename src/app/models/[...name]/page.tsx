@@ -16,7 +16,7 @@ import { providerData } from '@/lib/provider-data';
 import { generateChartData, generateStatsTable } from '@/lib/data';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import ReactMarkdown from "react-markdown";
-import { cn } from '@/lib/utils';
+import { cn, formatDisplayModelId, GATEWAY_PREFIXES } from '@/lib/utils';
 import { API_BASE_URL } from '@/lib/config';
 import { models as staticModels } from '@/lib/models-data';
 import { getApiKey } from '@/lib/api';
@@ -632,12 +632,12 @@ export default function ModelProfilePage() {
                 <div className="flex flex-wrap items-start justify-between gap-4">
                     <div className="flex-1">
                         <h1 className="text-3xl lg:text-4xl font-bold mb-2">{model.name}</h1>
-                        {/* Model ID with copy button */}
+                        {/* Model ID with copy button - display in researcher/model format */}
                         <div className="flex items-center gap-2 mb-2">
                             <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-muted rounded-md border">
-                                <code className="text-sm font-mono">{model.id}</code>
+                                <code className="text-sm font-mono">{formatDisplayModelId(model.id)}</code>
                                 <button
-                                    onClick={() => copyToClipboard(model.id, 'model-id')}
+                                    onClick={() => copyToClipboard(formatDisplayModelId(model.id), 'model-id')}
                                     className="text-muted-foreground hover:text-foreground transition-colors"
                                     title="Copy model ID"
                                 >
@@ -850,8 +850,9 @@ export default function ModelProfilePage() {
                                 // Always use Gatewayz API endpoint for code snippets
                                 const baseUrl = 'https://api.gatewayz.ai/v1';
                                 const currentApiKey = apiKey;
-                                // Always use the full model ID for Gatewayz
-                                const formattedModelId = model.id;
+                                // Use the display format (researcher/model-name) for code snippets
+                                // This is the canonical format users should use
+                                const formattedModelId = formatDisplayModelId(model.id);
 
                                 const codeExamples = {
                                     curl: `curl -X POST ${baseUrl}/chat/completions \\

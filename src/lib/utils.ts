@@ -153,6 +153,50 @@ export const getModelUrl = (modelId: string, providerSlug?: string): string => {
   return `/models`;
 };
 
+// Known gateway prefixes that should be stripped from model IDs for display
+// These are routing/infrastructure prefixes, not researcher/developer names
+export const GATEWAY_PREFIXES = ['near', 'openrouter', 'fireworks', 'together', 'groq', 'deepinfra', 'cerebras', 'nebius', 'xai', 'novita', 'huggingface', 'aimo', 'fal', 'alpaca', 'alibaba', 'clarifai', 'featherless', 'chutes', 'portkey', 'google', 'helicone', 'vercel-ai-gateway'];
+
+/**
+ * Format model ID for display in researcher/model-name format
+ * Strips gateway prefix if present to show the canonical researcher/model format
+ *
+ * Examples:
+ * - "near/deepseek-ai/deepseek-v3-1" → "deepseek-ai/deepseek-v3-1"
+ * - "openrouter/anthropic/claude-3" → "anthropic/claude-3"
+ * - "openai/gpt-5.1" → "openai/gpt-5.1" (no gateway prefix)
+ * - "deepseek-v3" → "deepseek-v3" (no slash)
+ *
+ * @param modelId - The full model ID which may include gateway prefix
+ * @param gateway - Optional gateway hint to help identify prefix
+ * @returns Model ID in researcher/model-name format
+ */
+export const formatDisplayModelId = (modelId: string, gateway?: string): string => {
+    if (!modelId) return modelId;
+
+    const parts = modelId.split('/');
+
+    // If only 1 or 2 parts, return as-is (already in correct format or just model name)
+    if (parts.length <= 2) {
+        return modelId;
+    }
+
+    // Check if the first part is a known gateway prefix
+    const firstPart = parts[0].toLowerCase();
+    if (GATEWAY_PREFIXES.includes(firstPart)) {
+        // Strip the gateway prefix and return the rest
+        return parts.slice(1).join('/');
+    }
+
+    // If gateway hint is provided and matches the first part, strip it
+    if (gateway && firstPart === gateway.toLowerCase()) {
+        return parts.slice(1).join('/');
+    }
+
+    // Return as-is if no gateway prefix detected
+    return modelId;
+};
+
 /**
  * Debounce function - delays execution until after wait time has elapsed
  * Perfect for reducing API calls on rapid user input (e.g., session title updates)

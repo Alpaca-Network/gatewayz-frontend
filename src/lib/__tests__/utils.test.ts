@@ -1,4 +1,4 @@
-import { cn, stringToColor, extractTokenValue, normalizeModelId, getModelUrl, shortenModelName } from '../utils'
+import { cn, stringToColor, extractTokenValue, normalizeModelId, getModelUrl, shortenModelName, formatDisplayModelId, GATEWAY_PREFIXES } from '../utils'
 
 describe('Utils', () => {
   describe('cn', () => {
@@ -191,6 +191,71 @@ describe('Utils', () => {
     it('should handle null/undefined gracefully', () => {
       expect(shortenModelName(null as unknown as string)).toBe(null)
       expect(shortenModelName(undefined as unknown as string)).toBe(undefined)
+    })
+  })
+
+  describe('formatDisplayModelId', () => {
+    it('should strip gateway prefix from NEAR models', () => {
+      expect(formatDisplayModelId('near/deepseek-ai/deepseek-v3-1')).toBe('deepseek-ai/deepseek-v3-1')
+    })
+
+    it('should strip gateway prefix from OpenRouter models', () => {
+      expect(formatDisplayModelId('openrouter/anthropic/claude-3')).toBe('anthropic/claude-3')
+    })
+
+    it('should preserve standard researcher/model format', () => {
+      expect(formatDisplayModelId('openai/gpt-5.1')).toBe('openai/gpt-5.1')
+    })
+
+    it('should preserve single part model names', () => {
+      expect(formatDisplayModelId('deepseek-v3')).toBe('deepseek-v3')
+    })
+
+    it('should strip fireworks gateway prefix', () => {
+      expect(formatDisplayModelId('fireworks/meta-llama/llama-3')).toBe('meta-llama/llama-3')
+    })
+
+    it('should be case-insensitive for gateway prefix matching', () => {
+      expect(formatDisplayModelId('NEAR/deepseek-ai/model')).toBe('deepseek-ai/model')
+    })
+
+    it('should use gateway hint when provided', () => {
+      expect(formatDisplayModelId('custom/provider/model', 'custom')).toBe('provider/model')
+    })
+
+    it('should handle empty string', () => {
+      expect(formatDisplayModelId('')).toBe('')
+    })
+
+    it('should handle null/undefined gracefully', () => {
+      expect(formatDisplayModelId(null as unknown as string)).toBe(null)
+      expect(formatDisplayModelId(undefined as unknown as string)).toBe(undefined)
+    })
+
+    it('should preserve complex paths after stripping gateway', () => {
+      expect(formatDisplayModelId('aimo/researcher/model/version')).toBe('researcher/model/version')
+    })
+
+    it('should not strip non-gateway prefixes', () => {
+      // 'deepseek-ai' is not a gateway, it's a researcher
+      expect(formatDisplayModelId('deepseek-ai/deepseek-v3/latest')).toBe('deepseek-ai/deepseek-v3/latest')
+    })
+  })
+
+  describe('GATEWAY_PREFIXES', () => {
+    it('should include common gateways', () => {
+      expect(GATEWAY_PREFIXES).toContain('near')
+      expect(GATEWAY_PREFIXES).toContain('openrouter')
+      expect(GATEWAY_PREFIXES).toContain('fireworks')
+      expect(GATEWAY_PREFIXES).toContain('groq')
+      expect(GATEWAY_PREFIXES).toContain('together')
+    })
+
+    it('should include all infrastructure gateways', () => {
+      expect(GATEWAY_PREFIXES).toContain('deepinfra')
+      expect(GATEWAY_PREFIXES).toContain('cerebras')
+      expect(GATEWAY_PREFIXES).toContain('huggingface')
+      expect(GATEWAY_PREFIXES).toContain('alibaba')
     })
   })
 })
