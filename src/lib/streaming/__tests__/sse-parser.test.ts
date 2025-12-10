@@ -222,6 +222,41 @@ describe('parseSSEChunk', () => {
       expect(result?.done).toBe(true);
     });
   });
+
+  describe('Real API response parsing', () => {
+    it('should correctly parse chunks from real gatewayz API response', () => {
+      // Exact format from curl test against beta.gatewayz.ai
+      const chunk1 = '{"id": "gen-1765332673", "object": "chat.completion.chunk", "choices": [{"index": 0, "delta": {"role": "assistant"}, "finish_reason": null}]}';
+      const chunk2 = '{"id": "gen-1765332673", "object": "chat.completion.chunk", "choices": [{"index": 0, "delta": {"role": "assistant", "content": "Hello"}, "finish_reason": null}]}';
+      const chunk3 = '{"id": "gen-1765332673", "object": "chat.completion.chunk", "choices": [{"index": 0, "delta": {"role": "assistant", "content": "!"}, "finish_reason": null}]}';
+      const chunk4 = '{"id": "gen-1765332673", "object": "chat.completion.chunk", "choices": [{"index": 0, "delta": {"role": "assistant"}, "finish_reason": "stop"}]}';
+
+      // Chunk 1: role-only initialization - should be skipped (null)
+      const result1 = parseSSEChunk(chunk1);
+      expect(result1).toBeNull();
+
+      // Chunk 2: has content "Hello" - should parse
+      const result2 = parseSSEChunk(chunk2);
+      expect(result2?.content).toBe('Hello');
+
+      // Chunk 3: has content "!" - should parse
+      const result3 = parseSSEChunk(chunk3);
+      expect(result3?.content).toBe('!');
+
+      // Chunk 4: finish_reason stop - should have done: true
+      const result4 = parseSSEChunk(chunk4);
+      expect(result4?.done).toBe(true);
+    });
+
+    it('should handle delta with both role and content', () => {
+      // Some providers include role in every delta
+      const json = JSON.stringify({
+        choices: [{ delta: { role: 'assistant', content: 'Test' }, finish_reason: null }],
+      });
+      const result = parseSSEChunk(json);
+      expect(result?.content).toBe('Test');
+    });
+  });
 });
 
 describe('parseSSEBuffer', () => {
