@@ -29,7 +29,7 @@ function formatElapsedTime(ms: number): string {
 /**
  * ChatTimer Component
  * Displays elapsed time since a message was sent while streaming is active.
- * Updates every millisecond and shows a clock icon with the elapsed time.
+ * Updates every 10ms for smooth display with minimal performance impact.
  */
 export function ChatTimer() {
   const messageStartTime = useChatUIStore((state) => state.messageStartTime);
@@ -50,10 +50,10 @@ export function ChatTimer() {
     // Set initial value
     setElapsedMs(calculateElapsed());
 
-    // Update every 1ms for real-time millisecond display
+    // Update every 10ms for smooth millisecond display with minimal performance impact
     const interval = setInterval(() => {
       setElapsedMs(calculateElapsed());
-    }, 1);
+    }, 10);
 
     return () => clearInterval(interval);
   }, [messageStartTime]);
