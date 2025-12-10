@@ -369,6 +369,7 @@ describe('handleRetry', () => {
   });
 });
 
+
 // Note: URL parameter handling tests are complex due to jest.doMock limitations with React.
 // The functionality is manually tested and the code follows patterns from the existing
 // handlePromptSelect function which is well-tested above. The key fixes include:
