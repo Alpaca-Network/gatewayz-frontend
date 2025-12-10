@@ -1,5 +1,20 @@
 /**
- * Utility for handling streaming responses from chat API
+ * Streaming Utilities
+ *
+ * @deprecated This file is deprecated and will be removed in a future version.
+ * Import from '@/lib/streaming/index' instead, or preferably use the AI SDK route
+ * (/api/chat/ai-sdk-completions) which now handles all provider formats.
+ *
+ * Migration guide:
+ * - For new code: Use the AI SDK route which handles Fireworks, DeepSeek, and all other formats
+ * - For existing imports: Change `import { streamChatResponse } from '@/lib/streaming'`
+ *   to `import { streamChatResponse } from '@/lib/streaming/index'`
+ *
+ * The modular streaming implementation is now in:
+ * - @/lib/streaming/types.ts - Type definitions
+ * - @/lib/streaming/errors.ts - Error classes
+ * - @/lib/streaming/sse-parser.ts - SSE parsing logic
+ * - @/lib/streaming/stream-chat.ts - Main streaming function
  */
 
 import { requestAuthRefresh, getApiKey } from '@/lib/api';

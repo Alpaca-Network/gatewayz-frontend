@@ -6,7 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Send, Loader2 } from 'lucide-react';
 import { getApiKey, getUserData } from '@/lib/api';
-import { streamChatResponse } from '@/lib/streaming';
+// Using modular streaming - the old streaming.ts is deprecated
+import { streamChatResponse } from '@/lib/streaming/index';
 import { normalizeModelId } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
