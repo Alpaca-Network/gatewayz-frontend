@@ -151,17 +151,21 @@ function parseOpenAIFormat(data: Record<string, unknown>): ParsedSSEData | null 
 
   const choice = choices[0] as Record<string, unknown>;
   const delta = choice.delta as Record<string, unknown>;
+  const finishReason = choice.finish_reason;
 
   if (delta) {
-    // Skip empty initialization chunks (only contain 'role')
-    const deltaKeys = Object.keys(delta);
-    if (deltaKeys.length === 1 && deltaKeys[0] === 'role') {
-      return null;
-    }
-
     const content = extractContent(delta);
     const reasoning = extractReasoning(delta);
-    const finishReason = choice.finish_reason;
+
+    // Check if this is a role-only initialization chunk with no finish_reason
+    const deltaKeys = Object.keys(delta);
+    const isRoleOnlyDelta = deltaKeys.length === 1 && deltaKeys[0] === 'role';
+
+    // Skip role-only chunks that don't have finish_reason or content
+    // Important: Don't skip if finish_reason is present (stream completion signal)
+    if (isRoleOnlyDelta && !finishReason) {
+      return null;
+    }
 
     if (!content && !reasoning && !finishReason) return null;
 
@@ -173,8 +177,8 @@ function parseOpenAIFormat(data: Record<string, unknown>): ParsedSSEData | null 
   }
 
   // Handle finish_reason without delta
-  if (choice.finish_reason) {
-    if (choice.finish_reason === 'error') {
+  if (finishReason) {
+    if (finishReason === 'error') {
       return {
         error: {
           message: 'Model returned an error without details. The model may be unavailable or misconfigured.',
@@ -305,12 +309,8 @@ function checkForError(data: Record<string, unknown>): ParsedSSEData | null {
     return { error: { message: `Stream error: ${data.error}` } };
   }
 
-  // Check for detail field (commonly used for HTTP errors)
-  if (typeof data.detail === 'string') {
-    return { error: { message: `Stream error: ${data.detail}` } };
-  }
-
-  return null;
+  // data.error exists but is neither object nor string - unusual case
+  return { error: { message: `Stream error: ${JSON.stringify(data.error)}` } };
 }
 
 /**

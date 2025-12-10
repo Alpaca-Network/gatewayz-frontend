@@ -29,6 +29,13 @@ describe('toPlainText', () => {
   it('should handle nested arrays', () => {
     expect(toPlainText({ text: ['hello', ' ', 'world'] })).toBe('hello world');
   });
+
+  it('should return empty string for object without known content fields', () => {
+    // Line 39: return '' when no content fields match
+    expect(toPlainText({ unknownField: 'value', otherField: 123 })).toBe('');
+    expect(toPlainText({})).toBe('');
+    expect(toPlainText({ number: 42, bool: true })).toBe('');
+  });
 });
 
 describe('parseSSEChunk', () => {
@@ -58,9 +65,35 @@ describe('parseSSEChunk', () => {
       expect(result?.done).toBe(true);
     });
 
+    it('should handle finish_reason without delta (line 189)', () => {
+      // Lines 189-192: finish_reason present but no delta object at all
+      const json = JSON.stringify({
+        choices: [{ finish_reason: 'stop' }],
+      });
+      const result = parseSSEChunk(json);
+      expect(result?.done).toBe(true);
+    });
+
     it('should skip role-only delta chunks', () => {
       const json = JSON.stringify({
         choices: [{ delta: { role: 'assistant' }, finish_reason: null }],
+      });
+      const result = parseSSEChunk(json);
+      expect(result).toBeNull();
+    });
+
+    it('should return null for OpenAI format with empty choice (line 192)', () => {
+      // Line 192: return null when choice has neither delta nor finish_reason
+      const json = JSON.stringify({
+        choices: [{ index: 0 }],
+      });
+      const result = parseSSEChunk(json);
+      expect(result).toBeNull();
+    });
+
+    it('should return null for OpenAI format with empty choices array', () => {
+      const json = JSON.stringify({
+        choices: [],
       });
       const result = parseSSEChunk(json);
       expect(result).toBeNull();
@@ -103,6 +136,27 @@ describe('parseSSEChunk', () => {
       expect(result?.content).toBe('Hello');
     });
 
+    it('should parse response.output_text.delta with object delta containing reasoning (line 212)', () => {
+      // Line 212: extractReasoning from delta object in event format
+      const json = JSON.stringify({
+        type: 'response.output_text.delta',
+        delta: { text: 'content', reasoning_content: 'thinking...' },
+      });
+      const result = parseSSEChunk(json);
+      expect(result?.content).toBe('content');
+      expect(result?.reasoning).toBe('thinking...');
+    });
+
+    it('should return null for output_text.delta with empty delta', () => {
+      // Line 212-213: return null when no content or reasoning
+      const json = JSON.stringify({
+        type: 'response.output_text.delta',
+        delta: {},
+      });
+      const result = parseSSEChunk(json);
+      expect(result).toBeNull();
+    });
+
     it('should parse response.reasoning.delta', () => {
       const json = JSON.stringify({
         type: 'response.reasoning.delta',
@@ -112,12 +166,103 @@ describe('parseSSEChunk', () => {
       expect(result?.reasoning).toBe('Thinking...');
     });
 
+    it('should return null for reasoning delta with empty content (line 225)', () => {
+      // Line 225: return null when reasoning is empty
+      const json = JSON.stringify({
+        type: 'response.reasoning.delta',
+        delta: '',
+      });
+      const result = parseSSEChunk(json);
+      expect(result).toBeNull();
+    });
+
+    it('should parse various reasoning event types', () => {
+      // Test all reasoning-related event types
+      const reasoningEventTypes = [
+        'response.reasoning_content.delta',
+        'response.reasoning.delta',
+        'response.output_reasoning.delta',
+        'response.reflection.delta',
+        'response.thinking.delta',
+        'response.output_thinking.delta',
+        'response.inner_thought.delta',
+      ];
+
+      for (const eventType of reasoningEventTypes) {
+        const json = JSON.stringify({
+          type: eventType,
+          delta: 'Thinking step',
+        });
+        const result = parseSSEChunk(json);
+        expect(result?.reasoning).toBe('Thinking step');
+      }
+    });
+
     it('should handle response.completed', () => {
       const json = JSON.stringify({
         type: 'response.completed',
       });
       const result = parseSSEChunk(json);
       expect(result?.done).toBe(true);
+    });
+
+    it('should handle all completion event types', () => {
+      // Test all done event types
+      const doneEventTypes = [
+        'response.output_text.done',
+        'response.completed',
+        'response.message.completed',
+        'response.stop',
+      ];
+
+      for (const eventType of doneEventTypes) {
+        const json = JSON.stringify({ type: eventType });
+        const result = parseSSEChunk(json);
+        expect(result?.done).toBe(true);
+      }
+    });
+
+    it('should handle response.error event (lines 237-246)', () => {
+      // Lines 237-246: response.error event type handling
+      const json = JSON.stringify({
+        type: 'response.error',
+        error: { message: 'Error from provider' },
+      });
+      expect(() => parseSSEChunk(json)).toThrow(StreamingError);
+    });
+
+    it('should handle response.error event with message at top level (line 240)', () => {
+      // Line 240: use data.message when error.message is not present
+      // Note: This returns an error object (event format), doesn't throw
+      const json = JSON.stringify({
+        type: 'response.error',
+        message: 'Top level error message',
+      });
+      const result = parseSSEChunk(json);
+      expect(result?.error).toBeDefined();
+      expect(result?.error?.message).toBe('Top level error message');
+      expect(result?.error?.type).toBe('response_error');
+    });
+
+    it('should handle response.error event with default message (line 241)', () => {
+      // Line 241: default message when no specific message found
+      // Note: This returns an error object (event format), doesn't throw
+      const json = JSON.stringify({
+        type: 'response.error',
+      });
+      const result = parseSSEChunk(json);
+      expect(result?.error).toBeDefined();
+      expect(result?.error?.message).toBe('Response stream error');
+      expect(result?.error?.type).toBe('response_error');
+    });
+
+    it('should return null for unknown event types', () => {
+      const json = JSON.stringify({
+        type: 'response.unknown.event',
+        data: 'something',
+      });
+      const result = parseSSEChunk(json);
+      expect(result).toBeNull();
     });
   });
 
@@ -179,9 +324,49 @@ describe('parseSSEChunk', () => {
       const result = parseSSEChunk(json);
       expect(result?.content).toBe('Hello');
     });
+
+    it('should handle string error (line 308-309)', () => {
+      // Lines 308-309: handle error as string
+      const json = JSON.stringify({
+        error: 'Simple string error message',
+      });
+      expect(() => parseSSEChunk(json)).toThrow('Stream error: Simple string error message');
+    });
+
+    it('should handle unusual error types (lines 312-313)', () => {
+      // Lines 312-313: handle error that is neither object nor string
+      const json = JSON.stringify({
+        error: 12345,
+      });
+      expect(() => parseSSEChunk(json)).toThrow('Stream error: 12345');
+    });
+
+    it('should handle boolean error value', () => {
+      const json = JSON.stringify({
+        error: true,
+      });
+      expect(() => parseSSEChunk(json)).toThrow('Stream error: true');
+    });
+
+    it('should handle array error value', () => {
+      const json = JSON.stringify({
+        error: ['error1', 'error2'],
+      });
+      expect(() => parseSSEChunk(json)).toThrow(StreamingError);
+    });
   });
 
   describe('finish_reason consistency', () => {
+    it('should return error object for finish_reason error (OpenAI)', () => {
+      const json = JSON.stringify({
+        choices: [{ finish_reason: 'error' }],
+      });
+      const result = parseSSEChunk(json);
+      expect(result?.error).toBeDefined();
+      expect(result?.error?.type).toBe('finish_error');
+      expect(result?.error?.message).toContain('error');
+    });
+
     it('should mark done for finish_reason stop (OpenAI)', () => {
       const json = JSON.stringify({
         choices: [{ delta: { content: 'End' }, finish_reason: 'stop' }],
@@ -220,6 +405,41 @@ describe('parseSSEChunk', () => {
       });
       const result = parseSSEChunk(json);
       expect(result?.done).toBe(true);
+    });
+  });
+
+  describe('Real API response parsing', () => {
+    it('should correctly parse chunks from real gatewayz API response', () => {
+      // Exact format from curl test against beta.gatewayz.ai
+      const chunk1 = '{"id": "gen-1765332673", "object": "chat.completion.chunk", "choices": [{"index": 0, "delta": {"role": "assistant"}, "finish_reason": null}]}';
+      const chunk2 = '{"id": "gen-1765332673", "object": "chat.completion.chunk", "choices": [{"index": 0, "delta": {"role": "assistant", "content": "Hello"}, "finish_reason": null}]}';
+      const chunk3 = '{"id": "gen-1765332673", "object": "chat.completion.chunk", "choices": [{"index": 0, "delta": {"role": "assistant", "content": "!"}, "finish_reason": null}]}';
+      const chunk4 = '{"id": "gen-1765332673", "object": "chat.completion.chunk", "choices": [{"index": 0, "delta": {"role": "assistant"}, "finish_reason": "stop"}]}';
+
+      // Chunk 1: role-only initialization - should be skipped (null)
+      const result1 = parseSSEChunk(chunk1);
+      expect(result1).toBeNull();
+
+      // Chunk 2: has content "Hello" - should parse
+      const result2 = parseSSEChunk(chunk2);
+      expect(result2?.content).toBe('Hello');
+
+      // Chunk 3: has content "!" - should parse
+      const result3 = parseSSEChunk(chunk3);
+      expect(result3?.content).toBe('!');
+
+      // Chunk 4: finish_reason stop - should have done: true
+      const result4 = parseSSEChunk(chunk4);
+      expect(result4?.done).toBe(true);
+    });
+
+    it('should handle delta with both role and content', () => {
+      // Some providers include role in every delta
+      const json = JSON.stringify({
+        choices: [{ delta: { role: 'assistant', content: 'Test' }, finish_reason: null }],
+      });
+      const result = parseSSEChunk(json);
+      expect(result?.content).toBe('Test');
     });
   });
 });
