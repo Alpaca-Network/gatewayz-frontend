@@ -137,7 +137,7 @@ const generateSessionTitle = (text: string, maxLength: number = 30): string => {
 };
 
 export function ChatInput() {
-  const { activeSessionId, setActiveSessionId, selectedModel, inputValue, setInputValue } = useChatUIStore();
+  const { activeSessionId, setActiveSessionId, selectedModel, inputValue, setInputValue, setMessageStartTime } = useChatUIStore();
   const { data: messages = [], isLoading: isHistoryLoading } = useSessionMessages(activeSessionId);
   const createSession = useCreateSession();
   const { isStreaming, streamMessage } = useChatStream();
@@ -272,12 +272,18 @@ export function ChatInput() {
     }
 
     try {
+        // Start the timer when message is sent
+        setMessageStartTime(Date.now());
+
         await streamMessage({
             sessionId,
             content,
             model: freshSelectedModel,
             messagesHistory: currentMessages
         });
+
+        // Clear the timer when streaming completes
+        setMessageStartTime(null);
 
         // Mark chat task as complete in onboarding after first message (authenticated users only)
         if (typeof window !== 'undefined' && isAuthenticated) {
@@ -325,6 +331,9 @@ export function ChatInput() {
           }
         }
     } catch (e) {
+        // Clear the timer on error
+        setMessageStartTime(null);
+
         const errorMessage = e instanceof Error ? e.message : "Failed to send message";
 
         // Check if the error is auth-related (guest mode not available or session expired)
@@ -347,7 +356,7 @@ export function ChatInput() {
           toast({ title: errorMessage, variant: "destructive" });
         }
     }
-  }, [inputValue, selectedImage, selectedVideo, selectedAudio, selectedDocument, isStreaming, selectedModel, activeSessionId, messages, setInputValue, setActiveSessionId, createSession, streamMessage, toast, isAuthenticated, login]);
+  }, [inputValue, selectedImage, selectedVideo, selectedAudio, selectedDocument, isStreaming, selectedModel, activeSessionId, messages, setInputValue, setActiveSessionId, createSession, streamMessage, toast, isAuthenticated, login, setMessageStartTime]);
 
   // Expose send function for prompt auto-send from WelcomeScreen
   useEffect(() => {

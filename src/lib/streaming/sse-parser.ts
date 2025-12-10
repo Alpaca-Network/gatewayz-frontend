@@ -162,6 +162,7 @@ function parseOpenAIFormat(data: Record<string, unknown>): ParsedSSEData | null 
     const isRoleOnlyDelta = deltaKeys.length === 1 && deltaKeys[0] === 'role';
 
     // Skip role-only chunks that don't have finish_reason or content
+    // Important: Don't skip if finish_reason is present (stream completion signal)
     if (isRoleOnlyDelta && !finishReason) {
       return null;
     }

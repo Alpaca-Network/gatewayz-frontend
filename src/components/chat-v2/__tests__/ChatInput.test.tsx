@@ -54,13 +54,16 @@ const mockStoreState = {
   activeSessionId: null as number | null,
   selectedModel: { value: 'test-model', label: 'Test Model' } as { value: string; label: string },
   inputValue: '',
+  messageStartTime: null as number | null,
 };
+const mockSetMessageStartTime = jest.fn();
 
 // Helper to reset store state
 const resetMockStoreState = () => {
   mockStoreState.activeSessionId = null;
   mockStoreState.selectedModel = { value: 'test-model', label: 'Test Model' };
   mockStoreState.inputValue = '';
+  mockStoreState.messageStartTime = null;
 };
 
 jest.mock('@/lib/store/chat-ui-store', () => {
@@ -71,6 +74,7 @@ jest.mock('@/lib/store/chat-ui-store', () => {
     selectedModel: mockStoreState.selectedModel,
     inputValue: mockStoreState.inputValue,
     setInputValue: mockSetInputValue,
+    setMessageStartTime: mockSetMessageStartTime,
   });
 
   // Add getState method to the function
