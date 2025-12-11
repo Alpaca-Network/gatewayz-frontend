@@ -137,7 +137,7 @@ const generateSessionTitle = (text: string, maxLength: number = 30): string => {
 };
 
 export function ChatInput() {
-  const { activeSessionId, setActiveSessionId, selectedModel, inputValue, setInputValue } = useChatUIStore();
+  const { activeSessionId, setActiveSessionId, selectedModel, inputValue, setInputValue, setMessageStartTime } = useChatUIStore();
   const { data: messages = [], isLoading: isHistoryLoading } = useSessionMessages(activeSessionId);
   const createSession = useCreateSession();
   const { isStreaming, streamMessage } = useChatStream();
@@ -160,6 +160,9 @@ export function ChatInput() {
   const audioInputRef = useRef<HTMLInputElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Ref for synchronous recording state check to prevent race conditions on rapid clicks
+  const isRecordingRef = useRef(false);
 
   // Derive input empty state directly from inputValue to avoid desync issues
   const isInputEmpty = !inputValue.trim();
@@ -269,12 +272,18 @@ export function ChatInput() {
     }
 
     try {
+        // Start the timer when message is sent
+        setMessageStartTime(Date.now());
+
         await streamMessage({
             sessionId,
             content,
             model: freshSelectedModel,
             messagesHistory: currentMessages
         });
+
+        // Clear the timer when streaming completes
+        setMessageStartTime(null);
 
         // Mark chat task as complete in onboarding after first message (authenticated users only)
         if (typeof window !== 'undefined' && isAuthenticated) {
@@ -322,6 +331,9 @@ export function ChatInput() {
           }
         }
     } catch (e) {
+        // Clear the timer on error
+        setMessageStartTime(null);
+
         const errorMessage = e instanceof Error ? e.message : "Failed to send message";
 
         // Check if the error is auth-related (guest mode not available or session expired)
@@ -344,7 +356,7 @@ export function ChatInput() {
           toast({ title: errorMessage, variant: "destructive" });
         }
     }
-  }, [inputValue, selectedImage, selectedVideo, selectedAudio, selectedDocument, isStreaming, selectedModel, activeSessionId, messages, setInputValue, setActiveSessionId, createSession, streamMessage, toast, isAuthenticated, login]);
+  }, [inputValue, selectedImage, selectedVideo, selectedAudio, selectedDocument, isStreaming, selectedModel, activeSessionId, messages, setInputValue, setActiveSessionId, createSession, streamMessage, toast, isAuthenticated, login, setMessageStartTime]);
 
   // Expose send function for prompt auto-send from WelcomeScreen
   useEffect(() => {
@@ -424,11 +436,14 @@ export function ChatInput() {
       if (documentInputRef.current) documentInputRef.current.value = '';
   };
 
+  // Ref to track current recognition instance for race condition prevention
+  const currentRecognitionRef = useRef<SpeechRecognition | null>(null);
+
   // Speech Recognition for transcription
   const startRecording = useCallback(() => {
-    // Prevent race condition: check if already recording before starting
-    // Use ref for synchronous check to avoid state timing issues
-    if (isRecording || speechRecognition) {
+    // Prevent race condition: use ref for synchronous check to avoid state timing issues
+    // State updates are asynchronous, so rapid double-clicks could bypass state-based guards
+    if (isRecordingRef.current) {
       return;
     }
 
@@ -443,8 +458,8 @@ export function ChatInput() {
       return;
     }
 
-    // Set recording state BEFORE creating recognition to prevent race conditions
-    // This ensures double-clicks are blocked even before onstart fires
+    // Set ref IMMEDIATELY to block any concurrent calls (synchronous update)
+    isRecordingRef.current = true;
     setIsRecording(true);
 
     const recognition = new SpeechRecognitionAPI();
@@ -452,9 +467,16 @@ export function ChatInput() {
     recognition.interimResults = true;
     recognition.lang = 'en-US';
 
+    // Track this recognition instance to prevent stale handlers from corrupting state
+    currentRecognitionRef.current = recognition;
+
+    // Set speechRecognition state BEFORE starting to ensure error handlers have access
+    setSpeechRecognition(recognition);
+
     recognition.onstart = () => {
-      // State already set above, but confirm it
+      // Confirm state is set (should already be set above)
       setIsRecording(true);
+      isRecordingRef.current = true;
     };
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
@@ -479,9 +501,16 @@ export function ChatInput() {
     };
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+      // Only handle error if this is still the current recognition instance
+      // This prevents stale handlers from corrupting state of a new recording
+      if (currentRecognitionRef.current !== recognition) {
+        return;
+      }
       console.error('Speech recognition error:', event.error);
+      isRecordingRef.current = false;
       setIsRecording(false);
       setSpeechRecognition(null);
+      currentRecognitionRef.current = null;
 
       if (event.error === 'not-allowed') {
         toast({
@@ -499,31 +528,43 @@ export function ChatInput() {
     };
 
     recognition.onend = () => {
+      // Only clean up state if this is still the current recognition instance
+      // This prevents an old recognition's onend from corrupting a new recording's state
+      if (currentRecognitionRef.current !== recognition) {
+        return;
+      }
+      isRecordingRef.current = false;
       setIsRecording(false);
       setSpeechRecognition(null);
+      currentRecognitionRef.current = null;
     };
 
     try {
       recognition.start();
-      setSpeechRecognition(recognition);
     } catch (error) {
       // Handle synchronous errors from recognition.start()
       // This can happen when audio context is blocked by browser policy
       console.error('Speech recognition start failed:', error);
+      isRecordingRef.current = false;
       setIsRecording(false);
       setSpeechRecognition(null);
+      currentRecognitionRef.current = null;
       toast({
         title: "Failed to start speech recognition",
         description: "Your browser blocked the microphone. Please check your permissions.",
         variant: "destructive"
       });
     }
-  }, [toast, setInputValue, isRecording, speechRecognition]);
+  }, [toast, setInputValue]);
 
   const stopRecording = useCallback(() => {
     if (speechRecognition) {
+      // Clear the current recognition ref BEFORE stopping to prevent onend handler
+      // from running (since we're intentionally stopping)
+      currentRecognitionRef.current = null;
       speechRecognition.stop();
       setSpeechRecognition(null);
+      isRecordingRef.current = false;
       setIsRecording(false);
     }
   }, [speechRecognition]);

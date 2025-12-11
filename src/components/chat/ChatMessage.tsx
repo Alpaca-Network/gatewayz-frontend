@@ -14,6 +14,7 @@ import dynamic from 'next/dynamic';
 import { usePrivy } from '@privy-io/react-auth';
 import remarkGfm from 'remark-gfm';
 import { shortenModelName } from '@/lib/utils';
+import { ChatTimer } from './ChatTimer';
 
 // Lazy load heavy components - enable SSR to prevent hydration mismatch
 const ReactMarkdown = dynamic(() => import('react-markdown'), { ssr: true });
@@ -294,14 +295,15 @@ export const ChatMessage = memo<ChatMessageProps>(
               <ErrorDisplay error={error} />
             )}
 
-            {/* Streaming indicator */}
+            {/* Streaming indicator with timer */}
             {isStreaming && (
-              <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+              <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
                 <div className="flex gap-1">
                   <span className="animate-bounce" style={{ animationDelay: '0ms' }}>●</span>
                   <span className="animate-bounce" style={{ animationDelay: '150ms' }}>●</span>
                   <span className="animate-bounce" style={{ animationDelay: '300ms' }}>●</span>
                 </div>
+                <ChatTimer />
               </div>
             )}
           </Card>

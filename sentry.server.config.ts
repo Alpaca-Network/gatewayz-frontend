@@ -31,9 +31,9 @@ const serverRateLimitState = {
 };
 
 const SERVER_RATE_LIMIT_CONFIG = {
-  maxEventsPerMinute: 50,  // Server can handle slightly more
+  maxEventsPerMinute: 20,  // REDUCED from 50 to prevent 429s
   windowMs: 60000,
-  dedupeWindowMs: 5000,    // Shorter dedupe window on server
+  dedupeWindowMs: 60000,   // INCREASED from 5s to 60s to prevent duplicates
   cleanupIntervalMs: 30000,
   maxMapSize: 100,
 };
@@ -118,8 +118,8 @@ Sentry.init({
   // Release tracking for associating errors with specific versions
   release: getRelease(),
 
-  // REDUCED: Sample only 10% of transactions to avoid rate limits
-  tracesSampleRate: 0.1,
+  // REDUCED: Sample only 1% of transactions to avoid rate limits
+  tracesSampleRate: 0.01,
 
   // Setting this option to true will print useful information to the console while you're setting up Sentry.
   debug: false,

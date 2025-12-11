@@ -459,6 +459,8 @@ describe('streamChatResponse', () => {
 
     test('should extract error message from unknown error object structure', async () => {
       // Simulate backend returning completely non-standard error structure
+      // When no message/detail/error/text/reason/code/type fields exist,
+      // but status is present, it should return "HTTP {status} error"
       const mockChunks = [
         'data: {"choices":[{"delta":{"content":"Start"}}]}\n\n',
         'data: {"error":{"unknown_field":"data","status":500}}\n\n',
@@ -471,7 +473,33 @@ describe('streamChatResponse', () => {
         body: createMockStream(mockChunks),
       });
 
-      // Should stringify the error object since we can't extract a known message field
+      // With status field present, it should extract "HTTP 500 error"
+      await expect(
+        collectChunks(
+          streamChatResponse(
+            '/api/chat/completions',
+            'test-key',
+            { model: 'openrouter/auto', messages: [], stream: true }
+          )
+        )
+      ).rejects.toThrow(/HTTP 500 error/);
+    });
+
+    test('should stringify unknown error object without status', async () => {
+      // Simulate backend returning completely non-standard error structure without status
+      const mockChunks = [
+        'data: {"choices":[{"delta":{"content":"Start"}}]}\n\n',
+        'data: {"error":{"unknown_field":"data","other_field":123}}\n\n',
+      ];
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Map([['content-type', 'text/event-stream']]),
+        body: createMockStream(mockChunks),
+      });
+
+      // Should stringify the error object since we can't extract a known field
       await expect(
         collectChunks(
           streamChatResponse(
@@ -505,6 +533,239 @@ describe('streamChatResponse', () => {
           )
         )
       ).rejects.toThrow(/Rate limit exceeded from provider/);
+    });
+
+    test('should extract error from "text" field in error object', async () => {
+      const mockChunks = [
+        'data: {"error":{"text":"Model overloaded, please retry"}}\n\n',
+      ];
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Map([['content-type', 'text/event-stream']]),
+        body: createMockStream(mockChunks),
+      });
+
+      await expect(
+        collectChunks(
+          streamChatResponse(
+            '/api/chat/completions',
+            'test-key',
+            { model: 'openrouter/auto', messages: [], stream: true }
+          )
+        )
+      ).rejects.toThrow(/Model overloaded, please retry/);
+    });
+
+    test('should extract error from "reason" field in error object', async () => {
+      const mockChunks = [
+        'data: {"error":{"reason":"Context length exceeded"}}\n\n',
+      ];
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Map([['content-type', 'text/event-stream']]),
+        body: createMockStream(mockChunks),
+      });
+
+      await expect(
+        collectChunks(
+          streamChatResponse(
+            '/api/chat/completions',
+            'test-key',
+            { model: 'openrouter/auto', messages: [], stream: true }
+          )
+        )
+      ).rejects.toThrow(/Context length exceeded/);
+    });
+
+    test('should extract error from code/type combination', async () => {
+      const mockChunks = [
+        'data: {"error":{"type":"invalid_request","code":"context_too_long"}}\n\n',
+      ];
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Map([['content-type', 'text/event-stream']]),
+        body: createMockStream(mockChunks),
+      });
+
+      await expect(
+        collectChunks(
+          streamChatResponse(
+            '/api/chat/completions',
+            'test-key',
+            { model: 'openrouter/auto', messages: [], stream: true }
+          )
+        )
+      ).rejects.toThrow(/invalid_request: context_too_long/);
+    });
+
+    test('should extract error from standalone code field', async () => {
+      // Use a non-rate-limit error code to test the "Error code:" fallback
+      // Rate limit errors are handled specially with user-friendly messages
+      const mockChunks = [
+        'data: {"error":{"code":"context_length_exceeded"}}\n\n',
+      ];
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Map([['content-type', 'text/event-stream']]),
+        body: createMockStream(mockChunks),
+      });
+
+      await expect(
+        collectChunks(
+          streamChatResponse(
+            '/api/chat/completions',
+            'test-key',
+            { model: 'openrouter/auto', messages: [], stream: true }
+          )
+        )
+      ).rejects.toThrow(/Error code: context_length_exceeded/);
+    });
+
+    test('should convert rate_limit_exceeded code to user-friendly message', async () => {
+      const mockChunks = [
+        'data: {"error":{"code":"rate_limit_exceeded"}}\n\n',
+      ];
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Map([['content-type', 'text/event-stream']]),
+        body: createMockStream(mockChunks),
+      });
+
+      // rate_limit_exceeded errors now return a user-friendly message
+      await expect(
+        collectChunks(
+          streamChatResponse(
+            '/api/chat/completions',
+            'test-key',
+            { model: 'openrouter/auto', messages: [], stream: true }
+          )
+        )
+      ).rejects.toThrow(/Rate limit exceeded.*temporarily unavailable/);
+    });
+
+    test('should extract error from standalone type field', async () => {
+      const mockChunks = [
+        'data: {"error":{"type":"server_error"}}\n\n',
+      ];
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Map([['content-type', 'text/event-stream']]),
+        body: createMockStream(mockChunks),
+      });
+
+      await expect(
+        collectChunks(
+          streamChatResponse(
+            '/api/chat/completions',
+            'test-key',
+            { model: 'openrouter/auto', messages: [], stream: true }
+          )
+        )
+      ).rejects.toThrow(/Error type: server_error/);
+    });
+
+    test('should handle top-level string error field', async () => {
+      const mockChunks = [
+        'data: {"error":"Service temporarily unavailable"}\n\n',
+      ];
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Map([['content-type', 'text/event-stream']]),
+        body: createMockStream(mockChunks),
+      });
+
+      await expect(
+        collectChunks(
+          streamChatResponse(
+            '/api/chat/completions',
+            'test-key',
+            { model: 'openrouter/auto', messages: [], stream: true }
+          )
+        )
+      ).rejects.toThrow(/Service temporarily unavailable/);
+    });
+
+    test('should handle top-level message field', async () => {
+      const mockChunks = [
+        'data: {"message":"Invalid API key format"}\n\n',
+      ];
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Map([['content-type', 'text/event-stream']]),
+        body: createMockStream(mockChunks),
+      });
+
+      await expect(
+        collectChunks(
+          streamChatResponse(
+            '/api/chat/completions',
+            'test-key',
+            { model: 'openrouter/auto', messages: [], stream: true }
+          )
+        )
+      ).rejects.toThrow(/Invalid API key format/);
+    });
+
+    test('should handle top-level trial expired error with user-friendly message', async () => {
+      const mockChunks = [
+        'data: {"detail":"Your trial has expired. Please upgrade."}\n\n',
+      ];
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Map([['content-type', 'text/event-stream']]),
+        body: createMockStream(mockChunks),
+      });
+
+      await expect(
+        collectChunks(
+          streamChatResponse(
+            '/api/chat/completions',
+            'test-key',
+            { model: 'openrouter/auto', messages: [], stream: true }
+          )
+        )
+      ).rejects.toThrow(/Trial credits have been used up.*FREE models/);
+    });
+
+    test('should handle top-level upstream rejected error with retry suggestion', async () => {
+      const mockChunks = [
+        'data: {"message":"upstream rejected the request"}\n\n',
+      ];
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Map([['content-type', 'text/event-stream']]),
+        body: createMockStream(mockChunks),
+      });
+
+      await expect(
+        collectChunks(
+          streamChatResponse(
+            '/api/chat/completions',
+            'test-key',
+            { model: 'openrouter/auto', messages: [], stream: true }
+          )
+        )
+      ).rejects.toThrow(/Backend error.*upstream rejected.*try again/i);
     });
   });
 
