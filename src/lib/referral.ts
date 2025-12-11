@@ -79,7 +79,12 @@ export function initializeReferralTracking(): void {
     storeReferralCode(urlCode, 'url');
     console.log('[Referral] Captured referral code from URL:', urlCode);
     // Clear any previous dismissal when a new referral code arrives
-    sessionStorage.removeItem('gatewayz_referral_toast_dismissed');
+    // Note: sessionStorage used intentionally here for non-persistent dismissal state
+    try {
+      sessionStorage.removeItem('gatewayz_referral_toast_dismissed');
+    } catch {
+      // Silently fail if sessionStorage is unavailable
+    }
   } else {
     const storedCode = getStoredReferralCode();
     if (storedCode) {
