@@ -71,6 +71,14 @@ jest.mock('@/hooks/use-toast', () => ({
   useToast: () => ({ toast: jest.fn() }),
 }));
 
+// Mock @tanstack/react-query for useQueryClient
+const mockSetQueryData = jest.fn();
+jest.mock('@tanstack/react-query', () => ({
+  useQueryClient: () => ({
+    setQueryData: mockSetQueryData,
+  }),
+}));
+
 // Mock next/navigation for useSearchParams
 jest.mock('next/navigation', () => ({
   useSearchParams: () => ({
