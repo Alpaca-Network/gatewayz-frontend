@@ -232,7 +232,7 @@ export function ChatLayout() {
    };
 
    // Handle retry for failed messages (e.g., rate limit errors)
-   // This removes the failed assistant message and resends the last user message
+   // This removes both the failed assistant message AND the user message, then resends
    const handleRetry = useCallback(() => {
        if (!activeSessionId || activeMessages.length < 2) return;
 
@@ -263,22 +263,27 @@ export function ChatLayout() {
            return;
        }
 
-       // Remove the failed assistant message from the query cache
+       // Check if __chatInputSend is available before making any changes
+       // This prevents leaving the UI in an inconsistent state
+       if (typeof window === 'undefined' || !(window as any).__chatInputSend) {
+           console.warn('[ChatLayout] __chatInputSend not available, cannot retry');
+           return;
+       }
+
+       // Remove BOTH the user message AND the failed assistant message from the query cache
+       // This prevents duplicate user messages when handleSend adds the message again
        queryClient.setQueryData(['chat-messages', activeSessionId], (old: any[] | undefined) => {
-           if (!old || old.length === 0) return old;
-           // Remove the last message (the failed assistant message)
-           return old.slice(0, -1);
+           if (!old || old.length < 2) return old;
+           // Remove the last two messages (user message + failed assistant message)
+           return old.slice(0, -2);
        });
 
-       // Set the input value to the last user message and trigger send
+       // Set the input value to the last user message
        setInputValue(userContent);
 
-       // Use requestAnimationFrame to ensure the input value is set before sending
-       requestAnimationFrame(() => {
-           if (typeof window !== 'undefined' && (window as any).__chatInputSend) {
-               (window as any).__chatInputSend();
-           }
-       });
+       // Trigger send - handleSend reads fresh state from Zustand store via getState()
+       // so the inputValue will be correctly picked up
+       (window as any).__chatInputSend();
    }, [activeSessionId, activeMessages, queryClient, setInputValue]);
 
    // When logged out, always show welcome screen (ignore cached messages and activeSessionId)
