@@ -4,6 +4,7 @@ import { usePrivy, User, LinkedAccountWithMetadata } from '@privy-io/react-auth'
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useChatUIStore } from '@/lib/store/chat-ui-store';
 import { processAuthResponse, AuthResponse, getApiKey, getUserData, saveApiKey, saveUserData, AUTH_REFRESH_COMPLETE_EVENT } from '@/lib/api';
+import { safeLocalStorageGet, safeLocalStorageSet } from '@/lib/safe-storage';
 
 // Helper to strip undefined values (copied from original context)
 const stripUndefined = <T>(value: T): T => {
@@ -94,13 +95,13 @@ export function useAuthSync() {
       const isNewUser = !existingUserData;
       const hasStoredApiKey = Boolean(existingUserData?.api_key);
 
-      let referralCode = localStorage.getItem("gatewayz_referral_code");
+      let referralCode = safeLocalStorageGet("gatewayz_referral_code");
       if (!referralCode && typeof window !== "undefined") {
         const urlParams = new URLSearchParams(window.location.search);
         const urlRefCode = urlParams.get("ref");
         if (urlRefCode) {
           referralCode = urlRefCode;
-          localStorage.setItem("gatewayz_referral_code", urlRefCode);
+          safeLocalStorageSet("gatewayz_referral_code", urlRefCode);
         }
       }
 
