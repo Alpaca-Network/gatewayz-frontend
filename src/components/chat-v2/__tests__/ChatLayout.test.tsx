@@ -25,11 +25,22 @@ jest.mock('@/lib/utils', () => ({
   cn: (...args: any[]) => args.filter(Boolean).join(' '),
 }));
 
+// Mock lucide-react icons
+jest.mock('lucide-react', () => ({
+  Menu: () => <span data-testid="menu-icon">Menu</span>,
+  Pencil: () => <span data-testid="pencil-icon">Pencil</span>,
+  EyeOff: () => <span data-testid="eye-off-icon">EyeOff</span>,
+  Eye: () => <span data-testid="eye-icon">Eye</span>,
+}));
+
 // Mock the stores and hooks
 const mockSetInputValue = jest.fn();
 const mockSetActiveSessionId = jest.fn();
 const mockSetSelectedModel = jest.fn();
 const mockSetMobileSidebarOpen = jest.fn();
+const mockToggleIncognitoMode = jest.fn();
+
+let mockIsIncognitoMode = false;
 
 jest.mock('@/lib/store/chat-ui-store', () => ({
   useChatUIStore: () => ({
@@ -41,7 +52,17 @@ jest.mock('@/lib/store/chat-ui-store', () => ({
     setInputValue: mockSetInputValue,
     mobileSidebarOpen: false,
     setMobileSidebarOpen: mockSetMobileSidebarOpen,
+    isIncognitoMode: mockIsIncognitoMode,
+    toggleIncognitoMode: mockToggleIncognitoMode,
   }),
+  INCOGNITO_DEFAULT_MODEL: {
+    value: 'near/zai-org/GLM-4.6',
+    label: 'GLM-4.6',
+    category: 'General',
+    sourceGateway: 'near',
+    developer: 'ZAI',
+    modalities: ['Text']
+  },
 }));
 
 jest.mock('@/lib/store/auth-store', () => ({
@@ -108,6 +129,7 @@ import { ChatLayout } from '../ChatLayout';
 describe('ChatLayout', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockIsIncognitoMode = false;
     delete (window as any).__chatInputSend;
     delete (window as any).__chatInputFocus;
   });
@@ -274,6 +296,33 @@ describe('shuffleArray function', () => {
 
     // Verify we get 4 cards
     expect(cards).toHaveLength(4);
+  });
+});
+
+describe('Incognito mode', () => {
+  it('should render incognito toggle button', () => {
+    render(<ChatLayout />);
+
+    // Should have a button with the incognito title
+    const incognitoButton = screen.getByTitle(/incognito mode/i);
+    expect(incognitoButton).toBeInTheDocument();
+  });
+
+  it('should call toggleIncognitoMode when incognito button is clicked', () => {
+    render(<ChatLayout />);
+
+    const incognitoButton = screen.getByTitle(/incognito mode/i);
+    fireEvent.click(incognitoButton);
+
+    expect(mockToggleIncognitoMode).toHaveBeenCalled();
+  });
+
+  it('should show different title when incognito mode is enabled', () => {
+    mockIsIncognitoMode = true;
+    render(<ChatLayout />);
+
+    const incognitoButton = screen.getByTitle(/incognito mode enabled/i);
+    expect(incognitoButton).toBeInTheDocument();
   });
 });
 

@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
-import { Menu, Pencil } from "lucide-react";
+import { Menu, Pencil, EyeOff, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 import { ChatSidebar } from "./ChatSidebar";
@@ -79,7 +79,7 @@ function WelcomeScreen({ onPromptSelect }: { onPromptSelect: (txt: string) => vo
 export function ChatLayout() {
    useAuthSync(); // Trigger auth sync
    const { isAuthenticated, isLoading: authLoading } = useAuthStore();
-   const { selectedModel, setSelectedModel, activeSessionId, setActiveSessionId, setInputValue, mobileSidebarOpen, setMobileSidebarOpen } = useChatUIStore();
+   const { selectedModel, setSelectedModel, activeSessionId, setActiveSessionId, setInputValue, mobileSidebarOpen, setMobileSidebarOpen, isIncognitoMode, toggleIncognitoMode } = useChatUIStore();
    const searchParams = useSearchParams();
 
    // Track if user has clicked a prompt (to immediately hide welcome screen)
@@ -290,8 +290,21 @@ export function ChatLayout() {
                        )}
                    </div>
 
-                   <div className="w-[200px] sm:w-[250px] shrink-0">
-                       <ModelSelect selectedModel={selectedModel} onSelectModel={setSelectedModel} />
+                   <div className="flex items-center gap-2 shrink-0">
+                       {/* Incognito Mode Toggle */}
+                       <Button
+                           variant={isIncognitoMode ? "default" : "ghost"}
+                           size="icon"
+                           onClick={toggleIncognitoMode}
+                           title={isIncognitoMode ? "Incognito mode enabled (GLM-4.6)" : "Enable incognito mode"}
+                           className={isIncognitoMode ? "bg-purple-600 hover:bg-purple-700 text-white" : ""}
+                       >
+                           {isIncognitoMode ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                       </Button>
+
+                       <div className="w-[180px] sm:w-[250px]">
+                           <ModelSelect selectedModel={selectedModel} onSelectModel={setSelectedModel} />
+                       </div>
                    </div>
                </header>
 
