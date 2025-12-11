@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import { API_BASE_URL } from '@/lib/config';
+import { retryFetch } from '@/lib/retry-utils';
+import { handleApiError } from '@/app/api/middleware/error-handler';
 
 const contactFormSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -33,29 +36,30 @@ export async function POST(request: NextRequest) {
     const { name, email, company, subject, message } = validationResult.data;
     const subjectLabel = subjectLabels[subject] || subject;
 
-    // Try to send via backend API
-    const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
-
     try {
-      const response = await fetch(`${apiBaseUrl}/v1/contact`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          to: 'sales@gatewayz.ai',
-          from_name: name,
-          from_email: email,
-          company: company || 'Not provided',
-          subject: `[${subjectLabel}] Contact Form Submission from ${name}`,
-          message: message,
-          metadata: {
-            source: 'beta.gatewayz.ai',
-            subject_category: subject,
-            timestamp: new Date().toISOString(),
+      // Send via backend API with retry logic for transient errors
+      const response = await retryFetch(
+        () => fetch(`${API_BASE_URL}/v1/contact`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
           },
+          body: JSON.stringify({
+            to: 'sales@gatewayz.ai',
+            from_name: name,
+            from_email: email,
+            company: company || 'Not provided',
+            subject: `[${subjectLabel}] Contact Form Submission from ${name}`,
+            message: message,
+            metadata: {
+              source: 'beta.gatewayz.ai',
+              subject_category: subject,
+              timestamp: new Date().toISOString(),
+            },
+          }),
         }),
-      });
+        { maxRetries: 3, retryableStatuses: [429, 502, 503, 504] }
+      );
 
       if (response.ok) {
         return NextResponse.json({
@@ -97,11 +101,7 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('[Contact Form] Error processing contact form:', error);
-    return NextResponse.json(
-      { error: 'Failed to process your request. Please try again later.' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'Contact Form');
   }
 }
 
