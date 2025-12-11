@@ -143,7 +143,7 @@ export default function StartApiPage() {
     python: `from openai import OpenAI
 
 client = OpenAI(
-    base_url="https://api.gatewayz.ai/v1",
+    base_url="https://api.gatewayz.ai",
     api_key="${apiKey || 'YOUR_API_KEY'}"
 )
 
@@ -158,7 +158,7 @@ print(completion.choices[0].message.content)`,
     javascript: `import OpenAI from 'openai';
 
 const client = new OpenAI({
-  baseURL: "https://api.gatewayz.ai/v1",
+  baseURL: "https://api.gatewayz.ai",
   apiKey: "${apiKey || 'YOUR_API_KEY'}"
 });
 
@@ -173,7 +173,7 @@ console.log(completion.choices[0].message.content);`,
     typescript: `import OpenAI from 'openai';
 
 const client = new OpenAI({
-  baseURL: "https://api.gatewayz.ai/v1",
+  baseURL: "https://api.gatewayz.ai",
   apiKey: "${apiKey || 'YOUR_API_KEY'}"
 });
 
