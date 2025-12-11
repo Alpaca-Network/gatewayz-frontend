@@ -304,6 +304,63 @@ function shouldRateLimitTransaction(event: TransactionEventLike): boolean {
   return false;
 }
 
+// =============================================================================
+// BROWSER TRACING BEST PRACTICES
+// Based on: https://blog.sentry.io/improving-browser-tracing-step-by-step/
+// =============================================================================
+
+/**
+ * Patterns for spans that should be ignored to reduce noise and costs.
+ * These are low-value spans that don't provide actionable insights.
+ */
+const IGNORE_SPAN_PATTERNS: (string | RegExp)[] = [
+  // Health check endpoints
+  '/api/health',
+  '/api/ping',
+  '/health',
+  '/healthz',
+  '/ready',
+  '/readyz',
+
+  // Web vitals endpoint (don't trace the vitals reporter itself)
+  '/api/vitals',
+
+  // Next.js static assets and internal routes
+  /^\/_next\/static\/.*/,
+  /^\/_next\/image.*/,
+  /^\/_next\/data\/.*/,
+
+  // Analytics and tracking endpoints (already tracked by their own services)
+  /posthog/i,
+  /analytics/i,
+  /segment/i,
+  /mixpanel/i,
+  /amplitude/i,
+  /hotjar/i,
+
+  // Third-party services that add noise
+  /walletconnect/i,
+  /infura\.io/i,
+  /alchemy\.com/i,
+
+  // Favicon and common static files
+  '/favicon.ico',
+  /\.(png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot)$/i,
+];
+
+/**
+ * Check if a URL should be ignored for span creation.
+ * Used by shouldCreateSpanForRequest to filter low-value requests.
+ */
+function shouldIgnoreUrl(url: string): boolean {
+  return IGNORE_SPAN_PATTERNS.some(pattern => {
+    if (typeof pattern === 'string') {
+      return url.includes(pattern);
+    }
+    return pattern.test(url);
+  });
+}
+
 Sentry.init({
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
 
@@ -325,10 +382,39 @@ Sentry.init({
   // Limit breadcrumbs to reduce payload size
   maxBreadcrumbs: RATE_LIMIT_CONFIG.maxBreadcrumbs,
 
-  // DISABLED: Replay integration completely removed to prevent 429s
-  // Replay was sending too many events to Sentry causing rate limit errors
   integrations: [
-    // REMOVED: Replay integration completely disabled
+    // =============================================================================
+    // BROWSER TRACING BEST PRACTICES
+    // Ref: https://blog.sentry.io/improving-browser-tracing-step-by-step/
+    // =============================================================================
+    Sentry.browserTracingIntegration({
+      // Track long tasks (>50ms) that block the main thread
+      enableLongTask: true,
+
+      // Enable Interaction to Next Paint (INP) tracking
+      enableInp: true,
+
+      // Explicit pageload control for SPAs - allows manual signaling when page is loaded
+      // Use Sentry.reportPageLoaded() to signal when your app considers the page ready
+      // This gives more accurate pageload measurements than automatic idle detection
+      enableReportPageLoaded: true,
+
+      // Filter low-value spans to reduce noise and costs
+      // This callback determines whether to create spans for outgoing requests
+      shouldCreateSpanForRequest: (url: string) => {
+        return !shouldIgnoreUrl(url);
+      },
+
+      // Experimental: Standalone Web Vitals spans
+      // These capture final LCP/CLS values independently from pageload spans,
+      // ensuring accurate measurements even when metrics stabilize after pageload
+      _experiments: {
+        enableStandaloneLcpSpans: true,
+        enableStandaloneClsSpans: true,
+      },
+    }),
+
+    // REMOVED: Replay integration completely disabled to prevent 429s
     // Sentry.replayIntegration({ maskAllText: true, blockAllMedia: true }),
 
     // REMOVED: consoleLoggingIntegration was sending every console.log/warn/error to Sentry
