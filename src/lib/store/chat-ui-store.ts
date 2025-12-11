@@ -31,6 +31,7 @@ interface ChatUIState {
   inputValue: string;
   selectedModel: ModelOption | null;
   isIncognitoMode: boolean;
+  messageStartTime: number | null; // Unix timestamp when message was sent
 
   setActiveSessionId: (id: number | null) => void;
   setMobileSidebarOpen: (open: boolean) => void;
@@ -38,6 +39,7 @@ interface ChatUIState {
   setSelectedModel: (model: ModelOption | null) => void;
   setIncognitoMode: (enabled: boolean) => void;
   toggleIncognitoMode: () => void;
+  setMessageStartTime: (time: number | null) => void;
   resetChatState: () => void;
 }
 
@@ -57,6 +59,7 @@ export const useChatUIStore = create<ChatUIState>((set, get) => ({
   inputValue: '',
   isIncognitoMode: getInitialIncognitoState(),
   selectedModel: getInitialIncognitoState() ? INCOGNITO_DEFAULT_MODEL : STANDARD_DEFAULT_MODEL,
+  messageStartTime: null,
 
   setActiveSessionId: (id) => set({ activeSessionId: id }),
   setMobileSidebarOpen: (open) => set({ mobileSidebarOpen: open }),
@@ -94,9 +97,11 @@ export const useChatUIStore = create<ChatUIState>((set, get) => ({
       selectedModel: newState ? INCOGNITO_DEFAULT_MODEL : state.selectedModel
     }));
   },
+  setMessageStartTime: (time) => set({ messageStartTime: time }),
   resetChatState: () => set({
     activeSessionId: null,
     inputValue: '',
-    mobileSidebarOpen: false
+    mobileSidebarOpen: false,
+    messageStartTime: null
   }),
 }));

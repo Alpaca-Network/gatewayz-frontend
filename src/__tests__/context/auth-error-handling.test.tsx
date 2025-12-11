@@ -14,7 +14,7 @@ import {
   createMockResponse,
   createErrorResponse,
 } from '@/__tests__/utils/mock-fetch';
-import { TEST_USER, TEST_TIMESTAMPS } from '@/__tests__/utils/test-constants';
+import { TEST_USER, TEST_TIMESTAMPS, TEST_API_KEYS } from '@/__tests__/utils/test-constants';
 
 // Mock Sentry
 jest.mock('@sentry/nextjs', () => ({
@@ -142,7 +142,7 @@ describe('Authentication Error Handling', () => {
   describe('Temporary API Key Upgrade (JAVASCRIPT-NEXTJS-14)', () => {
     it('should log temp key details to Sentry when detected', () => {
       const authData = {
-        api_key: 'gw_temp_abc123def',
+        api_key: TEST_API_KEYS.TEMP,
         user_id: TEST_USER.ID,
         credits: 100,
         is_new_user: false,
@@ -166,7 +166,7 @@ describe('Authentication Error Handling', () => {
             is_new_user: authData.is_new_user,
             tier: authData.tier,
             had_existing_live_key: false,
-            key_prefix: 'gw_temp_abc123d',
+            key_prefix: TEST_API_KEYS.TEMP.substring(0, 15),
           },
         };
 
@@ -177,7 +177,7 @@ describe('Authentication Error Handling', () => {
 
     it('should log permanent key details when received', () => {
       const authData = {
-        api_key: 'gw_live_xyz789abc',
+        api_key: TEST_API_KEYS.LIVE,
         user_id: TEST_USER.ID,
         credits: 431.78,
         tier: 'pro',
@@ -202,28 +202,28 @@ describe('Authentication Error Handling', () => {
       const testCases = [
         {
           desc: 'eligible user',
-          tempApiKey: 'gw_temp_abc123',
+          tempApiKey: TEST_API_KEYS.TEMP,
           credits: 100,
           is_new_user: false,
           shouldUpgrade: true,
         },
         {
           desc: 'new user - skip upgrade',
-          tempApiKey: 'gw_temp_abc123',
+          tempApiKey: TEST_API_KEYS.TEMP,
           credits: 100,
           is_new_user: true,
           shouldUpgrade: false,
         },
         {
           desc: 'low credits - skip upgrade',
-          tempApiKey: 'gw_temp_abc123',
+          tempApiKey: TEST_API_KEYS.TEMP,
           credits: 5,
           is_new_user: false,
           shouldUpgrade: false,
         },
         {
           desc: 'non-temp key - skip upgrade',
-          tempApiKey: 'gw_live_abc123',
+          tempApiKey: TEST_API_KEYS.LIVE,
           credits: 100,
           is_new_user: false,
           shouldUpgrade: false,
@@ -243,8 +243,8 @@ describe('Authentication Error Handling', () => {
     });
 
     it('should log upgrade details when upgrading API key', () => {
-      const currentKey = 'gw_temp_abc123def';
-      const liveApiKey = 'gw_live_xyz789abc';
+      const currentKey = TEST_API_KEYS.TEMP;
+      const liveApiKey = TEST_API_KEYS.LIVE;
 
       const upgradeDetails = {
         from_prefix: currentKey.substring(0, 15) + '...',
@@ -253,8 +253,8 @@ describe('Authentication Error Handling', () => {
         environment: 'live',
       };
 
-      expect(upgradeDetails.from_prefix).toBe('gw_temp_abc123d...');
-      expect(upgradeDetails.to_prefix).toBe('gw_live_xyz789a...');
+      expect(upgradeDetails.from_prefix).toBe(TEST_API_KEYS.TEMP.substring(0, 15) + '...');
+      expect(upgradeDetails.to_prefix).toBe(TEST_API_KEYS.LIVE.substring(0, 15) + '...');
       expect(upgradeDetails.is_primary).toBe(true);
       expect(upgradeDetails.environment).toBe('live');
     });
@@ -262,12 +262,12 @@ describe('Authentication Error Handling', () => {
     it('should log API keys response summary', () => {
       const keys = [
         {
-          api_key: 'gw_temp_abc123',
+          api_key: TEST_API_KEYS.TEMP,
           is_primary: false,
           environment_tag: 'dev',
         },
         {
-          api_key: 'gw_live_xyz789',
+          api_key: TEST_API_KEYS.LIVE,
           is_primary: true,
           environment_tag: 'live',
         },
@@ -287,7 +287,7 @@ describe('Authentication Error Handling', () => {
     });
 
     it('should successfully upgrade when API returns valid key', async () => {
-      const liveApiKey = 'gw_live_xyz789';
+      const liveApiKey = TEST_API_KEYS.LIVE;
 
       mockFetch.mockResolvedValue(
         createMockResponse({

@@ -8,7 +8,8 @@ import {
   type ChatSession as ApiChatSession,
   type ChatMessage as ApiChatMessage,
 } from "@/lib/chat-history";
-import { streamChatResponse } from "@/lib/streaming";
+// Using modular streaming - the old streaming.ts is deprecated
+import { streamChatResponse } from "@/lib/streaming/index";
 import type { ModelOption } from "@/components/chat/model-select";
 
 export type ChatSessionView = {

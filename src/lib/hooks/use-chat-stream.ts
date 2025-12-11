@@ -1,7 +1,8 @@
 import { useState, useRef, useCallback } from 'react';
 import { flushSync } from 'react-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { streamChatResponse } from '@/lib/streaming';
+// Using modular streaming - the old streaming.ts is deprecated
+import { streamChatResponse } from '@/lib/streaming/index';
 import { ChatStreamHandler } from '@/lib/chat-stream-handler';
 import { useSaveMessage } from '@/lib/hooks/use-chat-queries';
 import { useAuthStore } from '@/lib/store/auth-store';

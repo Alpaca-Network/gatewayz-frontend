@@ -9,9 +9,9 @@ const edgeRateLimitState = {
 };
 
 const EDGE_RATE_LIMIT_CONFIG = {
-  maxEventsPerMinute: 30,
+  maxEventsPerMinute: 10,    // REDUCED from 30 to prevent 429s
   windowMs: 60000,
-  dedupeWindowMs: 5000,
+  dedupeWindowMs: 60000,     // INCREASED from 5s to 60s to prevent duplicates
   cleanupIntervalMs: 30000,
   maxMapSize: 100,
 };
@@ -93,8 +93,8 @@ function shouldEdgeRateLimit(event: Sentry.ErrorEvent): boolean {
 Sentry.init({
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
 
-  // REDUCED: Sample only 10% of transactions to avoid rate limits
-  tracesSampleRate: 0.1,
+  // REDUCED: Sample only 1% of transactions to avoid rate limits
+  tracesSampleRate: 0.01,
 
   // Setting this option to true will print useful information to the console while you're setting up Sentry.
   debug: false,
