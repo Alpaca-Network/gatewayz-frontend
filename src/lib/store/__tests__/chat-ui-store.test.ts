@@ -29,6 +29,7 @@ describe('chat-ui-store', () => {
       mobileSidebarOpen: false,
       inputValue: '',
       isIncognitoMode: false,
+      previousModel: null,
       selectedModel: {
         value: 'deepseek/deepseek-r1',
         label: 'DeepSeek R1',
@@ -138,7 +139,7 @@ describe('chat-ui-store', () => {
       expect(state.selectedModel?.label).toBe('GLM-4.6');
     });
 
-    it('should not change model when incognito mode is disabled', () => {
+    it('should restore previous model when incognito mode is disabled', () => {
       // Set a custom model first
       useChatUIStore.getState().setSelectedModel({
         value: 'openai/gpt-4',
@@ -151,13 +152,34 @@ describe('chat-ui-store', () => {
 
       const { setIncognitoMode } = useChatUIStore.getState();
 
-      // Enable and then disable incognito
+      // Enable incognito - should switch to GLM-4.6 and save previous model
       setIncognitoMode(true);
       expect(useChatUIStore.getState().selectedModel?.value).toBe('near/zai-org/GLM-4.6');
+      expect(useChatUIStore.getState().previousModel?.value).toBe('openai/gpt-4');
 
+      // Disable incognito - should restore previous model (GPT-4)
       setIncognitoMode(false);
-      // Model should remain GLM-4.6 after disabling (user can manually change it)
-      expect(useChatUIStore.getState().selectedModel?.value).toBe('near/zai-org/GLM-4.6');
+      expect(useChatUIStore.getState().selectedModel?.value).toBe('openai/gpt-4');
+    });
+
+    it('should save previous model to localStorage when entering incognito', () => {
+      // Set a custom model first
+      useChatUIStore.getState().setSelectedModel({
+        value: 'openai/gpt-4',
+        label: 'GPT-4',
+        category: 'General',
+        sourceGateway: 'openrouter',
+        developer: 'OpenAI',
+        modalities: ['Text']
+      });
+
+      const { setIncognitoMode } = useChatUIStore.getState();
+
+      setIncognitoMode(true);
+      expect(localStorageMock.setItem).toHaveBeenCalledWith(
+        'gatewayz_previous_model',
+        expect.stringContaining('openai/gpt-4')
+      );
     });
 
     it('should switch model via toggleIncognitoMode', () => {

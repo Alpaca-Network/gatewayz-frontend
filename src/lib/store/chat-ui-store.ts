@@ -11,8 +11,9 @@ export const INCOGNITO_DEFAULT_MODEL: ModelOption = {
   modalities: ['Text']
 };
 
-// Storage key for incognito mode persistence
+// Storage keys for persistence
 const INCOGNITO_STORAGE_KEY = 'gatewayz_incognito_mode';
+const PREVIOUS_MODEL_STORAGE_KEY = 'gatewayz_previous_model';
 
 // Helper to get initial incognito state from localStorage
 const getInitialIncognitoState = (): boolean => {
@@ -25,6 +26,17 @@ const getInitialIncognitoState = (): boolean => {
   }
 };
 
+// Helper to get previous model from localStorage
+const getPreviousModel = (): ModelOption | null => {
+  if (typeof window === 'undefined') return null;
+  try {
+    const stored = localStorage.getItem(PREVIOUS_MODEL_STORAGE_KEY);
+    return stored ? JSON.parse(stored) : null;
+  } catch {
+    return null;
+  }
+};
+
 interface ChatUIState {
   activeSessionId: number | null;
   mobileSidebarOpen: boolean;
@@ -32,6 +44,7 @@ interface ChatUIState {
   selectedModel: ModelOption | null;
   messageStartTime: number | null; // Unix timestamp when message was sent
   isIncognitoMode: boolean;
+  previousModel: ModelOption | null; // Store model before entering incognito
 
   setActiveSessionId: (id: number | null) => void;
   setMobileSidebarOpen: (open: boolean) => void;
@@ -60,6 +73,7 @@ export const useChatUIStore = create<ChatUIState>((set, get) => ({
   selectedModel: getInitialIncognitoState() ? INCOGNITO_DEFAULT_MODEL : STANDARD_DEFAULT_MODEL,
   messageStartTime: null,
   isIncognitoMode: getInitialIncognitoState(),
+  previousModel: getPreviousModel(),
 
   setActiveSessionId: (id) => set({ activeSessionId: id }),
   setMobileSidebarOpen: (open) => set({ mobileSidebarOpen: open }),
@@ -67,36 +81,72 @@ export const useChatUIStore = create<ChatUIState>((set, get) => ({
   setSelectedModel: (model) => set({ selectedModel: model }),
   setMessageStartTime: (time) => set({ messageStartTime: time }),
   setIncognitoMode: (enabled) => {
+    const currentModel = get().selectedModel;
+    const previousModel = get().previousModel;
+
     // Persist to localStorage
     if (typeof window !== 'undefined') {
       try {
         localStorage.setItem(INCOGNITO_STORAGE_KEY, String(enabled));
+        if (enabled && currentModel) {
+          // Save current model before switching to incognito
+          localStorage.setItem(PREVIOUS_MODEL_STORAGE_KEY, JSON.stringify(currentModel));
+        }
       } catch {
         // Ignore storage errors
       }
     }
-    // Update state and switch model if enabling incognito
-    set((state) => ({
-      isIncognitoMode: enabled,
-      selectedModel: enabled ? INCOGNITO_DEFAULT_MODEL : state.selectedModel
-    }));
+
+    // Update state
+    if (enabled) {
+      // Entering incognito: save current model and switch to incognito model
+      set({
+        isIncognitoMode: true,
+        previousModel: currentModel,
+        selectedModel: INCOGNITO_DEFAULT_MODEL
+      });
+    } else {
+      // Exiting incognito: restore previous model
+      set({
+        isIncognitoMode: false,
+        selectedModel: previousModel || STANDARD_DEFAULT_MODEL
+      });
+    }
   },
   toggleIncognitoMode: () => {
     const currentState = get().isIncognitoMode;
+    const currentModel = get().selectedModel;
+    const previousModel = get().previousModel;
     const newState = !currentState;
+
     // Persist to localStorage
     if (typeof window !== 'undefined') {
       try {
         localStorage.setItem(INCOGNITO_STORAGE_KEY, String(newState));
+        if (newState && currentModel) {
+          // Save current model before switching to incognito
+          localStorage.setItem(PREVIOUS_MODEL_STORAGE_KEY, JSON.stringify(currentModel));
+        }
       } catch {
         // Ignore storage errors
       }
     }
-    // Update state and switch model if enabling incognito
-    set((state) => ({
-      isIncognitoMode: newState,
-      selectedModel: newState ? INCOGNITO_DEFAULT_MODEL : state.selectedModel
-    }));
+
+    // Update state
+    if (newState) {
+      // Entering incognito: save current model and switch to incognito model
+      set({
+        isIncognitoMode: true,
+        previousModel: currentModel,
+        selectedModel: INCOGNITO_DEFAULT_MODEL
+      });
+    } else {
+      // Exiting incognito: restore previous model
+      set({
+        isIncognitoMode: false,
+        selectedModel: previousModel || STANDARD_DEFAULT_MODEL
+      });
+    }
   },
   resetChatState: () => set({
     activeSessionId: null,

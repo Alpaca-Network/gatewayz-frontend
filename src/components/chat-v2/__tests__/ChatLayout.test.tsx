@@ -29,8 +29,9 @@ jest.mock('@/lib/utils', () => ({
 jest.mock('lucide-react', () => ({
   Menu: () => <span data-testid="menu-icon">Menu</span>,
   Pencil: () => <span data-testid="pencil-icon">Pencil</span>,
-  EyeOff: () => <span data-testid="eye-off-icon">EyeOff</span>,
-  Eye: () => <span data-testid="eye-icon">Eye</span>,
+  Lock: () => <span data-testid="lock-icon">Lock</span>,
+  Unlock: () => <span data-testid="unlock-icon">Unlock</span>,
+  Shield: () => <span data-testid="shield-icon">Shield</span>,
 }));
 
 // Mock the stores and hooks

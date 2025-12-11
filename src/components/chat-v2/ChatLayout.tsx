@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
-import { Menu, Pencil, EyeOff, Eye } from "lucide-react";
+import { Menu, Pencil, Lock, Unlock, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 import { ChatSidebar } from "./ChatSidebar";
@@ -296,10 +296,19 @@ export function ChatLayout() {
                            variant={isIncognitoMode ? "default" : "ghost"}
                            size="icon"
                            onClick={toggleIncognitoMode}
-                           title={isIncognitoMode ? "Incognito mode enabled (GLM-4.6)" : "Enable incognito mode"}
-                           className={isIncognitoMode ? "bg-purple-600 hover:bg-purple-700 text-white" : ""}
+                           title={isIncognitoMode ? "Incognito mode enabled (GLM-4.6) - Click to disable" : "Enable incognito mode"}
+                           className={`
+                               transition-all duration-500 ease-out
+                               ${isIncognitoMode
+                                   ? "bg-gradient-to-r from-purple-600 via-purple-500 to-indigo-600 hover:from-purple-700 hover:via-purple-600 hover:to-indigo-700 text-white shadow-lg shadow-purple-500/30 scale-110 ring-2 ring-purple-400/50 ring-offset-2 ring-offset-background"
+                                   : "hover:bg-muted"
+                               }
+                           `}
                        >
-                           {isIncognitoMode ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                           {isIncognitoMode
+                               ? <Lock className="h-4 w-4 animate-pulse" />
+                               : <Unlock className="h-4 w-4" />
+                           }
                        </Button>
 
                        <div className="w-[180px] sm:w-[250px]">
@@ -310,6 +319,29 @@ export function ChatLayout() {
 
               {/* Connection Status - shows when offline or has pending/failed messages */}
               <ConnectionStatus className="mx-auto mt-2" />
+
+              {/* Incognito Mode Banner */}
+              {isIncognitoMode && (
+                  <div className="mx-auto mt-2 mb-2 px-4 py-2 bg-gradient-to-r from-purple-600/10 via-purple-500/10 to-indigo-600/10 border border-purple-500/30 rounded-lg max-w-2xl animate-in fade-in slide-in-from-top-2 duration-300">
+                      <div className="flex items-center gap-3">
+                          <Shield className="h-5 w-5 text-purple-400 shrink-0" />
+                          <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-purple-300">Incognito Mode Active</p>
+                              <p className="text-xs text-purple-400/80 truncate">
+                                  Using GLM-4.6 model via NEAR AI for enhanced privacy. Your conversations are not stored.
+                              </p>
+                          </div>
+                          <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={toggleIncognitoMode}
+                              className="text-purple-400 hover:text-purple-300 hover:bg-purple-500/20 shrink-0"
+                          >
+                              Exit
+                          </Button>
+                      </div>
+                  </div>
+              )}
 
               {/* Main Content */}
               <div className="flex-1 overflow-hidden relative z-10 flex flex-col">
