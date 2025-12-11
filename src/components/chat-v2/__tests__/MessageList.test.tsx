@@ -1,0 +1,183 @@
+import { render, screen, fireEvent } from '@testing-library/react';
+import React from 'react';
+
+// Mock ChatMessage component
+const mockOnRetry = jest.fn();
+jest.mock('@/components/chat/ChatMessage', () => ({
+  ChatMessage: ({ role, content, hasError, onRetry }: any) => (
+    <div data-testid={`message-${role}`} data-has-error={hasError}>
+      <span data-testid="content">{typeof content === 'string' ? content : JSON.stringify(content)}</span>
+      {onRetry && (
+        <button data-testid="retry-button" onClick={onRetry}>
+          Retry
+        </button>
+      )}
+    </div>
+  ),
+}));
+
+import { MessageList } from '../MessageList';
+
+describe('MessageList', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  describe('onRetry prop', () => {
+    it('should pass onRetry to the last message when it has an error', () => {
+      const onRetry = jest.fn();
+      const messages = [
+        { id: 1, role: 'user' as const, content: 'Hello', created_at: '2024-01-01' },
+        { id: 2, role: 'assistant' as const, content: 'Error occurred', hasError: true, error: 'Rate limit exceeded', created_at: '2024-01-01' },
+      ];
+
+      render(
+        <MessageList
+          sessionId={1}
+          messages={messages}
+          isLoading={false}
+          onRetry={onRetry}
+        />
+      );
+
+      const retryButton = screen.getByTestId('retry-button');
+      expect(retryButton).toBeInTheDocument();
+
+      fireEvent.click(retryButton);
+      expect(onRetry).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not show retry button on non-error messages', () => {
+      const onRetry = jest.fn();
+      const messages = [
+        { id: 1, role: 'user' as const, content: 'Hello', created_at: '2024-01-01' },
+        { id: 2, role: 'assistant' as const, content: 'Hi there!', hasError: false, created_at: '2024-01-01' },
+      ];
+
+      render(
+        <MessageList
+          sessionId={1}
+          messages={messages}
+          isLoading={false}
+          onRetry={onRetry}
+        />
+      );
+
+      expect(screen.queryByTestId('retry-button')).not.toBeInTheDocument();
+    });
+
+    it('should not show retry button on error messages that are not the last message', () => {
+      const onRetry = jest.fn();
+      const messages = [
+        { id: 1, role: 'user' as const, content: 'Hello', created_at: '2024-01-01' },
+        { id: 2, role: 'assistant' as const, content: 'Error occurred', hasError: true, error: 'Error', created_at: '2024-01-01' },
+        { id: 3, role: 'user' as const, content: 'Try again', created_at: '2024-01-01' },
+        { id: 4, role: 'assistant' as const, content: 'Success!', hasError: false, created_at: '2024-01-01' },
+      ];
+
+      render(
+        <MessageList
+          sessionId={1}
+          messages={messages}
+          isLoading={false}
+          onRetry={onRetry}
+        />
+      );
+
+      // No retry button should be shown since the last message is not an error
+      expect(screen.queryByTestId('retry-button')).not.toBeInTheDocument();
+    });
+
+    it('should not show retry button when onRetry prop is not provided', () => {
+      const messages = [
+        { id: 1, role: 'user' as const, content: 'Hello', created_at: '2024-01-01' },
+        { id: 2, role: 'assistant' as const, content: 'Error occurred', hasError: true, error: 'Error', created_at: '2024-01-01' },
+      ];
+
+      render(
+        <MessageList
+          sessionId={1}
+          messages={messages}
+          isLoading={false}
+        />
+      );
+
+      expect(screen.queryByTestId('retry-button')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('rendering states', () => {
+    it('should return null when sessionId is null and no pendingPrompt', () => {
+      const { container } = render(
+        <MessageList
+          sessionId={null}
+          messages={[]}
+          isLoading={false}
+        />
+      );
+
+      expect(container.firstChild).toBeNull();
+    });
+
+    it('should show loading spinner when isLoading is true', () => {
+      const { container } = render(
+        <MessageList
+          sessionId={1}
+          messages={[]}
+          isLoading={true}
+        />
+      );
+
+      // Check for the loading spinner by class name
+      expect(container.querySelector('.animate-spin')).toBeInTheDocument();
+    });
+
+    it('should show empty state when no messages', () => {
+      render(
+        <MessageList
+          sessionId={1}
+          messages={[]}
+          isLoading={false}
+        />
+      );
+
+      expect(screen.getByText('Start the conversation')).toBeInTheDocument();
+    });
+
+    it('should render messages when provided', () => {
+      const messages = [
+        { id: 1, role: 'user' as const, content: 'Hello', created_at: '2024-01-01' },
+        { id: 2, role: 'assistant' as const, content: 'Hi there!', created_at: '2024-01-01' },
+      ];
+
+      render(
+        <MessageList
+          sessionId={1}
+          messages={messages}
+          isLoading={false}
+        />
+      );
+
+      expect(screen.getByTestId('message-user')).toBeInTheDocument();
+      expect(screen.getByTestId('message-assistant')).toBeInTheDocument();
+    });
+  });
+
+  describe('pendingPrompt (optimistic UI)', () => {
+    it('should show optimistic messages when pendingPrompt is set and no messages exist', () => {
+      render(
+        <MessageList
+          sessionId={null}
+          messages={[]}
+          isLoading={false}
+          pendingPrompt="What is the weather?"
+        />
+      );
+
+      // Should show the pending prompt as a user message
+      expect(screen.getByTestId('message-user')).toBeInTheDocument();
+      // Should show a streaming assistant message
+      expect(screen.getByTestId('message-assistant')).toBeInTheDocument();
+    });
+  });
+});
