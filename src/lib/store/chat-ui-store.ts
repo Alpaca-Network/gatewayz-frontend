@@ -107,6 +107,11 @@ export const useChatUIStore = create<ChatUIState>((set, get) => ({
       });
     } else {
       // Exiting incognito: restore previous model
+      // NOTE: If user changed the model while in incognito mode via ModelSelect,
+      // that change is intentionally not persisted because incognito mode is
+      // specifically about using GLM-4.6 for privacy. Changing the model while
+      // in incognito effectively overrides the incognito behavior for that session,
+      // but exiting still restores the pre-incognito model.
       set({
         isIncognitoMode: false,
         selectedModel: previousModel || STANDARD_DEFAULT_MODEL
@@ -114,39 +119,9 @@ export const useChatUIStore = create<ChatUIState>((set, get) => ({
     }
   },
   toggleIncognitoMode: () => {
+    // Delegate to setIncognitoMode to avoid code duplication
     const currentState = get().isIncognitoMode;
-    const currentModel = get().selectedModel;
-    const previousModel = get().previousModel;
-    const newState = !currentState;
-
-    // Persist to localStorage
-    if (typeof window !== 'undefined') {
-      try {
-        localStorage.setItem(INCOGNITO_STORAGE_KEY, String(newState));
-        if (newState && currentModel) {
-          // Save current model before switching to incognito
-          localStorage.setItem(PREVIOUS_MODEL_STORAGE_KEY, JSON.stringify(currentModel));
-        }
-      } catch {
-        // Ignore storage errors
-      }
-    }
-
-    // Update state
-    if (newState) {
-      // Entering incognito: save current model and switch to incognito model
-      set({
-        isIncognitoMode: true,
-        previousModel: currentModel,
-        selectedModel: INCOGNITO_DEFAULT_MODEL
-      });
-    } else {
-      // Exiting incognito: restore previous model
-      set({
-        isIncognitoMode: false,
-        selectedModel: previousModel || STANDARD_DEFAULT_MODEL
-      });
-    }
+    get().setIncognitoMode(!currentState);
   },
   resetChatState: () => set({
     activeSessionId: null,

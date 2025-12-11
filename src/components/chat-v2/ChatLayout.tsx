@@ -249,13 +249,23 @@ export function ChatLayout() {
        }
 
        // Extract the text content from the user message
+       // NOTE: For multimodal messages with attachments, only text is retried.
+       // Attachments (images, videos, audio, documents) are not preserved on retry
+       // because ChatInput manages them in local state. A full solution would require
+       // lifting attachment state to Zustand or exposing a method to set attachments.
        let userContent = '';
+       let hasAttachments = false;
        if (typeof lastUserMessage.content === 'string') {
            userContent = lastUserMessage.content;
        } else if (Array.isArray(lastUserMessage.content)) {
-           // For multimodal content, extract just the text for retry
            const textParts = lastUserMessage.content.filter((c: any) => c.type === 'text');
            userContent = textParts.map((c: any) => c.text).join('');
+           // Check if there are non-text parts (attachments)
+           hasAttachments = lastUserMessage.content.some((c: any) => c.type !== 'text');
+       }
+
+       if (hasAttachments) {
+           console.warn('[ChatLayout] Retry will only resend text content; attachments cannot be preserved');
        }
 
        if (!userContent.trim()) {
