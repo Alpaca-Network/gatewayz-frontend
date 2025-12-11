@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { Menu, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,7 @@ import { Card } from "@/components/ui/card";
 import { useSessionMessages } from "@/lib/hooks/use-chat-queries";
 import { GuestChatCounter } from "@/components/chat/guest-chat-counter";
 import { useNetworkStatus } from "@/hooks/use-network-status";
+import { useQueryClient } from "@tanstack/react-query";
 
 // Pool of prompts to randomly select from
 const ALL_PROMPTS = [
@@ -81,6 +82,7 @@ export function ChatLayout() {
    const { isAuthenticated, isLoading: authLoading } = useAuthStore();
    const { selectedModel, setSelectedModel, activeSessionId, setActiveSessionId, setInputValue, mobileSidebarOpen, setMobileSidebarOpen } = useChatUIStore();
    const searchParams = useSearchParams();
+   const queryClient = useQueryClient();
 
    // Track if user has clicked a prompt (to immediately hide welcome screen)
    const [pendingPrompt, setPendingPrompt] = useState<string | null>(null);
@@ -229,6 +231,56 @@ export function ChatLayout() {
        });
    };
 
+   // Handle retry for failed messages (e.g., rate limit errors)
+   // This removes the failed assistant message and resends the last user message
+   const handleRetry = useCallback(() => {
+       if (!activeSessionId || activeMessages.length < 2) return;
+
+       // Find the last user message (should be the second-to-last message)
+       const lastAssistantIndex = activeMessages.length - 1;
+       const lastUserIndex = lastAssistantIndex - 1;
+       const lastUserMessage = activeMessages[lastUserIndex];
+       const lastAssistantMessage = activeMessages[lastAssistantIndex];
+
+       // Verify the message structure is as expected
+       if (lastUserMessage?.role !== 'user' || lastAssistantMessage?.role !== 'assistant') {
+           console.warn('[ChatLayout] Unexpected message structure for retry');
+           return;
+       }
+
+       // Extract the text content from the user message
+       let userContent = '';
+       if (typeof lastUserMessage.content === 'string') {
+           userContent = lastUserMessage.content;
+       } else if (Array.isArray(lastUserMessage.content)) {
+           // For multimodal content, extract just the text for retry
+           const textParts = lastUserMessage.content.filter((c: any) => c.type === 'text');
+           userContent = textParts.map((c: any) => c.text).join('');
+       }
+
+       if (!userContent.trim()) {
+           console.warn('[ChatLayout] No text content found in last user message');
+           return;
+       }
+
+       // Remove the failed assistant message from the query cache
+       queryClient.setQueryData(['chat-messages', activeSessionId], (old: any[] | undefined) => {
+           if (!old || old.length === 0) return old;
+           // Remove the last message (the failed assistant message)
+           return old.slice(0, -1);
+       });
+
+       // Set the input value to the last user message and trigger send
+       setInputValue(userContent);
+
+       // Use requestAnimationFrame to ensure the input value is set before sending
+       requestAnimationFrame(() => {
+           if (typeof window !== 'undefined' && (window as any).__chatInputSend) {
+               (window as any).__chatInputSend();
+           }
+       });
+   }, [activeSessionId, activeMessages, queryClient, setInputValue]);
+
    // When logged out, always show welcome screen (ignore cached messages and activeSessionId)
    // When logged in, show welcome screen only if no active session or no messages after loading
    // ALSO hide welcome screen immediately when a prompt is clicked (pendingPrompt is set)
@@ -308,6 +360,7 @@ export function ChatLayout() {
                         messages={activeMessages}
                         isLoading={messagesLoading}
                         pendingPrompt={pendingPrompt}
+                        onRetry={handleRetry}
                       />
                   )}
                </div>
