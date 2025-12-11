@@ -134,6 +134,7 @@ jest.mock('lucide-react', () => ({
   LogIn: () => <span data-testid="login-icon">LogIn</span>,
   Check: () => <span data-testid="check-icon">Check</span>,
   FileText: () => <span data-testid="file-text-icon">FileText</span>,
+  RefreshCw: () => <span data-testid="refresh-icon">RefreshCw</span>,
 }));
 
 describe('ChatMessage', () => {
@@ -389,6 +390,50 @@ describe('ChatMessage', () => {
 
       const card = container.querySelector('.border-destructive');
       expect(card).toBeInTheDocument();
+    });
+
+    it('should show retry button for rate limit errors', () => {
+      const onRetry = jest.fn();
+      render(<ChatMessage {...defaultProps} hasError={true} error="Rate limit exceeded. The model is temporarily unavailable." onRetry={onRetry} />);
+
+      expect(screen.getByText('Try again')).toBeInTheDocument();
+    });
+
+    it('should call onRetry when retry button is clicked for rate limit errors', () => {
+      const onRetry = jest.fn();
+      render(<ChatMessage {...defaultProps} hasError={true} error="Rate limit exceeded" onRetry={onRetry} />);
+
+      const retryButton = screen.getByText('Try again');
+      fireEvent.click(retryButton);
+
+      expect(onRetry).toHaveBeenCalledTimes(1);
+    });
+
+    it('should show retry button for too many requests errors', () => {
+      const onRetry = jest.fn();
+      render(<ChatMessage {...defaultProps} hasError={true} error="Too many requests, please try again later" onRetry={onRetry} />);
+
+      expect(screen.getByText('Try again')).toBeInTheDocument();
+    });
+
+    it('should show retry button for high demand errors', () => {
+      const onRetry = jest.fn();
+      render(<ChatMessage {...defaultProps} hasError={true} error="Model temporarily unavailable due to high demand" onRetry={onRetry} />);
+
+      expect(screen.getByText('Try again')).toBeInTheDocument();
+    });
+
+    it('should not show retry button for rate limit errors when onRetry is not provided', () => {
+      render(<ChatMessage {...defaultProps} hasError={true} error="Rate limit exceeded" />);
+
+      expect(screen.queryByText('Try again')).not.toBeInTheDocument();
+    });
+
+    it('should not show retry button for non-rate-limit errors', () => {
+      const onRetry = jest.fn();
+      render(<ChatMessage {...defaultProps} hasError={true} error="Server error occurred" onRetry={onRetry} />);
+
+      expect(screen.queryByText('Try again')).not.toBeInTheDocument();
     });
   });
 

@@ -25,9 +25,9 @@ import { getApiKey } from '@/lib/auth';
 // =============================================================================
 
 const COMPLETIONS_ENDPOINT = '/api/chat/completions';
-const STREAM_TIMEOUT = 600_000; // 10 minutes max
+const STREAM_TIMEOUT = 60_000; // 1 minute max
 const FIRST_CHUNK_TIMEOUT = 30_000; // 30 seconds for first chunk
-const CHUNK_TIMEOUT = 60_000; // 60 seconds between chunks
+const CHUNK_TIMEOUT = 30_000; // 30 seconds between chunks
 const MAX_RETRIES = 2;
 
 // =============================================================================

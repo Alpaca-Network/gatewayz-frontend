@@ -8,7 +8,7 @@
 import React, { memo, useState } from 'react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Card } from '@/components/ui/card';
-import { Bot, User, Copy, RotateCcw, LogIn, Check, FileText } from 'lucide-react';
+import { Bot, User, Copy, RotateCcw, LogIn, Check, FileText, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import dynamic from 'next/dynamic';
 import { usePrivy } from '@privy-io/react-auth';
@@ -37,6 +37,7 @@ export interface ChatMessageProps {
   hasError?: boolean;
   onCopy?: () => void;
   onRegenerate?: () => void;
+  onRetry?: () => void;
   showActions?: boolean;
 }
 
@@ -64,10 +65,23 @@ const isAuthError = (error: string): boolean => {
   );
 };
 
-// Error display component with sign-in button for auth errors
-const ErrorDisplay = ({ error }: { error: string }) => {
+// Check if error is related to rate limiting
+const isRateLimitError = (error: string): boolean => {
+  const lowerError = error.toLowerCase();
+  return (
+    lowerError.includes('rate limit') ||
+    lowerError.includes('too many requests') ||
+    lowerError.includes('temporarily unavailable') ||
+    lowerError.includes('high demand') ||
+    lowerError.includes('429')
+  );
+};
+
+// Error display component with sign-in button for auth errors and retry for rate limits
+const ErrorDisplay = ({ error, onRetry }: { error: string; onRetry?: () => void }) => {
   const { login } = usePrivy();
   const showSignIn = isAuthError(error);
+  const showRetry = isRateLimitError(error) && onRetry;
 
   return (
     <div className="mt-2 p-3 bg-destructive/10 border border-destructive/20 rounded text-sm text-destructive">
@@ -81,6 +95,17 @@ const ErrorDisplay = ({ error }: { error: string }) => {
         >
           <LogIn className="h-4 w-4 mr-2" />
           Sign in to continue
+        </Button>
+      )}
+      {showRetry && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="mt-2 border-destructive/30 hover:bg-destructive/10"
+          onClick={onRetry}
+        >
+          <RefreshCw className="h-4 w-4 mr-2" />
+          Try again
         </Button>
       )}
     </div>
@@ -139,6 +164,7 @@ export const ChatMessage = memo<ChatMessageProps>(
     hasError,
     onCopy,
     onRegenerate,
+    onRetry,
     showActions = true,
   }) => {
     const isUser = role === 'user';
@@ -292,7 +318,7 @@ export const ChatMessage = memo<ChatMessageProps>(
 
             {/* Error display */}
             {hasError && error && (
-              <ErrorDisplay error={error} />
+              <ErrorDisplay error={error} onRetry={onRetry} />
             )}
 
             {/* Streaming indicator with timer */}
@@ -365,7 +391,8 @@ export const ChatMessage = memo<ChatMessageProps>(
       prevProps.audio === nextProps.audio &&
       prevProps.document === nextProps.document &&
       prevProps.error === nextProps.error &&
-      prevProps.hasError === nextProps.hasError
+      prevProps.hasError === nextProps.hasError &&
+      prevProps.onRetry === nextProps.onRetry
     );
   }
 );

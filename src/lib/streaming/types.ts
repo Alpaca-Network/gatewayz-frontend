@@ -49,7 +49,7 @@ export interface ParsedSSEData {
  * Configuration for the stream parser.
  */
 export interface StreamConfig {
-  /** Timeout for the entire stream in ms (default: 600000 = 10 min) */
+  /** Timeout for the entire stream in ms (default: 60000 = 1 min) */
   streamTimeoutMs?: number;
 
   /** Timeout for first chunk in ms (default: 10000 = 10 sec) */
@@ -69,7 +69,7 @@ export interface StreamConfig {
  * Default configuration values.
  */
 export const DEFAULT_STREAM_CONFIG: Required<StreamConfig> = {
-  streamTimeoutMs: 600_000, // 10 minutes
+  streamTimeoutMs: 60_000, // 1 minute max
   firstChunkTimeoutMs: 10_000, // 10 seconds
   chunkTimeoutMs: 30_000, // 30 seconds
   maxRetries: 7,

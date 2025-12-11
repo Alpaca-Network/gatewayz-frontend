@@ -24,7 +24,7 @@ export const TIMEOUT_CONFIG = {
 
   // Streaming timeouts
   streaming: {
-    initial: 300000,         // 5 minutes for streaming responses
+    initial: 60000,          // 1 minute max for initial streaming response
     chunk: 30000,            // 30 seconds between chunks
   },
 

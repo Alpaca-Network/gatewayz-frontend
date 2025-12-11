@@ -20,9 +20,10 @@ interface MessageListProps {
   messages: (ChatMessageData & { error?: string; hasError?: boolean })[];
   isLoading: boolean;
   pendingPrompt?: string | null;  // Optimistic message shown while session is being created
+  onRetry?: () => void;  // Callback to retry the last failed message
 }
 
-export function MessageList({ sessionId, messages, isLoading, pendingPrompt }: MessageListProps) {
+export function MessageList({ sessionId, messages, isLoading, pendingPrompt, onRetry }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [userHasScrolled, setUserHasScrolled] = useState(false);
@@ -118,6 +119,9 @@ export function MessageList({ sessionId, messages, isLoading, pendingPrompt }: M
     );
   }
 
+  // Only show retry button on the last message if it has an error
+  const lastMessageIndex = messages.length - 1;
+
   return (
     <div
       ref={containerRef}
@@ -140,6 +144,7 @@ export function MessageList({ sessionId, messages, isLoading, pendingPrompt }: M
           hasError={msg.hasError}
           showActions={msg.role === 'assistant'}
           onCopy={() => navigator.clipboard.writeText(getTextFromContent(msg.content))}
+          onRetry={idx === lastMessageIndex && msg.hasError ? onRetry : undefined}
         />
       ))}
       <div ref={bottomRef} className="h-1" />

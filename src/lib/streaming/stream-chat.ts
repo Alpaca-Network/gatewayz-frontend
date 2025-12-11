@@ -45,7 +45,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  * Configuration with defaults applied.
  */
 const CONFIG: Required<StreamConfig> = {
-  streamTimeoutMs: 600_000, // 10 minutes
+  streamTimeoutMs: 60_000, // 1 minute max
   firstChunkTimeoutMs: 10_000, // 10 seconds
   chunkTimeoutMs: 30_000, // 30 seconds
   maxRetries: 7,
