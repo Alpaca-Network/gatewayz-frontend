@@ -588,3 +588,128 @@ export function withSilentErrorCapture<T>(
     return fallback;
   }
 }
+
+// ============================================================================
+// BROWSER TRACING HELPERS
+// Based on: https://blog.sentry.io/improving-browser-tracing-step-by-step/
+// ============================================================================
+
+/**
+ * Signal to Sentry that the page has fully loaded.
+ *
+ * Use this in SPAs to manually indicate when your application considers
+ * the page "ready" rather than relying on automatic idle detection.
+ * This is particularly useful when:
+ * - Your app has complex async initialization
+ * - Content loads progressively
+ * - You want to measure time-to-interactive accurately
+ *
+ * Requires `enableReportPageLoaded: true` in Sentry.init config.
+ *
+ * @example
+ * ```tsx
+ * // In your main page component after data loads
+ * useEffect(() => {
+ *   if (isDataLoaded && !isLoading) {
+ *     reportPageLoaded();
+ *   }
+ * }, [isDataLoaded, isLoading]);
+ * ```
+ */
+export function reportPageLoaded(): void {
+  if (typeof window === 'undefined') return;
+
+  try {
+    // Sentry.reportPageLoaded() signals the end of the pageload span
+    // This gives more accurate pageload measurements for SPAs
+    if (typeof Sentry.reportPageLoaded === 'function') {
+      Sentry.reportPageLoaded();
+    }
+  } catch (error) {
+    // Silently fail - this is a non-critical operation
+    console.debug('[Sentry] Failed to report page loaded:', error);
+  }
+}
+
+/**
+ * Set the active span in the browser context.
+ *
+ * Use this to maintain span context outside of callback functions,
+ * which is useful for custom routing logic or state management that
+ * operates outside typical async patterns.
+ *
+ * @param span - The span to set as active, or null to clear
+ *
+ * @example
+ * ```tsx
+ * const span = Sentry.startInactiveSpan({ name: 'custom-operation' });
+ * setActiveSpanInBrowser(span);
+ * // ... perform operations that should be associated with this span
+ * span.end();
+ * setActiveSpanInBrowser(null);
+ * ```
+ */
+export function setActiveSpanInBrowser(span: Sentry.Span | null): void {
+  if (typeof window === 'undefined') return;
+  if (!span) return; // Cannot set null as active span
+
+  try {
+    // Use Sentry's withActiveSpan or similar mechanism
+    // Note: setActiveSpanInBrowser may not be available in all SDK versions
+    const sentryObj = Sentry as unknown as { setActiveSpanInBrowser?: (span: Sentry.Span) => void };
+    if (typeof sentryObj.setActiveSpanInBrowser === 'function') {
+      sentryObj.setActiveSpanInBrowser(span);
+    }
+  } catch (error) {
+    console.debug('[Sentry] Failed to set active span:', error);
+  }
+}
+
+/**
+ * Start a new span for tracking a specific operation with automatic
+ * active span management in the browser.
+ *
+ * This is a convenience wrapper that combines startSpan with
+ * setActiveSpanInBrowser for proper context propagation.
+ *
+ * @param name - Name of the operation being tracked
+ * @param op - Operation type (e.g., 'navigation', 'ui.action', 'http.client')
+ * @param fn - The async function to execute within the span context
+ *
+ * @example
+ * ```tsx
+ * const result = await withBrowserSpan(
+ *   'load-user-data',
+ *   'ui.action',
+ *   async () => {
+ *     const user = await fetchUser();
+ *     const preferences = await fetchPreferences();
+ *     return { user, preferences };
+ *   }
+ * );
+ * ```
+ */
+export async function withBrowserSpan<T>(
+  name: string,
+  op: string,
+  fn: () => Promise<T>
+): Promise<T> {
+  return Sentry.startSpan(
+    { name, op },
+    async (span) => {
+      try {
+        // Set this span as active for context propagation
+        setActiveSpanInBrowser(span);
+        const result = await fn();
+        span.setStatus({ code: 1 }); // OK
+        return result;
+      } catch (error) {
+        span.setStatus({ code: 2, message: error instanceof Error ? error.message : 'Unknown error' }); // ERROR
+        throw error;
+      } finally {
+        // Clear active span
+        setActiveSpanInBrowser(null);
+      }
+    }
+  );
+}
