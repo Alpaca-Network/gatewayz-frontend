@@ -135,10 +135,10 @@ export async function* streamChatResponse(
   retryCount = 0,
   maxRetries = 7  // Increased from 5 for better 429 handling
 ): AsyncGenerator<StreamChunk> {
-  // Client-side timeout for the fetch request (10 minutes for streaming)
-  // Increased to accommodate reasoning models, slow providers, and models with large context windows
+  // Client-side timeout for the fetch request (1 minute max)
+  // If a model doesn't respond within 1 minute, it's likely unavailable or experiencing issues
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 600000);
+  const timeoutId = setTimeout(() => controller.abort(), 60000);
 
   try {
     devLog('[Streaming] Initiating fetch request to:', url);
@@ -1042,7 +1042,7 @@ export async function* streamChatResponse(
     // Handle abort/timeout errors
     if (error instanceof Error) {
       if (error.name === 'AbortError') {
-        throw new Error('Request timed out after 10 minutes. The model may be overloaded, unavailable, or generating a very long response. Please try again or select a different model.');
+        throw new Error('Request timed out after 1 minute. The model may be overloaded or unavailable. Please try again or select a different model.');
       }
     }
 
@@ -1062,7 +1062,7 @@ export async function* streamChatResponse(
     // Handle abort/timeout errors from outer try block
     if (error instanceof Error) {
       if (error.name === 'AbortError') {
-        throw new Error('Request timed out after 10 minutes. The model may be overloaded, unavailable, or generating a very long response. Please try again or select a different model.');
+        throw new Error('Request timed out after 1 minute. The model may be overloaded or unavailable. Please try again or select a different model.');
       }
     }
 
