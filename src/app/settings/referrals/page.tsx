@@ -188,6 +188,9 @@ function ReferralsPageContent() {
           console.log('Referral stats data:', statsData);
           console.log('Full API response structure:', JSON.stringify(statsData, null, 2));
 
+          // Normalize referral data first so we can use it for both display and stats
+          let normalizedReferrals: ReferralTransaction[] = [];
+
           // Set referrals from stats response
           if (Array.isArray(statsData.referrals)) {
             console.log('Referrals array:', statsData.referrals);
@@ -198,16 +201,16 @@ function ReferralsPageContent() {
               console.log('Normalized first referral:', normalizeReferralData(statsData.referrals[0]));
             }
             // Normalize the referral data
-            const normalizedReferrals = statsData.referrals.map(normalizeReferralData);
+            normalizedReferrals = statsData.referrals.map(normalizeReferralData);
             setReferrals(normalizedReferrals);
           } else {
             console.log('Referrals is not an array:', typeof statsData.referrals, statsData.referrals);
           }
 
-          // Set stats from response
+          // Set stats from response - use normalized data for completedReferrals count
           setStats({
-            totalReferrals: Number(statsData.total_uses) || 0,
-            completedReferrals: Array.isArray(statsData.referrals) ? statsData.referrals.filter((r: any) => r.status === 'completed').length : 0,
+            totalReferrals: Number(statsData.total_uses) || normalizedReferrals.length,
+            completedReferrals: normalizedReferrals.filter((r) => r.status === 'completed').length,
             totalEarned: Number(statsData.total_earned) || 0
           });
         } else {
