@@ -446,21 +446,26 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
     const modelName = model.label.toLowerCase();
     const modelId = model.value.toLowerCase();
 
-    // Reasoning models - extended detection for thinking/reasoning capabilities
+    // Reasoning models - detection for thinking/reasoning capabilities
+    // Use regex with word boundaries to avoid false positives like "r12" or "r100"
+    const r1Pattern = /\br1\b/i; // Matches "r1" as a whole word (case insensitive)
+    const o1Pattern = /\bo1\b/i; // Matches "o1" as a whole word
+    const o3Pattern = /\bo3\b/i; // Matches "o3" as a whole word
+    const o4Pattern = /\bo4\b/i; // Matches "o4" as a whole word
+
     if (
       modelId.includes('deepseek-reasoner') ||
-      modelId.includes('deepseek-r1') ||
+      r1Pattern.test(modelId) ||
       modelId.includes('qwq') ||
-      modelId.includes('o1') ||
-      modelId.includes('o3') ||
-      modelId.includes('o4') ||
+      o1Pattern.test(modelId) ||
+      o3Pattern.test(modelId) ||
+      o4Pattern.test(modelId) ||
       modelId.includes('thinking') ||
       modelId.includes('reason') ||
       modelName.includes('reasoning') ||
       modelName.includes('reasoner') ||
       modelName.includes('thinking') ||
-      modelName.includes(' r1') ||
-      modelName.includes('-r1')
+      r1Pattern.test(modelName)
     ) {
       categories.push('Reasoning');
     }
