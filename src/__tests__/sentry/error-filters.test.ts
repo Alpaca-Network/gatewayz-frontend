@@ -493,8 +493,12 @@ describe('Sentry Error Filters', () => {
   describe('429 Rate Limit error filtering (prevents cascade)', () => {
     // Update beforeSendCallback to include 429 filtering for these tests
     let beforeSend429Callback: (event: Sentry.ErrorEvent, hint: Sentry.EventHint) => Sentry.ErrorEvent | null;
+    let consoleDebugSpy: jest.SpyInstance;
 
     beforeEach(() => {
+      // Mock console.debug to verify filter logging (implementation uses console.debug)
+      consoleDebugSpy = jest.spyOn(console, 'debug').mockImplementation();
+
       beforeSend429Callback = (event: Sentry.ErrorEvent, hint: Sentry.EventHint) => {
         const error = hint.originalException;
         const errorMessage = typeof error === 'string' ? error : error instanceof Error ? error.message : '';
@@ -522,31 +526,36 @@ describe('Sentry Error Filters', () => {
             );
 
           if (isMonitoringError) {
-            console.warn('[Sentry] Filtered out 429 rate limit error from monitoring endpoint (prevents cascade)');
+            console.debug('[Sentry] Filtered out 429 rate limit error from monitoring endpoint (prevents cascade)');
             return null;
           }
         }
 
         // Filter out network errors related to monitoring/telemetry
+        // Use lowercase for consistent case-insensitive matching
         if (
           errorMessageLower.includes('failed to fetch') ||
           errorMessageLower.includes('network error') ||
           errorMessageLower.includes('networkerror')
         ) {
           const isMonitoringNetworkError =
-            errorMessage.includes('/monitoring') ||
-            errorMessage.includes('sentry.io') ||
-            eventMessage.includes('/monitoring') ||
-            eventMessage.includes('sentry.io');
+            errorMessageLower.includes('/monitoring') ||
+            errorMessageLower.includes('sentry.io') ||
+            eventMessageLower.includes('/monitoring') ||
+            eventMessageLower.includes('sentry.io');
 
           if (isMonitoringNetworkError) {
-            console.warn('[Sentry] Filtered out network error from monitoring/Sentry endpoint');
+            console.debug('[Sentry] Filtered out network error from monitoring/Sentry endpoint');
             return null;
           }
         }
 
         return event;
       };
+    });
+
+    afterEach(() => {
+      consoleDebugSpy.mockRestore();
     });
 
     it('should filter out 429 errors from /monitoring endpoint', () => {
@@ -566,7 +575,7 @@ describe('Sentry Error Filters', () => {
       const result = beforeSend429Callback(event, hint);
 
       expect(result).toBeNull();
-      expect(consoleWarnSpy).toHaveBeenCalledWith(
+      expect(consoleDebugSpy).toHaveBeenCalledWith(
         '[Sentry] Filtered out 429 rate limit error from monitoring endpoint (prevents cascade)'
       );
     });
@@ -623,7 +632,7 @@ describe('Sentry Error Filters', () => {
       const result = beforeSend429Callback(event, hint);
 
       expect(result).toBeNull();
-      expect(consoleWarnSpy).toHaveBeenCalledWith(
+      expect(consoleDebugSpy).toHaveBeenCalledWith(
         '[Sentry] Filtered out network error from monitoring/Sentry endpoint'
       );
     });

@@ -143,13 +143,25 @@ export function initializeGlobalErrorHandlers(): void {
 
     // Skip monitoring/telemetry related errors to prevent cascades
     // These occur when Sentry/monitoring endpoints return 429 or fail
-    if (
+    // IMPORTANT: Only skip 429 errors that are monitoring-related, NOT all 429s
+    const isMonitoringRelated =
       errorMessageLower.includes('/monitoring') ||
       errorMessageLower.includes('sentry') ||
+      errorMessageLower.includes('telemetry');
+
+    const is429Error =
       errorMessageLower.includes('429') ||
-      errorMessageLower.includes('too many requests') ||
-      (errorMessageLower.includes('failed to fetch') &&
-        (errorMessage.includes('/monitoring') || errorMessage.includes('sentry.io')))
+      errorMessageLower.includes('too many requests');
+
+    const isMonitoringNetworkError =
+      errorMessageLower.includes('failed to fetch') &&
+      (errorMessageLower.includes('/monitoring') || errorMessageLower.includes('sentry.io'));
+
+    // Only skip if it's monitoring-related OR a 429 that's also monitoring-related
+    if (
+      isMonitoringRelated ||
+      (is429Error && isMonitoringRelated) ||
+      isMonitoringNetworkError
     ) {
       console.debug('[UnhandledRejection] Skipping monitoring/telemetry error to prevent cascade');
       return;
@@ -184,12 +196,18 @@ export function initializeGlobalErrorHandlers(): void {
     const errorMessageLower = errorMessage.toLowerCase();
 
     // Skip monitoring/telemetry related errors to prevent cascades
-    if (
+    // IMPORTANT: Only skip 429 errors that are monitoring-related, NOT all 429s
+    const isMonitoringRelated =
       errorMessageLower.includes('/monitoring') ||
       errorMessageLower.includes('sentry') ||
+      errorMessageLower.includes('telemetry');
+
+    const is429Error =
       errorMessageLower.includes('429') ||
-      errorMessageLower.includes('too many requests')
-    ) {
+      errorMessageLower.includes('too many requests');
+
+    // Only skip if it's monitoring-related OR a 429 that's also monitoring-related
+    if (isMonitoringRelated || (is429Error && isMonitoringRelated)) {
       console.debug('[GlobalError] Skipping monitoring/telemetry error to prevent cascade');
       return;
     }

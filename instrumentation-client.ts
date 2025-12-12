@@ -246,11 +246,12 @@ function shouldFilterEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): bo
     errorMessageLower.includes('networkerror')
   ) {
     // Check if the error is related to monitoring/telemetry endpoints
+    // Use lowercase for consistent case-insensitive matching
     const isMonitoringNetworkError =
-      errorMessage.includes('/monitoring') ||
-      errorMessage.includes('sentry.io') ||
-      eventMessage.includes('/monitoring') ||
-      eventMessage.includes('sentry.io');
+      errorMessageLower.includes('/monitoring') ||
+      errorMessageLower.includes('sentry.io') ||
+      eventMessageLower.includes('/monitoring') ||
+      eventMessageLower.includes('sentry.io');
 
     if (isMonitoringNetworkError) {
       console.debug('[Sentry] Filtered out network error from monitoring/Sentry endpoint');
