@@ -68,14 +68,19 @@ export async function GET(request: NextRequest) {
         // Try to fetch from backend API (if it supports popular models endpoint)
         // Always fetch MAX_POPULAR_MODELS to ensure cache can serve any limit up to that value
         try {
+          // Use AbortController for Node.js compatibility (AbortSignal.timeout requires Node 17.3+)
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 3000);
+
           const response = await fetch(`${API_BASE_URL}/v1/models/popular?limit=${MAX_POPULAR_MODELS}`, {
             method: 'GET',
             headers: {
               'Content-Type': 'application/json',
             },
-            // Short timeout - we have a fallback
-            signal: AbortSignal.timeout(3000),
+            signal: controller.signal,
           });
+
+          clearTimeout(timeoutId);
 
           if (response.ok) {
             const data = await response.json();
