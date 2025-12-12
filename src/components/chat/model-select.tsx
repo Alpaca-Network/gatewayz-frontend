@@ -68,6 +68,29 @@ const ensureRouterOption = (options: ModelOption[]): ModelOption[] => {
   return [{ ...ROUTER_OPTION }, ...options];
 };
 
+// Clean model name by removing redundant suffixes like "(Free)" since we show icons
+const cleanModelName = (name: string): string => {
+  return name.replace(/\s*\(free\)\s*/gi, '').trim();
+};
+
+// Abbreviate gateway names for compact display
+const getGatewayAbbrev = (gateway: string): string => {
+  const abbrevs: Record<string, string> = {
+    'cerebras': 'CRB',
+    'groq': 'GRQ',
+    'fireworks': 'FW',
+    'together': 'TGR',
+    'deepinfra': 'DI',
+    'featherless': 'FL',
+    'novita': 'NVT',
+    'chutes': 'CHT',
+    'nebius': 'NEB',
+    'huggingface': 'HF',
+    'near': 'NEAR',
+  };
+  return abbrevs[gateway.toLowerCase()] || gateway.slice(0, 3).toUpperCase();
+};
+
 // Extract developer from model ID (e.g., "openai/gpt-4" -> "OpenAI")
 const getDeveloper = (modelId: string): string => {
   const parts = modelId.split('/');
@@ -185,7 +208,7 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
           if (data.data && Array.isArray(data.data)) {
             const popularOptions: ModelOption[] = data.data.map((model: any) => ({
               value: model.id,
-              label: model.name,
+              label: cleanModelName(model.name),
               category: model.category || 'Paid',
               developer: model.developer,
               sourceGateway: model.sourceGateway || 'openrouter',
@@ -294,7 +317,7 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
 
           return {
             value: model.id,
-            label: model.name,
+            label: cleanModelName(model.name),
             category,
             sourceGateway,
             developer,
@@ -331,7 +354,8 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
     const groups: Record<string, ModelOption[]> = {};
 
     models.forEach(model => {
-      const dev = model.developer || 'Other';
+      // Models without a developer go directly to a temporary "_no_developer" group
+      const dev = model.developer || '_no_developer';
       if (!groups[dev]) {
         groups[dev] = [];
       }
@@ -346,6 +370,12 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
     const otherModels: ModelOption[] = [];
 
     Object.entries(groups).forEach(([developer, devModels]) => {
+      // Models without a developer always go to "Other"
+      if (developer === '_no_developer') {
+        otherModels.push(...devModels);
+        return;
+      }
+
       // Priority orgs always get their own section regardless of model count
       const isPriorityOrg = priorityOrgs.includes(developer);
 
@@ -504,7 +534,7 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
     });
   };
 
-  // Filter models based on search query and auto-expand matching sections
+  // Filter models based on search query
   const filteredModelsByDeveloper = React.useMemo(() => {
     if (!debouncedSearchQuery.trim()) {
       return modelsByDeveloper;
@@ -512,7 +542,6 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
 
     const query = debouncedSearchQuery.toLowerCase();
     const filtered: Record<string, ModelOption[]> = {};
-    const developersToExpand = new Set<string>();
 
     Object.entries(modelsByDeveloper).forEach(([developer, devModels]) => {
       const matchingModels = devModels.filter(model =>
@@ -523,15 +552,7 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
 
       if (matchingModels.length > 0) {
         filtered[developer] = matchingModels;
-        developersToExpand.add(developer);
       }
-    });
-
-    // Auto-expand sections with matches
-    setExpandedDevelopers(prev => {
-      const next = new Set(prev);
-      developersToExpand.forEach(dev => next.add(dev));
-      return next;
     });
 
     return filtered;
@@ -545,7 +566,6 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
 
     const query = debouncedSearchQuery.toLowerCase();
     const filtered: Record<string, ModelOption[]> = {};
-    const categoriesToExpand = new Set<string>();
 
     Object.entries(modelsByCategory).forEach(([category, catModels]) => {
       const matchingModels = catModels.filter(model =>
@@ -556,15 +576,7 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
 
       if (matchingModels.length > 0) {
         filtered[category] = matchingModels;
-        categoriesToExpand.add(category);
       }
-    });
-
-    // Auto-expand sections with matches
-    setExpandedDevelopers(prev => {
-      const next = new Set(prev);
-      categoriesToExpand.forEach(cat => next.add(cat));
-      return next;
     });
 
     return filtered;
@@ -590,23 +602,42 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
     }
 
     const query = debouncedSearchQuery.toLowerCase();
-    const filtered = popularModels.filter(model =>
+    return popularModels.filter(model =>
       model.label.toLowerCase().includes(query) ||
       model.value.toLowerCase().includes(query) ||
       model.developer?.toLowerCase().includes(query)
     );
+  }, [popularModels, debouncedSearchQuery]);
 
-    // Auto-expand Popular section when there are matches
-    if (filtered.length > 0) {
+  // Auto-expand sections with search matches (side effect in useEffect, not useMemo)
+  React.useEffect(() => {
+    if (!debouncedSearchQuery.trim()) {
+      return;
+    }
+
+    const sectionsToExpand = new Set<string>();
+
+    // Check filtered results and collect sections to expand
+    if (filteredPopularModels.length > 0) {
+      sectionsToExpand.add('Popular');
+    }
+
+    Object.keys(filteredModelsByDeveloper).forEach(dev => {
+      sectionsToExpand.add(dev);
+    });
+
+    Object.keys(filteredModelsByCategory).forEach(cat => {
+      sectionsToExpand.add(cat);
+    });
+
+    if (sectionsToExpand.size > 0) {
       setExpandedDevelopers(prev => {
         const next = new Set(prev);
-        next.add('Popular');
+        sectionsToExpand.forEach(section => next.add(section));
         return next;
       });
     }
-
-    return filtered;
-  }, [popularModels, debouncedSearchQuery]);
+  }, [debouncedSearchQuery, filteredPopularModels.length, filteredModelsByDeveloper, filteredModelsByCategory]);
 
   // Prefetch models on hover to improve perceived performance
   const handlePrefetchModels = React.useCallback(() => {
@@ -645,7 +676,7 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
 
             return {
               value: model.id,
-              label: model.name,
+              label: cleanModelName(model.name),
               category,
               sourceGateway,
               developer,
@@ -705,7 +736,7 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[95vw] sm:w-[400px] max-w-[400px] p-0">
+      <PopoverContent className="w-[95vw] sm:w-[450px] max-w-[450px] p-0">
         <Command shouldFilter={false}>
           <CommandInput
             placeholder="Search model..."
@@ -754,7 +785,7 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
                           )}
                         />
                         <span className="truncate flex-1">{model.label}</span>
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1 flex-shrink-0">
                           {model.speedTier === 'ultra-fast' && (
                             <span className="text-xs font-bold text-purple-600 dark:text-purple-400">⚡</span>
                           )}
@@ -762,14 +793,13 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
                             <span className="text-xs font-bold text-blue-600 dark:text-blue-400">⚡</span>
                           )}
                           {model.sourceGateway && model.sourceGateway !== 'openrouter' && (
-                            <span className="ml-1 text-xs font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                              {model.sourceGateway.toUpperCase()}
+                            <span className="ml-1 text-[10px] font-medium text-muted-foreground bg-muted px-1 py-0.5 rounded" title={model.sourceGateway}>
+                              {getGatewayAbbrev(model.sourceGateway)}
                             </span>
                           )}
                           {model.category === 'Free' && (
-                            <span className="ml-1 text-xs font-semibold text-green-600 dark:text-green-400 flex items-center gap-1">
-                              <Sparkles className="h-3 w-3" />
-                              FREE
+                            <span className="ml-1 text-green-600 dark:text-green-400 flex items-center" title="Free">
+                              <Sparkles className="h-3.5 w-3.5" />
                             </span>
                           )}
                         </div>
@@ -825,7 +855,7 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
                           )}
                         />
                         <span className="truncate flex-1">{model.label}</span>
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1 flex-shrink-0">
                           {model.speedTier === 'ultra-fast' && (
                             <span className="text-xs font-bold text-purple-600 dark:text-purple-400">⚡</span>
                           )}
@@ -833,14 +863,13 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
                             <span className="text-xs font-bold text-blue-600 dark:text-blue-400">⚡</span>
                           )}
                           {model.developer && (
-                            <span className="ml-1 text-xs text-muted-foreground">
+                            <span className="ml-1 text-[10px] text-muted-foreground">
                               {model.developer}
                             </span>
                           )}
                           {model.category === 'Free' && (
-                            <span className="ml-1 text-xs font-semibold text-green-600 dark:text-green-400 flex items-center gap-1">
-                              <Sparkles className="h-3 w-3" />
-                              FREE
+                            <span className="ml-1 text-green-600 dark:text-green-400 flex items-center" title="Free">
+                              <Sparkles className="h-3.5 w-3.5" />
                             </span>
                           )}
                         </div>
@@ -898,16 +927,15 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
                             )}
                           />
                           <span className="truncate flex-1">{model.label}</span>
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1 flex-shrink-0">
                             {model.sourceGateway && model.sourceGateway !== 'openrouter' && (
-                              <span className="ml-1 text-xs font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                                {model.sourceGateway.toUpperCase()}
+                              <span className="ml-1 text-[10px] font-medium text-muted-foreground bg-muted px-1 py-0.5 rounded" title={model.sourceGateway}>
+                                {getGatewayAbbrev(model.sourceGateway)}
                               </span>
                             )}
                             {model.category === 'Free' && (
-                              <span className="ml-1 text-xs font-semibold text-green-600 dark:text-green-400 flex items-center gap-1">
-                                <Sparkles className="h-3 w-3" />
-                                FREE
+                              <span className="ml-1 text-green-600 dark:text-green-400 flex items-center" title="Free">
+                                <Sparkles className="h-3.5 w-3.5" />
                               </span>
                             )}
                           </div>
@@ -967,7 +995,7 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
                           )}
                         />
                         <span className="truncate flex-1">{model.label}</span>
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1 flex-shrink-0">
                           {model.speedTier === 'ultra-fast' && (
                             <span className="text-xs font-bold text-purple-600 dark:text-purple-400">⚡</span>
                           )}
@@ -975,14 +1003,13 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
                             <span className="text-xs font-bold text-blue-600 dark:text-blue-400">⚡</span>
                           )}
                           {model.sourceGateway && model.sourceGateway !== 'openrouter' && (
-                            <span className="ml-1 text-xs font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                              {model.sourceGateway.toUpperCase()}
+                            <span className="ml-1 text-[10px] font-medium text-muted-foreground bg-muted px-1 py-0.5 rounded" title={model.sourceGateway}>
+                              {getGatewayAbbrev(model.sourceGateway)}
                             </span>
                           )}
                           {model.category === 'Free' && (
-                            <span className="ml-1 text-xs font-semibold text-green-600 dark:text-green-400 flex items-center gap-1">
-                              <Sparkles className="h-3 w-3" />
-                              FREE
+                            <span className="ml-1 text-green-600 dark:text-green-400 flex items-center" title="Free">
+                              <Sparkles className="h-3.5 w-3.5" />
                             </span>
                           )}
                         </div>

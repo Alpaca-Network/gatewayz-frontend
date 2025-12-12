@@ -6,9 +6,12 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 // Cache popular models for 5 minutes to reduce API calls
+// Note: In serverless environments, each instance has its own cache.
+// This is acceptable given the short TTL and graceful fallback behavior.
 let cachedPopularModels: PopularModel[] | null = null;
 let cacheTimestamp = 0;
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+const MAX_POPULAR_MODELS = 20; // Always fetch/cache this many models to handle varying limit params
 
 export interface PopularModel {
   id: string;
@@ -36,6 +39,10 @@ const FALLBACK_POPULAR_MODELS: PopularModel[] = [
 
 // GET /api/models/popular - Get popular models
 export async function GET(request: NextRequest) {
+  // Parse limit outside try block so it's accessible in catch
+  const searchParams = request.nextUrl.searchParams;
+  const limit = parseInt(searchParams.get('limit') || '10', 10);
+
   return Sentry.startSpan(
     {
       op: 'http.server',
@@ -43,9 +50,6 @@ export async function GET(request: NextRequest) {
     },
     async (span) => {
       try {
-        const searchParams = request.nextUrl.searchParams;
-        const limit = parseInt(searchParams.get('limit') || '10', 10);
-
         span.setAttribute('limit', limit);
 
         // Check cache first
@@ -60,8 +64,9 @@ export async function GET(request: NextRequest) {
         }
 
         // Try to fetch from backend API (if it supports popular models endpoint)
+        // Always fetch MAX_POPULAR_MODELS to ensure cache can serve any limit up to that value
         try {
-          const response = await fetch(`${API_BASE_URL}/v1/models/popular?limit=${limit}`, {
+          const response = await fetch(`${API_BASE_URL}/v1/models/popular?limit=${MAX_POPULAR_MODELS}`, {
             method: 'GET',
             headers: {
               'Content-Type': 'application/json',
@@ -73,12 +78,14 @@ export async function GET(request: NextRequest) {
           if (response.ok) {
             const data = await response.json();
             if (data.data && Array.isArray(data.data) && data.data.length > 0) {
-              cachedPopularModels = data.data;
+              // Cache the full response (up to MAX_POPULAR_MODELS)
+              const modelsToCache = data.data.slice(0, MAX_POPULAR_MODELS) as PopularModel[];
+              cachedPopularModels = modelsToCache;
               cacheTimestamp = now;
               span.setAttribute('source', 'backend_api');
-              span.setAttribute('models_count', data.data.length);
+              span.setAttribute('models_count', modelsToCache.length);
               return NextResponse.json({
-                data: data.data.slice(0, limit),
+                data: modelsToCache.slice(0, limit),
                 source: 'api'
               });
             }
@@ -113,9 +120,9 @@ export async function GET(request: NextRequest) {
         span.setAttribute('error', true);
         span.setAttribute('error_message', error instanceof Error ? error.message : 'Unknown error');
 
-        // Always return fallback on error
+        // Always return fallback on error, respecting the limit parameter
         return NextResponse.json({
-          data: FALLBACK_POPULAR_MODELS,
+          data: FALLBACK_POPULAR_MODELS.slice(0, limit),
           source: 'fallback_error'
         });
       }
