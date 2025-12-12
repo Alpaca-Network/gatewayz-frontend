@@ -201,6 +201,17 @@ async function testStreamingModel(model: string): Promise<TestResult> {
     const latencyMs = Date.now() - startTime;
     const ttfb = firstChunkTime ? firstChunkTime - startTime : latencyMs;
 
+    // Treat empty or missing content as a failure (consistent with non-streaming test)
+    if (!fullContent) {
+      console.log(`   ❌ Error: No content in streaming response (${chunkCount} chunks received)`);
+      return {
+        model: `${model} (streaming)`,
+        success: false,
+        error: 'No content in streaming response',
+        latencyMs,
+      };
+    }
+
     console.log(`   ✅ Success (${latencyMs}ms total, ${ttfb}ms to first chunk, ${chunkCount} chunks)`);
     console.log(`   📝 Response: "${fullContent.substring(0, 100)}${fullContent.length > 100 ? '...' : ''}"`);
 
