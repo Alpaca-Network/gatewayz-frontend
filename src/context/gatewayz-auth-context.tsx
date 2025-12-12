@@ -1002,8 +1002,14 @@ export function GatewayzAuthProvider({
 
           // Provide user-friendly error messages based on status code
           let userMessage: string;
-          if (is5xxError) {
+          let shouldRetry = false;
+
+          if (response.status === 504) {
+            userMessage = "Gateway timeout - our servers are taking too long to respond. Retrying...";
+            shouldRetry = authRetryCountRef.current < MAX_AUTH_RETRIES;
+          } else if (is5xxError) {
             userMessage = "Our servers are experiencing issues. Please try again in a moment.";
+            shouldRetry = authRetryCountRef.current < MAX_AUTH_RETRIES;
           } else if (response.status === 401 || response.status === 403) {
             userMessage = "Authentication failed. Please try logging in again.";
           } else if (response.status === 429) {
@@ -1022,16 +1028,32 @@ export function GatewayzAuthProvider({
               tags: {
                 auth_error: 'backend_auth_failed',
                 http_status: response.status,
+                is_gateway_timeout: response.status === 504 ? 'true' : 'false',
               },
               extra: {
                 response_status: response.status,
                 response_text: rawResponseText.substring(0, 500),
                 auth_method: (authBody as { auth_method?: string }).auth_method,
                 retry_attempt: authRetryCountRef.current,
+                will_retry: shouldRetry,
               },
               level: is5xxError ? 'error' : 'warning',
             }
           );
+
+          // Auto-retry for 504 Gateway Timeout and 5xx errors
+          if (shouldRetry) {
+            console.log(`[Auth] Retrying authentication after ${response.status} error (attempt ${authRetryCountRef.current + 1}/${MAX_AUTH_RETRIES})`);
+            authRetryCountRef.current++;
+
+            // Wait 2 seconds before retrying to give backend time to recover
+            await new Promise(resolve => setTimeout(resolve, 2000));
+
+            // Dispatch refresh event to trigger retry
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new Event(AUTH_REFRESH_EVENT));
+            }
+          }
 
           onAuthError?.(authError);
           return;

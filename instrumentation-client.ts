@@ -150,15 +150,18 @@ function shouldFilterEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): bo
   }
 
   // Filter out wallet extension removeListener errors
-  if (errorMessage.includes('removeListener') || errorMessage.includes('stopListeners')) {
-    if (stackFrames?.some(frame =>
-      frame.filename?.includes('inpage.js') ||
-      frame.filename?.includes('app:///') ||
-      frame.function?.includes('stopListeners')
-    )) {
-      console.debug('[Sentry] Filtered out wallet extension removeListener error');
-      return true;
-    }
+  // These errors occur when wallet extensions (MetaMask, etc.) are unloading
+  // and are completely harmless - they don't affect functionality
+  if (
+    errorMessage.includes('removeListener') ||
+    errorMessage.includes('stopListeners') ||
+    eventMessage.includes('removeListener') ||
+    eventMessage.includes('stopListeners') ||
+    (errorMessage.includes('Cannot read properties of undefined') && errorMessage.includes('removeListener'))
+  ) {
+    // Filter regardless of stack frame since these are always from extensions
+    console.debug('[Sentry] Filtered out wallet extension removeListener error');
+    return true;
   }
 
   // Filter out pending prompt timeout warnings (these are informational, not errors)
@@ -182,6 +185,25 @@ function shouldFilterEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): bo
   ) {
     console.debug('[Sentry] Filtered out non-critical WalletConnect relay error');
     return true;
+  }
+
+  // Filter out Next.js hydration errors
+  // These are often caused by browser extensions, ad blockers, or dynamic content
+  // and are non-critical since we have suppressHydrationWarning set
+  const eventMessageLower = eventMessage.toLowerCase();
+  if (
+    errorMessageLower.includes('hydration') ||
+    errorMessageLower.includes('text content does not match server') ||
+    errorMessageLower.includes('did not match') ||
+    eventMessageLower.includes('hydration') ||
+    eventMessageLower.includes('server rendered html')
+  ) {
+    // Only filter if it's a generic hydration error without specific component info
+    // This allows us to still catch real hydration bugs in our code
+    if (!errorMessage.includes('at path') && !errorMessage.includes('component stack')) {
+      console.debug('[Sentry] Filtered out generic hydration error (likely caused by browser extensions)');
+      return true;
+    }
   }
 
   return false;
