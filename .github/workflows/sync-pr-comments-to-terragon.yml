@@ -11,7 +11,7 @@ on:
 
 # Prevent concurrent runs for the same PR
 concurrency:
-  group: pr-comments-${{ inputs.pr_number }}
+  group: pr-comments-${{ github.event.inputs.pr_number }}
   cancel-in-progress: false
 
 # Required permissions for pushing to branches and commenting on PRs
