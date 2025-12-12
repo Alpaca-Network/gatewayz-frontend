@@ -489,4 +489,201 @@ describe('Sentry Error Filters', () => {
       expect(result).toBeNull();
     });
   });
+
+  describe('429 Rate Limit error filtering (prevents cascade)', () => {
+    // Update beforeSendCallback to include 429 filtering for these tests
+    let beforeSend429Callback: (event: Sentry.ErrorEvent, hint: Sentry.EventHint) => Sentry.ErrorEvent | null;
+
+    beforeEach(() => {
+      beforeSend429Callback = (event: Sentry.ErrorEvent, hint: Sentry.EventHint) => {
+        const error = hint.originalException;
+        const errorMessage = typeof error === 'string' ? error : error instanceof Error ? error.message : '';
+        const errorMessageLower = errorMessage.toLowerCase();
+        const eventMessage = event.message || '';
+        const eventMessageLower = eventMessage.toLowerCase();
+        const stackFrames = event.exception?.values?.[0]?.stacktrace?.frames;
+
+        // Filter out 429 rate limit errors from monitoring/telemetry endpoints
+        if (
+          errorMessageLower.includes('429') ||
+          errorMessageLower.includes('too many requests') ||
+          eventMessageLower.includes('429') ||
+          eventMessageLower.includes('too many requests')
+        ) {
+          const isMonitoringError =
+            errorMessageLower.includes('/monitoring') ||
+            errorMessageLower.includes('sentry') ||
+            errorMessageLower.includes('telemetry') ||
+            eventMessageLower.includes('/monitoring') ||
+            eventMessageLower.includes('sentry') ||
+            stackFrames?.some(frame =>
+              frame.filename?.includes('/monitoring') ||
+              frame.filename?.includes('sentry')
+            );
+
+          if (isMonitoringError) {
+            console.warn('[Sentry] Filtered out 429 rate limit error from monitoring endpoint (prevents cascade)');
+            return null;
+          }
+        }
+
+        // Filter out network errors related to monitoring/telemetry
+        if (
+          errorMessageLower.includes('failed to fetch') ||
+          errorMessageLower.includes('network error') ||
+          errorMessageLower.includes('networkerror')
+        ) {
+          const isMonitoringNetworkError =
+            errorMessage.includes('/monitoring') ||
+            errorMessage.includes('sentry.io') ||
+            eventMessage.includes('/monitoring') ||
+            eventMessage.includes('sentry.io');
+
+          if (isMonitoringNetworkError) {
+            console.warn('[Sentry] Filtered out network error from monitoring/Sentry endpoint');
+            return null;
+          }
+        }
+
+        return event;
+      };
+    });
+
+    it('should filter out 429 errors from /monitoring endpoint', () => {
+      const error = new Error('POST https://beta.gatewayz.ai/monitoring 429 (Too Many Requests)');
+      const event: Sentry.ErrorEvent = {
+        message: 'POST /monitoring 429',
+        exception: {
+          values: [{
+            type: 'Error',
+            value: 'POST https://beta.gatewayz.ai/monitoring 429 (Too Many Requests)',
+            stacktrace: { frames: [] }
+          }]
+        }
+      } as Sentry.ErrorEvent;
+
+      const hint: Sentry.EventHint = { originalException: error };
+      const result = beforeSend429Callback(event, hint);
+
+      expect(result).toBeNull();
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        '[Sentry] Filtered out 429 rate limit error from monitoring endpoint (prevents cascade)'
+      );
+    });
+
+    it('should filter out 429 errors mentioning Sentry', () => {
+      const error = new Error('Sentry rate limit exceeded: 429 Too Many Requests');
+      const event: Sentry.ErrorEvent = {
+        exception: {
+          values: [{
+            type: 'Error',
+            value: 'Sentry rate limit exceeded: 429 Too Many Requests',
+            stacktrace: { frames: [] }
+          }]
+        }
+      } as Sentry.ErrorEvent;
+
+      const hint: Sentry.EventHint = { originalException: error };
+      const result = beforeSend429Callback(event, hint);
+
+      expect(result).toBeNull();
+    });
+
+    it('should filter out "Too Many Requests" errors from telemetry', () => {
+      const error = new Error('Telemetry endpoint returned: Too Many Requests');
+      const event: Sentry.ErrorEvent = {
+        exception: {
+          values: [{
+            type: 'Error',
+            value: 'Telemetry endpoint returned: Too Many Requests',
+            stacktrace: { frames: [] }
+          }]
+        }
+      } as Sentry.ErrorEvent;
+
+      const hint: Sentry.EventHint = { originalException: error };
+      const result = beforeSend429Callback(event, hint);
+
+      expect(result).toBeNull();
+    });
+
+    it('should filter out network errors from sentry.io', () => {
+      const error = new Error('Failed to fetch https://o123.ingest.sentry.io/api/456/envelope');
+      const event: Sentry.ErrorEvent = {
+        exception: {
+          values: [{
+            type: 'Error',
+            value: 'Failed to fetch https://o123.ingest.sentry.io/api/456/envelope',
+            stacktrace: { frames: [] }
+          }]
+        }
+      } as Sentry.ErrorEvent;
+
+      const hint: Sentry.EventHint = { originalException: error };
+      const result = beforeSend429Callback(event, hint);
+
+      expect(result).toBeNull();
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        '[Sentry] Filtered out network error from monitoring/Sentry endpoint'
+      );
+    });
+
+    it('should filter out network errors from /monitoring endpoint', () => {
+      const error = new Error('NetworkError when attempting to fetch resource: /monitoring');
+      const event: Sentry.ErrorEvent = {
+        exception: {
+          values: [{
+            type: 'Error',
+            value: 'NetworkError when attempting to fetch resource: /monitoring',
+            stacktrace: { frames: [] }
+          }]
+        }
+      } as Sentry.ErrorEvent;
+
+      const hint: Sentry.EventHint = { originalException: error };
+      const result = beforeSend429Callback(event, hint);
+
+      expect(result).toBeNull();
+    });
+
+    it('should NOT filter 429 errors from other endpoints (API errors)', () => {
+      const error = new Error('POST /api/chat/completions 429 (Too Many Requests)');
+      const event: Sentry.ErrorEvent = {
+        exception: {
+          values: [{
+            type: 'Error',
+            value: 'POST /api/chat/completions 429 (Too Many Requests)',
+            stacktrace: { frames: [] }
+          }]
+        }
+      } as Sentry.ErrorEvent;
+
+      const hint: Sentry.EventHint = { originalException: error };
+      const result = beforeSend429Callback(event, hint);
+
+      // Should NOT be filtered - this is a real API error the user should know about
+      expect(result).not.toBeNull();
+      expect(result).toBe(event);
+    });
+
+    it('should NOT filter network errors from non-monitoring endpoints', () => {
+      const error = new Error('Failed to fetch https://api.example.com/data');
+      const event: Sentry.ErrorEvent = {
+        exception: {
+          values: [{
+            type: 'Error',
+            value: 'Failed to fetch https://api.example.com/data',
+            stacktrace: { frames: [] }
+          }]
+        }
+      } as Sentry.ErrorEvent;
+
+      const hint: Sentry.EventHint = { originalException: error };
+      const result = beforeSend429Callback(event, hint);
+
+      // Should NOT be filtered - this is a real network error
+      expect(result).not.toBeNull();
+      expect(result).toBe(event);
+    });
+  });
 });

@@ -135,12 +135,27 @@ export function initializeGlobalErrorHandlers(): void {
   // =============================================================================
 
   window.addEventListener('unhandledrejection', (event: PromiseRejectionEvent) => {
-    console.error('[UnhandledRejection]', event.reason);
-
     // Extract error information
     const error = event.reason;
     const errorMessage = error instanceof Error ? error.message : String(error);
     const errorStack = error instanceof Error ? error.stack : undefined;
+    const errorMessageLower = errorMessage.toLowerCase();
+
+    // Skip monitoring/telemetry related errors to prevent cascades
+    // These occur when Sentry/monitoring endpoints return 429 or fail
+    if (
+      errorMessageLower.includes('/monitoring') ||
+      errorMessageLower.includes('sentry') ||
+      errorMessageLower.includes('429') ||
+      errorMessageLower.includes('too many requests') ||
+      (errorMessageLower.includes('failed to fetch') &&
+        (errorMessage.includes('/monitoring') || errorMessage.includes('sentry.io')))
+    ) {
+      console.debug('[UnhandledRejection] Skipping monitoring/telemetry error to prevent cascade');
+      return;
+    }
+
+    console.error('[UnhandledRejection]', event.reason);
 
     // Add breadcrumb for additional context (Sentry will capture the error itself)
     Sentry.addBreadcrumb({
@@ -165,6 +180,20 @@ export function initializeGlobalErrorHandlers(): void {
   // =============================================================================
 
   window.addEventListener('error', (event: ErrorEvent) => {
+    const errorMessage = event.message || '';
+    const errorMessageLower = errorMessage.toLowerCase();
+
+    // Skip monitoring/telemetry related errors to prevent cascades
+    if (
+      errorMessageLower.includes('/monitoring') ||
+      errorMessageLower.includes('sentry') ||
+      errorMessageLower.includes('429') ||
+      errorMessageLower.includes('too many requests')
+    ) {
+      console.debug('[GlobalError] Skipping monitoring/telemetry error to prevent cascade');
+      return;
+    }
+
     console.error('[GlobalError]', event.error || event.message);
 
     // Skip errors from external scripts (ads, analytics, etc.)
