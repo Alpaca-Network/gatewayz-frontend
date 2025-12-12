@@ -133,6 +133,24 @@ function shouldFilterEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): bo
   const eventMessage = event.message || '';
   const stackFrames = event.exception?.values?.[0]?.stacktrace?.frames;
 
+  // Filter out "message port closed" errors from Chrome extensions
+  // These are benign browser extension communication errors that occur when:
+  // - An extension's background page/service worker is unloaded
+  // - Communication between content script and background script is interrupted
+  // - Extensions like password managers, ad blockers, etc. disconnect
+  // These errors are NOT from our application code and are completely harmless
+  const errorMessageLower = errorMessage.toLowerCase();
+  const eventMessageLower = eventMessage.toLowerCase();
+  if (
+    errorMessageLower.includes('message port closed') ||
+    errorMessageLower.includes('the message port closed before a response was received') ||
+    eventMessageLower.includes('message port closed') ||
+    eventMessageLower.includes('the message port closed before a response was received')
+  ) {
+    console.debug('[Sentry] Filtered out Chrome extension "message port closed" error (benign browser behavior)');
+    return true;
+  }
+
   // Filter out chrome.runtime.sendMessage errors from Privy wallet provider (inpage.js)
   if (
     errorMessage.includes('chrome.runtime.sendMessage') ||
@@ -176,7 +194,6 @@ function shouldFilterEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): bo
   }
 
   // Filter out WalletConnect relay errors (non-critical)
-  const errorMessageLower = errorMessage.toLowerCase();
   if (
     errorMessageLower.includes('walletconnect') ||
     errorMessageLower.includes('relay.walletconnect.com') ||
@@ -190,7 +207,6 @@ function shouldFilterEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): bo
   // Filter out Next.js hydration errors
   // These are often caused by browser extensions, ad blockers, or dynamic content
   // and are non-critical since we have suppressHydrationWarning set
-  const eventMessageLower = eventMessage.toLowerCase();
   if (
     errorMessageLower.includes('hydration') ||
     (errorMessageLower.includes('text content does not match') && errorMessageLower.includes('server')) ||

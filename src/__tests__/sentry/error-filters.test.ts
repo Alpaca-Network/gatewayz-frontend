@@ -353,6 +353,153 @@ describe('Sentry Error Filters', () => {
     });
   });
 
+  describe('Chrome extension "message port closed" error filtering', () => {
+    let messagePortCallback: (event: Sentry.ErrorEvent, hint: Sentry.EventHint) => Sentry.ErrorEvent | null;
+    let consoleDebugSpy: jest.SpyInstance;
+
+    beforeEach(() => {
+      consoleDebugSpy = jest.spyOn(console, 'debug').mockImplementation();
+
+      messagePortCallback = (event: Sentry.ErrorEvent, hint: Sentry.EventHint) => {
+        const error = hint.originalException;
+        const errorMessage = typeof error === 'string' ? error : error instanceof Error ? error.message : '';
+        const eventMessage = event.message || '';
+
+        // Filter out "message port closed" errors from Chrome extensions
+        if (
+          errorMessage.includes('message port closed') ||
+          errorMessage.includes('The message port closed before a response was received') ||
+          eventMessage.includes('message port closed') ||
+          eventMessage.includes('The message port closed before a response was received')
+        ) {
+          console.debug('[Sentry] Filtered out Chrome extension "message port closed" error (benign browser behavior)');
+          return null;
+        }
+
+        return event;
+      };
+    });
+
+    afterEach(() => {
+      consoleDebugSpy.mockRestore();
+    });
+
+    it('should filter out "message port closed" errors', () => {
+      const error = new Error('message port closed');
+      const event: Sentry.ErrorEvent = {
+        exception: {
+          values: [{
+            type: 'Error',
+            value: 'message port closed',
+            stacktrace: { frames: [] }
+          }]
+        }
+      } as Sentry.ErrorEvent;
+
+      const hint: Sentry.EventHint = { originalException: error };
+      const result = messagePortCallback(event, hint);
+
+      expect(result).toBeNull();
+      expect(consoleDebugSpy).toHaveBeenCalledWith(
+        '[Sentry] Filtered out Chrome extension "message port closed" error (benign browser behavior)'
+      );
+    });
+
+    it('should filter out full Chrome runtime.lastError message', () => {
+      const error = new Error('Unchecked runtime.lastError: The message port closed before a response was received.');
+      const event: Sentry.ErrorEvent = {
+        exception: {
+          values: [{
+            type: 'Error',
+            value: 'Unchecked runtime.lastError: The message port closed before a response was received.',
+            stacktrace: { frames: [] }
+          }]
+        }
+      } as Sentry.ErrorEvent;
+
+      const hint: Sentry.EventHint = { originalException: error };
+      const result = messagePortCallback(event, hint);
+
+      expect(result).toBeNull();
+    });
+
+    it('should filter out message port closed errors from event message', () => {
+      const error = new Error('Some other error');
+      const event: Sentry.ErrorEvent = {
+        message: 'The message port closed before a response was received',
+        exception: {
+          values: [{
+            type: 'Error',
+            value: 'Some other error',
+            stacktrace: { frames: [] }
+          }]
+        }
+      } as Sentry.ErrorEvent;
+
+      const hint: Sentry.EventHint = { originalException: error };
+      const result = messagePortCallback(event, hint);
+
+      expect(result).toBeNull();
+    });
+
+    it('should NOT filter unrelated errors', () => {
+      const error = new Error('Real application error');
+      const event: Sentry.ErrorEvent = {
+        exception: {
+          values: [{
+            type: 'Error',
+            value: 'Real application error',
+            stacktrace: { frames: [] }
+          }]
+        }
+      } as Sentry.ErrorEvent;
+
+      const hint: Sentry.EventHint = { originalException: error };
+      const result = messagePortCallback(event, hint);
+
+      expect(result).not.toBeNull();
+      expect(result).toBe(event);
+    });
+
+    it('should filter case-insensitive variants (uppercase)', () => {
+      // Update callback to use case-insensitive matching (matching the actual implementation)
+      const caseInsensitiveCallback = (event: Sentry.ErrorEvent, hint: Sentry.EventHint) => {
+        const error = hint.originalException;
+        const errorMessage = typeof error === 'string' ? error : error instanceof Error ? error.message : '';
+        const eventMessage = event.message || '';
+        const errorMessageLower = errorMessage.toLowerCase();
+        const eventMessageLower = eventMessage.toLowerCase();
+
+        if (
+          errorMessageLower.includes('message port closed') ||
+          errorMessageLower.includes('the message port closed before a response was received') ||
+          eventMessageLower.includes('message port closed') ||
+          eventMessageLower.includes('the message port closed before a response was received')
+        ) {
+          return null;
+        }
+
+        return event;
+      };
+
+      const error = new Error('MESSAGE PORT CLOSED');
+      const event: Sentry.ErrorEvent = {
+        exception: {
+          values: [{
+            type: 'Error',
+            value: 'MESSAGE PORT CLOSED',
+            stacktrace: { frames: [] }
+          }]
+        }
+      } as Sentry.ErrorEvent;
+
+      const hint: Sentry.EventHint = { originalException: error };
+      const result = caseInsensitiveCallback(event, hint);
+
+      expect(result).toBeNull();
+    });
+  });
+
   describe('edge cases', () => {
     it('should pass through unrelated errors', () => {
       const error = new Error('Some other application error');

@@ -141,6 +141,16 @@ export function initializeGlobalErrorHandlers(): void {
     const errorStack = error instanceof Error ? error.stack : undefined;
     const errorMessageLower = errorMessage.toLowerCase();
 
+    // Skip "message port closed" errors from Chrome extensions
+    // These are benign browser extension communication errors (password managers, ad blockers, etc.)
+    if (
+      errorMessageLower.includes('message port closed') ||
+      errorMessageLower.includes('the message port closed before a response was received')
+    ) {
+      console.debug('[UnhandledRejection] Skipping Chrome extension "message port closed" error (benign)');
+      return;
+    }
+
     // Skip ONLY 429 rate limit errors and network errors from monitoring/telemetry endpoints
     // These cause cascades: Sentry tries to report 429 errors, which causes more 429s
     // IMPORTANT: Do NOT skip all monitoring errors - only 429s and network failures
@@ -196,6 +206,16 @@ export function initializeGlobalErrorHandlers(): void {
   window.addEventListener('error', (event: ErrorEvent) => {
     const errorMessage = event.message || '';
     const errorMessageLower = errorMessage.toLowerCase();
+
+    // Skip "message port closed" errors from Chrome extensions
+    // These are benign browser extension communication errors (password managers, ad blockers, etc.)
+    if (
+      errorMessageLower.includes('message port closed') ||
+      errorMessageLower.includes('the message port closed before a response was received')
+    ) {
+      console.debug('[GlobalError] Skipping Chrome extension "message port closed" error (benign)');
+      return;
+    }
 
     // Skip ONLY 429 rate limit errors and network errors from monitoring/telemetry endpoints
     // These cause cascades: Sentry tries to report 429 errors, which causes more 429s

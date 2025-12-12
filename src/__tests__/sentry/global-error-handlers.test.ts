@@ -236,6 +236,45 @@ describe('Global Error Handlers - Error Filtering Logic', () => {
     });
   });
 
+  describe('Chrome extension "message port closed" error filtering', () => {
+    /**
+     * Simulates the filtering logic for message port closed errors
+     * These errors are benign Chrome extension communication failures
+     */
+    function shouldSkipMessagePortError(errorMessage: string): boolean {
+      const errorMessageLower = errorMessage.toLowerCase();
+
+      return (
+        errorMessageLower.includes('message port closed') ||
+        errorMessageLower.includes('the message port closed before a response was received')
+      );
+    }
+
+    it('should skip "message port closed" errors', () => {
+      expect(shouldSkipMessagePortError('message port closed')).toBe(true);
+    });
+
+    it('should skip full Chrome runtime.lastError message', () => {
+      expect(shouldSkipMessagePortError('Unchecked runtime.lastError: The message port closed before a response was received.')).toBe(true);
+    });
+
+    it('should skip case-insensitive variants', () => {
+      expect(shouldSkipMessagePortError('MESSAGE PORT CLOSED')).toBe(true);
+      expect(shouldSkipMessagePortError('The Message Port Closed Before A Response Was Received')).toBe(true);
+    });
+
+    it('should NOT skip unrelated errors', () => {
+      expect(shouldSkipMessagePortError('TypeError: Cannot read property')).toBe(false);
+      expect(shouldSkipMessagePortError('Network error')).toBe(false);
+      expect(shouldSkipMessagePortError('Some random error')).toBe(false);
+    });
+
+    it('should NOT skip errors that mention "port" without "message port closed"', () => {
+      expect(shouldSkipMessagePortError('Connection to port 3000 failed')).toBe(false);
+      expect(shouldSkipMessagePortError('WebSocket port error')).toBe(false);
+    });
+  });
+
   describe('Edge cases', () => {
     function shouldSkipUnhandledRejection(errorMessage: string): boolean {
       const errorMessageLower = errorMessage.toLowerCase();
