@@ -139,6 +139,7 @@ async function testStreamingModel(model: string): Promise<TestResult> {
     let fullContent = '';
     let firstChunkTime: number | null = null;
     let chunkCount = 0;
+    let buffer = ''; // Buffer for incomplete SSE lines across chunks
 
     while (true) {
       const { done, value } = await reader.read();
@@ -148,11 +149,16 @@ async function testStreamingModel(model: string): Promise<TestResult> {
         firstChunkTime = Date.now();
       }
 
-      const chunk = decoder.decode(value);
+      // Use stream: true to handle multi-byte UTF-8 characters split across chunks
+      const chunk = decoder.decode(value, { stream: true });
       chunkCount++;
 
-      // Parse SSE data
-      const lines = chunk.split('\n');
+      // Parse SSE data with proper buffering for lines that span chunk boundaries
+      buffer += chunk;
+      const lines = buffer.split('\n');
+      // Keep the last potentially incomplete line in the buffer
+      buffer = lines.pop() || '';
+
       for (const line of lines) {
         if (line.startsWith('data: ') && !line.includes('[DONE]')) {
           try {
@@ -162,9 +168,22 @@ async function testStreamingModel(model: string): Promise<TestResult> {
               fullContent += content;
             }
           } catch {
-            // Skip malformed JSON
+            // Skip malformed JSON (can happen with partial data)
           }
         }
+      }
+    }
+
+    // Process any remaining data in the buffer
+    if (buffer.startsWith('data: ') && !buffer.includes('[DONE]')) {
+      try {
+        const data = JSON.parse(buffer.slice(6));
+        const content = data.choices?.[0]?.delta?.content;
+        if (content) {
+          fullContent += content;
+        }
+      } catch {
+        // Skip malformed JSON
       }
     }
 
