@@ -774,8 +774,8 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
           <CommandList className="max-h-[400px]">
             <CommandEmpty>No model found.</CommandEmpty>
 
-            {/* Favorites Section */}
-            {filteredFavoriteModels.length > 0 && (
+            {/* Favorites Section - hidden in Incognito mode */}
+            {!isIncognitoMode && filteredFavoriteModels.length > 0 && (
               <div className="border-b">
                 <button
                   onClick={() => toggleDeveloper('Favorites')}
