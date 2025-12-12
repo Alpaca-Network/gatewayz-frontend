@@ -143,39 +143,40 @@ jobs:
 
       - name: Create Terragon Task Payload
         id: task_payload
+        env:
+          PR_NUMBER: ${{ inputs.pr_number }}
+          PR_TITLE: ${{ steps.pr_details.outputs.pr_title }}
+          PR_URL: ${{ steps.pr_details.outputs.pr_url }}
+          PR_BRANCH: ${{ steps.pr_details.outputs.pr_branch }}
+          INLINE_COUNT: ${{ steps.collect_comments.outputs.inline_count }}
+          REVIEW_COUNT: ${{ steps.collect_comments.outputs.review_count }}
+          DISCUSSION_COUNT: ${{ steps.collect_comments.outputs.discussion_count }}
+          COMMENTS_CONTENT: ${{ steps.collect_comments.outputs.comments_content }}
         run: |
-          PR_NUMBER="${{ inputs.pr_number }}"
-          PR_TITLE="${{ steps.pr_details.outputs.pr_title }}"
-          PR_URL="${{ steps.pr_details.outputs.pr_url }}"
-          PR_BRANCH="${{ steps.pr_details.outputs.pr_branch }}"
-
-          INLINE_COUNT="${{ steps.collect_comments.outputs.inline_count }}"
-          REVIEW_COUNT="${{ steps.collect_comments.outputs.review_count }}"
-          DISCUSSION_COUNT="${{ steps.collect_comments.outputs.discussion_count }}"
-
           TOTAL_COUNT=$((INLINE_COUNT + REVIEW_COUNT + DISCUSSION_COUNT))
 
           # Create task title
           TASK_TITLE="Address PR #${PR_NUMBER} feedback: ${PR_TITLE}"
 
-          # Create task description
-          cat << 'TASK_DESC' > /tmp/task_description.md
+          # Create task description using unquoted heredoc for variable expansion
+          # Use a unique delimiter to avoid collision with content
+          cat << TASK_DESC_DELIMITER_END > /tmp/task_description.md
           ## Task: Address PR Feedback
 
-          This task was automatically created to track feedback from PR #${{ inputs.pr_number }}.
+          This task was automatically created to track feedback from PR #${PR_NUMBER}.
 
           **Summary:**
-          - Inline code comments: ${{ steps.collect_comments.outputs.inline_count }}
-          - Reviews with comments: ${{ steps.collect_comments.outputs.review_count }}
-          - Discussion comments: ${{ steps.collect_comments.outputs.discussion_count }}
+          - Inline code comments: ${INLINE_COUNT}
+          - Reviews with comments: ${REVIEW_COUNT}
+          - Discussion comments: ${DISCUSSION_COUNT}
 
           **PR Details:**
-          - URL: ${{ steps.pr_details.outputs.pr_url }}
-          - Branch: `${{ steps.pr_details.outputs.pr_branch }}`
+          - URL: ${PR_URL}
+          - Branch: \`${PR_BRANCH}\`
 
           ---
 
-          ${{ steps.collect_comments.outputs.comments_content }}
+          ${COMMENTS_CONTENT}
 
           ---
 
@@ -186,7 +187,7 @@ jobs:
           3. Respond to questions in the PR
           4. Mark resolved comments as resolved in GitHub
           5. Request re-review when ready
-          TASK_DESC
+          TASK_DESC_DELIMITER_END
 
           echo "task_title=$TASK_TITLE" >> $GITHUB_OUTPUT
           echo "total_comments=$TOTAL_COUNT" >> $GITHUB_OUTPUT
