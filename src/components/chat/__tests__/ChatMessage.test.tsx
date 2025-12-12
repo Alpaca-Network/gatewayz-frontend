@@ -238,7 +238,7 @@ describe('ChatMessage', () => {
 
       const pre = container.querySelector('pre');
       expect(pre).toBeInTheDocument();
-      expect(pre).toHaveClass('bg-muted', 'p-3', 'rounded-md', 'overflow-x-auto');
+      expect(pre).toHaveClass('bg-slate-800', 'dark:bg-slate-900', 'text-slate-100', 'p-3', 'rounded-md', 'overflow-x-auto');
     });
 
     it('should render inline code with proper styling', () => {
@@ -247,7 +247,7 @@ describe('ChatMessage', () => {
 
       const code = container.querySelector('code');
       expect(code).toBeInTheDocument();
-      expect(code).toHaveClass('bg-muted', 'px-1.5', 'py-0.5', 'rounded', 'text-sm');
+      expect(code).toHaveClass('bg-slate-200', 'dark:bg-slate-700', 'text-slate-800', 'dark:text-slate-200', 'px-1.5', 'py-0.5', 'rounded', 'text-sm');
     });
   });
 

@@ -10,7 +10,7 @@ const SyntaxHighlighter = dynamic(
   () => import('react-syntax-highlighter').then(m => m.Prism),
   {
     loading: () => (
-      <pre className="bg-muted p-4 rounded-md overflow-x-auto">
+      <pre className="bg-slate-800 dark:bg-slate-900 text-slate-100 p-4 rounded-md overflow-x-auto">
         <code className="text-sm">Loading...</code>
       </pre>
     ),
