@@ -195,8 +195,14 @@ export function useChatStream() {
         const isDirectDeepSeekGateway = gatewayLower === 'deepseek';
         const isDeepSeekNeedingFlexible = (startsWithDeepSeek && !hasExplicitNormalizingPrefix) || isDirectDeepSeekGateway;
 
-        // Use regular completions route for models with non-standard formats
-        const useFlexibleRoute = isFireworksModel || isDeepSeekNeedingFlexible;
+        // NEAR AI models need flexible completions route
+        // The AI SDK endpoint doesn't handle NEAR models - they fall through to Vercel AI Gateway
+        // which doesn't know about NEAR models and returns 400 errors.
+        // The /api/chat/completions endpoint has proper NEAR handling via near_client.py
+        const isNearModel = modelLower.startsWith('near/') || gatewayLower === 'near';
+
+        // Use regular completions route for models with non-standard formats or provider-specific routing
+        const useFlexibleRoute = isFireworksModel || isDeepSeekNeedingFlexible || isNearModel;
         const url = useFlexibleRoute
             ? `/api/chat/completions?session_id=${sessionId}`
             : `/api/chat/ai-sdk-completions?session_id=${sessionId}`;
@@ -205,6 +211,7 @@ export function useChatStream() {
             useFlexibleRoute,
             isFireworksModel,
             isDeepSeekNeedingFlexible,
+            isNearModel,
             url,
             model: model.value
         });

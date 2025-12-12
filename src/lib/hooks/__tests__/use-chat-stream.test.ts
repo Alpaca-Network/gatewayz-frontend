@@ -1,7 +1,7 @@
 /**
  * Unit tests for use-chat-stream.ts
  *
- * Tests the Fireworks and DeepSeek model routing logic
+ * Tests the Fireworks, DeepSeek, and NEAR AI model routing logic
  * Tests media extraction from content arrays
  */
 
@@ -183,7 +183,13 @@ describe('useChatStream routing logic', () => {
     const isDirectDeepSeekGateway = gatewayLower === 'deepseek';
     const isDeepSeekNeedingFlexible = (startsWithDeepSeek && !hasExplicitNormalizingPrefix) || isDirectDeepSeekGateway;
 
-    return (isFireworksModel || isDeepSeekNeedingFlexible) ? 'completions' : 'ai-sdk';
+    // NEAR AI models need flexible completions route
+    // The AI SDK endpoint doesn't handle NEAR models - they fall through to Vercel AI Gateway
+    // which doesn't know about NEAR models and returns 400 errors.
+    // The /api/chat/completions endpoint has proper NEAR handling via near_client.py
+    const isNearModel = modelLower.startsWith('near/') || gatewayLower === 'near';
+
+    return (isFireworksModel || isDeepSeekNeedingFlexible || isNearModel) ? 'completions' : 'ai-sdk';
   }
 
   describe('Fireworks model detection', () => {
@@ -257,6 +263,39 @@ describe('useChatStream routing logic', () => {
       expect(getRouteForModel('huggingface/deepseek-ai/DeepSeek-R1')).toBe('ai-sdk');
       expect(getRouteForModel('nebius/deepseek-r1')).toBe('ai-sdk');
       expect(getRouteForModel('chutes/deepseek-r1')).toBe('ai-sdk');
+    });
+  });
+
+  describe('NEAR AI model detection', () => {
+    test('should route NEAR models with near/ prefix to completions endpoint', () => {
+      // NEAR AI models need the flexible completions route because
+      // the AI SDK endpoint doesn't handle them - they'd fall through to Vercel AI Gateway
+      // which doesn't know about NEAR models and returns 400 errors.
+      expect(getRouteForModel('near/zai-org/GLM-4.6')).toBe('completions');
+      expect(getRouteForModel('near/deepseek-ai/DeepSeek-V3.1')).toBe('completions');
+      expect(getRouteForModel('NEAR/zai-org/GLM-4.6')).toBe('completions');
+      expect(getRouteForModel('Near/DeepSeek-R1')).toBe('completions');
+    });
+
+    test('should route models with near sourceGateway to completions endpoint', () => {
+      // When sourceGateway is explicitly 'near', route to completions
+      expect(getRouteForModel('zai-org/GLM-4.6', 'near')).toBe('completions');
+      expect(getRouteForModel('deepseek-v3', 'NEAR')).toBe('completions');
+      expect(getRouteForModel('GLM-4.6', 'Near')).toBe('completions');
+    });
+
+    test('should route incognito mode model to completions endpoint', () => {
+      // The incognito mode default model: near/zai-org/GLM-4.6 with sourceGateway: 'near'
+      expect(getRouteForModel('near/zai-org/GLM-4.6', 'near')).toBe('completions');
+    });
+
+    test('should not route non-NEAR models to completions endpoint', () => {
+      // Models that don't start with 'near/' and don't have 'near' as sourceGateway
+      // should go through AI SDK as normal
+      expect(getRouteForModel('openai/gpt-4o')).toBe('ai-sdk');
+      expect(getRouteForModel('anthropic/claude-3')).toBe('ai-sdk');
+      expect(getRouteForModel('openrouter/auto')).toBe('ai-sdk');
+      expect(getRouteForModel('zai-org/GLM-4.6', 'openrouter')).toBe('ai-sdk');
     });
   });
 
