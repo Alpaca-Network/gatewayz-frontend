@@ -460,6 +460,44 @@ describe('Sentry Error Filters', () => {
       expect(result).not.toBeNull();
       expect(result).toBe(event);
     });
+
+    it('should filter case-insensitive variants (uppercase)', () => {
+      // Update callback to use case-insensitive matching (matching the actual implementation)
+      const caseInsensitiveCallback = (event: Sentry.ErrorEvent, hint: Sentry.EventHint) => {
+        const error = hint.originalException;
+        const errorMessage = typeof error === 'string' ? error : error instanceof Error ? error.message : '';
+        const eventMessage = event.message || '';
+        const errorMessageLower = errorMessage.toLowerCase();
+        const eventMessageLower = eventMessage.toLowerCase();
+
+        if (
+          errorMessageLower.includes('message port closed') ||
+          errorMessageLower.includes('the message port closed before a response was received') ||
+          eventMessageLower.includes('message port closed') ||
+          eventMessageLower.includes('the message port closed before a response was received')
+        ) {
+          return null;
+        }
+
+        return event;
+      };
+
+      const error = new Error('MESSAGE PORT CLOSED');
+      const event: Sentry.ErrorEvent = {
+        exception: {
+          values: [{
+            type: 'Error',
+            value: 'MESSAGE PORT CLOSED',
+            stacktrace: { frames: [] }
+          }]
+        }
+      } as Sentry.ErrorEvent;
+
+      const hint: Sentry.EventHint = { originalException: error };
+      const result = caseInsensitiveCallback(event, hint);
+
+      expect(result).toBeNull();
+    });
   });
 
   describe('edge cases', () => {
