@@ -319,11 +319,11 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
                           li: ({node, ...props}) => <li className="mb-1" {...props} />,
                           code: ({node, inline, ...props}: any) =>
                             inline ? (
-                              <code className="bg-black/20 dark:bg-white/20 px-1.5 py-0.5 rounded text-xs font-mono" {...props} />
+                              <code className="bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 px-1.5 py-0.5 rounded text-xs font-mono" {...props} />
                             ) : (
-                              <code className="block bg-black/20 dark:bg-white/20 p-3 rounded-lg text-xs font-mono overflow-x-auto mb-2" {...props} />
+                              <code className="block bg-slate-800 dark:bg-slate-900 text-slate-100 p-3 rounded-lg text-xs font-mono overflow-x-auto mb-2" {...props} />
                             ),
-                          pre: ({node, ...props}) => <pre className="block bg-black/20 dark:bg-white/20 p-3 rounded-lg overflow-x-auto mb-2" {...props} />,
+                          pre: ({node, ...props}) => <pre className="block bg-slate-800 dark:bg-slate-900 text-slate-100 p-3 rounded-lg overflow-x-auto mb-2" {...props} />,
                           a: ({node, ...props}) => <a className="text-blue-600 dark:text-blue-400 underline hover:opacity-80" {...props} />,
                           blockquote: ({node, ...props}) => <blockquote className="border-l-4 border-muted-foreground/50 pl-4 italic mb-2" {...props} />,
                           h1: ({node, ...props}) => <h1 className="text-xl font-bold mb-2" {...props} />,

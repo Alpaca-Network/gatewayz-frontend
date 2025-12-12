@@ -279,13 +279,13 @@ export const ChatMessage = memo<ChatMessageProps>(
                   components={{
                     code: ({ inline, className, children, node, ...props }: any) => {
                       return !inline ? (
-                        <pre className="bg-muted p-3 rounded-md overflow-x-auto">
+                        <pre className="bg-slate-800 dark:bg-slate-900 text-slate-100 p-3 rounded-md overflow-x-auto">
                           <code className={className} {...props}>
                             {children}
                           </code>
                         </pre>
                       ) : (
-                        <code className="bg-muted px-1.5 py-0.5 rounded text-sm" {...props}>
+                        <code className="bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 px-1.5 py-0.5 rounded text-sm" {...props}>
                           {children}
                         </code>
                       );
