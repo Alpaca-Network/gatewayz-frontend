@@ -164,58 +164,75 @@ export function useChatStream() {
         const modelLower = model.value.toLowerCase();
         const gatewayLower = model.sourceGateway?.toLowerCase() || '';
 
-        // Models/providers that need the flexible completions route:
-        // - Fireworks: returns non-OpenAI format (object: "response.chunk" with output array)
-        //   This includes any model served through Fireworks gateway, regardless of original provider
-        //   Examples: 'accounts/fireworks/models/deepseek-r1-0528', 'fireworks/llama-3.3-70b'
-        // - DeepSeek: returns OpenAI Responses API format (object: "response.chunk")
-        //   instead of Chat Completions format (choices[].delta) which AI SDK expects
-        //   Note: Only DeepSeek models through normalizing gateways (OpenRouter, Together) use AI SDK
-        const isFireworksModel = modelLower.includes('fireworks') ||
-                                  modelLower.includes('accounts/fireworks') ||
-                                  gatewayLower === 'fireworks';
-
-        // DeepSeek models need flexible completions route UNLESS they're explicitly routed
-        // through a gateway that normalizes the format (OpenRouter, Together, etc.)
-        // Models like 'openrouter/deepseek/deepseek-r1' have the gateway prefix and are normalized
-        // Models like 'deepseek/deepseek-r1' (no gateway prefix or sourceGateway) need flexible route
-        //
-        // IMPORTANT: Only redirect when we're CERTAIN it's direct DeepSeek API access:
-        // - 'deepseek/deepseek-r1' -> definitely direct DeepSeek API -> needs flexible route
-        // - 'openrouter/deepseek/deepseek-r1' -> normalized by OpenRouter -> AI SDK can handle
-        // - 'deepseek-r1' (no prefix) -> could be from any gateway, let AI SDK try
-        // - 'deepseek-r1' with sourceGateway='deepseek' -> direct DeepSeek -> needs flexible route
-        const startsWithDeepSeek = modelLower.startsWith('deepseek/');
+        // Gateways that normalize responses to standard OpenAI Chat Completions format
+        // These can use the AI SDK route safely
         const normalizingGateways = ['openrouter', 'together', 'groq', 'cerebras', 'anyscale'];
         const hasExplicitNormalizingPrefix = normalizingGateways.some(g => modelLower.startsWith(`${g}/`));
+        const isNormalizingGateway = normalizingGateways.includes(gatewayLower);
 
-        // Only redirect if:
-        // 1. Model explicitly starts with 'deepseek/' (direct API) AND doesn't have normalizing prefix, OR
-        // 2. sourceGateway is explicitly 'deepseek'
-        const isDirectDeepSeekGateway = gatewayLower === 'deepseek';
-        const isDeepSeekNeedingFlexible = (startsWithDeepSeek && !hasExplicitNormalizingPrefix) || isDirectDeepSeekGateway;
+        // Gateways/providers that return non-standard formats and need the flexible route:
+        // - fireworks: returns Responses API format (object: "response.chunk" with output array)
+        // - deepseek: returns Responses API format when accessed directly
+        // - near: requires special backend handling via near_client.py
+        // - chutes: custom model hosting with non-standard format
+        // - aimo: research models with custom format
+        // - fal: image/video models with different streaming format
+        // - alibaba: Qwen models with custom format when accessed directly
+        // - novita: GPU inference with custom format
+        // - huggingface: HF Inference API has different streaming format
+        // - alpaca: Alpaca Network with custom format
+        // - clarifai: Clarifai gateway with custom format
+        // - featherless: open-source model hosting with variable formats
+        // - deepinfra: can have non-standard formats for some models
+        const nonStandardGateways = [
+            'fireworks',
+            'deepseek',
+            'near',
+            'chutes',
+            'aimo',
+            'fal',
+            'alibaba',
+            'novita',
+            'huggingface',
+            'hug', // alias for huggingface
+            'alpaca',
+            'clarifai',
+            'featherless',
+            'deepinfra',
+        ];
 
-        // NEAR AI models need flexible completions route
-        // The AI SDK endpoint doesn't handle NEAR models - they fall through to Vercel AI Gateway
-        // which doesn't know about NEAR models and returns 400 errors.
-        // The /api/chat/completions endpoint has proper NEAR handling via near_client.py
-        const isNearModel = modelLower.startsWith('near/') || gatewayLower === 'near';
+        // Check if model is from a non-standard gateway by:
+        // 1. sourceGateway matches a non-standard gateway
+        // 2. Model ID starts with a non-standard gateway prefix
+        const isNonStandardGateway = nonStandardGateways.includes(gatewayLower) ||
+            nonStandardGateways.some(gw => modelLower.startsWith(`${gw}/`));
 
-        // Use regular completions route for models with non-standard formats or provider-specific routing
-        const useFlexibleRoute = isFireworksModel || isDeepSeekNeedingFlexible || isNearModel;
+        // Special case: Fireworks models with accounts/ prefix
+        const isFireworksModel = modelLower.includes('accounts/fireworks') ||
+            modelLower.includes('fireworks/');
+
+        // If model goes through a normalizing gateway (OpenRouter, Together, etc.),
+        // it's safe to use AI SDK even if the underlying provider is non-standard
+        // Example: 'openrouter/deepseek/deepseek-r1' is normalized by OpenRouter
+        const isNormalizedByGateway = hasExplicitNormalizingPrefix ||
+            (isNormalizingGateway && !nonStandardGateways.some(gw => modelLower.startsWith(`${gw}/`)));
+
+        // Use flexible route for non-standard gateways UNLESS normalized by a gateway
+        const useFlexibleRoute = (isNonStandardGateway || isFireworksModel) && !isNormalizedByGateway;
         const url = useFlexibleRoute
             ? `/api/chat/completions?session_id=${sessionId}`
             : `/api/chat/ai-sdk-completions?session_id=${sessionId}`;
 
         debugLog('Route selection', {
             useFlexibleRoute,
+            isNonStandardGateway,
             isFireworksModel,
-            isDeepSeekNeedingFlexible,
-            isNearModel,
+            isNormalizedByGateway,
+            gatewayLower,
             url,
             model: model.value
         });
-        console.log('[Chat Stream] Using', useFlexibleRoute ? 'completions (flexible)' : 'AI SDK', 'route for model:', model.value);
+        console.log('[Chat Stream] Using', useFlexibleRoute ? 'completions (flexible)' : 'AI SDK', 'route for model:', model.value, 'gateway:', gatewayLower || 'none');
 
         try {
             // 4. Stream Loop
