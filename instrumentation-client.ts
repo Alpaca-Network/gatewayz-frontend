@@ -133,6 +133,22 @@ function shouldFilterEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): bo
   const eventMessage = event.message || '';
   const stackFrames = event.exception?.values?.[0]?.stacktrace?.frames;
 
+  // Filter out "message port closed" errors from Chrome extensions
+  // These are benign browser extension communication errors that occur when:
+  // - An extension's background page/service worker is unloaded
+  // - Communication between content script and background script is interrupted
+  // - Extensions like password managers, ad blockers, etc. disconnect
+  // These errors are NOT from our application code and are completely harmless
+  if (
+    errorMessage.includes('message port closed') ||
+    errorMessage.includes('The message port closed before a response was received') ||
+    eventMessage.includes('message port closed') ||
+    eventMessage.includes('The message port closed before a response was received')
+  ) {
+    console.debug('[Sentry] Filtered out Chrome extension "message port closed" error (benign browser behavior)');
+    return true;
+  }
+
   // Filter out chrome.runtime.sendMessage errors from Privy wallet provider (inpage.js)
   if (
     errorMessage.includes('chrome.runtime.sendMessage') ||
