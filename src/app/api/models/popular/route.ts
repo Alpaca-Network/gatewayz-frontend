@@ -40,8 +40,10 @@ const FALLBACK_POPULAR_MODELS: PopularModel[] = [
 // GET /api/models/popular - Get popular models
 export async function GET(request: NextRequest) {
   // Parse limit outside try block so it's accessible in catch
+  // Validate to ensure we get a valid number, defaulting to 10 if NaN or invalid
   const searchParams = request.nextUrl.searchParams;
-  const limit = parseInt(searchParams.get('limit') || '10', 10);
+  const parsedLimit = parseInt(searchParams.get('limit') || '10', 10);
+  const limit = Number.isNaN(parsedLimit) || parsedLimit <= 0 ? 10 : Math.min(parsedLimit, MAX_POPULAR_MODELS);
 
   return Sentry.startSpan(
     {

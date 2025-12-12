@@ -211,4 +211,51 @@ describe('GET /api/models/popular', () => {
     // Should use fallback on timeout
     expect(['curated', 'cache', 'fallback_error']).toContain(data.source);
   });
+
+  it('handles non-numeric limit parameter gracefully', async () => {
+    // Mock API failure to use fallback
+    mockFetch.mockRejectedValueOnce(new Error('Force fallback'));
+
+    // Pass a non-numeric limit parameter
+    const request = new NextRequest('http://localhost/api/models/popular?limit=abc');
+    const response = await GET(request);
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.data).toBeDefined();
+    // Should return default 10 models, not an empty array
+    expect(data.data.length).toBeGreaterThan(0);
+    expect(data.data.length).toBeLessThanOrEqual(10);
+  });
+
+  it('handles negative limit parameter gracefully', async () => {
+    // Mock API failure to use fallback
+    mockFetch.mockRejectedValueOnce(new Error('Force fallback'));
+
+    // Pass a negative limit parameter
+    const request = new NextRequest('http://localhost/api/models/popular?limit=-5');
+    const response = await GET(request);
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.data).toBeDefined();
+    // Should return default 10 models, not an empty array
+    expect(data.data.length).toBeGreaterThan(0);
+    expect(data.data.length).toBeLessThanOrEqual(10);
+  });
+
+  it('caps limit to MAX_POPULAR_MODELS', async () => {
+    // Mock API failure to use fallback
+    mockFetch.mockRejectedValueOnce(new Error('Force fallback'));
+
+    // Pass a very large limit parameter
+    const request = new NextRequest('http://localhost/api/models/popular?limit=1000');
+    const response = await GET(request);
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.data).toBeDefined();
+    // Should be capped at MAX_POPULAR_MODELS (20)
+    expect(data.data.length).toBeLessThanOrEqual(20);
+  });
 });
