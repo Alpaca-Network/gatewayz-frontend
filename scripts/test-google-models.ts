@@ -9,8 +9,8 @@
  *   GATEWAYZ_API_KEY=your-key npx tsx scripts/test-google-models.ts
  */
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
-const API_KEY = process.env.GATEWAYZ_API_KEY || process.env.API_KEY;
+const GATEWAYZ_API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
+const GATEWAYZ_API_KEY = process.env.GATEWAYZ_API_KEY || process.env.API_KEY;
 
 interface TestResult {
   model: string;
@@ -36,11 +36,11 @@ async function testModel(model: string): Promise<TestResult> {
   try {
     console.log(`\n📍 Testing model: ${model}`);
 
-    const response = await fetch(`${API_BASE_URL}/v1/chat/completions`, {
+    const response = await fetch(`${GATEWAYZ_API_BASE_URL}/v1/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${API_KEY}`,
+        'Authorization': `Bearer ${GATEWAYZ_API_KEY}`,
       },
       body: JSON.stringify({
         model,
@@ -96,11 +96,11 @@ async function testStreamingModel(model: string): Promise<TestResult> {
   try {
     console.log(`\n📍 Testing streaming: ${model}`);
 
-    const response = await fetch(`${API_BASE_URL}/v1/chat/completions`, {
+    const response = await fetch(`${GATEWAYZ_API_BASE_URL}/v1/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${API_KEY}`,
+        'Authorization': `Bearer ${GATEWAYZ_API_KEY}`,
       },
       body: JSON.stringify({
         model,
@@ -196,10 +196,10 @@ async function testStreamingModel(model: string): Promise<TestResult> {
 async function main() {
   console.log('🚀 Google Models Test Suite');
   console.log('=============================\n');
-  console.log(`API Base URL: ${API_BASE_URL}`);
-  console.log(`API Key: ${API_KEY ? `${API_KEY.substring(0, 10)}...` : '❌ NOT SET'}`);
+  console.log(`API Base URL: ${GATEWAYZ_API_BASE_URL}`);
+  console.log(`API Key: ${GATEWAYZ_API_KEY ? `${GATEWAYZ_API_KEY.substring(0, 10)}...` : '❌ NOT SET'}`);
 
-  if (!API_KEY) {
+  if (!GATEWAYZ_API_KEY) {
     console.error('\n❌ Error: No API key provided.');
     console.log('Please set GATEWAYZ_API_KEY or API_KEY environment variable.');
     console.log('Example: GATEWAYZ_API_KEY=your-key npx tsx scripts/test-google-models.ts');
