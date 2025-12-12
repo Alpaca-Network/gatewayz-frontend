@@ -153,9 +153,14 @@ export function initializeGlobalErrorHandlers(): void {
       errorMessageLower.includes('429') ||
       errorMessageLower.includes('too many requests');
 
+    const isNetworkError =
+      errorMessageLower.includes('failed to fetch') ||
+      errorMessageLower.includes('network error') ||
+      errorMessageLower.includes('networkerror');
+
     const isMonitoringNetworkError =
-      errorMessageLower.includes('failed to fetch') &&
-      (errorMessageLower.includes('/monitoring') || errorMessageLower.includes('sentry.io'));
+      isNetworkError &&
+      (errorMessageLower.includes('/monitoring') || errorMessageLower.includes('sentry.io') || errorMessageLower.includes('telemetry'));
 
     // Only skip 429 errors from monitoring endpoints OR network errors to monitoring endpoints
     // Do NOT skip other monitoring errors (e.g., 500 errors should still be reported)
@@ -204,8 +209,13 @@ export function initializeGlobalErrorHandlers(): void {
       errorMessageLower.includes('429') ||
       errorMessageLower.includes('too many requests');
 
+    const isNetworkError =
+      errorMessageLower.includes('failed to fetch') ||
+      errorMessageLower.includes('network error') ||
+      errorMessageLower.includes('networkerror');
+
     const isMonitoringNetworkError =
-      errorMessageLower.includes('failed to fetch') &&
+      isNetworkError &&
       (errorMessageLower.includes('/monitoring') || errorMessageLower.includes('sentry.io') || errorMessageLower.includes('telemetry'));
 
     // Only skip 429 errors from monitoring endpoints OR network errors to monitoring endpoints

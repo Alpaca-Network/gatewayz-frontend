@@ -51,9 +51,14 @@ describe('Global Error Handlers - Error Filtering Logic', () => {
         errorMessageLower.includes('429') ||
         errorMessageLower.includes('too many requests');
 
+      const isNetworkError =
+        errorMessageLower.includes('failed to fetch') ||
+        errorMessageLower.includes('network error') ||
+        errorMessageLower.includes('networkerror');
+
       const isMonitoringNetworkError =
-        errorMessageLower.includes('failed to fetch') &&
-        (errorMessageLower.includes('/monitoring') || errorMessageLower.includes('sentry.io'));
+        isNetworkError &&
+        (errorMessageLower.includes('/monitoring') || errorMessageLower.includes('sentry.io') || errorMessageLower.includes('telemetry'));
 
       // Only skip 429 errors from monitoring endpoints OR network errors to monitoring endpoints
       // Do NOT skip other monitoring errors (e.g., 500 errors should still be reported)
@@ -89,6 +94,18 @@ describe('Global Error Handlers - Error Filtering Logic', () => {
 
     it('should skip network errors from sentry.io', () => {
       expect(shouldSkipUnhandledRejection('Failed to fetch https://sentry.io/api')).toBe(true);
+    });
+
+    it('should skip network errors from telemetry endpoints', () => {
+      expect(shouldSkipUnhandledRejection('Failed to fetch telemetry endpoint')).toBe(true);
+    });
+
+    it('should skip NetworkError variant from monitoring endpoints', () => {
+      expect(shouldSkipUnhandledRejection('NetworkError when attempting to fetch resource: /monitoring')).toBe(true);
+    });
+
+    it('should skip "network error" variant from sentry.io', () => {
+      expect(shouldSkipUnhandledRejection('network error connecting to sentry.io')).toBe(true);
     });
 
     it('should NOT skip 429 errors from non-monitoring endpoints', () => {
@@ -135,8 +152,13 @@ describe('Global Error Handlers - Error Filtering Logic', () => {
         errorMessageLower.includes('429') ||
         errorMessageLower.includes('too many requests');
 
+      const isNetworkError =
+        errorMessageLower.includes('failed to fetch') ||
+        errorMessageLower.includes('network error') ||
+        errorMessageLower.includes('networkerror');
+
       const isMonitoringNetworkError =
-        errorMessageLower.includes('failed to fetch') &&
+        isNetworkError &&
         (errorMessageLower.includes('/monitoring') || errorMessageLower.includes('sentry.io') || errorMessageLower.includes('telemetry'));
 
       // Only skip 429 errors from monitoring endpoints OR network errors to monitoring endpoints
@@ -179,6 +201,14 @@ describe('Global Error Handlers - Error Filtering Logic', () => {
       expect(shouldSkipGlobalError('Failed to fetch telemetry endpoint')).toBe(true);
     });
 
+    it('should skip NetworkError variant from monitoring endpoints', () => {
+      expect(shouldSkipGlobalError('NetworkError when attempting to fetch resource: /monitoring')).toBe(true);
+    });
+
+    it('should skip "network error" variant from sentry.io', () => {
+      expect(shouldSkipGlobalError('network error connecting to sentry.io')).toBe(true);
+    });
+
     it('should NOT skip 429 errors from non-monitoring endpoints', () => {
       // This is the key fix - 429 errors from real API endpoints should NOT be skipped
       expect(shouldSkipGlobalError('POST /api/chat 429 Too Many Requests')).toBe(false);
@@ -219,8 +249,13 @@ describe('Global Error Handlers - Error Filtering Logic', () => {
         errorMessageLower.includes('429') ||
         errorMessageLower.includes('too many requests');
 
+      const isNetworkError =
+        errorMessageLower.includes('failed to fetch') ||
+        errorMessageLower.includes('network error') ||
+        errorMessageLower.includes('networkerror');
+
       const isMonitoringNetworkError =
-        errorMessageLower.includes('failed to fetch') &&
+        isNetworkError &&
         (errorMessageLower.includes('/monitoring') || errorMessageLower.includes('sentry.io') || errorMessageLower.includes('telemetry'));
 
       // Only skip 429 errors from monitoring OR network errors to monitoring
