@@ -6,18 +6,14 @@ This directory contains pending tasks created by the PR Comments Sync workflow.
 
 When PR comments are added to pull requests, they are automatically synced to Terragon tasks via:
 
-1. **GitHub Action** (`.github/workflows/sync-pr-comments-to-terragon.yml`) - Automatically triggers on PR comments
+1. **GitHub Action** (`.github/workflows/sync-pr-comments-to-terragon.yml`) - Manual workflow dispatch to sync PR comments
 2. **Slash Command** (`.claude/commands/sync-pr-comments.md`) - Manual sync via `/sync-pr-comments [PR_NUMBER]`
 
 ## How It Works
 
-### Automatic Sync (GitHub Action)
+### Manual Sync (GitHub Action)
 
-The workflow triggers on:
-- New inline code review comments (`pull_request_review_comment`)
-- New PR reviews (`pull_request_review`)
-- New general PR comments (`issue_comment` on PRs)
-- Manual dispatch with PR number
+The workflow is triggered via manual dispatch (`workflow_dispatch`) with a PR number.
 
 When triggered, it:
 1. Collects all comments from the PR
