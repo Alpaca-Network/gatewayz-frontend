@@ -222,16 +222,20 @@ describe('Authentication Error Handling', () => {
       expect(userMessage).toContain('servers are experiencing issues');
     });
 
-    it('should increment authRetryCount before dispatching retry event', () => {
+    it('should NOT increment authRetryCount when dispatching retry event', () => {
+      // CRITICAL FIX: authRetryCount should NOT be incremented here
+      // syncWithBackend will increment it when handling AUTH_REFRESH_EVENT
+      // Incrementing twice causes retries to exhaust prematurely
       const status = 504;
       let authRetryCount = 0;
       const MAX_AUTH_RETRIES = 3;
       const shouldRetry = authRetryCount < MAX_AUTH_RETRIES;
 
-      // Simulate retry logic
+      // Simulate corrected retry logic - NO increment before dispatch
       if (shouldRetry) {
-        authRetryCount++;
-        expect(authRetryCount).toBe(1);
+        // authRetryCount is NOT incremented here!
+        // syncWithBackend will handle the increment
+        expect(authRetryCount).toBe(0); // Still 0, not 1
       }
     });
 

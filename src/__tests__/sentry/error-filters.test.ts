@@ -62,14 +62,19 @@ describe('Sentry Error Filters', () => {
       const errorMessageLower = errorMessage.toLowerCase();
       if (
         errorMessageLower.includes('hydration') ||
-        errorMessageLower.includes('text content does not match server') ||
-        errorMessageLower.includes('did not match') ||
+        (errorMessageLower.includes('text content does not match') && errorMessageLower.includes('server')) ||
         eventMessageLower.includes('hydration') ||
         eventMessageLower.includes('server rendered html')
       ) {
         // Only filter if it's a generic hydration error without specific component info
         // This allows us to still catch real hydration bugs in our code
-        if (!errorMessage.includes('at path') && !errorMessage.includes('component stack')) {
+        // Use case-insensitive checks to catch all variants (e.g., "At Path", "Component Stack")
+        const messageLower = errorMessage.toLowerCase();
+        const hasComponentInfo =
+          messageLower.includes('at path') ||
+          messageLower.includes('component stack');
+
+        if (!hasComponentInfo) {
           console.warn('[Sentry] Filtered out generic hydration error (likely caused by browser extensions)');
           return null;
         }
