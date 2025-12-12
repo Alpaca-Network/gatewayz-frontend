@@ -2,7 +2,7 @@
 "use client"
 
 import * as React from "react"
-import { Check, ChevronDown, ChevronRight, ChevronsUpDown, Loader2, Star, Sparkles } from "lucide-react"
+import { Check, ChevronDown, ChevronRight, ChevronsUpDown, Loader2, Star, Sparkles, TrendingUp } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { getAdaptiveTimeout } from "@/lib/network-timeouts"
@@ -130,11 +130,12 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
   const [models, setModels] = React.useState<ModelOption[]>([])
   const [loading, setLoading] = React.useState(false)
   const [favorites, setFavorites] = React.useState<Set<string>>(new Set())
-  const [expandedDevelopers, setExpandedDevelopers] = React.useState<Set<string>>(new Set(['Favorites']))
+  const [expandedDevelopers, setExpandedDevelopers] = React.useState<Set<string>>(new Set(['Favorites', 'Popular']))
   const [searchQuery, setSearchQuery] = React.useState('')
   const [debouncedSearchQuery, setDebouncedSearchQuery] = React.useState('')
   const [loadAllModels, setLoadAllModels] = React.useState(false)
   const [totalAvailableModels, setTotalAvailableModels] = React.useState<number | null>(null)
+  const [popularModels, setPopularModels] = React.useState<ModelOption[]>([])
 
   const persistModelsToCache = React.useCallback((options: ModelOption[], totalCount: number | null) => {
     try {
@@ -172,6 +173,34 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
         // Failed to load favorites, ignore
       }
     }
+  }, []);
+
+  // Fetch popular models
+  React.useEffect(() => {
+    async function fetchPopularModels() {
+      try {
+        const response = await fetch('/api/models/popular?limit=10');
+        if (response.ok) {
+          const data = await response.json();
+          if (data.data && Array.isArray(data.data)) {
+            const popularOptions: ModelOption[] = data.data.map((model: any) => ({
+              value: model.id,
+              label: model.name,
+              category: model.category || 'Paid',
+              developer: model.developer,
+              sourceGateway: model.sourceGateway || 'openrouter',
+              modalities: ['Text'],
+              speedTier: getModelSpeedTier(model.id, model.sourceGateway),
+            }));
+            setPopularModels(popularOptions);
+          }
+        }
+      } catch (error) {
+        console.log('[ModelSelect] Failed to fetch popular models:', error);
+        // Silently fail - popular models are optional
+      }
+    }
+    fetchPopularModels();
   }, []);
 
   // Save favorites to localStorage
@@ -294,6 +323,9 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
     fetchModels();
     }, [loadAllModels, persistModelsToCache]);
 
+  // Minimum models required for a developer to have their own section
+  const MIN_MODELS_FOR_DEVELOPER_SECTION = 3;
+
   // Group models by developer and sort by Hugging Face popularity
   const modelsByDeveloper = React.useMemo(() => {
     const groups: Record<string, ModelOption[]> = {};
@@ -306,9 +338,33 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
       groups[dev].push(model);
     });
 
+    // Define priority order for top organizations (these always get their own section)
+    const priorityOrgs = ['OpenAI', 'Anthropic', 'Google', 'Qwen', 'xAI', 'Meta', 'DeepSeek', 'Mistral AI'];
+
+    // Consolidate developers with few models into "Other" category
+    const consolidatedGroups: Record<string, ModelOption[]> = {};
+    const otherModels: ModelOption[] = [];
+
+    Object.entries(groups).forEach(([developer, devModels]) => {
+      // Priority orgs always get their own section regardless of model count
+      const isPriorityOrg = priorityOrgs.includes(developer);
+
+      if (isPriorityOrg || devModels.length >= MIN_MODELS_FOR_DEVELOPER_SECTION) {
+        consolidatedGroups[developer] = devModels;
+      } else {
+        // Consolidate into "Other"
+        otherModels.push(...devModels);
+      }
+    });
+
+    // Add "Other" category if there are any models
+    if (otherModels.length > 0) {
+      consolidatedGroups['Other'] = otherModels;
+    }
+
     // Calculate popularity score for each developer based on HuggingFace metrics
     const developerScores: Record<string, number> = {};
-    Object.entries(groups).forEach(([developer, devModels]) => {
+    Object.entries(consolidatedGroups).forEach(([developer, devModels]) => {
       const totalLikes = devModels.reduce((sum, m) => sum + (m.huggingfaceMetrics?.likes || 0), 0);
       const totalDownloads = devModels.reduce((sum, m) => sum + (m.huggingfaceMetrics?.downloads || 0), 0);
       // Weight likes more heavily than downloads (1 like = 1000 download equivalents)
@@ -316,12 +372,14 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
       developerScores[developer] = (totalLikes * 1000) + (totalDownloads / 1000);
     });
 
-    // Define priority order for top organizations
-    const priorityOrgs = ['OpenAI', 'Anthropic', 'Google', 'Qwen', 'xAI', 'Meta', 'DeepSeek', 'Mistral AI'];
-
     // Sort developers: priority orgs first (by their order), then by popularity score, then alphabetically
-    return Object.keys(groups)
+    // "Other" always goes last
+    return Object.keys(consolidatedGroups)
       .sort((a, b) => {
+        // "Other" always goes last
+        if (a === 'Other') return 1;
+        if (b === 'Other') return -1;
+
         const aPriority = priorityOrgs.indexOf(a);
         const bPriority = priorityOrgs.indexOf(b);
 
@@ -342,7 +400,7 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
         return a.localeCompare(b);
       })
       .reduce((acc, key) => {
-        acc[key] = groups[key];
+        acc[key] = consolidatedGroups[key];
         return acc;
       }, {} as Record<string, ModelOption[]>);
   }, [models]);
@@ -358,15 +416,21 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
     const modelName = model.label.toLowerCase();
     const modelId = model.value.toLowerCase();
 
-    // Reasoning models
+    // Reasoning models - extended detection for thinking/reasoning capabilities
     if (
       modelId.includes('deepseek-reasoner') ||
       modelId.includes('deepseek-r1') ||
       modelId.includes('qwq') ||
       modelId.includes('o1') ||
       modelId.includes('o3') ||
+      modelId.includes('o4') ||
+      modelId.includes('thinking') ||
+      modelId.includes('reason') ||
       modelName.includes('reasoning') ||
-      modelName.includes('reasoner')
+      modelName.includes('reasoner') ||
+      modelName.includes('thinking') ||
+      modelName.includes(' r1') ||
+      modelName.includes('-r1')
     ) {
       categories.push('Reasoning');
     }
@@ -518,6 +582,31 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
       model.value.toLowerCase().includes(query)
     );
   }, [favoriteModels, debouncedSearchQuery]);
+
+  // Filter popular models based on search
+  const filteredPopularModels = React.useMemo(() => {
+    if (!debouncedSearchQuery.trim()) {
+      return popularModels;
+    }
+
+    const query = debouncedSearchQuery.toLowerCase();
+    const filtered = popularModels.filter(model =>
+      model.label.toLowerCase().includes(query) ||
+      model.value.toLowerCase().includes(query) ||
+      model.developer?.toLowerCase().includes(query)
+    );
+
+    // Auto-expand Popular section when there are matches
+    if (filtered.length > 0) {
+      setExpandedDevelopers(prev => {
+        const next = new Set(prev);
+        next.add('Popular');
+        return next;
+      });
+    }
+
+    return filtered;
+  }, [popularModels, debouncedSearchQuery]);
 
   // Prefetch models on hover to improve perceived performance
   const handlePrefetchModels = React.useCallback(() => {
@@ -675,6 +764,77 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
                           {model.sourceGateway && model.sourceGateway !== 'openrouter' && (
                             <span className="ml-1 text-xs font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
                               {model.sourceGateway.toUpperCase()}
+                            </span>
+                          )}
+                          {model.category === 'Free' && (
+                            <span className="ml-1 text-xs font-semibold text-green-600 dark:text-green-400 flex items-center gap-1">
+                              <Sparkles className="h-3 w-3" />
+                              FREE
+                            </span>
+                          )}
+                        </div>
+                      </CommandItem>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Popular Models Section */}
+            {filteredPopularModels.length > 0 && (
+              <div className="border-b">
+                <button
+                  onClick={() => toggleDeveloper('Popular')}
+                  className="w-full flex items-center gap-2 px-2 py-1.5 text-sm font-semibold hover:bg-muted"
+                >
+                  {expandedDevelopers.has('Popular') ? (
+                    <ChevronDown className="h-4 w-4" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4" />
+                  )}
+                  <TrendingUp className="h-4 w-4 text-orange-500" />
+                  <span>Popular ({filteredPopularModels.length})</span>
+                </button>
+                {expandedDevelopers.has('Popular') && (
+                  <div className="pb-2">
+                    {filteredPopularModels.map((model) => (
+                      <CommandItem
+                        key={`popular-${model.value}`}
+                        value={`popular-${model.label}`}
+                        onSelect={() => {
+                          // First try to find the model in the full models list for complete data
+                          const fullModel = models.find(m => m.value === model.value);
+                          onSelectModel(fullModel || model);
+                          setOpen(false);
+                        }}
+                        className="cursor-pointer pl-8 pr-2 group"
+                      >
+                        <Star
+                          className={cn(
+                            "mr-2 h-4 w-4 flex-shrink-0 cursor-pointer transition-colors",
+                            favorites.has(model.value)
+                              ? "fill-yellow-400 text-yellow-400"
+                              : "text-muted-foreground/30 hover:text-yellow-400"
+                          )}
+                          onClick={(e) => toggleFavorite(model.value, e)}
+                        />
+                        <Check
+                          className={cn(
+                            "mr-2 h-4 w-4 flex-shrink-0",
+                            selectedModel?.value === model.value ? "opacity-100" : "opacity-0"
+                          )}
+                        />
+                        <span className="truncate flex-1">{model.label}</span>
+                        <div className="flex items-center gap-1">
+                          {model.speedTier === 'ultra-fast' && (
+                            <span className="text-xs font-bold text-purple-600 dark:text-purple-400">⚡</span>
+                          )}
+                          {model.speedTier === 'fast' && (
+                            <span className="text-xs font-bold text-blue-600 dark:text-blue-400">⚡</span>
+                          )}
+                          {model.developer && (
+                            <span className="ml-1 text-xs text-muted-foreground">
+                              {model.developer}
                             </span>
                           )}
                           {model.category === 'Free' && (
