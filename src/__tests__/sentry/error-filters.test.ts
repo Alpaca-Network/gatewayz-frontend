@@ -379,7 +379,6 @@ describe('Sentry Error Filters', () => {
       expect(result).toBe(event);
     });
   });
-});
 
   describe('Hydration error filtering (JAVASCRIPT-NEXTJS-K)', () => {
     it('should filter out generic hydration errors', () => {
