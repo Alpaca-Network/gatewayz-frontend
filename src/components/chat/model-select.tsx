@@ -206,15 +206,18 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
         if (response.ok) {
           const data = await response.json();
           if (data.data && Array.isArray(data.data)) {
-            const popularOptions: ModelOption[] = data.data.map((model: any) => ({
-              value: model.id,
-              label: cleanModelName(model.name),
-              category: model.category || 'Paid',
-              developer: model.developer,
-              sourceGateway: model.sourceGateway || 'openrouter',
-              modalities: ['Text'],
-              speedTier: getModelSpeedTier(model.id, model.sourceGateway),
-            }));
+            const popularOptions: ModelOption[] = data.data.map((model: any) => {
+              const gateway = model.sourceGateway || 'openrouter';
+              return {
+                value: model.id,
+                label: cleanModelName(model.name),
+                category: model.category || 'Paid',
+                developer: model.developer,
+                sourceGateway: gateway,
+                modalities: ['Text'],
+                speedTier: getModelSpeedTier(model.id, gateway),
+              };
+            });
             setPopularModels(popularOptions);
           }
         }
