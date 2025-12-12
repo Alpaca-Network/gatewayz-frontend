@@ -1,4 +1,4 @@
-import { useChatUIStore, INCOGNITO_DEFAULT_MODEL } from '../chat-ui-store';
+import { useChatUIStore, INCOGNITO_DEFAULT_MODEL, NEAR_INCOGNITO_MODELS } from '../chat-ui-store';
 
 // Mock localStorage
 const localStorageMock = (() => {
@@ -83,6 +83,45 @@ describe('chat-ui-store', () => {
       expect(INCOGNITO_DEFAULT_MODEL.value).toBe('near/zai-org/GLM-4.6');
       expect(INCOGNITO_DEFAULT_MODEL.label).toBe('GLM-4.6');
       expect(INCOGNITO_DEFAULT_MODEL.sourceGateway).toBe('near');
+    });
+  });
+
+  describe('NEAR_INCOGNITO_MODELS', () => {
+    it('should export all NEAR incognito models', () => {
+      expect(NEAR_INCOGNITO_MODELS).toBeDefined();
+      expect(Array.isArray(NEAR_INCOGNITO_MODELS)).toBe(true);
+      expect(NEAR_INCOGNITO_MODELS.length).toBe(5);
+    });
+
+    it('should include all 5 tested NEAR AI models', () => {
+      const modelIds = NEAR_INCOGNITO_MODELS.map(m => m.value);
+
+      expect(modelIds).toContain('near/zai-org/GLM-4.6');
+      expect(modelIds).toContain('near/deepseek-ai/DeepSeek-V3.1');
+      expect(modelIds).toContain('near/openai/gpt-oss-120b');
+      expect(modelIds).toContain('near/Qwen/Qwen3-30B-A3B-Instruct-2507');
+      expect(modelIds).toContain('near/moonshotai/Kimi-K2-Thinking');
+    });
+
+    it('should have all models with near gateway', () => {
+      NEAR_INCOGNITO_MODELS.forEach(model => {
+        expect(model.sourceGateway).toBe('near');
+      });
+    });
+
+    it('should have INCOGNITO_DEFAULT_MODEL as the first model', () => {
+      expect(NEAR_INCOGNITO_MODELS[0]).toEqual(INCOGNITO_DEFAULT_MODEL);
+    });
+
+    it('should have valid model structure for all models', () => {
+      NEAR_INCOGNITO_MODELS.forEach(model => {
+        expect(model.value).toBeDefined();
+        expect(model.label).toBeDefined();
+        expect(model.category).toBeDefined();
+        expect(model.sourceGateway).toBe('near');
+        expect(model.developer).toBeDefined();
+        expect(model.modalities).toContain('Text');
+      });
     });
   });
 

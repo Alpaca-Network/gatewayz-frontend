@@ -1,15 +1,53 @@
 import { create } from 'zustand';
 import { ModelOption } from '@/components/chat/model-select';
 
-// Incognito mode default model
-export const INCOGNITO_DEFAULT_MODEL: ModelOption = {
-  value: 'near/zai-org/GLM-4.6',
-  label: 'GLM-4.6',
-  category: 'General',
-  sourceGateway: 'near',
-  developer: 'ZAI',
-  modalities: ['Text']
-};
+// All NEAR AI models available for Incognito mode
+// These models support privacy-focused conversations via NEAR AI
+export const NEAR_INCOGNITO_MODELS: ModelOption[] = [
+  {
+    value: 'near/zai-org/GLM-4.6',
+    label: 'GLM-4.6',
+    category: 'General',
+    sourceGateway: 'near',
+    developer: 'ZAI',
+    modalities: ['Text']
+  },
+  {
+    value: 'near/deepseek-ai/DeepSeek-V3.1',
+    label: 'DeepSeek V3.1',
+    category: 'General',
+    sourceGateway: 'near',
+    developer: 'DeepSeek',
+    modalities: ['Text']
+  },
+  {
+    value: 'near/openai/gpt-oss-120b',
+    label: 'GPT OSS 120B',
+    category: 'General',
+    sourceGateway: 'near',
+    developer: 'OpenAI',
+    modalities: ['Text']
+  },
+  {
+    value: 'near/Qwen/Qwen3-30B-A3B-Instruct-2507',
+    label: 'Qwen3 30B A3B Instruct',
+    category: 'General',
+    sourceGateway: 'near',
+    developer: 'Qwen',
+    modalities: ['Text']
+  },
+  {
+    value: 'near/moonshotai/Kimi-K2-Thinking',
+    label: 'Kimi K2 Thinking',
+    category: 'Reasoning',
+    sourceGateway: 'near',
+    developer: 'Moonshot AI',
+    modalities: ['Text']
+  },
+];
+
+// Incognito mode default model (first model in the list)
+export const INCOGNITO_DEFAULT_MODEL: ModelOption = NEAR_INCOGNITO_MODELS[0];
 
 // Storage keys for persistence
 const INCOGNITO_STORAGE_KEY = 'gatewayz_incognito_mode';

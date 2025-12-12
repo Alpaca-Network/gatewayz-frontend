@@ -2,7 +2,7 @@
 "use client"
 
 import * as React from "react"
-import { Check, ChevronDown, ChevronRight, ChevronsUpDown, Loader2, Star, Sparkles, TrendingUp } from "lucide-react"
+import { Check, ChevronDown, ChevronRight, ChevronsUpDown, Loader2, Star, Sparkles, TrendingUp, Shield } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { getAdaptiveTimeout } from "@/lib/network-timeouts"
@@ -19,6 +19,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
+import { NEAR_INCOGNITO_MODELS } from "@/lib/store/chat-ui-store"
 
 export type ModelOption = {
     value: string;
@@ -38,6 +39,7 @@ export type ModelOption = {
 interface ModelSelectProps {
     selectedModel: ModelOption | null;
     onSelectModel: (model: ModelOption | null) => void;
+    isIncognitoMode?: boolean;
 }
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
@@ -148,12 +150,12 @@ const getModelSpeedTier = (modelId: string, gateway?: string): 'ultra-fast' | 'f
   return undefined; // Unknown speed
 };
 
-export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) {
+export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = false }: ModelSelectProps) {
   const [open, setOpen] = React.useState(false)
   const [models, setModels] = React.useState<ModelOption[]>([])
   const [loading, setLoading] = React.useState(false)
   const [favorites, setFavorites] = React.useState<Set<string>>(new Set())
-  const [expandedDevelopers, setExpandedDevelopers] = React.useState<Set<string>>(new Set(['Favorites', 'Popular']))
+  const [expandedDevelopers, setExpandedDevelopers] = React.useState<Set<string>>(new Set(['Favorites', 'Popular', 'Incognito']))
   const [searchQuery, setSearchQuery] = React.useState('')
   const [debouncedSearchQuery, setDebouncedSearchQuery] = React.useState('')
   const [loadAllModels, setLoadAllModels] = React.useState(false)
@@ -617,6 +619,20 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
     );
   }, [popularModels, debouncedSearchQuery]);
 
+  // Filter incognito models based on search
+  const filteredIncognitoModels = React.useMemo(() => {
+    if (!debouncedSearchQuery.trim()) {
+      return NEAR_INCOGNITO_MODELS;
+    }
+
+    const query = debouncedSearchQuery.toLowerCase();
+    return NEAR_INCOGNITO_MODELS.filter(model =>
+      model.label.toLowerCase().includes(query) ||
+      model.value.toLowerCase().includes(query) ||
+      model.developer?.toLowerCase().includes(query)
+    );
+  }, [debouncedSearchQuery]);
+
   // Auto-expand sections with search matches (side effect in useEffect, not useMemo)
   React.useEffect(() => {
     if (!debouncedSearchQuery.trim()) {
@@ -628,6 +644,10 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
     // Check filtered results and collect sections to expand
     if (filteredPopularModels.length > 0) {
       sectionsToExpand.add('Popular');
+    }
+
+    if (filteredIncognitoModels.length > 0) {
+      sectionsToExpand.add('Incognito');
     }
 
     Object.keys(filteredModelsByDeveloper).forEach(dev => {
@@ -645,7 +665,7 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
         return next;
       });
     }
-  }, [debouncedSearchQuery, filteredPopularModels.length, filteredModelsByDeveloper, filteredModelsByCategory]);
+  }, [debouncedSearchQuery, filteredPopularModels.length, filteredIncognitoModels.length, filteredModelsByDeveloper, filteredModelsByCategory]);
 
   // Prefetch models on hover to improve perceived performance
   const handlePrefetchModels = React.useCallback(() => {
@@ -818,8 +838,62 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
               </div>
             )}
 
-            {/* Popular Models Section */}
-            {filteredPopularModels.length > 0 && (
+            {/* Incognito Models Section - shown when in Incognito mode */}
+            {isIncognitoMode && filteredIncognitoModels.length > 0 && (
+              <div className="border-b">
+                <button
+                  onClick={() => toggleDeveloper('Incognito')}
+                  className="w-full flex items-center gap-2 px-2 py-1.5 text-sm font-semibold hover:bg-muted"
+                >
+                  {expandedDevelopers.has('Incognito') ? (
+                    <ChevronDown className="h-4 w-4" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4" />
+                  )}
+                  <Shield className="h-4 w-4 text-purple-500" />
+                  <span>Incognito Models ({filteredIncognitoModels.length})</span>
+                </button>
+                {expandedDevelopers.has('Incognito') && (
+                  <div className="pb-2">
+                    {filteredIncognitoModels.map((model) => (
+                      <CommandItem
+                        key={`incognito-${model.value}`}
+                        value={`incognito-${model.label}`}
+                        onSelect={() => {
+                          onSelectModel(model);
+                          setOpen(false);
+                        }}
+                        className="cursor-pointer pl-8 pr-2 group"
+                      >
+                        <Shield
+                          className="mr-2 h-4 w-4 flex-shrink-0 text-purple-500"
+                        />
+                        <Check
+                          className={cn(
+                            "mr-2 h-4 w-4 flex-shrink-0",
+                            selectedModel?.value === model.value ? "opacity-100" : "opacity-0"
+                          )}
+                        />
+                        <span className="truncate flex-1">{model.label}</span>
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          {model.developer && (
+                            <span className="ml-1 text-[10px] text-muted-foreground">
+                              {model.developer}
+                            </span>
+                          )}
+                          <span className="ml-1 text-[10px] font-medium text-purple-500 bg-purple-500/10 px-1 py-0.5 rounded">
+                            NEAR
+                          </span>
+                        </div>
+                      </CommandItem>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Popular Models Section - hidden in Incognito mode */}
+            {!isIncognitoMode && filteredPopularModels.length > 0 && (
               <div className="border-b">
                 <button
                   onClick={() => toggleDeveloper('Popular')}
@@ -888,8 +962,8 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
               </div>
             )}
 
-            {/* Category Groups */}
-            {Object.entries(filteredModelsByCategory).map(([category, catModels]) => {
+            {/* Category Groups - hidden in Incognito mode */}
+            {!isIncognitoMode && Object.entries(filteredModelsByCategory).map(([category, catModels]) => {
               // Skip empty categories
               if (catModels.length === 0) return null;
 
@@ -955,13 +1029,15 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
               );
             })}
 
-            {/* All Models (by Developer) */}
-            <div className="border-b">
-              <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                All Models
+            {/* All Models (by Developer) - hidden in Incognito mode */}
+            {!isIncognitoMode && (
+              <div className="border-b">
+                <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  All Models
+                </div>
               </div>
-            </div>
-            {Object.entries(filteredModelsByDeveloper).map(([developer, devModels]) => (
+            )}
+            {!isIncognitoMode && Object.entries(filteredModelsByDeveloper).map(([developer, devModels]) => (
               <div key={developer} className="border-b last:border-0">
                 <button
                   onClick={() => toggleDeveloper(developer)}
@@ -1028,8 +1104,8 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
               </div>
             ))}
 
-            {/* Load More Button */}
-            {!loadAllModels && !debouncedSearchQuery && (
+            {/* Load More Button - hidden in Incognito mode */}
+            {!isIncognitoMode && !loadAllModels && !debouncedSearchQuery && (
               <div className="border-t p-2">
                 <Button
                   variant="outline"
