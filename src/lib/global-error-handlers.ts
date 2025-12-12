@@ -192,9 +192,9 @@ export function initializeGlobalErrorHandlers(): void {
     const errorMessage = event.message || '';
     const errorMessageLower = errorMessage.toLowerCase();
 
-    // Skip ONLY 429 rate limit errors from monitoring/telemetry endpoints
+    // Skip ONLY 429 rate limit errors and network errors from monitoring/telemetry endpoints
     // These cause cascades: Sentry tries to report 429 errors, which causes more 429s
-    // IMPORTANT: Do NOT skip all monitoring errors - only 429s (other errors should be reported)
+    // IMPORTANT: Do NOT skip all monitoring errors - only 429s and network failures
     const isMonitoringRelated =
       errorMessageLower.includes('/monitoring') ||
       errorMessageLower.includes('sentry') ||
@@ -204,10 +204,14 @@ export function initializeGlobalErrorHandlers(): void {
       errorMessageLower.includes('429') ||
       errorMessageLower.includes('too many requests');
 
-    // Only skip 429 errors from monitoring endpoints
+    const isMonitoringNetworkError =
+      errorMessageLower.includes('failed to fetch') &&
+      (errorMessageLower.includes('/monitoring') || errorMessageLower.includes('sentry.io') || errorMessageLower.includes('telemetry'));
+
+    // Only skip 429 errors from monitoring endpoints OR network errors to monitoring endpoints
     // Do NOT skip other monitoring errors (e.g., 500 errors should still be reported)
-    if (is429Error && isMonitoringRelated) {
-      console.debug('[GlobalError] Skipping monitoring 429 error to prevent cascade');
+    if ((is429Error && isMonitoringRelated) || isMonitoringNetworkError) {
+      console.debug('[GlobalError] Skipping monitoring 429/network error to prevent cascade');
       return;
     }
 

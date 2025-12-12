@@ -542,8 +542,10 @@ describe('Sentry Error Filters', () => {
           const isMonitoringNetworkError =
             errorMessageLower.includes('/monitoring') ||
             errorMessageLower.includes('sentry.io') ||
+            errorMessageLower.includes('telemetry') ||
             eventMessageLower.includes('/monitoring') ||
-            eventMessageLower.includes('sentry.io');
+            eventMessageLower.includes('sentry.io') ||
+            eventMessageLower.includes('telemetry');
 
           if (isMonitoringNetworkError) {
             console.debug('[Sentry] Filtered out network error from monitoring/Sentry endpoint');
