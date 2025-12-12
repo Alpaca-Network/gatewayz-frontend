@@ -226,6 +226,7 @@ function shouldFilterEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): bo
       errorMessageLower.includes('telemetry') ||
       eventMessageLower.includes('/monitoring') ||
       eventMessageLower.includes('sentry') ||
+      eventMessageLower.includes('telemetry') ||
       // Check request URL in breadcrumbs or stack frames
       stackFrames?.some(frame =>
         frame.filename?.includes('/monitoring') ||

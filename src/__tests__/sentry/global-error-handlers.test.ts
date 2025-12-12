@@ -35,6 +35,9 @@ describe('Global Error Handlers - Error Filtering Logic', () => {
     /**
      * Simulates the filtering logic from the unhandledrejection handler
      * This mirrors the implementation in global-error-handlers.ts
+     *
+     * IMPORTANT: Only skip 429 errors AND network errors from monitoring endpoints
+     * Do NOT skip all monitoring errors (e.g., 500 errors should still be reported)
      */
     function shouldSkipUnhandledRejection(errorMessage: string): boolean {
       const errorMessageLower = errorMessage.toLowerCase();
@@ -52,20 +55,24 @@ describe('Global Error Handlers - Error Filtering Logic', () => {
         errorMessageLower.includes('failed to fetch') &&
         (errorMessageLower.includes('/monitoring') || errorMessageLower.includes('sentry.io'));
 
-      // Only skip if it's monitoring-related OR a 429 that's also monitoring-related
-      return isMonitoringRelated || (is429Error && isMonitoringRelated) || isMonitoringNetworkError;
+      // Only skip 429 errors from monitoring endpoints OR network errors to monitoring endpoints
+      // Do NOT skip other monitoring errors (e.g., 500 errors should still be reported)
+      return (is429Error && isMonitoringRelated) || isMonitoringNetworkError;
     }
 
-    it('should skip errors from /monitoring endpoint', () => {
-      expect(shouldSkipUnhandledRejection('POST /monitoring failed')).toBe(true);
+    it('should NOT skip generic errors from /monitoring endpoint (only 429s)', () => {
+      // Non-429 monitoring errors should be reported
+      expect(shouldSkipUnhandledRejection('POST /monitoring 500 Internal Server Error')).toBe(false);
     });
 
-    it('should skip errors mentioning Sentry', () => {
-      expect(shouldSkipUnhandledRejection('Sentry initialization failed')).toBe(true);
+    it('should NOT skip generic errors mentioning Sentry (only 429s)', () => {
+      // Non-429 Sentry errors should be reported
+      expect(shouldSkipUnhandledRejection('Sentry initialization failed')).toBe(false);
     });
 
-    it('should skip errors mentioning telemetry', () => {
-      expect(shouldSkipUnhandledRejection('Telemetry endpoint error')).toBe(true);
+    it('should NOT skip generic errors mentioning telemetry (only 429s)', () => {
+      // Non-429 telemetry errors should be reported
+      expect(shouldSkipUnhandledRejection('Telemetry endpoint error')).toBe(false);
     });
 
     it('should skip 429 errors from monitoring endpoints', () => {
@@ -101,10 +108,10 @@ describe('Global Error Handlers - Error Filtering Logic', () => {
       expect(shouldSkipUnhandledRejection('TypeError: Cannot read property')).toBe(false);
     });
 
-    it('should handle case-insensitive matching', () => {
-      expect(shouldSkipUnhandledRejection('POST /MONITORING failed')).toBe(true);
-      expect(shouldSkipUnhandledRejection('SENTRY error')).toBe(true);
-      expect(shouldSkipUnhandledRejection('TELEMETRY failed')).toBe(true);
+    it('should handle case-insensitive matching for 429 errors', () => {
+      expect(shouldSkipUnhandledRejection('POST /MONITORING 429')).toBe(true);
+      expect(shouldSkipUnhandledRejection('SENTRY 429 error')).toBe(true);
+      expect(shouldSkipUnhandledRejection('TELEMETRY 429 failed')).toBe(true);
     });
   });
 
@@ -112,6 +119,9 @@ describe('Global Error Handlers - Error Filtering Logic', () => {
     /**
      * Simulates the filtering logic from the error handler
      * This mirrors the implementation in global-error-handlers.ts
+     *
+     * IMPORTANT: Only skip 429 errors from monitoring endpoints
+     * Do NOT skip all monitoring errors (e.g., 500 errors should still be reported)
      */
     function shouldSkipGlobalError(errorMessage: string): boolean {
       const errorMessageLower = errorMessage.toLowerCase();
@@ -125,20 +135,24 @@ describe('Global Error Handlers - Error Filtering Logic', () => {
         errorMessageLower.includes('429') ||
         errorMessageLower.includes('too many requests');
 
-      // Only skip if it's monitoring-related OR a 429 that's also monitoring-related
-      return isMonitoringRelated || (is429Error && isMonitoringRelated);
+      // Only skip 429 errors from monitoring endpoints
+      // Do NOT skip other monitoring errors (e.g., 500 errors should still be reported)
+      return is429Error && isMonitoringRelated;
     }
 
-    it('should skip errors from /monitoring endpoint', () => {
-      expect(shouldSkipGlobalError('POST /monitoring failed')).toBe(true);
+    it('should NOT skip generic errors from /monitoring endpoint (only 429s)', () => {
+      // Non-429 monitoring errors should be reported
+      expect(shouldSkipGlobalError('POST /monitoring 500 Internal Server Error')).toBe(false);
     });
 
-    it('should skip errors mentioning Sentry', () => {
-      expect(shouldSkipGlobalError('Sentry initialization failed')).toBe(true);
+    it('should NOT skip generic errors mentioning Sentry (only 429s)', () => {
+      // Non-429 Sentry errors should be reported
+      expect(shouldSkipGlobalError('Sentry initialization failed')).toBe(false);
     });
 
-    it('should skip errors mentioning telemetry', () => {
-      expect(shouldSkipGlobalError('Telemetry endpoint error')).toBe(true);
+    it('should NOT skip generic errors mentioning telemetry (only 429s)', () => {
+      // Non-429 telemetry errors should be reported
+      expect(shouldSkipGlobalError('Telemetry endpoint error')).toBe(false);
     });
 
     it('should skip 429 errors from monitoring endpoints', () => {
@@ -166,9 +180,9 @@ describe('Global Error Handlers - Error Filtering Logic', () => {
       expect(shouldSkipGlobalError('ReferenceError: undefined is not defined')).toBe(false);
     });
 
-    it('should handle case-insensitive matching', () => {
-      expect(shouldSkipGlobalError('POST /MONITORING failed')).toBe(true);
-      expect(shouldSkipGlobalError('SENTRY error')).toBe(true);
+    it('should handle case-insensitive matching for 429 errors', () => {
+      expect(shouldSkipGlobalError('POST /MONITORING 429')).toBe(true);
+      expect(shouldSkipGlobalError('SENTRY 429 error')).toBe(true);
     });
   });
 
@@ -189,7 +203,8 @@ describe('Global Error Handlers - Error Filtering Logic', () => {
         errorMessageLower.includes('failed to fetch') &&
         (errorMessageLower.includes('/monitoring') || errorMessageLower.includes('sentry.io'));
 
-      return isMonitoringRelated || (is429Error && isMonitoringRelated) || isMonitoringNetworkError;
+      // Only skip 429 errors from monitoring OR network errors to monitoring
+      return (is429Error && isMonitoringRelated) || isMonitoringNetworkError;
     }
 
     it('should handle empty error message', () => {
@@ -205,10 +220,14 @@ describe('Global Error Handlers - Error Filtering Logic', () => {
       expect(shouldSkipUnhandledRejection('Error in mon function')).toBe(false);
     });
 
-    it('should handle combined monitoring and API errors correctly', () => {
-      // An error that mentions both monitoring AND a real API should still be skipped
-      // because it mentions monitoring
-      expect(shouldSkipUnhandledRejection('/monitoring proxy to /api/chat failed')).toBe(true);
+    it('should NOT skip non-429 errors from monitoring endpoint', () => {
+      // An error that mentions monitoring but is NOT a 429 should NOT be skipped
+      expect(shouldSkipUnhandledRejection('/monitoring proxy to /api/chat failed')).toBe(false);
+    });
+
+    it('should skip 429 errors from monitoring proxy', () => {
+      // A 429 from monitoring should be skipped
+      expect(shouldSkipUnhandledRejection('/monitoring proxy 429 rate limited')).toBe(true);
     });
 
     it('should NOT skip API 429 that mentions user monitoring activity', () => {

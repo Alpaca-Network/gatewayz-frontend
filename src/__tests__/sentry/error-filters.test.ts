@@ -520,6 +520,7 @@ describe('Sentry Error Filters', () => {
             errorMessageLower.includes('telemetry') ||
             eventMessageLower.includes('/monitoring') ||
             eventMessageLower.includes('sentry') ||
+            eventMessageLower.includes('telemetry') ||
             stackFrames?.some(frame =>
               frame.filename?.includes('/monitoring') ||
               frame.filename?.includes('sentry')
