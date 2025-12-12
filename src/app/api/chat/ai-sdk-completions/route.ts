@@ -331,8 +331,8 @@ export async function POST(request: NextRequest) {
     const isFireworksModel = modelLower.includes('accounts/fireworks');
 
     // If model goes through a normalizing gateway, it's safe to use AI SDK
-    const isNormalizedByGateway = hasExplicitNormalizingPrefix ||
-      (isNormalizingGateway && !nonStandardGateways.some(gw => modelLower.startsWith(`${gw}/`)));
+    // Trust explicit sourceGateway over model name prefix - if sourceGateway is a normalizing gateway, use AI SDK
+    const isNormalizedByGateway = hasExplicitNormalizingPrefix || isNormalizingGateway;
 
     // Use flexible route for non-standard gateways UNLESS normalized by a gateway
     const needsFlexibleRoute = (isNonStandardGateway || isFireworksModel) && !isNormalizedByGateway;

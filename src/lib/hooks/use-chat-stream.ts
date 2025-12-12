@@ -213,8 +213,8 @@ export function useChatStream() {
         // If model goes through a normalizing gateway (OpenRouter, Together, etc.),
         // it's safe to use AI SDK even if the underlying provider is non-standard
         // Example: 'openrouter/deepseek/deepseek-r1' is normalized by OpenRouter
-        const isNormalizedByGateway = hasExplicitNormalizingPrefix ||
-            (isNormalizingGateway && !nonStandardGateways.some(gw => modelLower.startsWith(`${gw}/`)));
+        // Trust explicit sourceGateway over model name prefix - if sourceGateway is a normalizing gateway, use AI SDK
+        const isNormalizedByGateway = hasExplicitNormalizingPrefix || isNormalizingGateway;
 
         // Use flexible route for non-standard gateways UNLESS normalized by a gateway
         const useFlexibleRoute = (isNonStandardGateway || isFireworksModel) && !isNormalizedByGateway;

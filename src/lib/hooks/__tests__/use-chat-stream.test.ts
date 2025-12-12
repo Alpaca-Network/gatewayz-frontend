@@ -188,8 +188,8 @@ describe('useChatStream routing logic', () => {
     const isFireworksModel = modelLower.includes('accounts/fireworks');
 
     // If model goes through a normalizing gateway, it's safe to use AI SDK
-    const isNormalizedByGateway = hasExplicitNormalizingPrefix ||
-      (isNormalizingGateway && !nonStandardGateways.some(gw => modelLower.startsWith(`${gw}/`)));
+    // Trust explicit sourceGateway over model name prefix - if sourceGateway is a normalizing gateway, use AI SDK
+    const isNormalizedByGateway = hasExplicitNormalizingPrefix || isNormalizingGateway;
 
     // Use flexible route for non-standard gateways UNLESS normalized by a gateway
     return (isNonStandardGateway || isFireworksModel) && !isNormalizedByGateway ? 'completions' : 'ai-sdk';
@@ -290,6 +290,18 @@ describe('useChatStream routing logic', () => {
       expect(getRouteForModel('openrouter/huggingface/llama')).toBe('ai-sdk');
       expect(getRouteForModel('together/deepinfra-model')).toBe('ai-sdk');
       expect(getRouteForModel('groq/custom-model')).toBe('ai-sdk');
+    });
+
+    test('should trust explicit sourceGateway over model name prefix', () => {
+      // Critical: When sourceGateway is explicitly a normalizing gateway,
+      // use AI SDK even if model name starts with a non-standard prefix
+      // This fixes the bug where 'deepseek/model' with sourceGateway='openrouter'
+      // was incorrectly routed to flexible endpoint
+      expect(getRouteForModel('deepseek/deepseek-r1', 'openrouter')).toBe('ai-sdk');
+      expect(getRouteForModel('deepseek/deepseek-chat', 'together')).toBe('ai-sdk');
+      expect(getRouteForModel('huggingface/llama', 'groq')).toBe('ai-sdk');
+      expect(getRouteForModel('deepinfra/model', 'cerebras')).toBe('ai-sdk');
+      expect(getRouteForModel('near/some-model', 'anyscale')).toBe('ai-sdk');
     });
   });
 
