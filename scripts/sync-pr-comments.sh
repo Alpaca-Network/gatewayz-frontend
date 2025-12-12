@@ -35,6 +35,12 @@ if ! command -v gh &> /dev/null; then
     exit 1
 fi
 
+# Check if jq is available
+if ! command -v jq &> /dev/null; then
+    log_error "jq is not installed. Please install it first."
+    exit 1
+fi
+
 # Check if authenticated
 if ! gh auth status &> /dev/null; then
     log_error "Not authenticated with GitHub CLI. Run 'gh auth login' first."
@@ -85,9 +91,10 @@ TIMESTAMP=$(date +%Y%m%d%H%M%S)
 TASK_FILE="$OUTPUT_DIR/pr-${PR_NUMBER}-${TIMESTAMP}.md"
 
 # Escape values for YAML using jq to handle special characters (quotes, colons, etc.)
-YAML_TITLE=$(echo "Address PR #${PR_NUMBER} feedback: ${PR_TITLE}" | jq -Rs '.')
-YAML_URL=$(echo "$PR_URL" | jq -Rs '.')
-YAML_BRANCH=$(echo "$PR_BRANCH" | jq -Rs '.')
+# Use printf '%s' instead of echo to avoid trailing newline in output
+YAML_TITLE=$(printf '%s' "Address PR #${PR_NUMBER} feedback: ${PR_TITLE}" | jq -Rs '.')
+YAML_URL=$(printf '%s' "$PR_URL" | jq -Rs '.')
+YAML_BRANCH=$(printf '%s' "$PR_BRANCH" | jq -Rs '.')
 
 # Start building the task file with properly escaped YAML frontmatter
 {
