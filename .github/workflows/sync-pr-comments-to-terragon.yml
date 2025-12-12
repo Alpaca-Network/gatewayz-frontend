@@ -1,0 +1,260 @@
+name: Sync PR Comments to Terragon Task
+
+on:
+  # Trigger on new PR review comments (inline code comments)
+  pull_request_review_comment:
+    types: [created]
+
+  # Trigger on new PR reviews
+  pull_request_review:
+    types: [submitted]
+
+  # Trigger on general PR comments
+  issue_comment:
+    types: [created]
+
+  # Manual trigger to sync all comments at once
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to sync comments from'
+        required: true
+        type: number
+
+# Prevent concurrent runs for the same PR
+concurrency:
+  group: pr-comments-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}
+  cancel-in-progress: false
+
+jobs:
+  sync-comments:
+    name: Sync PR Comments to Terragon
+    runs-on: ubuntu-latest
+    # Only run on PR-related issue comments (not regular issue comments)
+    if: |
+      github.event_name == 'pull_request_review_comment' ||
+      github.event_name == 'pull_request_review' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request)
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get PR Number
+        id: pr_number
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "pr_number=${{ inputs.pr_number }}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event_name }}" == "issue_comment" ]; then
+            echo "pr_number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
+          else
+            echo "pr_number=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Fetch PR Details
+        id: pr_details
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER="${{ steps.pr_number.outputs.pr_number }}"
+
+          # Get PR info
+          PR_INFO=$(gh pr view "$PR_NUMBER" --json title,url,author,body,headRefName)
+
+          echo "pr_title=$(echo "$PR_INFO" | jq -r '.title')" >> $GITHUB_OUTPUT
+          echo "pr_url=$(echo "$PR_INFO" | jq -r '.url')" >> $GITHUB_OUTPUT
+          echo "pr_author=$(echo "$PR_INFO" | jq -r '.author.login')" >> $GITHUB_OUTPUT
+          echo "pr_branch=$(echo "$PR_INFO" | jq -r '.headRefName')" >> $GITHUB_OUTPUT
+
+      - name: Collect All PR Comments
+        id: collect_comments
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER="${{ steps.pr_number.outputs.pr_number }}"
+
+          # Create temporary file for comments
+          COMMENTS_FILE=$(mktemp)
+
+          echo "# PR Comments Summary" > "$COMMENTS_FILE"
+          echo "" >> "$COMMENTS_FILE"
+          echo "**PR**: [${{ steps.pr_details.outputs.pr_title }}](${{ steps.pr_details.outputs.pr_url }})" >> "$COMMENTS_FILE"
+          echo "**Author**: @${{ steps.pr_details.outputs.pr_author }}" >> "$COMMENTS_FILE"
+          echo "**Branch**: \`${{ steps.pr_details.outputs.pr_branch }}\`" >> "$COMMENTS_FILE"
+          echo "" >> "$COMMENTS_FILE"
+
+          # Collect inline review comments
+          echo "## Code Review Comments" >> "$COMMENTS_FILE"
+          echo "" >> "$COMMENTS_FILE"
+
+          gh api "repos/${{ github.repository }}/pulls/$PR_NUMBER/comments" \
+            --jq '.[] | "### \(.path):\(.line // .original_line // "N/A")\n**@\(.user.login)** at \(.created_at)\n> \(.body | gsub("\n"; "\n> "))\n"' \
+            >> "$COMMENTS_FILE" 2>/dev/null || echo "No inline comments found" >> "$COMMENTS_FILE"
+
+          echo "" >> "$COMMENTS_FILE"
+
+          # Collect PR reviews
+          echo "## Reviews" >> "$COMMENTS_FILE"
+          echo "" >> "$COMMENTS_FILE"
+
+          gh pr view "$PR_NUMBER" --json reviews \
+            --jq '.reviews[] | select(.body != "") | "### \(.state) by @\(.author.login)\n> \(.body | gsub("\n"; "\n> "))\n"' \
+            >> "$COMMENTS_FILE" 2>/dev/null || echo "No reviews with comments found" >> "$COMMENTS_FILE"
+
+          echo "" >> "$COMMENTS_FILE"
+
+          # Collect general PR comments
+          echo "## Discussion Comments" >> "$COMMENTS_FILE"
+          echo "" >> "$COMMENTS_FILE"
+
+          gh api "repos/${{ github.repository }}/issues/$PR_NUMBER/comments" \
+            --jq '.[] | "**@\(.user.login)** at \(.created_at)\n> \(.body | gsub("\n"; "\n> "))\n"' \
+            >> "$COMMENTS_FILE" 2>/dev/null || echo "No discussion comments found" >> "$COMMENTS_FILE"
+
+          # Output the comments file path
+          echo "comments_file=$COMMENTS_FILE" >> $GITHUB_OUTPUT
+
+          # Also output a summary count
+          INLINE_COUNT=$(gh api "repos/${{ github.repository }}/pulls/$PR_NUMBER/comments" --jq 'length' 2>/dev/null || echo "0")
+          REVIEW_COUNT=$(gh pr view "$PR_NUMBER" --json reviews --jq '[.reviews[] | select(.body != "")] | length' 2>/dev/null || echo "0")
+          DISCUSSION_COUNT=$(gh api "repos/${{ github.repository }}/issues/$PR_NUMBER/comments" --jq 'length' 2>/dev/null || echo "0")
+
+          echo "inline_count=$INLINE_COUNT" >> $GITHUB_OUTPUT
+          echo "review_count=$REVIEW_COUNT" >> $GITHUB_OUTPUT
+          echo "discussion_count=$DISCUSSION_COUNT" >> $GITHUB_OUTPUT
+
+          # Store content for next step (escape for JSON)
+          COMMENTS_CONTENT=$(cat "$COMMENTS_FILE")
+          echo "comments_content<<EOF" >> $GITHUB_OUTPUT
+          echo "$COMMENTS_CONTENT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create Terragon Task Payload
+        id: task_payload
+        run: |
+          PR_NUMBER="${{ steps.pr_number.outputs.pr_number }}"
+          PR_TITLE="${{ steps.pr_details.outputs.pr_title }}"
+          PR_URL="${{ steps.pr_details.outputs.pr_url }}"
+          PR_BRANCH="${{ steps.pr_details.outputs.pr_branch }}"
+
+          INLINE_COUNT="${{ steps.collect_comments.outputs.inline_count }}"
+          REVIEW_COUNT="${{ steps.collect_comments.outputs.review_count }}"
+          DISCUSSION_COUNT="${{ steps.collect_comments.outputs.discussion_count }}"
+
+          TOTAL_COUNT=$((INLINE_COUNT + REVIEW_COUNT + DISCUSSION_COUNT))
+
+          # Create task title
+          TASK_TITLE="Address PR #${PR_NUMBER} feedback: ${PR_TITLE}"
+
+          # Create task description
+          cat << 'TASK_DESC' > /tmp/task_description.md
+          ## Task: Address PR Feedback
+
+          This task was automatically created to track feedback from PR #${{ steps.pr_number.outputs.pr_number }}.
+
+          **Summary:**
+          - Inline code comments: ${{ steps.collect_comments.outputs.inline_count }}
+          - Reviews with comments: ${{ steps.collect_comments.outputs.review_count }}
+          - Discussion comments: ${{ steps.collect_comments.outputs.discussion_count }}
+
+          **PR Details:**
+          - URL: ${{ steps.pr_details.outputs.pr_url }}
+          - Branch: `${{ steps.pr_details.outputs.pr_branch }}`
+
+          ---
+
+          ${{ steps.collect_comments.outputs.comments_content }}
+
+          ---
+
+          ## Instructions
+
+          1. Review each comment above
+          2. Address code review comments by making the requested changes
+          3. Respond to questions in the PR
+          4. Mark resolved comments as resolved in GitHub
+          5. Request re-review when ready
+          TASK_DESC
+
+          echo "task_title=$TASK_TITLE" >> $GITHUB_OUTPUT
+          echo "total_comments=$TOTAL_COUNT" >> $GITHUB_OUTPUT
+
+      - name: Dispatch to Terragon (via Claude Code)
+        if: steps.collect_comments.outputs.inline_count > 0 || steps.collect_comments.outputs.review_count > 0 || steps.collect_comments.outputs.discussion_count > 0
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # This step can be customized based on how Terragon tasks are created
+          # Option 1: Use Claude Code CLI to create task
+          # Option 2: Call Terragon API directly
+          # Option 3: Create a GitHub Issue that Terragon monitors
+
+          PR_NUMBER="${{ steps.pr_number.outputs.pr_number }}"
+          TASK_TITLE="${{ steps.task_payload.outputs.task_title }}"
+
+          echo "=== PR Comments Summary ==="
+          echo "PR #$PR_NUMBER: ${{ steps.pr_details.outputs.pr_title }}"
+          echo "Total comments to address: ${{ steps.task_payload.outputs.total_comments }}"
+          echo ""
+          echo "Task would be created with title: $TASK_TITLE"
+          echo ""
+          echo "=== Comments Content ==="
+          cat /tmp/task_description.md
+
+          # Create a marker file that can be picked up by Terragon
+          # This writes to .terragon/pending-tasks/ for the Terragon system to pick up
+          mkdir -p .terragon/pending-tasks
+
+          TASK_FILE=".terragon/pending-tasks/pr-${PR_NUMBER}-$(date +%Y%m%d%H%M%S).md"
+
+          cat << EOF > "$TASK_FILE"
+          ---
+          title: "$TASK_TITLE"
+          pr_number: $PR_NUMBER
+          pr_url: "${{ steps.pr_details.outputs.pr_url }}"
+          branch: "${{ steps.pr_details.outputs.pr_branch }}"
+          created_at: "$(date -Iseconds)"
+          status: pending
+          ---
+
+          $(cat /tmp/task_description.md)
+          EOF
+
+          echo ""
+          echo "Task file created: $TASK_FILE"
+
+          # Optionally commit the task file back to the branch
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add "$TASK_FILE"
+          git commit -m "chore: sync PR #$PR_NUMBER comments to Terragon task" || echo "No changes to commit"
+          git push origin HEAD:${{ steps.pr_details.outputs.pr_branch }} || echo "Could not push to branch"
+
+      - name: Add PR Comment with Task Link
+        if: steps.collect_comments.outputs.inline_count > 0 || steps.collect_comments.outputs.review_count > 0 || steps.collect_comments.outputs.discussion_count > 0
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER="${{ steps.pr_number.outputs.pr_number }}"
+
+          gh pr comment "$PR_NUMBER" --body "## Terragon Task Created
+
+          A Terragon task has been created to track the feedback on this PR.
+
+          **Summary:**
+          - Inline code comments: ${{ steps.collect_comments.outputs.inline_count }}
+          - Reviews with comments: ${{ steps.collect_comments.outputs.review_count }}
+          - Discussion comments: ${{ steps.collect_comments.outputs.discussion_count }}
+
+          The task file has been added to \`.terragon/pending-tasks/\` on branch \`${{ steps.pr_details.outputs.pr_branch }}\`.
+
+          ---
+          *This comment was automatically generated by the PR Comments Sync workflow.*"
+
+      - name: Skip - No Comments
+        if: steps.collect_comments.outputs.inline_count == 0 && steps.collect_comments.outputs.review_count == 0 && steps.collect_comments.outputs.discussion_count == 0
+        run: |
+          echo "No comments found on PR #${{ steps.pr_number.outputs.pr_number }}, skipping task creation."
