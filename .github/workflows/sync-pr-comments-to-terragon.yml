@@ -30,14 +30,24 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -e
           PR_NUMBER="${{ inputs.pr_number }}"
 
-          # Get PR info
-          PR_INFO=$(gh pr view "$PR_NUMBER" --repo "${{ github.repository }}" --json title,url,author,body,headRefName,headRepositoryOwner)
+          # Get PR info and validate the response
+          if ! PR_INFO=$(gh pr view "$PR_NUMBER" --repo "${{ github.repository }}" --json title,url,author,body,headRefName,headRepositoryOwner); then
+            echo "::error::Failed to fetch PR #$PR_NUMBER details"
+            exit 1
+          fi
 
           PR_BRANCH=$(echo "$PR_INFO" | jq -r '.headRefName')
           HEAD_OWNER=$(echo "$PR_INFO" | jq -r '.headRepositoryOwner.login')
           REPO_OWNER="${{ github.repository_owner }}"
+
+          # Validate required fields
+          if [ -z "$PR_BRANCH" ] || [ "$PR_BRANCH" = "null" ]; then
+            echo "::error::Failed to get PR branch name from API response"
+            exit 1
+          fi
 
           # Use heredoc for pr_title to handle special characters safely
           echo "pr_title<<PR_TITLE_DELIMITER_${{ github.run_id }}" >> $GITHUB_OUTPUT
