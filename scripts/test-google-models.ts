@@ -171,9 +171,14 @@ async function testStreamingModel(model: string): Promise<TestResult> {
       buffer = lines.pop() || '';
 
       for (const line of lines) {
-        if (line.startsWith('data: ') && !line.includes('[DONE]')) {
+        if (line.startsWith('data: ')) {
+          const payload = line.slice(6).trim();
+          // Check for exact [DONE] marker, not substring match
+          if (payload === '[DONE]') {
+            continue;
+          }
           try {
-            const data = JSON.parse(line.slice(6));
+            const data = JSON.parse(payload);
             const content = data.choices?.[0]?.delta?.content;
             if (content) {
               fullContent += content;
@@ -186,15 +191,19 @@ async function testStreamingModel(model: string): Promise<TestResult> {
     }
 
     // Process any remaining data in the buffer
-    if (buffer.startsWith('data: ') && !buffer.includes('[DONE]')) {
-      try {
-        const data = JSON.parse(buffer.slice(6));
-        const content = data.choices?.[0]?.delta?.content;
-        if (content) {
-          fullContent += content;
+    if (buffer.startsWith('data: ')) {
+      const payload = buffer.slice(6).trim();
+      // Check for exact [DONE] marker, not substring match
+      if (payload !== '[DONE]') {
+        try {
+          const data = JSON.parse(payload);
+          const content = data.choices?.[0]?.delta?.content;
+          if (content) {
+            fullContent += content;
+          }
+        } catch {
+          // Skip malformed JSON
         }
-      } catch {
-        // Skip malformed JSON
       }
     }
 
