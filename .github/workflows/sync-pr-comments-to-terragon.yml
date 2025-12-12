@@ -189,13 +189,15 @@ jobs:
            steps.collect_comments.outputs.discussion_count != '0')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TASK_TITLE: ${{ steps.task_payload.outputs.task_title }}
+          PR_TITLE: ${{ steps.pr_details.outputs.pr_title }}
+          PR_URL: ${{ steps.pr_details.outputs.pr_url }}
+          PR_BRANCH: ${{ steps.pr_details.outputs.pr_branch }}
         run: |
           PR_NUMBER="${{ inputs.pr_number }}"
-          TASK_TITLE="${{ steps.task_payload.outputs.task_title }}"
-          PR_BRANCH="${{ steps.pr_details.outputs.pr_branch }}"
 
           echo "=== PR Comments Summary ==="
-          echo "PR #$PR_NUMBER: ${{ steps.pr_details.outputs.pr_title }}"
+          echo "PR #$PR_NUMBER: $PR_TITLE"
           echo "Total comments to address: ${{ steps.task_payload.outputs.total_comments }}"
           echo ""
           echo "Task title: $TASK_TITLE"
@@ -205,21 +207,24 @@ jobs:
 
           TASK_FILE=".terragon/pending-tasks/pr-${PR_NUMBER}-$(date +%Y%m%d%H%M%S).md"
 
-          # Use unique delimiter to prevent collision with user content
-          TASK_DELIMITER="TERRAGON_TASK_FILE_${{ github.run_id }}"
+          # Escape values for YAML using jq to handle special characters
+          YAML_TITLE=$(echo "$TASK_TITLE" | jq -Rs '.')
+          YAML_URL=$(echo "$PR_URL" | jq -Rs '.')
+          YAML_BRANCH=$(echo "$PR_BRANCH" | jq -Rs '.')
 
-          cat << "$TASK_DELIMITER" > "$TASK_FILE"
-          ---
-          title: "$TASK_TITLE"
-          pr_number: $PR_NUMBER
-          pr_url: "${{ steps.pr_details.outputs.pr_url }}"
-          branch: "$PR_BRANCH"
-          created_at: "$(date -Iseconds)"
-          status: pending
-          ---
-
-          $(cat /tmp/task_description.md)
-          $TASK_DELIMITER
+          # Write YAML frontmatter with properly escaped values
+          {
+            echo "---"
+            echo "title: $YAML_TITLE"
+            echo "pr_number: $PR_NUMBER"
+            echo "pr_url: $YAML_URL"
+            echo "branch: $YAML_BRANCH"
+            echo "created_at: \"$(date -Iseconds)\""
+            echo "status: pending"
+            echo "---"
+            echo ""
+            cat /tmp/task_description.md
+          } > "$TASK_FILE"
 
           echo ""
           echo "Task file created: $TASK_FILE"
