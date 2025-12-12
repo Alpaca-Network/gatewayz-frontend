@@ -136,16 +136,18 @@ else
 fi
 echo "" >> "$TASK_FILE"
 
-# Collect general PR comments
+# Collect general PR comments (exclude bot comments to match workflow behavior)
 log_info "Fetching discussion comments..."
 DISCUSSION_COMMENTS=$(gh api "repos/$REPO/issues/$PR_NUMBER/comments" 2>/dev/null || echo "[]")
-DISCUSSION_COUNT=$(echo "$DISCUSSION_COMMENTS" | jq 'length')
+# Filter out bot comments
+DISCUSSION_COMMENTS_FILTERED=$(echo "$DISCUSSION_COMMENTS" | jq '[.[] | select(.user.type != "Bot")]')
+DISCUSSION_COUNT=$(echo "$DISCUSSION_COMMENTS_FILTERED" | jq 'length')
 
 echo "## Discussion Comments ($DISCUSSION_COUNT)" >> "$TASK_FILE"
 echo "" >> "$TASK_FILE"
 
 if [ "$DISCUSSION_COUNT" -gt 0 ]; then
-    echo "$DISCUSSION_COMMENTS" | jq -r '.[] | "**@\(.user.login)** at \(.created_at)\n\n> \(.body | gsub("\n"; "\n> "))\n"' >> "$TASK_FILE"
+    echo "$DISCUSSION_COMMENTS_FILTERED" | jq -r '.[] | "**@\(.user.login)** at \(.created_at)\n\n> \(.body | gsub("\n"; "\n> "))\n"' >> "$TASK_FILE"
 else
     echo "_No discussion comments_" >> "$TASK_FILE"
 fi

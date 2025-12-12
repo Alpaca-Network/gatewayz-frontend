@@ -35,12 +35,15 @@ jobs:
           # Get PR info
           PR_INFO=$(gh pr view "$PR_NUMBER" --repo "${{ github.repository }}" --json title,url,author,body,headRefName,headRepositoryOwner)
 
-          PR_TITLE=$(echo "$PR_INFO" | jq -r '.title')
           PR_BRANCH=$(echo "$PR_INFO" | jq -r '.headRefName')
           HEAD_OWNER=$(echo "$PR_INFO" | jq -r '.headRepositoryOwner.login')
           REPO_OWNER="${{ github.repository_owner }}"
 
-          echo "pr_title=$PR_TITLE" >> $GITHUB_OUTPUT
+          # Use heredoc for pr_title to handle special characters safely
+          echo "pr_title<<PR_TITLE_DELIMITER_${{ github.run_id }}" >> $GITHUB_OUTPUT
+          echo "$PR_INFO" | jq -r '.title' >> $GITHUB_OUTPUT
+          echo "PR_TITLE_DELIMITER_${{ github.run_id }}" >> $GITHUB_OUTPUT
+
           echo "pr_url=$(echo "$PR_INFO" | jq -r '.url')" >> $GITHUB_OUTPUT
           echo "pr_author=$(echo "$PR_INFO" | jq -r '.author.login')" >> $GITHUB_OUTPUT
           echo "pr_branch=$PR_BRANCH" >> $GITHUB_OUTPUT
@@ -54,10 +57,15 @@ jobs:
           fi
 
       - name: Checkout PR branch
+        if: steps.pr_details.outputs.is_fork != 'true'
         uses: actions/checkout@v4
         with:
           ref: ${{ steps.pr_details.outputs.pr_branch }}
           fetch-depth: 0
+
+      - name: Checkout base branch for fork PRs
+        if: steps.pr_details.outputs.is_fork == 'true'
+        uses: actions/checkout@v4
 
       - name: Collect All PR Comments
         id: collect_comments
@@ -197,7 +205,10 @@ jobs:
 
           TASK_FILE=".terragon/pending-tasks/pr-${PR_NUMBER}-$(date +%Y%m%d%H%M%S).md"
 
-          cat << EOF > "$TASK_FILE"
+          # Use unique delimiter to prevent collision with user content
+          TASK_DELIMITER="TERRAGON_TASK_FILE_${{ github.run_id }}"
+
+          cat << "$TASK_DELIMITER" > "$TASK_FILE"
           ---
           title: "$TASK_TITLE"
           pr_number: $PR_NUMBER
@@ -208,7 +219,7 @@ jobs:
           ---
 
           $(cat /tmp/task_description.md)
-          EOF
+          $TASK_DELIMITER
 
           echo ""
           echo "Task file created: $TASK_FILE"
