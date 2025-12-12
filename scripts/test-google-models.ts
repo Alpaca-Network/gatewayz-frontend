@@ -66,7 +66,18 @@ async function testModel(model: string): Promise<TestResult> {
     }
 
     const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || 'No content in response';
+    const content = data.choices?.[0]?.message?.content;
+
+    // Treat empty or missing content as a failure
+    if (!content) {
+      console.log(`   ❌ Error: No content in response`);
+      return {
+        model,
+        success: false,
+        error: 'No content in response',
+        latencyMs,
+      };
+    }
 
     console.log(`   ✅ Success (${latencyMs}ms)`);
     console.log(`   📝 Response: "${content.substring(0, 100)}${content.length > 100 ? '...' : ''}"`);
