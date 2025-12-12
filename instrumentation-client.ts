@@ -211,6 +211,57 @@ function shouldFilterEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): bo
     }
   }
 
+  // Filter out 429 rate limit errors from monitoring/telemetry endpoints
+  // These create a cascade: Sentry tries to report 429 errors, which causes more 429s
+  if (
+    errorMessageLower.includes('429') ||
+    errorMessageLower.includes('too many requests') ||
+    eventMessageLower.includes('429') ||
+    eventMessageLower.includes('too many requests')
+  ) {
+    // Check if it's related to monitoring/telemetry endpoints
+    const isMonitoringError =
+      errorMessageLower.includes('/monitoring') ||
+      errorMessageLower.includes('sentry') ||
+      errorMessageLower.includes('telemetry') ||
+      eventMessageLower.includes('/monitoring') ||
+      eventMessageLower.includes('sentry') ||
+      eventMessageLower.includes('telemetry') ||
+      // Check request URL in breadcrumbs or stack frames
+      stackFrames?.some(frame =>
+        frame.filename?.includes('/monitoring') ||
+        frame.filename?.includes('sentry')
+      );
+
+    if (isMonitoringError) {
+      console.debug('[Sentry] Filtered out 429 rate limit error from monitoring endpoint (prevents cascade)');
+      return true;
+    }
+  }
+
+  // Filter out network errors related to monitoring/telemetry
+  // These are non-critical and can cause cascading errors
+  if (
+    errorMessageLower.includes('failed to fetch') ||
+    errorMessageLower.includes('network error') ||
+    errorMessageLower.includes('networkerror')
+  ) {
+    // Check if the error is related to monitoring/telemetry endpoints
+    // Use lowercase for consistent case-insensitive matching
+    const isMonitoringNetworkError =
+      errorMessageLower.includes('/monitoring') ||
+      errorMessageLower.includes('sentry.io') ||
+      errorMessageLower.includes('telemetry') ||
+      eventMessageLower.includes('/monitoring') ||
+      eventMessageLower.includes('sentry.io') ||
+      eventMessageLower.includes('telemetry');
+
+    if (isMonitoringNetworkError) {
+      console.debug('[Sentry] Filtered out network error from monitoring/Sentry endpoint');
+      return true;
+    }
+  }
+
   return false;
 }
 
