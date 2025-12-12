@@ -84,26 +84,31 @@ mkdir -p "$OUTPUT_DIR"
 TIMESTAMP=$(date +%Y%m%d%H%M%S)
 TASK_FILE="$OUTPUT_DIR/pr-${PR_NUMBER}-${TIMESTAMP}.md"
 
-# Start building the task file
-cat << EOF > "$TASK_FILE"
----
-title: "Address PR #${PR_NUMBER} feedback: ${PR_TITLE}"
-pr_number: ${PR_NUMBER}
-pr_url: "${PR_URL}"
-branch: "${PR_BRANCH}"
-created_at: "$(date -Iseconds)"
-status: pending
----
+# Escape values for YAML using jq to handle special characters (quotes, colons, etc.)
+YAML_TITLE=$(echo "Address PR #${PR_NUMBER} feedback: ${PR_TITLE}" | jq -Rs '.')
+YAML_URL=$(echo "$PR_URL" | jq -Rs '.')
+YAML_BRANCH=$(echo "$PR_BRANCH" | jq -Rs '.')
 
-# PR Comments Summary
-
-**PR**: [${PR_TITLE}](${PR_URL})
-**Author**: @${PR_AUTHOR}
-**Branch**: \`${PR_BRANCH}\`
-
----
-
-EOF
+# Start building the task file with properly escaped YAML frontmatter
+{
+    echo "---"
+    echo "title: $YAML_TITLE"
+    echo "pr_number: $PR_NUMBER"
+    echo "pr_url: $YAML_URL"
+    echo "branch: $YAML_BRANCH"
+    echo "created_at: \"$(date -Iseconds)\""
+    echo "status: pending"
+    echo "---"
+    echo ""
+    echo "# PR Comments Summary"
+    echo ""
+    echo "**PR**: [${PR_TITLE}](${PR_URL})"
+    echo "**Author**: \`@${PR_AUTHOR}\`"
+    echo "**Branch**: \`${PR_BRANCH}\`"
+    echo ""
+    echo "---"
+    echo ""
+} > "$TASK_FILE"
 
 # Collect inline review comments
 log_info "Fetching inline code review comments..."
