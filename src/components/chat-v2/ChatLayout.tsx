@@ -363,7 +363,7 @@ export function ChatLayout() {
                            variant={isIncognitoMode ? "default" : "ghost"}
                            size="icon"
                            onClick={toggleIncognitoMode}
-                           title={isIncognitoMode ? "Incognito mode enabled (GLM-4.6) - Click to disable" : "Enable incognito mode"}
+                           title={isIncognitoMode ? "Incognito mode enabled - Click to disable" : "Enable incognito mode"}
                            className={`
                                transition-all duration-500 ease-out
                                ${isIncognitoMode
@@ -379,7 +379,7 @@ export function ChatLayout() {
                        </Button>
 
                        <div className="w-[180px] sm:w-[250px]">
-                           <ModelSelect selectedModel={selectedModel} onSelectModel={setSelectedModel} />
+                           <ModelSelect selectedModel={selectedModel} onSelectModel={setSelectedModel} isIncognitoMode={isIncognitoMode} />
                        </div>
                    </div>
                </header>
@@ -395,7 +395,7 @@ export function ChatLayout() {
                           <div className="flex-1 min-w-0">
                               <p className="text-sm font-medium text-purple-300">Incognito Mode Active</p>
                               <p className="text-xs text-purple-400/80 truncate">
-                                  Using GLM-4.6 model via NEAR AI for enhanced privacy. Your conversations are not stored.
+                                  Using NEAR AI models for enhanced privacy. Your conversations are not stored.
                               </p>
                           </div>
                           <Button
