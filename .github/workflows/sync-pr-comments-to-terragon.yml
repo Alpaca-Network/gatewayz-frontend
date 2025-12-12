@@ -116,11 +116,12 @@ jobs:
           echo "review_count=$REVIEW_COUNT" >> $GITHUB_OUTPUT
           echo "discussion_count=$DISCUSSION_COUNT" >> $GITHUB_OUTPUT
 
-          # Store content for next step
+          # Store content for next step using unique delimiter to avoid collision with PR content
           COMMENTS_CONTENT=$(cat "$COMMENTS_FILE")
-          echo "comments_content<<EOF" >> $GITHUB_OUTPUT
+          DELIMITER="TERRAGON_COMMENTS_CONTENT_DELIMITER_${{ github.run_id }}"
+          echo "comments_content<<${DELIMITER}" >> $GITHUB_OUTPUT
           echo "$COMMENTS_CONTENT" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          echo "${DELIMITER}" >> $GITHUB_OUTPUT
 
       - name: Create Terragon Task Payload
         id: task_payload
