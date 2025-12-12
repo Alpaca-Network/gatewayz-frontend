@@ -997,12 +997,11 @@ export function GatewayzAuthProvider({
             return;
           }
 
-          clearStoredCredentials();
-          setAuthStatus("error", `backend status ${response.status}`);
-
-          // Provide user-friendly error messages based on status code
-          let userMessage: string;
+          // CRITICAL: Check if we should retry BEFORE clearing credentials
+          // clearStoredCredentials() resets authRetryCountRef.current to 0 by default
+          // which would cause infinite retry loops
           let shouldRetry = false;
+          let userMessage: string;
 
           if (response.status === 504) {
             userMessage = "Gateway timeout - our servers are taking too long to respond. Retrying...";
@@ -1017,6 +1016,11 @@ export function GatewayzAuthProvider({
           } else {
             userMessage = `Authentication failed (${response.status}). Please try again.`;
           }
+
+          // Clear credentials after determining shouldRetry
+          // For retryable errors, preserve retry counter; otherwise reset it
+          clearStoredCredentials(!shouldRetry);
+          setAuthStatus("error", `backend status ${response.status}`);
 
           const authError: AuthError = { status: response.status, message: rawResponseText };
           setError(userMessage);
@@ -1044,12 +1048,16 @@ export function GatewayzAuthProvider({
           // Auto-retry for 504 Gateway Timeout and 5xx errors
           if (shouldRetry) {
             console.log(`[Auth] Retrying authentication after ${response.status} error (attempt ${authRetryCountRef.current + 1}/${MAX_AUTH_RETRIES})`);
-            authRetryCountRef.current++;
+
+            // NOTE: Do NOT increment authRetryCountRef here!
+            // syncWithBackend will increment it when handling the AUTH_REFRESH_EVENT
+            // Incrementing twice would cause retries to exhaust prematurely
 
             // Wait 2 seconds before retrying to give backend time to recover
             await new Promise(resolve => setTimeout(resolve, 2000));
 
             // Dispatch refresh event to trigger retry
+            // syncWithBackend will increment authRetryCountRef.current
             if (typeof window !== 'undefined') {
               window.dispatchEvent(new Event(AUTH_REFRESH_EVENT));
             }
