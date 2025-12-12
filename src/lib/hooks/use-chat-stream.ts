@@ -207,9 +207,8 @@ export function useChatStream() {
         const isNonStandardGateway = nonStandardGateways.includes(gatewayLower) ||
             nonStandardGateways.some(gw => modelLower.startsWith(`${gw}/`));
 
-        // Special case: Fireworks models with accounts/ prefix
-        const isFireworksModel = modelLower.includes('accounts/fireworks') ||
-            modelLower.includes('fireworks/');
+        // Special case: Fireworks models with accounts/ prefix (fireworks/ prefix is already handled by nonStandardGateways)
+        const isFireworksModel = modelLower.includes('accounts/fireworks');
 
         // If model goes through a normalizing gateway (OpenRouter, Together, etc.),
         // it's safe to use AI SDK even if the underlying provider is non-standard
