@@ -82,6 +82,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -e
           PR_NUMBER="${{ inputs.pr_number }}"
 
           # Create temporary file for comments
@@ -94,41 +95,70 @@ jobs:
           echo "**Branch**: \`${{ steps.pr_details.outputs.pr_branch }}\`" >> "$COMMENTS_FILE"
           echo "" >> "$COMMENTS_FILE"
 
-          # Collect inline review comments
+          # Fetch all comment data upfront and validate API responses
+          # This ensures we fail fast on API errors rather than silently skipping
+          echo "Fetching inline review comments..."
+          if ! INLINE_COMMENTS=$(gh api "repos/${{ github.repository }}/pulls/$PR_NUMBER/comments"); then
+            echo "::error::Failed to fetch inline review comments"
+            exit 1
+          fi
+
+          echo "Fetching PR reviews..."
+          if ! REVIEWS=$(gh pr view "$PR_NUMBER" --json reviews); then
+            echo "::error::Failed to fetch PR reviews"
+            exit 1
+          fi
+
+          echo "Fetching discussion comments..."
+          if ! DISCUSSION_COMMENTS=$(gh api "repos/${{ github.repository }}/issues/$PR_NUMBER/comments"); then
+            echo "::error::Failed to fetch discussion comments"
+            exit 1
+          fi
+
+          # Process inline review comments
           echo "## Code Review Comments" >> "$COMMENTS_FILE"
           echo "" >> "$COMMENTS_FILE"
 
-          gh api "repos/${{ github.repository }}/pulls/$PR_NUMBER/comments" \
-            --jq '.[] | "### \(.path):\(.line // .original_line // "N/A")\n**@\(.user.login)** at \(.created_at)\n> \(.body | gsub("\n"; "\n> "))\n"' \
-            >> "$COMMENTS_FILE" 2>/dev/null || echo "No inline comments found" >> "$COMMENTS_FILE"
+          INLINE_FORMATTED=$(echo "$INLINE_COMMENTS" | jq -r '.[] | "### \(.path):\(.line // .original_line // "N/A")\n**@\(.user.login)** at \(.created_at)\n> \(.body | gsub("\n"; "\n> "))\n"' 2>/dev/null || true)
+          if [ -n "$INLINE_FORMATTED" ]; then
+            echo "$INLINE_FORMATTED" >> "$COMMENTS_FILE"
+          else
+            echo "No inline comments found" >> "$COMMENTS_FILE"
+          fi
 
           echo "" >> "$COMMENTS_FILE"
 
-          # Collect PR reviews
+          # Process PR reviews
           echo "## Reviews" >> "$COMMENTS_FILE"
           echo "" >> "$COMMENTS_FILE"
 
-          gh pr view "$PR_NUMBER" --json reviews \
-            --jq '.reviews[] | select(.body != "") | "### \(.state) by @\(.author.login)\n> \(.body | gsub("\n"; "\n> "))\n"' \
-            >> "$COMMENTS_FILE" 2>/dev/null || echo "No reviews with comments found" >> "$COMMENTS_FILE"
+          REVIEWS_FORMATTED=$(echo "$REVIEWS" | jq -r '.reviews[] | select(.body != "") | "### \(.state) by @\(.author.login)\n> \(.body | gsub("\n"; "\n> "))\n"' 2>/dev/null || true)
+          if [ -n "$REVIEWS_FORMATTED" ]; then
+            echo "$REVIEWS_FORMATTED" >> "$COMMENTS_FILE"
+          else
+            echo "No reviews with comments found" >> "$COMMENTS_FILE"
+          fi
 
           echo "" >> "$COMMENTS_FILE"
 
-          # Collect general PR comments (exclude bot comments to avoid noise)
+          # Process general PR comments (exclude bot comments to avoid noise)
           echo "## Discussion Comments" >> "$COMMENTS_FILE"
           echo "" >> "$COMMENTS_FILE"
 
-          gh api "repos/${{ github.repository }}/issues/$PR_NUMBER/comments" \
-            --jq '.[] | select(.user.type != "Bot") | "**@\(.user.login)** at \(.created_at)\n> \(.body | gsub("\n"; "\n> "))\n"' \
-            >> "$COMMENTS_FILE" 2>/dev/null || echo "No discussion comments found" >> "$COMMENTS_FILE"
+          DISCUSSION_FORMATTED=$(echo "$DISCUSSION_COMMENTS" | jq -r '.[] | select(.user.type != "Bot") | "**@\(.user.login)** at \(.created_at)\n> \(.body | gsub("\n"; "\n> "))\n"' 2>/dev/null || true)
+          if [ -n "$DISCUSSION_FORMATTED" ]; then
+            echo "$DISCUSSION_FORMATTED" >> "$COMMENTS_FILE"
+          else
+            echo "No discussion comments found" >> "$COMMENTS_FILE"
+          fi
 
           # Output the comments file path
           echo "comments_file=$COMMENTS_FILE" >> $GITHUB_OUTPUT
 
-          # Also output a summary count (exclude bot comments from counts)
-          INLINE_COUNT=$(gh api "repos/${{ github.repository }}/pulls/$PR_NUMBER/comments" --jq 'length' 2>/dev/null || echo "0")
-          REVIEW_COUNT=$(gh pr view "$PR_NUMBER" --json reviews --jq '[.reviews[] | select(.body != "")] | length' 2>/dev/null || echo "0")
-          DISCUSSION_COUNT=$(gh api "repos/${{ github.repository }}/issues/$PR_NUMBER/comments" --jq '[.[] | select(.user.type != "Bot")] | length' 2>/dev/null || echo "0")
+          # Calculate counts from already-fetched data (no additional API calls)
+          INLINE_COUNT=$(echo "$INLINE_COMMENTS" | jq 'length')
+          REVIEW_COUNT=$(echo "$REVIEWS" | jq '[.reviews[] | select(.body != "")] | length')
+          DISCUSSION_COUNT=$(echo "$DISCUSSION_COMMENTS" | jq '[.[] | select(.user.type != "Bot")] | length')
 
           echo "inline_count=$INLINE_COUNT" >> $GITHUB_OUTPUT
           echo "review_count=$REVIEW_COUNT" >> $GITHUB_OUTPUT
@@ -159,35 +189,35 @@ jobs:
           TASK_TITLE="Address PR #${PR_NUMBER} feedback: ${PR_TITLE}"
 
           # Create task description using unquoted heredoc for variable expansion
-          # Use a unique delimiter to avoid collision with content
-          cat << TASK_DESC_DELIMITER_END > /tmp/task_description.md
-          ## Task: Address PR Feedback
+          # Use a unique delimiter with run_id to avoid collision with user content
+          cat << TASK_DESC_DELIMITER_${{ github.run_id }}_END > /tmp/task_description.md
+## Task: Address PR Feedback
 
-          This task was automatically created to track feedback from PR #${PR_NUMBER}.
+This task was automatically created to track feedback from PR #${PR_NUMBER}.
 
-          **Summary:**
-          - Inline code comments: ${INLINE_COUNT}
-          - Reviews with comments: ${REVIEW_COUNT}
-          - Discussion comments: ${DISCUSSION_COUNT}
+**Summary:**
+- Inline code comments: ${INLINE_COUNT}
+- Reviews with comments: ${REVIEW_COUNT}
+- Discussion comments: ${DISCUSSION_COUNT}
 
-          **PR Details:**
-          - URL: ${PR_URL}
-          - Branch: \`${PR_BRANCH}\`
+**PR Details:**
+- URL: ${PR_URL}
+- Branch: \`${PR_BRANCH}\`
 
-          ---
+---
 
-          ${COMMENTS_CONTENT}
+${COMMENTS_CONTENT}
 
-          ---
+---
 
-          ## Instructions
+## Instructions
 
-          1. Review each comment above
-          2. Address code review comments by making the requested changes
-          3. Respond to questions in the PR
-          4. Mark resolved comments as resolved in GitHub
-          5. Request re-review when ready
-          TASK_DESC_DELIMITER_END
+1. Review each comment above
+2. Address code review comments by making the requested changes
+3. Respond to questions in the PR
+4. Mark resolved comments as resolved in GitHub
+5. Request re-review when ready
+TASK_DESC_DELIMITER_${{ github.run_id }}_END
 
           echo "task_title=$TASK_TITLE" >> $GITHUB_OUTPUT
           echo "total_comments=$TOTAL_COUNT" >> $GITHUB_OUTPUT
