@@ -3,6 +3,7 @@
 
 import * as React from "react"
 import { Check, ChevronDown, ChevronRight, ChevronsUpDown, Loader2, Star, Sparkles } from "lucide-react"
+import { useVirtualizer } from "@tanstack/react-virtual"
 
 import { cn } from "@/lib/utils"
 import { getAdaptiveTimeout } from "@/lib/network-timeouts"
@@ -35,10 +36,94 @@ export type ModelOption = {
     avgLatencyMs?: number;
 };
 
+// Virtual list item types for efficient rendering
+type VirtualListItem =
+  | { type: 'favorites-header'; count: number; isExpanded: boolean }
+  | { type: 'category-header'; category: string; count: number; isExpanded: boolean }
+  | { type: 'all-models-header' }
+  | { type: 'developer-header'; developer: string; count: number; isExpanded: boolean }
+  | { type: 'model-item'; model: ModelOption; section: string }
+  | { type: 'load-more-button' }
+  | { type: 'empty-message' };
+
 interface ModelSelectProps {
     selectedModel: ModelOption | null;
     onSelectModel: (model: ModelOption | null) => void;
 }
+
+// Memoized model item component to prevent unnecessary re-renders
+interface ModelCommandItemProps {
+  model: ModelOption;
+  selectedModel: ModelOption | null;
+  favorites: Set<string>;
+  onSelect: (model: ModelOption) => void;
+  onToggleFavorite: (modelId: string, event: React.MouseEvent) => void;
+  showSpeedBadge?: boolean;
+}
+
+const ModelCommandItem = React.memo(function ModelCommandItem({
+  model,
+  selectedModel,
+  favorites,
+  onSelect,
+  onToggleFavorite,
+  showSpeedBadge = true,
+}: ModelCommandItemProps) {
+  const handleSelect = React.useCallback(() => {
+    onSelect(model);
+  }, [model, onSelect]);
+
+  const handleFavoriteClick = React.useCallback((e: React.MouseEvent) => {
+    onToggleFavorite(model.value, e);
+  }, [model.value, onToggleFavorite]);
+
+  const isFavorite = favorites.has(model.value);
+  const isSelected = selectedModel?.value === model.value;
+
+  return (
+    <CommandItem
+      value={model.label}
+      onSelect={handleSelect}
+      className="cursor-pointer pl-8 pr-2 group"
+    >
+      <Star
+        className={cn(
+          "mr-2 h-4 w-4 flex-shrink-0 cursor-pointer transition-colors",
+          isFavorite
+            ? "fill-yellow-400 text-yellow-400"
+            : "text-muted-foreground/30 hover:text-yellow-400"
+        )}
+        onClick={handleFavoriteClick}
+      />
+      <Check
+        className={cn(
+          "mr-2 h-4 w-4 flex-shrink-0",
+          isSelected ? "opacity-100" : "opacity-0"
+        )}
+      />
+      <span className="truncate flex-1">{model.label}</span>
+      <div className="flex items-center gap-1">
+        {showSpeedBadge && model.speedTier === 'ultra-fast' && (
+          <span className="text-xs font-bold text-purple-600 dark:text-purple-400">⚡</span>
+        )}
+        {showSpeedBadge && model.speedTier === 'fast' && (
+          <span className="text-xs font-bold text-blue-600 dark:text-blue-400">⚡</span>
+        )}
+        {model.sourceGateway && model.sourceGateway !== 'openrouter' && (
+          <span className="ml-1 text-xs font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+            {model.sourceGateway.toUpperCase()}
+          </span>
+        )}
+        {model.category === 'Free' && (
+          <span className="ml-1 text-xs font-semibold text-green-600 dark:text-green-400 flex items-center gap-1">
+            <Sparkles className="h-3 w-3" />
+            FREE
+          </span>
+        )}
+      </div>
+    </CommandItem>
+  );
+});
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
 
@@ -173,22 +258,6 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
       }
     }
   }, []);
-
-  // Save favorites to localStorage
-  const toggleFavorite = (modelId: string, event: React.MouseEvent) => {
-    event.stopPropagation();
-    event.preventDefault();
-    setFavorites(prev => {
-      const next = new Set(prev);
-      if (next.has(modelId)) {
-        next.delete(modelId);
-      } else {
-        next.add(modelId);
-      }
-      localStorage.setItem(FAVORITES_KEY, JSON.stringify(Array.from(next)));
-      return next;
-    });
-  };
 
   React.useEffect(() => {
     async function fetchModels() {
@@ -519,6 +588,132 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
     );
   }, [favoriteModels, debouncedSearchQuery]);
 
+  // Create flattened items list for virtualization
+  const flattenedItems = React.useMemo((): VirtualListItem[] => {
+    const items: VirtualListItem[] = [];
+
+    // Check if there are any visible items at all
+    const hasAnyItems = filteredFavoriteModels.length > 0 ||
+      Object.values(filteredModelsByCategory).some(models => models.length > 0) ||
+      Object.values(filteredModelsByDeveloper).some(models => models.length > 0);
+
+    if (!hasAnyItems) {
+      items.push({ type: 'empty-message' });
+      return items;
+    }
+
+    // Favorites section
+    if (filteredFavoriteModels.length > 0) {
+      items.push({
+        type: 'favorites-header',
+        count: filteredFavoriteModels.length,
+        isExpanded: expandedDevelopers.has('Favorites')
+      });
+      if (expandedDevelopers.has('Favorites')) {
+        filteredFavoriteModels.forEach(model => {
+          items.push({ type: 'model-item', model, section: 'Favorites' });
+        });
+      }
+    }
+
+    // Category sections
+    Object.entries(filteredModelsByCategory).forEach(([category, catModels]) => {
+      if (catModels.length === 0) return;
+      items.push({
+        type: 'category-header',
+        category,
+        count: catModels.length,
+        isExpanded: expandedDevelopers.has(category)
+      });
+      if (expandedDevelopers.has(category)) {
+        catModels.forEach(model => {
+          items.push({ type: 'model-item', model, section: category });
+        });
+      }
+    });
+
+    // All Models header
+    items.push({ type: 'all-models-header' });
+
+    // Developer sections
+    Object.entries(filteredModelsByDeveloper).forEach(([developer, devModels]) => {
+      if (devModels.length === 0) return;
+      items.push({
+        type: 'developer-header',
+        developer,
+        count: devModels.length,
+        isExpanded: expandedDevelopers.has(developer)
+      });
+      if (expandedDevelopers.has(developer)) {
+        const modelsToShow = loadAllModels ? devModels : devModels.slice(0, MAX_MODELS_PER_DEVELOPER);
+        modelsToShow.forEach(model => {
+          items.push({ type: 'model-item', model, section: developer });
+        });
+      }
+    });
+
+    // Load more button
+    if (!loadAllModels && !debouncedSearchQuery) {
+      items.push({ type: 'load-more-button' });
+    }
+
+    return items;
+  }, [
+    filteredFavoriteModels,
+    filteredModelsByCategory,
+    filteredModelsByDeveloper,
+    expandedDevelopers,
+    loadAllModels,
+    debouncedSearchQuery
+  ]);
+
+  // Ref for virtual list scroll container
+  const listRef = React.useRef<HTMLDivElement>(null);
+
+  // Setup virtualizer
+  const virtualizer = useVirtualizer({
+    count: flattenedItems.length,
+    getScrollElement: () => listRef.current,
+    estimateSize: (index) => {
+      const item = flattenedItems[index];
+      if (item.type === 'all-models-header') return 28;
+      if (item.type === 'favorites-header' || item.type === 'category-header' || item.type === 'developer-header') return 36;
+      if (item.type === 'load-more-button') return 52;
+      if (item.type === 'empty-message') return 40;
+      return 40; // model-item
+    },
+    overscan: 10,
+  });
+
+  // Reset scroll position when search changes
+  React.useEffect(() => {
+    if (listRef.current) {
+      listRef.current.scrollTop = 0;
+    }
+  }, [debouncedSearchQuery]);
+
+  // Stable callback for model selection
+  const handleModelSelect = React.useCallback((model: ModelOption) => {
+    onSelectModel(model);
+    setOpen(false);
+  }, [onSelectModel]);
+
+  // Stable callback for favorite toggle
+  const handleToggleFavorite = React.useCallback((modelId: string, event: React.MouseEvent) => {
+    event.stopPropagation();
+    event.preventDefault();
+    setFavorites(prev => {
+      const next = new Set(prev);
+      if (next.has(modelId)) {
+        next.delete(modelId);
+      } else {
+        next.add(modelId);
+      }
+      localStorage.setItem(FAVORITES_KEY, JSON.stringify(Array.from(next)));
+      return next;
+    });
+  }, []);
+
   // Prefetch models on hover to improve perceived performance
   const handlePrefetchModels = React.useCallback(() => {
     if (!loadAllModels && models.length === INITIAL_MODELS_LIMIT) {
@@ -623,237 +818,132 @@ export function ModelSelect({ selectedModel, onSelectModel }: ModelSelectProps) 
             value={searchQuery}
             onValueChange={setSearchQuery}
           />
-          <CommandList className="max-h-[400px]">
-            <CommandEmpty>No model found.</CommandEmpty>
+          {/* Virtualized list for performance with 330+ models */}
+          <div
+            ref={listRef}
+            className="max-h-[400px] overflow-auto"
+            style={{ contain: 'strict' }}
+          >
+            <div
+              style={{
+                height: `${virtualizer.getTotalSize()}px`,
+                width: '100%',
+                position: 'relative',
+              }}
+            >
+              {virtualizer.getVirtualItems().map((virtualRow) => {
+                const item = flattenedItems[virtualRow.index];
 
-            {/* Favorites Section */}
-            {filteredFavoriteModels.length > 0 && (
-              <div className="border-b">
-                <button
-                  onClick={() => toggleDeveloper('Favorites')}
-                  className="w-full flex items-center gap-2 px-2 py-1.5 text-sm font-semibold hover:bg-muted"
-                >
-                  {expandedDevelopers.has('Favorites') ? (
-                    <ChevronDown className="h-4 w-4" />
-                  ) : (
-                    <ChevronRight className="h-4 w-4" />
-                  )}
-                  <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                  <span>Favorites ({filteredFavoriteModels.length})</span>
-                </button>
-                {expandedDevelopers.has('Favorites') && (
-                  <div className="pb-2">
-                    {filteredFavoriteModels.map((model) => (
-                      <CommandItem
-                        key={model.value}
-                        value={model.label}
-                        onSelect={(currentValue) => {
-                          const selected = models.find(m => m.label.toLowerCase() === currentValue.toLowerCase());
-                          onSelectModel(selected || null);
-                          setOpen(false);
-                        }}
-                        className="cursor-pointer pl-8 pr-2"
-                      >
-                        <Star
-                          className="mr-2 h-4 w-4 fill-yellow-400 text-yellow-400 flex-shrink-0 cursor-pointer"
-                          onClick={(e) => toggleFavorite(model.value, e)}
-                        />
-                        <Check
-                          className={cn(
-                            "mr-2 h-4 w-4 flex-shrink-0",
-                            selectedModel?.value === model.value ? "opacity-100" : "opacity-0"
-                          )}
-                        />
-                        <span className="truncate flex-1">{model.label}</span>
-                        <div className="flex items-center gap-1">
-                          {model.speedTier === 'ultra-fast' && (
-                            <span className="text-xs font-bold text-purple-600 dark:text-purple-400">⚡</span>
-                          )}
-                          {model.speedTier === 'fast' && (
-                            <span className="text-xs font-bold text-blue-600 dark:text-blue-400">⚡</span>
-                          )}
-                          {model.sourceGateway && model.sourceGateway !== 'openrouter' && (
-                            <span className="ml-1 text-xs font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                              {model.sourceGateway.toUpperCase()}
-                            </span>
-                          )}
-                          {model.category === 'Free' && (
-                            <span className="ml-1 text-xs font-semibold text-green-600 dark:text-green-400 flex items-center gap-1">
-                              <Sparkles className="h-3 w-3" />
-                              FREE
-                            </span>
-                          )}
-                        </div>
-                      </CommandItem>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Category Groups */}
-            {Object.entries(filteredModelsByCategory).map(([category, catModels]) => {
-              // Skip empty categories
-              if (catModels.length === 0) return null;
-
-              return (
-                <div key={category} className="border-b">
-                  <button
-                    onClick={() => toggleDeveloper(category)}
-                    className="w-full flex items-center gap-2 px-2 py-1.5 text-sm font-semibold hover:bg-muted"
+                return (
+                  <div
+                    key={virtualRow.key}
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      height: `${virtualRow.size}px`,
+                      transform: `translateY(${virtualRow.start}px)`,
+                    }}
                   >
-                    {expandedDevelopers.has(category) ? (
-                      <ChevronDown className="h-4 w-4" />
-                    ) : (
-                      <ChevronRight className="h-4 w-4" />
+                    {item.type === 'empty-message' && (
+                      <div className="py-6 text-center text-sm text-muted-foreground">
+                        No model found.
+                      </div>
                     )}
-                    <span>{category} ({catModels.length})</span>
-                  </button>
-                  {expandedDevelopers.has(category) && (
-                    <div className="pb-2">
-                      {catModels.map((model) => (
-                        <CommandItem
-                          key={`${category}-${model.value}`}
-                          value={model.label}
-                          onSelect={(currentValue) => {
-                            const selected = models.find(m => m.label.toLowerCase() === currentValue.toLowerCase());
-                            onSelectModel(selected || null);
-                            setOpen(false);
-                          }}
-                          className="cursor-pointer pl-8 pr-2 group"
+
+                    {item.type === 'favorites-header' && (
+                      <div className="border-b">
+                        <button
+                          onClick={() => toggleDeveloper('Favorites')}
+                          className="w-full flex items-center gap-2 px-2 py-1.5 text-sm font-semibold hover:bg-muted"
                         >
-                          <Star
-                            className={cn(
-                              "mr-2 h-4 w-4 flex-shrink-0 cursor-pointer transition-colors",
-                              favorites.has(model.value)
-                                ? "fill-yellow-400 text-yellow-400"
-                                : "text-muted-foreground/30 hover:text-yellow-400"
-                            )}
-                            onClick={(e) => toggleFavorite(model.value, e)}
-                          />
-                          <Check
-                            className={cn(
-                              "mr-2 h-4 w-4 flex-shrink-0",
-                              selectedModel?.value === model.value ? "opacity-100" : "opacity-0"
-                            )}
-                          />
-                          <span className="truncate flex-1">{model.label}</span>
-                          <div className="flex items-center gap-1">
-                            {model.sourceGateway && model.sourceGateway !== 'openrouter' && (
-                              <span className="ml-1 text-xs font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                                {model.sourceGateway.toUpperCase()}
-                              </span>
-                            )}
-                            {model.category === 'Free' && (
-                              <span className="ml-1 text-xs font-semibold text-green-600 dark:text-green-400 flex items-center gap-1">
-                                <Sparkles className="h-3 w-3" />
-                                FREE
-                              </span>
-                            )}
-                          </div>
-                        </CommandItem>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-
-            {/* All Models (by Developer) */}
-            <div className="border-b">
-              <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                All Models
-              </div>
-            </div>
-            {Object.entries(filteredModelsByDeveloper).map(([developer, devModels]) => (
-              <div key={developer} className="border-b last:border-0">
-                <button
-                  onClick={() => toggleDeveloper(developer)}
-                  className="w-full flex items-center gap-2 px-2 py-1.5 text-sm font-semibold hover:bg-muted"
-                >
-                  {expandedDevelopers.has(developer) ? (
-                    <ChevronDown className="h-4 w-4" />
-                  ) : (
-                    <ChevronRight className="h-4 w-4" />
-                  )}
-                  <span>{developer} ({devModels.length})</span>
-                </button>
-                {expandedDevelopers.has(developer) && (
-                  <div className="pb-2">
-                    {(loadAllModels ? devModels : devModels.slice(0, MAX_MODELS_PER_DEVELOPER)).map((model) => (
-                      <CommandItem
-                        key={model.value}
-                        value={model.label}
-                        onSelect={(currentValue) => {
-                          const selected = models.find(m => m.label.toLowerCase() === currentValue.toLowerCase());
-                          onSelectModel(selected || null);
-                          setOpen(false);
-                        }}
-                        className="cursor-pointer pl-8 pr-2 group"
-                      >
-                        <Star
-                          className={cn(
-                            "mr-2 h-4 w-4 flex-shrink-0 cursor-pointer transition-colors",
-                            favorites.has(model.value)
-                              ? "fill-yellow-400 text-yellow-400"
-                              : "text-muted-foreground/30 hover:text-yellow-400"
+                          {item.isExpanded ? (
+                            <ChevronDown className="h-4 w-4" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4" />
                           )}
-                          onClick={(e) => toggleFavorite(model.value, e)}
-                        />
-                        <Check
-                          className={cn(
-                            "mr-2 h-4 w-4 flex-shrink-0",
-                            selectedModel?.value === model.value ? "opacity-100" : "opacity-0"
-                          )}
-                        />
-                        <span className="truncate flex-1">{model.label}</span>
-                        <div className="flex items-center gap-1">
-                          {model.speedTier === 'ultra-fast' && (
-                            <span className="text-xs font-bold text-purple-600 dark:text-purple-400">⚡</span>
-                          )}
-                          {model.speedTier === 'fast' && (
-                            <span className="text-xs font-bold text-blue-600 dark:text-blue-400">⚡</span>
-                          )}
-                          {model.sourceGateway && model.sourceGateway !== 'openrouter' && (
-                            <span className="ml-1 text-xs font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                              {model.sourceGateway.toUpperCase()}
-                            </span>
-                          )}
-                          {model.category === 'Free' && (
-                            <span className="ml-1 text-xs font-semibold text-green-600 dark:text-green-400 flex items-center gap-1">
-                              <Sparkles className="h-3 w-3" />
-                              FREE
-                            </span>
-                          )}
-                        </div>
-                      </CommandItem>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-
-            {/* Load More Button */}
-            {!loadAllModels && !debouncedSearchQuery && (
-              <div className="border-t p-2">
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => setLoadAllModels(true)}
-                  disabled={loading}
-                >
-                    {loading ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Loading all models...
-                      </>
-                    ) : (
-                      loadAllButtonLabel
+                          <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                          <span>Favorites ({item.count})</span>
+                        </button>
+                      </div>
                     )}
-                </Button>
-              </div>
-            )}
-          </CommandList>
+
+                    {item.type === 'category-header' && (
+                      <div className="border-b">
+                        <button
+                          onClick={() => toggleDeveloper(item.category)}
+                          className="w-full flex items-center gap-2 px-2 py-1.5 text-sm font-semibold hover:bg-muted"
+                        >
+                          {item.isExpanded ? (
+                            <ChevronDown className="h-4 w-4" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4" />
+                          )}
+                          <span>{item.category} ({item.count})</span>
+                        </button>
+                      </div>
+                    )}
+
+                    {item.type === 'all-models-header' && (
+                      <div className="border-b">
+                        <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                          All Models
+                        </div>
+                      </div>
+                    )}
+
+                    {item.type === 'developer-header' && (
+                      <div className="border-b">
+                        <button
+                          onClick={() => toggleDeveloper(item.developer)}
+                          className="w-full flex items-center gap-2 px-2 py-1.5 text-sm font-semibold hover:bg-muted"
+                        >
+                          {item.isExpanded ? (
+                            <ChevronDown className="h-4 w-4" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4" />
+                          )}
+                          <span>{item.developer} ({item.count})</span>
+                        </button>
+                      </div>
+                    )}
+
+                    {item.type === 'model-item' && (
+                      <ModelCommandItem
+                        model={item.model}
+                        selectedModel={selectedModel}
+                        favorites={favorites}
+                        onSelect={handleModelSelect}
+                        onToggleFavorite={handleToggleFavorite}
+                        showSpeedBadge={item.section !== 'Favorites'}
+                      />
+                    )}
+
+                    {item.type === 'load-more-button' && (
+                      <div className="border-t p-2">
+                        <Button
+                          variant="outline"
+                          className="w-full"
+                          onClick={() => setLoadAllModels(true)}
+                          disabled={loading}
+                        >
+                          {loading ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Loading all models...
+                            </>
+                          ) : (
+                            loadAllButtonLabel
+                          )}
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </Command>
       </PopoverContent>
     </Popover>
