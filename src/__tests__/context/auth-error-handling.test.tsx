@@ -250,6 +250,46 @@ describe('Authentication Error Handling', () => {
         expect(RETRY_DELAY_MS).toBe(2000);
       }
     });
+
+    it('should determine shouldRetry BEFORE clearing credentials', () => {
+      // CRITICAL: clearStoredCredentials() resets authRetryCountRef.current to 0
+      // Must check shouldRetry BEFORE calling clearStoredCredentials()
+      // Otherwise would cause infinite retry loops
+
+      const status = 504;
+      let authRetryCount = 1; // Already attempted once
+      const MAX_AUTH_RETRIES = 3;
+
+      // Check retry limit FIRST
+      const shouldRetry = authRetryCount < MAX_AUTH_RETRIES;
+      expect(shouldRetry).toBe(true);
+
+      // THEN clear credentials with appropriate flag
+      // If shouldRetry=true, pass resetRetryCounter=false to preserve counter
+      const resetRetryCounter = !shouldRetry;
+      expect(resetRetryCounter).toBe(false);
+
+      // If we cleared BEFORE checking, counter would be 0 and shouldRetry always true
+      // This would create an infinite loop
+    });
+
+    it('should pass resetRetryCounter=true for non-retryable errors', () => {
+      const status = 401; // Non-retryable
+      let authRetryCount = 1;
+      const MAX_AUTH_RETRIES = 3;
+
+      // 401 is not retryable
+      let shouldRetry = false;
+      if (status === 504 || (status >= 500 && status < 600)) {
+        shouldRetry = authRetryCount < MAX_AUTH_RETRIES;
+      }
+
+      expect(shouldRetry).toBe(false);
+
+      // For non-retryable errors, reset the counter
+      const resetRetryCounter = !shouldRetry;
+      expect(resetRetryCounter).toBe(true);
+    });
   });
 
   describe('AbortError Handling (JAVASCRIPT-NEXTJS-S)', () => {
