@@ -498,11 +498,10 @@ function getStaticFallbackModels(gateway: string): any[] {
   const normalizedGateway = normalizeGatewayId(gateway);
 
   // Map developers to their preferred gateways
-  // Note: 'qwen' developer maps to 'alibaba' gateway (Alibaba Cloud Model Studio)
   const developerToGateway: Record<string, string> = {
     'alpaca-network': 'alpaca',
     'near': 'near',
-    'qwen': 'alibaba',
+    'alibaba': 'alibaba',
     'google': 'google',
     'clarifai': 'clarifai',
     'onerouter': 'onerouter',
@@ -519,11 +518,10 @@ function getStaticFallbackModels(gateway: string): any[] {
   } else {
     // Get models for specific gateway by filtering by developer field
     // This maps gateway names to their corresponding developer identifiers
-    // Note: 'alibaba' gateway maps to 'qwen' developer (Alibaba Cloud Model Studio hosts Qwen models)
     const gatewayToDeveloper: Record<string, string> = {
       'alpaca': 'alpaca-network',
       'near': 'near',
-      'alibaba': 'qwen',
+      'alibaba': 'alibaba',
       'google': 'google',
       'clarifai': 'clarifai',
       'onerouter': 'onerouter',
