@@ -320,3 +320,150 @@ export function isGatewayDeprecated(gatewayId: string): boolean {
   const config = GATEWAY_BY_ID[gatewayId];
   return config?.deprecated || false;
 }
+
+// ============================================================================
+// Dynamic Gateway Discovery
+// ============================================================================
+
+/**
+ * Runtime-discovered gateways that aren't in the static registry.
+ * These are discovered from backend API responses and can be used
+ * for new gateways before they're added to the static config.
+ */
+const dynamicGateways: Map<string, GatewayConfig> = new Map();
+
+/**
+ * Generate a default color for dynamically discovered gateways
+ * Uses a hash of the gateway ID to pick a consistent color
+ */
+function generateGatewayColor(gatewayId: string): string {
+  const colors = [
+    'bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-orange-500',
+    'bg-pink-500', 'bg-teal-500', 'bg-indigo-500', 'bg-cyan-500',
+    'bg-amber-500', 'bg-rose-500', 'bg-emerald-500', 'bg-violet-500',
+  ];
+  // Simple hash based on string chars
+  let hash = 0;
+  for (let i = 0; i < gatewayId.length; i++) {
+    hash = ((hash << 5) - hash) + gatewayId.charCodeAt(i);
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  return colors[Math.abs(hash) % colors.length];
+}
+
+/**
+ * Register a dynamically discovered gateway.
+ * This allows new gateways to be used immediately without code changes.
+ *
+ * @param gatewayId - The gateway identifier from the backend
+ * @param config - Optional partial config to override defaults
+ * @returns The gateway config (either existing or newly created)
+ */
+export function registerDynamicGateway(
+  gatewayId: string,
+  config?: Partial<GatewayConfig>
+): GatewayConfig {
+  // If already in static registry, return that
+  if (GATEWAY_BY_ID[gatewayId]) {
+    return GATEWAY_BY_ID[gatewayId];
+  }
+
+  // If already dynamically registered, return that
+  if (dynamicGateways.has(gatewayId)) {
+    return dynamicGateways.get(gatewayId)!;
+  }
+
+  // Create new gateway config with sensible defaults
+  const newGateway: GatewayConfig = {
+    id: gatewayId,
+    name: config?.name || formatGatewayName(gatewayId),
+    color: config?.color || generateGatewayColor(gatewayId),
+    priority: config?.priority || 'slow', // Default to slow for safety
+    ...config,
+  };
+
+  // Register it
+  dynamicGateways.set(gatewayId, newGateway);
+  GATEWAY_BY_ID[gatewayId] = newGateway;
+  GATEWAY_CONFIG[gatewayId] = {
+    name: newGateway.name,
+    color: newGateway.color,
+    icon: newGateway.icon,
+  };
+
+  console.log(`[Gateway Registry] Dynamically registered new gateway: ${gatewayId}`);
+  return newGateway;
+}
+
+/**
+ * Format a gateway ID into a display name
+ * e.g., 'my-new-gateway' -> 'My New Gateway'
+ */
+function formatGatewayName(gatewayId: string): string {
+  return gatewayId
+    .split(/[-_]/)
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
+}
+
+/**
+ * Get all gateways including dynamically registered ones
+ */
+export function getAllGateways(): GatewayConfig[] {
+  return [...GATEWAYS, ...Array.from(dynamicGateways.values())];
+}
+
+/**
+ * Get all active gateway IDs including dynamically registered ones
+ */
+export function getAllActiveGatewayIds(): string[] {
+  const staticIds = ACTIVE_GATEWAY_IDS;
+  const dynamicIds = Array.from(dynamicGateways.keys());
+  return [...staticIds, ...dynamicIds];
+}
+
+/**
+ * Check if a gateway was dynamically registered (not in static config)
+ */
+export function isDynamicGateway(gatewayId: string): boolean {
+  return dynamicGateways.has(gatewayId);
+}
+
+/**
+ * Process model data and auto-register any unknown gateways found
+ * Call this when processing models from the API
+ */
+export function autoRegisterGatewaysFromModels(models: Array<{ source_gateway?: string; source_gateways?: string[] }>): void {
+  const seenGateways = new Set<string>();
+
+  for (const model of models) {
+    // Check source_gateway
+    if (model.source_gateway) {
+      seenGateways.add(model.source_gateway);
+    }
+    // Check source_gateways array
+    if (model.source_gateways) {
+      for (const gw of model.source_gateways) {
+        seenGateways.add(gw);
+      }
+    }
+  }
+
+  // Register any unknown gateways
+  for (const gatewayId of seenGateways) {
+    if (!GATEWAY_BY_ID[gatewayId] && !dynamicGateways.has(gatewayId)) {
+      // Normalize alias first (e.g., 'hug' -> 'huggingface')
+      const normalized = normalizeGatewayId(gatewayId);
+      if (!GATEWAY_BY_ID[normalized]) {
+        registerDynamicGateway(gatewayId);
+      }
+    }
+  }
+}
+
+/**
+ * Get a list of dynamically registered gateways (useful for debugging/logging)
+ */
+export function getDynamicGateways(): GatewayConfig[] {
+  return Array.from(dynamicGateways.values());
+}

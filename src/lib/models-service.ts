@@ -8,6 +8,8 @@ import {
   buildGatewayHeaders,
   normalizeGatewayId,
   isValidGateway,
+  autoRegisterGatewaysFromModels,
+  getAllActiveGatewayIds,
 } from '@/lib/gateway-registry';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
@@ -276,6 +278,10 @@ async function fetchModelsLogic(gateway: string, limit?: number) {
       }
 
       const uniqueModels = Array.from(modelMap.values());
+
+      // Auto-register any new gateways discovered from the API response
+      // This allows new gateways to appear in the UI without code changes
+      autoRegisterGatewaysFromModels(uniqueModels);
 
       console.log(`[Models] Combined ${combinedModels.length} total (${uniqueModels.length} unique) from ${gatewaysToFetch.length} gateways`);
 
