@@ -1,14 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getModelsForGateway } from '@/lib/models-service';
 import * as Sentry from '@sentry/nextjs';
-import { ACTIVE_GATEWAY_IDS } from '@/lib/gateway-registry';
+import { getAllActiveGatewayIds } from '@/lib/gateway-registry';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300; // 5 minutes max execution time
-
-// Use centralized gateway registry - to add a new gateway, update src/lib/gateway-registry.ts
-const ALL_GATEWAYS = ACTIVE_GATEWAY_IDS;
 
 /**
  * POST /api/cache/warm-models - Warm the cache for all model gateways
@@ -41,9 +38,12 @@ export async function POST(request: NextRequest) {
         console.log('[Cache Warming] Starting cache warming for all gateways...');
         const startTime = Date.now();
 
+        // Get all gateways including dynamically registered ones
+        const allGateways = getAllActiveGatewayIds();
+
         // Warm cache for all gateways in parallel
         const results = await Promise.allSettled(
-          ALL_GATEWAYS.map(async (gateway) => {
+          allGateways.map(async (gateway) => {
             try {
               const result = await getModelsForGateway(gateway);
               const count = result.data?.length || 0;
@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
             return result.value;
           } else {
             return {
-              gateway: ALL_GATEWAYS[index],
+              gateway: allGateways[index],
               count: 0,
               status: 'error',
               error: result.reason?.message || 'Promise rejected'
@@ -127,12 +127,13 @@ export async function POST(request: NextRequest) {
  * GET /api/cache/warm-models - Get cache warming status/info
  */
 export async function GET(request: NextRequest) {
+  const gateways = getAllActiveGatewayIds();
   return NextResponse.json({
     endpoint: '/api/cache/warm-models',
     description: 'Warm the Redis cache for all model gateways',
     method: 'POST',
     auth: 'Bearer token required (CACHE_WARMING_SECRET env var)',
-    gateways: ALL_GATEWAYS,
-    total_gateways: ALL_GATEWAYS.length
+    gateways: gateways,
+    total_gateways: gateways.length
   });
 }

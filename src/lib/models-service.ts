@@ -3,7 +3,6 @@ import { getErrorMessage, isAbortOrNetworkError } from '@/lib/network-error';
 import { cacheAside, cacheStaleWhileRevalidate, cacheKey, CACHE_PREFIX, TTL, cacheInvalidate } from '@/lib/cache-strategies';
 import {
   VALID_GATEWAYS,
-  ACTIVE_GATEWAY_IDS,
   PRIORITY_GATEWAYS,
   buildGatewayHeaders,
   normalizeGatewayId,
@@ -170,8 +169,8 @@ async function fetchModelsLogic(gateway: string, limit?: number) {
   if (gateway === 'all') {
     console.log('[Models] Fetching from all gateways in batches to avoid rate limits');
     try {
-      // Fetch from all active gateways (using centralized registry)
-      const gatewaysToFetch = ACTIVE_GATEWAY_IDS;
+      // Fetch from all active gateways (using dynamic function to include runtime-registered gateways)
+      const gatewaysToFetch = getAllActiveGatewayIds();
 
       // Process gateways in batches to avoid rate limiting
       const results = await processBatches(
@@ -531,8 +530,8 @@ function getStaticFallbackModels(gateway: string): any[] {
       gatewayModels = models.filter(m => m.developer === developerName);
     } else {
       // For gateways without specific mappings, distribute models evenly as before
-      // Uses centralized gateway registry for the list
-      const allGateways = ACTIVE_GATEWAY_IDS;
+      // Uses dynamic function to include runtime-registered gateways
+      const allGateways = getAllActiveGatewayIds();
       const modelsPerGateway = Math.ceil(models.length / allGateways.length);
 
       // Use normalized gateway for lookup to handle aliases correctly
