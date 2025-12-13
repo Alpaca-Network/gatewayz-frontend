@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as Sentry from '@sentry/nextjs';
-import { GATEWAYS, ACTIVE_GATEWAYS, GatewayConfig } from '@/lib/gateway-registry';
+import { GATEWAYS, ACTIVE_GATEWAYS, getAllGateways, getAllActiveGatewayIds, GatewayConfig } from '@/lib/gateway-registry';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -25,7 +25,8 @@ async function discoverAvailableGateways(): Promise<string[]> {
   }
 
   const availableGateways: string[] = [];
-  const gatewayIds = ACTIVE_GATEWAYS.map(g => g.id);
+  // Use getAllActiveGatewayIds() to include dynamically registered gateways
+  const gatewayIds = getAllActiveGatewayIds();
 
   // Test each gateway in parallel with short timeout
   const results = await Promise.allSettled(
@@ -96,8 +97,11 @@ export async function GET(request: NextRequest) {
         const shouldDiscover = searchParams.get('discover') === 'true';
         const includeDeprecated = searchParams.get('includeDeprecated') === 'true';
 
-        // Get base gateway list
-        const baseGateways = includeDeprecated ? GATEWAYS : ACTIVE_GATEWAYS;
+        // Get base gateway list - use getAllGateways() to include dynamically registered gateways
+        const allGateways = getAllGateways();
+        const baseGateways = includeDeprecated
+          ? allGateways
+          : allGateways.filter(g => !g.deprecated);
 
         // Optionally discover which gateways are actually available
         let availableGatewayIds: string[] | null = null;

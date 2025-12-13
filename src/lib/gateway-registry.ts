@@ -374,12 +374,13 @@ export function registerDynamicGateway(
   }
 
   // Create new gateway config with sensible defaults
+  // Spread config first so explicit defaults take precedence over undefined values
   const newGateway: GatewayConfig = {
-    id: gatewayId,
+    ...config,
+    id: gatewayId, // Always use the provided gatewayId
     name: config?.name || formatGatewayName(gatewayId),
     color: config?.color || generateGatewayColor(gatewayId),
     priority: config?.priority || 'slow', // Default to slow for safety
-    ...config,
   };
 
   // Register it

@@ -299,6 +299,28 @@ describe('gateway-registry', () => {
         expect(result.priority).toBe('fast');
       });
 
+      it('should always use gatewayId parameter for id (not config.id)', () => {
+        // Even if config has a different id, the gatewayId parameter should be used
+        const result = registerDynamicGateway('correct-id-gateway', {
+          id: 'wrong-id',
+          name: 'Test Gateway',
+        });
+        expect(result.id).toBe('correct-id-gateway');
+      });
+
+      it('should use defaults when config has undefined values', () => {
+        const result = registerDynamicGateway('defaults-test-gateway', {
+          name: undefined,
+          color: undefined,
+          priority: undefined,
+        });
+        // Should use generated defaults, not undefined
+        expect(result.name).toBe('Defaults Test Gateway');
+        expect(result.color).toBeDefined();
+        expect(result.color).not.toBe('undefined');
+        expect(result.priority).toBe('slow');
+      });
+
       it('should return same gateway on subsequent registrations', () => {
         const first = registerDynamicGateway('repeat-gateway');
         const second = registerDynamicGateway('repeat-gateway');
