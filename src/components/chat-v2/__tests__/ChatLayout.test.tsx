@@ -78,9 +78,13 @@ jest.mock('@/lib/hooks/use-auth-sync', () => ({
   useAuthSync: jest.fn(),
 }));
 
+const mockCreateSessionMutateAsync = jest.fn();
 jest.mock('@/lib/hooks/use-chat-queries', () => ({
   useSessionMessages: () => ({ data: [], isLoading: false }),
-  useCreateSession: () => ({ mutateAsync: jest.fn() }),
+  useCreateSession: () => ({
+    mutateAsync: mockCreateSessionMutateAsync,
+    isPending: false,
+  }),
 }));
 
 jest.mock('@/lib/hooks/use-chat-stream', () => ({
@@ -371,19 +375,9 @@ describe('handleRetry', () => {
 });
 
 
-const mockCreateSessionMutateAsync = jest.fn();
-
 describe('Mobile new chat button', () => {
   beforeEach(() => {
     mockCreateSessionMutateAsync.mockReset();
-    // Update the mock to use our trackable function
-    jest.doMock('@/lib/hooks/use-chat-queries', () => ({
-      useSessionMessages: () => ({ data: [], isLoading: false }),
-      useCreateSession: () => ({
-        mutateAsync: mockCreateSessionMutateAsync,
-        isPending: false,
-      }),
-    }));
   });
 
   it('should render a new chat button for mobile with Plus icon', () => {
@@ -401,15 +395,33 @@ describe('Mobile new chat button', () => {
     expect(newChatButton).toBeInTheDocument();
   });
 
-  it('should be clickable', () => {
+  it('should call createSession.mutateAsync when clicked', async () => {
+    mockCreateSessionMutateAsync.mockResolvedValue({ id: 123, title: 'Untitled Chat' });
+
     render(<ChatLayout />);
 
     const newChatButton = screen.getByTitle('New Chat');
+    fireEvent.click(newChatButton);
 
-    // Should not throw when clicked
-    expect(() => {
-      fireEvent.click(newChatButton);
-    }).not.toThrow();
+    await waitFor(() => {
+      expect(mockCreateSessionMutateAsync).toHaveBeenCalledWith({
+        title: 'Untitled Chat',
+        model: 'test-model',
+      });
+    });
+  });
+
+  it('should set active session ID after successful creation', async () => {
+    mockCreateSessionMutateAsync.mockResolvedValue({ id: 456, title: 'Untitled Chat' });
+
+    render(<ChatLayout />);
+
+    const newChatButton = screen.getByTitle('New Chat');
+    fireEvent.click(newChatButton);
+
+    await waitFor(() => {
+      expect(mockSetActiveSessionId).toHaveBeenCalledWith(456);
+    });
   });
 });
 
