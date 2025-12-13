@@ -327,7 +327,7 @@ describe('GET /api/gateways', () => {
   });
 
   describe('Caching', () => {
-    it('should indicate cached status in response', async () => {
+    it('should indicate cached status in response when discovery is enabled', async () => {
       mockFetch.mockResolvedValue({
         ok: true,
         json: async () => ({ data: [{ id: 'model' }] }),
@@ -341,6 +341,19 @@ describe('GET /api/gateways', () => {
       const data = await response.json();
 
       expect(typeof data.cached).toBe('boolean');
+      expect(typeof data.availableCount).toBe('number');
+    });
+
+    it('should not include cached or availableCount when discovery is not requested', async () => {
+      const request = new NextRequest('http://localhost:3000/api/gateways', {
+        method: 'GET',
+      });
+
+      const response = await GET(request);
+      const data = await response.json();
+
+      expect(data.cached).toBeUndefined();
+      expect(data.availableCount).toBeUndefined();
     });
   });
 

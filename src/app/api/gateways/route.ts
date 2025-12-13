@@ -31,10 +31,10 @@ async function discoverAvailableGateways(): Promise<string[]> {
   // Test each gateway in parallel with short timeout
   const results = await Promise.allSettled(
     gatewayIds.map(async (gatewayId) => {
-      try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 5000); // 5s timeout
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000); // 5s timeout
 
+      try {
         const response = await fetch(
           `${API_BASE_URL}/v1/models?gateway=${gatewayId}&limit=1`,
           {
@@ -42,8 +42,6 @@ async function discoverAvailableGateways(): Promise<string[]> {
             headers: { 'Content-Type': 'application/json' },
           }
         );
-
-        clearTimeout(timeout);
 
         if (response.ok) {
           const data = await response.json();
@@ -54,6 +52,9 @@ async function discoverAvailableGateways(): Promise<string[]> {
         return { gatewayId, available: false };
       } catch {
         return { gatewayId, available: false };
+      } finally {
+        // Always clear timeout to prevent resource leaks
+        clearTimeout(timeout);
       }
     })
   );
@@ -145,8 +146,11 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({
           gateways: gatewaysWithStatus,
           total: gatewaysWithStatus.length,
-          availableCount: availableGatewayIds?.length,
-          cached: discoveredGatewaysCache !== null && Date.now() - (discoveredGatewaysCache?.timestamp || 0) < CACHE_DURATION,
+          // Only include discovery-related fields when discovery was requested
+          ...(shouldDiscover && {
+            availableCount: availableGatewayIds?.length,
+            cached: discoveredGatewaysCache !== null && Date.now() - (discoveredGatewaysCache?.timestamp || 0) < CACHE_DURATION,
+          }),
           source: 'registry', // Always from registry, discovery just adds availability
         });
       } catch (error) {

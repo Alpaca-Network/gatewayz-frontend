@@ -29,7 +29,7 @@ import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 import { stringToColor, getModelUrl } from '@/lib/utils';
 import { safeParseJson } from '@/lib/http';
-import { GATEWAY_CONFIG as REGISTRY_GATEWAY_CONFIG, ACTIVE_GATEWAY_IDS } from '@/lib/gateway-registry';
+import { GATEWAY_CONFIG as REGISTRY_GATEWAY_CONFIG, getAllActiveGatewayIds } from '@/lib/gateway-registry';
 
 
 interface Model {
@@ -800,9 +800,9 @@ export default function ModelsClient({
       });
     });
 
-    // Use centralized gateway registry for all known gateways
+    // Use getAllActiveGatewayIds() to include dynamically registered gateways
     // To add a new gateway, simply add it to src/lib/gateway-registry.ts
-    const allKnownGateways = ACTIVE_GATEWAY_IDS;
+    const allKnownGateways = getAllActiveGatewayIds();
 
     // Log gateway counts for debugging
     const gatewayStats = allKnownGateways.map(g => ({
