@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
-import { Menu, Pencil, Lock, Unlock, Shield } from "lucide-react";
+import { Menu, Pencil, Lock, Unlock, Shield, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 import { ChatSidebar } from "./ChatSidebar";
@@ -18,6 +18,8 @@ import { useSessionMessages } from "@/lib/hooks/use-chat-queries";
 import { GuestChatCounter } from "@/components/chat/guest-chat-counter";
 import { useNetworkStatus } from "@/hooks/use-network-status";
 import { useQueryClient } from "@tanstack/react-query";
+import { useCreateSession } from "@/lib/hooks/use-chat-queries";
+import { useToast } from "@/hooks/use-toast";
 
 // Pool of prompts to randomly select from
 const ALL_PROMPTS = [
@@ -83,6 +85,8 @@ export function ChatLayout() {
    const { selectedModel, setSelectedModel, activeSessionId, setActiveSessionId, setInputValue, mobileSidebarOpen, setMobileSidebarOpen, isIncognitoMode, toggleIncognitoMode } = useChatUIStore();
    const searchParams = useSearchParams();
    const queryClient = useQueryClient();
+   const createSession = useCreateSession();
+   const { toast } = useToast();
 
    // Track if user has clicked a prompt (to immediately hide welcome screen)
    const [pendingPrompt, setPendingPrompt] = useState<string | null>(null);
@@ -301,6 +305,24 @@ export function ChatLayout() {
    // ALSO hide welcome screen immediately when a prompt is clicked (pendingPrompt is set)
    const showWelcomeScreen = !pendingPrompt && (!isAuthenticated || !activeSessionId || (!messagesLoading && activeMessages.length === 0));
 
+   // Handle creating a new chat session (for mobile new chat button)
+   const handleCreateNewChat = useCallback(async () => {
+       try {
+           const newSession = await createSession.mutateAsync({
+               title: "Untitled Chat",
+               model: selectedModel?.value
+           });
+           setActiveSessionId(newSession.id);
+       } catch (e) {
+           console.error("Failed to create session", e);
+           toast({
+               title: "Unable to start a new chat",
+               description: "Please try again in a moment.",
+               variant: "destructive",
+           });
+       }
+   }, [createSession, selectedModel?.value, setActiveSessionId, toast]);
+
    if (authLoading) {
        return (
            <div className="flex flex-1 items-center justify-center">
@@ -345,6 +367,18 @@ export function ChatLayout() {
                                <ChatSidebar className="h-full border-none" onClose={() => setMobileSidebarOpen(false)} />
                            </SheetContent>
                        </Sheet>
+
+                       {/* Mobile New Chat Button - easily accessible on mobile */}
+                       <Button
+                           variant="ghost"
+                           size="icon"
+                           className="lg:hidden"
+                           onClick={handleCreateNewChat}
+                           disabled={createSession.isPending}
+                           title="New Chat"
+                       >
+                           <Plus className="h-5 w-5" />
+                       </Button>
 
                        {/* Title - Placeholder for now, could use useSession details */}
                        <h1 className="font-semibold text-lg truncate hidden sm:block">

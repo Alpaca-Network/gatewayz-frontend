@@ -32,6 +32,7 @@ jest.mock('lucide-react', () => ({
   Lock: () => <span data-testid="lock-icon">Lock</span>,
   Unlock: () => <span data-testid="unlock-icon">Unlock</span>,
   Shield: () => <span data-testid="shield-icon">Shield</span>,
+  Plus: () => <span data-testid="plus-icon">Plus</span>,
 }));
 
 // Mock the stores and hooks
@@ -369,6 +370,48 @@ describe('handleRetry', () => {
   });
 });
 
+
+const mockCreateSessionMutateAsync = jest.fn();
+
+describe('Mobile new chat button', () => {
+  beforeEach(() => {
+    mockCreateSessionMutateAsync.mockReset();
+    // Update the mock to use our trackable function
+    jest.doMock('@/lib/hooks/use-chat-queries', () => ({
+      useSessionMessages: () => ({ data: [], isLoading: false }),
+      useCreateSession: () => ({
+        mutateAsync: mockCreateSessionMutateAsync,
+        isPending: false,
+      }),
+    }));
+  });
+
+  it('should render a new chat button for mobile with Plus icon', () => {
+    render(<ChatLayout />);
+
+    // Should have a button with the Plus icon for mobile new chat
+    const plusIcon = screen.getByTestId('plus-icon');
+    expect(plusIcon).toBeInTheDocument();
+  });
+
+  it('should have a new chat button with correct title', () => {
+    render(<ChatLayout />);
+
+    const newChatButton = screen.getByTitle('New Chat');
+    expect(newChatButton).toBeInTheDocument();
+  });
+
+  it('should be clickable', () => {
+    render(<ChatLayout />);
+
+    const newChatButton = screen.getByTitle('New Chat');
+
+    // Should not throw when clicked
+    expect(() => {
+      fireEvent.click(newChatButton);
+    }).not.toThrow();
+  });
+});
 
 // Note: URL parameter handling tests are complex due to jest.doMock limitations with React.
 // The functionality is manually tested and the code follows patterns from the existing
