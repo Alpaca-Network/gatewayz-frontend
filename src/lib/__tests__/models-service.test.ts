@@ -29,27 +29,11 @@ describe('models-service', () => {
     });
 
     it('should accept valid gateways', async () => {
+      // Import ACTIVE_GATEWAY_IDS from centralized registry
+      const { ACTIVE_GATEWAY_IDS } = require('@/lib/gateway-registry');
       const validGateways = [
-        'openrouter',
-        'featherless',
-        'groq',
-        'together',
-        'fireworks',
-        'chutes',
-        'deepinfra',
-        'google',
-        'cerebras',
-        'nebius',
-        'xai',
-        'novita',
-        'huggingface',
-        'aimo',
-        'near',
-        'fal',
-        'vercel-ai-gateway',
-        'helicone',
-        'alpaca',
-        'all',
+        ...ACTIVE_GATEWAY_IDS,
+        'all', // Special value
       ];
 
       mockFetch.mockResolvedValue(createSuccessResponse({ data: [] }));
