@@ -302,6 +302,28 @@ describe('GET /api/gateways', () => {
       expect(response.status).toBe(200);
       expect(data.gateways).toBeDefined();
     });
+
+    it('should mark gateway as unavailable when API returns non-ok response', async () => {
+      // Mock fetch to return non-ok response (not throwing)
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 500,
+        json: async () => ({ error: 'Server error' }),
+      });
+
+      const request = new NextRequest('http://localhost:3000/api/gateways?discover=true', {
+        method: 'GET',
+      });
+
+      const response = await GET(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      // All gateways should be unavailable due to 500 responses
+      for (const gateway of data.gateways) {
+        expect(gateway.available).toBe(false);
+      }
+    });
   });
 
   describe('Caching', () => {
@@ -343,6 +365,7 @@ describe('GET /api/gateways', () => {
         expect(gateway.available).toBe(false);
       }
     });
+
   });
 
   describe('Sentry Integration', () => {
@@ -539,6 +562,7 @@ describe('POST /api/gateways/refresh', () => {
       expect(data.success).toBe(true);
       expect(data.availableGateways).toEqual([]);
     });
+
   });
 
   describe('Sentry Integration', () => {

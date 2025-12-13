@@ -494,6 +494,10 @@ function getStaticFallbackModels(gateway: string): any[] {
   }
   let transformedModels;
 
+  // Normalize gateway to canonical ID (e.g., 'hug' -> 'huggingface')
+  // This ensures aliases are resolved before any lookups
+  const normalizedGateway = normalizeGatewayId(gateway);
+
   // Map developers to their preferred gateways
   const developerToGateway: Record<string, string> = {
     'alpaca-network': 'alpaca',
@@ -502,7 +506,7 @@ function getStaticFallbackModels(gateway: string): any[] {
     // Add more mappings as needed
   };
 
-  if (gateway === 'all') {
+  if (normalizedGateway === 'all') {
     // Assign models to gateways based on their developer field if possible
     transformedModels = models.map((model) => {
       // Check if this developer has a specific gateway mapping
@@ -522,8 +526,8 @@ function getStaticFallbackModels(gateway: string): any[] {
     let gatewayModels;
 
     // If we have a specific developer mapping, filter by developer field
-    if (gatewayToDeveloper[gateway]) {
-      const developerName = gatewayToDeveloper[gateway];
+    if (gatewayToDeveloper[normalizedGateway]) {
+      const developerName = gatewayToDeveloper[normalizedGateway];
       gatewayModels = models.filter(m => m.developer === developerName);
     } else {
       // For gateways without specific mappings, distribute models evenly as before
@@ -531,7 +535,8 @@ function getStaticFallbackModels(gateway: string): any[] {
       const allGateways = ACTIVE_GATEWAY_IDS;
       const modelsPerGateway = Math.ceil(models.length / allGateways.length);
 
-      const gatewayIndex = allGateways.indexOf(gateway);
+      // Use normalized gateway for lookup to handle aliases correctly
+      const gatewayIndex = allGateways.indexOf(normalizedGateway);
       if (gatewayIndex !== -1) {
         const startIndex = gatewayIndex * modelsPerGateway;
         const endIndex = gatewayIndex === allGateways.length - 1 ? models.length : (gatewayIndex + 1) * modelsPerGateway;
@@ -541,7 +546,7 @@ function getStaticFallbackModels(gateway: string): any[] {
       }
     }
 
-    transformedModels = gatewayModels.map(m => transformModel(m, gateway));
+    transformedModels = gatewayModels.map(m => transformModel(m, normalizedGateway));
   }
 
   return transformedModels;
