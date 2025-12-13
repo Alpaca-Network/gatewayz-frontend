@@ -98,11 +98,14 @@ export function OnboardingBanner() {
 
   // Handle DOM manipulation after visibility changes (only runs on client after hydration)
   useEffect(() => {
+    let rafId1: number | null = null;
+    let rafId2: number | null = null;
+
     if (visible) {
       document.documentElement.classList.add('has-onboarding-banner');
       // Measure banner height after render - use requestAnimationFrame to ensure DOM is ready
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
+      rafId1 = requestAnimationFrame(() => {
+        rafId2 = requestAnimationFrame(() => {
           const bannerElement = document.querySelector('[data-onboarding-banner]');
           if (bannerElement) {
             const bannerHeight = bannerElement.getBoundingClientRect().height;
@@ -126,6 +129,22 @@ export function OnboardingBanner() {
       document.documentElement.style.setProperty('--models-header-top', '65px');
       document.documentElement.style.setProperty('--onboarding-banner-height', '0px');
     }
+
+    // Cleanup function to prevent stale DOM styles and cancel pending animations
+    return () => {
+      if (rafId1 !== null) {
+        cancelAnimationFrame(rafId1);
+      }
+      if (rafId2 !== null) {
+        cancelAnimationFrame(rafId2);
+      }
+      // Clean up DOM on unmount
+      document.documentElement.classList.remove('has-onboarding-banner');
+      document.documentElement.style.setProperty('--sidebar-top', '65px');
+      document.documentElement.style.setProperty('--sidebar-height', 'calc(100vh - 65px)');
+      document.documentElement.style.setProperty('--models-header-top', '65px');
+      document.documentElement.style.setProperty('--onboarding-banner-height', '0px');
+    };
   }, [visible]);
 
   // Listen for localStorage changes (from other components marking tasks complete)

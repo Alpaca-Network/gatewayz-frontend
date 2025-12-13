@@ -190,10 +190,41 @@ describe('OnboardingBanner Hydration Fix', () => {
       // Unmount component
       unmount();
 
-      // The cleanup should remove the class
+      // The cleanup should remove the class and reset CSS properties
       await waitFor(() => {
-        // Check that component handles cleanup gracefully
-        expect(true).toBe(true);
+        expect(document.documentElement.classList.contains('has-onboarding-banner')).toBe(false);
+        expect(document.documentElement.style.getPropertyValue('--sidebar-top')).toBe('65px');
+        expect(document.documentElement.style.getPropertyValue('--onboarding-banner-height')).toBe('0px');
+      });
+    });
+
+    it('should cleanup DOM styles and cancel animations on unmount', async () => {
+      localStorage.setItem('gatewayz_onboarding_tasks', JSON.stringify({
+        welcome: true,
+        chat: false,
+      }));
+
+      // Add the class manually to test cleanup
+      document.documentElement.classList.add('has-onboarding-banner');
+      document.documentElement.style.setProperty('--sidebar-top', '105px');
+
+      const { unmount } = render(<OnboardingBanner />);
+
+      // Wait for component to be visible
+      await waitFor(() => {
+        expect(document.documentElement.classList.contains('has-onboarding-banner')).toBe(true);
+      });
+
+      // Unmount while still visible
+      unmount();
+
+      // Cleanup should restore default values
+      await waitFor(() => {
+        expect(document.documentElement.classList.contains('has-onboarding-banner')).toBe(false);
+        expect(document.documentElement.style.getPropertyValue('--sidebar-top')).toBe('65px');
+        expect(document.documentElement.style.getPropertyValue('--sidebar-height')).toBe('calc(100vh - 65px)');
+        expect(document.documentElement.style.getPropertyValue('--models-header-top')).toBe('65px');
+        expect(document.documentElement.style.getPropertyValue('--onboarding-banner-height')).toBe('0px');
       });
     });
   });
