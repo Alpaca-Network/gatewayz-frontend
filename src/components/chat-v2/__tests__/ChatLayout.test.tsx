@@ -423,6 +423,25 @@ describe('Mobile new chat button', () => {
       expect(mockSetActiveSessionId).toHaveBeenCalledWith(456);
     });
   });
+
+  it('should show toast on error when session creation fails', async () => {
+    const mockToast = jest.fn();
+    jest.spyOn(require('@/hooks/use-toast'), 'useToast').mockReturnValue({ toast: mockToast });
+    mockCreateSessionMutateAsync.mockRejectedValue(new Error('Network error'));
+
+    render(<ChatLayout />);
+
+    const newChatButton = screen.getByTitle('New Chat');
+    fireEvent.click(newChatButton);
+
+    await waitFor(() => {
+      expect(mockToast).toHaveBeenCalledWith({
+        title: 'Unable to start a new chat',
+        description: 'Please try again in a moment.',
+        variant: 'destructive',
+      });
+    });
+  });
 });
 
 // Note: URL parameter handling tests are complex due to jest.doMock limitations with React.
