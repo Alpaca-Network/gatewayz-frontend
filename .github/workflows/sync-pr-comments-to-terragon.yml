@@ -219,7 +219,11 @@ ${COMMENTS_CONTENT}
 5. Request re-review when ready
 TASK_DESC_DELIMITER_${{ github.run_id }}_END
 
-          echo "task_title=$TASK_TITLE" >> $GITHUB_OUTPUT
+          # Use heredoc for task_title to handle special characters (%, \n, \r) safely
+          echo "task_title<<TASK_TITLE_DELIMITER_${{ github.run_id }}" >> $GITHUB_OUTPUT
+          echo "$TASK_TITLE" >> $GITHUB_OUTPUT
+          echo "TASK_TITLE_DELIMITER_${{ github.run_id }}" >> $GITHUB_OUTPUT
+
           echo "total_comments=$TOTAL_COUNT" >> $GITHUB_OUTPUT
 
       - name: Create and Push Terragon Task File
