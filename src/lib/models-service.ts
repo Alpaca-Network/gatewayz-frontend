@@ -1,6 +1,15 @@
 import { models } from '@/lib/models-data';
 import { getErrorMessage, isAbortOrNetworkError } from '@/lib/network-error';
 import { cacheAside, cacheStaleWhileRevalidate, cacheKey, CACHE_PREFIX, TTL, cacheInvalidate } from '@/lib/cache-strategies';
+import {
+  VALID_GATEWAYS,
+  PRIORITY_GATEWAYS,
+  buildGatewayHeaders,
+  normalizeGatewayId,
+  isValidGateway,
+  autoRegisterGatewaysFromModels,
+  getAllActiveGatewayIds,
+} from '@/lib/gateway-registry';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
 
@@ -149,35 +158,8 @@ async function fetchModelsLogic(gateway: string, limit?: number) {
     }
   }
 
-  // Validate gateway
-  // Note: 'portkey' is deprecated; use individual providers instead (google, cerebras, nebius, xai, novita, huggingface)
-  const validGateways = [
-    'openrouter',
-    'portkey', // Kept for backward compatibility
-    'featherless',
-    'chutes',
-    'fireworks',
-    'together',
-    'groq',
-    'deepinfra',
-    // New Portkey SDK providers
-    'google',
-    'cerebras',
-    'nebius',
-    'xai',
-    'novita',
-    'huggingface',
-    'aimo',
-    'near',
-    'fal',
-    'vercel-ai-gateway', // Vercel AI Gateway
-    'helicone', // Helicone AI Gateway - will be skipped if backend unavailable
-    'alpaca', // Alpaca Network
-    'alibaba', // Alibaba Cloud
-    'clarifai', // Clarifai AI Gateway
-    'all'
-  ];
-  if (!validGateways.includes(gateway)) {
+  // Validate gateway using centralized registry
+  if (!isValidGateway(gateway)) {
     throw new Error('Invalid gateway');
   }
 
@@ -187,30 +169,8 @@ async function fetchModelsLogic(gateway: string, limit?: number) {
   if (gateway === 'all') {
     console.log('[Models] Fetching from all gateways in batches to avoid rate limits');
     try {
-      // Fetch from all known gateways (excluding deprecated 'portkey' and 'all' itself)
-      const gatewaysToFetch = [
-        'openrouter',
-        'featherless',
-        'groq',
-        'together',
-        'fireworks',
-        'chutes',
-        'deepinfra',
-        'google',
-        'cerebras',
-        'nebius',
-        'xai',
-        'novita',
-        'huggingface',
-        'aimo',
-        'near',
-        'fal',
-        'vercel-ai-gateway',
-        'helicone',
-        'alpaca',
-        'alibaba',
-        'clarifai'
-      ];
+      // Fetch from all active gateways (using dynamic function to include runtime-registered gateways)
+      const gatewaysToFetch = getAllActiveGatewayIds();
 
       // Process gateways in batches to avoid rate limiting
       const results = await processBatches(
@@ -318,6 +278,10 @@ async function fetchModelsLogic(gateway: string, limit?: number) {
 
       const uniqueModels = Array.from(modelMap.values());
 
+      // Auto-register any new gateways discovered from the API response
+      // This allows new gateways to appear in the UI without code changes
+      autoRegisterGatewaysFromModels(uniqueModels);
+
       console.log(`[Models] Combined ${combinedModels.length} total (${uniqueModels.length} unique) from ${gatewaysToFetch.length} gateways`);
 
       // Cache the result for 'all' gateway
@@ -343,39 +307,15 @@ async function fetchModelsLogic(gateway: string, limit?: number) {
   return { data: getStaticFallbackModels(gateway) };
 }
 
-// Helper function to build request headers
+// Helper function to build request headers (uses centralized gateway registry)
 function buildHeaders(gateway: string): Record<string, string> {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json'
-  };
-
-  const hfApiKey = process.env.NEXT_PUBLIC_HF_API_KEY || process.env.HF_API_KEY;
-  if (gateway === 'huggingface' && hfApiKey) {
-    headers['Authorization'] = `Bearer ${hfApiKey}`;
-  }
-
-  const nearApiKey = process.env.NEXT_PUBLIC_NEAR_API_KEY || process.env.NEAR_API_KEY;
-  if (gateway === 'near' && nearApiKey) {
-    headers['Authorization'] = `Bearer ${nearApiKey}`;
-  }
-
-  const alibabaApiKey = process.env.NEXT_PUBLIC_ALIBABA_API_KEY || process.env.ALIBABA_API_KEY;
-  if (gateway === 'alibaba' && alibabaApiKey) {
-    headers['Authorization'] = `Bearer ${alibabaApiKey}`;
-  }
-
-  const clarifaiApiKey = process.env.NEXT_PUBLIC_CLARIFAI_API_KEY || process.env.CLARIFAI_API_KEY;
-  if (gateway === 'clarifai' && clarifaiApiKey) {
-    headers['Authorization'] = `Bearer ${clarifaiApiKey}`;
-  }
-
-  return headers;
+  return buildGatewayHeaders(gateway);
 }
 
 // Helper function to normalize model fields for consistent tag display
 function normalizeModel(model: any, gateway: string): any {
-  // Normalize gateway values - convert 'hug' to 'huggingface' for consistency
-  const normalizeGatewayValue = (gw: string) => gw === 'hug' ? 'huggingface' : gw;
+  // Normalize gateway values using centralized registry
+  const normalizeGatewayValue = (gw: string) => normalizeGatewayId(gw);
 
   // Get normalized gateway from source_gateway or use the provided gateway parameter
   const primaryGateway = normalizeGatewayValue(model.source_gateway || gateway);
@@ -412,9 +352,9 @@ function getApiBaseUrl(): string {
 async function fetchModelsFromGateway(gateway: string, limit?: number): Promise<any[]> {
   const allModels: any[] = [];
   const requestLimit = limit || 50000; // Request up to 50k models per page (backend limit)
-  const FAST_GATEWAYS = ['openrouter', 'groq', 'together', 'fireworks', 'vercel-ai-gateway'];
+  // Use centralized PRIORITY_GATEWAYS for fast gateway detection
   // Increased timeouts to handle slow gateways: 5000ms for fast, 30000ms for slow (HuggingFace needs more time)
-  const timeoutMs = FAST_GATEWAYS.includes(gateway) ? 5000 : 30000;
+  const timeoutMs = PRIORITY_GATEWAYS.includes(gateway) ? 5000 : 30000;
 
   let offset = 0;
   let hasMore = true;
@@ -553,6 +493,10 @@ function getStaticFallbackModels(gateway: string): any[] {
   }
   let transformedModels;
 
+  // Normalize gateway to canonical ID (e.g., 'hug' -> 'huggingface')
+  // This ensures aliases are resolved before any lookups
+  const normalizedGateway = normalizeGatewayId(gateway);
+
   // Map developers to their preferred gateways
   const developerToGateway: Record<string, string> = {
     'alpaca-network': 'alpaca',
@@ -561,7 +505,7 @@ function getStaticFallbackModels(gateway: string): any[] {
     // Add more mappings as needed
   };
 
-  if (gateway === 'all') {
+  if (normalizedGateway === 'all') {
     // Assign models to gateways based on their developer field if possible
     transformedModels = models.map((model) => {
       // Check if this developer has a specific gateway mapping
@@ -581,38 +525,17 @@ function getStaticFallbackModels(gateway: string): any[] {
     let gatewayModels;
 
     // If we have a specific developer mapping, filter by developer field
-    if (gatewayToDeveloper[gateway]) {
-      const developerName = gatewayToDeveloper[gateway];
+    if (gatewayToDeveloper[normalizedGateway]) {
+      const developerName = gatewayToDeveloper[normalizedGateway];
       gatewayModels = models.filter(m => m.developer === developerName);
     } else {
       // For gateways without specific mappings, distribute models evenly as before
-      const allGateways = [
-        'openrouter',
-        'portkey',
-        'featherless',
-        'chutes',
-        'fireworks',
-        'together',
-        'groq',
-        'deepinfra',
-        'google',
-        'cerebras',
-        'nebius',
-        'xai',
-        'novita',
-        'huggingface',
-        'aimo',
-        'near',
-        'fal',
-        'vercel-ai-gateway',
-        'helicone',
-        'alpaca',
-        'alibaba',
-        'clarifai'
-      ];
+      // Uses dynamic function to include runtime-registered gateways
+      const allGateways = getAllActiveGatewayIds();
       const modelsPerGateway = Math.ceil(models.length / allGateways.length);
 
-      const gatewayIndex = allGateways.indexOf(gateway);
+      // Use normalized gateway for lookup to handle aliases correctly
+      const gatewayIndex = allGateways.indexOf(normalizedGateway);
       if (gatewayIndex !== -1) {
         const startIndex = gatewayIndex * modelsPerGateway;
         const endIndex = gatewayIndex === allGateways.length - 1 ? models.length : (gatewayIndex + 1) * modelsPerGateway;
@@ -622,7 +545,7 @@ function getStaticFallbackModels(gateway: string): any[] {
       }
     }
 
-    transformedModels = gatewayModels.map(m => transformModel(m, gateway));
+    transformedModels = gatewayModels.map(m => transformModel(m, normalizedGateway));
   }
 
   return transformedModels;
