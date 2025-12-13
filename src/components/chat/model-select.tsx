@@ -532,7 +532,7 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
     });
 
     return categories;
-  }, [models]);
+  }, [models, categorizeModel]);
 
   const toggleDeveloper = (developer: string) => {
     setExpandedDevelopers(prev => {
