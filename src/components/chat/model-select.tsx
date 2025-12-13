@@ -183,7 +183,7 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
   React.useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearchQuery(searchQuery);
-    }, 150); // 150ms debounce - faster for better UX
+    }, 200); // 200ms debounce - balanced for performance
 
     return () => clearTimeout(timer);
   }, [searchQuery]);
@@ -445,32 +445,34 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
     return models.filter(m => favorites.has(m.value));
   }, [models, favorites]);
 
-  // Categorize models by capability/use case
-  const categorizeModel = (model: ModelOption): string[] => {
+  // Pre-compiled regex patterns for categorization (outside component for performance)
+  const categoryPatterns = React.useMemo(() => ({
+    r1: /\br1\b/i,
+    o1: /\bo1\b/i,
+    o3: /\bo3\b/i,
+    o4: /\bo4\b/i,
+  }), []);
+
+  // Memoized categorize function to avoid recreating on every render
+  const categorizeModel = React.useCallback((model: ModelOption): string[] => {
     const categories: string[] = [];
     const modelName = model.label.toLowerCase();
     const modelId = model.value.toLowerCase();
 
     // Reasoning models - detection for thinking/reasoning capabilities
-    // Use regex with word boundaries to avoid false positives like "r12" or "r100"
-    const r1Pattern = /\br1\b/i; // Matches "r1" as a whole word (case insensitive)
-    const o1Pattern = /\bo1\b/i; // Matches "o1" as a whole word
-    const o3Pattern = /\bo3\b/i; // Matches "o3" as a whole word
-    const o4Pattern = /\bo4\b/i; // Matches "o4" as a whole word
-
     if (
       modelId.includes('deepseek-reasoner') ||
-      r1Pattern.test(modelId) ||
+      categoryPatterns.r1.test(modelId) ||
       modelId.includes('qwq') ||
-      o1Pattern.test(modelId) ||
-      o3Pattern.test(modelId) ||
-      o4Pattern.test(modelId) ||
+      categoryPatterns.o1.test(modelId) ||
+      categoryPatterns.o3.test(modelId) ||
+      categoryPatterns.o4.test(modelId) ||
       modelId.includes('thinking') ||
       modelId.includes('reason') ||
       modelName.includes('reasoning') ||
       modelName.includes('reasoner') ||
       modelName.includes('thinking') ||
-      r1Pattern.test(modelName)
+      categoryPatterns.r1.test(modelName)
     ) {
       categories.push('Reasoning');
     }
@@ -508,7 +510,7 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
     }
 
     return categories;
-  };
+  }, [categoryPatterns]);
 
   // Group models by category
   const modelsByCategory = React.useMemo(() => {
@@ -544,128 +546,138 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
     });
   };
 
-  // Filter models based on search query
-  const filteredModelsByDeveloper = React.useMemo(() => {
-    if (!debouncedSearchQuery.trim()) {
-      return modelsByDeveloper;
+  // Combined filter computation in a single pass for better performance
+  // This avoids multiple separate filter operations that each iterate through all models
+  const filteredData = React.useMemo(() => {
+    const query = debouncedSearchQuery.trim().toLowerCase();
+
+    // If no search query, return unfiltered data
+    if (!query) {
+      return {
+        modelsByDeveloper,
+        modelsByCategory,
+        favoriteModels,
+        popularModels,
+        incognitoModels: NEAR_INCOGNITO_MODELS,
+      };
     }
 
-    const query = debouncedSearchQuery.toLowerCase();
-    const filtered: Record<string, ModelOption[]> = {};
+    // Pre-compute model match check function
+    const matchesQuery = (model: ModelOption, extraCheck?: string) => {
+      const labelLower = model.label.toLowerCase();
+      const valueLower = model.value.toLowerCase();
+      const developerLower = model.developer?.toLowerCase() || '';
 
+      return labelLower.includes(query) ||
+        valueLower.includes(query) ||
+        developerLower.includes(query) ||
+        (extraCheck && extraCheck.toLowerCase().includes(query));
+    };
+
+    // Filter developer groups
+    const filteredByDeveloper: Record<string, ModelOption[]> = {};
     Object.entries(modelsByDeveloper).forEach(([developer, devModels]) => {
-      const matchingModels = devModels.filter(model =>
-        model.label.toLowerCase().includes(query) ||
-        model.value.toLowerCase().includes(query) ||
-        developer.toLowerCase().includes(query)
-      );
+      const developerLower = developer.toLowerCase();
+      const developerMatches = developerLower.includes(query);
+
+      const matchingModels = developerMatches
+        ? devModels // If developer name matches, include all models
+        : devModels.filter(model => matchesQuery(model));
 
       if (matchingModels.length > 0) {
-        filtered[developer] = matchingModels;
+        filteredByDeveloper[developer] = matchingModels;
       }
     });
 
-    return filtered;
-  }, [modelsByDeveloper, debouncedSearchQuery]);
-
-  // Filter category models based on search
-  const filteredModelsByCategory = React.useMemo(() => {
-    if (!debouncedSearchQuery.trim()) {
-      return modelsByCategory;
-    }
-
-    const query = debouncedSearchQuery.toLowerCase();
-    const filtered: Record<string, ModelOption[]> = {};
-
+    // Filter category groups
+    const filteredByCategory: Record<string, ModelOption[]> = {};
     Object.entries(modelsByCategory).forEach(([category, catModels]) => {
-      const matchingModels = catModels.filter(model =>
-        model.label.toLowerCase().includes(query) ||
-        model.value.toLowerCase().includes(query) ||
-        category.toLowerCase().includes(query)
-      );
+      const categoryLower = category.toLowerCase();
+      const categoryMatches = categoryLower.includes(query);
+
+      const matchingModels = categoryMatches
+        ? catModels // If category name matches, include all models
+        : catModels.filter(model => matchesQuery(model));
 
       if (matchingModels.length > 0) {
-        filtered[category] = matchingModels;
+        filteredByCategory[category] = matchingModels;
       }
     });
 
-    return filtered;
-  }, [modelsByCategory, debouncedSearchQuery]);
+    // Filter other lists
+    const filteredFavorites = favoriteModels.filter(model => matchesQuery(model));
+    const filteredPopular = popularModels.filter(model => matchesQuery(model));
+    const filteredIncognito = NEAR_INCOGNITO_MODELS.filter(model => matchesQuery(model));
 
-  // Filter favorite models based on search
-  const filteredFavoriteModels = React.useMemo(() => {
-    if (!debouncedSearchQuery.trim()) {
-      return favoriteModels;
-    }
+    return {
+      modelsByDeveloper: filteredByDeveloper,
+      modelsByCategory: filteredByCategory,
+      favoriteModels: filteredFavorites,
+      popularModels: filteredPopular,
+      incognitoModels: filteredIncognito,
+    };
+  }, [debouncedSearchQuery, modelsByDeveloper, modelsByCategory, favoriteModels, popularModels]);
 
-    const query = debouncedSearchQuery.toLowerCase();
-    return favoriteModels.filter(model =>
-      model.label.toLowerCase().includes(query) ||
-      model.value.toLowerCase().includes(query)
-    );
-  }, [favoriteModels, debouncedSearchQuery]);
+  // Destructure for cleaner access in render
+  const filteredModelsByDeveloper = filteredData.modelsByDeveloper;
+  const filteredModelsByCategory = filteredData.modelsByCategory;
+  const filteredFavoriteModels = filteredData.favoriteModels;
+  const filteredPopularModels = filteredData.popularModels;
+  const filteredIncognitoModels = filteredData.incognitoModels;
 
-  // Filter popular models based on search
-  const filteredPopularModels = React.useMemo(() => {
-    if (!debouncedSearchQuery.trim()) {
-      return popularModels;
-    }
+  // Auto-expand sections with search matches
+  // Use a ref to track if we've already expanded for this query to avoid redundant updates
+  const lastExpandedQueryRef = React.useRef<string>('');
 
-    const query = debouncedSearchQuery.toLowerCase();
-    return popularModels.filter(model =>
-      model.label.toLowerCase().includes(query) ||
-      model.value.toLowerCase().includes(query) ||
-      model.developer?.toLowerCase().includes(query)
-    );
-  }, [popularModels, debouncedSearchQuery]);
-
-  // Filter incognito models based on search
-  const filteredIncognitoModels = React.useMemo(() => {
-    if (!debouncedSearchQuery.trim()) {
-      return NEAR_INCOGNITO_MODELS;
-    }
-
-    const query = debouncedSearchQuery.toLowerCase();
-    return NEAR_INCOGNITO_MODELS.filter(model =>
-      model.label.toLowerCase().includes(query) ||
-      model.value.toLowerCase().includes(query) ||
-      model.developer?.toLowerCase().includes(query)
-    );
-  }, [debouncedSearchQuery]);
-
-  // Auto-expand sections with search matches (side effect in useEffect, not useMemo)
   React.useEffect(() => {
-    if (!debouncedSearchQuery.trim()) {
+    const query = debouncedSearchQuery.trim();
+
+    // Skip if no query or if we've already expanded for this exact query
+    if (!query || lastExpandedQueryRef.current === query) {
       return;
     }
 
-    const sectionsToExpand = new Set<string>();
+    lastExpandedQueryRef.current = query;
 
-    // Check filtered results and collect sections to expand
+    // Collect all sections that have matches
+    const sectionsToExpand: string[] = [];
+
     if (filteredPopularModels.length > 0) {
-      sectionsToExpand.add('Popular');
+      sectionsToExpand.push('Popular');
     }
 
     if (filteredIncognitoModels.length > 0) {
-      sectionsToExpand.add('Incognito');
+      sectionsToExpand.push('Incognito');
     }
 
+    // Only add developer sections, not individual models
     Object.keys(filteredModelsByDeveloper).forEach(dev => {
-      sectionsToExpand.add(dev);
+      sectionsToExpand.push(dev);
     });
 
     Object.keys(filteredModelsByCategory).forEach(cat => {
-      sectionsToExpand.add(cat);
+      sectionsToExpand.push(cat);
     });
 
-    if (sectionsToExpand.size > 0) {
+    if (sectionsToExpand.length > 0) {
       setExpandedDevelopers(prev => {
+        // Check if any section actually needs to be added
+        const needsUpdate = sectionsToExpand.some(section => !prev.has(section));
+        if (!needsUpdate) return prev;
+
         const next = new Set(prev);
         sectionsToExpand.forEach(section => next.add(section));
         return next;
       });
     }
   }, [debouncedSearchQuery, filteredPopularModels.length, filteredIncognitoModels.length, filteredModelsByDeveloper, filteredModelsByCategory]);
+
+  // Reset the ref when query is cleared
+  React.useEffect(() => {
+    if (!debouncedSearchQuery.trim()) {
+      lastExpandedQueryRef.current = '';
+    }
+  }, [debouncedSearchQuery]);
 
   // Prefetch models on hover to improve perceived performance
   const handlePrefetchModels = React.useCallback(() => {
