@@ -27,7 +27,6 @@ export function OnboardingBanner() {
     const userData = getUserData();
     if (!userData) {
       setVisible(false);
-      document.documentElement.classList.remove('has-onboarding-banner');
       return;
     }
 
@@ -35,7 +34,6 @@ export function OnboardingBanner() {
     const dismissed = safeSessionStorage.getItem('onboarding_banner_dismissed');
     if (dismissed) {
       setVisible(false);
-      document.documentElement.classList.remove('has-onboarding-banner');
       return;
     }
 
@@ -43,14 +41,12 @@ export function OnboardingBanner() {
     const completed = localStorage.getItem('gatewayz_onboarding_completed');
     if (completed) {
       setVisible(false);
-      document.documentElement.classList.remove('has-onboarding-banner');
       return;
     }
 
     // Don't show on onboarding page itself or home page
     if (pathname === '/onboarding' || pathname === '/') {
       setVisible(false);
-      document.documentElement.classList.remove('has-onboarding-banner');
       return;
     }
 
@@ -94,9 +90,15 @@ export function OnboardingBanner() {
     // Show banner if there are incomplete tasks
     const shouldShow = !!incomplete;
     setVisible(shouldShow);
+  }, [pathname]);
 
-    // Add/remove class to document element for CSS targeting
-    if (shouldShow) {
+  useEffect(() => {
+    loadTasks();
+  }, [loadTasks]);
+
+  // Handle DOM manipulation after visibility changes (only runs on client after hydration)
+  useEffect(() => {
+    if (visible) {
       document.documentElement.classList.add('has-onboarding-banner');
       // Measure banner height after render - use requestAnimationFrame to ensure DOM is ready
       requestAnimationFrame(() => {
@@ -124,11 +126,7 @@ export function OnboardingBanner() {
       document.documentElement.style.setProperty('--models-header-top', '65px');
       document.documentElement.style.setProperty('--onboarding-banner-height', '0px');
     }
-  }, [pathname]);
-
-  useEffect(() => {
-    loadTasks();
-  }, [loadTasks]);
+  }, [visible]);
 
   // Listen for localStorage changes (from other components marking tasks complete)
   useEffect(() => {
