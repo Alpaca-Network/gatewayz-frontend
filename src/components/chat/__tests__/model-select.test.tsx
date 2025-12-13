@@ -32,15 +32,14 @@ const createMockModels = (count: number): ModelOption[] => {
 };
 
 // Helper to simulate matchesQuery function from the component
-const matchesQuery = (model: ModelOption, query: string, extraCheck?: string): boolean => {
+const matchesQuery = (model: ModelOption, query: string): boolean => {
   const labelLower = model.label.toLowerCase();
   const valueLower = model.value.toLowerCase();
   const developerLower = model.developer?.toLowerCase() || '';
 
   return labelLower.includes(query) ||
     valueLower.includes(query) ||
-    developerLower.includes(query) ||
-    (extraCheck ? extraCheck.toLowerCase().includes(query) : false);
+    developerLower.includes(query);
 };
 
 // Test filtering logic that mirrors the optimized component implementation
@@ -131,7 +130,8 @@ describe('ModelSelect filtering performance', () => {
       expect(matchesQuery(model, 'gpt')).toBe(true);
       expect(matchesQuery(model, 'openai')).toBe(true);
       expect(matchesQuery(model, 'anthropic')).toBe(false);
-      expect(matchesQuery(model, 'paid', 'Paid')).toBe(true);
+      // Note: matchesQuery only checks label, value, and developer - not category
+      expect(matchesQuery(model, 'paid')).toBe(false);
     });
 
     it('should handle models without developer', () => {

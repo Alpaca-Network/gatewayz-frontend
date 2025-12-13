@@ -563,15 +563,14 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
     }
 
     // Pre-compute model match check function
-    const matchesQuery = (model: ModelOption, extraCheck?: string) => {
+    const matchesQuery = (model: ModelOption) => {
       const labelLower = model.label.toLowerCase();
       const valueLower = model.value.toLowerCase();
       const developerLower = model.developer?.toLowerCase() || '';
 
       return labelLower.includes(query) ||
         valueLower.includes(query) ||
-        developerLower.includes(query) ||
-        (extraCheck && extraCheck.toLowerCase().includes(query));
+        developerLower.includes(query);
     };
 
     // Filter developer groups
@@ -625,19 +624,24 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
   const filteredPopularModels = filteredData.popularModels;
   const filteredIncognitoModels = filteredData.incognitoModels;
 
-  // Auto-expand sections with search matches
-  // Use a ref to track if we've already expanded for this query to avoid redundant updates
-  const lastExpandedQueryRef = React.useRef<string>('');
+  // Memoize keys for stable effect dependencies
+  const filteredDeveloperKeys = React.useMemo(
+    () => Object.keys(filteredModelsByDeveloper).sort().join(','),
+    [filteredModelsByDeveloper]
+  );
+  const filteredCategoryKeys = React.useMemo(
+    () => Object.keys(filteredModelsByCategory).sort().join(','),
+    [filteredModelsByCategory]
+  );
 
+  // Auto-expand sections with search matches
   React.useEffect(() => {
     const query = debouncedSearchQuery.trim();
 
-    // Skip if no query or if we've already expanded for this exact query
-    if (!query || lastExpandedQueryRef.current === query) {
+    // Skip if no query
+    if (!query) {
       return;
     }
-
-    lastExpandedQueryRef.current = query;
 
     // Collect all sections that have matches
     const sectionsToExpand: string[] = [];
@@ -650,14 +654,18 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
       sectionsToExpand.push('Incognito');
     }
 
-    // Only add developer sections, not individual models
-    Object.keys(filteredModelsByDeveloper).forEach(dev => {
-      sectionsToExpand.push(dev);
-    });
+    // Add developer and category sections from memoized keys
+    if (filteredDeveloperKeys) {
+      filteredDeveloperKeys.split(',').forEach(dev => {
+        if (dev) sectionsToExpand.push(dev);
+      });
+    }
 
-    Object.keys(filteredModelsByCategory).forEach(cat => {
-      sectionsToExpand.push(cat);
-    });
+    if (filteredCategoryKeys) {
+      filteredCategoryKeys.split(',').forEach(cat => {
+        if (cat) sectionsToExpand.push(cat);
+      });
+    }
 
     if (sectionsToExpand.length > 0) {
       setExpandedDevelopers(prev => {
@@ -670,14 +678,7 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
         return next;
       });
     }
-  }, [debouncedSearchQuery, filteredPopularModels.length, filteredIncognitoModels.length, filteredModelsByDeveloper, filteredModelsByCategory]);
-
-  // Reset the ref when query is cleared
-  React.useEffect(() => {
-    if (!debouncedSearchQuery.trim()) {
-      lastExpandedQueryRef.current = '';
-    }
-  }, [debouncedSearchQuery]);
+  }, [debouncedSearchQuery, filteredPopularModels.length, filteredIncognitoModels.length, filteredDeveloperKeys, filteredCategoryKeys]);
 
   // Prefetch models on hover to improve perceived performance
   const handlePrefetchModels = React.useCallback(() => {
