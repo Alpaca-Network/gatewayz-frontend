@@ -502,6 +502,9 @@ function getStaticFallbackModels(gateway: string): any[] {
     'alpaca-network': 'alpaca',
     'near': 'near',
     'alibaba': 'alibaba',
+    'google': 'google',
+    'clarifai': 'clarifai',
+    'onerouter': 'onerouter',
     // Add more mappings as needed
   };
 
@@ -519,6 +522,9 @@ function getStaticFallbackModels(gateway: string): any[] {
       'alpaca': 'alpaca-network',
       'near': 'near',
       'alibaba': 'alibaba',
+      'google': 'google',
+      'clarifai': 'clarifai',
+      'onerouter': 'onerouter',
       // Add more mappings as needed for other gateways
     };
 
