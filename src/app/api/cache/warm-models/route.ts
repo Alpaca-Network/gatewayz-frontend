@@ -1,35 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getModelsForGateway } from '@/lib/models-service';
 import * as Sentry from '@sentry/nextjs';
+import { ACTIVE_GATEWAY_IDS } from '@/lib/gateway-registry';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300; // 5 minutes max execution time
 
-// List of all gateways to warm
-const ALL_GATEWAYS = [
-  'openrouter',
-  'featherless',
-  'groq',
-  'together',
-  'fireworks',
-  'chutes',
-  'deepinfra',
-  'google',
-  'cerebras',
-  'nebius',
-  'xai',
-  'novita',
-  'huggingface',
-  'aimo',
-  'near',
-  'fal',
-  'vercel-ai-gateway',
-  'helicone',
-  'alpaca',
-  'alibaba',
-  'clarifai'
-];
+// Use centralized gateway registry - to add a new gateway, update src/lib/gateway-registry.ts
+const ALL_GATEWAYS = ACTIVE_GATEWAY_IDS;
 
 /**
  * POST /api/cache/warm-models - Warm the cache for all model gateways
