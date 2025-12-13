@@ -1,0 +1,338 @@
+name: Sync PR Comments to Terragon Task
+
+on:
+  # Manual trigger to sync all comments at once
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to sync comments from'
+        required: true
+        type: number
+
+# Prevent concurrent runs for the same PR
+concurrency:
+  group: pr-comments-${{ github.event.inputs.pr_number }}
+  cancel-in-progress: false
+
+# Required permissions for pushing to branches and commenting on PRs
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync-comments:
+    name: Sync PR Comments to Terragon
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Fetch PR Details
+        id: pr_details
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          PR_NUMBER="${{ inputs.pr_number }}"
+
+          # Get PR info and validate the response
+          if ! PR_INFO=$(gh pr view "$PR_NUMBER" --repo "${{ github.repository }}" --json title,url,author,body,headRefName,headRepositoryOwner); then
+            echo "::error::Failed to fetch PR #$PR_NUMBER details"
+            exit 1
+          fi
+
+          PR_BRANCH=$(echo "$PR_INFO" | jq -r '.headRefName')
+          HEAD_OWNER=$(echo "$PR_INFO" | jq -r '.headRepositoryOwner.login')
+          REPO_OWNER="${{ github.repository_owner }}"
+
+          # Validate required fields
+          if [ -z "$PR_BRANCH" ] || [ "$PR_BRANCH" = "null" ]; then
+            echo "::error::Failed to get PR branch name from API response"
+            exit 1
+          fi
+
+          # Use heredoc for pr_title to handle special characters safely
+          echo "pr_title<<PR_TITLE_DELIMITER_${{ github.run_id }}" >> $GITHUB_OUTPUT
+          echo "$PR_INFO" | jq -r '.title' >> $GITHUB_OUTPUT
+          echo "PR_TITLE_DELIMITER_${{ github.run_id }}" >> $GITHUB_OUTPUT
+
+          echo "pr_url=$(echo "$PR_INFO" | jq -r '.url')" >> $GITHUB_OUTPUT
+          echo "pr_author=$(echo "$PR_INFO" | jq -r '.author.login')" >> $GITHUB_OUTPUT
+          echo "pr_branch=$PR_BRANCH" >> $GITHUB_OUTPUT
+
+          # Check if this is a fork PR (can't push to fork branches)
+          if [ "$HEAD_OWNER" != "$REPO_OWNER" ]; then
+            echo "is_fork=true" >> $GITHUB_OUTPUT
+            echo "::warning::PR is from a fork ($HEAD_OWNER/$PR_BRANCH). Cannot push task file to fork."
+          else
+            echo "is_fork=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Checkout PR branch
+        if: steps.pr_details.outputs.is_fork != 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.pr_details.outputs.pr_branch }}
+          fetch-depth: 0
+
+      - name: Checkout base branch for fork PRs
+        if: steps.pr_details.outputs.is_fork == 'true'
+        uses: actions/checkout@v4
+
+      - name: Collect All PR Comments
+        id: collect_comments
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          PR_NUMBER="${{ inputs.pr_number }}"
+
+          # Create temporary file for comments
+          COMMENTS_FILE=$(mktemp)
+
+          echo "# PR Comments Summary" > "$COMMENTS_FILE"
+          echo "" >> "$COMMENTS_FILE"
+          echo "**PR**: [${{ steps.pr_details.outputs.pr_title }}](${{ steps.pr_details.outputs.pr_url }})" >> "$COMMENTS_FILE"
+          echo "**Author**: \`@${{ steps.pr_details.outputs.pr_author }}\`" >> "$COMMENTS_FILE"
+          echo "**Branch**: \`${{ steps.pr_details.outputs.pr_branch }}\`" >> "$COMMENTS_FILE"
+          echo "" >> "$COMMENTS_FILE"
+
+          # Fetch all comment data upfront and validate API responses
+          # This ensures we fail fast on API errors rather than silently skipping
+          echo "Fetching inline review comments..."
+          if ! INLINE_COMMENTS=$(gh api "repos/${{ github.repository }}/pulls/$PR_NUMBER/comments"); then
+            echo "::error::Failed to fetch inline review comments"
+            exit 1
+          fi
+
+          echo "Fetching PR reviews..."
+          if ! REVIEWS=$(gh pr view "$PR_NUMBER" --json reviews); then
+            echo "::error::Failed to fetch PR reviews"
+            exit 1
+          fi
+
+          echo "Fetching discussion comments..."
+          if ! DISCUSSION_COMMENTS=$(gh api "repos/${{ github.repository }}/issues/$PR_NUMBER/comments"); then
+            echo "::error::Failed to fetch discussion comments"
+            exit 1
+          fi
+
+          # Process inline review comments
+          echo "## Code Review Comments" >> "$COMMENTS_FILE"
+          echo "" >> "$COMMENTS_FILE"
+
+          INLINE_FORMATTED=$(echo "$INLINE_COMMENTS" | jq -r '.[] | "### \(.path):\(.line // .original_line // "N/A")\n**@\(.user.login)** at \(.created_at)\n> \(.body | gsub("\n"; "\n> "))\n"' 2>/dev/null || true)
+          if [ -n "$INLINE_FORMATTED" ]; then
+            echo "$INLINE_FORMATTED" >> "$COMMENTS_FILE"
+          else
+            echo "No inline comments found" >> "$COMMENTS_FILE"
+          fi
+
+          echo "" >> "$COMMENTS_FILE"
+
+          # Process PR reviews
+          echo "## Reviews" >> "$COMMENTS_FILE"
+          echo "" >> "$COMMENTS_FILE"
+
+          REVIEWS_FORMATTED=$(echo "$REVIEWS" | jq -r '.reviews[] | select(.body != "") | "### \(.state) by @\(.author.login)\n> \(.body | gsub("\n"; "\n> "))\n"' 2>/dev/null || true)
+          if [ -n "$REVIEWS_FORMATTED" ]; then
+            echo "$REVIEWS_FORMATTED" >> "$COMMENTS_FILE"
+          else
+            echo "No reviews with comments found" >> "$COMMENTS_FILE"
+          fi
+
+          echo "" >> "$COMMENTS_FILE"
+
+          # Process general PR comments (exclude bot comments to avoid noise)
+          echo "## Discussion Comments" >> "$COMMENTS_FILE"
+          echo "" >> "$COMMENTS_FILE"
+
+          DISCUSSION_FORMATTED=$(echo "$DISCUSSION_COMMENTS" | jq -r '.[] | select(.user.type != "Bot") | "**@\(.user.login)** at \(.created_at)\n> \(.body | gsub("\n"; "\n> "))\n"' 2>/dev/null || true)
+          if [ -n "$DISCUSSION_FORMATTED" ]; then
+            echo "$DISCUSSION_FORMATTED" >> "$COMMENTS_FILE"
+          else
+            echo "No discussion comments found" >> "$COMMENTS_FILE"
+          fi
+
+          # Output the comments file path
+          echo "comments_file=$COMMENTS_FILE" >> $GITHUB_OUTPUT
+
+          # Calculate counts from already-fetched data (no additional API calls)
+          INLINE_COUNT=$(echo "$INLINE_COMMENTS" | jq 'length')
+          REVIEW_COUNT=$(echo "$REVIEWS" | jq '[.reviews[] | select(.body != "")] | length')
+          DISCUSSION_COUNT=$(echo "$DISCUSSION_COMMENTS" | jq '[.[] | select(.user.type != "Bot")] | length')
+
+          echo "inline_count=$INLINE_COUNT" >> $GITHUB_OUTPUT
+          echo "review_count=$REVIEW_COUNT" >> $GITHUB_OUTPUT
+          echo "discussion_count=$DISCUSSION_COUNT" >> $GITHUB_OUTPUT
+
+          # Store content for next step using unique delimiter to avoid collision with PR content
+          COMMENTS_CONTENT=$(cat "$COMMENTS_FILE")
+          DELIMITER="TERRAGON_COMMENTS_CONTENT_DELIMITER_${{ github.run_id }}"
+          echo "comments_content<<${DELIMITER}" >> $GITHUB_OUTPUT
+          echo "$COMMENTS_CONTENT" >> $GITHUB_OUTPUT
+          echo "${DELIMITER}" >> $GITHUB_OUTPUT
+
+      - name: Create Terragon Task Payload
+        id: task_payload
+        env:
+          PR_NUMBER: ${{ inputs.pr_number }}
+          PR_TITLE: ${{ steps.pr_details.outputs.pr_title }}
+          PR_URL: ${{ steps.pr_details.outputs.pr_url }}
+          PR_BRANCH: ${{ steps.pr_details.outputs.pr_branch }}
+          INLINE_COUNT: ${{ steps.collect_comments.outputs.inline_count }}
+          REVIEW_COUNT: ${{ steps.collect_comments.outputs.review_count }}
+          DISCUSSION_COUNT: ${{ steps.collect_comments.outputs.discussion_count }}
+          COMMENTS_CONTENT: ${{ steps.collect_comments.outputs.comments_content }}
+        run: |
+          TOTAL_COUNT=$((INLINE_COUNT + REVIEW_COUNT + DISCUSSION_COUNT))
+
+          # Create task title
+          TASK_TITLE="Address PR #${PR_NUMBER} feedback: ${PR_TITLE}"
+
+          # Create task description using unquoted heredoc for variable expansion
+          # Use a unique delimiter with run_id to avoid collision with user content
+          cat << TASK_DESC_DELIMITER_${{ github.run_id }}_END > /tmp/task_description.md
+## Task: Address PR Feedback
+
+This task was automatically created to track feedback from PR #${PR_NUMBER}.
+
+**Summary:**
+- Inline code comments: ${INLINE_COUNT}
+- Reviews with comments: ${REVIEW_COUNT}
+- Discussion comments: ${DISCUSSION_COUNT}
+
+**PR Details:**
+- URL: ${PR_URL}
+- Branch: \`${PR_BRANCH}\`
+
+---
+
+${COMMENTS_CONTENT}
+
+---
+
+## Instructions
+
+1. Review each comment above
+2. Address code review comments by making the requested changes
+3. Respond to questions in the PR
+4. Mark resolved comments as resolved in GitHub
+5. Request re-review when ready
+TASK_DESC_DELIMITER_${{ github.run_id }}_END
+
+          # Use heredoc for task_title to handle special characters (%, \n, \r) safely
+          echo "task_title<<TASK_TITLE_DELIMITER_${{ github.run_id }}" >> $GITHUB_OUTPUT
+          echo "$TASK_TITLE" >> $GITHUB_OUTPUT
+          echo "TASK_TITLE_DELIMITER_${{ github.run_id }}" >> $GITHUB_OUTPUT
+
+          echo "total_comments=$TOTAL_COUNT" >> $GITHUB_OUTPUT
+
+      - name: Create and Push Terragon Task File
+        if: |
+          steps.pr_details.outputs.is_fork != 'true' &&
+          (steps.collect_comments.outputs.inline_count != '0' ||
+           steps.collect_comments.outputs.review_count != '0' ||
+           steps.collect_comments.outputs.discussion_count != '0')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TASK_TITLE: ${{ steps.task_payload.outputs.task_title }}
+          PR_TITLE: ${{ steps.pr_details.outputs.pr_title }}
+          PR_URL: ${{ steps.pr_details.outputs.pr_url }}
+          PR_BRANCH: ${{ steps.pr_details.outputs.pr_branch }}
+        run: |
+          PR_NUMBER="${{ inputs.pr_number }}"
+
+          echo "=== PR Comments Summary ==="
+          echo "PR #$PR_NUMBER: $PR_TITLE"
+          echo "Total comments to address: ${{ steps.task_payload.outputs.total_comments }}"
+          echo ""
+          echo "Task title: $TASK_TITLE"
+
+          # Create a marker file that can be picked up by Terragon
+          mkdir -p .terragon/pending-tasks
+
+          TASK_FILE=".terragon/pending-tasks/pr-${PR_NUMBER}-$(date +%Y%m%d%H%M%S).md"
+
+          # Escape values for YAML using jq to handle special characters
+          # Use printf '%s' instead of echo to avoid trailing newline in output
+          YAML_TITLE=$(printf '%s' "$TASK_TITLE" | jq -Rs '.')
+          YAML_URL=$(printf '%s' "$PR_URL" | jq -Rs '.')
+          YAML_BRANCH=$(printf '%s' "$PR_BRANCH" | jq -Rs '.')
+
+          # Write YAML frontmatter with properly escaped values
+          {
+            echo "---"
+            echo "title: $YAML_TITLE"
+            echo "pr_number: $PR_NUMBER"
+            echo "pr_url: $YAML_URL"
+            echo "branch: $YAML_BRANCH"
+            echo "created_at: \"$(date -Iseconds)\""
+            echo "status: pending"
+            echo "---"
+            echo ""
+            cat /tmp/task_description.md
+          } > "$TASK_FILE"
+
+          echo ""
+          echo "Task file created: $TASK_FILE"
+
+          # Configure git
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Add and commit the task file
+          git add "$TASK_FILE"
+
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore: sync PR #$PR_NUMBER comments to Terragon task
+
+          [skip ci]"
+
+            # Push to the PR branch
+            if ! git push origin "HEAD:$PR_BRANCH"; then
+              echo "::error::Failed to push task file to branch $PR_BRANCH"
+              exit 1
+            fi
+
+            echo "Successfully pushed task file to $PR_BRANCH"
+          fi
+
+      - name: Add PR Comment with Task Summary
+        if: |
+          steps.collect_comments.outputs.inline_count != '0' ||
+          steps.collect_comments.outputs.review_count != '0' ||
+          steps.collect_comments.outputs.discussion_count != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER="${{ inputs.pr_number }}"
+          IS_FORK="${{ steps.pr_details.outputs.is_fork }}"
+
+          if [ "$IS_FORK" == "true" ]; then
+            TASK_NOTE="Note: This PR is from a fork, so the task file could not be committed to the branch."
+          else
+            TASK_NOTE="The task file has been added to \`.terragon/pending-tasks/\` on branch \`${{ steps.pr_details.outputs.pr_branch }}\`."
+          fi
+
+          gh pr comment "$PR_NUMBER" --body "## Terragon Task Synced
+
+PR feedback has been synced to a Terragon task.
+
+**Summary:**
+- Inline code comments: ${{ steps.collect_comments.outputs.inline_count }}
+- Reviews with comments: ${{ steps.collect_comments.outputs.review_count }}
+- Discussion comments: ${{ steps.collect_comments.outputs.discussion_count }}
+
+$TASK_NOTE
+
+---
+*This comment was automatically generated by the PR Comments Sync workflow.*"
+
+      - name: Skip - No Comments
+        if: |
+          steps.collect_comments.outputs.inline_count == '0' &&
+          steps.collect_comments.outputs.review_count == '0' &&
+          steps.collect_comments.outputs.discussion_count == '0'
+        run: |
+          echo "No comments found on PR #${{ inputs.pr_number }}, skipping task creation."
