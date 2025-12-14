@@ -82,7 +82,7 @@ function WelcomeScreen({ onPromptSelect }: { onPromptSelect: (txt: string) => vo
 export function ChatLayout() {
    useAuthSync(); // Trigger auth sync
    const { isAuthenticated, isLoading: authLoading } = useAuthStore();
-   const { selectedModel, setSelectedModel, activeSessionId, setActiveSessionId, setInputValue, mobileSidebarOpen, setMobileSidebarOpen, isIncognitoMode, toggleIncognitoMode } = useChatUIStore();
+   const { selectedModel, setSelectedModel, activeSessionId, setActiveSessionId, setInputValue, mobileSidebarOpen, setMobileSidebarOpen, isIncognitoMode, toggleIncognitoMode, syncIncognitoState } = useChatUIStore();
    const searchParams = useSearchParams();
    const queryClient = useQueryClient();
    const createSession = useCreateSession();
@@ -97,6 +97,13 @@ export function ChatLayout() {
    const urlMessageProcessedRef = useRef(false);
    // Track pending timeout IDs for cleanup
    const pendingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+   // Sync incognito state after client-side hydration
+   // This fixes the SSR mismatch where incognito mode might be enabled in localStorage
+   // but the model wasn't correctly set due to server-side rendering
+   useEffect(() => {
+       syncIncognitoState();
+   }, [syncIncognitoState]);
 
    // Handle URL message parameter - populate input and auto-send on mount
    useEffect(() => {

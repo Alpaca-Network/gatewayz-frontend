@@ -272,4 +272,120 @@ describe('chat-ui-store', () => {
       expect(useChatUIStore.getState().isIncognitoMode).toBe(true);
     });
   });
+
+  describe('syncIncognitoState', () => {
+    it('should sync incognito state when localStorage has incognito enabled but model is wrong', () => {
+      // Simulate SSR hydration mismatch: localStorage has incognito=true,
+      // but selectedModel is the standard default (not a NEAR model)
+      localStorageMock.setItem('gatewayz_incognito_mode', 'true');
+
+      // Reset store to simulate fresh page load where SSR set wrong model
+      useChatUIStore.setState({
+        isIncognitoMode: false, // SSR default
+        selectedModel: {
+          value: 'deepseek/deepseek-r1',
+          label: 'DeepSeek R1',
+          category: 'Reasoning',
+          sourceGateway: 'openrouter',
+          developer: 'DeepSeek',
+          modalities: ['Text']
+        },
+        previousModel: null,
+        _hasHydrated: false
+      });
+
+      // Call sync to fix the state
+      useChatUIStore.getState().syncIncognitoState();
+
+      // Verify state was fixed
+      const state = useChatUIStore.getState();
+      expect(state.isIncognitoMode).toBe(true);
+      expect(state.selectedModel?.value).toBe('near/zai-org/GLM-4.6');
+      expect(state.selectedModel?.sourceGateway).toBe('near');
+      expect(state.previousModel?.value).toBe('deepseek/deepseek-r1');
+      expect(state._hasHydrated).toBe(true);
+    });
+
+    it('should not change state if already using a NEAR model', () => {
+      localStorageMock.setItem('gatewayz_incognito_mode', 'true');
+
+      // State is already correct
+      useChatUIStore.setState({
+        isIncognitoMode: true,
+        selectedModel: INCOGNITO_DEFAULT_MODEL,
+        previousModel: null,
+        _hasHydrated: false
+      });
+
+      useChatUIStore.getState().syncIncognitoState();
+
+      // State should remain unchanged (except _hasHydrated)
+      const state = useChatUIStore.getState();
+      expect(state.isIncognitoMode).toBe(true);
+      expect(state.selectedModel?.value).toBe('near/zai-org/GLM-4.6');
+      expect(state._hasHydrated).toBe(true);
+    });
+
+    it('should only run once (idempotent)', () => {
+      localStorageMock.setItem('gatewayz_incognito_mode', 'true');
+
+      useChatUIStore.setState({
+        isIncognitoMode: false,
+        selectedModel: {
+          value: 'deepseek/deepseek-r1',
+          label: 'DeepSeek R1',
+          category: 'Reasoning',
+          sourceGateway: 'openrouter',
+          developer: 'DeepSeek',
+          modalities: ['Text']
+        },
+        previousModel: null,
+        _hasHydrated: false
+      });
+
+      // First call
+      useChatUIStore.getState().syncIncognitoState();
+      expect(useChatUIStore.getState()._hasHydrated).toBe(true);
+
+      // Change the model manually
+      useChatUIStore.getState().setSelectedModel({
+        value: 'anthropic/claude-3',
+        label: 'Claude 3',
+        category: 'General',
+        sourceGateway: 'openrouter',
+        developer: 'Anthropic',
+        modalities: ['Text']
+      });
+
+      // Second call should not change anything
+      useChatUIStore.getState().syncIncognitoState();
+      expect(useChatUIStore.getState().selectedModel?.value).toBe('anthropic/claude-3');
+    });
+
+    it('should not sync if incognito is not enabled in localStorage', () => {
+      localStorageMock.setItem('gatewayz_incognito_mode', 'false');
+
+      useChatUIStore.setState({
+        isIncognitoMode: false,
+        selectedModel: {
+          value: 'deepseek/deepseek-r1',
+          label: 'DeepSeek R1',
+          category: 'Reasoning',
+          sourceGateway: 'openrouter',
+          developer: 'DeepSeek',
+          modalities: ['Text']
+        },
+        previousModel: null,
+        _hasHydrated: false
+      });
+
+      useChatUIStore.getState().syncIncognitoState();
+
+      // Model should remain unchanged
+      const state = useChatUIStore.getState();
+      expect(state.selectedModel?.value).toBe('deepseek/deepseek-r1');
+      expect(state.isIncognitoMode).toBe(false);
+      expect(state._hasHydrated).toBe(true);
+    });
+  });
 });
