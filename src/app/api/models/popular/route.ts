@@ -24,15 +24,16 @@ export interface PopularModel {
 
 // Fallback popular models based on industry trends and community usage
 // This list is updated periodically to reflect current popularity
+// NOTE: Model IDs with sourceGateway should include the gateway prefix for proper backend routing
 const FALLBACK_POPULAR_MODELS: PopularModel[] = [
   { id: 'anthropic/claude-sonnet-4', name: 'Claude Sonnet 4', developer: 'Anthropic', category: 'Paid' },
   { id: 'openai/gpt-4o', name: 'GPT-4o', developer: 'OpenAI', category: 'Paid' },
   { id: 'openai/gpt-4o-mini', name: 'GPT-4o Mini', developer: 'OpenAI', category: 'Paid' },
   { id: 'google/gemini-2.0-flash-001', name: 'Gemini 2.0 Flash', developer: 'Google', category: 'Paid' },
-  { id: 'deepseek/deepseek-r1', name: 'DeepSeek R1', developer: 'DeepSeek', category: 'Paid', sourceGateway: 'openrouter' },
+  { id: 'openrouter/deepseek/deepseek-r1', name: 'DeepSeek R1', developer: 'DeepSeek', category: 'Paid', sourceGateway: 'openrouter' },
   { id: 'deepseek/deepseek-chat', name: 'DeepSeek Chat', developer: 'DeepSeek', category: 'Paid' },
-  { id: 'meta-llama/llama-3.3-70b-instruct', name: 'Llama 3.3 70B', developer: 'Meta', category: 'Free', sourceGateway: 'openrouter' },
-  { id: 'qwen/qwen-2.5-72b-instruct', name: 'Qwen 2.5 72B', developer: 'Qwen', category: 'Free', sourceGateway: 'openrouter' },
+  { id: 'openrouter/meta-llama/llama-3.3-70b-instruct', name: 'Llama 3.3 70B', developer: 'Meta', category: 'Free', sourceGateway: 'openrouter' },
+  { id: 'openrouter/qwen/qwen-2.5-72b-instruct', name: 'Qwen 2.5 72B', developer: 'Qwen', category: 'Free', sourceGateway: 'openrouter' },
   { id: 'x-ai/grok-2-1212', name: 'Grok 2', developer: 'xAI', category: 'Paid' },
   { id: 'mistralai/mistral-large-2411', name: 'Mistral Large', developer: 'Mistral AI', category: 'Paid' },
 ];
