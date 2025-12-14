@@ -56,6 +56,7 @@ jest.mock('@/lib/store/chat-ui-store', () => ({
     setMobileSidebarOpen: mockSetMobileSidebarOpen,
     isIncognitoMode: mockIsIncognitoMode,
     toggleIncognitoMode: mockToggleIncognitoMode,
+    syncIncognitoState: jest.fn(), // Added for hydration fix
   }),
   INCOGNITO_DEFAULT_MODEL: {
     value: 'near/zai-org/GLM-4.6',
