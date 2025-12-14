@@ -80,8 +80,14 @@ function WelcomeScreen({ onPromptSelect }: { onPromptSelect: (txt: string) => vo
 }
 
 export function ChatLayout() {
-   useAuthSync(); // Trigger auth sync
-   const { isAuthenticated, isLoading: authLoading } = useAuthStore();
+   const { isLoading: authSyncLoading } = useAuthSync(); // Trigger auth sync and get loading state
+   const { isAuthenticated, isLoading: storeLoading } = useAuthStore();
+
+   // Use the more accurate loading state from useAuthSync which considers:
+   // 1. The auth query loading state
+   // 2. Whether we already have cached auth credentials
+   // For non-authenticated users, this will be false immediately after the effect runs
+   const authLoading = authSyncLoading;
    const { selectedModel, setSelectedModel, activeSessionId, setActiveSessionId, setInputValue, mobileSidebarOpen, setMobileSidebarOpen, isIncognitoMode, toggleIncognitoMode, syncIncognitoState } = useChatUIStore();
    const searchParams = useSearchParams();
    const queryClient = useQueryClient();

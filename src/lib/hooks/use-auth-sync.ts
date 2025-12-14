@@ -67,13 +67,17 @@ export function useAuthSync() {
   const queryClient = useQueryClient();
 
   // Initialize store from localStorage on mount
+  // This effect MUST set isLoading to false to allow the chat UI to render
   useEffect(() => {
     const storedKey = getApiKey();
     const storedUser = getUserData();
     if (storedKey && storedUser) {
+      // User has cached credentials - set auth state
       setAuth(storedKey, storedUser);
     } else {
-        setLoading(false);
+      // No cached credentials - this is a guest user or fresh session
+      // CRITICAL: Set loading to false so the chat UI renders
+      setLoading(false);
     }
   }, [setAuth, setLoading]);
 

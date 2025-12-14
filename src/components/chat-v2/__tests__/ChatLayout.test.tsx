@@ -76,7 +76,10 @@ jest.mock('@/lib/store/auth-store', () => ({
 }));
 
 jest.mock('@/lib/hooks/use-auth-sync', () => ({
-  useAuthSync: jest.fn(),
+  useAuthSync: jest.fn(() => ({
+    isLoading: false,
+    isAuthenticated: true,
+  })),
 }));
 
 const mockCreateSessionMutateAsync = jest.fn();
