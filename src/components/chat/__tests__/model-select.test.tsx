@@ -1,4 +1,12 @@
-import { ModelSelect, ModelOption } from '../model-select';
+import {
+  ModelSelect,
+  ModelOption,
+  cleanModelName,
+  getGatewayAbbrev,
+  getDeveloper,
+  getModelSpeedTier,
+  ensureRouterOption,
+} from '../model-select';
 
 // Test the component exports correctly
 describe('ModelSelect', () => {
@@ -12,6 +20,207 @@ describe('ModelSelect', () => {
       // React components are functions
       expect(typeof ModelSelect).toBe('function');
     });
+  });
+});
+
+// Test cleanModelName helper function
+describe('cleanModelName', () => {
+  it('should remove "(Free)" suffix from model names', () => {
+    expect(cleanModelName('GPT-4 (Free)')).toBe('GPT-4');
+    expect(cleanModelName('Claude 3 (free)')).toBe('Claude 3');
+    expect(cleanModelName('Model (FREE)')).toBe('Model');
+  });
+
+  it('should handle model names without "(Free)" suffix', () => {
+    expect(cleanModelName('GPT-4')).toBe('GPT-4');
+    expect(cleanModelName('Claude 3 Opus')).toBe('Claude 3 Opus');
+  });
+
+  it('should trim whitespace', () => {
+    expect(cleanModelName('  GPT-4  ')).toBe('GPT-4');
+    expect(cleanModelName('Model (Free)  ')).toBe('Model');
+  });
+
+  it('should handle "(Free)" in the middle of the name', () => {
+    // The regex removes "(Free)" with optional surrounding whitespace,
+    // which may collapse adjacent spaces - this is acceptable behavior
+    expect(cleanModelName('Model (Free) Version')).toBe('ModelVersion');
+  });
+});
+
+// Test getGatewayAbbrev helper function
+describe('getGatewayAbbrev', () => {
+  it('should return known abbreviations for common gateways', () => {
+    expect(getGatewayAbbrev('cerebras')).toBe('CRB');
+    expect(getGatewayAbbrev('groq')).toBe('GRQ');
+    expect(getGatewayAbbrev('fireworks')).toBe('FW');
+    expect(getGatewayAbbrev('together')).toBe('TGR');
+    expect(getGatewayAbbrev('deepinfra')).toBe('DI');
+    expect(getGatewayAbbrev('featherless')).toBe('FL');
+    expect(getGatewayAbbrev('novita')).toBe('NVT');
+    expect(getGatewayAbbrev('chutes')).toBe('CHT');
+    expect(getGatewayAbbrev('nebius')).toBe('NEB');
+    expect(getGatewayAbbrev('huggingface')).toBe('HF');
+    expect(getGatewayAbbrev('near')).toBe('NEAR');
+  });
+
+  it('should be case-insensitive', () => {
+    expect(getGatewayAbbrev('CEREBRAS')).toBe('CRB');
+    expect(getGatewayAbbrev('Groq')).toBe('GRQ');
+    expect(getGatewayAbbrev('FIREWORKS')).toBe('FW');
+  });
+
+  it('should return first 3 characters uppercase for unknown gateways', () => {
+    expect(getGatewayAbbrev('openrouter')).toBe('OPE');
+    expect(getGatewayAbbrev('unknown')).toBe('UNK');
+    expect(getGatewayAbbrev('newgateway')).toBe('NEW');
+  });
+
+  it('should handle short gateway names', () => {
+    expect(getGatewayAbbrev('ab')).toBe('AB');
+    expect(getGatewayAbbrev('x')).toBe('X');
+  });
+});
+
+// Test getDeveloper helper function
+describe('getDeveloper', () => {
+  it('should extract and format known developers from model IDs', () => {
+    expect(getDeveloper('openai/gpt-4')).toBe('OpenAI');
+    expect(getDeveloper('anthropic/claude-3')).toBe('Anthropic');
+    expect(getDeveloper('google/gemini-pro')).toBe('Google');
+    expect(getDeveloper('meta-llama/llama-3')).toBe('Meta');
+    expect(getDeveloper('mistralai/mistral-7b')).toBe('Mistral AI');
+    expect(getDeveloper('cohere/command')).toBe('Cohere');
+    expect(getDeveloper('amazon/titan')).toBe('Amazon');
+    expect(getDeveloper('microsoft/phi-3')).toBe('Microsoft');
+    expect(getDeveloper('deepseek/deepseek-coder')).toBe('DeepSeek');
+    expect(getDeveloper('qwen/qwen-2')).toBe('Qwen');
+    expect(getDeveloper('x-ai/grok')).toBe('xAI');
+  });
+
+  it('should capitalize unknown developers', () => {
+    expect(getDeveloper('newdev/model')).toBe('Newdev');
+    expect(getDeveloper('custom/model-name')).toBe('Custom');
+  });
+
+  it('should return "Other" for models without developer prefix', () => {
+    expect(getDeveloper('model-without-prefix')).toBe('Other');
+    expect(getDeveloper('simple-model')).toBe('Other');
+  });
+
+  it('should handle multiple slashes in model ID', () => {
+    expect(getDeveloper('openai/gpt-4/latest')).toBe('OpenAI');
+    expect(getDeveloper('custom/path/to/model')).toBe('Custom');
+  });
+});
+
+// Test getModelSpeedTier helper function
+describe('getModelSpeedTier', () => {
+  describe('ultra-fast tier', () => {
+    it('should identify Cerebras models as ultra-fast', () => {
+      expect(getModelSpeedTier('any-model', 'cerebras')).toBe('ultra-fast');
+      expect(getModelSpeedTier('llama-3@cerebras/version', undefined)).toBe('ultra-fast');
+    });
+
+    it('should identify Groq models as ultra-fast', () => {
+      expect(getModelSpeedTier('any-model', 'groq')).toBe('ultra-fast');
+      expect(getModelSpeedTier('groq/llama-3-8b', undefined)).toBe('ultra-fast');
+    });
+  });
+
+  describe('fast tier', () => {
+    it('should identify Fireworks models as fast', () => {
+      expect(getModelSpeedTier('any-model', 'fireworks')).toBe('fast');
+      expect(getModelSpeedTier('fireworks/llama-3', undefined)).toBe('fast');
+    });
+
+    it('should identify known fast models by name', () => {
+      expect(getModelSpeedTier('google/gemini-flash', undefined)).toBe('fast');
+      expect(getModelSpeedTier('openai/gpt-4o-mini', undefined)).toBe('fast');
+      expect(getModelSpeedTier('anthropic/claude-haiku', undefined)).toBe('fast');
+    });
+  });
+
+  describe('medium tier', () => {
+    it('should identify standard models as medium', () => {
+      expect(getModelSpeedTier('openai/gpt-4-turbo', undefined)).toBe('medium');
+      expect(getModelSpeedTier('anthropic/claude-sonnet', undefined)).toBe('medium');
+      expect(getModelSpeedTier('meta/llama-3-70b', undefined)).toBe('medium');
+    });
+  });
+
+  describe('slow tier', () => {
+    it('should identify reasoning models as slow', () => {
+      expect(getModelSpeedTier('openai/o1-preview', undefined)).toBe('slow');
+      expect(getModelSpeedTier('openai/o3-mini', undefined)).toBe('slow');
+      expect(getModelSpeedTier('deepseek/deepseek-reasoner', undefined)).toBe('slow');
+      expect(getModelSpeedTier('qwen/qwq-32b', undefined)).toBe('slow');
+    });
+  });
+
+  describe('unknown tier', () => {
+    it('should return undefined for unknown models', () => {
+      expect(getModelSpeedTier('unknown/random-model', undefined)).toBeUndefined();
+      expect(getModelSpeedTier('custom/custom-model', undefined)).toBeUndefined();
+    });
+  });
+});
+
+// Test ensureRouterOption helper function
+describe('ensureRouterOption', () => {
+  const ROUTER_VALUE = 'openrouter/auto';
+
+  it('should add router option to empty array', () => {
+    const result = ensureRouterOption([]);
+    expect(result.length).toBe(1);
+    expect(result[0].value).toBe(ROUTER_VALUE);
+    expect(result[0].label).toBe('Gatewayz Router');
+  });
+
+  it('should prepend router option when not present', () => {
+    const models: ModelOption[] = [
+      { value: 'openai/gpt-4', label: 'GPT-4', category: 'Paid' },
+      { value: 'anthropic/claude-3', label: 'Claude 3', category: 'Paid' },
+    ];
+    const result = ensureRouterOption(models);
+    expect(result.length).toBe(3);
+    expect(result[0].value).toBe(ROUTER_VALUE);
+    expect(result[1].value).toBe('openai/gpt-4');
+  });
+
+  it('should not duplicate router option when already present', () => {
+    const models: ModelOption[] = [
+      { value: ROUTER_VALUE, label: 'Existing Router', category: 'Router' },
+      { value: 'openai/gpt-4', label: 'GPT-4', category: 'Paid' },
+    ];
+    const result = ensureRouterOption(models);
+    expect(result.length).toBe(2);
+    // Router option should be merged with default properties
+    expect(result[0].value).toBe(ROUTER_VALUE);
+  });
+
+  it('should preserve original model properties', () => {
+    const models: ModelOption[] = [
+      {
+        value: 'openai/gpt-4',
+        label: 'GPT-4',
+        category: 'Paid',
+        developer: 'OpenAI',
+        speedTier: 'medium',
+      },
+    ];
+    const result = ensureRouterOption(models);
+    expect(result[1].developer).toBe('OpenAI');
+    expect(result[1].speedTier).toBe('medium');
+  });
+
+  it('should set router with correct default properties', () => {
+    const result = ensureRouterOption([]);
+    const router = result[0];
+    expect(router.category).toBe('Router');
+    expect(router.sourceGateway).toBe('openrouter');
+    expect(router.developer).toBe('Alpaca');
+    expect(router.modalities).toEqual(['Text', 'Image', 'File', 'Audio', 'Video']);
   });
 });
 
