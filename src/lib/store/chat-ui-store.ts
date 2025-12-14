@@ -103,8 +103,9 @@ interface ChatUIState {
 }
 
 // Standard default model
+// NOTE: Model ID must include the gateway prefix (e.g., 'openrouter/') for proper backend routing
 const STANDARD_DEFAULT_MODEL: ModelOption = {
-  value: 'deepseek/deepseek-r1',
+  value: 'openrouter/deepseek/deepseek-r1',
   label: 'DeepSeek R1',
   category: 'Reasoning',
   sourceGateway: 'openrouter',

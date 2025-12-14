@@ -31,7 +31,7 @@ describe('chat-ui-store', () => {
       isIncognitoMode: false,
       previousModel: null,
       selectedModel: {
-        value: 'deepseek/deepseek-r1',
+        value: 'openrouter/deepseek/deepseek-r1',
         label: 'DeepSeek R1',
         category: 'Reasoning',
         sourceGateway: 'openrouter',
@@ -283,7 +283,7 @@ describe('chat-ui-store', () => {
       useChatUIStore.setState({
         isIncognitoMode: false, // SSR default
         selectedModel: {
-          value: 'deepseek/deepseek-r1',
+          value: 'openrouter/deepseek/deepseek-r1',
           label: 'DeepSeek R1',
           category: 'Reasoning',
           sourceGateway: 'openrouter',
@@ -302,7 +302,7 @@ describe('chat-ui-store', () => {
       expect(state.isIncognitoMode).toBe(true);
       expect(state.selectedModel?.value).toBe('near/zai-org/GLM-4.6');
       expect(state.selectedModel?.sourceGateway).toBe('near');
-      expect(state.previousModel?.value).toBe('deepseek/deepseek-r1');
+      expect(state.previousModel?.value).toBe('openrouter/deepseek/deepseek-r1');
       expect(state._hasHydrated).toBe(true);
     });
 
@@ -332,7 +332,7 @@ describe('chat-ui-store', () => {
       useChatUIStore.setState({
         isIncognitoMode: false,
         selectedModel: {
-          value: 'deepseek/deepseek-r1',
+          value: 'openrouter/deepseek/deepseek-r1',
           label: 'DeepSeek R1',
           category: 'Reasoning',
           sourceGateway: 'openrouter',
@@ -368,7 +368,7 @@ describe('chat-ui-store', () => {
       useChatUIStore.setState({
         isIncognitoMode: false,
         selectedModel: {
-          value: 'deepseek/deepseek-r1',
+          value: 'openrouter/deepseek/deepseek-r1',
           label: 'DeepSeek R1',
           category: 'Reasoning',
           sourceGateway: 'openrouter',
@@ -383,7 +383,7 @@ describe('chat-ui-store', () => {
 
       // Model should remain unchanged
       const state = useChatUIStore.getState();
-      expect(state.selectedModel?.value).toBe('deepseek/deepseek-r1');
+      expect(state.selectedModel?.value).toBe('openrouter/deepseek/deepseek-r1');
       expect(state.isIncognitoMode).toBe(false);
       expect(state._hasHydrated).toBe(true);
     });
@@ -404,7 +404,7 @@ describe('chat-ui-store', () => {
       useChatUIStore.setState({
         isIncognitoMode: false,
         selectedModel: {
-          value: 'deepseek/deepseek-r1',
+          value: 'openrouter/deepseek/deepseek-r1',
           label: 'DeepSeek R1',
           category: 'Reasoning',
           sourceGateway: 'openrouter',

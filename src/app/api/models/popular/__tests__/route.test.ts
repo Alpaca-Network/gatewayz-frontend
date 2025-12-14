@@ -109,7 +109,7 @@ describe('GET /api/models/popular', () => {
     const expectedModels = [
       'anthropic/claude-sonnet-4',
       'openai/gpt-4o',
-      'deepseek/deepseek-r1',
+      'openrouter/deepseek/deepseek-r1',
     ];
 
     // At least some expected popular models should be in the list
