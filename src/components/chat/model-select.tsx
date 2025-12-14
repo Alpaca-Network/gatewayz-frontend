@@ -624,22 +624,33 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
   const filteredPopularModels = filteredData.popularModels;
   const filteredIncognitoModels = filteredData.incognitoModels;
 
-  // Memoize keys for stable effect dependencies
-  const filteredDeveloperKeys = React.useMemo(
-    () => Object.keys(filteredModelsByDeveloper).sort().join(','),
+  // Memoize keys arrays for stable effect dependencies (avoid join/split which can corrupt names with delimiters)
+  const filteredDeveloperKeysArray = React.useMemo(
+    () => Object.keys(filteredModelsByDeveloper).sort(),
     [filteredModelsByDeveloper]
   );
-  const filteredCategoryKeys = React.useMemo(
-    () => Object.keys(filteredModelsByCategory).sort().join(','),
+  const filteredCategoryKeysArray = React.useMemo(
+    () => Object.keys(filteredModelsByCategory).sort(),
     [filteredModelsByCategory]
   );
+
+  // Track sections that were auto-expanded by search (to reset on clear)
+  const autoExpandedSectionsRef = React.useRef<Set<string>>(new Set());
 
   // Auto-expand sections with search matches
   React.useEffect(() => {
     const query = debouncedSearchQuery.trim();
 
-    // Skip if no query
+    // Reset auto-expanded sections when query is cleared
     if (!query) {
+      if (autoExpandedSectionsRef.current.size > 0) {
+        setExpandedDevelopers(prev => {
+          const next = new Set(prev);
+          autoExpandedSectionsRef.current.forEach(section => next.delete(section));
+          return next;
+        });
+        autoExpandedSectionsRef.current.clear();
+      }
       return;
     }
 
@@ -654,18 +665,14 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
       sectionsToExpand.push('Incognito');
     }
 
-    // Add developer and category sections from memoized keys
-    if (filteredDeveloperKeys) {
-      filteredDeveloperKeys.split(',').forEach(dev => {
-        if (dev) sectionsToExpand.push(dev);
-      });
-    }
+    // Add developer and category sections directly from arrays
+    filteredDeveloperKeysArray.forEach(dev => {
+      if (dev) sectionsToExpand.push(dev);
+    });
 
-    if (filteredCategoryKeys) {
-      filteredCategoryKeys.split(',').forEach(cat => {
-        if (cat) sectionsToExpand.push(cat);
-      });
-    }
+    filteredCategoryKeysArray.forEach(cat => {
+      if (cat) sectionsToExpand.push(cat);
+    });
 
     if (sectionsToExpand.length > 0) {
       setExpandedDevelopers(prev => {
@@ -674,11 +681,17 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
         if (!needsUpdate) return prev;
 
         const next = new Set(prev);
-        sectionsToExpand.forEach(section => next.add(section));
+        sectionsToExpand.forEach(section => {
+          if (!prev.has(section)) {
+            // Track that this section was auto-expanded
+            autoExpandedSectionsRef.current.add(section);
+          }
+          next.add(section);
+        });
         return next;
       });
     }
-  }, [debouncedSearchQuery, filteredPopularModels.length, filteredIncognitoModels.length, filteredDeveloperKeys, filteredCategoryKeys]);
+  }, [debouncedSearchQuery, filteredPopularModels.length, filteredIncognitoModels.length, filteredDeveloperKeysArray, filteredCategoryKeysArray]);
 
   // Prefetch models on hover to improve perceived performance
   const handlePrefetchModels = React.useCallback(() => {
