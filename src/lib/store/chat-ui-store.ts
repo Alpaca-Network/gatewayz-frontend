@@ -137,15 +137,22 @@ export const useChatUIStore = create<ChatUIState>((set, get) => ({
     if (state._hasHydrated) return;
 
     // Check localStorage for the true incognito state
-    const storedIncognito = typeof window !== 'undefined'
-      ? localStorage.getItem(INCOGNITO_STORAGE_KEY) === 'true'
-      : false;
+    let storedIncognito = false;
+    if (typeof window !== 'undefined') {
+      try {
+        storedIncognito = localStorage.getItem(INCOGNITO_STORAGE_KEY) === 'true';
+      } catch {
+        // Ignore storage errors
+      }
+    }
 
     // If incognito mode is enabled but selected model is not a NEAR model,
     // we need to fix the state (this happens due to SSR hydration mismatch)
     if (storedIncognito && !isNearIncognitoModel(state.selectedModel)) {
-      // Save current model as previous (if it's not already a NEAR model)
-      const previousModel = state.selectedModel;
+      // Read the actual previous model from localStorage (not the SSR default)
+      const storedPreviousModel = getPreviousModel();
+      // If no stored previous model, use current SSR model as fallback
+      const previousModel = storedPreviousModel || state.selectedModel;
       set({
         _hasHydrated: true,
         isIncognitoMode: true,
@@ -153,8 +160,8 @@ export const useChatUIStore = create<ChatUIState>((set, get) => ({
         selectedModel: INCOGNITO_DEFAULT_MODEL
       });
 
-      // Also persist the previous model to localStorage
-      if (previousModel && typeof window !== 'undefined') {
+      // Only persist to localStorage if we didn't have a stored value
+      if (!storedPreviousModel && previousModel && typeof window !== 'undefined') {
         try {
           localStorage.setItem(PREVIOUS_MODEL_STORAGE_KEY, JSON.stringify(previousModel));
         } catch {

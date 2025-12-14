@@ -387,5 +387,42 @@ describe('chat-ui-store', () => {
       expect(state.isIncognitoMode).toBe(false);
       expect(state._hasHydrated).toBe(true);
     });
+
+    it('should read previousModel from localStorage instead of using SSR default', () => {
+      // Simulate incognito was enabled with a specific model stored
+      localStorageMock.setItem('gatewayz_incognito_mode', 'true');
+      localStorageMock.setItem('gatewayz_previous_model', JSON.stringify({
+        value: 'openai/gpt-4',
+        label: 'GPT-4',
+        category: 'General',
+        sourceGateway: 'openrouter',
+        developer: 'OpenAI',
+        modalities: ['Text']
+      }));
+
+      // SSR default model (would be different from stored previous model)
+      useChatUIStore.setState({
+        isIncognitoMode: false,
+        selectedModel: {
+          value: 'deepseek/deepseek-r1',
+          label: 'DeepSeek R1',
+          category: 'Reasoning',
+          sourceGateway: 'openrouter',
+          developer: 'DeepSeek',
+          modalities: ['Text']
+        },
+        previousModel: null,
+        _hasHydrated: false
+      });
+
+      useChatUIStore.getState().syncIncognitoState();
+
+      // Should restore the stored GPT-4 as previousModel, not the SSR default DeepSeek R1
+      const state = useChatUIStore.getState();
+      expect(state.isIncognitoMode).toBe(true);
+      expect(state.selectedModel?.value).toBe('near/zai-org/GLM-4.6');
+      expect(state.previousModel?.value).toBe('openai/gpt-4');
+      expect(state._hasHydrated).toBe(true);
+    });
   });
 });
