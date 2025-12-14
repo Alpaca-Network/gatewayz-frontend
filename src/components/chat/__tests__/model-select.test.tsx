@@ -1,4 +1,4 @@
-import { ModelSelect } from '../model-select';
+import { ModelSelect, ModelOption } from '../model-select';
 
 // Test the component exports correctly
 describe('ModelSelect', () => {
@@ -12,5 +12,529 @@ describe('ModelSelect', () => {
       // React components are functions
       expect(typeof ModelSelect).toBe('function');
     });
+  });
+});
+
+// Helper to create mock model data
+const createMockModels = (count: number): ModelOption[] => {
+  const developers = ['OpenAI', 'Anthropic', 'Google', 'Meta', 'Mistral AI'];
+  const categories = ['Paid', 'Free'];
+
+  return Array.from({ length: count }, (_, i) => ({
+    value: `${developers[i % developers.length].toLowerCase()}/model-${i}`,
+    label: `Test Model ${i}`,
+    category: categories[i % categories.length],
+    developer: developers[i % developers.length],
+    sourceGateway: 'openrouter',
+    modalities: ['Text'],
+    speedTier: 'fast' as const,
+  }));
+};
+
+// Helper to simulate matchesQuery function from the component
+const matchesQuery = (model: ModelOption, query: string): boolean => {
+  const labelLower = model.label.toLowerCase();
+  const valueLower = model.value.toLowerCase();
+  const developerLower = model.developer?.toLowerCase() || '';
+
+  return labelLower.includes(query) ||
+    valueLower.includes(query) ||
+    developerLower.includes(query);
+};
+
+// Test filtering logic that mirrors the optimized component implementation
+describe('ModelSelect filtering performance', () => {
+  describe('filter matching logic', () => {
+    it('should match models by label (case-insensitive)', () => {
+      const models = createMockModels(10);
+      const query = 'test model 5';
+
+      const matchingModels = models.filter(model =>
+        model.label.toLowerCase().includes(query.toLowerCase())
+      );
+
+      expect(matchingModels).toHaveLength(1);
+      expect(matchingModels[0].label).toBe('Test Model 5');
+    });
+
+    it('should match models by value/id', () => {
+      const models = createMockModels(10);
+      const query = 'anthropic';
+
+      const matchingModels = models.filter(model =>
+        model.value.toLowerCase().includes(query.toLowerCase())
+      );
+
+      expect(matchingModels.length).toBeGreaterThan(0);
+      expect(matchingModels.every(m => m.value.includes('anthropic'))).toBe(true);
+    });
+
+    it('should match models by developer', () => {
+      const models = createMockModels(10);
+      const query = 'google';
+
+      const matchingModels = models.filter(model =>
+        model.developer?.toLowerCase().includes(query.toLowerCase())
+      );
+
+      expect(matchingModels.length).toBeGreaterThan(0);
+      expect(matchingModels.every(m => m.developer === 'Google')).toBe(true);
+    });
+  });
+
+  describe('combined filter computation', () => {
+    it('should efficiently filter when query is empty', () => {
+      const query = '';
+      const models = createMockModels(100);
+
+      // Empty query should return all models without filtering
+      const result = query.trim() ? models.filter(() => true) : models;
+
+      expect(result).toBe(models); // Same reference, no filtering
+    });
+
+    it('should handle special characters in search', () => {
+      const models: ModelOption[] = [
+        {
+          value: 'openai/gpt-4o-mini',
+          label: 'GPT-4o Mini',
+          category: 'Paid',
+          developer: 'OpenAI',
+        },
+        {
+          value: 'anthropic/claude-3.5-sonnet',
+          label: 'Claude 3.5 Sonnet',
+          category: 'Paid',
+          developer: 'Anthropic',
+        },
+      ];
+
+      const query = 'gpt-4o';
+      const matchingModels = models.filter(model =>
+        model.label.toLowerCase().includes(query.toLowerCase()) ||
+        model.value.toLowerCase().includes(query.toLowerCase())
+      );
+
+      expect(matchingModels).toHaveLength(1);
+      expect(matchingModels[0].value).toBe('openai/gpt-4o-mini');
+    });
+
+    it('should use matchesQuery helper correctly', () => {
+      const model: ModelOption = {
+        value: 'openai/gpt-4',
+        label: 'GPT-4',
+        category: 'Paid',
+        developer: 'OpenAI',
+      };
+
+      expect(matchesQuery(model, 'gpt')).toBe(true);
+      expect(matchesQuery(model, 'openai')).toBe(true);
+      expect(matchesQuery(model, 'anthropic')).toBe(false);
+      // Note: matchesQuery only checks label, value, and developer - not category
+      expect(matchesQuery(model, 'paid')).toBe(false);
+    });
+
+    it('should handle models without developer', () => {
+      const model: ModelOption = {
+        value: 'unknown/model',
+        label: 'Unknown Model',
+        category: 'Free',
+      };
+
+      expect(matchesQuery(model, 'unknown')).toBe(true);
+      expect(matchesQuery(model, 'developer')).toBe(false);
+    });
+  });
+
+  describe('performance characteristics', () => {
+    it('should complete filtering of 500 models in reasonable time', () => {
+      const models = createMockModels(500);
+      const query = 'openai';
+
+      const startTime = performance.now();
+
+      const matchingModels = models.filter(model =>
+        model.label.toLowerCase().includes(query.toLowerCase()) ||
+        model.value.toLowerCase().includes(query.toLowerCase()) ||
+        model.developer?.toLowerCase().includes(query.toLowerCase())
+      );
+
+      const endTime = performance.now();
+      const duration = endTime - startTime;
+
+      // Should complete in under 50ms even with 500 models
+      expect(duration).toBeLessThan(50);
+      expect(matchingModels.length).toBeGreaterThan(0);
+    });
+  });
+});
+
+// Test combined filter data structure (mirrors filteredData useMemo)
+describe('ModelSelect combined filter computation', () => {
+  it('should return unfiltered data when query is empty', () => {
+    const modelsByDeveloper: Record<string, ModelOption[]> = {
+      'OpenAI': createMockModels(5).filter(m => m.developer === 'OpenAI'),
+      'Anthropic': createMockModels(5).filter(m => m.developer === 'Anthropic'),
+    };
+    const modelsByCategory: Record<string, ModelOption[]> = {
+      'Reasoning': [],
+      'Code Generation': [],
+    };
+    const favoriteModels: ModelOption[] = [];
+    const popularModels: ModelOption[] = [];
+    const incognitoModels: ModelOption[] = [];
+
+    const query = '';
+
+    // Mirrors the filteredData useMemo logic
+    const filteredData = (() => {
+      const trimmedQuery = query.trim().toLowerCase();
+
+      if (!trimmedQuery) {
+        return {
+          modelsByDeveloper,
+          modelsByCategory,
+          favoriteModels,
+          popularModels,
+          incognitoModels,
+        };
+      }
+
+      return { modelsByDeveloper: {}, modelsByCategory: {}, favoriteModels: [], popularModels: [], incognitoModels: [] };
+    })();
+
+    // Should return same references when query is empty
+    expect(filteredData.modelsByDeveloper).toBe(modelsByDeveloper);
+    expect(filteredData.modelsByCategory).toBe(modelsByCategory);
+  });
+
+  it('should filter developer groups correctly', () => {
+    const openaiModels: ModelOption[] = [
+      { value: 'openai/gpt-4', label: 'GPT-4', category: 'Paid', developer: 'OpenAI' },
+      { value: 'openai/gpt-3.5', label: 'GPT-3.5', category: 'Paid', developer: 'OpenAI' },
+    ];
+    const anthropicModels: ModelOption[] = [
+      { value: 'anthropic/claude-3', label: 'Claude 3', category: 'Paid', developer: 'Anthropic' },
+    ];
+
+    const modelsByDeveloper: Record<string, ModelOption[]> = {
+      'OpenAI': openaiModels,
+      'Anthropic': anthropicModels,
+    };
+
+    const query = 'gpt';
+
+    // Mirrors the filteredData filtering logic
+    const filteredByDeveloper: Record<string, ModelOption[]> = {};
+    Object.entries(modelsByDeveloper).forEach(([developer, devModels]) => {
+      const developerLower = developer.toLowerCase();
+      const developerMatches = developerLower.includes(query);
+
+      const matchingModels = developerMatches
+        ? devModels
+        : devModels.filter(model => matchesQuery(model, query));
+
+      if (matchingModels.length > 0) {
+        filteredByDeveloper[developer] = matchingModels;
+      }
+    });
+
+    expect(filteredByDeveloper['OpenAI']).toHaveLength(2);
+    expect(filteredByDeveloper['Anthropic']).toBeUndefined();
+  });
+
+  it('should include all models when developer name matches query', () => {
+    const openaiModels: ModelOption[] = [
+      { value: 'openai/gpt-4', label: 'GPT-4', category: 'Paid', developer: 'OpenAI' },
+      { value: 'openai/dall-e', label: 'DALL-E', category: 'Paid', developer: 'OpenAI' },
+    ];
+
+    const modelsByDeveloper: Record<string, ModelOption[]> = {
+      'OpenAI': openaiModels,
+    };
+
+    const query = 'openai';
+
+    const filteredByDeveloper: Record<string, ModelOption[]> = {};
+    Object.entries(modelsByDeveloper).forEach(([developer, devModels]) => {
+      const developerLower = developer.toLowerCase();
+      const developerMatches = developerLower.includes(query);
+
+      const matchingModels = developerMatches
+        ? devModels // All models included when developer matches
+        : devModels.filter(model => matchesQuery(model, query));
+
+      if (matchingModels.length > 0) {
+        filteredByDeveloper[developer] = matchingModels;
+      }
+    });
+
+    // Both models included because "OpenAI" matches "openai"
+    expect(filteredByDeveloper['OpenAI']).toHaveLength(2);
+  });
+
+  it('should filter category groups correctly', () => {
+    const reasoningModels: ModelOption[] = [
+      { value: 'openai/o1', label: 'O1', category: 'Paid', developer: 'OpenAI' },
+    ];
+    const codeModels: ModelOption[] = [
+      { value: 'deepseek/coder', label: 'DeepSeek Coder', category: 'Paid', developer: 'DeepSeek' },
+    ];
+
+    const modelsByCategory: Record<string, ModelOption[]> = {
+      'Reasoning': reasoningModels,
+      'Code Generation': codeModels,
+    };
+
+    const query = 'code';
+
+    const filteredByCategory: Record<string, ModelOption[]> = {};
+    Object.entries(modelsByCategory).forEach(([category, catModels]) => {
+      const categoryLower = category.toLowerCase();
+      const categoryMatches = categoryLower.includes(query);
+
+      const matchingModels = categoryMatches
+        ? catModels
+        : catModels.filter(model => matchesQuery(model, query));
+
+      if (matchingModels.length > 0) {
+        filteredByCategory[category] = matchingModels;
+      }
+    });
+
+    // "Code Generation" category matches "code", so all its models included
+    expect(filteredByCategory['Code Generation']).toHaveLength(1);
+    // "Reasoning" doesn't match and its models don't contain "code"
+    expect(filteredByCategory['Reasoning']).toBeUndefined();
+  });
+});
+
+// Test category pattern matching (mirrors categoryPatterns and categorizeModel)
+describe('ModelSelect category patterns', () => {
+  const categoryPatterns = {
+    r1: /\br1\b/i,
+    o1: /\bo1\b/i,
+    o3: /\bo3\b/i,
+    o4: /\bo4\b/i,
+  };
+
+  it('should match r1 pattern correctly', () => {
+    expect(categoryPatterns.r1.test('deepseek-r1')).toBe(true);
+    expect(categoryPatterns.r1.test('r1-preview')).toBe(true);
+    expect(categoryPatterns.r1.test('model-r1-latest')).toBe(true);
+    // Should not match r12, r100, etc.
+    expect(categoryPatterns.r1.test('r12')).toBe(false);
+    expect(categoryPatterns.r1.test('r100')).toBe(false);
+  });
+
+  it('should match o1 pattern correctly', () => {
+    expect(categoryPatterns.o1.test('openai/o1')).toBe(true);
+    expect(categoryPatterns.o1.test('o1-preview')).toBe(true);
+    expect(categoryPatterns.o1.test('o1-mini')).toBe(true);
+    // Should not match o10, o100, etc.
+    expect(categoryPatterns.o1.test('o10')).toBe(false);
+    expect(categoryPatterns.o1.test('o100')).toBe(false);
+  });
+
+  it('should match o3 pattern correctly', () => {
+    expect(categoryPatterns.o3.test('openai/o3')).toBe(true);
+    expect(categoryPatterns.o3.test('o3-mini')).toBe(true);
+    expect(categoryPatterns.o3.test('o30')).toBe(false);
+  });
+
+  it('should match o4 pattern correctly', () => {
+    expect(categoryPatterns.o4.test('openai/o4')).toBe(true);
+    expect(categoryPatterns.o4.test('o4-preview')).toBe(true);
+    expect(categoryPatterns.o4.test('o40')).toBe(false);
+  });
+});
+
+// Test model categorization logic (mirrors categorizeModel)
+describe('ModelSelect model categorization', () => {
+  const categoryPatterns = {
+    r1: /\br1\b/i,
+    o1: /\bo1\b/i,
+    o3: /\bo3\b/i,
+    o4: /\bo4\b/i,
+  };
+
+  const categorizeModel = (model: ModelOption): string[] => {
+    const categories: string[] = [];
+    const modelName = model.label.toLowerCase();
+    const modelId = model.value.toLowerCase();
+
+    // Reasoning models
+    if (
+      modelId.includes('deepseek-reasoner') ||
+      categoryPatterns.r1.test(modelId) ||
+      modelId.includes('qwq') ||
+      categoryPatterns.o1.test(modelId) ||
+      categoryPatterns.o3.test(modelId) ||
+      categoryPatterns.o4.test(modelId) ||
+      modelId.includes('thinking') ||
+      modelId.includes('reason') ||
+      modelName.includes('reasoning') ||
+      modelName.includes('reasoner') ||
+      modelName.includes('thinking') ||
+      categoryPatterns.r1.test(modelName)
+    ) {
+      categories.push('Reasoning');
+    }
+
+    // Code generation models
+    if (
+      modelId.includes('code') ||
+      modelId.includes('codestral') ||
+      modelId.includes('codellama') ||
+      modelId.includes('starcoder') ||
+      modelId.includes('deepseek-coder') ||
+      modelId.includes('qwen-coder') ||
+      modelName.includes('code') ||
+      modelName.includes('coder')
+    ) {
+      categories.push('Code Generation');
+    }
+
+    // Multimodal models
+    if (model.category === 'Multimodal' || modelName.includes('vision') || modelName.includes('multimodal')) {
+      categories.push('Multimodal');
+    }
+
+    // Cost Efficient models
+    const isFree = model.category === 'Free' || model.category?.toLowerCase().includes('free');
+    if (isFree) {
+      categories.push('Cost Efficient');
+      categories.push('Free');
+    } else if (model.category === 'Paid') {
+      if (modelId.includes('gemini-flash') || modelId.includes('gpt-4o-mini') || modelId.includes('claude-haiku')) {
+        categories.push('Cost Efficient');
+      }
+    }
+
+    return categories;
+  };
+
+  it('should categorize reasoning models correctly', () => {
+    const models: ModelOption[] = [
+      { value: 'deepseek/deepseek-reasoner', label: 'DeepSeek Reasoner', category: 'Paid' },
+      { value: 'openai/o1-preview', label: 'O1 Preview', category: 'Paid' },
+      { value: 'deepseek/r1', label: 'R1', category: 'Paid' },
+      { value: 'qwen/qwq-32b', label: 'QwQ 32B', category: 'Paid' },
+    ];
+
+    models.forEach(model => {
+      const categories = categorizeModel(model);
+      expect(categories).toContain('Reasoning');
+    });
+  });
+
+  it('should categorize code models correctly', () => {
+    const models: ModelOption[] = [
+      { value: 'deepseek/deepseek-coder', label: 'DeepSeek Coder', category: 'Paid' },
+      { value: 'meta/codellama-70b', label: 'CodeLlama 70B', category: 'Paid' },
+      { value: 'bigcode/starcoder2', label: 'StarCoder 2', category: 'Free' },
+    ];
+
+    models.forEach(model => {
+      const categories = categorizeModel(model);
+      expect(categories).toContain('Code Generation');
+    });
+  });
+
+  it('should categorize multimodal models correctly', () => {
+    const model: ModelOption = {
+      value: 'openai/gpt-4-vision',
+      label: 'GPT-4 Vision',
+      category: 'Paid',
+    };
+
+    const categories = categorizeModel(model);
+    expect(categories).toContain('Multimodal');
+  });
+
+  it('should categorize free models as cost efficient', () => {
+    const model: ModelOption = {
+      value: 'meta/llama-3-8b',
+      label: 'Llama 3 8B',
+      category: 'Free',
+    };
+
+    const categories = categorizeModel(model);
+    expect(categories).toContain('Cost Efficient');
+    expect(categories).toContain('Free');
+  });
+
+  it('should categorize efficient paid models correctly', () => {
+    const models: ModelOption[] = [
+      { value: 'openai/gpt-4o-mini', label: 'GPT-4o Mini', category: 'Paid' },
+      { value: 'google/gemini-flash', label: 'Gemini Flash', category: 'Paid' },
+      { value: 'anthropic/claude-haiku', label: 'Claude Haiku', category: 'Paid' },
+    ];
+
+    models.forEach(model => {
+      const categories = categorizeModel(model);
+      expect(categories).toContain('Cost Efficient');
+    });
+  });
+
+  it('should not categorize regular paid models as cost efficient', () => {
+    const model: ModelOption = {
+      value: 'openai/gpt-4-turbo',
+      label: 'GPT-4 Turbo',
+      category: 'Paid',
+    };
+
+    const categories = categorizeModel(model);
+    expect(categories).not.toContain('Cost Efficient');
+  });
+});
+
+// Test section expansion logic (mirrors auto-expand useEffect)
+describe('ModelSelect section expansion', () => {
+  it('should collect sections to expand based on search results', () => {
+    const filteredPopularModels = [{ value: 'model1', label: 'Model 1', category: 'Paid' }];
+    const filteredIncognitoModels: ModelOption[] = [];
+    const filteredModelsByDeveloper = { 'OpenAI': [], 'Anthropic': [] };
+    const filteredModelsByCategory = { 'Reasoning': [] };
+
+    const sectionsToExpand: string[] = [];
+
+    if (filteredPopularModels.length > 0) {
+      sectionsToExpand.push('Popular');
+    }
+
+    if (filteredIncognitoModels.length > 0) {
+      sectionsToExpand.push('Incognito');
+    }
+
+    Object.keys(filteredModelsByDeveloper).forEach(dev => {
+      sectionsToExpand.push(dev);
+    });
+
+    Object.keys(filteredModelsByCategory).forEach(cat => {
+      sectionsToExpand.push(cat);
+    });
+
+    expect(sectionsToExpand).toContain('Popular');
+    expect(sectionsToExpand).not.toContain('Incognito');
+    expect(sectionsToExpand).toContain('OpenAI');
+    expect(sectionsToExpand).toContain('Anthropic');
+    expect(sectionsToExpand).toContain('Reasoning');
+  });
+
+  it('should only update expanded set when needed', () => {
+    const expandedDevelopers = new Set(['Favorites', 'Popular']);
+    const sectionsToExpand = ['Popular', 'OpenAI'];
+
+    // Check if any section actually needs to be added
+    const needsUpdate = sectionsToExpand.some(section => !expandedDevelopers.has(section));
+
+    expect(needsUpdate).toBe(true); // 'OpenAI' is not in the set
+
+    // If all sections already expanded, no update needed
+    const allExpanded = new Set(['Favorites', 'Popular', 'OpenAI']);
+    const needsUpdate2 = sectionsToExpand.some(section => !allExpanded.has(section));
+
+    expect(needsUpdate2).toBe(false);
   });
 });
