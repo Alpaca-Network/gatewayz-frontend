@@ -83,7 +83,7 @@ Analysis of Sentry errors from the last 24 hours for the `javascript-nextjs` pro
 - **Status:** Rate-limited in PR #598, but still occurring
 - **Location:** `/settings/keys`
 - **First Seen:** 2025-11-25
-- **Last Seen:** 2025-11-29 (RECENT - within last 24h)
+- **Last Seen:** 2025-11-29 (5 days ago)
 
 **Impact:** Medium - affects 6 users, prevents authentication
 
@@ -143,7 +143,7 @@ Analysis of Sentry errors from the last 24 hours for the `javascript-nextjs` pro
 - **Status:** Performance monitoring issue
 - **Location:** `/`
 - **First Seen:** 2025-11-25
-- **Last Seen:** 2025-12-12 (RECENT - within last 24h)
+- **Last Seen:** 2025-12-12 (2 days ago)
 
 **Impact:** Low severity but affects performance - 9 users experiencing N+1 queries
 
@@ -222,20 +222,20 @@ Analysis of Sentry errors from the last 24 hours for the `javascript-nextjs` pro
 
 ### ⚠️ Issues Requiring Action
 
-#### 🔴 Priority 1: Authentication Timeout (Recent Activity)
+#### 🟡 Priority 1: Authentication Timeout
 - **Issue:** JAVASCRIPT-NEXTJS-X
 - **Impact:** 6 users unable to authenticate
-- **Last Seen:** 2025-11-29 (within 24h)
+- **Last Seen:** 2025-11-29 (5 days ago)
 - **Action Required:**
   1. Investigate Privy authentication flow delays
   2. Review timeout configuration in `gatewayz-auth-context.tsx`
   3. Add better error recovery/retry logic
   4. Consider increasing timeout threshold
 
-#### 🟡 Priority 2: N+1 API Call Performance (Recent Activity)
+#### 🟡 Priority 2: N+1 API Call Performance
 - **Issue:** JAVASCRIPT-NEXTJS-12
 - **Impact:** 9 users experiencing performance degradation
-- **Last Seen:** 2025-12-12 (within 24h)
+- **Last Seen:** 2025-12-12 (2 days ago)
 - **Action Required:**
   1. Identify components making sequential API calls
   2. Implement request batching/deduplication
