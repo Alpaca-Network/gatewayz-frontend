@@ -140,10 +140,17 @@ export function ChatInput() {
   const { activeSessionId, setActiveSessionId, selectedModel, inputValue, setInputValue, setMessageStartTime } = useChatUIStore();
   const { data: messages = [], isLoading: isHistoryLoading } = useSessionMessages(activeSessionId);
   const createSession = useCreateSession();
-  const { isStreaming, streamMessage } = useChatStream();
+  const { isStreaming, streamMessage, stopStream } = useChatStream();
   const { toast } = useToast();
   const { isAuthenticated } = useAuthStore();
   const { login } = usePrivy();
+
+  // Handle stop button click
+  const handleStop = useCallback(() => {
+    stopStream();
+    // Clear the timer when stopped
+    setMessageStartTime(null);
+  }, [stopStream, setMessageStartTime]);
 
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
@@ -715,23 +722,42 @@ export function ChatInput() {
                 enterKeyHint="send"
             />
 
-            <Button
-                type="button"
-                size="icon"
-                onPointerDown={(e) => {
-                    // Prevent focus loss on mobile which can cause state sync issues
-                    e.preventDefault();
-                }}
-                onClick={(e) => {
-                    // Prevent any default behavior that might interfere
-                    e.preventDefault();
-                    handleSend();
-                }}
-                disabled={isStreaming}
-                className={cn("bg-primary", isStreaming && "opacity-50")}
-            >
-                {isStreaming ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            </Button>
+            {isStreaming ? (
+                <Button
+                    type="button"
+                    size="icon"
+                    variant="destructive"
+                    onPointerDown={(e) => {
+                        // Prevent focus loss on mobile which can cause state sync issues
+                        e.preventDefault();
+                    }}
+                    onClick={(e) => {
+                        e.preventDefault();
+                        handleStop();
+                    }}
+                    title="Stop generating"
+                >
+                    <Square className="h-4 w-4" />
+                </Button>
+            ) : (
+                <Button
+                    type="button"
+                    size="icon"
+                    onPointerDown={(e) => {
+                        // Prevent focus loss on mobile which can cause state sync issues
+                        e.preventDefault();
+                    }}
+                    onClick={(e) => {
+                        // Prevent any default behavior that might interfere
+                        e.preventDefault();
+                        handleSend();
+                    }}
+                    disabled={isInputEmpty && !selectedImage && !selectedVideo && !selectedAudio && !selectedDocument}
+                    className="bg-primary"
+                >
+                    <Send className="h-4 w-4" />
+                </Button>
+            )}
         </div>
       </div>
     </div>
