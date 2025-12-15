@@ -119,11 +119,15 @@ export function ChatLayout() {
        if (messageParam && !urlMessageProcessedRef.current) {
            urlMessageProcessedRef.current = true;
 
-           // Disable incognito mode when using chat prompts from homepage
-           // This ensures the user's selected model from the homepage is used
-           if (isIncognitoMode) {
-               setIncognitoMode(false);
-           }
+           // Always disable incognito mode when using chat prompts from homepage/start pages
+           // This ensures the user's selected model is used instead of the incognito model.
+           // We call setIncognitoMode(false) unconditionally because:
+           // 1. If incognito is already off, this is a no-op (state doesn't change)
+           // 2. If incognito is on (or will be set on by syncIncognitoState due to SSR hydration),
+           //    this ensures it gets disabled
+           // This avoids a race condition where syncIncognitoState might enable incognito
+           // after this effect has already checked the stale isIncognitoMode value.
+           setIncognitoMode(false);
 
            // Set model from URL if provided
            if (modelParam) {
@@ -191,7 +195,7 @@ export function ChatLayout() {
                pendingTimeoutRef.current = null;
            }
        };
-   }, [searchParams, setInputValue, setSelectedModel, isIncognitoMode, setIncognitoMode]);
+   }, [searchParams, setInputValue, setSelectedModel, setIncognitoMode]);
 
    // Clear pending prompt once we have real messages OR when session changes
    useEffect(() => {

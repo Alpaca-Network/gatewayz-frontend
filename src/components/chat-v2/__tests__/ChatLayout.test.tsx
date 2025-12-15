@@ -460,3 +460,5 @@ describe('Mobile new chat button', () => {
 // 4. Race condition: ChatInput.test.tsx tests the fresh model from store.getState()
 // 5. Retry fix: check __chatInputSend availability BEFORE modifying cache
 // 6. Retry fix: remove both user and assistant messages to prevent duplicates
+// 7. Incognito fix: setIncognitoMode(false) is called unconditionally when URL message params
+//    are present to avoid race condition with syncIncognitoState SSR hydration
