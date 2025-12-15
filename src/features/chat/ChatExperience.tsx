@@ -211,15 +211,23 @@ export function ChatExperience() {
                 </CardContent>
               </Card>
             ) : (
-              activeMessages.map((msg) => (
-                <ChatMessage
-                  key={msg.id}
-                  role={msg.role}
-                  content={msg.content}
-                  isStreaming={msg.isStreaming}
-                  model={msg.model}
-                />
-              ))
+              activeMessages.map((msg, idx) => {
+                const isLastAssistant = msg.role === 'assistant' && idx === activeMessages.length - 1;
+                return (
+                  <ChatMessage
+                    key={msg.id}
+                    role={msg.role}
+                    content={msg.content}
+                    isStreaming={msg.isStreaming}
+                    model={msg.model}
+                    onCopy={() => navigator.clipboard.writeText(typeof msg.content === 'string' ? msg.content : '')}
+                    onLike={msg.role === 'assistant' ? () => console.log('Liked message:', msg.id) : undefined}
+                    onDislike={msg.role === 'assistant' ? () => console.log('Disliked message:', msg.id) : undefined}
+                    onShare={msg.role === 'assistant' ? () => navigator.clipboard.writeText(typeof msg.content === 'string' ? msg.content : '') : undefined}
+                    onRegenerate={isLastAssistant && !msg.isStreaming ? () => console.log('Regenerate:', msg.id) : undefined}
+                  />
+                );
+              })
             )}
             {sending && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
