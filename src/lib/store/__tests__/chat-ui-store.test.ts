@@ -230,6 +230,69 @@ describe('chat-ui-store', () => {
       expect(state.isIncognitoMode).toBe(true);
       expect(state.selectedModel?.value).toBe('near/zai-org/GLM-4.6');
     });
+
+    it('should be idempotent - calling setIncognitoMode(false) when already off should not change model', () => {
+      // Set a custom model
+      const customModel = {
+        value: 'openai/gpt-4',
+        label: 'GPT-4',
+        category: 'General',
+        sourceGateway: 'openrouter',
+        developer: 'OpenAI',
+        modalities: ['Text']
+      };
+      useChatUIStore.getState().setSelectedModel(customModel);
+
+      // Simulate a previous incognito session by setting previousModel directly
+      // (this happens when user was in incognito mode in a previous session)
+      useChatUIStore.setState({ previousModel: {
+        value: 'anthropic/claude-3',
+        label: 'Claude 3',
+        category: 'General',
+        sourceGateway: 'openrouter',
+        developer: 'Anthropic',
+        modalities: ['Text']
+      }});
+
+      // Verify incognito is off and we have our custom model
+      expect(useChatUIStore.getState().isIncognitoMode).toBe(false);
+      expect(useChatUIStore.getState().selectedModel?.value).toBe('openai/gpt-4');
+
+      // Call setIncognitoMode(false) - this should be a no-op
+      useChatUIStore.getState().setIncognitoMode(false);
+
+      // Model should NOT have changed to previousModel
+      expect(useChatUIStore.getState().selectedModel?.value).toBe('openai/gpt-4');
+      expect(useChatUIStore.getState().isIncognitoMode).toBe(false);
+    });
+
+    it('should be idempotent - calling setIncognitoMode(true) when already on should not change model', () => {
+      // Enable incognito mode
+      useChatUIStore.getState().setIncognitoMode(true);
+      expect(useChatUIStore.getState().isIncognitoMode).toBe(true);
+
+      // Store the previousModel that was saved
+      const savedPreviousModel = useChatUIStore.getState().previousModel;
+
+      // Manually change selected model while in incognito (simulating user selecting different incognito model)
+      const differentIncognitoModel = {
+        value: 'near/deepseek-ai/DeepSeek-V3.1',
+        label: 'DeepSeek V3.1',
+        category: 'General',
+        sourceGateway: 'near',
+        developer: 'DeepSeek',
+        modalities: ['Text']
+      };
+      useChatUIStore.getState().setSelectedModel(differentIncognitoModel);
+
+      // Call setIncognitoMode(true) again - should be a no-op
+      useChatUIStore.getState().setIncognitoMode(true);
+
+      // Should still have the different incognito model, not reset to default
+      expect(useChatUIStore.getState().selectedModel?.value).toBe('near/deepseek-ai/DeepSeek-V3.1');
+      // previousModel should not have been overwritten
+      expect(useChatUIStore.getState().previousModel).toEqual(savedPreviousModel);
+    });
   });
 
   describe('resetChatState', () => {
