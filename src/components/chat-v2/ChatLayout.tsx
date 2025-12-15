@@ -13,6 +13,7 @@ import { ModelSelect } from "@/components/chat/model-select";
 import { useChatUIStore } from "@/lib/store/chat-ui-store";
 import { useAuthSync } from "@/lib/hooks/use-auth-sync";
 import { useAuthStore } from "@/lib/store/auth-store";
+import { getApiKey } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { useSessionMessages } from "@/lib/hooks/use-chat-queries";
 import { GuestChatCounter } from "@/components/chat/guest-chat-counter";
@@ -323,6 +324,155 @@ export function ChatLayout() {
        (window as any).__chatInputSend();
    }, [activeSessionId, activeMessages, queryClient, setInputValue]);
 
+   // Handle regenerate - re-send the last user message to get a new response
+   const handleRegenerate = useCallback(() => {
+       if (!activeSessionId || activeMessages.length < 2) return;
+
+       // Find the last user message
+       const lastAssistantIndex = activeMessages.length - 1;
+       const lastUserIndex = lastAssistantIndex - 1;
+       const lastUserMessage = activeMessages[lastUserIndex];
+       const lastAssistantMessage = activeMessages[lastAssistantIndex];
+
+       if (lastUserMessage?.role !== 'user' || lastAssistantMessage?.role !== 'assistant') {
+           console.warn('[ChatLayout] Unexpected message structure for regenerate');
+           return;
+       }
+
+       // Don't regenerate while streaming
+       if (lastAssistantMessage.isStreaming) {
+           console.warn('[ChatLayout] Cannot regenerate while message is still streaming');
+           return;
+       }
+
+       // Extract text content
+       let userContent = '';
+       if (typeof lastUserMessage.content === 'string') {
+           userContent = lastUserMessage.content;
+       } else if (Array.isArray(lastUserMessage.content)) {
+           userContent = lastUserMessage.content
+               .filter((c: any) => c.type === 'text')
+               .map((c: any) => c.text)
+               .join('');
+       }
+
+       if (!userContent.trim()) return;
+
+       // Check if __chatInputSend is available
+       if (typeof window === 'undefined' || !(window as any).__chatInputSend) {
+           console.warn('[ChatLayout] __chatInputSend not available, cannot regenerate');
+           return;
+       }
+
+       // Remove BOTH the user message AND the assistant message from cache
+       // This prevents duplicate user messages when handleSend adds the message again
+       queryClient.setQueryData(['chat-messages', activeSessionId], (old: any[] | undefined) => {
+           if (!old || old.length < 2) return old;
+           return old.slice(0, -2);
+       });
+
+       // Set the input and re-send
+       setInputValue(userContent);
+       (window as any).__chatInputSend();
+   }, [activeSessionId, activeMessages, queryClient, setInputValue]);
+
+   // Handle feedback - like a message
+   const handleLike = useCallback(async (messageId: number) => {
+       const apiKey = getApiKey();
+       const message = activeMessages.find(m => m.id === messageId);
+
+       try {
+           await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai'}/v1/chat/feedback`, {
+               method: 'POST',
+               headers: {
+                   ...(apiKey && { 'Authorization': `Bearer ${apiKey}` }),
+                   'Content-Type': 'application/json'
+               },
+               body: JSON.stringify({
+                   feedback_type: 'thumbs_up',
+                   session_id: activeSessionId,
+                   message_id: messageId,
+                   model: message?.model,
+                   rating: 5,
+                   metadata: {
+                       response_content: typeof message?.content === 'string' ? message.content : undefined
+                   }
+               })
+           });
+           toast({
+               title: "Feedback received",
+               description: "Thanks for the positive feedback!",
+           });
+       } catch (error) {
+           console.error('[ChatLayout] Failed to submit feedback:', error);
+           toast({
+               title: "Feedback received",
+               description: "Thanks for the positive feedback!",
+           });
+       }
+   }, [activeSessionId, activeMessages, toast]);
+
+   // Handle feedback - dislike a message
+   const handleDislike = useCallback(async (messageId: number) => {
+       const apiKey = getApiKey();
+       const message = activeMessages.find(m => m.id === messageId);
+
+       try {
+           await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai'}/v1/chat/feedback`, {
+               method: 'POST',
+               headers: {
+                   ...(apiKey && { 'Authorization': `Bearer ${apiKey}` }),
+                   'Content-Type': 'application/json'
+               },
+               body: JSON.stringify({
+                   feedback_type: 'thumbs_down',
+                   session_id: activeSessionId,
+                   message_id: messageId,
+                   model: message?.model,
+                   rating: 1,
+                   metadata: {
+                       response_content: typeof message?.content === 'string' ? message.content : undefined
+                   }
+               })
+           });
+           toast({
+               title: "Feedback received",
+               description: "Thanks for letting us know. We'll work to improve.",
+           });
+       } catch (error) {
+           console.error('[ChatLayout] Failed to submit feedback:', error);
+           toast({
+               title: "Feedback received",
+               description: "Thanks for letting us know. We'll work to improve.",
+           });
+       }
+   }, [activeSessionId, activeMessages, toast]);
+
+   // Handle share - copy message or share link
+   const handleShare = useCallback((messageId: number) => {
+       // Find the message and copy its content
+       const message = activeMessages.find(m => m.id === messageId);
+       if (!message) {
+           toast({
+               title: "Unable to share",
+               description: "Message not found.",
+               variant: "destructive",
+           });
+           return;
+       }
+       const content = typeof message.content === 'string'
+           ? message.content
+           : (message.content as any[])
+               .filter((c: any) => c.type === 'text')
+               .map((c: any) => c.text)
+               .join('');
+       navigator.clipboard.writeText(content);
+       toast({
+           title: "Copied to clipboard",
+           description: "Response has been copied to your clipboard.",
+       });
+   }, [activeMessages, toast]);
+
    // When logged out, always show welcome screen (ignore cached messages and activeSessionId)
    // When logged in, show welcome screen only if no active session or no messages after loading
    // ALSO hide welcome screen immediately when a prompt is clicked (pendingPrompt is set)
@@ -478,6 +628,10 @@ export function ChatLayout() {
                         isLoading={messagesLoading}
                         pendingPrompt={pendingPrompt}
                         onRetry={handleRetry}
+                        onRegenerate={handleRegenerate}
+                        onLike={handleLike}
+                        onDislike={handleDislike}
+                        onShare={handleShare}
                       />
                   )}
                </div>
