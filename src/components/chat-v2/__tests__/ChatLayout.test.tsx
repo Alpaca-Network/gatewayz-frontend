@@ -1017,4 +1017,220 @@ describe('handleShare with array content', () => {
       expect(clipboardWriteText).toHaveBeenCalledWith('First part. Second part.');
     });
   });
+
+  it('should filter out undefined text values in array content', async () => {
+    const arrayContentWithUndefined = [
+      { id: 1, role: 'user', content: 'Hello', isStreaming: false },
+      {
+        id: 2,
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'Valid text.' },
+          { type: 'text' }, // missing text property
+          { type: 'text', text: undefined }, // explicit undefined
+          { type: 'text', text: '' }, // empty string - should be filtered
+          { type: 'text', text: 'More text.' },
+        ],
+        isStreaming: false,
+      },
+    ];
+
+    jest.spyOn(require('@/lib/store/chat-ui-store'), 'useChatUIStore').mockReturnValue({
+      activeSessionId: 123,
+      setActiveSessionId: mockSetActiveSessionId,
+      selectedModel: { value: 'test-model', label: 'Test Model' },
+      setSelectedModel: mockSetSelectedModel,
+      inputValue: '',
+      setInputValue: mockSetInputValue,
+      mobileSidebarOpen: false,
+      setMobileSidebarOpen: mockSetMobileSidebarOpen,
+      isIncognitoMode: false,
+      setIncognitoMode: mockSetIncognitoMode,
+      toggleIncognitoMode: mockToggleIncognitoMode,
+      syncIncognitoState: jest.fn(),
+    });
+    jest.spyOn(require('@/lib/hooks/use-chat-queries'), 'useSessionMessages').mockReturnValue({
+      data: arrayContentWithUndefined,
+      isLoading: false,
+    });
+
+    render(<ChatLayout />);
+
+    expect(mockMessageListProps.onShare).toBeDefined();
+
+    mockMessageListProps.onShare(2);
+
+    await waitFor(() => {
+      // Should only contain valid text values, not "undefined" literals
+      expect(clipboardWriteText).toHaveBeenCalledWith('Valid text.More text.');
+    });
+  });
+
+  it('should show error toast when clipboard.writeText fails', async () => {
+    clipboardWriteText.mockRejectedValue(new Error('Clipboard access denied'));
+
+    const messages = [
+      { id: 1, role: 'user', content: 'Hello', isStreaming: false },
+      { id: 2, role: 'assistant', content: 'Response text', isStreaming: false },
+    ];
+
+    jest.spyOn(require('@/lib/store/chat-ui-store'), 'useChatUIStore').mockReturnValue({
+      activeSessionId: 123,
+      setActiveSessionId: mockSetActiveSessionId,
+      selectedModel: { value: 'test-model', label: 'Test Model' },
+      setSelectedModel: mockSetSelectedModel,
+      inputValue: '',
+      setInputValue: mockSetInputValue,
+      mobileSidebarOpen: false,
+      setMobileSidebarOpen: mockSetMobileSidebarOpen,
+      isIncognitoMode: false,
+      setIncognitoMode: mockSetIncognitoMode,
+      toggleIncognitoMode: mockToggleIncognitoMode,
+      syncIncognitoState: jest.fn(),
+    });
+    jest.spyOn(require('@/lib/hooks/use-chat-queries'), 'useSessionMessages').mockReturnValue({
+      data: messages,
+      isLoading: false,
+    });
+
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+    render(<ChatLayout />);
+
+    expect(mockMessageListProps.onShare).toBeDefined();
+
+    await mockMessageListProps.onShare(2);
+
+    await waitFor(() => {
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Copy failed',
+          description: 'Unable to copy to clipboard. Please try again.',
+          variant: 'destructive',
+        })
+      );
+    });
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      '[ChatLayout] Failed to copy to clipboard:',
+      expect.any(Error)
+    );
+
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('should show success toast only after clipboard.writeText resolves', async () => {
+    // Track the order of calls
+    const callOrder: string[] = [];
+
+    clipboardWriteText.mockImplementation(() => {
+      callOrder.push('clipboard');
+      return Promise.resolve();
+    });
+
+    mockToast.mockImplementation(() => {
+      callOrder.push('toast');
+    });
+
+    const messages = [
+      { id: 1, role: 'user', content: 'Hello', isStreaming: false },
+      { id: 2, role: 'assistant', content: 'Response text', isStreaming: false },
+    ];
+
+    jest.spyOn(require('@/lib/store/chat-ui-store'), 'useChatUIStore').mockReturnValue({
+      activeSessionId: 123,
+      setActiveSessionId: mockSetActiveSessionId,
+      selectedModel: { value: 'test-model', label: 'Test Model' },
+      setSelectedModel: mockSetSelectedModel,
+      inputValue: '',
+      setInputValue: mockSetInputValue,
+      mobileSidebarOpen: false,
+      setMobileSidebarOpen: mockSetMobileSidebarOpen,
+      isIncognitoMode: false,
+      setIncognitoMode: mockSetIncognitoMode,
+      toggleIncognitoMode: mockToggleIncognitoMode,
+      syncIncognitoState: jest.fn(),
+    });
+    jest.spyOn(require('@/lib/hooks/use-chat-queries'), 'useSessionMessages').mockReturnValue({
+      data: messages,
+      isLoading: false,
+    });
+
+    render(<ChatLayout />);
+
+    await mockMessageListProps.onShare(2);
+
+    await waitFor(() => {
+      expect(clipboardWriteText).toHaveBeenCalled();
+      expect(mockToast).toHaveBeenCalled();
+    });
+
+    // Verify clipboard was called before toast (async behavior is correct)
+    expect(callOrder[0]).toBe('clipboard');
+    expect(callOrder[1]).toBe('toast');
+  });
+});
+
+describe('handleRegenerate with undefined text values', () => {
+  let mockToast: jest.Mock;
+
+  beforeEach(() => {
+    mockToast = jest.fn();
+    jest.spyOn(require('@/hooks/use-toast'), 'useToast').mockReturnValue({ toast: mockToast });
+    Object.keys(mockMessageListProps).forEach(key => delete mockMessageListProps[key]);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+    delete (window as any).__chatInputSend;
+  });
+
+  it('should filter out undefined text values when extracting user content', async () => {
+    const messagesWithUndefined = [
+      {
+        id: 1,
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Valid content.' },
+          { type: 'text' }, // missing text
+          { type: 'text', text: undefined },
+          { type: 'text', text: 'More content.' },
+        ],
+        isStreaming: false,
+      },
+      { id: 2, role: 'assistant', content: 'Response', isStreaming: false },
+    ];
+
+    jest.spyOn(require('@/lib/store/chat-ui-store'), 'useChatUIStore').mockReturnValue({
+      activeSessionId: 123,
+      setActiveSessionId: mockSetActiveSessionId,
+      selectedModel: { value: 'test-model', label: 'Test Model' },
+      setSelectedModel: mockSetSelectedModel,
+      inputValue: '',
+      setInputValue: mockSetInputValue,
+      mobileSidebarOpen: false,
+      setMobileSidebarOpen: mockSetMobileSidebarOpen,
+      isIncognitoMode: false,
+      setIncognitoMode: mockSetIncognitoMode,
+      toggleIncognitoMode: mockToggleIncognitoMode,
+      syncIncognitoState: jest.fn(),
+    });
+    jest.spyOn(require('@/lib/hooks/use-chat-queries'), 'useSessionMessages').mockReturnValue({
+      data: messagesWithUndefined,
+      isLoading: false,
+    });
+
+    (window as any).__chatInputSend = jest.fn();
+
+    render(<ChatLayout />);
+
+    expect(mockMessageListProps.onRegenerate).toBeDefined();
+
+    mockMessageListProps.onRegenerate();
+
+    await waitFor(() => {
+      // Should only contain valid text, not "undefined" literals
+      expect(mockSetInputValue).toHaveBeenCalledWith('Valid content.More content.');
+    });
+  });
 });

@@ -349,4 +349,86 @@ describe('getTextFromContent helper', () => {
 
     expect(clipboardWriteText).toHaveBeenCalledWith('Shared multimodal content!');
   });
+
+  it('should filter out entries with missing text property', async () => {
+    const mockMessages = [
+      { id: '1', role: 'user', content: 'Hello', isStreaming: false },
+      {
+        id: '2',
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'Valid text.' },
+          { type: 'text' }, // missing text property
+          { type: 'text', text: undefined }, // explicit undefined
+          { type: 'text', text: 'More text.' },
+        ],
+        isStreaming: false,
+        model: 'gpt-4',
+      },
+    ];
+
+    jest.spyOn(require('../useChatController'), 'useChatController').mockReturnValue({
+      sessions: [{ id: '1', title: 'Test Session', updatedAt: new Date().toISOString() }],
+      activeSessionId: '1',
+      activeSession: { id: '1', title: 'Test Session' },
+      messages: mockMessages,
+      loadingSessions: false,
+      loadingMessages: false,
+      sending: false,
+      error: null,
+      createSession: jest.fn(),
+      selectSession: jest.fn(),
+      renameSession: jest.fn(),
+      deleteSession: jest.fn(),
+      sendMessage: jest.fn(),
+      clearError: jest.fn(),
+    });
+
+    render(<ChatExperience />);
+
+    const copyButtons = screen.getAllByTestId('copy-btn');
+    copyButtons[1].click();
+
+    // Should only contain valid text values, not "undefined" literals
+    expect(clipboardWriteText).toHaveBeenCalledWith('Valid text.More text.');
+  });
+
+  it('should return empty string for non-string non-array content', async () => {
+    const mockMessages = [
+      { id: '1', role: 'user', content: 'Hello', isStreaming: false },
+      {
+        id: '2',
+        role: 'assistant',
+        // Simulate an edge case with an unusual content type
+        content: null as any,
+        isStreaming: false,
+        model: 'gpt-4',
+      },
+    ];
+
+    jest.spyOn(require('../useChatController'), 'useChatController').mockReturnValue({
+      sessions: [{ id: '1', title: 'Test Session', updatedAt: new Date().toISOString() }],
+      activeSessionId: '1',
+      activeSession: { id: '1', title: 'Test Session' },
+      messages: mockMessages,
+      loadingSessions: false,
+      loadingMessages: false,
+      sending: false,
+      error: null,
+      createSession: jest.fn(),
+      selectSession: jest.fn(),
+      renameSession: jest.fn(),
+      deleteSession: jest.fn(),
+      sendMessage: jest.fn(),
+      clearError: jest.fn(),
+    });
+
+    render(<ChatExperience />);
+
+    const copyButtons = screen.getAllByTestId('copy-btn');
+    copyButtons[1].click();
+
+    // Null content should return empty string
+    expect(clipboardWriteText).toHaveBeenCalledWith('');
+  });
 });
