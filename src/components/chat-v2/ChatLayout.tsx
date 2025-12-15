@@ -351,7 +351,7 @@ export function ChatLayout() {
            userContent = lastUserMessage.content;
        } else if (Array.isArray(lastUserMessage.content)) {
            userContent = lastUserMessage.content
-               .filter((c: any) => c.type === 'text')
+               .filter((c: any) => c.type === 'text' && c.text)
                .map((c: any) => c.text)
                .join('');
        }
@@ -461,7 +461,7 @@ export function ChatLayout() {
    }, [activeSessionId, activeMessages, toast]);
 
    // Handle share - copy message or share link
-   const handleShare = useCallback((messageId: number) => {
+   const handleShare = useCallback(async (messageId: number) => {
        // Find the message and copy its content
        const message = activeMessages.find(m => m.id === messageId);
        if (!message) {
@@ -477,15 +477,24 @@ export function ChatLayout() {
            content = message.content;
        } else if (Array.isArray(message.content)) {
            content = message.content
-               .filter((c: any) => c.type === 'text')
+               .filter((c: any) => c.type === 'text' && c.text)
                .map((c: any) => c.text)
                .join('');
        }
-       navigator.clipboard.writeText(content);
-       toast({
-           title: "Copied to clipboard",
-           description: "Response has been copied to your clipboard.",
-       });
+       try {
+           await navigator.clipboard.writeText(content);
+           toast({
+               title: "Copied to clipboard",
+               description: "Response has been copied to your clipboard.",
+           });
+       } catch (error) {
+           console.error('[ChatLayout] Failed to copy to clipboard:', error);
+           toast({
+               title: "Copy failed",
+               description: "Unable to copy to clipboard. Please try again.",
+               variant: "destructive",
+           });
+       }
    }, [activeMessages, toast]);
 
    // When logged out, always show welcome screen (ignore cached messages and activeSessionId)
