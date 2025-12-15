@@ -42,17 +42,29 @@ const transactionRateLimitState = {
   lastCleanup: Date.now(),
 };
 
-// Rate limiting configuration - AGGRESSIVELY reduced to prevent 429 errors
+// Rate limiting configuration - EXTREMELY aggressive to prevent 429 errors
+// The /monitoring tunnel is still returning 429s, so we need to reduce further
 const RATE_LIMIT_CONFIG = {
-  maxEventsPerMinute: 5,         // REDUCED: Max events per minute (was 10, still hitting 429s)
+  maxEventsPerMinute: 2,         // REDUCED: Max 2 events per minute (was 5, still hitting 429s)
   windowMs: 60000,               // 1 minute window
-  dedupeWindowMs: 120000,        // INCREASED: Don't send same message within 2 minutes (was 60s)
-  maxBreadcrumbs: 10,            // REDUCED: Limit breadcrumbs to reduce payload size (was 20)
+  dedupeWindowMs: 300000,        // INCREASED: Don't send same message within 5 minutes (was 2 min)
+  maxBreadcrumbs: 5,             // REDUCED: Limit breadcrumbs to reduce payload size (was 10)
   cleanupIntervalMs: 30000,      // Cleanup stale entries every 30 seconds
   maxMapSize: 50,                // Maximum entries in deduplication map
-  // Transaction-specific limits (more lenient since we already have low sample rate)
-  maxTransactionsPerMinute: 10,  // Allow more transactions than errors
-  transactionDedupeWindowMs: 30000, // 30 seconds for transaction deduplication
+  // Transaction-specific limits
+  maxTransactionsPerMinute: 3,   // REDUCED from 10 - allow fewer transactions
+  transactionDedupeWindowMs: 60000, // INCREASED from 30s - 1 minute for transaction deduplication
+  // Backoff configuration for when we detect 429 errors
+  backoffMultiplier: 2,          // Double the wait time after each 429
+  maxBackoffMs: 300000,          // Maximum backoff of 5 minutes
+  initialBackoffMs: 60000,       // Start with 1 minute backoff after 429
+};
+
+// Track 429 backoff state
+const backoffState = {
+  inBackoff: false,
+  backoffUntil: 0,
+  currentBackoffMs: RATE_LIMIT_CONFIG.initialBackoffMs,
 };
 
 /**
@@ -250,6 +262,8 @@ function shouldFilterEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): bo
       );
 
     if (isMonitoringError) {
+      // Trigger backoff mode when we detect a 429 from our own monitoring
+      enterBackoffMode();
       console.debug('[Sentry] Filtered out 429 rate limit error from monitoring endpoint (prevents cascade)');
       return true;
     }
@@ -282,12 +296,61 @@ function shouldFilterEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): bo
 }
 
 /**
+ * Enter backoff mode after receiving a 429 error
+ * Called when we detect a rate limit error
+ */
+function enterBackoffMode(): void {
+  const now = Date.now();
+  backoffState.inBackoff = true;
+  backoffState.backoffUntil = now + backoffState.currentBackoffMs;
+
+  // Increase backoff for next time (exponential backoff)
+  backoffState.currentBackoffMs = Math.min(
+    backoffState.currentBackoffMs * RATE_LIMIT_CONFIG.backoffMultiplier,
+    RATE_LIMIT_CONFIG.maxBackoffMs
+  );
+
+  console.warn(`[Sentry] Entering backoff mode for ${backoffState.currentBackoffMs / 1000}s due to rate limiting`);
+}
+
+/**
+ * Check if we're currently in backoff mode
+ * Returns true if we should drop events
+ */
+function isInBackoff(): boolean {
+  if (!backoffState.inBackoff) {
+    return false;
+  }
+
+  const now = Date.now();
+  if (now >= backoffState.backoffUntil) {
+    // Backoff period expired, reset
+    backoffState.inBackoff = false;
+    // Reduce backoff time for next occurrence (gradual recovery)
+    backoffState.currentBackoffMs = Math.max(
+      backoffState.currentBackoffMs / RATE_LIMIT_CONFIG.backoffMultiplier,
+      RATE_LIMIT_CONFIG.initialBackoffMs
+    );
+    console.debug('[Sentry] Backoff period ended, resuming normal operation');
+    return false;
+  }
+
+  return true;
+}
+
+/**
  * Check if we should rate limit this error event
  * Returns true if the event should be dropped
  * Note: Only call this AFTER shouldFilterEvent returns false
  */
 function shouldRateLimit(event: Sentry.ErrorEvent): boolean {
   const now = Date.now();
+
+  // Check if we're in backoff mode first (highest priority)
+  if (isInBackoff()) {
+    console.debug('[Sentry] In backoff mode, dropping event');
+    return true;
+  }
 
   // Periodic cleanup to prevent unbounded memory growth
   cleanupStaleEntries();
@@ -356,6 +419,13 @@ function cleanupStaleTransactionEntries(): void {
  */
 function shouldRateLimitTransaction(event: TransactionEventLike): boolean {
   const now = Date.now();
+
+  // Check if we're in backoff mode first (highest priority)
+  // Transactions also respect backoff to reduce overall load
+  if (isInBackoff()) {
+    console.debug('[Sentry] In backoff mode, dropping transaction');
+    return true;
+  }
 
   // Periodic cleanup to prevent unbounded memory growth
   cleanupStaleTransactionEntries();
