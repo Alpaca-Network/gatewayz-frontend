@@ -479,11 +479,24 @@ export async function POST(request: NextRequest) {
               errorData = { raw: errorText };
             }
 
+            // Provide user-friendly error messages for common status codes
+            let userMessage = errorData.message || errorData.detail || errorText.substring(0, 500);
+            let errorType = 'api_error';
+
+            if (response.status === 401 || response.status === 403) {
+              userMessage = 'Your session has expired. Please log out and log back in to continue.';
+              errorType = 'auth_error';
+            } else if (response.status === 429) {
+              userMessage = errorData.detail || errorData.message || 'Rate limit exceeded. Please wait a moment and try again.';
+              errorType = 'rate_limit_error';
+            }
+
             return new Response(JSON.stringify({
               error: 'Backend API Error',
               status: response.status,
               statusText: response.statusText,
-              message: errorData.message || errorData.detail || errorText.substring(0, 500),
+              message: userMessage,
+              type: errorType,
               model: body.model,
               gateway: body.gateway,
               errorData: errorData

@@ -588,9 +588,11 @@ describe('ChatInput auth error handling', () => {
 
   it('should detect 403 forbidden/API key related errors', () => {
     const apiKeyErrors = [
+      'Your session has expired. Please log out and log back in to continue.',
       'Your API key may be invalid or expired. Please try logging out and back in.',
       'Access forbidden. Your API key may be invalid.',
       'API key validation failed',
+      'Forbidden',
     ];
 
     apiKeyErrors.forEach(error => {
@@ -598,7 +600,9 @@ describe('ChatInput auth error handling', () => {
       const isApiKeyError =
         lowerError.includes('api key') ||
         lowerError.includes('access forbidden') ||
-        lowerError.includes('logging out and back in');
+        lowerError.includes('logging out and back in') ||
+        lowerError.includes('log out and log back in') ||
+        lowerError === 'forbidden';
 
       expect(isApiKeyError).toBe(true);
     });

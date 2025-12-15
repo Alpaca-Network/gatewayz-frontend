@@ -345,7 +345,9 @@ export function ChatInput() {
                                 lowerErrorMessage.includes('create a free account');
         const isApiKeyError = lowerErrorMessage.includes('api key') ||
                              lowerErrorMessage.includes('access forbidden') ||
-                             lowerErrorMessage.includes('logging out and back in');
+                             lowerErrorMessage.includes('logging out and back in') ||
+                             lowerErrorMessage.includes('log out and log back in') ||
+                             lowerErrorMessage === 'forbidden';
         const isSessionError = lowerErrorMessage.includes('session expired') ||
                               lowerErrorMessage.includes('authentication');
         const isAuthError = isGuestAuthError || isApiKeyError || isSessionError;

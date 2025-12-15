@@ -293,11 +293,10 @@ export async function* streamChatResponse(
 
     // Handle 403 Forbidden - invalid or expired API key
     if (response.status === 403) {
-      const errorMessage = errorData.detail || errorData.error?.message || 'Access forbidden';
       devError('403 Forbidden details:', errorData);
 
       throw new Error(
-        errorMessage + '. Your API key may be invalid or expired. Please try logging out and back in.'
+        'Your session has expired. Please log out and log back in to continue.'
       );
     }
 

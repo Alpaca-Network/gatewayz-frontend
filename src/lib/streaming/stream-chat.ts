@@ -136,7 +136,7 @@ async function handleHttpError(
 
     case 403:
       throw new AuthenticationError(
-        'Your API key may be invalid or expired. Please try logging out and back in.'
+        'Your session has expired. Please log out and log back in to continue.'
       );
 
     case 404:
