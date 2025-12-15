@@ -472,12 +472,15 @@ export function ChatLayout() {
            });
            return;
        }
-       const content = typeof message.content === 'string'
-           ? message.content
-           : (message.content as any[])
+       let content = '';
+       if (typeof message.content === 'string') {
+           content = message.content;
+       } else if (Array.isArray(message.content)) {
+           content = message.content
                .filter((c: any) => c.type === 'text')
                .map((c: any) => c.text)
                .join('');
+       }
        navigator.clipboard.writeText(content);
        toast({
            title: "Copied to clipboard",
