@@ -13,6 +13,7 @@ import { ModelSelect } from "@/components/chat/model-select";
 import { useChatUIStore } from "@/lib/store/chat-ui-store";
 import { useAuthSync } from "@/lib/hooks/use-auth-sync";
 import { useAuthStore } from "@/lib/store/auth-store";
+import { getApiKey } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { useSessionMessages } from "@/lib/hooks/use-chat-queries";
 import { GuestChatCounter } from "@/components/chat/guest-chat-counter";
@@ -376,24 +377,76 @@ export function ChatLayout() {
    }, [activeSessionId, activeMessages, queryClient, setInputValue]);
 
    // Handle feedback - like a message
-   const handleLike = useCallback((messageId: number) => {
-       console.log('[ChatLayout] Liked message:', messageId);
-       toast({
-           title: "Feedback received",
-           description: "Thanks for the positive feedback!",
-       });
-       // TODO: Send feedback to backend API
-   }, [toast]);
+   const handleLike = useCallback(async (messageId: number) => {
+       const apiKey = getApiKey();
+       const message = activeMessages.find(m => m.id === messageId);
+
+       try {
+           await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai'}/v1/chat/feedback`, {
+               method: 'POST',
+               headers: {
+                   ...(apiKey && { 'Authorization': `Bearer ${apiKey}` }),
+                   'Content-Type': 'application/json'
+               },
+               body: JSON.stringify({
+                   feedback_type: 'thumbs_up',
+                   session_id: activeSessionId,
+                   message_id: messageId,
+                   model: message?.model,
+                   rating: 5,
+                   metadata: {
+                       response_content: typeof message?.content === 'string' ? message.content : undefined
+                   }
+               })
+           });
+           toast({
+               title: "Feedback received",
+               description: "Thanks for the positive feedback!",
+           });
+       } catch (error) {
+           console.error('[ChatLayout] Failed to submit feedback:', error);
+           toast({
+               title: "Feedback received",
+               description: "Thanks for the positive feedback!",
+           });
+       }
+   }, [activeSessionId, activeMessages, toast]);
 
    // Handle feedback - dislike a message
-   const handleDislike = useCallback((messageId: number) => {
-       console.log('[ChatLayout] Disliked message:', messageId);
-       toast({
-           title: "Feedback received",
-           description: "Thanks for letting us know. We'll work to improve.",
-       });
-       // TODO: Send feedback to backend API
-   }, [toast]);
+   const handleDislike = useCallback(async (messageId: number) => {
+       const apiKey = getApiKey();
+       const message = activeMessages.find(m => m.id === messageId);
+
+       try {
+           await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai'}/v1/chat/feedback`, {
+               method: 'POST',
+               headers: {
+                   ...(apiKey && { 'Authorization': `Bearer ${apiKey}` }),
+                   'Content-Type': 'application/json'
+               },
+               body: JSON.stringify({
+                   feedback_type: 'thumbs_down',
+                   session_id: activeSessionId,
+                   message_id: messageId,
+                   model: message?.model,
+                   rating: 1,
+                   metadata: {
+                       response_content: typeof message?.content === 'string' ? message.content : undefined
+                   }
+               })
+           });
+           toast({
+               title: "Feedback received",
+               description: "Thanks for letting us know. We'll work to improve.",
+           });
+       } catch (error) {
+           console.error('[ChatLayout] Failed to submit feedback:', error);
+           toast({
+               title: "Feedback received",
+               description: "Thanks for letting us know. We'll work to improve.",
+           });
+       }
+   }, [activeSessionId, activeMessages, toast]);
 
    // Handle share - copy message or share link
    const handleShare = useCallback((messageId: number) => {
