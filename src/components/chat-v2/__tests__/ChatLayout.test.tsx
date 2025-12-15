@@ -733,17 +733,19 @@ describe('Handlers with active session', () => {
 
     expect(mockMessageListProps.onShare).toBeDefined();
 
-    mockMessageListProps.onShare(2);
+    await mockMessageListProps.onShare(2);
 
     await waitFor(() => {
       expect(clipboardWriteText).toHaveBeenCalledWith('Hi there!');
     });
 
-    expect(mockToast).toHaveBeenCalledWith(
-      expect.objectContaining({
-        title: 'Copied to clipboard',
-      })
-    );
+    await waitFor(() => {
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Copied to clipboard',
+        })
+      );
+    });
   });
 
   it('should show error toast when handleShare cannot find message', async () => {
@@ -752,14 +754,16 @@ describe('Handlers with active session', () => {
     expect(mockMessageListProps.onShare).toBeDefined();
 
     // Try to share a non-existent message
-    mockMessageListProps.onShare(999);
+    await mockMessageListProps.onShare(999);
 
-    expect(mockToast).toHaveBeenCalledWith(
-      expect.objectContaining({
-        title: 'Unable to share',
-        variant: 'destructive',
-      })
-    );
+    await waitFor(() => {
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Unable to share',
+          variant: 'destructive',
+        })
+      );
+    });
   });
 
   it('should handle regenerate with valid messages', async () => {
@@ -1011,7 +1015,7 @@ describe('handleShare with array content', () => {
 
     expect(mockMessageListProps.onShare).toBeDefined();
 
-    mockMessageListProps.onShare(2);
+    await mockMessageListProps.onShare(2);
 
     await waitFor(() => {
       expect(clipboardWriteText).toHaveBeenCalledWith('First part. Second part.');
@@ -1058,7 +1062,7 @@ describe('handleShare with array content', () => {
 
     expect(mockMessageListProps.onShare).toBeDefined();
 
-    mockMessageListProps.onShare(2);
+    await mockMessageListProps.onShare(2);
 
     await waitFor(() => {
       // Should only contain valid text values, not "undefined" literals
