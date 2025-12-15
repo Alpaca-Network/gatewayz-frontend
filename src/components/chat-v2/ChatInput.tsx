@@ -370,14 +370,9 @@ export function ChatInput() {
               variant: "destructive"
             });
             // Auto-logout and re-login to refresh API key
-            const logoutResult = logout();
-            if (logoutResult && typeof logoutResult.then === 'function') {
-              logoutResult.then(() => {
-                login();
-              });
-            } else {
-              login();
-            }
+            Promise.resolve(logout())
+              .catch(() => {/* ignore logout errors */})
+              .finally(() => login());
           } else {
             // Other auth errors for authenticated users
             toast({ title: errorMessage, variant: "destructive" });
