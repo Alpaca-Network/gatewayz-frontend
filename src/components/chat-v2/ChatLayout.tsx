@@ -88,7 +88,7 @@ export function ChatLayout() {
    // 2. Whether we already have cached auth credentials
    // For non-authenticated users, this will be false immediately after the effect runs
    const authLoading = authSyncLoading;
-   const { selectedModel, setSelectedModel, activeSessionId, setActiveSessionId, setInputValue, mobileSidebarOpen, setMobileSidebarOpen, isIncognitoMode, toggleIncognitoMode, syncIncognitoState } = useChatUIStore();
+   const { selectedModel, setSelectedModel, activeSessionId, setActiveSessionId, setInputValue, mobileSidebarOpen, setMobileSidebarOpen, isIncognitoMode, setIncognitoMode, toggleIncognitoMode, syncIncognitoState } = useChatUIStore();
    const searchParams = useSearchParams();
    const queryClient = useQueryClient();
    const createSession = useCreateSession();
@@ -118,6 +118,12 @@ export function ChatLayout() {
 
        if (messageParam && !urlMessageProcessedRef.current) {
            urlMessageProcessedRef.current = true;
+
+           // Disable incognito mode when using chat prompts from homepage
+           // This ensures the user's selected model from the homepage is used
+           if (isIncognitoMode) {
+               setIncognitoMode(false);
+           }
 
            // Set model from URL if provided
            if (modelParam) {
@@ -185,7 +191,7 @@ export function ChatLayout() {
                pendingTimeoutRef.current = null;
            }
        };
-   }, [searchParams, setInputValue, setSelectedModel]);
+   }, [searchParams, setInputValue, setSelectedModel, isIncognitoMode, setIncognitoMode]);
 
    // Clear pending prompt once we have real messages OR when session changes
    useEffect(() => {

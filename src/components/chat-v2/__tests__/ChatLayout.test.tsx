@@ -41,6 +41,7 @@ const mockSetActiveSessionId = jest.fn();
 const mockSetSelectedModel = jest.fn();
 const mockSetMobileSidebarOpen = jest.fn();
 const mockToggleIncognitoMode = jest.fn();
+const mockSetIncognitoMode = jest.fn();
 
 let mockIsIncognitoMode = false;
 
@@ -55,6 +56,7 @@ jest.mock('@/lib/store/chat-ui-store', () => ({
     mobileSidebarOpen: false,
     setMobileSidebarOpen: mockSetMobileSidebarOpen,
     isIncognitoMode: mockIsIncognitoMode,
+    setIncognitoMode: mockSetIncognitoMode,
     toggleIncognitoMode: mockToggleIncognitoMode,
     syncIncognitoState: jest.fn(), // Added for hydration fix
   }),
@@ -148,6 +150,7 @@ describe('ChatLayout', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockIsIncognitoMode = false;
+    mockSetIncognitoMode.mockClear();
     delete (window as any).__chatInputSend;
     delete (window as any).__chatInputFocus;
   });
