@@ -10,6 +10,14 @@ import { getApiKey } from '@/lib/api';
 import { ModelOption } from '@/components/chat/model-select';
 import { ChatMessage } from '@/lib/chat-history';
 
+// Stream stopped error for clean cancellation
+class StreamStoppedError extends Error {
+    constructor() {
+        super('Stream stopped by user');
+        this.name = 'StreamStoppedError';
+    }
+}
+
 // Debug logging helper - always logs in development, logs errors in production
 const debugLog = (message: string, data?: any) => {
     const timestamp = new Date().toISOString();
@@ -47,8 +55,18 @@ export function useChatStream() {
     const [isStreaming, setIsStreaming] = useState(false);
     const [streamError, setStreamError] = useState<string | null>(null);
     const streamHandlerRef = useRef<ChatStreamHandler>(new ChatStreamHandler());
+    const abortControllerRef = useRef<AbortController | null>(null);
     const saveMessage = useSaveMessage();
     const queryClient = useQueryClient();
+
+    // Stop the current stream
+    const stopStream = useCallback(() => {
+        debugLog('stopStream called', { hasController: !!abortControllerRef.current });
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+            abortControllerRef.current = null;
+        }
+    }, []);
 
     const streamMessage = useCallback(async ({
         sessionId,
@@ -96,6 +114,10 @@ export function useChatStream() {
         setIsStreaming(true);
         setStreamError(null);
         streamHandlerRef.current.reset();
+
+        // Create new abort controller for this stream
+        abortControllerRef.current = new AbortController();
+        const { signal } = abortControllerRef.current;
 
         // Cancel any outgoing refetches (so they don't overwrite our optimistic update)
         await queryClient.cancelQueries({ queryKey: ['chat-messages', sessionId] });
@@ -238,10 +260,18 @@ export function useChatStream() {
             let lastUpdate = Date.now();
             let chunkCount = 0;
             let totalContentLength = 0;
+            let wasStopped = false;
 
             debugLog('Starting stream loop', { url, apiKeyPrefix: apiKey.substring(0, 15) + '...' });
 
             for await (const chunk of streamChatResponse(url, apiKey, requestBody)) {
+                // Check if stream was stopped by user
+                if (signal.aborted) {
+                    debugLog('Stream aborted by user');
+                    wasStopped = true;
+                    break;
+                }
+
                 chunkCount++;
 
                 if (chunkCount === 1) {
@@ -307,31 +337,39 @@ export function useChatStream() {
             const finalContent = streamHandlerRef.current.getFinalContent();
             const finalReasoning = streamHandlerRef.current.getFinalReasoning();
 
-            debugLog('Stream completed successfully', {
+            debugLog(wasStopped ? 'Stream stopped by user' : 'Stream completed successfully', {
                 totalChunks: chunkCount,
                 finalContentLength: finalContent.length,
                 hasReasoning: !!finalReasoning,
-                reasoningLength: finalReasoning?.length || 0
+                reasoningLength: finalReasoning?.length || 0,
+                wasStopped
             });
 
             // Save Assistant Message - for authenticated users OR guest sessions (negative IDs)
             // Guest messages are saved to localStorage, authenticated to backend
             // Include reasoning if present for proper persistence and display on reload
-            saveMessage.mutate({
-                 sessionId,
-                 role: 'assistant',
-                 content: finalContent,
-                 model: model.value,
-                 reasoning: finalReasoning || undefined
-            });
+            // Only save if we have content (even if stopped mid-stream)
+            if (finalContent) {
+                saveMessage.mutate({
+                     sessionId,
+                     role: 'assistant',
+                     content: finalContent,
+                     model: model.value,
+                     reasoning: finalReasoning || undefined
+                });
+            }
 
-            // Mark isStreaming false
+            // Mark isStreaming false and set wasStopped flag if applicable
             flushSync(() => {
                 queryClient.setQueryData(['chat-messages', sessionId], (old: any[] | undefined) => {
                     if (!old || old.length === 0) return old || [];
                     const last = old[old.length - 1];
                     if (!last) return old;
-                    return [...old.slice(0, -1), { ...last, isStreaming: false }];
+                    return [...old.slice(0, -1), {
+                        ...last,
+                        isStreaming: false,
+                        wasStopped: wasStopped && finalContent ? true : undefined
+                    }];
                 });
             });
 
@@ -370,6 +408,7 @@ export function useChatStream() {
     return {
         isStreaming,
         streamError,
-        streamMessage
+        streamMessage,
+        stopStream
     };
 }

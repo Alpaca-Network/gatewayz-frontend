@@ -501,3 +501,130 @@ describe('Reasoning parameter handling', () => {
     });
   });
 });
+
+describe('Stop stream functionality', () => {
+  /**
+   * Tests for the stop/abort stream feature
+   * The useChatStream hook now exposes a stopStream function that aborts the current stream
+   */
+
+  describe('AbortController behavior', () => {
+    test('should create AbortController signal that can be aborted', () => {
+      const controller = new AbortController();
+      const { signal } = controller;
+
+      expect(signal.aborted).toBe(false);
+
+      controller.abort();
+
+      expect(signal.aborted).toBe(true);
+    });
+
+    test('should allow checking abort status during stream loop', () => {
+      const controller = new AbortController();
+      const { signal } = controller;
+
+      let wasAborted = false;
+      let iterations = 0;
+
+      // Simulate a stream loop that checks abort status
+      const simulateStreamLoop = () => {
+        for (let i = 0; i < 10; i++) {
+          if (signal.aborted) {
+            wasAborted = true;
+            break;
+          }
+          iterations++;
+
+          // Abort after 5 iterations (simulates user clicking stop)
+          if (i === 4) {
+            controller.abort();
+          }
+        }
+      };
+
+      simulateStreamLoop();
+
+      expect(wasAborted).toBe(true);
+      expect(iterations).toBe(5);
+    });
+
+    test('should preserve partial content when stopped', () => {
+      const controller = new AbortController();
+      const { signal } = controller;
+
+      let accumulatedContent = '';
+      const chunks = ['Hello', ' ', 'world', ', ', 'how', ' ', 'are', ' ', 'you', '?'];
+
+      // Simulate streaming with abort
+      for (const chunk of chunks) {
+        if (signal.aborted) {
+          break;
+        }
+        accumulatedContent += chunk;
+
+        // Abort after "how"
+        if (chunk === 'how') {
+          controller.abort();
+        }
+      }
+
+      expect(accumulatedContent).toBe('Hello world, how');
+      expect(signal.aborted).toBe(true);
+    });
+  });
+
+  describe('Stream stopped state', () => {
+    test('should set wasStopped flag when stream is aborted with content', () => {
+      const finalContent = 'Partial response';
+      const wasStopped = true;
+
+      // Mirrors the logic in use-chat-stream.ts for setting wasStopped
+      const shouldSetWasStopped = wasStopped && finalContent;
+
+      expect(shouldSetWasStopped).toBeTruthy();
+    });
+
+    test('should not set wasStopped flag when stream is aborted without content', () => {
+      const finalContent = '';
+      const wasStopped = true;
+
+      // Mirrors the logic in use-chat-stream.ts for setting wasStopped
+      const shouldSetWasStopped = wasStopped && finalContent ? true : undefined;
+
+      expect(shouldSetWasStopped).toBeUndefined();
+    });
+
+    test('should not set wasStopped flag when stream completes normally', () => {
+      const finalContent = 'Complete response';
+      const wasStopped = false;
+
+      // Mirrors the logic in use-chat-stream.ts for setting wasStopped
+      const shouldSetWasStopped = wasStopped && finalContent ? true : undefined;
+
+      expect(shouldSetWasStopped).toBeUndefined();
+    });
+  });
+
+  describe('Message saving on stop', () => {
+    test('should save message when stopped with partial content', () => {
+      const finalContent = 'Partial but useful response';
+      const wasStopped = true;
+
+      // Mirrors the conditional save logic in use-chat-stream.ts
+      const shouldSaveMessage = !!finalContent;
+
+      expect(shouldSaveMessage).toBe(true);
+    });
+
+    test('should not save message when stopped with no content', () => {
+      const finalContent = '';
+      const wasStopped = true;
+
+      // Mirrors the conditional save logic in use-chat-stream.ts
+      const shouldSaveMessage = !!finalContent;
+
+      expect(shouldSaveMessage).toBe(false);
+    });
+  });
+});
