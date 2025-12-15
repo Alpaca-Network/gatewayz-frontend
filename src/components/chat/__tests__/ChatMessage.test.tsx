@@ -536,4 +536,65 @@ describe('ChatMessage', () => {
       expect(ChatMessage.displayName).toBe('ChatMessage');
     });
   });
+
+  describe('Stopped indicator (wasStopped)', () => {
+    it('should show "Response stopped" indicator when wasStopped is true and not streaming', () => {
+      render(<ChatMessage {...defaultProps} wasStopped={true} isStreaming={false} />);
+
+      expect(screen.getByText('Response stopped')).toBeInTheDocument();
+    });
+
+    it('should not show stopped indicator when wasStopped is false', () => {
+      render(<ChatMessage {...defaultProps} wasStopped={false} isStreaming={false} />);
+
+      expect(screen.queryByText('Response stopped')).not.toBeInTheDocument();
+    });
+
+    it('should not show stopped indicator when still streaming', () => {
+      // Even if wasStopped is somehow set while streaming, indicator should not show
+      render(<ChatMessage {...defaultProps} wasStopped={true} isStreaming={true} />);
+
+      // Should show streaming indicator instead
+      expect(screen.queryByText('Response stopped')).not.toBeInTheDocument();
+    });
+
+    it('should not show stopped indicator when wasStopped is undefined', () => {
+      render(<ChatMessage {...defaultProps} wasStopped={undefined} isStreaming={false} />);
+
+      expect(screen.queryByText('Response stopped')).not.toBeInTheDocument();
+    });
+
+    it('should apply italic styling to stopped indicator', () => {
+      const { container } = render(<ChatMessage {...defaultProps} wasStopped={true} isStreaming={false} />);
+
+      const stoppedIndicator = container.querySelector('.italic');
+      expect(stoppedIndicator).toBeInTheDocument();
+      expect(stoppedIndicator).toHaveTextContent('Response stopped');
+    });
+
+    it('should show content alongside stopped indicator', () => {
+      render(<ChatMessage {...defaultProps} content="Partial response text" wasStopped={true} isStreaming={false} />);
+
+      // Both content and stopped indicator should be present
+      expect(screen.getByText('Partial response text')).toBeInTheDocument();
+      expect(screen.getByText('Response stopped')).toBeInTheDocument();
+    });
+  });
+
+  describe('Memoization comparison with wasStopped', () => {
+    // The custom comparison function should include wasStopped
+    it('should have wasStopped in comparison function', () => {
+      // Verify by checking the component re-renders when wasStopped changes
+      const { rerender } = render(<ChatMessage {...defaultProps} wasStopped={false} />);
+
+      // Should not show indicator initially
+      expect(screen.queryByText('Response stopped')).not.toBeInTheDocument();
+
+      // Rerender with wasStopped=true
+      rerender(<ChatMessage {...defaultProps} wasStopped={true} />);
+
+      // Should now show the indicator (proves comparison function works)
+      expect(screen.getByText('Response stopped')).toBeInTheDocument();
+    });
+  });
 });

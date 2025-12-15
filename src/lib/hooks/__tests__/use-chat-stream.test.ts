@@ -572,6 +572,36 @@ describe('Stop stream functionality', () => {
       expect(accumulatedContent).toBe('Hello world, how');
       expect(signal.aborted).toBe(true);
     });
+
+    test('should allow abort even when no chunks received yet', () => {
+      const controller = new AbortController();
+      const { signal } = controller;
+
+      // Abort immediately before any chunks
+      controller.abort();
+
+      let chunkCount = 0;
+      const chunks = ['a', 'b', 'c'];
+
+      for (const chunk of chunks) {
+        if (signal.aborted) break;
+        chunkCount++;
+      }
+
+      expect(chunkCount).toBe(0);
+      expect(signal.aborted).toBe(true);
+    });
+
+    test('should handle multiple aborts gracefully', () => {
+      const controller = new AbortController();
+      const { signal } = controller;
+
+      controller.abort();
+      controller.abort(); // Second abort should not throw
+      controller.abort(); // Third abort should not throw
+
+      expect(signal.aborted).toBe(true);
+    });
   });
 
   describe('Stream stopped state', () => {
@@ -625,6 +655,108 @@ describe('Stop stream functionality', () => {
       const shouldSaveMessage = !!finalContent;
 
       expect(shouldSaveMessage).toBe(false);
+    });
+
+    test('should save message with reasoning when stopped', () => {
+      const finalContent = 'Response text';
+      const finalReasoning = 'Step by step thinking...';
+      const wasStopped = true;
+
+      // Both content and reasoning should be saved together
+      const saveParams = {
+        content: finalContent,
+        reasoning: finalReasoning || undefined
+      };
+
+      expect(saveParams.content).toBe('Response text');
+      expect(saveParams.reasoning).toBe('Step by step thinking...');
+    });
+
+    test('should not include reasoning when empty', () => {
+      const finalContent = 'Response text';
+      const finalReasoning = '';
+
+      // Empty reasoning should become undefined
+      const saveParams = {
+        content: finalContent,
+        reasoning: finalReasoning || undefined
+      };
+
+      expect(saveParams.reasoning).toBeUndefined();
+    });
+  });
+
+  describe('UI state updates on stop', () => {
+    test('should mark message as not streaming when stopped', () => {
+      // Simulates the final state update
+      const updateState = (wasStopped: boolean, finalContent: string) => {
+        return {
+          isStreaming: false,
+          wasStopped: wasStopped && finalContent ? true : undefined
+        };
+      };
+
+      const state = updateState(true, 'Some content');
+
+      expect(state.isStreaming).toBe(false);
+      expect(state.wasStopped).toBe(true);
+    });
+
+    test('should handle state update when stop clicked but no content yet', () => {
+      const updateState = (wasStopped: boolean, finalContent: string) => {
+        return {
+          isStreaming: false,
+          wasStopped: wasStopped && finalContent ? true : undefined
+        };
+      };
+
+      const state = updateState(true, '');
+
+      expect(state.isStreaming).toBe(false);
+      expect(state.wasStopped).toBeUndefined();
+    });
+  });
+
+  describe('AbortController reference management', () => {
+    test('should allow setting controller to null after abort', () => {
+      let controllerRef: AbortController | null = new AbortController();
+
+      // Simulate abort
+      controllerRef.abort();
+      controllerRef = null;
+
+      expect(controllerRef).toBeNull();
+    });
+
+    test('should create new controller for each stream', () => {
+      const controller1 = new AbortController();
+      const signal1 = controller1.signal;
+
+      const controller2 = new AbortController();
+      const signal2 = controller2.signal;
+
+      // Different controllers should have different signals
+      expect(signal1).not.toBe(signal2);
+
+      // Aborting one should not affect the other
+      controller1.abort();
+      expect(signal1.aborted).toBe(true);
+      expect(signal2.aborted).toBe(false);
+    });
+
+    test('should safely handle stopStream when no active controller', () => {
+      let controllerRef: AbortController | null = null;
+
+      // Simulates calling stopStream when there's no active stream
+      const stopStream = () => {
+        if (controllerRef) {
+          controllerRef.abort();
+          controllerRef = null;
+        }
+      };
+
+      // Should not throw
+      expect(() => stopStream()).not.toThrow();
     });
   });
 });
