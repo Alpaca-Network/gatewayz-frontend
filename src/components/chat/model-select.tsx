@@ -89,6 +89,7 @@ export const getGatewayAbbrev = (gateway: string): string => {
     'nebius': 'NEB',
     'huggingface': 'HF',
     'near': 'NEAR',
+    'onerouter': '1R',
   };
   return abbrevs[gateway.toLowerCase()] || gateway.slice(0, 3).toUpperCase();
 };
@@ -110,7 +111,8 @@ export const getDeveloper = (modelId: string): string => {
       'microsoft': 'Microsoft',
       'deepseek': 'DeepSeek',
       'qwen': 'Qwen',
-      'x-ai': 'xAI'
+      'x-ai': 'xAI',
+      'onerouter': 'OneRouter'
     };
     return formatted[dev] || dev.charAt(0).toUpperCase() + dev.slice(1);
   }
