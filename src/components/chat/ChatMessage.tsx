@@ -458,7 +458,8 @@ export const ChatMessage = memo<ChatMessageProps>(
       prevProps.onLike === nextProps.onLike &&
       prevProps.onDislike === nextProps.onDislike &&
       prevProps.onShare === nextProps.onShare &&
-      prevProps.onMore === nextProps.onMore
+      prevProps.onMore === nextProps.onMore &&
+      prevProps.onRegenerate === nextProps.onRegenerate
     );
   }
 );

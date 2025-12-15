@@ -351,7 +351,7 @@ export function ChatLayout() {
            userContent = lastUserMessage.content;
        } else if (Array.isArray(lastUserMessage.content)) {
            userContent = lastUserMessage.content
-               .filter((c: any) => c.type === 'text')
+               .filter((c: any) => c.type === 'text' && c.text)
                .map((c: any) => c.text)
                .join('');
        }
@@ -382,7 +382,7 @@ export function ChatLayout() {
        const message = activeMessages.find(m => m.id === messageId);
 
        try {
-           await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai'}/v1/chat/feedback`, {
+           const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai'}/v1/chat/feedback`, {
                method: 'POST',
                headers: {
                    ...(apiKey && { 'Authorization': `Bearer ${apiKey}` }),
@@ -399,6 +399,11 @@ export function ChatLayout() {
                    }
                })
            });
+
+           if (!response.ok) {
+               throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+           }
+
            toast({
                title: "Feedback received",
                description: "Thanks for the positive feedback!",
@@ -406,8 +411,9 @@ export function ChatLayout() {
        } catch (error) {
            console.error('[ChatLayout] Failed to submit feedback:', error);
            toast({
-               title: "Feedback received",
-               description: "Thanks for the positive feedback!",
+               title: "Feedback failed",
+               description: "Unable to submit feedback. Please try again.",
+               variant: "destructive",
            });
        }
    }, [activeSessionId, activeMessages, toast]);
@@ -418,7 +424,7 @@ export function ChatLayout() {
        const message = activeMessages.find(m => m.id === messageId);
 
        try {
-           await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai'}/v1/chat/feedback`, {
+           const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai'}/v1/chat/feedback`, {
                method: 'POST',
                headers: {
                    ...(apiKey && { 'Authorization': `Bearer ${apiKey}` }),
@@ -435,6 +441,11 @@ export function ChatLayout() {
                    }
                })
            });
+
+           if (!response.ok) {
+               throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+           }
+
            toast({
                title: "Feedback received",
                description: "Thanks for letting us know. We'll work to improve.",
@@ -442,14 +453,15 @@ export function ChatLayout() {
        } catch (error) {
            console.error('[ChatLayout] Failed to submit feedback:', error);
            toast({
-               title: "Feedback received",
-               description: "Thanks for letting us know. We'll work to improve.",
+               title: "Feedback failed",
+               description: "Unable to submit feedback. Please try again.",
+               variant: "destructive",
            });
        }
    }, [activeSessionId, activeMessages, toast]);
 
    // Handle share - copy message or share link
-   const handleShare = useCallback((messageId: number) => {
+   const handleShare = useCallback(async (messageId: number) => {
        // Find the message and copy its content
        const message = activeMessages.find(m => m.id === messageId);
        if (!message) {
@@ -460,17 +472,29 @@ export function ChatLayout() {
            });
            return;
        }
-       const content = typeof message.content === 'string'
-           ? message.content
-           : (message.content as any[])
-               .filter((c: any) => c.type === 'text')
+       let content = '';
+       if (typeof message.content === 'string') {
+           content = message.content;
+       } else if (Array.isArray(message.content)) {
+           content = message.content
+               .filter((c: any) => c.type === 'text' && c.text)
                .map((c: any) => c.text)
                .join('');
-       navigator.clipboard.writeText(content);
-       toast({
-           title: "Copied to clipboard",
-           description: "Response has been copied to your clipboard.",
-       });
+       }
+       try {
+           await navigator.clipboard.writeText(content);
+           toast({
+               title: "Copied to clipboard",
+               description: "Response has been copied to your clipboard.",
+           });
+       } catch (error) {
+           console.error('[ChatLayout] Failed to copy to clipboard:', error);
+           toast({
+               title: "Copy failed",
+               description: "Unable to copy to clipboard. Please try again.",
+               variant: "destructive",
+           });
+       }
    }, [activeMessages, toast]);
 
    // When logged out, always show welcome screen (ignore cached messages and activeSessionId)
