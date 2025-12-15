@@ -120,6 +120,14 @@ jest.mock('@privy-io/react-auth', () => ({
   }),
 }));
 
+// Mock GatewayzAuth context
+const mockLogout = jest.fn(() => Promise.resolve());
+jest.mock('@/context/gatewayz-auth-context', () => ({
+  useGatewayzAuth: () => ({
+    logout: mockLogout,
+  }),
+}));
+
 // Mock guest chat utilities
 jest.mock('@/lib/guest-chat', () => ({
   incrementGuestMessageCount: jest.fn(() => 1),
@@ -544,29 +552,72 @@ describe('ChatInput auth error handling', () => {
     const errorMessage = 'Please sign in to use the chat feature. Create a free account to get started!';
     const lowerError = errorMessage.toLowerCase();
 
-    // Verify error detection logic matches auth errors
-    const isAuthError =
+    // Verify error detection logic matches auth errors (guest auth errors)
+    const isGuestAuthError =
       lowerError.includes('sign in') ||
       lowerError.includes('sign up') ||
-      lowerError.includes('create a free account') ||
-      lowerError.includes('session expired') ||
-      lowerError.includes('authentication');
+      lowerError.includes('create a free account');
 
-    expect(isAuthError).toBe(true);
+    expect(isGuestAuthError).toBe(true);
   });
 
   it('should not trigger login for non-auth errors', async () => {
     const errorMessage = 'Network error: Failed to connect';
     const lowerError = errorMessage.toLowerCase();
 
-    const isAuthError =
+    const isRateLimitError =
+      lowerError.includes('rate limit') ||
+      lowerError.includes('daily limit') ||
+      lowerError.includes('messages for today') ||
+      lowerError.includes('too many');
+    const isGuestAuthError = !isRateLimitError && (
       lowerError.includes('sign in') ||
       lowerError.includes('sign up') ||
-      lowerError.includes('create a free account') ||
+      lowerError.includes('create a free account'));
+    const isApiKeyError =
+      lowerError.includes('api key') ||
+      lowerError.includes('access forbidden') ||
+      lowerError.includes('logging out and back in') ||
+      lowerError.includes('log out and log back in') ||
+      lowerError === 'forbidden';
+    const isSessionError =
       lowerError.includes('session expired') ||
       lowerError.includes('authentication');
+    const isAuthError = isGuestAuthError || isApiKeyError || isSessionError;
 
     expect(isAuthError).toBe(false);
+  });
+
+  it('should not trigger login for rate limit errors even if they contain "sign up"', () => {
+    // Rate limit messages often contain "sign up" to encourage users to create accounts
+    // but they should NOT be treated as auth errors that trigger login
+    const rateLimitErrors = [
+      "You've used all 5 messages for today. Sign up for a free account to continue!",
+      "Rate limit exceeded. Please wait and try again.",
+      "Daily limit reached. Sign up to chat without limits!",
+      "Too many requests. Please sign up for unlimited access.",
+    ];
+
+    rateLimitErrors.forEach(error => {
+      const lowerError = error.toLowerCase();
+
+      const isRateLimitError =
+        lowerError.includes('rate limit') ||
+        lowerError.includes('daily limit') ||
+        lowerError.includes('messages for today') ||
+        lowerError.includes('too many');
+
+      // Rate limit errors should be detected
+      expect(isRateLimitError).toBe(true);
+
+      // Even though some contain "sign up", they should NOT be treated as guest auth errors
+      const isGuestAuthError = !isRateLimitError && (
+        lowerError.includes('sign in') ||
+        lowerError.includes('sign up') ||
+        lowerError.includes('create a free account'));
+
+      expect(isGuestAuthError).toBe(false);
+    });
   });
 
   it('should detect various auth-related error messages', () => {
@@ -580,14 +631,38 @@ describe('ChatInput auth error handling', () => {
 
     authErrors.forEach(error => {
       const lowerError = error.toLowerCase();
-      const isAuthError =
+      const isGuestAuthError =
         lowerError.includes('sign in') ||
         lowerError.includes('sign up') ||
-        lowerError.includes('create a free account') ||
+        lowerError.includes('create a free account');
+      const isSessionError =
         lowerError.includes('session expired') ||
         lowerError.includes('authentication');
+      const isAuthError = isGuestAuthError || isSessionError;
 
       expect(isAuthError).toBe(true);
+    });
+  });
+
+  it('should detect 403 forbidden/API key related errors', () => {
+    const apiKeyErrors = [
+      'Your session has expired. Please log out and log back in to continue.',
+      'Your API key may be invalid or expired. Please try logging out and back in.',
+      'Access forbidden. Your API key may be invalid.',
+      'API key validation failed',
+      'Forbidden',
+    ];
+
+    apiKeyErrors.forEach(error => {
+      const lowerError = error.toLowerCase();
+      const isApiKeyError =
+        lowerError.includes('api key') ||
+        lowerError.includes('access forbidden') ||
+        lowerError.includes('logging out and back in') ||
+        lowerError.includes('log out and log back in') ||
+        lowerError === 'forbidden';
+
+      expect(isApiKeyError).toBe(true);
     });
   });
 
