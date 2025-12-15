@@ -310,7 +310,7 @@ function enterBackoffMode(): void {
     RATE_LIMIT_CONFIG.maxBackoffMs
   );
 
-  console.warn(`[Sentry] Entering backoff mode for ${backoffState.currentBackoffMs / 1000}s due to rate limiting`);
+  console.warn(`[Sentry] Entering backoff mode for ${(now + backoffState.currentBackoffMs - backoffState.backoffUntil) / 1000}s due to rate limiting`);
 }
 
 /**
