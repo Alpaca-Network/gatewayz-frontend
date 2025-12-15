@@ -35,8 +35,8 @@ export const FEATURED_MODELS = {
   },
   // Google Gemini - Best for math, reasoning, and calculations
   math: {
-    id: 'google/gemini-3.0',
-    displayName: 'Gemini 3.0',
+    id: 'google/gemini-3-pro-preview',
+    displayName: 'Gemini 3 Pro',
     provider: 'Google',
   },
   // OpenAI GPT - Best for general purpose questions
