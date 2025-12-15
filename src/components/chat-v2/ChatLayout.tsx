@@ -382,7 +382,7 @@ export function ChatLayout() {
        const message = activeMessages.find(m => m.id === messageId);
 
        try {
-           await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai'}/v1/chat/feedback`, {
+           const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai'}/v1/chat/feedback`, {
                method: 'POST',
                headers: {
                    ...(apiKey && { 'Authorization': `Bearer ${apiKey}` }),
@@ -399,6 +399,11 @@ export function ChatLayout() {
                    }
                })
            });
+
+           if (!response.ok) {
+               throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+           }
+
            toast({
                title: "Feedback received",
                description: "Thanks for the positive feedback!",
@@ -406,8 +411,9 @@ export function ChatLayout() {
        } catch (error) {
            console.error('[ChatLayout] Failed to submit feedback:', error);
            toast({
-               title: "Feedback received",
-               description: "Thanks for the positive feedback!",
+               title: "Feedback failed",
+               description: "Unable to submit feedback. Please try again.",
+               variant: "destructive",
            });
        }
    }, [activeSessionId, activeMessages, toast]);
@@ -418,7 +424,7 @@ export function ChatLayout() {
        const message = activeMessages.find(m => m.id === messageId);
 
        try {
-           await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai'}/v1/chat/feedback`, {
+           const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai'}/v1/chat/feedback`, {
                method: 'POST',
                headers: {
                    ...(apiKey && { 'Authorization': `Bearer ${apiKey}` }),
@@ -435,6 +441,11 @@ export function ChatLayout() {
                    }
                })
            });
+
+           if (!response.ok) {
+               throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+           }
+
            toast({
                title: "Feedback received",
                description: "Thanks for letting us know. We'll work to improve.",
@@ -442,8 +453,9 @@ export function ChatLayout() {
        } catch (error) {
            console.error('[ChatLayout] Failed to submit feedback:', error);
            toast({
-               title: "Feedback received",
-               description: "Thanks for letting us know. We'll work to improve.",
+               title: "Feedback failed",
+               description: "Unable to submit feedback. Please try again.",
+               variant: "destructive",
            });
        }
    }, [activeSessionId, activeMessages, toast]);
