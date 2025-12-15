@@ -32,6 +32,7 @@ export interface ChatMessageProps {
   audio?: string;
   document?: string;
   isStreaming?: boolean;
+  wasStopped?: boolean;
   model?: string;
   error?: string;
   hasError?: boolean;
@@ -159,6 +160,7 @@ export const ChatMessage = memo<ChatMessageProps>(
     audio,
     document,
     isStreaming,
+    wasStopped,
     model,
     error,
     hasError,
@@ -332,6 +334,13 @@ export const ChatMessage = memo<ChatMessageProps>(
                 <ChatTimer />
               </div>
             )}
+
+            {/* Stopped indicator */}
+            {wasStopped && !isStreaming && (
+              <div className="mt-2 text-xs text-muted-foreground italic">
+                Response stopped
+              </div>
+            )}
           </Card>
 
           {/* Model info and actions */}
@@ -385,6 +394,7 @@ export const ChatMessage = memo<ChatMessageProps>(
       contentEquals(prevProps.content, nextProps.content) &&
       prevProps.reasoning === nextProps.reasoning &&
       prevProps.isStreaming === nextProps.isStreaming &&
+      prevProps.wasStopped === nextProps.wasStopped &&
       prevProps.model === nextProps.model &&
       prevProps.image === nextProps.image &&
       prevProps.video === nextProps.video &&
