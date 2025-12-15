@@ -51,6 +51,97 @@ const extractMediaFromContent = (content: any): { image?: string; video?: string
     return result;
 };
 
+// Helper to check if a model supports a given modality
+const modelSupportsModality = (modelModalities: string[] | undefined, modality: string): boolean => {
+    if (!modelModalities || modelModalities.length === 0) {
+        // If no modalities specified, assume text-only
+        return modality.toLowerCase() === 'text';
+    }
+    return modelModalities.some(m => m.toLowerCase() === modality.toLowerCase());
+};
+
+// Helper to normalize message content for API requests
+// When switching between models, multimodal content (arrays with images/audio/video)
+// needs to be converted to text-only format for non-vision models
+// If modelModalities is provided, we check if the model supports the content types
+export const normalizeContentForApi = (content: any, modelModalities?: string[]): string | any[] => {
+    // If content is a string, return as-is
+    if (typeof content === 'string') {
+        return content;
+    }
+
+    // If content is an array (multimodal format), check each part
+    if (Array.isArray(content)) {
+        // Check if model supports image/video/audio
+        const supportsImage = modelSupportsModality(modelModalities, 'image');
+        const supportsVideo = modelSupportsModality(modelModalities, 'video');
+        const supportsAudio = modelSupportsModality(modelModalities, 'audio');
+        const supportsFile = modelSupportsModality(modelModalities, 'file');
+
+        // If model supports all modalities present in content, return as-is
+        const hasImage = content.some(p => p.type === 'image_url');
+        const hasVideo = content.some(p => p.type === 'video_url');
+        const hasAudio = content.some(p => p.type === 'audio_url');
+        const hasFile = content.some(p => p.type === 'file_url');
+
+        const allSupported = (!hasImage || supportsImage) &&
+                            (!hasVideo || supportsVideo) &&
+                            (!hasAudio || supportsAudio) &&
+                            (!hasFile || supportsFile);
+
+        // If model supports all content types, return the original array
+        if (allSupported) {
+            return content;
+        }
+
+        // Otherwise, extract only text parts
+        const textParts: string[] = [];
+        let hasNonTextContent = false;
+
+        for (const part of content) {
+            if (part.type === 'text' && part.text) {
+                textParts.push(part.text);
+            } else if (part.type === 'image_url' || part.type === 'video_url' ||
+                       part.type === 'audio_url' || part.type === 'file_url') {
+                hasNonTextContent = true;
+            }
+        }
+
+        // If there's non-text content that's being stripped, log it
+        if (hasNonTextContent && textParts.length > 0) {
+            debugLog('Normalizing multimodal content to text-only', {
+                originalParts: content.length,
+                textParts: textParts.length,
+                hasNonTextContent,
+                modelModalities,
+                stripped: { hasImage, hasVideo, hasAudio, hasFile }
+            });
+            return textParts.join('\n');
+        }
+
+        // If only text parts, join them
+        if (textParts.length > 0) {
+            return textParts.join('\n');
+        }
+
+        // If no text content at all but model doesn't support the content types,
+        // return empty string rather than unsupported content
+        if (hasNonTextContent && !allSupported) {
+            debugLog('Dropping unsupported multimodal content with no text', {
+                modelModalities,
+                contentTypes: { hasImage, hasVideo, hasAudio, hasFile }
+            });
+            return '';
+        }
+
+        // Fallback: return original content
+        return content;
+    }
+
+    // Fallback: convert to string
+    return String(content || '');
+};
+
 export function useChatStream() {
     const [isStreaming, setIsStreaming] = useState(false);
     const [streamError, setStreamError] = useState<string | null>(null);
@@ -174,14 +265,21 @@ export function useChatStream() {
             })
             .map((msg: any) => {
                 // Extract only the fields the API expects: role, content, and optionally name
+                // Normalize content to handle multimodal messages when switching models
+                // This ensures messages with images/audio from vision models don't break
+                // when the user switches to a text-only model
                 const sanitized: { role: string; content: any; name?: string } = {
                     role: msg.role,
-                    content: msg.content
+                    content: normalizeContentForApi(msg.content, model.modalities)
                 };
                 if (msg.name) sanitized.name = msg.name;
                 return sanitized;
             });
-        const apiMessages = [...sanitizedHistory, { role: 'user', content }];
+
+        // Normalize the current user message content as well
+        // This handles cases where user sends multimodal content to a text-only model
+        const normalizedContent = normalizeContentForApi(content, model.modalities);
+        const apiMessages = [...sanitizedHistory, { role: 'user', content: normalizedContent }];
 
         const requestBody: any = {
             model: model.value,

@@ -76,8 +76,27 @@ async function handleHttpError(
   // Handle specific status codes
   switch (response.status) {
     case 400: {
+      // Extract error message from various response formats:
+      // - Direct: errorData.detail, errorData.message
+      // - Nested error object: errorData.error?.message
+      // - Wrapped by API proxy: errorData.errorData?.detail, errorData.errorData?.message
       const errorMessage =
-        errorData.detail || errorData.error?.message || errorData.message || 'Bad request';
+        errorData.detail ||
+        errorData.error?.message ||
+        errorData.message ||
+        errorData.errorData?.detail ||
+        errorData.errorData?.message ||
+        errorData.errorData?.error?.message ||
+        'Bad request';
+
+      devError('400 Bad Request details:', {
+        detail: errorData.detail,
+        message: errorData.message,
+        errorMessage: errorData.error?.message,
+        nestedDetail: errorData.errorData?.detail,
+        nestedMessage: errorData.errorData?.message,
+        fullErrorData: errorData,
+      });
 
       if (
         errorMessage.toLowerCase().includes('trial has expired') ||
