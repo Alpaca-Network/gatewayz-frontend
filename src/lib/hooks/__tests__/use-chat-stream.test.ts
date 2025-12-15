@@ -759,4 +759,166 @@ describe('Stop stream functionality', () => {
       expect(() => stopStream()).not.toThrow();
     });
   });
+
+  describe('Message history sanitization', () => {
+    test('should filter out messages with isStreaming flag', () => {
+      const messagesHistory = [
+        { role: 'user', content: 'Hello' },
+        { role: 'assistant', content: 'Hi there!', model: 'gpt-4' },
+        { role: 'user', content: 'How are you?' },
+        { role: 'assistant', content: 'Partial response...', isStreaming: true }
+      ];
+
+      // Simulates the filtering logic from use-chat-stream.ts
+      const sanitizedHistory = messagesHistory
+        .filter((msg: any) => {
+          if (msg.isStreaming) return false;
+          if (msg.wasStopped && !msg.content) return false;
+          if (msg.role === 'assistant' && !msg.content) return false;
+          return true;
+        })
+        .map((msg: any) => ({
+          role: msg.role,
+          content: msg.content,
+          ...(msg.name && { name: msg.name })
+        }));
+
+      expect(sanitizedHistory).toHaveLength(3);
+      expect(sanitizedHistory).not.toContainEqual(
+        expect.objectContaining({ isStreaming: true })
+      );
+    });
+
+    test('should include stopped messages if they have content', () => {
+      const messagesHistory = [
+        { role: 'user', content: 'Hello' },
+        { role: 'assistant', content: 'Partial but useful response', wasStopped: true }
+      ];
+
+      const sanitizedHistory = messagesHistory
+        .filter((msg: any) => {
+          if (msg.isStreaming) return false;
+          if (msg.wasStopped && !msg.content) return false;
+          if (msg.role === 'assistant' && !msg.content) return false;
+          return true;
+        })
+        .map((msg: any) => ({
+          role: msg.role,
+          content: msg.content,
+          ...(msg.name && { name: msg.name })
+        }));
+
+      expect(sanitizedHistory).toHaveLength(2);
+      expect(sanitizedHistory[1].content).toBe('Partial but useful response');
+    });
+
+    test('should filter out stopped messages with no content', () => {
+      const messagesHistory = [
+        { role: 'user', content: 'Hello' },
+        { role: 'assistant', content: '', wasStopped: true }
+      ];
+
+      const sanitizedHistory = messagesHistory
+        .filter((msg: any) => {
+          if (msg.isStreaming) return false;
+          if (msg.wasStopped && !msg.content) return false;
+          if (msg.role === 'assistant' && !msg.content) return false;
+          return true;
+        })
+        .map((msg: any) => ({
+          role: msg.role,
+          content: msg.content,
+          ...(msg.name && { name: msg.name })
+        }));
+
+      expect(sanitizedHistory).toHaveLength(1);
+      expect(sanitizedHistory[0].role).toBe('user');
+    });
+
+    test('should filter out empty assistant messages without wasStopped flag', () => {
+      // When a stream is stopped before any content arrives, wasStopped may be undefined
+      // because the flag is only set to true when finalContent is truthy (line 389).
+      // These empty assistant messages should still be filtered out.
+      const messagesHistory = [
+        { role: 'user', content: 'Hello' },
+        { role: 'assistant', content: '' } // No wasStopped flag, just empty content
+      ];
+
+      const sanitizedHistory = messagesHistory
+        .filter((msg: any) => {
+          if (msg.isStreaming) return false;
+          if (msg.wasStopped && !msg.content) return false;
+          if (msg.role === 'assistant' && !msg.content) return false;
+          return true;
+        })
+        .map((msg: any) => ({
+          role: msg.role,
+          content: msg.content,
+          ...(msg.name && { name: msg.name })
+        }));
+
+      expect(sanitizedHistory).toHaveLength(1);
+      expect(sanitizedHistory[0].role).toBe('user');
+    });
+
+    test('should strip UI-only fields from messages', () => {
+      const messagesHistory = [
+        { role: 'user', content: 'Hello', created_at: '2024-01-01', model: 'gpt-4' },
+        {
+          role: 'assistant',
+          content: 'Response',
+          hasError: false,
+          error: undefined,
+          wasStopped: false,
+          reasoning: 'Some reasoning',
+          model: 'gpt-4'
+        }
+      ];
+
+      const sanitizedHistory = messagesHistory
+        .filter((msg: any) => {
+          if (msg.isStreaming) return false;
+          if (msg.wasStopped && !msg.content) return false;
+          if (msg.role === 'assistant' && !msg.content) return false;
+          return true;
+        })
+        .map((msg: any) => ({
+          role: msg.role,
+          content: msg.content,
+          ...(msg.name && { name: msg.name })
+        }));
+
+      // Should only have role and content
+      expect(sanitizedHistory[0]).toEqual({ role: 'user', content: 'Hello' });
+      expect(sanitizedHistory[1]).toEqual({ role: 'assistant', content: 'Response' });
+      expect(sanitizedHistory[1]).not.toHaveProperty('hasError');
+      expect(sanitizedHistory[1]).not.toHaveProperty('error');
+      expect(sanitizedHistory[1]).not.toHaveProperty('wasStopped');
+      expect(sanitizedHistory[1]).not.toHaveProperty('reasoning');
+      expect(sanitizedHistory[1]).not.toHaveProperty('model');
+    });
+
+    test('should preserve name field when present', () => {
+      const messagesHistory = [
+        { role: 'user', content: 'Hello', name: 'John' },
+        { role: 'assistant', content: 'Hi John!' }
+      ];
+
+      const sanitizedHistory = messagesHistory
+        .filter((msg: any) => {
+          if (msg.isStreaming) return false;
+          if (msg.wasStopped && !msg.content) return false;
+          if (msg.role === 'assistant' && !msg.content) return false;
+          return true;
+        })
+        .map((msg: any) => ({
+          role: msg.role,
+          content: msg.content,
+          ...(msg.name && { name: msg.name })
+        }));
+
+      expect(sanitizedHistory[0]).toEqual({ role: 'user', content: 'Hello', name: 'John' });
+      expect(sanitizedHistory[1]).toEqual({ role: 'assistant', content: 'Hi John!' });
+    });
+  });
 });

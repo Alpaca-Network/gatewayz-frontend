@@ -158,9 +158,30 @@ export function useChatStream() {
 
         // 3. Prepare Request
         // We need to format the messages history for the API
-        // messagesHistory typically comes from the cache, which matches the API format usually.
-        // We just need to ensure we append the NEW user message.
-        const apiMessages = [...messagesHistory, { role: 'user', content }];
+        // messagesHistory comes from the cache and may contain UI-only fields
+        // (isStreaming, wasStopped, hasError, error) that the backend doesn't expect.
+        // We also need to filter out incomplete messages from stopped streams.
+        const sanitizedHistory = messagesHistory
+            .filter((msg: any) => {
+                // Filter out messages that are still streaming
+                if (msg.isStreaming) return false;
+                // Filter out stopped messages without content
+                if (msg.wasStopped && !msg.content) return false;
+                // Filter out empty assistant messages (e.g., from stopped streams before any content arrived)
+                // These may not have wasStopped set if the stop happened before finalization
+                if (msg.role === 'assistant' && !msg.content) return false;
+                return true;
+            })
+            .map((msg: any) => {
+                // Extract only the fields the API expects: role, content, and optionally name
+                const sanitized: { role: string; content: any; name?: string } = {
+                    role: msg.role,
+                    content: msg.content
+                };
+                if (msg.name) sanitized.name = msg.name;
+                return sanitized;
+            });
+        const apiMessages = [...sanitizedHistory, { role: 'user', content }];
 
         const requestBody: any = {
             model: model.value,
