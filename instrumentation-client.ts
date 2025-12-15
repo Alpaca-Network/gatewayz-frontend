@@ -445,7 +445,7 @@ Sentry.init({
 
   // Enable session replays for better error debugging
   replaysOnErrorSampleRate: 1,    // Capture replay for 100% of errors
-  replaysSessionSampleRate: 1,    // Capture 100% of sessions
+  replaysSessionSampleRate: 0.1,  // Capture 10% of sessions (balances cost/privacy with debugging)
 
   // Limit breadcrumbs to reduce payload size
   maxBreadcrumbs: RATE_LIMIT_CONFIG.maxBreadcrumbs,

@@ -35,11 +35,11 @@ describe('Sentry Rate Limiting Configuration', () => {
       // Replays are enabled for better error debugging
       const EXPECTED_REPLAY_RATES = {
         replaysOnErrorSampleRate: 1,    // 100% of errors
-        replaysSessionSampleRate: 1,    // 100% of sessions
+        replaysSessionSampleRate: 0.1,  // 10% of sessions (balances cost/privacy)
       };
 
       expect(EXPECTED_REPLAY_RATES.replaysOnErrorSampleRate).toBe(1);
-      expect(EXPECTED_REPLAY_RATES.replaysSessionSampleRate).toBe(1);
+      expect(EXPECTED_REPLAY_RATES.replaysSessionSampleRate).toBe(0.1);
     });
   });
 
