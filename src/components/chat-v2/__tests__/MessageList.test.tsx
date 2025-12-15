@@ -363,7 +363,7 @@ describe('MessageList', () => {
       expect(onShare).toHaveBeenCalledWith(2);
     });
 
-    it('should not show share button when message has no id', () => {
+    it('should show share button even when message has no id (for streaming messages)', () => {
       const onShare = jest.fn();
       const messages = [
         { id: 1, role: 'user' as const, content: 'Hello', created_at: '2024-01-01' },
@@ -379,8 +379,8 @@ describe('MessageList', () => {
         />
       );
 
-      // Assistant message without id should not have share button
-      expect(screen.queryByTestId('share-button')).not.toBeInTheDocument();
+      // Assistant message should have share button even without id (icons show during streaming)
+      expect(screen.getByTestId('share-button')).toBeInTheDocument();
     });
   });
 

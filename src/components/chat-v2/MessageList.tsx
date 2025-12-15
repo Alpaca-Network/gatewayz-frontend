@@ -153,9 +153,9 @@ export function MessageList({ sessionId, messages, isLoading, pendingPrompt, onR
             onCopy={() => navigator.clipboard.writeText(getTextFromContent(msg.content))}
             onRetry={idx === lastMessageIndex && msg.hasError ? onRetry : undefined}
             onRegenerate={isLastAssistant && !msg.isStreaming ? onRegenerate : undefined}
-            onLike={msg.role === 'assistant' && msg.id != null && onLike ? () => onLike(msg.id) : undefined}
-            onDislike={msg.role === 'assistant' && msg.id != null && onDislike ? () => onDislike(msg.id) : undefined}
-            onShare={msg.role === 'assistant' && msg.id != null && onShare ? () => onShare(msg.id) : undefined}
+            onLike={msg.role === 'assistant' && onLike ? () => onLike(msg.id) : undefined}
+            onDislike={msg.role === 'assistant' && onDislike ? () => onDislike(msg.id) : undefined}
+            onShare={msg.role === 'assistant' && onShare ? () => onShare(msg.id) : undefined}
           />
         );
       })}
