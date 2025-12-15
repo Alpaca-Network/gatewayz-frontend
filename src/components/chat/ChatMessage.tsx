@@ -454,6 +454,8 @@ export const ChatMessage = memo<ChatMessageProps>(
       prevProps.document === nextProps.document &&
       prevProps.error === nextProps.error &&
       prevProps.hasError === nextProps.hasError &&
+      prevProps.showActions === nextProps.showActions &&
+      prevProps.onCopy === nextProps.onCopy &&
       prevProps.onRetry === nextProps.onRetry &&
       prevProps.onLike === nextProps.onLike &&
       prevProps.onDislike === nextProps.onDislike &&
