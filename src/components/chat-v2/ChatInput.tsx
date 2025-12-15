@@ -62,6 +62,7 @@ import {
 } from "@/lib/guest-chat";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { usePrivy } from "@privy-io/react-auth";
+import { useGatewayzAuth } from "@/context/gatewayz-auth-context";
 
 // Helper for file to base64
 const fileToBase64 = (file: File): Promise<string> => {
@@ -144,6 +145,7 @@ export function ChatInput() {
   const { toast } = useToast();
   const { isAuthenticated } = useAuthStore();
   const { login } = usePrivy();
+  const { logout } = useGatewayzAuth();
 
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
@@ -336,27 +338,53 @@ export function ChatInput() {
 
         const errorMessage = e instanceof Error ? e.message : "Failed to send message";
 
-        // Check if the error is auth-related (guest mode not available or session expired)
-        const isAuthError = errorMessage.toLowerCase().includes('sign in') ||
-                           errorMessage.toLowerCase().includes('sign up') ||
-                           errorMessage.toLowerCase().includes('create a free account') ||
-                           errorMessage.toLowerCase().includes('session expired') ||
-                           errorMessage.toLowerCase().includes('authentication');
+        // Check if the error is auth-related (guest mode not available, session expired, or API key issues)
+        const lowerErrorMessage = errorMessage.toLowerCase();
+        const isGuestAuthError = lowerErrorMessage.includes('sign in') ||
+                                lowerErrorMessage.includes('sign up') ||
+                                lowerErrorMessage.includes('create a free account');
+        const isApiKeyError = lowerErrorMessage.includes('api key') ||
+                             lowerErrorMessage.includes('access forbidden') ||
+                             lowerErrorMessage.includes('logging out and back in');
+        const isSessionError = lowerErrorMessage.includes('session expired') ||
+                              lowerErrorMessage.includes('authentication');
+        const isAuthError = isGuestAuthError || isApiKeyError || isSessionError;
 
-        if (isAuthError && !isAuthenticated) {
-          // Show the login modal for auth-related errors
-          toast({
-            title: "Sign in required",
-            description: "Create a free account to use the chat feature.",
-            variant: "destructive"
-          });
-          // Trigger Privy login modal
-          login();
+        if (isAuthError) {
+          if (!isAuthenticated) {
+            // Unauthenticated user - show the login modal
+            toast({
+              title: "Sign in required",
+              description: "Create a free account to use the chat feature.",
+              variant: "destructive"
+            });
+            // Trigger Privy login modal
+            login();
+          } else if (isApiKeyError) {
+            // Authenticated user with invalid API key - prompt to re-authenticate
+            toast({
+              title: "Session expired",
+              description: "Your session has expired. Please log out and log back in.",
+              variant: "destructive"
+            });
+            // Auto-logout and re-login to refresh API key
+            const logoutResult = logout();
+            if (logoutResult && typeof logoutResult.then === 'function') {
+              logoutResult.then(() => {
+                login();
+              });
+            } else {
+              login();
+            }
+          } else {
+            // Other auth errors for authenticated users
+            toast({ title: errorMessage, variant: "destructive" });
+          }
         } else {
           toast({ title: errorMessage, variant: "destructive" });
         }
     }
-  }, [inputValue, selectedImage, selectedVideo, selectedAudio, selectedDocument, isStreaming, selectedModel, activeSessionId, messages, setInputValue, setActiveSessionId, createSession, streamMessage, toast, isAuthenticated, login, setMessageStartTime]);
+  }, [inputValue, selectedImage, selectedVideo, selectedAudio, selectedDocument, isStreaming, selectedModel, activeSessionId, messages, setInputValue, setActiveSessionId, createSession, streamMessage, toast, isAuthenticated, login, logout, setMessageStartTime]);
 
   // Expose send function for prompt auto-send from WelcomeScreen
   useEffect(() => {
