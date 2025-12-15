@@ -88,10 +88,13 @@ jest.mock('@/lib/hooks/use-chat-queries', () => ({
   useSessionMessages: () => ({ data: [], isLoading: false }),
 }));
 
+const mockStopStream = jest.fn();
+
 jest.mock('@/lib/hooks/use-chat-stream', () => ({
   useChatStream: () => ({
     isStreaming: false,
     streamMessage: mockStreamMessage,
+    stopStream: mockStopStream,
   }),
 }));
 
@@ -134,6 +137,7 @@ import { ChatInput } from '../ChatInput';
 describe('ChatInput', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    resetMockStoreState();
     // Clean up window functions
     delete (window as any).__chatInputFocus;
     delete (window as any).__chatInputSend;
@@ -145,25 +149,36 @@ describe('ChatInput', () => {
   });
 
   describe('send button disabled state', () => {
-    it('should enable send button when not streaming (validation happens in handleSend)', () => {
+    it('should disable send button when input is empty', () => {
       render(<ChatInput />);
 
       // Find all buttons and get the last one (send button)
       const buttons = screen.getAllByTestId('button');
       const sendBtn = buttons[buttons.length - 1];
 
-      // Button is only disabled during streaming, not when input is empty
-      // Validation of empty input happens inside handleSend
+      // Button is disabled when input is empty (better UX)
+      expect(sendBtn).toBeDisabled();
+    });
+
+    it('should enable send button when input has content', () => {
+      // Set input value to non-empty
+      mockStoreState.inputValue = 'Hello world';
+
+      render(<ChatInput />);
+
+      const buttons = screen.getAllByTestId('button');
+      const sendBtn = buttons[buttons.length - 1];
       expect(sendBtn).not.toBeDisabled();
     });
 
     it('should derive isInputEmpty from inputValue without separate state', () => {
       // This test verifies the fix: isInputEmpty is derived from inputValue
       // not tracked as separate state that could desync
+      // Set input to non-empty to verify button is enabled
+      mockStoreState.inputValue = 'Test message';
+
       render(<ChatInput />);
 
-      // The isInputEmpty value is used in handleSend validation, not for disabling the button
-      // This prevents the race condition where button state and input value could desync
       const buttons = screen.getAllByTestId('button');
       const sendBtn = buttons[buttons.length - 1];
       expect(sendBtn).not.toBeDisabled();
