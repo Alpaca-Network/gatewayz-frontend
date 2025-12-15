@@ -296,7 +296,7 @@ export async function* streamChatResponse(
       devError('403 Forbidden details:', errorData);
 
       throw new Error(
-        'Your session has expired. Please log out and log back in to continue.'
+        'Your session has expired. Please log out and log back in to continue. If this issue persists, clear your browser cookies and log in again.'
       );
     }
 

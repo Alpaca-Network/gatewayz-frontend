@@ -136,7 +136,7 @@ async function handleHttpError(
 
     case 403:
       throw new AuthenticationError(
-        'Your session has expired. Please log out and log back in to continue.'
+        'Your session has expired. Please log out and log back in to continue. If this issue persists, clear your browser cookies and log in again.'
       );
 
     case 404:

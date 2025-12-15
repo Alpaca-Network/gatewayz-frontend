@@ -484,7 +484,7 @@ export async function POST(request: NextRequest) {
             let errorType = 'api_error';
 
             if (response.status === 401 || response.status === 403) {
-              userMessage = 'Your session has expired. Please log out and log back in to continue.';
+              userMessage = 'Your session has expired. Please log out and log back in to continue. If this issue persists, clear your browser cookies and log in again.';
               errorType = 'auth_error';
             } else if (response.status === 429) {
               userMessage = errorData.detail || errorData.message || 'Rate limit exceeded. Please wait a moment and try again.';
