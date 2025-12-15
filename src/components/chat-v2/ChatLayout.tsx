@@ -338,6 +338,12 @@ export function ChatLayout() {
            return;
        }
 
+       // Don't regenerate while streaming
+       if (lastAssistantMessage.isStreaming) {
+           console.warn('[ChatLayout] Cannot regenerate while message is still streaming');
+           return;
+       }
+
        // Extract text content
        let userContent = '';
        if (typeof lastUserMessage.content === 'string') {
@@ -357,10 +363,11 @@ export function ChatLayout() {
            return;
        }
 
-       // Remove just the last assistant message from cache
+       // Remove BOTH the user message AND the assistant message from cache
+       // This prevents duplicate user messages when handleSend adds the message again
        queryClient.setQueryData(['chat-messages', activeSessionId], (old: any[] | undefined) => {
-           if (!old || old.length < 1) return old;
-           return old.slice(0, -1);
+           if (!old || old.length < 2) return old;
+           return old.slice(0, -2);
        });
 
        // Set the input and re-send
@@ -392,19 +399,25 @@ export function ChatLayout() {
    const handleShare = useCallback((messageId: number) => {
        // Find the message and copy its content
        const message = activeMessages.find(m => m.id === messageId);
-       if (message) {
-           const content = typeof message.content === 'string'
-               ? message.content
-               : (message.content as any[])
-                   .filter((c: any) => c.type === 'text')
-                   .map((c: any) => c.text)
-                   .join('');
-           navigator.clipboard.writeText(content);
+       if (!message) {
            toast({
-               title: "Copied to clipboard",
-               description: "Response has been copied to your clipboard.",
+               title: "Unable to share",
+               description: "Message not found.",
+               variant: "destructive",
            });
+           return;
        }
+       const content = typeof message.content === 'string'
+           ? message.content
+           : (message.content as any[])
+               .filter((c: any) => c.type === 'text')
+               .map((c: any) => c.text)
+               .join('');
+       navigator.clipboard.writeText(content);
+       toast({
+           title: "Copied to clipboard",
+           description: "Response has been copied to your clipboard.",
+       });
    }, [activeMessages, toast]);
 
    // When logged out, always show welcome screen (ignore cached messages and activeSessionId)
