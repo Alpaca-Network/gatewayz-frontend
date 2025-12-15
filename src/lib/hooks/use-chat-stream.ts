@@ -51,6 +51,53 @@ const extractMediaFromContent = (content: any): { image?: string; video?: string
     return result;
 };
 
+// Helper to normalize message content for API requests
+// When switching between models, multimodal content (arrays with images/audio/video)
+// needs to be converted to text-only format for non-vision models
+const normalizeContentForApi = (content: any): string | any[] => {
+    // If content is a string, return as-is
+    if (typeof content === 'string') {
+        return content;
+    }
+
+    // If content is an array (multimodal format), extract text parts
+    if (Array.isArray(content)) {
+        const textParts: string[] = [];
+        let hasNonTextContent = false;
+
+        for (const part of content) {
+            if (part.type === 'text' && part.text) {
+                textParts.push(part.text);
+            } else if (part.type === 'image_url' || part.type === 'video_url' ||
+                       part.type === 'audio_url' || part.type === 'file_url') {
+                hasNonTextContent = true;
+            }
+        }
+
+        // If there's non-text content, add a note about it being omitted
+        if (hasNonTextContent && textParts.length > 0) {
+            debugLog('Normalizing multimodal content to text-only', {
+                originalParts: content.length,
+                textParts: textParts.length,
+                hasNonTextContent
+            });
+            return textParts.join('\n');
+        }
+
+        // If only text parts, join them
+        if (textParts.length > 0) {
+            return textParts.join('\n');
+        }
+
+        // If no text content at all, return the original (let the API handle it)
+        // This preserves vision-capable model requests
+        return content;
+    }
+
+    // Fallback: convert to string
+    return String(content || '');
+};
+
 export function useChatStream() {
     const [isStreaming, setIsStreaming] = useState(false);
     const [streamError, setStreamError] = useState<string | null>(null);
@@ -174,9 +221,12 @@ export function useChatStream() {
             })
             .map((msg: any) => {
                 // Extract only the fields the API expects: role, content, and optionally name
+                // Normalize content to handle multimodal messages when switching models
+                // This ensures messages with images/audio from vision models don't break
+                // when the user switches to a text-only model
                 const sanitized: { role: string; content: any; name?: string } = {
                     role: msg.role,
-                    content: msg.content
+                    content: normalizeContentForApi(msg.content)
                 };
                 if (msg.name) sanitized.name = msg.name;
                 return sanitized;
