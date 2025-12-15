@@ -42,18 +42,17 @@ const transactionRateLimitState = {
   lastCleanup: Date.now(),
 };
 
-// Rate limiting configuration - EXTREMELY aggressive to prevent 429 errors
-// The /monitoring tunnel is still returning 429s, so we need to reduce further
+// Rate limiting configuration - balanced for better error visibility
 const RATE_LIMIT_CONFIG = {
-  maxEventsPerMinute: 2,         // REDUCED: Max 2 events per minute (was 5, still hitting 429s)
+  maxEventsPerMinute: 10,        // INCREASED: Allow 10 events per minute for better visibility
   windowMs: 60000,               // 1 minute window
-  dedupeWindowMs: 300000,        // INCREASED: Don't send same message within 5 minutes (was 2 min)
-  maxBreadcrumbs: 5,             // REDUCED: Limit breadcrumbs to reduce payload size (was 10)
+  dedupeWindowMs: 60000,         // REDUCED: Don't send same message within 1 minute
+  maxBreadcrumbs: 20,            // INCREASED: More breadcrumbs for better debugging context
   cleanupIntervalMs: 30000,      // Cleanup stale entries every 30 seconds
   maxMapSize: 50,                // Maximum entries in deduplication map
   // Transaction-specific limits
-  maxTransactionsPerMinute: 3,   // REDUCED from 10 - allow fewer transactions
-  transactionDedupeWindowMs: 60000, // INCREASED from 30s - 1 minute for transaction deduplication
+  maxTransactionsPerMinute: 10,  // INCREASED: Allow more transactions
+  transactionDedupeWindowMs: 30000, // REDUCED: 30 seconds for transaction deduplication
   // Backoff configuration for when we detect 429 errors
   backoffMultiplier: 2,          // Double the wait time after each 429
   maxBackoffMs: 300000,          // Maximum backoff of 5 minutes
@@ -194,16 +193,8 @@ function shouldFilterEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): bo
     return true;
   }
 
-  // Filter out pending prompt timeout warnings (these are informational, not errors)
-  if (
-    errorMessage.includes('Pending prompt timed out') ||
-    eventMessage.includes('Pending prompt timed out') ||
-    errorMessage.includes('timed out after') ||
-    eventMessage.includes('clearing optimistic UI')
-  ) {
-    console.debug('[Sentry] Filtered out pending prompt timeout warning (informational)');
-    return true;
-  }
+  // NOTE: "Pending prompt timed out" errors are now captured (not filtered)
+  // These are important for debugging UI timeout issues
 
   // Filter out WalletConnect relay errors (non-critical)
   if (
@@ -216,28 +207,8 @@ function shouldFilterEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): bo
     return true;
   }
 
-  // Filter out Next.js hydration errors
-  // These are often caused by browser extensions, ad blockers, or dynamic content
-  // and are non-critical since we have suppressHydrationWarning set
-  if (
-    errorMessageLower.includes('hydration') ||
-    (errorMessageLower.includes('text content does not match') && errorMessageLower.includes('server')) ||
-    eventMessageLower.includes('hydration') ||
-    eventMessageLower.includes('server rendered html')
-  ) {
-    // Only filter if it's a generic hydration error without specific component info
-    // This allows us to still catch real hydration bugs in our code
-    // Use case-insensitive checks to catch all variants (e.g., "At Path", "Component Stack")
-    const messageLower = errorMessage.toLowerCase();
-    const hasComponentInfo =
-      messageLower.includes('at path') ||
-      messageLower.includes('component stack');
-
-    if (!hasComponentInfo) {
-      console.debug('[Sentry] Filtered out generic hydration error (likely caused by browser extensions)');
-      return true;
-    }
-  }
+  // NOTE: Next.js hydration errors are now captured (not filtered)
+  // These are important for debugging SSR/hydration mismatches
 
   // Filter out 429 rate limit errors from monitoring/telemetry endpoints
   // These create a cascade: Sentry tries to report 429 errors, which causes more 429s
@@ -466,35 +437,29 @@ Sentry.init({
   // Release tracking for associating errors with specific versions
   release: getRelease(),
 
-  // REDUCED: Sample only 1% of transactions to avoid rate limits
-  // Increase to 0.05 or 0.1 only for debugging specific issues
-  tracesSampleRate: 0.01,  // REDUCED from 0.05 to 0.01
+  // Sample 10% of transactions for performance monitoring
+  tracesSampleRate: 0.1,
 
   // Setting this option to true will print useful information to the console while you're setting up Sentry.
   debug: false,
 
-  // DISABLED: Replays completely disabled to reduce 429s
-  // Session replays send continuous data which contributes to rate limiting
-  replaysOnErrorSampleRate: 0,    // DISABLED - was 0.1, causing 429s
-  replaysSessionSampleRate: 0,    // Already disabled
+  // Enable session replays for better error debugging
+  replaysOnErrorSampleRate: 1,    // Capture replay for 100% of errors
+  replaysSessionSampleRate: 1,    // Capture 100% of sessions
 
   // Limit breadcrumbs to reduce payload size
   maxBreadcrumbs: RATE_LIMIT_CONFIG.maxBreadcrumbs,
 
-  // DISABLED: Replay integration completely removed to prevent 429s
-  // Replay was sending too many events to Sentry causing rate limit errors
+  // Enable replay integration for session recordings
   integrations: [
-    // REMOVED: Replay integration completely disabled
-    // Sentry.replayIntegration({ maskAllText: true, blockAllMedia: true }),
-
-    // REMOVED: consoleLoggingIntegration was sending every console.log/warn/error to Sentry
-    // This was a major source of 429 rate limit errors
-    // Re-enable only for debugging: Sentry.consoleLoggingIntegration({ levels: ["error"] }),
+    Sentry.replayIntegration({
+      maskAllText: true,
+      blockAllMedia: true,
+    }),
   ],
 
-  // DISABLED: enableLogs was causing excessive event volume
-  // Re-enable only for debugging specific issues
-  enableLogs: false,
+  // Enable console logging integration for error-level logs
+  enableLogs: true,
 
   // Filter out non-blocking errors FIRST, then apply rate limiting
   // This prevents filtered events from consuming rate limit quota
