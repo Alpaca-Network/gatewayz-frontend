@@ -39,6 +39,7 @@ interface SpeechRecognition extends EventTarget {
 }
 
 import { useState, useRef, useCallback, useEffect } from "react";
+import * as Sentry from "@sentry/nextjs";
 import { Send, Image as ImageIcon, Video as VideoIcon, Mic, Mic as AudioIcon, X, RefreshCw, Paperclip, FileText, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -351,6 +352,30 @@ export function ChatInput() {
         const isSessionError = lowerErrorMessage.includes('session expired') ||
                               lowerErrorMessage.includes('authentication');
         const isAuthError = isGuestAuthError || isApiKeyError || isSessionError;
+
+        // Capture error to Sentry with appropriate tags
+        Sentry.captureException(
+          e instanceof Error ? e : new Error(errorMessage),
+          {
+            tags: {
+              error_type: isAuthError ? 'chat_auth_error' : 'chat_send_error',
+              is_authenticated: isAuthenticated ? 'true' : 'false',
+              model: freshSelectedModel?.value || 'unknown',
+            },
+            extra: {
+              errorMessage,
+              isGuestAuthError,
+              isApiKeyError,
+              isSessionError,
+              sessionId,
+              hasImage: !!currentImage,
+              hasVideo: !!currentVideo,
+              hasAudio: !!currentAudio,
+              hasDocument: !!currentDocument,
+            },
+            level: isAuthError ? 'warning' : 'error',
+          }
+        );
 
         if (isAuthError) {
           if (!isAuthenticated) {
