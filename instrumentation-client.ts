@@ -302,7 +302,10 @@ function shouldFilterEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): bo
 function enterBackoffMode(): void {
   const now = Date.now();
   backoffState.inBackoff = true;
-  backoffState.backoffUntil = now + backoffState.currentBackoffMs;
+
+  // Store the actual backoff duration for logging before updating currentBackoffMs
+  const actualBackoffMs = backoffState.currentBackoffMs;
+  backoffState.backoffUntil = now + actualBackoffMs;
 
   // Increase backoff for next time (exponential backoff)
   backoffState.currentBackoffMs = Math.min(
@@ -310,7 +313,7 @@ function enterBackoffMode(): void {
     RATE_LIMIT_CONFIG.maxBackoffMs
   );
 
-  console.warn(`[Sentry] Entering backoff mode for ${(now + backoffState.currentBackoffMs - backoffState.backoffUntil) / 1000}s due to rate limiting`);
+  console.warn(`[Sentry] Entering backoff mode for ${actualBackoffMs / 1000}s due to rate limiting`);
 }
 
 /**
