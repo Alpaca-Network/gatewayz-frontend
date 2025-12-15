@@ -60,7 +60,7 @@ const ROUTER_OPTION: ModelOption = {
   modalities: ['Text', 'Image', 'File', 'Audio', 'Video'] // Router supports all modalities
 };
 
-const ensureRouterOption = (options: ModelOption[]): ModelOption[] => {
+export const ensureRouterOption = (options: ModelOption[]): ModelOption[] => {
   const hasRouter = options.some((option) => option.value === ROUTER_OPTION.value);
   if (hasRouter) {
     return options.map((option) =>
@@ -71,12 +71,12 @@ const ensureRouterOption = (options: ModelOption[]): ModelOption[] => {
 };
 
 // Clean model name by removing redundant suffixes like "(Free)" since we show icons
-const cleanModelName = (name: string): string => {
+export const cleanModelName = (name: string): string => {
   return name.replace(/\s*\(free\)\s*/gi, '').trim();
 };
 
 // Abbreviate gateway names for compact display
-const getGatewayAbbrev = (gateway: string): string => {
+export const getGatewayAbbrev = (gateway: string): string => {
   const abbrevs: Record<string, string> = {
     'cerebras': 'CRB',
     'groq': 'GRQ',
@@ -94,7 +94,7 @@ const getGatewayAbbrev = (gateway: string): string => {
 };
 
 // Extract developer from model ID (e.g., "openai/gpt-4" -> "OpenAI")
-const getDeveloper = (modelId: string): string => {
+export const getDeveloper = (modelId: string): string => {
   const parts = modelId.split('/');
   if (parts.length > 1) {
     const dev = parts[0];
@@ -118,7 +118,7 @@ const getDeveloper = (modelId: string): string => {
 };
 
 // Determine model speed tier based on gateway and model characteristics
-const getModelSpeedTier = (modelId: string, gateway?: string): 'ultra-fast' | 'fast' | 'medium' | 'slow' | undefined => {
+export const getModelSpeedTier = (modelId: string, gateway?: string): 'ultra-fast' | 'fast' | 'medium' | 'slow' | undefined => {
   const id = modelId.toLowerCase();
 
   // Ultra-fast providers (Cerebras, Groq) - known for extreme speed
