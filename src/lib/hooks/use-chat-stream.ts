@@ -163,10 +163,13 @@ export function useChatStream() {
         // We also need to filter out incomplete messages from stopped streams.
         const sanitizedHistory = messagesHistory
             .filter((msg: any) => {
-                // Filter out messages that are still streaming or were stopped without content
+                // Filter out messages that are still streaming
                 if (msg.isStreaming) return false;
-                // Include stopped messages if they have content
+                // Filter out stopped messages without content
                 if (msg.wasStopped && !msg.content) return false;
+                // Filter out empty assistant messages (e.g., from stopped streams before any content arrived)
+                // These may not have wasStopped set if the stop happened before finalization
+                if (msg.role === 'assistant' && !msg.content) return false;
                 return true;
             })
             .map((msg: any) => {

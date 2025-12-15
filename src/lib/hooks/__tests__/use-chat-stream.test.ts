@@ -774,6 +774,7 @@ describe('Stop stream functionality', () => {
         .filter((msg: any) => {
           if (msg.isStreaming) return false;
           if (msg.wasStopped && !msg.content) return false;
+          if (msg.role === 'assistant' && !msg.content) return false;
           return true;
         })
         .map((msg: any) => ({
@@ -798,6 +799,7 @@ describe('Stop stream functionality', () => {
         .filter((msg: any) => {
           if (msg.isStreaming) return false;
           if (msg.wasStopped && !msg.content) return false;
+          if (msg.role === 'assistant' && !msg.content) return false;
           return true;
         })
         .map((msg: any) => ({
@@ -820,6 +822,33 @@ describe('Stop stream functionality', () => {
         .filter((msg: any) => {
           if (msg.isStreaming) return false;
           if (msg.wasStopped && !msg.content) return false;
+          if (msg.role === 'assistant' && !msg.content) return false;
+          return true;
+        })
+        .map((msg: any) => ({
+          role: msg.role,
+          content: msg.content,
+          ...(msg.name && { name: msg.name })
+        }));
+
+      expect(sanitizedHistory).toHaveLength(1);
+      expect(sanitizedHistory[0].role).toBe('user');
+    });
+
+    test('should filter out empty assistant messages without wasStopped flag', () => {
+      // When a stream is stopped before any content arrives, wasStopped may be undefined
+      // because the flag is only set to true when finalContent is truthy (line 389).
+      // These empty assistant messages should still be filtered out.
+      const messagesHistory = [
+        { role: 'user', content: 'Hello' },
+        { role: 'assistant', content: '' } // No wasStopped flag, just empty content
+      ];
+
+      const sanitizedHistory = messagesHistory
+        .filter((msg: any) => {
+          if (msg.isStreaming) return false;
+          if (msg.wasStopped && !msg.content) return false;
+          if (msg.role === 'assistant' && !msg.content) return false;
           return true;
         })
         .map((msg: any) => ({
@@ -850,6 +879,7 @@ describe('Stop stream functionality', () => {
         .filter((msg: any) => {
           if (msg.isStreaming) return false;
           if (msg.wasStopped && !msg.content) return false;
+          if (msg.role === 'assistant' && !msg.content) return false;
           return true;
         })
         .map((msg: any) => ({
@@ -878,6 +908,7 @@ describe('Stop stream functionality', () => {
         .filter((msg: any) => {
           if (msg.isStreaming) return false;
           if (msg.wasStopped && !msg.content) return false;
+          if (msg.role === 'assistant' && !msg.content) return false;
           return true;
         })
         .map((msg: any) => ({
