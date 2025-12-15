@@ -341,9 +341,20 @@ export function ChatInput() {
 
         // Check if the error is auth-related (guest mode not available, session expired, or API key issues)
         const lowerErrorMessage = errorMessage.toLowerCase();
-        const isGuestAuthError = lowerErrorMessage.includes('sign in') ||
+
+        // Rate limit errors should NOT be treated as auth errors, even if they mention "sign up"
+        // Rate limit messages like "You've used all X messages for today. Sign up..." contain "sign up"
+        // but should show the rate limit message, not trigger login
+        const isRateLimitError = lowerErrorMessage.includes('rate limit') ||
+                                lowerErrorMessage.includes('daily limit') ||
+                                lowerErrorMessage.includes('messages for today') ||
+                                lowerErrorMessage.includes('too many');
+
+        // Only check for guest auth errors if NOT a rate limit error
+        const isGuestAuthError = !isRateLimitError && (
+                                lowerErrorMessage.includes('sign in') ||
                                 lowerErrorMessage.includes('sign up') ||
-                                lowerErrorMessage.includes('create a free account');
+                                lowerErrorMessage.includes('create a free account'));
         const isApiKeyError = lowerErrorMessage.includes('api key') ||
                              lowerErrorMessage.includes('access forbidden') ||
                              lowerErrorMessage.includes('logging out and back in') ||
@@ -354,16 +365,18 @@ export function ChatInput() {
         const isAuthError = isGuestAuthError || isApiKeyError || isSessionError;
 
         // Capture error to Sentry with appropriate tags
+        const errorType = isRateLimitError ? 'chat_rate_limit_error' : isAuthError ? 'chat_auth_error' : 'chat_send_error';
         Sentry.captureException(
           e instanceof Error ? e : new Error(errorMessage),
           {
             tags: {
-              error_type: isAuthError ? 'chat_auth_error' : 'chat_send_error',
+              error_type: errorType,
               is_authenticated: isAuthenticated ? 'true' : 'false',
               model: freshSelectedModel?.value || 'unknown',
             },
             extra: {
               errorMessage,
+              isRateLimitError,
               isGuestAuthError,
               isApiKeyError,
               isSessionError,
@@ -373,7 +386,7 @@ export function ChatInput() {
               hasAudio: !!currentAudio,
               hasDocument: !!currentDocument,
             },
-            level: isAuthError ? 'warning' : 'error',
+            level: isRateLimitError ? 'warning' : isAuthError ? 'warning' : 'error',
           }
         );
 
