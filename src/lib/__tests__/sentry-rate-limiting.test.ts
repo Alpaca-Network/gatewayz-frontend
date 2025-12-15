@@ -5,41 +5,41 @@
 
 describe('Sentry Rate Limiting Configuration', () => {
   describe('Client-side Rate Limiting', () => {
-    it('should have aggressive rate limits to prevent 429 errors', () => {
+    it('should have balanced rate limits for error visibility', () => {
       // These tests document the expected configuration values
       // The actual implementation is in instrumentation-client.ts
 
       const EXPECTED_CONFIG = {
-        maxEventsPerMinute: 5,      // Very conservative
+        maxEventsPerMinute: 10,     // Allow 10 events per minute
         windowMs: 60000,            // 1 minute window
-        dedupeWindowMs: 120000,     // 2 minute deduplication
-        maxBreadcrumbs: 10,         // Reduced breadcrumbs
+        dedupeWindowMs: 60000,      // 1 minute deduplication
+        maxBreadcrumbs: 20,         // More breadcrumbs for debugging
         cleanupIntervalMs: 30000,   // 30 second cleanup
         maxMapSize: 50,             // Reasonable map size
       };
 
-      // Verify expected values are reasonable
-      expect(EXPECTED_CONFIG.maxEventsPerMinute).toBeLessThanOrEqual(10);
-      expect(EXPECTED_CONFIG.dedupeWindowMs).toBeGreaterThanOrEqual(60000);
-      expect(EXPECTED_CONFIG.maxBreadcrumbs).toBeLessThanOrEqual(30);
+      // Verify expected values allow adequate error visibility
+      expect(EXPECTED_CONFIG.maxEventsPerMinute).toBe(10);
+      expect(EXPECTED_CONFIG.dedupeWindowMs).toBe(60000);
+      expect(EXPECTED_CONFIG.maxBreadcrumbs).toBe(20);
     });
 
-    it('should have low transaction sample rate', () => {
-      // tracesSampleRate should be very low to avoid 429s
-      const EXPECTED_TRACES_SAMPLE_RATE = 0.01; // 1%
+    it('should have reasonable transaction sample rate', () => {
+      // tracesSampleRate set to 10% for performance monitoring
+      const EXPECTED_TRACES_SAMPLE_RATE = 0.1; // 10%
 
-      expect(EXPECTED_TRACES_SAMPLE_RATE).toBeLessThanOrEqual(0.1);
+      expect(EXPECTED_TRACES_SAMPLE_RATE).toBe(0.1);
     });
 
-    it('should have replays disabled', () => {
-      // Replays contribute significantly to event volume
+    it('should have replays enabled for debugging', () => {
+      // Replays enabled to capture user sessions for debugging
       const EXPECTED_REPLAY_RATES = {
-        replaysOnErrorSampleRate: 0,
-        replaysSessionSampleRate: 0,
+        replaysOnErrorSampleRate: 1,   // Capture replay on all errors
+        replaysSessionSampleRate: 1,   // Capture all session replays
       };
 
-      expect(EXPECTED_REPLAY_RATES.replaysOnErrorSampleRate).toBe(0);
-      expect(EXPECTED_REPLAY_RATES.replaysSessionSampleRate).toBe(0);
+      expect(EXPECTED_REPLAY_RATES.replaysOnErrorSampleRate).toBe(1);
+      expect(EXPECTED_REPLAY_RATES.replaysSessionSampleRate).toBe(1);
     });
   });
 
@@ -87,15 +87,16 @@ describe('Sentry Rate Limiting Configuration', () => {
       });
     });
 
-    it('should filter out pending prompt timeouts', () => {
-      // These informational messages should not consume quota
+    it('should NOT filter out pending prompt timeouts (now captured)', () => {
+      // These messages are now captured as they may indicate real user-facing issues
+      // Previously filtered, now allowed through to Sentry
       const TIMEOUT_PATTERNS = [
         'Pending prompt timed out',
         'timed out after',
         'clearing optimistic UI',
       ];
 
-      // Verify all patterns are non-empty strings
+      // Verify these patterns exist and should now be captured
       TIMEOUT_PATTERNS.forEach(pattern => {
         expect(pattern.length).toBeGreaterThan(0);
       });
