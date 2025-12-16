@@ -363,7 +363,7 @@ describe('MessageList', () => {
       expect(onShare).toHaveBeenCalledWith(2);
     });
 
-    it('should not show share button when message has no id', () => {
+    it('should show share button even when message has no id (for streaming messages)', () => {
       const onShare = jest.fn();
       const messages = [
         { id: 1, role: 'user' as const, content: 'Hello', created_at: '2024-01-01' },
@@ -379,8 +379,148 @@ describe('MessageList', () => {
         />
       );
 
-      // Assistant message without id should not have share button
-      expect(screen.queryByTestId('share-button')).not.toBeInTheDocument();
+      // Assistant message should have share button even without id (icons show during streaming)
+      expect(screen.getByTestId('share-button')).toBeInTheDocument();
+    });
+  });
+
+  describe('getTextFromContent helper', () => {
+    let clipboardWriteText: jest.Mock;
+
+    beforeEach(() => {
+      clipboardWriteText = jest.fn().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, 'clipboard', {
+        value: { writeText: clipboardWriteText },
+        writable: true,
+        configurable: true,
+      });
+    });
+
+    it('should copy string content to clipboard', () => {
+      const messages = [
+        { id: 1, role: 'user' as const, content: 'Hello world', created_at: '2024-01-01' },
+      ];
+
+      // Update mock to capture onCopy
+      let capturedOnCopy: (() => void) | null = null;
+      jest.spyOn(require('@/components/chat/ChatMessage'), 'ChatMessage').mockImplementation(
+        ({ onCopy }: any) => {
+          capturedOnCopy = onCopy;
+          return <div data-testid="message"><button data-testid="copy-btn" onClick={onCopy}>Copy</button></div>;
+        }
+      );
+
+      render(
+        <MessageList
+          sessionId={1}
+          messages={messages}
+          isLoading={false}
+        />
+      );
+
+      const copyButton = screen.getByTestId('copy-btn');
+      fireEvent.click(copyButton);
+
+      expect(clipboardWriteText).toHaveBeenCalledWith('Hello world');
+    });
+
+    it('should extract text from array content when copying', () => {
+      const messages = [
+        {
+          id: 1,
+          role: 'assistant' as const,
+          content: [
+            { type: 'text', text: 'Part 1. ' },
+            { type: 'text', text: 'Part 2.' },
+            { type: 'image', url: 'test.jpg' },
+          ],
+          created_at: '2024-01-01',
+        },
+      ];
+
+      // Update mock to capture onCopy
+      jest.spyOn(require('@/components/chat/ChatMessage'), 'ChatMessage').mockImplementation(
+        ({ onCopy }: any) => {
+          return <div data-testid="message"><button data-testid="copy-btn" onClick={onCopy}>Copy</button></div>;
+        }
+      );
+
+      render(
+        <MessageList
+          sessionId={1}
+          messages={messages}
+          isLoading={false}
+        />
+      );
+
+      const copyButton = screen.getByTestId('copy-btn');
+      fireEvent.click(copyButton);
+
+      expect(clipboardWriteText).toHaveBeenCalledWith('Part 1. Part 2.');
+    });
+
+    it('should handle null/undefined content gracefully', () => {
+      const messages = [
+        {
+          id: 1,
+          role: 'assistant' as const,
+          content: null as any,
+          created_at: '2024-01-01',
+        },
+      ];
+
+      // Update mock to capture onCopy
+      jest.spyOn(require('@/components/chat/ChatMessage'), 'ChatMessage').mockImplementation(
+        ({ onCopy }: any) => {
+          return <div data-testid="message"><button data-testid="copy-btn" onClick={onCopy}>Copy</button></div>;
+        }
+      );
+
+      render(
+        <MessageList
+          sessionId={1}
+          messages={messages}
+          isLoading={false}
+        />
+      );
+
+      const copyButton = screen.getByTestId('copy-btn');
+      fireEvent.click(copyButton);
+
+      // Should return empty string for null/undefined content
+      expect(clipboardWriteText).toHaveBeenCalledWith('');
+    });
+
+    it('should handle numeric content gracefully', () => {
+      const messages = [
+        {
+          id: 1,
+          role: 'assistant' as const,
+          content: 12345 as any,
+          created_at: '2024-01-01',
+        },
+      ];
+
+      // Update mock to capture onCopy
+      jest.spyOn(require('@/components/chat/ChatMessage'), 'ChatMessage').mockImplementation(
+        ({ onCopy }: any) => {
+          return <div data-testid="message"><button data-testid="copy-btn" onClick={onCopy}>Copy</button></div>;
+        }
+      );
+
+      render(
+        <MessageList
+          sessionId={1}
+          messages={messages}
+          isLoading={false}
+        />
+      );
+
+      const copyButton = screen.getByTestId('copy-btn');
+      fireEvent.click(copyButton);
+
+      // Should return empty string for non-string, non-array content
+      expect(clipboardWriteText).toHaveBeenCalledWith('');
     });
   });
 
