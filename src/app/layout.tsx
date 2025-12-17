@@ -23,6 +23,7 @@ import { ReferralBonusDialog } from '@/components/dialogs/referral-bonus-dialog'
 import { SafeStorageShim } from '@/components/safe-storage-shim';
 import { ReferralToast } from '@/components/referral/referral-toast';
 import { WebVitalsReporter } from '@/components/web-vitals';
+import { EarlyErrorSuppressor } from '@/components/early-error-suppressor';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -87,7 +88,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning className="scroll-smooth">
-      {/* ... (head content) */}
+      <head>
+        {/* Early error suppressor must run before wallet extensions inject ethereum */}
+        <EarlyErrorSuppressor />
+      </head>
         <body className={`${inter.className} antialiased bg-background min-h-screen flex flex-col`} suppressHydrationWarning>
           <SafeStorageShim />
         <ErrorSuppressor />
