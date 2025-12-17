@@ -300,7 +300,7 @@ function shouldFilterEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): bo
     event.level === 'info' &&
     (errorMessageLower.includes('n+1 api call') ||
      eventMessageLower.includes('n+1 api call') ||
-     event.message?.toLowerCase().includes('n+1 api call'))
+     (event.message?.toLowerCase() || '').includes('n+1 api call'))
   ) {
     console.debug('[Sentry] Filtered out N+1 API Call info event (intentional parallel prefetch optimization)');
     return true;
