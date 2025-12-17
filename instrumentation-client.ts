@@ -263,6 +263,20 @@ function shouldFilterEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): bo
     }
   }
 
+  // Filter out "N+1 API Call" performance monitoring events
+  // These are triggered by our intentional parallel model prefetch optimization
+  // The prefetch hook makes 6 parallel requests to different gateways for performance
+  // This is NOT a bug - it's a deliberate optimization pattern
+  if (
+    event.level === 'info' &&
+    (errorMessageLower.includes('n+1 api call') ||
+     eventMessageLower.includes('n+1 api call') ||
+     (event.message?.toLowerCase() || '').includes('n+1 api call'))
+  ) {
+    console.debug('[Sentry] Filtered out N+1 API Call info event (intentional parallel prefetch optimization)');
+    return true;
+  }
+
   return false;
 }
 

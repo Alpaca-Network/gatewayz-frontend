@@ -39,7 +39,7 @@ function cleanupEdgeStaleEntries(): void {
   }
 }
 
-function shouldFilterEdgeEvent(errorMessage: string): boolean {
+function shouldFilterEdgeEvent(errorMessage: string, event?: Sentry.ErrorEvent): boolean {
   const normalizedMessage = (errorMessage || '').toLowerCase();
 
   const isWalletExtensionError =
@@ -54,7 +54,14 @@ function shouldFilterEdgeEvent(errorMessage: string): boolean {
     normalizedMessage.includes('explorer-api.walletconnect.com') ||
     normalizedMessage.includes('relay.walletconnect.com');
 
-  return isWalletExtensionError || isWalletConnectRelayError;
+  // Filter out "N+1 API Call" performance monitoring events
+  // These are triggered by our intentional parallel model prefetch optimization
+  const isN1ApiCall =
+    event?.level === 'info' &&
+    (normalizedMessage.includes('n+1 api call') ||
+     (event?.message?.toLowerCase() || '').includes('n+1 api call'));
+
+  return isWalletExtensionError || isWalletConnectRelayError || isN1ApiCall;
 }
 
 function shouldEdgeRateLimit(event: Sentry.ErrorEvent): boolean {
@@ -112,7 +119,7 @@ Sentry.init({
     const errorMessage = typeof error === 'string' ? error : error instanceof Error ? error.message : '';
 
     // Filter BEFORE rate limiting to avoid wasting quota
-    if (shouldFilterEdgeEvent(errorMessage)) {
+    if (shouldFilterEdgeEvent(errorMessage, event)) {
       console.warn('[Sentry] Filtered out non-blocking wallet/extension error:', errorMessage);
       return null;
     }
