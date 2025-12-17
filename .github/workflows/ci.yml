@@ -9,6 +9,9 @@ on:
   pull_request:
     branches:
       - '**'
+  repository_dispatch:
+    types: [monorepo-sync]
+  workflow_dispatch:
 
 permissions:
   contents: read
