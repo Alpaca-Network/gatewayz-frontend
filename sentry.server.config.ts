@@ -81,7 +81,7 @@ function shouldFilterServerEvent(errorMessage: string, event?: Sentry.ErrorEvent
   const isN1ApiCall =
     event?.level === 'info' &&
     (normalizedMessage.includes('n+1 api call') ||
-     event?.message?.toLowerCase().includes('n+1 api call'));
+     (event?.message?.toLowerCase() || '').includes('n+1 api call'));
 
   return isWalletExtensionError || isWalletConnectRelayError || isN1ApiCall;
 }
