@@ -103,13 +103,13 @@ interface ChatUIState {
 }
 
 // Standard default model
-// NOTE: Model ID must include the gateway prefix (e.g., 'openrouter/') for proper backend routing
+// NOTE: Model ID must include the gateway prefix (e.g., 'cerebras/') for proper backend routing
 const STANDARD_DEFAULT_MODEL: ModelOption = {
-  value: 'openrouter/deepseek/deepseek-r1',
-  label: 'DeepSeek R1',
+  value: 'cerebras/qwen-3-32b',
+  label: 'Qwen3 32B',
   category: 'Reasoning',
-  sourceGateway: 'openrouter',
-  developer: 'DeepSeek',
+  sourceGateway: 'cerebras',
+  developer: 'Qwen',
   modalities: ['Text']
 };
 
