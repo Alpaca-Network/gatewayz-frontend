@@ -228,12 +228,14 @@ describe('AI SDK Completions Route', () => {
       const { streamText, createOpenAI } = require('ai');
       const { createOpenAI: createOpenAIMock } = require('@ai-sdk/openai');
 
-      streamText.mockReturnValue({
+      // Use mockImplementation to create a fresh generator per call
+      // mockReturnValue with an immediately-invoked generator would create a single shared instance
+      streamText.mockImplementation(() => ({
         fullStream: (async function* () {
           yield { type: 'text-delta', text: 'Hello' };
           yield { type: 'finish', finishReason: 'stop' };
         })(),
-      });
+      }));
 
       // Make 3 requests (the limit)
       for (let i = 0; i < 3; i++) {
@@ -309,12 +311,13 @@ describe('AI SDK Completions Route', () => {
       expect(failedResponse.status).toBe(404); // Should fail with model not found
 
       // Now make 3 successful requests - they should all succeed because the failed one didn't consume quota
-      streamText.mockReturnValue({
+      // Use mockImplementation to create a fresh generator per call
+      streamText.mockImplementation(() => ({
         fullStream: (async function* () {
           yield { type: 'text-delta', text: 'Hello' };
           yield { type: 'finish', finishReason: 'stop' };
         })(),
-      });
+      }));
 
       for (let i = 0; i < 3; i++) {
         const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
@@ -342,6 +345,147 @@ describe('AI SDK Completions Route', () => {
         }),
         headers: {
           'x-forwarded-for': '192.168.1.200',
+        },
+      });
+
+      const rateLimitedResponse = await POST(rateLimitedRequest);
+      expect(rateLimitedResponse.status).toBe(429);
+
+      // Clean up
+      delete process.env.GUEST_API_KEY;
+    });
+
+    it('should consume guest quota for redirected non-standard model requests', async () => {
+      // Set GUEST_API_KEY for this test
+      process.env.GUEST_API_KEY = 'test-guest-key';
+
+      // Mock global fetch for the redirect
+      const mockFetch = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        body: new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode('data: {"choices":[{"delta":{"content":"Hello"}}]}\n\n'));
+            controller.close();
+          },
+        }),
+        headers: new Map([['Content-Type', 'text/event-stream']]),
+      });
+      global.fetch = mockFetch as unknown as typeof fetch;
+
+      // Make 3 requests to a non-standard gateway (deepseek) - should be redirected
+      for (let i = 0; i < 3; i++) {
+        const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
+          method: 'POST',
+          body: JSON.stringify({
+            model: 'deepseek/deepseek-r1',
+            messages: [{ role: 'user', content: 'Hello' }],
+            apiKey: 'guest',
+          }),
+          headers: {
+            'x-forwarded-for': '192.168.1.150',
+          },
+        });
+        const response = await POST(request);
+        expect(response.status).toBe(200);
+        expect(response.headers.get('X-Redirected-From')).toBe('ai-sdk-completions');
+      }
+
+      // Verify fetch was called 3 times (for redirects)
+      expect(mockFetch).toHaveBeenCalledTimes(3);
+
+      // 4th request should be rate limited even though it's redirected
+      const rateLimitedRequest = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
+        method: 'POST',
+        body: JSON.stringify({
+          model: 'deepseek/deepseek-r1',
+          messages: [{ role: 'user', content: 'Hello' }],
+          apiKey: 'guest',
+        }),
+        headers: {
+          'x-forwarded-for': '192.168.1.150',
+        },
+      });
+
+      const rateLimitedResponse = await POST(rateLimitedRequest);
+      expect(rateLimitedResponse.status).toBe(429);
+
+      const data = await rateLimitedResponse.json();
+      expect(data.code).toBe('GUEST_RATE_LIMIT_EXCEEDED');
+
+      // Clean up
+      delete process.env.GUEST_API_KEY;
+    });
+
+    it('should not consume guest quota when redirected request fails', async () => {
+      // Set GUEST_API_KEY for this test
+      process.env.GUEST_API_KEY = 'test-guest-key';
+
+      // Mock global fetch to return an error response
+      const mockFetch = jest.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        body: null,
+        headers: new Map([['Content-Type', 'application/json']]),
+      });
+      global.fetch = mockFetch as unknown as typeof fetch;
+
+      // Make a failed redirected request
+      const failedRequest = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
+        method: 'POST',
+        body: JSON.stringify({
+          model: 'deepseek/deepseek-r1',
+          messages: [{ role: 'user', content: 'Hello' }],
+          apiKey: 'guest',
+        }),
+        headers: {
+          'x-forwarded-for': '192.168.1.160',
+        },
+      });
+
+      const failedResponse = await POST(failedRequest);
+      expect(failedResponse.status).toBe(500);
+
+      // Now mock successful fetch
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        body: new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode('data: {"choices":[{"delta":{"content":"Hello"}}]}\n\n'));
+            controller.close();
+          },
+        }),
+        headers: new Map([['Content-Type', 'text/event-stream']]),
+      });
+
+      // Make 3 successful redirected requests - they should all succeed because the failed one didn't consume quota
+      for (let i = 0; i < 3; i++) {
+        const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
+          method: 'POST',
+          body: JSON.stringify({
+            model: 'deepseek/deepseek-r1',
+            messages: [{ role: 'user', content: 'Hello' }],
+            apiKey: 'guest',
+          }),
+          headers: {
+            'x-forwarded-for': '192.168.1.160',
+          },
+        });
+        const response = await POST(request);
+        expect(response.status).toBe(200);
+      }
+
+      // 4th request should be rate limited
+      const rateLimitedRequest = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
+        method: 'POST',
+        body: JSON.stringify({
+          model: 'deepseek/deepseek-r1',
+          messages: [{ role: 'user', content: 'Hello' }],
+          apiKey: 'guest',
+        }),
+        headers: {
+          'x-forwarded-for': '192.168.1.160',
         },
       });
 

@@ -394,6 +394,15 @@ export async function POST(request: NextRequest) {
         body: JSON.stringify(forwardedBody),
       });
 
+      // Increment guest rate limit for redirected requests if the response was successful
+      // This is critical: we check rate limits before redirect but must increment after
+      // to prevent guests from bypassing limits on non-standard model requests
+      const guestClientIP = (request as any).__guestClientIP;
+      if (guestClientIP && forwardedResponse.ok) {
+        const incrementResult = incrementGuestRateLimit(guestClientIP);
+        console.log(`[AI SDK Route] Guest redirected request from ${guestClientIP}. Remaining: ${incrementResult.remaining}/${incrementResult.limit}`);
+      }
+
       // Return the response from the flexible completions route
       return new Response(forwardedResponse.body, {
         status: forwardedResponse.status,
