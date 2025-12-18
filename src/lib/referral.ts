@@ -93,7 +93,8 @@ export function initializeReferralTracking(): void {
       url.searchParams.delete('ref');
       url.searchParams.delete('referral');
       // Use replaceState to update URL without triggering a page reload
-      window.history.replaceState({}, '', url.toString());
+      // IMPORTANT: Preserve existing history state (used by Next.js router) to prevent navigation issues
+      window.history.replaceState(window.history.state, '', url.toString());
       console.log('[Referral] Removed ref parameter from URL');
     } catch (error) {
       console.warn('[Referral] Failed to remove ref parameter from URL:', error);
