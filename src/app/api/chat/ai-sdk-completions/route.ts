@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { streamText, APICallError } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
+import { checkGuestRateLimit, incrementGuestRateLimit, getClientIP, formatResetTime } from '@/lib/guest-rate-limiter';
 
 /**
  * AI SDK Chat Completions Route
@@ -284,6 +285,36 @@ export async function POST(request: NextRequest) {
         });
       }
 
+      // Check guest rate limit before proceeding
+      const clientIP = getClientIP(request);
+      const rateLimitCheck = checkGuestRateLimit(clientIP);
+
+      if (!rateLimitCheck.allowed) {
+        const resetTime = formatResetTime(rateLimitCheck.resetInMs);
+        console.log(`[AI SDK Route] Guest rate limit exceeded for IP ${clientIP}. Reset in ${resetTime}`);
+        return new Response(JSON.stringify({
+          error: 'Rate limit exceeded',
+          code: 'GUEST_RATE_LIMIT_EXCEEDED',
+          message: `You've reached the free chat limit. Create a free account for unlimited access, or try again in ${resetTime}.`,
+          detail: `Guest users are limited to ${rateLimitCheck.limit} messages per day.`,
+          remaining: 0,
+          limit: rateLimitCheck.limit,
+          resetInMs: rateLimitCheck.resetInMs
+        }), {
+          status: 429,
+          headers: {
+            'Content-Type': 'application/json',
+            'X-RateLimit-Limit': String(rateLimitCheck.limit),
+            'X-RateLimit-Remaining': '0',
+            'X-RateLimit-Reset': String(Math.floor(Date.now() / 1000) + Math.ceil(rateLimitCheck.resetInMs / 1000))
+          },
+        });
+      }
+
+      // Store guest info for rate limit increment after successful stream initialization
+      // We don't increment here to avoid consuming quota on pre-stream errors
+      (request as any).__guestClientIP = clientIP;
+
       apiKey = guestKey;
       console.log('[AI SDK Route] Using guest API key for unauthenticated request');
     }
@@ -433,6 +464,15 @@ export async function POST(request: NextRequest) {
         });
 
         console.log('[AI SDK Route] streamText call successful, starting stream...');
+
+        // Increment guest rate limit only after successful stream initialization
+        // This ensures quota is not consumed on pre-stream errors (invalid model, connection failure, etc.)
+        const guestClientIP = (request as any).__guestClientIP;
+        if (guestClientIP) {
+          const incrementResult = incrementGuestRateLimit(guestClientIP);
+          console.log(`[AI SDK Route] Guest request from ${guestClientIP}. Remaining: ${incrementResult.remaining}/${incrementResult.limit}`);
+        }
+
         break; // Success - exit retry loop
 
       } catch (streamInitError) {
