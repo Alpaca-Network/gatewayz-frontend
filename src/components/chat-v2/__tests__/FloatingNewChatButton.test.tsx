@@ -1,14 +1,15 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
 
-// Mock next/navigation
+// Mock next/navigation - declare mocks before jest.mock() for proper hoisting
 const mockPush = jest.fn();
 const mockUsePathname = jest.fn(() => '/');
+
 jest.mock('next/navigation', () => ({
   useRouter: () => ({
     push: mockPush,
   }),
-  usePathname: mockUsePathname,
+  usePathname: () => mockUsePathname(),
 }));
 
 // Mock UI components
