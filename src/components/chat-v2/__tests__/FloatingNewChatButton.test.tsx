@@ -1,14 +1,14 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
 
-// Mock next/navigation
+// Mock next/navigation - use a mutable variable for dynamic pathname
 const mockPush = jest.fn();
-const mockUsePathname = jest.fn(() => '/');
+let mockPathname = '/';
 jest.mock('next/navigation', () => ({
   useRouter: () => ({
     push: mockPush,
   }),
-  usePathname: mockUsePathname,
+  usePathname: () => mockPathname,
 }));
 
 // Mock UI components
@@ -25,22 +25,24 @@ jest.mock('lucide-react', () => ({
   Plus: () => <span data-testid="plus-icon">Plus</span>,
 }));
 
-// Mock the stores and hooks
+// Mock the stores and hooks with mutable mock state
 const mockSetActiveSessionId = jest.fn();
 const mockCreateSessionMutateAsync = jest.fn();
+let mockIsPending = false;
+let mockSelectedModel: { value: string; label: string } | undefined = { value: 'test-model', label: 'Test Model' };
 
 jest.mock('@/lib/store/chat-ui-store', () => ({
   useChatUIStore: () => ({
     activeSessionId: null,
     setActiveSessionId: mockSetActiveSessionId,
-    selectedModel: { value: 'test-model', label: 'Test Model' },
+    get selectedModel() { return mockSelectedModel; },
   }),
 }));
 
 jest.mock('@/lib/hooks/use-chat-queries', () => ({
   useCreateSession: () => ({
     mutateAsync: mockCreateSessionMutateAsync,
-    isPending: false,
+    get isPending() { return mockIsPending; },
   }),
 }));
 
@@ -60,7 +62,9 @@ describe('FloatingNewChatButton', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockCreateSessionMutateAsync.mockResolvedValue({ id: 123, title: 'Untitled Chat' });
-    mockUsePathname.mockReturnValue('/');
+    mockPathname = '/';
+    mockIsPending = false;
+    mockSelectedModel = { value: 'test-model', label: 'Test Model' };
   });
 
   describe('Rendering', () => {
@@ -121,7 +125,7 @@ describe('FloatingNewChatButton', () => {
 
     it('should navigate to /chat if not already on chat page', async () => {
       // Mock pathname as not /chat
-      mockUsePathname.mockReturnValue('/settings');
+      mockPathname = '/settings';
 
       render(<FloatingNewChatButton />);
 
@@ -135,7 +139,7 @@ describe('FloatingNewChatButton', () => {
 
     it('should not navigate if already on /chat page', async () => {
       // Mock pathname as /chat
-      mockUsePathname.mockReturnValue('/chat');
+      mockPathname = '/chat';
 
       render(<FloatingNewChatButton />);
 
@@ -200,11 +204,8 @@ describe('FloatingNewChatButton', () => {
 
   describe('Loading State', () => {
     it('should disable button when session creation is pending', () => {
-      // Mock isPending as true
-      jest.spyOn(require('@/lib/hooks/use-chat-queries'), 'useCreateSession').mockReturnValue({
-        mutateAsync: mockCreateSessionMutateAsync,
-        isPending: true,
-      });
+      // Set isPending to true before rendering
+      mockIsPending = true;
 
       render(<FloatingNewChatButton />);
 
@@ -213,6 +214,9 @@ describe('FloatingNewChatButton', () => {
     });
 
     it('should enable button when session creation is not pending', () => {
+      // Ensure isPending is false (default)
+      mockIsPending = false;
+
       render(<FloatingNewChatButton />);
 
       const button = screen.getByTestId('floating-button');
@@ -241,7 +245,7 @@ describe('FloatingNewChatButton', () => {
       render(<FloatingNewChatButton />);
 
       const button = screen.getByTestId('floating-button');
-      expect(button.className).toContain('z-50');
+      expect(button.className).toContain('z-[9999]');
     });
   });
 
@@ -265,12 +269,8 @@ describe('FloatingNewChatButton', () => {
 
   describe('Integration with selectedModel', () => {
     it('should use selectedModel value when creating session', async () => {
-      // Mock with different model
-      jest.spyOn(require('@/lib/store/chat-ui-store'), 'useChatUIStore').mockReturnValue({
-        activeSessionId: null,
-        setActiveSessionId: mockSetActiveSessionId,
-        selectedModel: { value: 'gpt-4', label: 'GPT-4' },
-      });
+      // Set different model before rendering
+      mockSelectedModel = { value: 'gpt-4', label: 'GPT-4' };
 
       render(<FloatingNewChatButton />);
 
@@ -286,11 +286,8 @@ describe('FloatingNewChatButton', () => {
     });
 
     it('should handle undefined selectedModel', async () => {
-      jest.spyOn(require('@/lib/store/chat-ui-store'), 'useChatUIStore').mockReturnValue({
-        activeSessionId: null,
-        setActiveSessionId: mockSetActiveSessionId,
-        selectedModel: undefined,
-      });
+      // Set selectedModel to undefined before rendering
+      mockSelectedModel = undefined;
 
       render(<FloatingNewChatButton />);
 
