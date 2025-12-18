@@ -311,9 +311,9 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // Increment rate limit counter for successful guest requests
-      const incrementResult = incrementGuestRateLimit(clientIP);
-      console.log(`[AI SDK Route] Guest request from ${clientIP}. Remaining: ${incrementResult.remaining}/${incrementResult.limit}`);
+      // Store guest info for rate limit increment after successful stream initialization
+      // We don't increment here to avoid consuming quota on pre-stream errors
+      (request as any).__guestClientIP = clientIP;
 
       apiKey = guestKey;
       console.log('[AI SDK Route] Using guest API key for unauthenticated request');
@@ -464,6 +464,15 @@ export async function POST(request: NextRequest) {
         });
 
         console.log('[AI SDK Route] streamText call successful, starting stream...');
+
+        // Increment guest rate limit only after successful stream initialization
+        // This ensures quota is not consumed on pre-stream errors (invalid model, connection failure, etc.)
+        const guestClientIP = (request as any).__guestClientIP;
+        if (guestClientIP) {
+          const incrementResult = incrementGuestRateLimit(guestClientIP);
+          console.log(`[AI SDK Route] Guest request from ${guestClientIP}. Remaining: ${incrementResult.remaining}/${incrementResult.limit}`);
+        }
+
         break; // Success - exit retry loop
 
       } catch (streamInitError) {

@@ -276,6 +276,81 @@ describe('AI SDK Completions Route', () => {
       // Clean up
       delete process.env.GUEST_API_KEY;
     });
+
+    it('should not consume guest quota when streamText throws pre-stream error', async () => {
+      // Set GUEST_API_KEY for this test
+      process.env.GUEST_API_KEY = 'test-guest-key';
+
+      const { streamText } = require('ai');
+      const { APICallError } = require('ai');
+
+      // First request: streamText throws an error (e.g., invalid model)
+      streamText.mockImplementationOnce(() => {
+        throw new APICallError({
+          message: 'Model not found',
+          statusCode: 404,
+          isRetryable: false,
+        });
+      });
+
+      const failedRequest = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
+        method: 'POST',
+        body: JSON.stringify({
+          model: 'invalid-model',
+          messages: [{ role: 'user', content: 'Hello' }],
+          apiKey: 'guest',
+        }),
+        headers: {
+          'x-forwarded-for': '192.168.1.200',
+        },
+      });
+
+      const failedResponse = await POST(failedRequest);
+      expect(failedResponse.status).toBe(404); // Should fail with model not found
+
+      // Now make 3 successful requests - they should all succeed because the failed one didn't consume quota
+      streamText.mockReturnValue({
+        fullStream: (async function* () {
+          yield { type: 'text-delta', text: 'Hello' };
+          yield { type: 'finish', finishReason: 'stop' };
+        })(),
+      });
+
+      for (let i = 0; i < 3; i++) {
+        const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
+          method: 'POST',
+          body: JSON.stringify({
+            model: 'gpt-4',
+            messages: [{ role: 'user', content: 'Hello' }],
+            apiKey: 'guest',
+          }),
+          headers: {
+            'x-forwarded-for': '192.168.1.200',
+          },
+        });
+        const response = await POST(request);
+        expect(response.status).toBe(200);
+      }
+
+      // 4th successful request should be rate limited (quota was only consumed by the 3 successful ones)
+      const rateLimitedRequest = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
+        method: 'POST',
+        body: JSON.stringify({
+          model: 'gpt-4',
+          messages: [{ role: 'user', content: 'Hello' }],
+          apiKey: 'guest',
+        }),
+        headers: {
+          'x-forwarded-for': '192.168.1.200',
+        },
+      });
+
+      const rateLimitedResponse = await POST(rateLimitedRequest);
+      expect(rateLimitedResponse.status).toBe(429);
+
+      // Clean up
+      delete process.env.GUEST_API_KEY;
+    });
   });
 
   describe('Provider Detection', () => {
