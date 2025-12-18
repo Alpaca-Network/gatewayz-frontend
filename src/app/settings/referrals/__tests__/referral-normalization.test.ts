@@ -86,15 +86,15 @@ describe('normalizeReferralData', () => {
 
     const result = normalizeReferralData(raw);
 
-    expect(result).toEqual({
-      id: 0,
-      referee_id: '',
-      referee_email: '',
-      status: 'pending',
-      reward_amount: 0,
-      created_at: '',
-      completed_at: undefined
-    });
+    // UUID should be generated when id, referee_id, and created_at are all missing
+    expect(typeof result.id).toBe('string');
+    expect(result.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+    expect(result.referee_id).toBe('');
+    expect(result.referee_email).toBe('');
+    expect(result.status).toBe('pending');
+    expect(result.reward_amount).toBe(0);
+    expect(result.created_at).toBe('');
+    expect(result.completed_at).toBe(undefined);
   });
 
   it('should handle uppercase Status field', () => {

@@ -116,15 +116,15 @@ describe('normalizeReferralData', () => {
 
     const result = normalizeReferralData(raw);
 
-    expect(result).toEqual({
-      id: 0,
-      referee_id: '',
-      referee_email: '',
-      status: 'pending',
-      reward_amount: 0,
-      created_at: '',
-      completed_at: undefined
-    });
+    // UUID should be generated when id, referee_id, and created_at are all missing
+    expect(typeof result.id).toBe('string');
+    expect(result.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+    expect(result.referee_id).toBe('');
+    expect(result.referee_email).toBe('');
+    expect(result.status).toBe('pending');
+    expect(result.reward_amount).toBe(0);
+    expect(result.created_at).toBe('');
+    expect(result.completed_at).toBe(undefined);
   });
 
   it('should handle uppercase Status field', () => {
@@ -164,6 +164,168 @@ describe('normalizeReferralData', () => {
     const result = normalizeReferralData(raw);
 
     expect(result.reward_amount).toBe(0);
+  });
+
+  it('should generate synthetic ID from referee_id and created_at when id is missing', () => {
+    const raw: FlexibleReferralData = {
+      referee_id: 'user999',
+      referee_email: 'synthetic@example.com',
+      created_at: '2024-06-01T12:00:00Z',
+      status: 'pending',
+      reward_amount: 10
+    };
+
+    const result = normalizeReferralData(raw);
+
+    // Synthetic ID should be referee_id + timestamp
+    expect(typeof result.id).toBe('string');
+    expect(result.id).toContain('user999_');
+    expect(result.id).toContain('1717243200000'); // timestamp of 2024-06-01T12:00:00Z
+  });
+
+  it('should generate synthetic ID with camelCase fields', () => {
+    const raw: FlexibleReferralData = {
+      refereeId: 'camelUser',
+      refereeEmail: 'camel@example.com',
+      createdAt: '2024-07-01T12:00:00Z',
+      status: 'pending'
+    };
+
+    const result = normalizeReferralData(raw);
+
+    // Should use camelCase fallbacks for synthetic ID generation
+    expect(typeof result.id).toBe('string');
+    expect(result.id).toContain('camelUser_');
+  });
+
+  it('should accept string IDs from API without converting', () => {
+    const raw: FlexibleReferralData = {
+      id: 'api-string-id-123',
+      referee_email: 'string-id@example.com',
+      status: 'completed'
+    };
+
+    const result = normalizeReferralData(raw);
+
+    // String IDs should be preserved as-is
+    expect(result.id).toBe('api-string-id-123');
+    expect(typeof result.id).toBe('string');
+  });
+
+  it('should accept numeric IDs from API without converting', () => {
+    const raw: FlexibleReferralData = {
+      id: 12345,
+      referee_email: 'numeric-id@example.com',
+      status: 'completed'
+    };
+
+    const result = normalizeReferralData(raw);
+
+    // Numeric IDs should be preserved as-is
+    expect(result.id).toBe(12345);
+    expect(typeof result.id).toBe('number');
+  });
+
+  it('should generate unique UUIDs for multiple empty objects', () => {
+    const result1 = normalizeReferralData({});
+    const result2 = normalizeReferralData({});
+
+    // Each should get a different UUID
+    expect(result1.id).not.toBe(result2.id);
+    expect(typeof result1.id).toBe('string');
+    expect(typeof result2.id).toBe('string');
+  });
+
+  it('should fallback to UUID when createdAt is invalid date string', () => {
+    const raw: FlexibleReferralData = {
+      referee_id: 'user123',
+      created_at: 'invalid-date-string',
+      referee_email: 'invalid@example.com',
+      status: 'pending'
+    };
+
+    const result = normalizeReferralData(raw);
+
+    // Should generate UUID instead of synthetic ID with NaN
+    expect(typeof result.id).toBe('string');
+    expect(result.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+    expect(result.id).not.toContain('NaN');
+  });
+
+  it('should generate different UUIDs for multiple records with same invalid date', () => {
+    const raw1 = {
+      referee_id: 'user123',
+      created_at: 'invalid-date',
+      referee_email: 'test1@example.com'
+    };
+    const raw2 = {
+      referee_id: 'user123',
+      created_at: 'invalid-date',
+      referee_email: 'test2@example.com'
+    };
+
+    const result1 = normalizeReferralData(raw1);
+    const result2 = normalizeReferralData(raw2);
+
+    // Each should get a unique UUID, not duplicate "user123_NaN"
+    expect(result1.id).not.toBe(result2.id);
+    expect(result1.id).not.toContain('NaN');
+    expect(result2.id).not.toContain('NaN');
+  });
+
+  it('should accept 0 as a valid API-provided ID', () => {
+    const raw: FlexibleReferralData = {
+      id: 0,
+      referee_email: 'zero-id@example.com',
+      status: 'pending'
+    };
+
+    const result = normalizeReferralData(raw);
+
+    // 0 is a valid ID and should be preserved
+    expect(result.id).toBe(0);
+    expect(typeof result.id).toBe('number');
+  });
+
+  it('should generate valid UUID format in all environments', () => {
+    const raw: FlexibleReferralData = {
+      referee_email: 'uuid-test@example.com',
+      status: 'pending'
+    };
+
+    const result = normalizeReferralData(raw);
+
+    // Should generate a valid UUID (regardless of crypto availability)
+    expect(typeof result.id).toBe('string');
+    expect(result.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+  });
+
+  it('should reject empty string IDs and generate synthetic/UUID instead', () => {
+    const raw1: FlexibleReferralData = {
+      id: '',
+      referee_id: 'user123',
+      created_at: '2024-01-01T00:00:00Z',
+      referee_email: 'empty1@example.com',
+      status: 'pending'
+    };
+    const raw2: FlexibleReferralData = {
+      id: '',
+      referee_id: 'user456',
+      created_at: '2024-01-01T00:00:00Z',
+      referee_email: 'empty2@example.com',
+      status: 'pending'
+    };
+
+    const result1 = normalizeReferralData(raw1);
+    const result2 = normalizeReferralData(raw2);
+
+    // Should generate synthetic IDs, not use empty string
+    expect(result1.id).not.toBe('');
+    expect(result2.id).not.toBe('');
+    // Each should be unique (different referee_id)
+    expect(result1.id).not.toBe(result2.id);
+    expect(result1.id).toContain('user123_');
+    expect(result2.id).toContain('user456_');
   });
 });
 
