@@ -31,11 +31,11 @@ describe('chat-ui-store', () => {
       isIncognitoMode: false,
       previousModel: null,
       selectedModel: {
-        value: 'openrouter/deepseek/deepseek-r1',
-        label: 'DeepSeek R1',
+        value: 'cerebras/qwen-3-32b',
+        label: 'Qwen3 32B',
         category: 'Reasoning',
-        sourceGateway: 'openrouter',
-        developer: 'DeepSeek',
+        sourceGateway: 'cerebras',
+        developer: 'Qwen',
         modalities: ['Text']
       },
       messageStartTime: null,
