@@ -3,6 +3,19 @@
  * Shared functions for normalizing and processing referral data
  */
 
+// Safe UUID generator that works in all environments
+const generateUUID = (): string => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  // Fallback UUID v4 generator for environments without crypto.randomUUID
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+};
+
 // Flexible referral data type to handle different API response formats
 export interface FlexibleReferralData {
   [key: string]: any;
@@ -34,11 +47,12 @@ export const normalizeReferralData = (rawData: FlexibleReferralData): ReferralTr
 
   // Transaction ID should be unique - don't use user_id as fallback to prevent duplicate React keys
   // Priority: 1) API-provided ID, 2) Synthetic ID from referee_id + timestamp, 3) UUID fallback
-  const apiId = rawData.id || rawData.ID;
+  // Use nullish coalescing (??) to preserve 0 as a valid ID
+  const apiId = rawData.id ?? rawData.ID;
 
   let transactionId: string | number;
   if (apiId !== undefined && apiId !== null) {
-    // Use API-provided ID as-is (can be string or number)
+    // Use API-provided ID as-is (can be string or number, including 0)
     transactionId = apiId;
   } else if (refereeId && createdAt) {
     // Validate timestamp to prevent NaN in synthetic IDs
@@ -48,11 +62,11 @@ export const normalizeReferralData = (rawData: FlexibleReferralData): ReferralTr
       transactionId = `${refereeId}_${timestamp}`;
     } else {
       // Invalid date - fallback to UUID to ensure uniqueness
-      transactionId = crypto.randomUUID();
+      transactionId = generateUUID();
     }
   } else {
     // Fallback to UUID when critical fields are missing
-    transactionId = crypto.randomUUID();
+    transactionId = generateUUID();
   }
 
   return {

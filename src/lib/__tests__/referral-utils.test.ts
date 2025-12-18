@@ -272,6 +272,33 @@ describe('normalizeReferralData', () => {
     expect(result1.id).not.toContain('NaN');
     expect(result2.id).not.toContain('NaN');
   });
+
+  it('should accept 0 as a valid API-provided ID', () => {
+    const raw: FlexibleReferralData = {
+      id: 0,
+      referee_email: 'zero-id@example.com',
+      status: 'pending'
+    };
+
+    const result = normalizeReferralData(raw);
+
+    // 0 is a valid ID and should be preserved
+    expect(result.id).toBe(0);
+    expect(typeof result.id).toBe('number');
+  });
+
+  it('should generate valid UUID format in all environments', () => {
+    const raw: FlexibleReferralData = {
+      referee_email: 'uuid-test@example.com',
+      status: 'pending'
+    };
+
+    const result = normalizeReferralData(raw);
+
+    // Should generate a valid UUID (regardless of crypto availability)
+    expect(typeof result.id).toBe('string');
+    expect(result.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+  });
 });
 
 describe('calculateStats', () => {
