@@ -3,17 +3,6 @@
  * Shared functions for normalizing and processing referral data
  */
 
-// Simple string hash function for generating numeric IDs
-const hashString = (str: string): number => {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32bit integer
-  }
-  return Math.abs(hash);
-};
-
 // Flexible referral data type to handle different API response formats
 export interface FlexibleReferralData {
   [key: string]: any;
@@ -21,7 +10,7 @@ export interface FlexibleReferralData {
 
 // Referral transaction data type
 export interface ReferralTransaction {
-  id: number;
+  id: string | number;
   referee_id: string;
   referee_email: string;
   status: 'pending' | 'completed';
@@ -39,21 +28,33 @@ export const normalizeReferralData = (rawData: FlexibleReferralData): ReferralTr
   const rawStatus = String(rawData.status || rawData.Status || 'pending').toLowerCase();
   const status = (rawStatus === 'completed' ? 'completed' : 'pending') as 'pending' | 'completed';
 
-  // Transaction ID should be unique - fallback to creating a synthetic ID from referee_id + timestamp
-  // instead of using user_id which could cause duplicate React keys
-  const transactionId = rawData.id || rawData.ID;
-  const syntheticId = transactionId ||
-    (rawData.referee_id && rawData.created_at ?
-      `${rawData.referee_id}_${new Date(rawData.created_at).getTime()}` :
-      0);
+  // Extract normalized field values using all variations
+  const refereeId = rawData.referee_id || rawData.refereeId || rawData.user_id || rawData.userId || '';
+  const createdAt = rawData.created_at || rawData.createdAt || rawData.date_created || rawData.dateCreated || rawData.date || rawData.signed_up_at || '';
+
+  // Transaction ID should be unique - don't use user_id as fallback to prevent duplicate React keys
+  // Priority: 1) API-provided ID, 2) Synthetic ID from referee_id + timestamp, 3) UUID fallback
+  const apiId = rawData.id || rawData.ID;
+
+  let transactionId: string | number;
+  if (apiId !== undefined && apiId !== null) {
+    // Use API-provided ID as-is (can be string or number)
+    transactionId = apiId;
+  } else if (refereeId && createdAt) {
+    // Create synthetic ID from referee_id + timestamp for uniqueness
+    transactionId = `${refereeId}_${new Date(createdAt).getTime()}`;
+  } else {
+    // Fallback to UUID when critical fields are missing
+    transactionId = crypto.randomUUID();
+  }
 
   return {
-    id: typeof syntheticId === 'string' ? hashString(syntheticId) : Number(syntheticId) || 0,
-    referee_id: rawData.referee_id || rawData.refereeId || rawData.user_id || rawData.userId || '',
+    id: transactionId,
+    referee_id: refereeId,
     referee_email: rawData.referee_email || rawData.refereeEmail || rawData.email || rawData.user_email || rawData.userEmail || '',
     status,
     reward_amount: Number(rawData.reward_amount || rawData.rewardAmount || rawData.amount || rawData.reward || 0),
-    created_at: rawData.created_at || rawData.createdAt || rawData.date_created || rawData.dateCreated || rawData.date || rawData.signed_up_at || '',
+    created_at: createdAt,
     completed_at: rawData.completed_at || rawData.completedAt || rawData.date_completed || rawData.dateCompleted || rawData.bonus_date || undefined
   };
 };
