@@ -11,7 +11,7 @@
       "api_key": "${GATEWAYZ_API_KEY}",
       "models": [
         "openai/gpt-4o-mini",
-        "google/gemini-2.1-pro",
+        "google/gemini-2.5-pro",
         "qwen/qwen2-72b-a16b-2507",
         "qwen/qwen2-57b-a14b-2507",
         "moonshotai/kimi-k2",
@@ -25,10 +25,10 @@
   ],
   "router": {
     "default": "gatewayz,openai/gpt-4o-mini",
-    "background": "gatewayz,google/gemini-2.1-pro",
+    "background": "gatewayz,google/gemini-2.5-pro",
     "think": "gatewayz,anthropic/claude-3-5-sonnet-20241022",
     "longContext": "gatewayz,qwen/qwen2-72b-a16b-2507",
-    "webSearch": "gatewayz,google/gemini-2.1-pro",
+    "webSearch": "gatewayz,google/gemini-2.5-pro",
     "custom": "./custom-router.js"
   }
 }

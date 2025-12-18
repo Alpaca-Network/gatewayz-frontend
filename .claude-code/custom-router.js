@@ -30,7 +30,7 @@ module.exports = async function router(req, config) {
 
   // Route to appropriate model
   if (isWebSearch) {
-    return "gatewayz,google/gemini-2.1-pro";
+    return "gatewayz,google/gemini-2.5-pro";
   }
 
   if (isLongContext) {
@@ -42,7 +42,7 @@ module.exports = async function router(req, config) {
   }
 
   if (isBackgroundTask) {
-    return "gatewayz,google/gemini-2.1-pro";
+    return "gatewayz,google/gemini-2.5-pro";
   }
 
   // Default: use GPT-4o mini for standard tasks

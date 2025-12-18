@@ -66,7 +66,7 @@ export CLAUDE_API_ENDPOINT=http://localhost:3042/v1/messages
 The configuration includes popular models from GatewayZ:
 
 - **openai/gpt-4o-mini** - Fast, cost-effective for general tasks
-- **google/gemini-2.1-pro** - Advanced multimodal reasoning
+- **google/gemini-2.5-pro** - Advanced multimodal reasoning
 - **qwen/qwen2-72b-a16b-2507** - Free tier, long context support
 - **qwen/qwen2-57b-a14b-2507** - High-quality multilingual model
 - **moonshotai/kimi-k2** - Free tier with large context window
@@ -79,10 +79,10 @@ The custom router (`custom-router.js`) automatically selects models based on:
 
 | Task Type | Selected Model | Reason |
 |-----------|----------------|--------|
-| Web Search | Gemini 2.1 Pro | Multimodal, up-to-date knowledge |
+| Web Search | Gemini 2.5 Pro | Multimodal, up-to-date knowledge |
 | Long Context (>50k chars) | Qwen2 72B | Large context window (262k tokens) |
 | Reasoning/Analysis | Claude 3.5 Sonnet | Superior reasoning capabilities |
-| Background Tasks | Gemini 2.1 Pro | Reliable for async operations |
+| Background Tasks | Gemini 2.5 Pro | Reliable for async operations |
 | Default | GPT-4o mini | Fast, cost-effective |
 
 ### Predefined Routes
@@ -92,10 +92,10 @@ You can also use predefined routes from `config.json`:
 ```json
 {
   "default": "gatewayz,openai/gpt-4o-mini",
-  "background": "gatewayz,google/gemini-2.1-pro",
+  "background": "gatewayz,google/gemini-2.5-pro",
   "think": "gatewayz,anthropic/claude-3-5-sonnet-20241022",
   "longContext": "gatewayz,qwen/qwen2-72b-a16b-2507",
-  "webSearch": "gatewayz,google/gemini-2.1-pro"
+  "webSearch": "gatewayz,google/gemini-2.5-pro"
 }
 ```
 
