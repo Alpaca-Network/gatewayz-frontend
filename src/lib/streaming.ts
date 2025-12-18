@@ -17,6 +17,7 @@
  * - @/lib/streaming/stream-chat.ts - Main streaming function
  */
 
+import * as Sentry from '@sentry/nextjs';
 import { requestAuthRefresh, getApiKey } from '@/lib/api';
 import { StreamCoordinator } from '@/lib/stream-coordinator';
 
@@ -252,6 +253,25 @@ export async function* streamChatResponse(
       const errorCode = errorData.code;
       devError('401 Unauthorized - triggering auth refresh');
 
+      // Capture auth error to Sentry
+      Sentry.captureException(
+        new Error(`Chat 401 Unauthorized: ${errorMessage}`),
+        {
+          tags: {
+            error_type: 'chat_auth_error',
+            http_status: 401,
+            error_code: errorCode || 'unknown',
+            model: String(requestBody.model || 'unknown'),
+          },
+          extra: {
+            errorData,
+            url,
+            retryCount,
+          },
+          level: 'warning',
+        }
+      );
+
       // Check if this is a guest user who needs to sign up
       if (errorCode === 'GUEST_NOT_CONFIGURED') {
         throw new Error(
@@ -293,11 +313,27 @@ export async function* streamChatResponse(
 
     // Handle 403 Forbidden - invalid or expired API key
     if (response.status === 403) {
-      const errorMessage = errorData.detail || errorData.error?.message || 'Access forbidden';
       devError('403 Forbidden details:', errorData);
 
+      // Capture auth error to Sentry
+      Sentry.captureException(
+        new Error('Chat 403 Forbidden - session expired'),
+        {
+          tags: {
+            error_type: 'chat_auth_error',
+            http_status: 403,
+            model: String(requestBody.model || 'unknown'),
+          },
+          extra: {
+            errorData,
+            url,
+          },
+          level: 'warning',
+        }
+      );
+
       throw new Error(
-        errorMessage + '. Your API key may be invalid or expired. Please try logging out and back in.'
+        'Your session has expired. Please log out and log back in to continue. If this issue persists, clear your browser cookies and log in again.'
       );
     }
 

@@ -10,6 +10,14 @@ import { getApiKey } from '@/lib/api';
 import { ModelOption } from '@/components/chat/model-select';
 import { ChatMessage } from '@/lib/chat-history';
 
+// Stream stopped error for clean cancellation
+class StreamStoppedError extends Error {
+    constructor() {
+        super('Stream stopped by user');
+        this.name = 'StreamStoppedError';
+    }
+}
+
 // Debug logging helper - always logs in development, logs errors in production
 const debugLog = (message: string, data?: any) => {
     const timestamp = new Date().toISOString();
@@ -43,12 +51,113 @@ const extractMediaFromContent = (content: any): { image?: string; video?: string
     return result;
 };
 
+// Helper to check if a model supports a given modality
+const modelSupportsModality = (modelModalities: string[] | undefined, modality: string): boolean => {
+    if (!modelModalities || modelModalities.length === 0) {
+        // If no modalities specified, assume text-only
+        return modality.toLowerCase() === 'text';
+    }
+    return modelModalities.some(m => m.toLowerCase() === modality.toLowerCase());
+};
+
+// Helper to normalize message content for API requests
+// When switching between models, multimodal content (arrays with images/audio/video)
+// needs to be converted to text-only format for non-vision models
+// If modelModalities is provided, we check if the model supports the content types
+export const normalizeContentForApi = (content: any, modelModalities?: string[]): string | any[] => {
+    // If content is a string, return as-is
+    if (typeof content === 'string') {
+        return content;
+    }
+
+    // If content is an array (multimodal format), check each part
+    if (Array.isArray(content)) {
+        // Check if model supports image/video/audio
+        const supportsImage = modelSupportsModality(modelModalities, 'image');
+        const supportsVideo = modelSupportsModality(modelModalities, 'video');
+        const supportsAudio = modelSupportsModality(modelModalities, 'audio');
+        const supportsFile = modelSupportsModality(modelModalities, 'file');
+
+        // If model supports all modalities present in content, return as-is
+        const hasImage = content.some(p => p.type === 'image_url');
+        const hasVideo = content.some(p => p.type === 'video_url');
+        const hasAudio = content.some(p => p.type === 'audio_url');
+        const hasFile = content.some(p => p.type === 'file_url');
+
+        const allSupported = (!hasImage || supportsImage) &&
+                            (!hasVideo || supportsVideo) &&
+                            (!hasAudio || supportsAudio) &&
+                            (!hasFile || supportsFile);
+
+        // If model supports all content types, return the original array
+        if (allSupported) {
+            return content;
+        }
+
+        // Otherwise, extract only text parts
+        const textParts: string[] = [];
+        let hasNonTextContent = false;
+
+        for (const part of content) {
+            if (part.type === 'text' && part.text) {
+                textParts.push(part.text);
+            } else if (part.type === 'image_url' || part.type === 'video_url' ||
+                       part.type === 'audio_url' || part.type === 'file_url') {
+                hasNonTextContent = true;
+            }
+        }
+
+        // If there's non-text content that's being stripped, log it
+        if (hasNonTextContent && textParts.length > 0) {
+            debugLog('Normalizing multimodal content to text-only', {
+                originalParts: content.length,
+                textParts: textParts.length,
+                hasNonTextContent,
+                modelModalities,
+                stripped: { hasImage, hasVideo, hasAudio, hasFile }
+            });
+            return textParts.join('\n');
+        }
+
+        // If only text parts, join them
+        if (textParts.length > 0) {
+            return textParts.join('\n');
+        }
+
+        // If no text content at all but model doesn't support the content types,
+        // return empty string rather than unsupported content
+        if (hasNonTextContent && !allSupported) {
+            debugLog('Dropping unsupported multimodal content with no text', {
+                modelModalities,
+                contentTypes: { hasImage, hasVideo, hasAudio, hasFile }
+            });
+            return '';
+        }
+
+        // Fallback: return original content
+        return content;
+    }
+
+    // Fallback: convert to string
+    return String(content || '');
+};
+
 export function useChatStream() {
     const [isStreaming, setIsStreaming] = useState(false);
     const [streamError, setStreamError] = useState<string | null>(null);
     const streamHandlerRef = useRef<ChatStreamHandler>(new ChatStreamHandler());
+    const abortControllerRef = useRef<AbortController | null>(null);
     const saveMessage = useSaveMessage();
     const queryClient = useQueryClient();
+
+    // Stop the current stream
+    const stopStream = useCallback(() => {
+        debugLog('stopStream called', { hasController: !!abortControllerRef.current });
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+            abortControllerRef.current = null;
+        }
+    }, []);
 
     const streamMessage = useCallback(async ({
         sessionId,
@@ -97,6 +206,10 @@ export function useChatStream() {
         setStreamError(null);
         streamHandlerRef.current.reset();
 
+        // Create new abort controller for this stream
+        abortControllerRef.current = new AbortController();
+        const { signal } = abortControllerRef.current;
+
         // Cancel any outgoing refetches (so they don't overwrite our optimistic update)
         await queryClient.cancelQueries({ queryKey: ['chat-messages', sessionId] });
 
@@ -136,9 +249,37 @@ export function useChatStream() {
 
         // 3. Prepare Request
         // We need to format the messages history for the API
-        // messagesHistory typically comes from the cache, which matches the API format usually.
-        // We just need to ensure we append the NEW user message.
-        const apiMessages = [...messagesHistory, { role: 'user', content }];
+        // messagesHistory comes from the cache and may contain UI-only fields
+        // (isStreaming, wasStopped, hasError, error) that the backend doesn't expect.
+        // We also need to filter out incomplete messages from stopped streams.
+        const sanitizedHistory = messagesHistory
+            .filter((msg: any) => {
+                // Filter out messages that are still streaming
+                if (msg.isStreaming) return false;
+                // Filter out stopped messages without content
+                if (msg.wasStopped && !msg.content) return false;
+                // Filter out empty assistant messages (e.g., from stopped streams before any content arrived)
+                // These may not have wasStopped set if the stop happened before finalization
+                if (msg.role === 'assistant' && !msg.content) return false;
+                return true;
+            })
+            .map((msg: any) => {
+                // Extract only the fields the API expects: role, content, and optionally name
+                // Normalize content to handle multimodal messages when switching models
+                // This ensures messages with images/audio from vision models don't break
+                // when the user switches to a text-only model
+                const sanitized: { role: string; content: any; name?: string } = {
+                    role: msg.role,
+                    content: normalizeContentForApi(msg.content, model.modalities)
+                };
+                if (msg.name) sanitized.name = msg.name;
+                return sanitized;
+            });
+
+        // Normalize the current user message content as well
+        // This handles cases where user sends multimodal content to a text-only model
+        const normalizedContent = normalizeContentForApi(content, model.modalities);
+        const apiMessages = [...sanitizedHistory, { role: 'user', content: normalizedContent }];
 
         const requestBody: any = {
             model: model.value,
@@ -238,10 +379,18 @@ export function useChatStream() {
             let lastUpdate = Date.now();
             let chunkCount = 0;
             let totalContentLength = 0;
+            let wasStopped = false;
 
             debugLog('Starting stream loop', { url, apiKeyPrefix: apiKey.substring(0, 15) + '...' });
 
             for await (const chunk of streamChatResponse(url, apiKey, requestBody)) {
+                // Check if stream was stopped by user
+                if (signal.aborted) {
+                    debugLog('Stream aborted by user');
+                    wasStopped = true;
+                    break;
+                }
+
                 chunkCount++;
 
                 if (chunkCount === 1) {
@@ -307,31 +456,39 @@ export function useChatStream() {
             const finalContent = streamHandlerRef.current.getFinalContent();
             const finalReasoning = streamHandlerRef.current.getFinalReasoning();
 
-            debugLog('Stream completed successfully', {
+            debugLog(wasStopped ? 'Stream stopped by user' : 'Stream completed successfully', {
                 totalChunks: chunkCount,
                 finalContentLength: finalContent.length,
                 hasReasoning: !!finalReasoning,
-                reasoningLength: finalReasoning?.length || 0
+                reasoningLength: finalReasoning?.length || 0,
+                wasStopped
             });
 
             // Save Assistant Message - for authenticated users OR guest sessions (negative IDs)
             // Guest messages are saved to localStorage, authenticated to backend
             // Include reasoning if present for proper persistence and display on reload
-            saveMessage.mutate({
-                 sessionId,
-                 role: 'assistant',
-                 content: finalContent,
-                 model: model.value,
-                 reasoning: finalReasoning || undefined
-            });
+            // Only save if we have content (even if stopped mid-stream)
+            if (finalContent) {
+                saveMessage.mutate({
+                     sessionId,
+                     role: 'assistant',
+                     content: finalContent,
+                     model: model.value,
+                     reasoning: finalReasoning || undefined
+                });
+            }
 
-            // Mark isStreaming false
+            // Mark isStreaming false and set wasStopped flag if applicable
             flushSync(() => {
                 queryClient.setQueryData(['chat-messages', sessionId], (old: any[] | undefined) => {
                     if (!old || old.length === 0) return old || [];
                     const last = old[old.length - 1];
                     if (!last) return old;
-                    return [...old.slice(0, -1), { ...last, isStreaming: false }];
+                    return [...old.slice(0, -1), {
+                        ...last,
+                        isStreaming: false,
+                        wasStopped: wasStopped && finalContent ? true : undefined
+                    }];
                 });
             });
 
@@ -370,6 +527,7 @@ export function useChatStream() {
     return {
         isStreaming,
         streamError,
-        streamMessage
+        streamMessage,
+        stopStream
     };
 }

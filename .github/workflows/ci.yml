@@ -18,7 +18,7 @@ jobs:
   # Check for merge conflicts first
   check-merge-conflicts:
     name: Check Merge Conflicts
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     outputs:
       has-conflicts: ${{ steps.check.outputs.has-conflicts }}
       conflicted-files: ${{ steps.check.outputs.conflicted-files }}
@@ -49,7 +49,7 @@ jobs:
 
   test:
     name: Test
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [check-merge-conflicts]
     if: needs.check-merge-conflicts.outputs.has-conflicts == 'false'
 
@@ -97,7 +97,7 @@ jobs:
 
   lint:
     name: Lint
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [check-merge-conflicts]
     if: needs.check-merge-conflicts.outputs.has-conflicts == 'false'
 
@@ -132,7 +132,7 @@ jobs:
 
   typecheck:
     name: Type Check
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [check-merge-conflicts]
     if: needs.check-merge-conflicts.outputs.has-conflicts == 'false'
 
@@ -167,7 +167,7 @@ jobs:
 
   build:
     name: Build
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [check-merge-conflicts]
     if: needs.check-merge-conflicts.outputs.has-conflicts == 'false'
 
@@ -217,7 +217,7 @@ jobs:
 
   e2e:
     name: E2E Tests (Playwright)
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [check-merge-conflicts]
     # Only run E2E tests on main branches and PRs to avoid excessive test runs, and if no merge conflicts
     if: (github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/develop') && needs.check-merge-conflicts.outputs.has-conflicts == 'false'
@@ -346,7 +346,7 @@ jobs:
   # AI-powered tool. Manual resolution is required when conflicts are detected.
   resolve-conflicts:
     name: Resolve Merge Conflicts
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [check-merge-conflicts]
     if: needs.check-merge-conflicts.outputs.has-conflicts == 'true'
 
@@ -376,7 +376,7 @@ jobs:
   # Summary job that all other jobs depend on - useful for branch protection rules
   ci-success:
     name: CI Success
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [check-merge-conflicts, resolve-conflicts, test, lint, typecheck, build, e2e]
     if: always()
 

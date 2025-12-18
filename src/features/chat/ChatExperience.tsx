@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { Plus, Send, Edit3, Trash2, Loader2, MessageSquare, Check } from "lucide-react";
 
@@ -14,6 +14,20 @@ import { Badge } from "@/components/ui/badge";
 import { ChatMessage } from "@/components/chat/ChatMessage";
 import { useToast } from "@/hooks/use-toast";
 import type { ModelOption } from "@/components/chat/model-select";
+
+// Helper to extract text from multimodal content
+function getTextFromContent(content: string | Array<{ type: string; text?: string }>): string {
+  if (typeof content === 'string') {
+    return content;
+  }
+  if (Array.isArray(content)) {
+    return content
+      .filter((c) => c.type === 'text' && c.text)
+      .map((c) => c.text)
+      .join('');
+  }
+  return '';
+}
 
 const ModelSelect = dynamic(() => import("@/components/chat/model-select").then((m) => m.ModelSelect), {
   ssr: false,
@@ -211,15 +225,23 @@ export function ChatExperience() {
                 </CardContent>
               </Card>
             ) : (
-              activeMessages.map((msg) => (
-                <ChatMessage
-                  key={msg.id}
-                  role={msg.role}
-                  content={msg.content}
-                  isStreaming={msg.isStreaming}
-                  model={msg.model}
-                />
-              ))
+              activeMessages.map((msg, idx) => {
+                const isLastAssistant = msg.role === 'assistant' && idx === activeMessages.length - 1;
+                return (
+                  <ChatMessage
+                    key={msg.id}
+                    role={msg.role}
+                    content={msg.content}
+                    isStreaming={msg.isStreaming}
+                    model={msg.model}
+                    onCopy={() => navigator.clipboard.writeText(getTextFromContent(msg.content))}
+                    onLike={msg.role === 'assistant' ? () => console.log('Liked message:', msg.id) : undefined}
+                    onDislike={msg.role === 'assistant' ? () => console.log('Disliked message:', msg.id) : undefined}
+                    onShare={msg.role === 'assistant' ? () => navigator.clipboard.writeText(getTextFromContent(msg.content)) : undefined}
+                    onRegenerate={isLastAssistant && !msg.isStreaming ? () => console.log('Regenerate:', msg.id) : undefined}
+                  />
+                );
+              })
             )}
             {sending && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">

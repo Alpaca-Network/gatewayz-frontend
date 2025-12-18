@@ -135,6 +135,10 @@ jest.mock('lucide-react', () => ({
   Check: () => <span data-testid="check-icon">Check</span>,
   FileText: () => <span data-testid="file-text-icon">FileText</span>,
   RefreshCw: () => <span data-testid="refresh-icon">RefreshCw</span>,
+  ThumbsUp: () => <span data-testid="thumbs-up-icon">ThumbsUp</span>,
+  ThumbsDown: () => <span data-testid="thumbs-down-icon">ThumbsDown</span>,
+  Share: () => <span data-testid="share-icon">Share</span>,
+  MoreHorizontal: () => <span data-testid="more-icon">More</span>,
 }));
 
 describe('ChatMessage', () => {
@@ -485,6 +489,106 @@ describe('ChatMessage', () => {
 
       expect(screen.queryByTitle('Copy message')).not.toBeInTheDocument();
     });
+
+    it('should render like button when onLike is provided', () => {
+      const onLike = jest.fn();
+      render(<ChatMessage {...defaultProps} onLike={onLike} />);
+
+      expect(screen.getByTestId('thumbs-up-icon')).toBeInTheDocument();
+    });
+
+    it('should call onLike when like button is clicked', () => {
+      const onLike = jest.fn();
+      render(<ChatMessage {...defaultProps} onLike={onLike} />);
+
+      const likeButton = screen.getByTitle('Good response');
+      fireEvent.click(likeButton);
+
+      expect(onLike).toHaveBeenCalledTimes(1);
+    });
+
+    it('should render dislike button when onDislike is provided', () => {
+      const onDislike = jest.fn();
+      render(<ChatMessage {...defaultProps} onDislike={onDislike} />);
+
+      expect(screen.getByTestId('thumbs-down-icon')).toBeInTheDocument();
+    });
+
+    it('should call onDislike when dislike button is clicked', () => {
+      const onDislike = jest.fn();
+      render(<ChatMessage {...defaultProps} onDislike={onDislike} />);
+
+      const dislikeButton = screen.getByTitle('Bad response');
+      fireEvent.click(dislikeButton);
+
+      expect(onDislike).toHaveBeenCalledTimes(1);
+    });
+
+    it('should render share button when onShare is provided', () => {
+      const onShare = jest.fn();
+      render(<ChatMessage {...defaultProps} onShare={onShare} />);
+
+      expect(screen.getByTestId('share-icon')).toBeInTheDocument();
+    });
+
+    it('should call onShare when share button is clicked', () => {
+      const onShare = jest.fn();
+      render(<ChatMessage {...defaultProps} onShare={onShare} />);
+
+      const shareButton = screen.getByTitle('Share');
+      fireEvent.click(shareButton);
+
+      expect(onShare).toHaveBeenCalledTimes(1);
+    });
+
+    it('should render more button when onMore is provided', () => {
+      const onMore = jest.fn();
+      render(<ChatMessage {...defaultProps} onMore={onMore} />);
+
+      expect(screen.getByTestId('more-icon')).toBeInTheDocument();
+    });
+
+    it('should call onMore when more button is clicked', () => {
+      const onMore = jest.fn();
+      render(<ChatMessage {...defaultProps} onMore={onMore} />);
+
+      const moreButton = screen.getByTitle('More options');
+      fireEvent.click(moreButton);
+
+      expect(onMore).toHaveBeenCalledTimes(1);
+    });
+
+    it('should render all action buttons when all handlers are provided', () => {
+      render(
+        <ChatMessage
+          {...defaultProps}
+          onCopy={jest.fn()}
+          onLike={jest.fn()}
+          onDislike={jest.fn()}
+          onShare={jest.fn()}
+          onRegenerate={jest.fn()}
+          onMore={jest.fn()}
+        />
+      );
+
+      expect(screen.getByTestId('copy-icon')).toBeInTheDocument();
+      expect(screen.getByTestId('thumbs-up-icon')).toBeInTheDocument();
+      expect(screen.getByTestId('thumbs-down-icon')).toBeInTheDocument();
+      expect(screen.getByTestId('share-icon')).toBeInTheDocument();
+      expect(screen.getByTestId('regenerate-icon')).toBeInTheDocument();
+      expect(screen.getByTestId('more-icon')).toBeInTheDocument();
+    });
+
+    it('should not render action buttons when handlers are not provided', () => {
+      render(<ChatMessage {...defaultProps} />);
+
+      expect(screen.queryByTestId('copy-icon')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('thumbs-up-icon')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('thumbs-down-icon')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('share-icon')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('regenerate-icon')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('more-icon')).not.toBeInTheDocument();
+    });
   });
 
   describe('Model display', () => {
@@ -534,6 +638,67 @@ describe('ChatMessage', () => {
   describe('Memoization', () => {
     it('should be a memoized component', () => {
       expect(ChatMessage.displayName).toBe('ChatMessage');
+    });
+  });
+
+  describe('Stopped indicator (wasStopped)', () => {
+    it('should show "Response stopped" indicator when wasStopped is true and not streaming', () => {
+      render(<ChatMessage {...defaultProps} wasStopped={true} isStreaming={false} />);
+
+      expect(screen.getByText('Response stopped')).toBeInTheDocument();
+    });
+
+    it('should not show stopped indicator when wasStopped is false', () => {
+      render(<ChatMessage {...defaultProps} wasStopped={false} isStreaming={false} />);
+
+      expect(screen.queryByText('Response stopped')).not.toBeInTheDocument();
+    });
+
+    it('should not show stopped indicator when still streaming', () => {
+      // Even if wasStopped is somehow set while streaming, indicator should not show
+      render(<ChatMessage {...defaultProps} wasStopped={true} isStreaming={true} />);
+
+      // Should show streaming indicator instead
+      expect(screen.queryByText('Response stopped')).not.toBeInTheDocument();
+    });
+
+    it('should not show stopped indicator when wasStopped is undefined', () => {
+      render(<ChatMessage {...defaultProps} wasStopped={undefined} isStreaming={false} />);
+
+      expect(screen.queryByText('Response stopped')).not.toBeInTheDocument();
+    });
+
+    it('should apply italic styling to stopped indicator', () => {
+      const { container } = render(<ChatMessage {...defaultProps} wasStopped={true} isStreaming={false} />);
+
+      const stoppedIndicator = container.querySelector('.italic');
+      expect(stoppedIndicator).toBeInTheDocument();
+      expect(stoppedIndicator).toHaveTextContent('Response stopped');
+    });
+
+    it('should show content alongside stopped indicator', () => {
+      render(<ChatMessage {...defaultProps} content="Partial response text" wasStopped={true} isStreaming={false} />);
+
+      // Both content and stopped indicator should be present
+      expect(screen.getByText('Partial response text')).toBeInTheDocument();
+      expect(screen.getByText('Response stopped')).toBeInTheDocument();
+    });
+  });
+
+  describe('Memoization comparison with wasStopped', () => {
+    // The custom comparison function should include wasStopped
+    it('should have wasStopped in comparison function', () => {
+      // Verify by checking the component re-renders when wasStopped changes
+      const { rerender } = render(<ChatMessage {...defaultProps} wasStopped={false} />);
+
+      // Should not show indicator initially
+      expect(screen.queryByText('Response stopped')).not.toBeInTheDocument();
+
+      // Rerender with wasStopped=true
+      rerender(<ChatMessage {...defaultProps} wasStopped={true} />);
+
+      // Should now show the indicator (proves comparison function works)
+      expect(screen.getByText('Response stopped')).toBeInTheDocument();
     });
   });
 });

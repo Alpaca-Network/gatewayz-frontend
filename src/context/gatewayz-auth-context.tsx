@@ -27,6 +27,7 @@ import {
 } from "@/integrations/privy/auth-session-transfer";
 import { getReferralCode, clearReferralCode } from "@/lib/referral";
 import { resetGuestMessageCount } from "@/lib/guest-chat";
+import { rateLimitedCaptureMessage } from "@/lib/global-error-handlers";
 
 type AuthStatus = "idle" | "unauthenticated" | "authenticating" | "authenticated" | "error";
 
@@ -283,7 +284,7 @@ export function GatewayzAuthProvider({
         console.log(`[Auth] Auto-retrying authentication (attempt ${authRetryCountRef.current + 1}/${MAX_AUTH_RETRIES})`);
         setError("Authentication is taking longer than expected - retrying...");
 
-        Sentry.captureMessage("Authentication timeout - auto-retrying", {
+        rateLimitedCaptureMessage("Authentication timeout - auto-retrying", {
           level: 'warning',
           tags: {
             auth_error: 'authenticating_timeout_retry',
@@ -308,7 +309,7 @@ export function GatewayzAuthProvider({
         // Clear any stuck credentials but keep retry counter to prevent infinite loop
         clearStoredCredentials(false);
 
-        Sentry.captureMessage("Authentication timeout - stuck in authenticating state", {
+        rateLimitedCaptureMessage("Authentication timeout - stuck in authenticating state", {
           level: 'error',
           tags: {
             auth_error: 'authenticating_timeout',
@@ -1206,7 +1207,7 @@ export function GatewayzAuthProvider({
             setStatus("error");
             setError("Authentication request timed out. Please try again.");
 
-            Sentry.captureMessage("Authentication sync aborted by client timeout", {
+            rateLimitedCaptureMessage("Authentication sync aborted by client timeout", {
               level: "warning",
               tags: {
                 auth_error: "frontend_timeout",

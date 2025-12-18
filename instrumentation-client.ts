@@ -42,17 +42,28 @@ const transactionRateLimitState = {
   lastCleanup: Date.now(),
 };
 
-// Rate limiting configuration - AGGRESSIVELY reduced to prevent 429 errors
+// Rate limiting configuration - balanced for better error visibility
 const RATE_LIMIT_CONFIG = {
-  maxEventsPerMinute: 5,         // REDUCED: Max events per minute (was 10, still hitting 429s)
+  maxEventsPerMinute: 10,        // INCREASED: Allow 10 events per minute for better visibility
   windowMs: 60000,               // 1 minute window
-  dedupeWindowMs: 120000,        // INCREASED: Don't send same message within 2 minutes (was 60s)
-  maxBreadcrumbs: 10,            // REDUCED: Limit breadcrumbs to reduce payload size (was 20)
+  dedupeWindowMs: 60000,         // REDUCED: Don't send same message within 1 minute
+  maxBreadcrumbs: 20,            // INCREASED: More breadcrumbs for better debugging context
   cleanupIntervalMs: 30000,      // Cleanup stale entries every 30 seconds
   maxMapSize: 50,                // Maximum entries in deduplication map
-  // Transaction-specific limits (more lenient since we already have low sample rate)
-  maxTransactionsPerMinute: 10,  // Allow more transactions than errors
-  transactionDedupeWindowMs: 30000, // 30 seconds for transaction deduplication
+  // Transaction-specific limits
+  maxTransactionsPerMinute: 10,  // INCREASED: Allow more transactions
+  transactionDedupeWindowMs: 30000, // REDUCED: 30 seconds for transaction deduplication
+  // Backoff configuration for when we detect 429 errors
+  backoffMultiplier: 2,          // Double the wait time after each 429
+  maxBackoffMs: 300000,          // Maximum backoff of 5 minutes
+  initialBackoffMs: 60000,       // Start with 1 minute backoff after 429
+};
+
+// Track 429 backoff state
+const backoffState = {
+  inBackoff: false,
+  backoffUntil: 0,
+  currentBackoffMs: RATE_LIMIT_CONFIG.initialBackoffMs,
 };
 
 /**
@@ -182,16 +193,8 @@ function shouldFilterEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): bo
     return true;
   }
 
-  // Filter out pending prompt timeout warnings (these are informational, not errors)
-  if (
-    errorMessage.includes('Pending prompt timed out') ||
-    eventMessage.includes('Pending prompt timed out') ||
-    errorMessage.includes('timed out after') ||
-    eventMessage.includes('clearing optimistic UI')
-  ) {
-    console.debug('[Sentry] Filtered out pending prompt timeout warning (informational)');
-    return true;
-  }
+  // NOTE: "Pending prompt timed out" errors are now captured (not filtered)
+  // These are important for debugging UI timeout issues
 
   // Filter out WalletConnect relay errors (non-critical)
   if (
@@ -204,28 +207,8 @@ function shouldFilterEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): bo
     return true;
   }
 
-  // Filter out Next.js hydration errors
-  // These are often caused by browser extensions, ad blockers, or dynamic content
-  // and are non-critical since we have suppressHydrationWarning set
-  if (
-    errorMessageLower.includes('hydration') ||
-    (errorMessageLower.includes('text content does not match') && errorMessageLower.includes('server')) ||
-    eventMessageLower.includes('hydration') ||
-    eventMessageLower.includes('server rendered html')
-  ) {
-    // Only filter if it's a generic hydration error without specific component info
-    // This allows us to still catch real hydration bugs in our code
-    // Use case-insensitive checks to catch all variants (e.g., "At Path", "Component Stack")
-    const messageLower = errorMessage.toLowerCase();
-    const hasComponentInfo =
-      messageLower.includes('at path') ||
-      messageLower.includes('component stack');
-
-    if (!hasComponentInfo) {
-      console.debug('[Sentry] Filtered out generic hydration error (likely caused by browser extensions)');
-      return true;
-    }
-  }
+  // NOTE: Next.js hydration errors are now captured (not filtered)
+  // These are important for debugging SSR/hydration mismatches
 
   // Filter out 429 rate limit errors from monitoring/telemetry endpoints
   // These create a cascade: Sentry tries to report 429 errors, which causes more 429s
@@ -250,6 +233,8 @@ function shouldFilterEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): bo
       );
 
     if (isMonitoringError) {
+      // Trigger backoff mode when we detect a 429 from our own monitoring
+      enterBackoffMode();
       console.debug('[Sentry] Filtered out 429 rate limit error from monitoring endpoint (prevents cascade)');
       return true;
     }
@@ -278,7 +263,67 @@ function shouldFilterEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): bo
     }
   }
 
+  // Filter out "N+1 API Call" performance monitoring events
+  // These are triggered by our intentional parallel model prefetch optimization
+  // The prefetch hook makes 6 parallel requests to different gateways for performance
+  // This is NOT a bug - it's a deliberate optimization pattern
+  if (
+    event.level === 'info' &&
+    (errorMessageLower.includes('n+1 api call') ||
+     eventMessageLower.includes('n+1 api call') ||
+     (event.message?.toLowerCase() || '').includes('n+1 api call'))
+  ) {
+    console.debug('[Sentry] Filtered out N+1 API Call info event (intentional parallel prefetch optimization)');
+    return true;
+  }
+
   return false;
+}
+
+/**
+ * Enter backoff mode after receiving a 429 error
+ * Called when we detect a rate limit error
+ */
+function enterBackoffMode(): void {
+  const now = Date.now();
+  backoffState.inBackoff = true;
+
+  // Store the actual backoff duration for logging before updating currentBackoffMs
+  const actualBackoffMs = backoffState.currentBackoffMs;
+  backoffState.backoffUntil = now + actualBackoffMs;
+
+  // Increase backoff for next time (exponential backoff)
+  backoffState.currentBackoffMs = Math.min(
+    backoffState.currentBackoffMs * RATE_LIMIT_CONFIG.backoffMultiplier,
+    RATE_LIMIT_CONFIG.maxBackoffMs
+  );
+
+  console.warn(`[Sentry] Entering backoff mode for ${actualBackoffMs / 1000}s due to rate limiting`);
+}
+
+/**
+ * Check if we're currently in backoff mode
+ * Returns true if we should drop events
+ */
+function isInBackoff(): boolean {
+  if (!backoffState.inBackoff) {
+    return false;
+  }
+
+  const now = Date.now();
+  if (now >= backoffState.backoffUntil) {
+    // Backoff period expired, reset
+    backoffState.inBackoff = false;
+    // Reduce backoff time for next occurrence (gradual recovery)
+    backoffState.currentBackoffMs = Math.max(
+      backoffState.currentBackoffMs / RATE_LIMIT_CONFIG.backoffMultiplier,
+      RATE_LIMIT_CONFIG.initialBackoffMs
+    );
+    console.debug('[Sentry] Backoff period ended, resuming normal operation');
+    return false;
+  }
+
+  return true;
 }
 
 /**
@@ -288,6 +333,12 @@ function shouldFilterEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): bo
  */
 function shouldRateLimit(event: Sentry.ErrorEvent): boolean {
   const now = Date.now();
+
+  // Check if we're in backoff mode first (highest priority)
+  if (isInBackoff()) {
+    console.debug('[Sentry] In backoff mode, dropping event');
+    return true;
+  }
 
   // Periodic cleanup to prevent unbounded memory growth
   cleanupStaleEntries();
@@ -357,6 +408,13 @@ function cleanupStaleTransactionEntries(): void {
 function shouldRateLimitTransaction(event: TransactionEventLike): boolean {
   const now = Date.now();
 
+  // Check if we're in backoff mode first (highest priority)
+  // Transactions also respect backoff to reduce overall load
+  if (isInBackoff()) {
+    console.debug('[Sentry] In backoff mode, dropping transaction');
+    return true;
+  }
+
   // Periodic cleanup to prevent unbounded memory growth
   cleanupStaleTransactionEntries();
 
@@ -393,35 +451,29 @@ Sentry.init({
   // Release tracking for associating errors with specific versions
   release: getRelease(),
 
-  // REDUCED: Sample only 1% of transactions to avoid rate limits
-  // Increase to 0.05 or 0.1 only for debugging specific issues
-  tracesSampleRate: 0.01,  // REDUCED from 0.05 to 0.01
+  // Sample 10% of transactions for performance monitoring
+  tracesSampleRate: 0.1,
 
   // Setting this option to true will print useful information to the console while you're setting up Sentry.
   debug: false,
 
-  // DISABLED: Replays completely disabled to reduce 429s
-  // Session replays send continuous data which contributes to rate limiting
-  replaysOnErrorSampleRate: 0,    // DISABLED - was 0.1, causing 429s
-  replaysSessionSampleRate: 0,    // Already disabled
+  // Enable session replays for better error debugging
+  replaysOnErrorSampleRate: 1,    // Capture replay for 100% of errors
+  replaysSessionSampleRate: 0.1,  // Capture 10% of sessions (balances cost/privacy with debugging)
 
   // Limit breadcrumbs to reduce payload size
   maxBreadcrumbs: RATE_LIMIT_CONFIG.maxBreadcrumbs,
 
-  // DISABLED: Replay integration completely removed to prevent 429s
-  // Replay was sending too many events to Sentry causing rate limit errors
+  // Enable replay integration for session recordings
   integrations: [
-    // REMOVED: Replay integration completely disabled
-    // Sentry.replayIntegration({ maskAllText: true, blockAllMedia: true }),
-
-    // REMOVED: consoleLoggingIntegration was sending every console.log/warn/error to Sentry
-    // This was a major source of 429 rate limit errors
-    // Re-enable only for debugging: Sentry.consoleLoggingIntegration({ levels: ["error"] }),
+    Sentry.replayIntegration({
+      maskAllText: true,
+      blockAllMedia: true,
+    }),
   ],
 
-  // DISABLED: enableLogs was causing excessive event volume
-  // Re-enable only for debugging specific issues
-  enableLogs: false,
+  // Enable console logging integration for error-level logs
+  enableLogs: true,
 
   // Filter out non-blocking errors FIRST, then apply rate limiting
   // This prevents filtered events from consuming rate limit quota

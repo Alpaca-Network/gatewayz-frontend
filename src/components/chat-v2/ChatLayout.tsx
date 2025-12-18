@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
-import { Menu, Pencil, Lock, Unlock, Shield } from "lucide-react";
+import { Menu, Pencil, Lock, Unlock, Shield, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 import { ChatSidebar } from "./ChatSidebar";
@@ -13,11 +13,14 @@ import { ModelSelect } from "@/components/chat/model-select";
 import { useChatUIStore } from "@/lib/store/chat-ui-store";
 import { useAuthSync } from "@/lib/hooks/use-auth-sync";
 import { useAuthStore } from "@/lib/store/auth-store";
+import { getApiKey } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { useSessionMessages } from "@/lib/hooks/use-chat-queries";
 import { GuestChatCounter } from "@/components/chat/guest-chat-counter";
 import { useNetworkStatus } from "@/hooks/use-network-status";
 import { useQueryClient } from "@tanstack/react-query";
+import { useCreateSession } from "@/lib/hooks/use-chat-queries";
+import { useToast } from "@/hooks/use-toast";
 
 // Pool of prompts to randomly select from
 const ALL_PROMPTS = [
@@ -78,11 +81,19 @@ function WelcomeScreen({ onPromptSelect }: { onPromptSelect: (txt: string) => vo
 }
 
 export function ChatLayout() {
-   useAuthSync(); // Trigger auth sync
-   const { isAuthenticated, isLoading: authLoading } = useAuthStore();
-   const { selectedModel, setSelectedModel, activeSessionId, setActiveSessionId, setInputValue, mobileSidebarOpen, setMobileSidebarOpen, isIncognitoMode, toggleIncognitoMode } = useChatUIStore();
+   const { isLoading: authSyncLoading } = useAuthSync(); // Trigger auth sync and get loading state
+   const { isAuthenticated, isLoading: storeLoading } = useAuthStore();
+
+   // Use the more accurate loading state from useAuthSync which considers:
+   // 1. The auth query loading state
+   // 2. Whether we already have cached auth credentials
+   // For non-authenticated users, this will be false immediately after the effect runs
+   const authLoading = authSyncLoading;
+   const { selectedModel, setSelectedModel, activeSessionId, setActiveSessionId, setInputValue, mobileSidebarOpen, setMobileSidebarOpen, isIncognitoMode, setIncognitoMode, toggleIncognitoMode, syncIncognitoState } = useChatUIStore();
    const searchParams = useSearchParams();
    const queryClient = useQueryClient();
+   const createSession = useCreateSession();
+   const { toast } = useToast();
 
    // Track if user has clicked a prompt (to immediately hide welcome screen)
    const [pendingPrompt, setPendingPrompt] = useState<string | null>(null);
@@ -94,6 +105,13 @@ export function ChatLayout() {
    // Track pending timeout IDs for cleanup
    const pendingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+   // Sync incognito state after client-side hydration
+   // This fixes the SSR mismatch where incognito mode might be enabled in localStorage
+   // but the model wasn't correctly set due to server-side rendering
+   useEffect(() => {
+       syncIncognitoState();
+   }, [syncIncognitoState]);
+
    // Handle URL message parameter - populate input and auto-send on mount
    useEffect(() => {
        const messageParam = searchParams.get('message');
@@ -101,6 +119,16 @@ export function ChatLayout() {
 
        if (messageParam && !urlMessageProcessedRef.current) {
            urlMessageProcessedRef.current = true;
+
+           // Always disable incognito mode when using chat prompts from homepage/start pages
+           // This ensures the user's selected model is used instead of the incognito model.
+           // We call setIncognitoMode(false) unconditionally because:
+           // 1. If incognito is already off, this is a no-op (state doesn't change)
+           // 2. If incognito is on (or will be set on by syncIncognitoState due to SSR hydration),
+           //    this ensures it gets disabled
+           // This avoids a race condition where syncIncognitoState might enable incognito
+           // after this effect has already checked the stale isIncognitoMode value.
+           setIncognitoMode(false);
 
            // Set model from URL if provided
            if (modelParam) {
@@ -168,7 +196,7 @@ export function ChatLayout() {
                pendingTimeoutRef.current = null;
            }
        };
-   }, [searchParams, setInputValue, setSelectedModel]);
+   }, [searchParams, setInputValue, setSelectedModel, setIncognitoMode]);
 
    // Clear pending prompt once we have real messages OR when session changes
    useEffect(() => {
@@ -296,10 +324,201 @@ export function ChatLayout() {
        (window as any).__chatInputSend();
    }, [activeSessionId, activeMessages, queryClient, setInputValue]);
 
+   // Handle regenerate - re-send the last user message to get a new response
+   const handleRegenerate = useCallback(() => {
+       if (!activeSessionId || activeMessages.length < 2) return;
+
+       // Find the last user message
+       const lastAssistantIndex = activeMessages.length - 1;
+       const lastUserIndex = lastAssistantIndex - 1;
+       const lastUserMessage = activeMessages[lastUserIndex];
+       const lastAssistantMessage = activeMessages[lastAssistantIndex];
+
+       if (lastUserMessage?.role !== 'user' || lastAssistantMessage?.role !== 'assistant') {
+           console.warn('[ChatLayout] Unexpected message structure for regenerate');
+           return;
+       }
+
+       // Don't regenerate while streaming
+       if (lastAssistantMessage.isStreaming) {
+           console.warn('[ChatLayout] Cannot regenerate while message is still streaming');
+           return;
+       }
+
+       // Extract text content
+       let userContent = '';
+       if (typeof lastUserMessage.content === 'string') {
+           userContent = lastUserMessage.content;
+       } else if (Array.isArray(lastUserMessage.content)) {
+           userContent = lastUserMessage.content
+               .filter((c: any) => c.type === 'text' && c.text)
+               .map((c: any) => c.text)
+               .join('');
+       }
+
+       if (!userContent.trim()) return;
+
+       // Check if __chatInputSend is available
+       if (typeof window === 'undefined' || !(window as any).__chatInputSend) {
+           console.warn('[ChatLayout] __chatInputSend not available, cannot regenerate');
+           return;
+       }
+
+       // Remove BOTH the user message AND the assistant message from cache
+       // This prevents duplicate user messages when handleSend adds the message again
+       queryClient.setQueryData(['chat-messages', activeSessionId], (old: any[] | undefined) => {
+           if (!old || old.length < 2) return old;
+           return old.slice(0, -2);
+       });
+
+       // Set the input and re-send
+       setInputValue(userContent);
+       (window as any).__chatInputSend();
+   }, [activeSessionId, activeMessages, queryClient, setInputValue]);
+
+   // Handle feedback - like a message
+   const handleLike = useCallback(async (messageId: number) => {
+       const apiKey = getApiKey();
+       const message = activeMessages.find(m => m.id === messageId);
+
+       try {
+           const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai'}/v1/chat/feedback`, {
+               method: 'POST',
+               headers: {
+                   ...(apiKey && { 'Authorization': `Bearer ${apiKey}` }),
+                   'Content-Type': 'application/json'
+               },
+               body: JSON.stringify({
+                   feedback_type: 'thumbs_up',
+                   session_id: activeSessionId,
+                   message_id: messageId,
+                   model: message?.model,
+                   rating: 5,
+                   metadata: {
+                       response_content: typeof message?.content === 'string' ? message.content : undefined
+                   }
+               })
+           });
+
+           if (!response.ok) {
+               throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+           }
+
+           toast({
+               title: "Feedback received",
+               description: "Thanks for the positive feedback!",
+           });
+       } catch (error) {
+           console.error('[ChatLayout] Failed to submit feedback:', error);
+           toast({
+               title: "Feedback failed",
+               description: "Unable to submit feedback. Please try again.",
+               variant: "destructive",
+           });
+       }
+   }, [activeSessionId, activeMessages, toast]);
+
+   // Handle feedback - dislike a message
+   const handleDislike = useCallback(async (messageId: number) => {
+       const apiKey = getApiKey();
+       const message = activeMessages.find(m => m.id === messageId);
+
+       try {
+           const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai'}/v1/chat/feedback`, {
+               method: 'POST',
+               headers: {
+                   ...(apiKey && { 'Authorization': `Bearer ${apiKey}` }),
+                   'Content-Type': 'application/json'
+               },
+               body: JSON.stringify({
+                   feedback_type: 'thumbs_down',
+                   session_id: activeSessionId,
+                   message_id: messageId,
+                   model: message?.model,
+                   rating: 1,
+                   metadata: {
+                       response_content: typeof message?.content === 'string' ? message.content : undefined
+                   }
+               })
+           });
+
+           if (!response.ok) {
+               throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+           }
+
+           toast({
+               title: "Feedback received",
+               description: "Thanks for letting us know. We'll work to improve.",
+           });
+       } catch (error) {
+           console.error('[ChatLayout] Failed to submit feedback:', error);
+           toast({
+               title: "Feedback failed",
+               description: "Unable to submit feedback. Please try again.",
+               variant: "destructive",
+           });
+       }
+   }, [activeSessionId, activeMessages, toast]);
+
+   // Handle share - copy message or share link
+   const handleShare = useCallback(async (messageId: number) => {
+       // Find the message and copy its content
+       const message = activeMessages.find(m => m.id === messageId);
+       if (!message) {
+           toast({
+               title: "Unable to share",
+               description: "Message not found.",
+               variant: "destructive",
+           });
+           return;
+       }
+       let content = '';
+       if (typeof message.content === 'string') {
+           content = message.content;
+       } else if (Array.isArray(message.content)) {
+           content = message.content
+               .filter((c: any) => c.type === 'text' && c.text)
+               .map((c: any) => c.text)
+               .join('');
+       }
+       try {
+           await navigator.clipboard.writeText(content);
+           toast({
+               title: "Copied to clipboard",
+               description: "Response has been copied to your clipboard.",
+           });
+       } catch (error) {
+           console.error('[ChatLayout] Failed to copy to clipboard:', error);
+           toast({
+               title: "Copy failed",
+               description: "Unable to copy to clipboard. Please try again.",
+               variant: "destructive",
+           });
+       }
+   }, [activeMessages, toast]);
+
    // When logged out, always show welcome screen (ignore cached messages and activeSessionId)
    // When logged in, show welcome screen only if no active session or no messages after loading
    // ALSO hide welcome screen immediately when a prompt is clicked (pendingPrompt is set)
    const showWelcomeScreen = !pendingPrompt && (!isAuthenticated || !activeSessionId || (!messagesLoading && activeMessages.length === 0));
+
+   // Handle creating a new chat session (for mobile new chat button)
+   const handleCreateNewChat = useCallback(async () => {
+       try {
+           const newSession = await createSession.mutateAsync({
+               title: "Untitled Chat",
+               model: selectedModel?.value
+           });
+           setActiveSessionId(newSession.id);
+       } catch (e) {
+           console.error("Failed to create session", e);
+           toast({
+               title: "Unable to start a new chat",
+               description: "Please try again in a moment.",
+               variant: "destructive",
+           });
+       }
+   }, [createSession, selectedModel?.value, setActiveSessionId, toast]);
 
    if (authLoading) {
        return (
@@ -345,6 +564,18 @@ export function ChatLayout() {
                                <ChatSidebar className="h-full border-none" onClose={() => setMobileSidebarOpen(false)} />
                            </SheetContent>
                        </Sheet>
+
+                       {/* Mobile New Chat Button - easily accessible on mobile */}
+                       <Button
+                           variant="ghost"
+                           size="icon"
+                           className="lg:hidden"
+                           onClick={handleCreateNewChat}
+                           disabled={createSession.isPending}
+                           title="New Chat"
+                       >
+                           <Plus className="h-5 w-5" />
+                       </Button>
 
                        {/* Title - Placeholder for now, could use useSession details */}
                        <h1 className="font-semibold text-lg truncate hidden sm:block">
@@ -421,6 +652,10 @@ export function ChatLayout() {
                         isLoading={messagesLoading}
                         pendingPrompt={pendingPrompt}
                         onRetry={handleRetry}
+                        onRegenerate={handleRegenerate}
+                        onLike={handleLike}
+                        onDislike={handleDislike}
+                        onShare={handleShare}
                       />
                   )}
                </div>

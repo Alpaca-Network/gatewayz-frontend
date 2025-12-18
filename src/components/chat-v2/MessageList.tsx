@@ -17,13 +17,17 @@ const getTextFromContent = (content: string | any[]): string => {
 
 interface MessageListProps {
   sessionId: number | null;
-  messages: (ChatMessageData & { error?: string; hasError?: boolean })[];
+  messages: (ChatMessageData & { error?: string; hasError?: boolean; wasStopped?: boolean })[];
   isLoading: boolean;
   pendingPrompt?: string | null;  // Optimistic message shown while session is being created
   onRetry?: () => void;  // Callback to retry the last failed message
+  onRegenerate?: () => void;  // Callback to regenerate the last response
+  onLike?: (messageId: number) => void;  // Callback for positive feedback
+  onDislike?: (messageId: number) => void;  // Callback for negative feedback
+  onShare?: (messageId: number) => void;  // Callback to share a message
 }
 
-export function MessageList({ sessionId, messages, isLoading, pendingPrompt, onRetry }: MessageListProps) {
+export function MessageList({ sessionId, messages, isLoading, pendingPrompt, onRetry, onRegenerate, onLike, onDislike, onShare }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [userHasScrolled, setUserHasScrolled] = useState(false);
@@ -128,25 +132,33 @@ export function MessageList({ sessionId, messages, isLoading, pendingPrompt, onR
       onScroll={handleScroll}
       className="flex-1 overflow-y-auto p-3 sm:p-4 lg:p-6 space-y-4 sm:space-y-6"
     >
-      {messages.map((msg, idx) => (
-        <ChatMessageBubble
-          key={msg.id ?? `${msg.role}-${idx}`}
-          role={msg.role}
-          content={msg.content}
-          reasoning={msg.reasoning}
-          image={msg.image}
-          video={msg.video}
-          audio={msg.audio}
-          document={msg.document}
-          isStreaming={msg.isStreaming}
-          model={msg.model}
-          error={msg.error}
-          hasError={msg.hasError}
-          showActions={msg.role === 'assistant'}
-          onCopy={() => navigator.clipboard.writeText(getTextFromContent(msg.content))}
-          onRetry={idx === lastMessageIndex && msg.hasError ? onRetry : undefined}
-        />
-      ))}
+      {messages.map((msg, idx) => {
+        const isLastAssistant = msg.role === 'assistant' && idx === lastMessageIndex;
+        return (
+          <ChatMessageBubble
+            key={msg.id ?? `${msg.role}-${idx}`}
+            role={msg.role}
+            content={msg.content}
+            reasoning={msg.reasoning}
+            image={msg.image}
+            video={msg.video}
+            audio={msg.audio}
+            document={msg.document}
+            isStreaming={msg.isStreaming}
+            wasStopped={msg.wasStopped}
+            model={msg.model}
+            error={msg.error}
+            hasError={msg.hasError}
+            showActions={msg.role === 'assistant'}
+            onCopy={() => navigator.clipboard.writeText(getTextFromContent(msg.content))}
+            onRetry={idx === lastMessageIndex && msg.hasError ? onRetry : undefined}
+            onRegenerate={isLastAssistant && !msg.isStreaming ? onRegenerate : undefined}
+            onLike={msg.role === 'assistant' && onLike ? () => onLike(msg.id) : undefined}
+            onDislike={msg.role === 'assistant' && onDislike ? () => onDislike(msg.id) : undefined}
+            onShare={msg.role === 'assistant' && onShare ? () => onShare(msg.id) : undefined}
+          />
+        );
+      })}
       <div ref={bottomRef} className="h-1" />
     </div>
   );

@@ -75,6 +75,12 @@ const getPreviousModel = (): ModelOption | null => {
   }
 };
 
+// Helper to check if a model is a valid NEAR incognito model
+const isNearIncognitoModel = (model: ModelOption | null): boolean => {
+  if (!model) return false;
+  return model.sourceGateway === 'near' || model.value.startsWith('near/');
+};
+
 interface ChatUIState {
   activeSessionId: number | null;
   mobileSidebarOpen: boolean;
@@ -83,6 +89,7 @@ interface ChatUIState {
   messageStartTime: number | null; // Unix timestamp when message was sent
   isIncognitoMode: boolean;
   previousModel: ModelOption | null; // Store model before entering incognito
+  _hasHydrated: boolean; // Track if hydration sync has run
 
   setActiveSessionId: (id: number | null) => void;
   setMobileSidebarOpen: (open: boolean) => void;
@@ -92,11 +99,13 @@ interface ChatUIState {
   setIncognitoMode: (enabled: boolean) => void;
   toggleIncognitoMode: () => void;
   resetChatState: () => void;
+  syncIncognitoState: () => void; // Sync incognito state after hydration
 }
 
 // Standard default model
+// NOTE: Model ID must include the gateway prefix (e.g., 'openrouter/') for proper backend routing
 const STANDARD_DEFAULT_MODEL: ModelOption = {
-  value: 'deepseek/deepseek-r1',
+  value: 'openrouter/deepseek/deepseek-r1',
   label: 'DeepSeek R1',
   category: 'Reasoning',
   sourceGateway: 'openrouter',
@@ -112,12 +121,60 @@ export const useChatUIStore = create<ChatUIState>((set, get) => ({
   messageStartTime: null,
   isIncognitoMode: getInitialIncognitoState(),
   previousModel: getPreviousModel(),
+  _hasHydrated: false,
 
   setActiveSessionId: (id) => set({ activeSessionId: id }),
   setMobileSidebarOpen: (open) => set({ mobileSidebarOpen: open }),
   setInputValue: (val) => set({ inputValue: val }),
   setSelectedModel: (model) => set({ selectedModel: model }),
   setMessageStartTime: (time) => set({ messageStartTime: time }),
+
+  // Sync incognito state after client-side hydration
+  // This fixes the SSR mismatch where localStorage is unavailable during server render
+  syncIncognitoState: () => {
+    const state = get();
+
+    // Only run once after hydration
+    if (state._hasHydrated) return;
+
+    // Check localStorage for the true incognito state
+    let storedIncognito = false;
+    if (typeof window !== 'undefined') {
+      try {
+        storedIncognito = localStorage.getItem(INCOGNITO_STORAGE_KEY) === 'true';
+      } catch {
+        // Ignore storage errors
+      }
+    }
+
+    // If incognito mode is enabled but selected model is not a NEAR model,
+    // we need to fix the state (this happens due to SSR hydration mismatch)
+    if (storedIncognito && !isNearIncognitoModel(state.selectedModel)) {
+      // Read the actual previous model from localStorage (not the SSR default)
+      const storedPreviousModel = getPreviousModel();
+      // If no stored previous model, use current SSR model as fallback
+      const previousModel = storedPreviousModel || state.selectedModel;
+      set({
+        _hasHydrated: true,
+        isIncognitoMode: true,
+        previousModel: previousModel,
+        selectedModel: INCOGNITO_DEFAULT_MODEL
+      });
+
+      // Only persist to localStorage if we didn't have a stored value
+      if (!storedPreviousModel && previousModel && typeof window !== 'undefined') {
+        try {
+          localStorage.setItem(PREVIOUS_MODEL_STORAGE_KEY, JSON.stringify(previousModel));
+        } catch {
+          // Ignore storage errors
+        }
+      }
+    } else {
+      // Just mark as hydrated, state is already correct
+      set({ _hasHydrated: true });
+    }
+  },
+
   setIncognitoMode: (enabled) => {
     const currentModel = get().selectedModel;
     const previousModel = get().previousModel;

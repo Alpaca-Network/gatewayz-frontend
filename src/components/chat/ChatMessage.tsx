@@ -8,7 +8,7 @@
 import React, { memo, useState } from 'react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Card } from '@/components/ui/card';
-import { Bot, User, Copy, RotateCcw, LogIn, Check, FileText, RefreshCw } from 'lucide-react';
+import { Bot, User, Copy, RotateCcw, LogIn, Check, FileText, RefreshCw, ThumbsUp, ThumbsDown, Share, MoreHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import dynamic from 'next/dynamic';
 import { usePrivy } from '@privy-io/react-auth';
@@ -32,12 +32,17 @@ export interface ChatMessageProps {
   audio?: string;
   document?: string;
   isStreaming?: boolean;
+  wasStopped?: boolean;
   model?: string;
   error?: string;
   hasError?: boolean;
   onCopy?: () => void;
   onRegenerate?: () => void;
   onRetry?: () => void;
+  onLike?: () => void;
+  onDislike?: () => void;
+  onShare?: () => void;
+  onMore?: () => void;
   showActions?: boolean;
 }
 
@@ -159,12 +164,17 @@ export const ChatMessage = memo<ChatMessageProps>(
     audio,
     document,
     isStreaming,
+    wasStopped,
     model,
     error,
     hasError,
     onCopy,
     onRegenerate,
     onRetry,
+    onLike,
+    onDislike,
+    onShare,
+    onMore,
     showActions = true,
   }) => {
     const isUser = role === 'user';
@@ -332,6 +342,13 @@ export const ChatMessage = memo<ChatMessageProps>(
                 <ChatTimer />
               </div>
             )}
+
+            {/* Stopped indicator */}
+            {wasStopped && !isStreaming && (
+              <div className="mt-2 text-xs text-muted-foreground italic">
+                Response stopped
+              </div>
+            )}
           </Card>
 
           {/* Model info and actions */}
@@ -352,6 +369,39 @@ export const ChatMessage = memo<ChatMessageProps>(
                     <Copy className="h-3 w-3" />
                   </Button>
                 )}
+                {onLike && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={onLike}
+                    title="Good response"
+                  >
+                    <ThumbsUp className="h-3 w-3" />
+                  </Button>
+                )}
+                {onDislike && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={onDislike}
+                    title="Bad response"
+                  >
+                    <ThumbsDown className="h-3 w-3" />
+                  </Button>
+                )}
+                {onShare && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={onShare}
+                    title="Share"
+                  >
+                    <Share className="h-3 w-3" />
+                  </Button>
+                )}
                 {onRegenerate && (
                   <Button
                     variant="ghost"
@@ -361,6 +411,17 @@ export const ChatMessage = memo<ChatMessageProps>(
                     title="Regenerate response"
                   >
                     <RotateCcw className="h-3 w-3" />
+                  </Button>
+                )}
+                {onMore && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={onMore}
+                    title="More options"
+                  >
+                    <MoreHorizontal className="h-3 w-3" />
                   </Button>
                 )}
               </div>
@@ -385,6 +446,7 @@ export const ChatMessage = memo<ChatMessageProps>(
       contentEquals(prevProps.content, nextProps.content) &&
       prevProps.reasoning === nextProps.reasoning &&
       prevProps.isStreaming === nextProps.isStreaming &&
+      prevProps.wasStopped === nextProps.wasStopped &&
       prevProps.model === nextProps.model &&
       prevProps.image === nextProps.image &&
       prevProps.video === nextProps.video &&
@@ -392,7 +454,14 @@ export const ChatMessage = memo<ChatMessageProps>(
       prevProps.document === nextProps.document &&
       prevProps.error === nextProps.error &&
       prevProps.hasError === nextProps.hasError &&
-      prevProps.onRetry === nextProps.onRetry
+      prevProps.showActions === nextProps.showActions &&
+      prevProps.onCopy === nextProps.onCopy &&
+      prevProps.onRetry === nextProps.onRetry &&
+      prevProps.onLike === nextProps.onLike &&
+      prevProps.onDislike === nextProps.onDislike &&
+      prevProps.onShare === nextProps.onShare &&
+      prevProps.onMore === nextProps.onMore &&
+      prevProps.onRegenerate === nextProps.onRegenerate
     );
   }
 );

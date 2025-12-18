@@ -39,6 +39,7 @@ interface SpeechRecognition extends EventTarget {
 }
 
 import { useState, useRef, useCallback, useEffect } from "react";
+import * as Sentry from "@sentry/nextjs";
 import { Send, Image as ImageIcon, Video as VideoIcon, Mic, Mic as AudioIcon, X, RefreshCw, Paperclip, FileText, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -62,6 +63,7 @@ import {
 } from "@/lib/guest-chat";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { usePrivy } from "@privy-io/react-auth";
+import { useGatewayzAuth } from "@/context/gatewayz-auth-context";
 
 // Helper for file to base64
 const fileToBase64 = (file: File): Promise<string> => {
@@ -140,10 +142,18 @@ export function ChatInput() {
   const { activeSessionId, setActiveSessionId, selectedModel, inputValue, setInputValue, setMessageStartTime } = useChatUIStore();
   const { data: messages = [], isLoading: isHistoryLoading } = useSessionMessages(activeSessionId);
   const createSession = useCreateSession();
-  const { isStreaming, streamMessage } = useChatStream();
+  const { isStreaming, streamMessage, stopStream } = useChatStream();
   const { toast } = useToast();
   const { isAuthenticated } = useAuthStore();
   const { login } = usePrivy();
+  const { logout } = useGatewayzAuth();
+
+  // Handle stop button click
+  const handleStop = useCallback(() => {
+    stopStream();
+    // Clear the timer when stopped
+    setMessageStartTime(null);
+  }, [stopStream, setMessageStartTime]);
 
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
@@ -336,27 +346,87 @@ export function ChatInput() {
 
         const errorMessage = e instanceof Error ? e.message : "Failed to send message";
 
-        // Check if the error is auth-related (guest mode not available or session expired)
-        const isAuthError = errorMessage.toLowerCase().includes('sign in') ||
-                           errorMessage.toLowerCase().includes('sign up') ||
-                           errorMessage.toLowerCase().includes('create a free account') ||
-                           errorMessage.toLowerCase().includes('session expired') ||
-                           errorMessage.toLowerCase().includes('authentication');
+        // Check if the error is auth-related (guest mode not available, session expired, or API key issues)
+        const lowerErrorMessage = errorMessage.toLowerCase();
 
-        if (isAuthError && !isAuthenticated) {
-          // Show the login modal for auth-related errors
-          toast({
-            title: "Sign in required",
-            description: "Create a free account to use the chat feature.",
-            variant: "destructive"
-          });
-          // Trigger Privy login modal
-          login();
+        // Rate limit errors should NOT be treated as auth errors, even if they mention "sign up"
+        // Rate limit messages like "You've used all X messages for today. Sign up..." contain "sign up"
+        // but should show the rate limit message, not trigger login
+        const isRateLimitError = lowerErrorMessage.includes('rate limit') ||
+                                lowerErrorMessage.includes('daily limit') ||
+                                lowerErrorMessage.includes('messages for today') ||
+                                lowerErrorMessage.includes('too many');
+
+        // Only check for guest auth errors if NOT a rate limit error
+        const isGuestAuthError = !isRateLimitError && (
+                                lowerErrorMessage.includes('sign in') ||
+                                lowerErrorMessage.includes('sign up') ||
+                                lowerErrorMessage.includes('create a free account'));
+        const isApiKeyError = lowerErrorMessage.includes('api key') ||
+                             lowerErrorMessage.includes('access forbidden') ||
+                             lowerErrorMessage.includes('logging out and back in') ||
+                             lowerErrorMessage.includes('log out and log back in') ||
+                             lowerErrorMessage === 'forbidden';
+        const isSessionError = lowerErrorMessage.includes('session expired') ||
+                              lowerErrorMessage.includes('authentication');
+        const isAuthError = isGuestAuthError || isApiKeyError || isSessionError;
+
+        // Capture error to Sentry with appropriate tags
+        const errorType = isRateLimitError ? 'chat_rate_limit_error' : isAuthError ? 'chat_auth_error' : 'chat_send_error';
+        Sentry.captureException(
+          e instanceof Error ? e : new Error(errorMessage),
+          {
+            tags: {
+              error_type: errorType,
+              is_authenticated: isAuthenticated ? 'true' : 'false',
+              model: freshSelectedModel?.value || 'unknown',
+            },
+            extra: {
+              errorMessage,
+              isRateLimitError,
+              isGuestAuthError,
+              isApiKeyError,
+              isSessionError,
+              sessionId,
+              hasImage: !!currentImage,
+              hasVideo: !!currentVideo,
+              hasAudio: !!currentAudio,
+              hasDocument: !!currentDocument,
+            },
+            level: isRateLimitError ? 'warning' : isAuthError ? 'warning' : 'error',
+          }
+        );
+
+        if (isAuthError) {
+          if (!isAuthenticated) {
+            // Unauthenticated user - show the login modal
+            toast({
+              title: "Sign in required",
+              description: "Create a free account to use the chat feature.",
+              variant: "destructive"
+            });
+            // Trigger Privy login modal
+            login();
+          } else if (isApiKeyError) {
+            // Authenticated user with invalid API key - prompt to re-authenticate
+            toast({
+              title: "Session expired",
+              description: "Your session has expired. Please log out and log back in.",
+              variant: "destructive"
+            });
+            // Auto-logout and re-login to refresh API key
+            Promise.resolve(logout())
+              .catch(() => {/* ignore logout errors */})
+              .finally(() => login());
+          } else {
+            // Other auth errors for authenticated users
+            toast({ title: errorMessage, variant: "destructive" });
+          }
         } else {
           toast({ title: errorMessage, variant: "destructive" });
         }
     }
-  }, [inputValue, selectedImage, selectedVideo, selectedAudio, selectedDocument, isStreaming, selectedModel, activeSessionId, messages, setInputValue, setActiveSessionId, createSession, streamMessage, toast, isAuthenticated, login, setMessageStartTime]);
+  }, [inputValue, selectedImage, selectedVideo, selectedAudio, selectedDocument, isStreaming, selectedModel, activeSessionId, messages, setInputValue, setActiveSessionId, createSession, streamMessage, toast, isAuthenticated, login, logout, setMessageStartTime]);
 
   // Expose send function for prompt auto-send from WelcomeScreen
   useEffect(() => {
@@ -715,23 +785,42 @@ export function ChatInput() {
                 enterKeyHint="send"
             />
 
-            <Button
-                type="button"
-                size="icon"
-                onPointerDown={(e) => {
-                    // Prevent focus loss on mobile which can cause state sync issues
-                    e.preventDefault();
-                }}
-                onClick={(e) => {
-                    // Prevent any default behavior that might interfere
-                    e.preventDefault();
-                    handleSend();
-                }}
-                disabled={isStreaming}
-                className={cn("bg-primary", isStreaming && "opacity-50")}
-            >
-                {isStreaming ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            </Button>
+            {isStreaming ? (
+                <Button
+                    type="button"
+                    size="icon"
+                    variant="destructive"
+                    onPointerDown={(e) => {
+                        // Prevent focus loss on mobile which can cause state sync issues
+                        e.preventDefault();
+                    }}
+                    onClick={(e) => {
+                        e.preventDefault();
+                        handleStop();
+                    }}
+                    title="Stop generating"
+                >
+                    <Square className="h-4 w-4" />
+                </Button>
+            ) : (
+                <Button
+                    type="button"
+                    size="icon"
+                    onPointerDown={(e) => {
+                        // Prevent focus loss on mobile which can cause state sync issues
+                        e.preventDefault();
+                    }}
+                    onClick={(e) => {
+                        // Prevent any default behavior that might interfere
+                        e.preventDefault();
+                        handleSend();
+                    }}
+                    disabled={isInputEmpty && !selectedImage && !selectedVideo && !selectedAudio && !selectedDocument}
+                    className="bg-primary"
+                >
+                    <Send className="h-4 w-4" />
+                </Button>
+            )}
         </div>
       </div>
     </div>

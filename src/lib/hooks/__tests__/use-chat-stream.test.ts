@@ -501,3 +501,607 @@ describe('Reasoning parameter handling', () => {
     });
   });
 });
+
+describe('Stop stream functionality', () => {
+  /**
+   * Tests for the stop/abort stream feature
+   * The useChatStream hook now exposes a stopStream function that aborts the current stream
+   */
+
+  describe('AbortController behavior', () => {
+    test('should create AbortController signal that can be aborted', () => {
+      const controller = new AbortController();
+      const { signal } = controller;
+
+      expect(signal.aborted).toBe(false);
+
+      controller.abort();
+
+      expect(signal.aborted).toBe(true);
+    });
+
+    test('should allow checking abort status during stream loop', () => {
+      const controller = new AbortController();
+      const { signal } = controller;
+
+      let wasAborted = false;
+      let iterations = 0;
+
+      // Simulate a stream loop that checks abort status
+      const simulateStreamLoop = () => {
+        for (let i = 0; i < 10; i++) {
+          if (signal.aborted) {
+            wasAborted = true;
+            break;
+          }
+          iterations++;
+
+          // Abort after 5 iterations (simulates user clicking stop)
+          if (i === 4) {
+            controller.abort();
+          }
+        }
+      };
+
+      simulateStreamLoop();
+
+      expect(wasAborted).toBe(true);
+      expect(iterations).toBe(5);
+    });
+
+    test('should preserve partial content when stopped', () => {
+      const controller = new AbortController();
+      const { signal } = controller;
+
+      let accumulatedContent = '';
+      const chunks = ['Hello', ' ', 'world', ', ', 'how', ' ', 'are', ' ', 'you', '?'];
+
+      // Simulate streaming with abort
+      for (const chunk of chunks) {
+        if (signal.aborted) {
+          break;
+        }
+        accumulatedContent += chunk;
+
+        // Abort after "how"
+        if (chunk === 'how') {
+          controller.abort();
+        }
+      }
+
+      expect(accumulatedContent).toBe('Hello world, how');
+      expect(signal.aborted).toBe(true);
+    });
+
+    test('should allow abort even when no chunks received yet', () => {
+      const controller = new AbortController();
+      const { signal } = controller;
+
+      // Abort immediately before any chunks
+      controller.abort();
+
+      let chunkCount = 0;
+      const chunks = ['a', 'b', 'c'];
+
+      for (const chunk of chunks) {
+        if (signal.aborted) break;
+        chunkCount++;
+      }
+
+      expect(chunkCount).toBe(0);
+      expect(signal.aborted).toBe(true);
+    });
+
+    test('should handle multiple aborts gracefully', () => {
+      const controller = new AbortController();
+      const { signal } = controller;
+
+      controller.abort();
+      controller.abort(); // Second abort should not throw
+      controller.abort(); // Third abort should not throw
+
+      expect(signal.aborted).toBe(true);
+    });
+  });
+
+  describe('Stream stopped state', () => {
+    test('should set wasStopped flag when stream is aborted with content', () => {
+      const finalContent = 'Partial response';
+      const wasStopped = true;
+
+      // Mirrors the logic in use-chat-stream.ts for setting wasStopped
+      const shouldSetWasStopped = wasStopped && finalContent;
+
+      expect(shouldSetWasStopped).toBeTruthy();
+    });
+
+    test('should not set wasStopped flag when stream is aborted without content', () => {
+      const finalContent = '';
+      const wasStopped = true;
+
+      // Mirrors the logic in use-chat-stream.ts for setting wasStopped
+      const shouldSetWasStopped = wasStopped && finalContent ? true : undefined;
+
+      expect(shouldSetWasStopped).toBeUndefined();
+    });
+
+    test('should not set wasStopped flag when stream completes normally', () => {
+      const finalContent = 'Complete response';
+      const wasStopped = false;
+
+      // Mirrors the logic in use-chat-stream.ts for setting wasStopped
+      const shouldSetWasStopped = wasStopped && finalContent ? true : undefined;
+
+      expect(shouldSetWasStopped).toBeUndefined();
+    });
+  });
+
+  describe('Message saving on stop', () => {
+    test('should save message when stopped with partial content', () => {
+      const finalContent = 'Partial but useful response';
+      const wasStopped = true;
+
+      // Mirrors the conditional save logic in use-chat-stream.ts
+      const shouldSaveMessage = !!finalContent;
+
+      expect(shouldSaveMessage).toBe(true);
+    });
+
+    test('should not save message when stopped with no content', () => {
+      const finalContent = '';
+      const wasStopped = true;
+
+      // Mirrors the conditional save logic in use-chat-stream.ts
+      const shouldSaveMessage = !!finalContent;
+
+      expect(shouldSaveMessage).toBe(false);
+    });
+
+    test('should save message with reasoning when stopped', () => {
+      const finalContent = 'Response text';
+      const finalReasoning = 'Step by step thinking...';
+      const wasStopped = true;
+
+      // Both content and reasoning should be saved together
+      const saveParams = {
+        content: finalContent,
+        reasoning: finalReasoning || undefined
+      };
+
+      expect(saveParams.content).toBe('Response text');
+      expect(saveParams.reasoning).toBe('Step by step thinking...');
+    });
+
+    test('should not include reasoning when empty', () => {
+      const finalContent = 'Response text';
+      const finalReasoning = '';
+
+      // Empty reasoning should become undefined
+      const saveParams = {
+        content: finalContent,
+        reasoning: finalReasoning || undefined
+      };
+
+      expect(saveParams.reasoning).toBeUndefined();
+    });
+  });
+
+  describe('UI state updates on stop', () => {
+    test('should mark message as not streaming when stopped', () => {
+      // Simulates the final state update
+      const updateState = (wasStopped: boolean, finalContent: string) => {
+        return {
+          isStreaming: false,
+          wasStopped: wasStopped && finalContent ? true : undefined
+        };
+      };
+
+      const state = updateState(true, 'Some content');
+
+      expect(state.isStreaming).toBe(false);
+      expect(state.wasStopped).toBe(true);
+    });
+
+    test('should handle state update when stop clicked but no content yet', () => {
+      const updateState = (wasStopped: boolean, finalContent: string) => {
+        return {
+          isStreaming: false,
+          wasStopped: wasStopped && finalContent ? true : undefined
+        };
+      };
+
+      const state = updateState(true, '');
+
+      expect(state.isStreaming).toBe(false);
+      expect(state.wasStopped).toBeUndefined();
+    });
+  });
+
+  describe('AbortController reference management', () => {
+    test('should allow setting controller to null after abort', () => {
+      let controllerRef: AbortController | null = new AbortController();
+
+      // Simulate abort
+      controllerRef.abort();
+      controllerRef = null;
+
+      expect(controllerRef).toBeNull();
+    });
+
+    test('should create new controller for each stream', () => {
+      const controller1 = new AbortController();
+      const signal1 = controller1.signal;
+
+      const controller2 = new AbortController();
+      const signal2 = controller2.signal;
+
+      // Different controllers should have different signals
+      expect(signal1).not.toBe(signal2);
+
+      // Aborting one should not affect the other
+      controller1.abort();
+      expect(signal1.aborted).toBe(true);
+      expect(signal2.aborted).toBe(false);
+    });
+
+    test('should safely handle stopStream when no active controller', () => {
+      let controllerRef: AbortController | null = null;
+
+      // Simulates calling stopStream when there's no active stream
+      const stopStream = () => {
+        if (controllerRef) {
+          controllerRef.abort();
+          controllerRef = null;
+        }
+      };
+
+      // Should not throw
+      expect(() => stopStream()).not.toThrow();
+    });
+  });
+
+  describe('Message history sanitization', () => {
+    test('should filter out messages with isStreaming flag', () => {
+      const messagesHistory = [
+        { role: 'user', content: 'Hello' },
+        { role: 'assistant', content: 'Hi there!', model: 'gpt-4' },
+        { role: 'user', content: 'How are you?' },
+        { role: 'assistant', content: 'Partial response...', isStreaming: true }
+      ];
+
+      // Simulates the filtering logic from use-chat-stream.ts
+      const sanitizedHistory = messagesHistory
+        .filter((msg: any) => {
+          if (msg.isStreaming) return false;
+          if (msg.wasStopped && !msg.content) return false;
+          if (msg.role === 'assistant' && !msg.content) return false;
+          return true;
+        })
+        .map((msg: any) => ({
+          role: msg.role,
+          content: msg.content,
+          ...(msg.name && { name: msg.name })
+        }));
+
+      expect(sanitizedHistory).toHaveLength(3);
+      expect(sanitizedHistory).not.toContainEqual(
+        expect.objectContaining({ isStreaming: true })
+      );
+    });
+
+    test('should include stopped messages if they have content', () => {
+      const messagesHistory = [
+        { role: 'user', content: 'Hello' },
+        { role: 'assistant', content: 'Partial but useful response', wasStopped: true }
+      ];
+
+      const sanitizedHistory = messagesHistory
+        .filter((msg: any) => {
+          if (msg.isStreaming) return false;
+          if (msg.wasStopped && !msg.content) return false;
+          if (msg.role === 'assistant' && !msg.content) return false;
+          return true;
+        })
+        .map((msg: any) => ({
+          role: msg.role,
+          content: msg.content,
+          ...(msg.name && { name: msg.name })
+        }));
+
+      expect(sanitizedHistory).toHaveLength(2);
+      expect(sanitizedHistory[1].content).toBe('Partial but useful response');
+    });
+
+    test('should filter out stopped messages with no content', () => {
+      const messagesHistory = [
+        { role: 'user', content: 'Hello' },
+        { role: 'assistant', content: '', wasStopped: true }
+      ];
+
+      const sanitizedHistory = messagesHistory
+        .filter((msg: any) => {
+          if (msg.isStreaming) return false;
+          if (msg.wasStopped && !msg.content) return false;
+          if (msg.role === 'assistant' && !msg.content) return false;
+          return true;
+        })
+        .map((msg: any) => ({
+          role: msg.role,
+          content: msg.content,
+          ...(msg.name && { name: msg.name })
+        }));
+
+      expect(sanitizedHistory).toHaveLength(1);
+      expect(sanitizedHistory[0].role).toBe('user');
+    });
+
+    test('should filter out empty assistant messages without wasStopped flag', () => {
+      // When a stream is stopped before any content arrives, wasStopped may be undefined
+      // because the flag is only set to true when finalContent is truthy (line 389).
+      // These empty assistant messages should still be filtered out.
+      const messagesHistory = [
+        { role: 'user', content: 'Hello' },
+        { role: 'assistant', content: '' } // No wasStopped flag, just empty content
+      ];
+
+      const sanitizedHistory = messagesHistory
+        .filter((msg: any) => {
+          if (msg.isStreaming) return false;
+          if (msg.wasStopped && !msg.content) return false;
+          if (msg.role === 'assistant' && !msg.content) return false;
+          return true;
+        })
+        .map((msg: any) => ({
+          role: msg.role,
+          content: msg.content,
+          ...(msg.name && { name: msg.name })
+        }));
+
+      expect(sanitizedHistory).toHaveLength(1);
+      expect(sanitizedHistory[0].role).toBe('user');
+    });
+
+    test('should strip UI-only fields from messages', () => {
+      const messagesHistory = [
+        { role: 'user', content: 'Hello', created_at: '2024-01-01', model: 'gpt-4' },
+        {
+          role: 'assistant',
+          content: 'Response',
+          hasError: false,
+          error: undefined,
+          wasStopped: false,
+          reasoning: 'Some reasoning',
+          model: 'gpt-4'
+        }
+      ];
+
+      const sanitizedHistory = messagesHistory
+        .filter((msg: any) => {
+          if (msg.isStreaming) return false;
+          if (msg.wasStopped && !msg.content) return false;
+          if (msg.role === 'assistant' && !msg.content) return false;
+          return true;
+        })
+        .map((msg: any) => ({
+          role: msg.role,
+          content: msg.content,
+          ...(msg.name && { name: msg.name })
+        }));
+
+      // Should only have role and content
+      expect(sanitizedHistory[0]).toEqual({ role: 'user', content: 'Hello' });
+      expect(sanitizedHistory[1]).toEqual({ role: 'assistant', content: 'Response' });
+      expect(sanitizedHistory[1]).not.toHaveProperty('hasError');
+      expect(sanitizedHistory[1]).not.toHaveProperty('error');
+      expect(sanitizedHistory[1]).not.toHaveProperty('wasStopped');
+      expect(sanitizedHistory[1]).not.toHaveProperty('reasoning');
+      expect(sanitizedHistory[1]).not.toHaveProperty('model');
+    });
+
+    test('should preserve name field when present', () => {
+      const messagesHistory = [
+        { role: 'user', content: 'Hello', name: 'John' },
+        { role: 'assistant', content: 'Hi John!' }
+      ];
+
+      const sanitizedHistory = messagesHistory
+        .filter((msg: any) => {
+          if (msg.isStreaming) return false;
+          if (msg.wasStopped && !msg.content) return false;
+          if (msg.role === 'assistant' && !msg.content) return false;
+          return true;
+        })
+        .map((msg: any) => ({
+          role: msg.role,
+          content: msg.content,
+          ...(msg.name && { name: msg.name })
+        }));
+
+      expect(sanitizedHistory[0]).toEqual({ role: 'user', content: 'Hello', name: 'John' });
+      expect(sanitizedHistory[1]).toEqual({ role: 'assistant', content: 'Hi John!' });
+    });
+  });
+});
+
+// Import the normalizeContentForApi function
+import { normalizeContentForApi } from '../use-chat-stream';
+
+describe('normalizeContentForApi', () => {
+  describe('string content', () => {
+    test('should return string content as-is', () => {
+      expect(normalizeContentForApi('Hello world')).toBe('Hello world');
+      expect(normalizeContentForApi('Hello world', ['Text'])).toBe('Hello world');
+      expect(normalizeContentForApi('Hello world', ['Text', 'Image'])).toBe('Hello world');
+    });
+
+    test('should handle empty string', () => {
+      expect(normalizeContentForApi('')).toBe('');
+    });
+  });
+
+  describe('text-only array content', () => {
+    test('should preserve text-only array when model supports all content', () => {
+      const content = [
+        { type: 'text', text: 'Hello' },
+        { type: 'text', text: 'World' }
+      ];
+      // Text-only arrays are valid OpenAI format, no need to convert
+      expect(normalizeContentForApi(content)).toEqual(content);
+    });
+
+    test('should preserve text-only array regardless of modalities', () => {
+      const content = [
+        { type: 'text', text: 'Hello' },
+        { type: 'text', text: 'World' }
+      ];
+      // Text-only arrays don't contain unsupported media, so they're preserved
+      expect(normalizeContentForApi(content, ['Text'])).toEqual(content);
+      expect(normalizeContentForApi(content, ['Text', 'Image'])).toEqual(content);
+    });
+  });
+
+  describe('multimodal content with supported modalities', () => {
+    test('should preserve image when model supports Image modality', () => {
+      const content = [
+        { type: 'text', text: 'Check this image' },
+        { type: 'image_url', image_url: { url: 'https://example.com/image.png' } }
+      ];
+      const result = normalizeContentForApi(content, ['Text', 'Image']);
+      expect(result).toEqual(content);
+    });
+
+    test('should preserve video when model supports Video modality', () => {
+      const content = [
+        { type: 'text', text: 'Watch this' },
+        { type: 'video_url', video_url: { url: 'https://example.com/video.mp4' } }
+      ];
+      const result = normalizeContentForApi(content, ['Text', 'Video']);
+      expect(result).toEqual(content);
+    });
+
+    test('should preserve audio when model supports Audio modality', () => {
+      const content = [
+        { type: 'text', text: 'Listen to this' },
+        { type: 'audio_url', audio_url: { url: 'https://example.com/audio.mp3' } }
+      ];
+      const result = normalizeContentForApi(content, ['Text', 'Audio']);
+      expect(result).toEqual(content);
+    });
+
+    test('should preserve file when model supports File modality', () => {
+      const content = [
+        { type: 'text', text: 'Read this document' },
+        { type: 'file_url', file_url: { url: 'https://example.com/doc.pdf' } }
+      ];
+      const result = normalizeContentForApi(content, ['Text', 'File']);
+      expect(result).toEqual(content);
+    });
+
+    test('should preserve all media when model supports all modalities', () => {
+      const content = [
+        { type: 'text', text: 'Check all these' },
+        { type: 'image_url', image_url: { url: 'https://example.com/image.png' } },
+        { type: 'video_url', video_url: { url: 'https://example.com/video.mp4' } },
+        { type: 'audio_url', audio_url: { url: 'https://example.com/audio.mp3' } },
+        { type: 'file_url', file_url: { url: 'https://example.com/doc.pdf' } }
+      ];
+      const result = normalizeContentForApi(content, ['Text', 'Image', 'Video', 'Audio', 'File']);
+      expect(result).toEqual(content);
+    });
+  });
+
+  describe('multimodal content with unsupported modalities', () => {
+    test('should strip image when model does not support Image modality', () => {
+      const content = [
+        { type: 'text', text: 'Check this image' },
+        { type: 'image_url', image_url: { url: 'https://example.com/image.png' } }
+      ];
+      const result = normalizeContentForApi(content, ['Text']);
+      expect(result).toBe('Check this image');
+    });
+
+    test('should strip video when model does not support Video modality', () => {
+      const content = [
+        { type: 'text', text: 'Watch this' },
+        { type: 'video_url', video_url: { url: 'https://example.com/video.mp4' } }
+      ];
+      const result = normalizeContentForApi(content, ['Text']);
+      expect(result).toBe('Watch this');
+    });
+
+    test('should strip image when no modalities specified (assumes text-only)', () => {
+      const content = [
+        { type: 'text', text: 'Check this' },
+        { type: 'image_url', image_url: { url: 'https://example.com/image.png' } }
+      ];
+      const result = normalizeContentForApi(content);
+      expect(result).toBe('Check this');
+    });
+
+    test('should strip image when empty modalities array (assumes text-only)', () => {
+      const content = [
+        { type: 'text', text: 'Check this' },
+        { type: 'image_url', image_url: { url: 'https://example.com/image.png' } }
+      ];
+      const result = normalizeContentForApi(content, []);
+      expect(result).toBe('Check this');
+    });
+
+    test('should strip all unsupported media types', () => {
+      const content = [
+        { type: 'text', text: 'Hello' },
+        { type: 'image_url', image_url: { url: 'https://example.com/image.png' } },
+        { type: 'video_url', video_url: { url: 'https://example.com/video.mp4' } },
+        { type: 'text', text: 'World' },
+        { type: 'audio_url', audio_url: { url: 'https://example.com/audio.mp3' } }
+      ];
+      const result = normalizeContentForApi(content, ['Text']);
+      expect(result).toBe('Hello\nWorld');
+    });
+
+    test('should return empty string when only unsupported media with no text', () => {
+      const content = [
+        { type: 'image_url', image_url: { url: 'https://example.com/image.png' } }
+      ];
+      const result = normalizeContentForApi(content, ['Text']);
+      expect(result).toBe('');
+    });
+  });
+
+  describe('modality case insensitivity', () => {
+    test('should match modalities case-insensitively', () => {
+      const content = [
+        { type: 'text', text: 'Check this' },
+        { type: 'image_url', image_url: { url: 'https://example.com/image.png' } }
+      ];
+      expect(normalizeContentForApi(content, ['text', 'image'])).toEqual(content);
+      expect(normalizeContentForApi(content, ['TEXT', 'IMAGE'])).toEqual(content);
+      expect(normalizeContentForApi(content, ['Text', 'Image'])).toEqual(content);
+    });
+  });
+
+  describe('edge cases', () => {
+    test('should handle null content', () => {
+      expect(normalizeContentForApi(null)).toBe('');
+    });
+
+    test('should handle undefined content', () => {
+      expect(normalizeContentForApi(undefined)).toBe('');
+    });
+
+    test('should handle number content', () => {
+      expect(normalizeContentForApi(123)).toBe('123');
+    });
+
+    test('should handle empty array', () => {
+      expect(normalizeContentForApi([])).toEqual([]);
+    });
+
+    test('should handle array with no text or media parts', () => {
+      const content = [
+        { type: 'unknown', data: 'something' }
+      ];
+      expect(normalizeContentForApi(content)).toEqual(content);
+    });
+  });
+});

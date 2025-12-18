@@ -32,13 +32,13 @@ const normalizeReferralData = (rawData: FlexibleReferralData): ReferralTransacti
   const status = (rawStatus === 'completed' ? 'completed' : 'pending') as 'pending' | 'completed';
 
   return {
-    id: rawData.id || rawData.ID || 0,
+    id: rawData.id || rawData.ID || rawData.user_id || rawData.userId || 0,
     referee_id: rawData.referee_id || rawData.refereeId || rawData.user_id || rawData.userId || '',
     referee_email: rawData.referee_email || rawData.refereeEmail || rawData.email || rawData.user_email || rawData.userEmail || '',
     status,
     reward_amount: Number(rawData.reward_amount || rawData.rewardAmount || rawData.amount || rawData.reward || 0),
-    created_at: rawData.created_at || rawData.createdAt || rawData.date_created || rawData.dateCreated || '',
-    completed_at: rawData.completed_at || rawData.completedAt || rawData.date_completed || rawData.dateCompleted || undefined
+    created_at: rawData.created_at || rawData.createdAt || rawData.date_created || rawData.dateCreated || rawData.date || rawData.signed_up_at || '',
+    completed_at: rawData.completed_at || rawData.completedAt || rawData.date_completed || rawData.dateCompleted || rawData.bonus_date || undefined
   };
 };
 
@@ -212,7 +212,7 @@ function ReferralsPageContent() {
           }
 
           // Set stats from response - use normalized data for completedReferrals count
-          // Use nullish coalescing (??) to properly handle 0 values from the API
+          // Use Number.isNaN to properly handle 0 values from the API (don't treat 0 as falsy)
           const totalUses = Number(statsData.total_uses);
           const totalEarned = Number(statsData.total_earned);
           setStats({

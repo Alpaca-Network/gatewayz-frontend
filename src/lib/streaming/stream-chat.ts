@@ -9,6 +9,7 @@
  * This file is kept for backwards compatibility during migration.
  */
 
+import * as Sentry from '@sentry/nextjs';
 import { StreamCoordinator } from '@/lib/stream-coordinator';
 import type { StreamChunk, StreamConfig } from './types';
 import { parseSSEBuffer } from './sse-parser';
@@ -75,8 +76,27 @@ async function handleHttpError(
   // Handle specific status codes
   switch (response.status) {
     case 400: {
+      // Extract error message from various response formats:
+      // - Direct: errorData.detail, errorData.message
+      // - Nested error object: errorData.error?.message
+      // - Wrapped by API proxy: errorData.errorData?.detail, errorData.errorData?.message
       const errorMessage =
-        errorData.detail || errorData.error?.message || errorData.message || 'Bad request';
+        errorData.detail ||
+        errorData.error?.message ||
+        errorData.message ||
+        errorData.errorData?.detail ||
+        errorData.errorData?.message ||
+        errorData.errorData?.error?.message ||
+        'Bad request';
+
+      devError('400 Bad Request details:', {
+        detail: errorData.detail,
+        message: errorData.message,
+        errorMessage: errorData.error?.message,
+        nestedDetail: errorData.errorData?.detail,
+        nestedMessage: errorData.errorData?.message,
+        fullErrorData: errorData,
+      });
 
       if (
         errorMessage.toLowerCase().includes('trial has expired') ||
@@ -98,6 +118,25 @@ async function handleHttpError(
 
     case 401: {
       const errorCode = errorData.code;
+
+      // Capture auth error to Sentry
+      Sentry.captureException(
+        new Error(`Chat 401 Unauthorized: ${errorData.detail || errorData.message || 'Authentication required'}`),
+        {
+          tags: {
+            error_type: 'chat_auth_error',
+            http_status: 401,
+            error_code: errorCode || 'unknown',
+            model: String(requestBody.model || 'unknown'),
+          },
+          extra: {
+            errorData,
+            url,
+            retryCount,
+          },
+          level: 'warning',
+        }
+      );
 
       if (errorCode === 'GUEST_NOT_CONFIGURED') {
         throw new AuthenticationError(
@@ -135,8 +174,24 @@ async function handleHttpError(
     }
 
     case 403:
+      // Capture auth error to Sentry
+      Sentry.captureException(
+        new Error('Chat 403 Forbidden - session expired'),
+        {
+          tags: {
+            error_type: 'chat_auth_error',
+            http_status: 403,
+            model: String(requestBody.model || 'unknown'),
+          },
+          extra: {
+            errorData,
+            url,
+          },
+          level: 'warning',
+        }
+      );
       throw new AuthenticationError(
-        'Your API key may be invalid or expired. Please try logging out and back in.'
+        'Your session has expired. Please log out and log back in to continue. If this issue persists, clear your browser cookies and log in again.'
       );
 
     case 404:
