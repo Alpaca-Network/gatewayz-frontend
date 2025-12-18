@@ -299,6 +299,34 @@ describe('normalizeReferralData', () => {
     expect(typeof result.id).toBe('string');
     expect(result.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
   });
+
+  it('should reject empty string IDs and generate synthetic/UUID instead', () => {
+    const raw1: FlexibleReferralData = {
+      id: '',
+      referee_id: 'user123',
+      created_at: '2024-01-01T00:00:00Z',
+      referee_email: 'empty1@example.com',
+      status: 'pending'
+    };
+    const raw2: FlexibleReferralData = {
+      id: '',
+      referee_id: 'user456',
+      created_at: '2024-01-01T00:00:00Z',
+      referee_email: 'empty2@example.com',
+      status: 'pending'
+    };
+
+    const result1 = normalizeReferralData(raw1);
+    const result2 = normalizeReferralData(raw2);
+
+    // Should generate synthetic IDs, not use empty string
+    expect(result1.id).not.toBe('');
+    expect(result2.id).not.toBe('');
+    // Each should be unique (different referee_id)
+    expect(result1.id).not.toBe(result2.id);
+    expect(result1.id).toContain('user123_');
+    expect(result2.id).toContain('user456_');
+  });
 });
 
 describe('calculateStats', () => {

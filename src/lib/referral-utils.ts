@@ -51,8 +51,9 @@ export const normalizeReferralData = (rawData: FlexibleReferralData): ReferralTr
   const apiId = rawData.id ?? rawData.ID;
 
   let transactionId: string | number;
-  if (apiId !== undefined && apiId !== null) {
+  if (apiId !== undefined && apiId !== null && apiId !== '') {
     // Use API-provided ID as-is (can be string or number, including 0)
+    // Reject empty strings to prevent duplicate keys
     transactionId = apiId;
   } else if (refereeId && createdAt) {
     // Validate timestamp to prevent NaN in synthetic IDs
