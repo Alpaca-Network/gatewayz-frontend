@@ -3,6 +3,17 @@
  * Shared functions for normalizing and processing referral data
  */
 
+// Simple string hash function for generating numeric IDs
+const hashString = (str: string): number => {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  return Math.abs(hash);
+};
+
 // Flexible referral data type to handle different API response formats
 export interface FlexibleReferralData {
   [key: string]: any;
@@ -28,8 +39,16 @@ export const normalizeReferralData = (rawData: FlexibleReferralData): ReferralTr
   const rawStatus = String(rawData.status || rawData.Status || 'pending').toLowerCase();
   const status = (rawStatus === 'completed' ? 'completed' : 'pending') as 'pending' | 'completed';
 
+  // Transaction ID should be unique - fallback to creating a synthetic ID from referee_id + timestamp
+  // instead of using user_id which could cause duplicate React keys
+  const transactionId = rawData.id || rawData.ID;
+  const syntheticId = transactionId ||
+    (rawData.referee_id && rawData.created_at ?
+      `${rawData.referee_id}_${new Date(rawData.created_at).getTime()}` :
+      0);
+
   return {
-    id: rawData.id || rawData.ID || rawData.user_id || rawData.userId || 0,
+    id: typeof syntheticId === 'string' ? hashString(syntheticId) : Number(syntheticId) || 0,
     referee_id: rawData.referee_id || rawData.refereeId || rawData.user_id || rawData.userId || '',
     referee_email: rawData.referee_email || rawData.refereeEmail || rawData.email || rawData.user_email || rawData.userEmail || '',
     status,
