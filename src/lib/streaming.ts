@@ -346,10 +346,11 @@ export async function* streamChatResponse(
       );
     }
 
-    // Handle 503 Service Unavailable and 504 Gateway Timeout with retry logic
-    if (response.status === 503 || response.status === 504) {
-      const isTimeout = response.status === 504;
-      const statusText = isTimeout ? 'Gateway Timeout' : 'Service Unavailable';
+    // Handle 502 Bad Gateway, 503 Service Unavailable and 504 Gateway Timeout with retry logic
+    if (response.status === 502 || response.status === 503 || response.status === 504) {
+      const statusText = response.status === 504 ? 'Gateway Timeout'
+        : response.status === 502 ? 'Bad Gateway'
+        : 'Service Unavailable';
       const errorMessage = errorData.detail || errorData.error?.message || errorData.message || statusText;
 
       if (retryCount < maxRetries) {

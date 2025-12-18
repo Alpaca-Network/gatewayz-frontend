@@ -415,6 +415,87 @@ describe('streamChatResponse', () => {
       const chunks = await collectChunks(generator);
       expect(chunks.find((c) => c.content)).toBeDefined();
     }, 10000);
+
+    it('should retry on 502 bad gateway', async () => {
+      global.fetch = jest
+        .fn()
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 502,
+          headers: new Headers(),
+          json: jest.fn().mockResolvedValue({ detail: 'Bad Gateway' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          body: createSSEResponse([
+            JSON.stringify({ choices: [{ delta: { content: 'Recovered' }, finish_reason: null }] }),
+            JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }] }),
+          ]),
+        });
+
+      const generator = streamChatResponse(
+        'https://api.test.com/v1/chat/completions',
+        'test-api-key',
+        { model: 'gpt-4', messages: [] },
+        0,
+        2
+      );
+
+      const chunks = await collectChunks(generator);
+      expect(chunks.find((c) => c.content)?.content).toBe('Recovered');
+    }, 10000);
+
+    it('should throw StreamingError after max retries on 502', async () => {
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: false,
+        status: 502,
+        headers: new Headers(),
+        json: jest.fn().mockResolvedValue({ detail: 'Bad Gateway' }),
+      });
+
+      const generator = streamChatResponse(
+        'https://api.test.com/v1/chat/completions',
+        'test-api-key',
+        { model: 'gpt-4', messages: [] },
+        7, // Already at max retries
+        7
+      );
+
+      await expect(collectChunks(generator)).rejects.toThrow(/Service unavailable/);
+    });
+
+    it('should retry on 504 gateway timeout', async () => {
+      global.fetch = jest
+        .fn()
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 504,
+          headers: new Headers(),
+          json: jest.fn().mockResolvedValue({ detail: 'Gateway Timeout' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          body: createSSEResponse([
+            JSON.stringify({ choices: [{ delta: { content: 'Recovered' }, finish_reason: null }] }),
+            JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }] }),
+          ]),
+        });
+
+      const generator = streamChatResponse(
+        'https://api.test.com/v1/chat/completions',
+        'test-api-key',
+        { model: 'gpt-4', messages: [] },
+        0,
+        2
+      );
+
+      const chunks = await collectChunks(generator);
+      expect(chunks.find((c) => c.content)?.content).toBe('Recovered');
+    }, 10000);
   });
 
   describe('network error handling', () => {
