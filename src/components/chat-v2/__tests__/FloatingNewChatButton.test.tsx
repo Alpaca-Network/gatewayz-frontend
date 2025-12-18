@@ -3,13 +3,12 @@ import React from 'react';
 
 // Mock next/navigation
 const mockPush = jest.fn();
-const mockPathname = '/';
+const mockUsePathname = jest.fn().mockReturnValue('/');
 jest.mock('next/navigation', () => ({
   useRouter: () => ({
     push: mockPush,
-    pathname: mockPathname,
   }),
-  usePathname: () => mockPathname,
+  usePathname: () => mockUsePathname(),
 }));
 
 // Mock UI components
@@ -60,7 +59,9 @@ import { FloatingNewChatButton } from '../FloatingNewChatButton';
 describe('FloatingNewChatButton', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.restoreAllMocks();
     mockCreateSessionMutateAsync.mockResolvedValue({ id: 123, title: 'Untitled Chat' });
+    mockUsePathname.mockReturnValue('/');
   });
 
   describe('Rendering', () => {
@@ -121,7 +122,7 @@ describe('FloatingNewChatButton', () => {
 
     it('should navigate to /chat if not already on chat page', async () => {
       // Mock pathname as not /chat
-      (require('next/navigation').usePathname as jest.Mock).mockReturnValue('/settings');
+      mockUsePathname.mockReturnValue('/settings');
 
       render(<FloatingNewChatButton />);
 
@@ -135,7 +136,7 @@ describe('FloatingNewChatButton', () => {
 
     it('should not navigate if already on /chat page', async () => {
       // Mock pathname as /chat
-      (require('next/navigation').usePathname as jest.Mock).mockReturnValue('/chat');
+      mockUsePathname.mockReturnValue('/chat');
 
       render(<FloatingNewChatButton />);
 
@@ -241,7 +242,7 @@ describe('FloatingNewChatButton', () => {
       render(<FloatingNewChatButton />);
 
       const button = screen.getByTestId('floating-button');
-      expect(button.className).toContain('z-50');
+      expect(button.className).toContain('z-[9999]');
     });
   });
 
