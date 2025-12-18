@@ -58,16 +58,16 @@ export function FloatingNewChatButton() {
       size="icon"
       className={cn(
         // Base styles
-        "fixed bottom-6 right-6 z-50",
-        "h-14 w-14 rounded-full shadow-lg",
+        "fixed bottom-6 right-6 z-[9999]",
+        "h-14 w-14 rounded-full shadow-2xl",
         // Only show on mobile (below lg breakpoint)
         "lg:hidden",
         // Animations and transitions
         "transition-all duration-300 ease-in-out",
-        "hover:scale-110 hover:shadow-xl",
+        "hover:scale-110 hover:shadow-2xl",
         "active:scale-95",
-        // Gradient background
-        "bg-gradient-to-r from-primary to-primary/90",
+        // Ensure visibility with explicit background and border
+        "bg-primary text-primary-foreground border-2 border-primary-foreground/20",
         // Disabled state
         "disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
       )}
