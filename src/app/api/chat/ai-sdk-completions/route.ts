@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { streamText, APICallError } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
+import { checkGuestRateLimit, incrementGuestRateLimit, getClientIP, formatResetTime } from '@/lib/guest-rate-limiter';
 
 /**
  * AI SDK Chat Completions Route
@@ -283,6 +284,36 @@ export async function POST(request: NextRequest) {
           headers: { 'Content-Type': 'application/json' },
         });
       }
+
+      // Check guest rate limit before proceeding
+      const clientIP = getClientIP(request);
+      const rateLimitCheck = checkGuestRateLimit(clientIP);
+
+      if (!rateLimitCheck.allowed) {
+        const resetTime = formatResetTime(rateLimitCheck.resetInMs);
+        console.log(`[AI SDK Route] Guest rate limit exceeded for IP ${clientIP}. Reset in ${resetTime}`);
+        return new Response(JSON.stringify({
+          error: 'Rate limit exceeded',
+          code: 'GUEST_RATE_LIMIT_EXCEEDED',
+          message: `You've reached the free chat limit. Create a free account for unlimited access, or try again in ${resetTime}.`,
+          detail: `Guest users are limited to ${rateLimitCheck.limit} messages per day.`,
+          remaining: 0,
+          limit: rateLimitCheck.limit,
+          resetInMs: rateLimitCheck.resetInMs
+        }), {
+          status: 429,
+          headers: {
+            'Content-Type': 'application/json',
+            'X-RateLimit-Limit': String(rateLimitCheck.limit),
+            'X-RateLimit-Remaining': '0',
+            'X-RateLimit-Reset': String(Math.floor(Date.now() / 1000) + Math.ceil(rateLimitCheck.resetInMs / 1000))
+          },
+        });
+      }
+
+      // Increment rate limit counter for successful guest requests
+      const incrementResult = incrementGuestRateLimit(clientIP);
+      console.log(`[AI SDK Route] Guest request from ${clientIP}. Remaining: ${incrementResult.remaining}/${incrementResult.limit}`);
 
       apiKey = guestKey;
       console.log('[AI SDK Route] Using guest API key for unauthenticated request');
