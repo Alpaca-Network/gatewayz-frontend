@@ -202,7 +202,8 @@ describe('FloatingNewChatButton', () => {
   describe('Loading State', () => {
     it('should disable button when session creation is pending', () => {
       // Mock isPending as true
-      jest.spyOn(require('@/lib/hooks/use-chat-queries'), 'useCreateSession').mockReturnValue({
+      const useChatQueriesMock = jest.spyOn(require('@/lib/hooks/use-chat-queries'), 'useCreateSession');
+      useChatQueriesMock.mockReturnValue({
         mutateAsync: mockCreateSessionMutateAsync,
         isPending: true,
       });
@@ -211,6 +212,9 @@ describe('FloatingNewChatButton', () => {
 
       const button = screen.getByTestId('floating-button');
       expect(button).toBeDisabled();
+
+      // Restore the original mock
+      useChatQueriesMock.mockRestore();
     });
 
     it('should enable button when session creation is not pending', () => {
@@ -242,7 +246,7 @@ describe('FloatingNewChatButton', () => {
       render(<FloatingNewChatButton />);
 
       const button = screen.getByTestId('floating-button');
-      expect(button.className).toContain('z-50');
+      expect(button.className).toContain('z-[9999]');
     });
   });
 
