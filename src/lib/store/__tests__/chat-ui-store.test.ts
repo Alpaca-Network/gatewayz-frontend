@@ -31,11 +31,11 @@ describe('chat-ui-store', () => {
       isIncognitoMode: false,
       previousModel: null,
       selectedModel: {
-        value: 'cerebras/qwen-3-32b',
-        label: 'Qwen3 32B',
-        category: 'Reasoning',
+        value: 'cerebras/llama-3.3-70b',
+        label: 'Llama 3.3 70B',
+        category: 'General',
         sourceGateway: 'cerebras',
-        developer: 'Qwen',
+        developer: 'Meta',
         modalities: ['Text']
       },
       messageStartTime: null,

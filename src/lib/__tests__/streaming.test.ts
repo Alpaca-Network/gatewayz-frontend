@@ -366,6 +366,41 @@ describe('streamChatResponse', () => {
       ).rejects.toThrow(/Server error/);
     });
 
+    test('should retry on 502 bad gateway', async () => {
+      // First call returns 502
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: false,
+        status: 502,
+        headers: new Map(),
+        json: async () => ({ detail: 'Bad Gateway' }),
+      });
+
+      // Second call succeeds
+      const mockChunks = [
+        'data: {"choices":[{"delta":{"content":"Success after 502"}}]}\n\n',
+        'data: [DONE]\n\n',
+      ];
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Map([['content-type', 'text/event-stream']]),
+        body: createMockStream(mockChunks),
+      });
+
+      const chunks = await collectChunks(
+        streamChatResponse(
+          '/api/chat/completions',
+          'test-key',
+          { model: 'openrouter/auto', messages: [], stream: true }
+        )
+      );
+
+      const contentChunks = chunks.filter(c => c.content);
+      expect(contentChunks.length).toBe(1);
+      expect(contentChunks[0].content).toBe('Success after 502');
+    });
+
     test('should retry on 503 service unavailable', async () => {
       // First call returns 503
       (global.fetch as jest.Mock).mockResolvedValueOnce({
@@ -399,6 +434,41 @@ describe('streamChatResponse', () => {
       const contentChunks = chunks.filter(c => c.content);
       expect(contentChunks.length).toBe(1);
       expect(contentChunks[0].content).toBe('Success');
+    });
+
+    test('should retry on 504 gateway timeout', async () => {
+      // First call returns 504
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: false,
+        status: 504,
+        headers: new Map(),
+        json: async () => ({ detail: 'Gateway Timeout' }),
+      });
+
+      // Second call succeeds
+      const mockChunks = [
+        'data: {"choices":[{"delta":{"content":"Success after 504"}}]}\n\n',
+        'data: [DONE]\n\n',
+      ];
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Map([['content-type', 'text/event-stream']]),
+        body: createMockStream(mockChunks),
+      });
+
+      const chunks = await collectChunks(
+        streamChatResponse(
+          '/api/chat/completions',
+          'test-key',
+          { model: 'openrouter/auto', messages: [], stream: true }
+        )
+      );
+
+      const contentChunks = chunks.filter(c => c.content);
+      expect(contentChunks.length).toBe(1);
+      expect(contentChunks[0].content).toBe('Success after 504');
     });
 
     test('should handle network errors with retry', async () => {
