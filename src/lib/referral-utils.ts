@@ -41,8 +41,15 @@ export const normalizeReferralData = (rawData: FlexibleReferralData): ReferralTr
     // Use API-provided ID as-is (can be string or number)
     transactionId = apiId;
   } else if (refereeId && createdAt) {
-    // Create synthetic ID from referee_id + timestamp for uniqueness
-    transactionId = `${refereeId}_${new Date(createdAt).getTime()}`;
+    // Validate timestamp to prevent NaN in synthetic IDs
+    const timestamp = new Date(createdAt).getTime();
+    if (!Number.isNaN(timestamp)) {
+      // Create synthetic ID from referee_id + timestamp for uniqueness
+      transactionId = `${refereeId}_${timestamp}`;
+    } else {
+      // Invalid date - fallback to UUID to ensure uniqueness
+      transactionId = crypto.randomUUID();
+    }
   } else {
     // Fallback to UUID when critical fields are missing
     transactionId = crypto.randomUUID();

@@ -235,6 +235,43 @@ describe('normalizeReferralData', () => {
     expect(typeof result1.id).toBe('string');
     expect(typeof result2.id).toBe('string');
   });
+
+  it('should fallback to UUID when createdAt is invalid date string', () => {
+    const raw: FlexibleReferralData = {
+      referee_id: 'user123',
+      created_at: 'invalid-date-string',
+      referee_email: 'invalid@example.com',
+      status: 'pending'
+    };
+
+    const result = normalizeReferralData(raw);
+
+    // Should generate UUID instead of synthetic ID with NaN
+    expect(typeof result.id).toBe('string');
+    expect(result.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+    expect(result.id).not.toContain('NaN');
+  });
+
+  it('should generate different UUIDs for multiple records with same invalid date', () => {
+    const raw1 = {
+      referee_id: 'user123',
+      created_at: 'invalid-date',
+      referee_email: 'test1@example.com'
+    };
+    const raw2 = {
+      referee_id: 'user123',
+      created_at: 'invalid-date',
+      referee_email: 'test2@example.com'
+    };
+
+    const result1 = normalizeReferralData(raw1);
+    const result2 = normalizeReferralData(raw2);
+
+    // Each should get a unique UUID, not duplicate "user123_NaN"
+    expect(result1.id).not.toBe(result2.id);
+    expect(result1.id).not.toContain('NaN');
+    expect(result2.id).not.toContain('NaN');
+  });
 });
 
 describe('calculateStats', () => {
