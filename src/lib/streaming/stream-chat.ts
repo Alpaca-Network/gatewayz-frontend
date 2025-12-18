@@ -246,6 +246,7 @@ async function handleHttpError(
         `Server error: ${errorData.detail || errorData.message || 'Internal server error'}. Please try again.`
       );
 
+    case 502:
     case 503:
     case 504: {
       if (retryCount < maxRetries) {
