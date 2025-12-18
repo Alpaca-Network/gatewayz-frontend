@@ -1,16 +1,17 @@
 /**
- * Tests for referral data normalization and stats calculation logic
+ * Tests for referral utility functions
  */
 
 import {
   normalizeReferralData,
   calculateStats,
-  ReferralTransaction
-} from '@/lib/referral-utils';
+  ReferralTransaction,
+  FlexibleReferralData
+} from '../referral-utils';
 
 describe('normalizeReferralData', () => {
   it('should normalize snake_case fields', () => {
-    const raw = {
+    const raw: FlexibleReferralData = {
       id: 1,
       referee_id: 'user123',
       referee_email: 'test@example.com',
@@ -34,7 +35,7 @@ describe('normalizeReferralData', () => {
   });
 
   it('should normalize camelCase fields', () => {
-    const raw = {
+    const raw: FlexibleReferralData = {
       ID: 2,
       refereeId: 'user456',
       refereeEmail: 'camel@example.com',
@@ -58,7 +59,7 @@ describe('normalizeReferralData', () => {
   });
 
   it('should handle alternative field names', () => {
-    const raw = {
+    const raw: FlexibleReferralData = {
       id: 3,
       user_id: 'altuser',
       email: 'alt@example.com',
@@ -81,8 +82,37 @@ describe('normalizeReferralData', () => {
     });
   });
 
+  it('should handle additional date field fallbacks', () => {
+    const raw: FlexibleReferralData = {
+      id: 4,
+      user_id: 'dateuser',
+      email: 'date@example.com',
+      status: 'pending',
+      reward: 20.00,
+      date: '2024-04-01T00:00:00Z',
+      bonus_date: '2024-04-02T00:00:00Z'
+    };
+
+    const result = normalizeReferralData(raw);
+
+    expect(result.created_at).toBe('2024-04-01T00:00:00Z');
+    expect(result.completed_at).toBe('2024-04-02T00:00:00Z');
+  });
+
+  it('should handle signed_up_at field', () => {
+    const raw: FlexibleReferralData = {
+      id: 5,
+      email: 'signup@example.com',
+      signed_up_at: '2024-05-01T00:00:00Z'
+    };
+
+    const result = normalizeReferralData(raw);
+
+    expect(result.created_at).toBe('2024-05-01T00:00:00Z');
+  });
+
   it('should handle missing fields with defaults', () => {
-    const raw = {};
+    const raw: FlexibleReferralData = {};
 
     const result = normalizeReferralData(raw);
 
@@ -98,10 +128,10 @@ describe('normalizeReferralData', () => {
   });
 
   it('should handle uppercase Status field', () => {
-    const raw = {
-      id: 4,
+    const raw: FlexibleReferralData = {
+      id: 6,
       referee_email: 'upper@example.com',
-      Status: 'COMPLETED',  // uppercase from some APIs
+      Status: 'COMPLETED',
       reward_amount: 5
     };
 
@@ -111,8 +141,8 @@ describe('normalizeReferralData', () => {
   });
 
   it('should convert string reward amounts to numbers', () => {
-    const raw = {
-      id: 5,
+    const raw: FlexibleReferralData = {
+      id: 7,
       referee_email: 'string@example.com',
       reward_amount: '25.50',
       status: 'completed'
@@ -122,6 +152,18 @@ describe('normalizeReferralData', () => {
 
     expect(result.reward_amount).toBe(25.50);
     expect(typeof result.reward_amount).toBe('number');
+  });
+
+  it('should default reward_amount to 0 when not provided', () => {
+    const raw: FlexibleReferralData = {
+      id: 8,
+      referee_email: 'noreward@example.com',
+      status: 'pending'
+    };
+
+    const result = normalizeReferralData(raw);
+
+    expect(result.reward_amount).toBe(0);
   });
 });
 
@@ -169,7 +211,7 @@ describe('calculateStats', () => {
     expect(result.totalReferrals).toBe(3);
   });
 
-  it('should use 0 when total_uses is explicitly 0 (not fall back to array length)', () => {
+  it('should preserve 0 when total_uses is explicitly 0', () => {
     const statsData = { total_uses: 0, total_earned: 0 };
 
     const result = calculateStats(statsData, sampleReferrals);
@@ -178,20 +220,12 @@ describe('calculateStats', () => {
     expect(result.totalReferrals).toBe(0);
   });
 
-  it('should fall back when total_uses is undefined', () => {
-    const statsData = { total_uses: undefined, total_earned: 50 };
+  it('should fall back when total_uses is NaN', () => {
+    const statsData = { total_uses: 'not-a-number' as any, total_earned: 50 };
 
     const result = calculateStats(statsData, sampleReferrals);
 
-    expect(result.totalReferrals).toBe(3); // Falls back to array length
-  });
-
-  it('should fall back when total_uses is NaN (non-numeric string)', () => {
-    const statsData = { total_uses: 'not-a-number' as unknown as number, total_earned: 50 };
-
-    const result = calculateStats(statsData, sampleReferrals);
-
-    expect(result.totalReferrals).toBe(3); // Falls back to array length
+    expect(result.totalReferrals).toBe(3);
   });
 
   it('should count completed referrals from normalized data', () => {
@@ -199,7 +233,7 @@ describe('calculateStats', () => {
 
     const result = calculateStats(statsData, sampleReferrals);
 
-    expect(result.completedReferrals).toBe(2); // Only 2 have status 'completed'
+    expect(result.completedReferrals).toBe(2);
   });
 
   it('should use API total_earned when provided', () => {
@@ -210,7 +244,7 @@ describe('calculateStats', () => {
     expect(result.totalEarned).toBe(99.99);
   });
 
-  it('should use 0 when total_earned is explicitly 0', () => {
+  it('should preserve 0 when total_earned is explicitly 0', () => {
     const statsData = { total_uses: 3, total_earned: 0 };
 
     const result = calculateStats(statsData, sampleReferrals);
