@@ -497,10 +497,12 @@ export function ChatLayout() {
        }
    }, [activeMessages, toast]);
 
-   // When logged out, always show welcome screen (ignore cached messages and activeSessionId)
-   // When logged in, show welcome screen only if no active session or no messages after loading
-   // ALSO hide welcome screen immediately when a prompt is clicked (pendingPrompt is set)
-   const showWelcomeScreen = !pendingPrompt && (!isAuthenticated || !activeSessionId || (!messagesLoading && activeMessages.length === 0));
+   // Show welcome screen only when:
+   // 1. No pending prompt (user hasn't clicked a starter prompt)
+   // 2. AND either no active session OR (not loading AND no messages)
+   // This applies to both authenticated and guest users to ensure the welcome screen
+   // disappears when a message is sent or a prompt is clicked
+   const showWelcomeScreen = !pendingPrompt && (!activeSessionId || (!messagesLoading && activeMessages.length === 0));
 
    // Handle creating a new chat session (for mobile new chat button)
    const handleCreateNewChat = useCallback(async () => {
