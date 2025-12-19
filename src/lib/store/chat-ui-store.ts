@@ -36,14 +36,6 @@ export const NEAR_INCOGNITO_MODELS: ModelOption[] = [
     developer: 'Qwen',
     modalities: ['Text']
   },
-  {
-    value: 'near/moonshotai/Kimi-K2-Thinking',
-    label: 'Kimi K2 Thinking',
-    category: 'Reasoning',
-    sourceGateway: 'near',
-    developer: 'Moonshot AI',
-    modalities: ['Text']
-  },
 ];
 
 // Incognito mode default model (first model in the list)
