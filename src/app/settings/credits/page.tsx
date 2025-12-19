@@ -122,13 +122,6 @@ interface CreditPackage {
 const creditPackages: CreditPackage[] = [
   {
     id: 'tier1',
-    name: 'Starter',
-    creditValue: 10,
-    price: 9,
-    discount: '10% off',
-  },
-  {
-    id: 'tier2',
     name: 'Growth',
     creditValue: 100,
     price: 75,
@@ -136,7 +129,7 @@ const creditPackages: CreditPackage[] = [
     popular: true,
   },
   {
-    id: 'tier3',
+    id: 'tier2',
     name: 'Scale',
     creditValue: 250,
     price: 175,
