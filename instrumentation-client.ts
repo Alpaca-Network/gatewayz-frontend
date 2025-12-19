@@ -333,8 +333,8 @@ function shouldFilterEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): bo
         frame.filename?.includes('auth.privy.io')
       );
 
-    if (isPrivyError || !errorMessage) {
-      // Filter if it's definitely Privy, or if there's no detailed error context
+    if (isPrivyError) {
+      // Filter if it's definitely Privy
       console.debug('[Sentry] Filtered out Privy iframe initialization error (external auth provider)');
       return true;
     }

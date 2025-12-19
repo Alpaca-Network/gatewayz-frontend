@@ -96,7 +96,7 @@ function shouldFilterServerEvent(errorMessage: string, event?: Sentry.ErrorEvent
   // Filter out Privy iframe errors (external auth provider)
   const isPrivyIframeError =
     (normalizedMessage.includes('iframe not initialized') || normalizedMessage.includes('origin not allowed')) &&
-    (normalizedMessage.includes('privy') || !errorMessage);
+    normalizedMessage.includes('privy');
 
   // Filter out "Large HTTP payload" info events
   const isLargePayloadInfo =
