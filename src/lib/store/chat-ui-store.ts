@@ -96,13 +96,13 @@ interface ChatUIState {
 
 // Standard default model
 // NOTE: Model ID must include the gateway prefix (e.g., 'cerebras/') for proper backend routing
-// Using Llama 3.3 70B as default - a reliable production model on Cerebras
+// Using Qwen3 32B as default - a reliable production model on Cerebras
 const STANDARD_DEFAULT_MODEL: ModelOption = {
-  value: 'cerebras/llama-3.3-70b',
-  label: 'Llama 3.3 70B',
+  value: 'cerebras/qwen-3-32b',
+  label: 'Qwen3 32B',
   category: 'General',
   sourceGateway: 'cerebras',
-  developer: 'Meta',
+  developer: 'Qwen',
   modalities: ['Text']
 };
 
