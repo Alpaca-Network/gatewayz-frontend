@@ -125,35 +125,9 @@ export function PricingSection() {
         return;
       }
 
-      // Call subscription checkout API
-      const response = await fetch('/api/stripe/subscribe', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          priceId: tier.stripePriceId,
-          productId: tier.stripeProductId,
-          userEmail: userData.email,
-          userId: userData.user_id,
-          apiKey: userData.api_key,
-          tier: tier.id, // Include tier name for Stripe metadata
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to start subscription');
-      }
-
-      const data = await response.json();
-
-      // Redirect to Stripe Checkout
-      if (data.url) {
-        window.location.href = data.url;
-      } else {
-        throw new Error('No checkout URL received');
-      }
+      // Redirect to checkout page for analytics tracking
+      // The checkout page will handle the actual Stripe redirect
+      window.location.href = `/checkout?type=subscription&tier=${tier.id}&priceId=${tier.stripePriceId}&productId=${tier.stripeProductId}`;
     } catch (error) {
       console.error('Subscription error:', error);
       alert(error instanceof Error ? error.message : 'Failed to start subscription. Please try again.');

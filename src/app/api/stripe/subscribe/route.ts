@@ -42,8 +42,8 @@ export async function POST(req: NextRequest) {
       price_id: priceId,
       product_id: productId, // Stripe Product ID to store in database (prod_TKOqQPhVRxNp4Q or prod_TKOraBpWMxMAIu)
       customer_email: normalizedEmail,
-      success_url: `${frontendUrl}/settings/credits?session_id={{CHECKOUT_SESSION_ID}}`,
-      cancel_url: `${frontendUrl}/settings/credits`,
+      success_url: `${frontendUrl}/checkout/confirmation?session_id={{CHECKOUT_SESSION_ID}}&type=subscription&tier=${tier || 'pro'}`,
+      cancel_url: `${frontendUrl}/checkout?type=subscription&tier=${tier || 'pro'}&priceId=${priceId}&productId=${productId}`,
       mode: 'subscription', // Subscription mode instead of payment
       ...(tier && { tier }), // Pass tier for subscription metadata tracking
     };
