@@ -72,6 +72,15 @@ describe('FloatingNewChatButton', () => {
       expect(button).toBeInTheDocument();
     });
 
+    it('should not render on /chat page', () => {
+      mockUsePathname.mockReturnValue('/chat');
+
+      const { container } = render(<FloatingNewChatButton />);
+
+      expect(container.firstChild).toBeNull();
+      expect(screen.queryByTestId('floating-button')).not.toBeInTheDocument();
+    });
+
     it('should render the Plus icon', () => {
       render(<FloatingNewChatButton />);
 
@@ -120,7 +129,7 @@ describe('FloatingNewChatButton', () => {
       });
     });
 
-    it('should navigate to /chat if not already on chat page', async () => {
+    it('should navigate to /chat when clicked', async () => {
       // Mock pathname as not /chat
       mockUsePathname.mockReturnValue('/settings');
 
@@ -132,23 +141,6 @@ describe('FloatingNewChatButton', () => {
       await waitFor(() => {
         expect(mockPush).toHaveBeenCalledWith('/chat');
       });
-    });
-
-    it('should not navigate if already on /chat page', async () => {
-      // Mock pathname as /chat
-      mockUsePathname.mockReturnValue('/chat');
-
-      render(<FloatingNewChatButton />);
-
-      const button = screen.getByTestId('floating-button');
-      fireEvent.click(button);
-
-      await waitFor(() => {
-        expect(mockSetActiveSessionId).toHaveBeenCalled();
-      });
-
-      // Should not push to /chat since we're already there
-      expect(mockPush).not.toHaveBeenCalled();
     });
   });
 

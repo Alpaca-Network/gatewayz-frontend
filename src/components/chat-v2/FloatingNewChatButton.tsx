@@ -26,6 +26,11 @@ export function FloatingNewChatButton() {
   const createSession = useCreateSession();
   const { toast } = useToast();
 
+  // Don't render on the chat page - users are already there
+  if (pathname === "/chat") {
+    return null;
+  }
+
   const handleNewChat = async () => {
     try {
       // Create a new chat session
@@ -37,10 +42,8 @@ export function FloatingNewChatButton() {
       // Set the active session
       setActiveSessionId(newSession.id);
 
-      // Navigate to chat page if not already there
-      if (pathname !== "/chat") {
-        router.push("/chat");
-      }
+      // Navigate to chat page
+      router.push("/chat");
     } catch (error) {
       console.error("Failed to create new chat:", error);
       toast({
