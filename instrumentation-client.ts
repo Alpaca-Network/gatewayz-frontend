@@ -277,6 +277,81 @@ function shouldFilterEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): bo
     return true;
   }
 
+  // Filter out localStorage access denied errors (browser privacy mode / iframes)
+  // These occur when users browse in private/incognito mode or when the site is in an iframe
+  // with strict privacy settings. These are not application bugs.
+  if (
+    errorMessageLower.includes('localstorage') ||
+    errorMessageLower.includes('local storage') ||
+    errorMessageLower.includes('sessionstorage') ||
+    eventMessageLower.includes('localstorage') ||
+    eventMessageLower.includes('local storage') ||
+    eventMessageLower.includes('sessionstorage')
+  ) {
+    if (
+      errorMessageLower.includes('access is denied') ||
+      errorMessageLower.includes('access denied') ||
+      errorMessageLower.includes('not available') ||
+      errorMessageLower.includes('permission denied') ||
+      eventMessageLower.includes('access is denied') ||
+      eventMessageLower.includes('access denied') ||
+      eventMessageLower.includes('not available') ||
+      eventMessageLower.includes('permission denied')
+    ) {
+      console.debug('[Sentry] Filtered out localStorage/sessionStorage access denied error (browser privacy mode)');
+      return true;
+    }
+  }
+
+  // Filter out "Java object is gone" errors (Android WebView)
+  // These occur in Android WebView when Java bridge objects are garbage collected
+  // This is an external browser behavior, not an application bug
+  if (
+    errorMessageLower.includes('java object is gone') ||
+    errorMessageLower.includes('javaobject') ||
+    eventMessageLower.includes('java object is gone') ||
+    eventMessageLower.includes('javaobject')
+  ) {
+    console.debug('[Sentry] Filtered out Android WebView "Java object is gone" error (external browser behavior)');
+    return true;
+  }
+
+  // Filter out Privy iframe errors (external authentication provider)
+  // These are thrown by Privy's authentication iframe, not our application code
+  if (
+    errorMessageLower.includes('iframe not initialized') ||
+    errorMessageLower.includes('origin not allowed') ||
+    eventMessageLower.includes('iframe not initialized') ||
+    eventMessageLower.includes('origin not allowed')
+  ) {
+    // Check if it's related to Privy
+    const isPrivyError =
+      errorMessageLower.includes('privy') ||
+      eventMessageLower.includes('privy') ||
+      stackFrames?.some(frame =>
+        frame.filename?.includes('privy') ||
+        frame.filename?.includes('auth.privy.io')
+      );
+
+    if (isPrivyError) {
+      // Filter if it's definitely Privy
+      console.debug('[Sentry] Filtered out Privy iframe initialization error (external auth provider)');
+      return true;
+    }
+  }
+
+  // Filter out "Large HTTP payload" info events
+  // These are monitoring/info level events that don't indicate errors
+  if (
+    event.level === 'info' &&
+    (errorMessageLower.includes('large http payload') ||
+     eventMessageLower.includes('large http payload') ||
+     (event.message?.toLowerCase() || '').includes('large http payload'))
+  ) {
+    console.debug('[Sentry] Filtered out Large HTTP payload info event (monitoring only)');
+    return true;
+  }
+
   return false;
 }
 
