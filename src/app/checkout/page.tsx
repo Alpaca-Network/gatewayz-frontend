@@ -32,18 +32,20 @@ function CheckoutPageContent() {
   // Get checkout details from URL params
   const type = searchParams?.get('type') || 'credits'; // 'credits' or 'subscription'
   const amount = searchParams?.get('amount');
+  const creditValue = searchParams?.get('creditValue'); // Credits to add (may differ from amount due to discounts)
   const tier = searchParams?.get('tier');
   const priceId = searchParams?.get('priceId');
   const productId = searchParams?.get('productId');
 
   // Determine what's being purchased
   const isSubscription = type === 'subscription';
+  const credits = creditValue || amount;
   const displayAmount = isSubscription
     ? (tier === 'pro' ? '$10' : tier === 'max' ? '$75' : `$${amount}`)
     : `$${amount}`;
   const displayName = isSubscription
     ? `${tier?.charAt(0).toUpperCase()}${tier?.slice(1)} Plan`
-    : `${amount} Credits`;
+    : `$${credits} Credits`;
 
   const handleProceedToPayment = async () => {
     setIsLoading(true);
@@ -85,6 +87,7 @@ function CheckoutPageContent() {
           },
           body: JSON.stringify({
             amount: parseFloat(amount || '0'),
+            creditValue: parseFloat(creditValue || amount || '0'), // Credits to add
             userEmail: userData.email,
             userId: userData.user_id,
             apiKey: userData.api_key,

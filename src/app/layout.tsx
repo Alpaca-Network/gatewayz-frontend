@@ -24,6 +24,7 @@ import { SafeStorageShim } from '@/components/safe-storage-shim';
 import { ReferralToast } from '@/components/referral/referral-toast';
 import { WebVitalsReporter } from '@/components/web-vitals';
 import { EarlyErrorSuppressor } from '@/components/early-error-suppressor';
+import { FloatingNewChatButton } from '@/components/chat-v2/FloatingNewChatButton';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -129,6 +130,7 @@ export default function RootLayout({
                 <TrialCreditsNotice />
                 <ReferralBonusDialog />
                 <ReferralToast />
+                <FloatingNewChatButton />
                 <Analytics />
                 <SpeedInsights />
                 <WebVitalsReporter />

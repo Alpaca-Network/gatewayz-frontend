@@ -127,11 +127,13 @@ function ConfirmationPageContent() {
   const type = searchParams?.get('type') || 'credits';
   const tier = searchParams?.get('tier');
   const amount = searchParams?.get('amount');
+  const creditValue = searchParams?.get('creditValue'); // Credits received (may differ from amount if discounted)
 
   const isSubscription = type === 'subscription';
+  const credits = creditValue || amount;
   const purchaseDescription = isSubscription
     ? `${tier?.charAt(0).toUpperCase()}${tier?.slice(1)} Plan subscription`
-    : `$${amount} credits`;
+    : `$${credits} credits`;
 
   // Fetch referral code and update user data
   useEffect(() => {

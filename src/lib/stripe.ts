@@ -14,13 +14,19 @@ export const getStripe = () => {
  * Redirect to the checkout page for analytics tracking before Stripe payment.
  * This allows Google Analytics, Google Ads, X Ads, etc. to track checkout initiation.
  */
-export const redirectToCheckout = async (amount: number, userEmail?: string, userId?: number) => {
+export const redirectToCheckout = async (
+  amount: number,
+  userEmail?: string,
+  userId?: number,
+  creditValue?: number // Optional: credits to add (if different from amount due to discounts)
+) => {
   try {
     // Get API key from localStorage
     const apiKey = getApiKey();
 
     console.log('Checkout - API key exists:', !!apiKey);
     console.log('Checkout - Amount:', amount);
+    console.log('Checkout - Credit value:', creditValue || amount);
     console.log('Checkout - User ID:', userId);
 
     if (!apiKey) {
@@ -29,7 +35,8 @@ export const redirectToCheckout = async (amount: number, userEmail?: string, use
 
     // Redirect to checkout page for analytics tracking
     // The checkout page will handle the actual Stripe redirect
-    window.location.href = `/checkout?type=credits&amount=${amount}`;
+    const credits = creditValue || amount;
+    window.location.href = `/checkout?type=credits&amount=${amount}&creditValue=${credits}`;
   } catch (error) {
     console.log('Error redirecting to checkout:', error);
     throw error;
