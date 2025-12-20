@@ -302,10 +302,12 @@ export const ChatMessage = memo<ChatMessageProps>(
                     },
                     p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
                     table: ({ children }) => (
-                      <div className="overflow-x-auto my-4 max-w-full -mx-4 px-4 sm:mx-0 sm:px-0">
+                      <div className="overflow-x-auto my-4 max-w-full -mx-4 px-4 sm:mx-0 sm:px-0 relative">
                         <table className="min-w-full border-collapse border border-border">
                           {children}
                         </table>
+                        {/* Subtle gradient hint for horizontal scrolling on mobile */}
+                        <div className="pointer-events-none absolute top-0 right-0 bottom-0 w-8 bg-gradient-to-l from-background/50 to-transparent sm:hidden" />
                       </div>
                     ),
                     thead: ({ children }) => (
