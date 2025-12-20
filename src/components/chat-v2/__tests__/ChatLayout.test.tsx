@@ -729,18 +729,18 @@ describe('Handlers with active session', () => {
   });
 
   it('should call handleShare and create share URL', async () => {
-    render(<ChatLayout />);
-
-    expect(mockMessageListProps.onShare).toBeDefined();
-
-    // Mock global fetch for the share API call
-    global.fetch = jest.fn().mockResolvedValueOnce({
+    // Mock global fetch BEFORE render to ensure it intercepts the dynamic import's fetch call
+    global.fetch = jest.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
         success: true,
         share_url: 'https://gatewayz.ai/share/abc123',
       }),
     });
+
+    render(<ChatLayout />);
+
+    expect(mockMessageListProps.onShare).toBeDefined();
 
     await mockMessageListProps.onShare(2);
 
@@ -758,16 +758,16 @@ describe('Handlers with active session', () => {
   });
 
   it('should show error toast when handleShare fails to create share link', async () => {
-    render(<ChatLayout />);
-
-    expect(mockMessageListProps.onShare).toBeDefined();
-
-    // Mock global fetch to fail
-    global.fetch = jest.fn().mockResolvedValueOnce({
+    // Mock global fetch BEFORE render to ensure it intercepts the dynamic import's fetch call
+    global.fetch = jest.fn().mockResolvedValue({
       ok: false,
       status: 500,
       json: async () => ({ error: 'Failed to create share link' }),
     });
+
+    render(<ChatLayout />);
+
+    expect(mockMessageListProps.onShare).toBeDefined();
 
     await mockMessageListProps.onShare(2);
 
