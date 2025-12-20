@@ -460,42 +460,42 @@ export function ChatLayout() {
        }
    }, [activeSessionId, activeMessages, toast]);
 
-   // Handle share - copy message or share link
+   // Handle share - create and copy shareable link
    const handleShare = useCallback(async (messageId: number) => {
-       // Find the message and copy its content
-       const message = activeMessages.find(m => m.id === messageId);
-       if (!message) {
+       if (!activeSessionId) {
            toast({
                title: "Unable to share",
-               description: "Message not found.",
+               description: "No active chat session.",
                variant: "destructive",
            });
            return;
        }
-       let content = '';
-       if (typeof message.content === 'string') {
-           content = message.content;
-       } else if (Array.isArray(message.content)) {
-           content = message.content
-               .filter((c: any) => c.type === 'text' && c.text)
-               .map((c: any) => c.text)
-               .join('');
-       }
+
        try {
-           await navigator.clipboard.writeText(content);
-           toast({
-               title: "Copied to clipboard",
-               description: "Response has been copied to your clipboard.",
+           // Import the share utility function
+           const { createShareLink, copyShareUrlToClipboard } = await import('@/lib/share-chat');
+
+           // Create a shareable link for the entire chat session
+           const result = await createShareLink({
+               sessionId: activeSessionId,
            });
+
+           if (!result.success || !result.share_url) {
+               throw new Error(result.error || 'Failed to create share link');
+           }
+
+           // Copy the share URL to clipboard
+           await copyShareUrlToClipboard(result.share_url, toast);
+
        } catch (error) {
-           console.error('[ChatLayout] Failed to copy to clipboard:', error);
+           console.error('[ChatLayout] Failed to create share link:', error);
            toast({
-               title: "Copy failed",
-               description: "Unable to copy to clipboard. Please try again.",
+               title: "Share failed",
+               description: "Unable to create share link. Please try again.",
                variant: "destructive",
            });
        }
-   }, [activeMessages, toast]);
+   }, [activeSessionId, toast]);
 
    // Show welcome screen only when:
    // 1. No pending prompt (user hasn't clicked a starter prompt)

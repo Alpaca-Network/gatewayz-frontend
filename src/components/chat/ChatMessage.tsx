@@ -397,7 +397,7 @@ export const ChatMessage = memo<ChatMessageProps>(
                     size="icon"
                     className="h-6 w-6"
                     onClick={onShare}
-                    title="Share"
+                    title="Share chat"
                   >
                     <Share className="h-3 w-3" />
                   </Button>
