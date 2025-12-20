@@ -728,7 +728,28 @@ describe('Handlers with active session', () => {
     });
   });
 
-  it('should call handleShare and copy content to clipboard', async () => {
+  it('should call handleShare and create share URL', async () => {
+    // Mock the createShareLink function
+    const mockCreateShareLink = jest.fn().mockResolvedValue({
+      success: true,
+      share_url: 'https://gatewayz.ai/share/abc123',
+    });
+
+    // Mock the share-chat module
+    jest.doMock('@/lib/share-chat', () => ({
+      createShareLink: mockCreateShareLink,
+      copyShareUrlToClipboard: jest.fn().mockImplementation(async (url, toast) => {
+        await navigator.clipboard.writeText(url);
+        if (toast) {
+          toast({
+            title: 'Share link copied!',
+            description: 'Anyone with this link can view this conversation.',
+          });
+        }
+        return true;
+      }),
+    }));
+
     render(<ChatLayout />);
 
     expect(mockMessageListProps.onShare).toBeDefined();
@@ -736,30 +757,35 @@ describe('Handlers with active session', () => {
     await mockMessageListProps.onShare(2);
 
     await waitFor(() => {
-      expect(clipboardWriteText).toHaveBeenCalledWith('Hi there!');
-    });
-
-    await waitFor(() => {
       expect(mockToast).toHaveBeenCalledWith(
         expect.objectContaining({
-          title: 'Copied to clipboard',
+          title: 'Share link copied!',
+          description: 'Anyone with this link can view this conversation.',
         })
       );
     });
   });
 
-  it('should show error toast when handleShare cannot find message', async () => {
+  it('should show error toast when handleShare fails to create share link', async () => {
+    // Mock the createShareLink to fail
+    jest.doMock('@/lib/share-chat', () => ({
+      createShareLink: jest.fn().mockResolvedValue({
+        success: false,
+        error: 'Failed to create share link',
+      }),
+      copyShareUrlToClipboard: jest.fn(),
+    }));
+
     render(<ChatLayout />);
 
     expect(mockMessageListProps.onShare).toBeDefined();
 
-    // Try to share a non-existent message
-    await mockMessageListProps.onShare(999);
+    await mockMessageListProps.onShare(2);
 
     await waitFor(() => {
       expect(mockToast).toHaveBeenCalledWith(
         expect.objectContaining({
-          title: 'Unable to share',
+          title: 'Share failed',
           variant: 'destructive',
         })
       );
@@ -957,223 +983,6 @@ describe('handleRegenerate edge cases', () => {
   });
 });
 
-describe('handleShare with array content', () => {
-  let mockToast: jest.Mock;
-  let clipboardWriteText: jest.Mock;
-
-  beforeEach(() => {
-    mockToast = jest.fn();
-    clipboardWriteText = jest.fn().mockResolvedValue(undefined);
-    Object.defineProperty(navigator, 'clipboard', {
-      value: { writeText: clipboardWriteText },
-      writable: true,
-      configurable: true,
-    });
-    jest.spyOn(require('@/hooks/use-toast'), 'useToast').mockReturnValue({ toast: mockToast });
-    Object.keys(mockMessageListProps).forEach(key => delete mockMessageListProps[key]);
-  });
-
-  afterEach(() => {
-    jest.restoreAllMocks();
-  });
-
-  it('should extract text from array content when sharing', async () => {
-    const arrayContentMessages = [
-      { id: 1, role: 'user', content: 'Hello', isStreaming: false },
-      {
-        id: 2,
-        role: 'assistant',
-        content: [
-          { type: 'text', text: 'First part. ' },
-          { type: 'text', text: 'Second part.' },
-          { type: 'image', url: 'test.jpg' },
-        ],
-        isStreaming: false,
-      },
-    ];
-
-    jest.spyOn(require('@/lib/store/chat-ui-store'), 'useChatUIStore').mockReturnValue({
-      activeSessionId: 123,
-      setActiveSessionId: mockSetActiveSessionId,
-      selectedModel: { value: 'test-model', label: 'Test Model' },
-      setSelectedModel: mockSetSelectedModel,
-      inputValue: '',
-      setInputValue: mockSetInputValue,
-      mobileSidebarOpen: false,
-      setMobileSidebarOpen: mockSetMobileSidebarOpen,
-      isIncognitoMode: false,
-      setIncognitoMode: mockSetIncognitoMode,
-      toggleIncognitoMode: mockToggleIncognitoMode,
-      syncIncognitoState: jest.fn(),
-    });
-    jest.spyOn(require('@/lib/hooks/use-chat-queries'), 'useSessionMessages').mockReturnValue({
-      data: arrayContentMessages,
-      isLoading: false,
-    });
-
-    render(<ChatLayout />);
-
-    expect(mockMessageListProps.onShare).toBeDefined();
-
-    await mockMessageListProps.onShare(2);
-
-    await waitFor(() => {
-      expect(clipboardWriteText).toHaveBeenCalledWith('First part. Second part.');
-    });
-  });
-
-  it('should filter out undefined text values in array content', async () => {
-    const arrayContentWithUndefined = [
-      { id: 1, role: 'user', content: 'Hello', isStreaming: false },
-      {
-        id: 2,
-        role: 'assistant',
-        content: [
-          { type: 'text', text: 'Valid text.' },
-          { type: 'text' }, // missing text property
-          { type: 'text', text: undefined }, // explicit undefined
-          { type: 'text', text: '' }, // empty string - should be filtered
-          { type: 'text', text: 'More text.' },
-        ],
-        isStreaming: false,
-      },
-    ];
-
-    jest.spyOn(require('@/lib/store/chat-ui-store'), 'useChatUIStore').mockReturnValue({
-      activeSessionId: 123,
-      setActiveSessionId: mockSetActiveSessionId,
-      selectedModel: { value: 'test-model', label: 'Test Model' },
-      setSelectedModel: mockSetSelectedModel,
-      inputValue: '',
-      setInputValue: mockSetInputValue,
-      mobileSidebarOpen: false,
-      setMobileSidebarOpen: mockSetMobileSidebarOpen,
-      isIncognitoMode: false,
-      setIncognitoMode: mockSetIncognitoMode,
-      toggleIncognitoMode: mockToggleIncognitoMode,
-      syncIncognitoState: jest.fn(),
-    });
-    jest.spyOn(require('@/lib/hooks/use-chat-queries'), 'useSessionMessages').mockReturnValue({
-      data: arrayContentWithUndefined,
-      isLoading: false,
-    });
-
-    render(<ChatLayout />);
-
-    expect(mockMessageListProps.onShare).toBeDefined();
-
-    await mockMessageListProps.onShare(2);
-
-    await waitFor(() => {
-      // Should only contain valid text values, not "undefined" literals
-      expect(clipboardWriteText).toHaveBeenCalledWith('Valid text.More text.');
-    });
-  });
-
-  it('should show error toast when clipboard.writeText fails', async () => {
-    clipboardWriteText.mockRejectedValue(new Error('Clipboard access denied'));
-
-    const messages = [
-      { id: 1, role: 'user', content: 'Hello', isStreaming: false },
-      { id: 2, role: 'assistant', content: 'Response text', isStreaming: false },
-    ];
-
-    jest.spyOn(require('@/lib/store/chat-ui-store'), 'useChatUIStore').mockReturnValue({
-      activeSessionId: 123,
-      setActiveSessionId: mockSetActiveSessionId,
-      selectedModel: { value: 'test-model', label: 'Test Model' },
-      setSelectedModel: mockSetSelectedModel,
-      inputValue: '',
-      setInputValue: mockSetInputValue,
-      mobileSidebarOpen: false,
-      setMobileSidebarOpen: mockSetMobileSidebarOpen,
-      isIncognitoMode: false,
-      setIncognitoMode: mockSetIncognitoMode,
-      toggleIncognitoMode: mockToggleIncognitoMode,
-      syncIncognitoState: jest.fn(),
-    });
-    jest.spyOn(require('@/lib/hooks/use-chat-queries'), 'useSessionMessages').mockReturnValue({
-      data: messages,
-      isLoading: false,
-    });
-
-    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
-
-    render(<ChatLayout />);
-
-    expect(mockMessageListProps.onShare).toBeDefined();
-
-    await mockMessageListProps.onShare(2);
-
-    await waitFor(() => {
-      expect(mockToast).toHaveBeenCalledWith(
-        expect.objectContaining({
-          title: 'Copy failed',
-          description: 'Unable to copy to clipboard. Please try again.',
-          variant: 'destructive',
-        })
-      );
-    });
-
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      '[ChatLayout] Failed to copy to clipboard:',
-      expect.any(Error)
-    );
-
-    consoleErrorSpy.mockRestore();
-  });
-
-  it('should show success toast only after clipboard.writeText resolves', async () => {
-    // Track the order of calls
-    const callOrder: string[] = [];
-
-    clipboardWriteText.mockImplementation(() => {
-      callOrder.push('clipboard');
-      return Promise.resolve();
-    });
-
-    mockToast.mockImplementation(() => {
-      callOrder.push('toast');
-    });
-
-    const messages = [
-      { id: 1, role: 'user', content: 'Hello', isStreaming: false },
-      { id: 2, role: 'assistant', content: 'Response text', isStreaming: false },
-    ];
-
-    jest.spyOn(require('@/lib/store/chat-ui-store'), 'useChatUIStore').mockReturnValue({
-      activeSessionId: 123,
-      setActiveSessionId: mockSetActiveSessionId,
-      selectedModel: { value: 'test-model', label: 'Test Model' },
-      setSelectedModel: mockSetSelectedModel,
-      inputValue: '',
-      setInputValue: mockSetInputValue,
-      mobileSidebarOpen: false,
-      setMobileSidebarOpen: mockSetMobileSidebarOpen,
-      isIncognitoMode: false,
-      setIncognitoMode: mockSetIncognitoMode,
-      toggleIncognitoMode: mockToggleIncognitoMode,
-      syncIncognitoState: jest.fn(),
-    });
-    jest.spyOn(require('@/lib/hooks/use-chat-queries'), 'useSessionMessages').mockReturnValue({
-      data: messages,
-      isLoading: false,
-    });
-
-    render(<ChatLayout />);
-
-    await mockMessageListProps.onShare(2);
-
-    await waitFor(() => {
-      expect(clipboardWriteText).toHaveBeenCalled();
-      expect(mockToast).toHaveBeenCalled();
-    });
-
-    // Verify clipboard was called before toast (async behavior is correct)
-    expect(callOrder[0]).toBe('clipboard');
-    expect(callOrder[1]).toBe('toast');
-  });
-});
 
 describe('handleRegenerate with undefined text values', () => {
   let mockToast: jest.Mock;
