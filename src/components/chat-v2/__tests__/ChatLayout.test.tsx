@@ -729,56 +729,45 @@ describe('Handlers with active session', () => {
   });
 
   it('should call handleShare and create share URL', async () => {
-    // Mock the createShareLink function
-    const mockCreateShareLink = jest.fn().mockResolvedValue({
-      success: true,
-      share_url: 'https://gatewayz.ai/share/abc123',
-    });
-
-    // Mock the share-chat module
-    jest.doMock('@/lib/share-chat', () => ({
-      createShareLink: mockCreateShareLink,
-      copyShareUrlToClipboard: jest.fn().mockImplementation(async (url, toast) => {
-        await navigator.clipboard.writeText(url);
-        if (toast) {
-          toast({
-            title: 'Share link copied!',
-            description: 'Anyone with this link can view this conversation.',
-          });
-        }
-        return true;
-      }),
-    }));
-
     render(<ChatLayout />);
 
     expect(mockMessageListProps.onShare).toBeDefined();
 
+    // Mock global fetch for the share API call
+    global.fetch = jest.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        success: true,
+        share_url: 'https://gatewayz.ai/share/abc123',
+      }),
+    });
+
     await mockMessageListProps.onShare(2);
+
+    await waitFor(() => {
+      expect(clipboardWriteText).toHaveBeenCalledWith('https://gatewayz.ai/share/abc123');
+    });
 
     await waitFor(() => {
       expect(mockToast).toHaveBeenCalledWith(
         expect.objectContaining({
           title: 'Share link copied!',
-          description: 'Anyone with this link can view this conversation.',
         })
       );
     });
   });
 
   it('should show error toast when handleShare fails to create share link', async () => {
-    // Mock the createShareLink to fail
-    jest.doMock('@/lib/share-chat', () => ({
-      createShareLink: jest.fn().mockResolvedValue({
-        success: false,
-        error: 'Failed to create share link',
-      }),
-      copyShareUrlToClipboard: jest.fn(),
-    }));
-
     render(<ChatLayout />);
 
     expect(mockMessageListProps.onShare).toBeDefined();
+
+    // Mock global fetch to fail
+    global.fetch = jest.fn().mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      json: async () => ({ error: 'Failed to create share link' }),
+    });
 
     await mockMessageListProps.onShare(2);
 
