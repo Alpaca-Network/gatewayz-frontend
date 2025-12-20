@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-const BACKEND_API_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+import { API_BASE_URL } from '@/lib/config';
 
 /**
  * GET /api/chat/share/[token]
@@ -8,10 +7,10 @@ const BACKEND_API_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { token: string } }
+  { params }: { params: Promise<{ token: string }> }
 ) {
   try {
-    const { token } = params;
+    const { token } = await params;
 
     if (!token) {
       return NextResponse.json(
@@ -22,7 +21,7 @@ export async function GET(
 
     // Call backend API to get shared chat (public endpoint)
     const response = await fetch(
-      `${BACKEND_API_URL}/v1/chat/share/${token}`,
+      `${API_BASE_URL}/v1/chat/share/${token}`,
       {
         headers: {
           'Content-Type': 'application/json',
@@ -63,50 +62,29 @@ export async function GET(
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { token: string } }
+  { params }: { params: Promise<{ token: string }> }
 ) {
   try {
-    const { createClient } = await import('@/lib/supabase/server');
-    const supabase = await createClient();
+    // Get API key from Authorization header
+    const authHeader = request.headers.get('authorization');
 
-    // Get current user
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-
-    if (userError || !user) {
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return NextResponse.json(
-        { error: 'Unauthorized' },
+        { error: 'Missing or invalid authorization header' },
         { status: 401 }
       );
     }
 
-    // Get user's API key
-    const { data: userData, error: apiKeyError } = await supabase
-      .from('users')
-      .select('api_key')
-      .eq('id', user.id)
-      .single();
-
-    if (apiKeyError || !userData?.api_key) {
-      return NextResponse.json(
-        { error: 'API key not found' },
-        { status: 401 }
-      );
-    }
-
-    const { token } = params;
-
-    // In the frontend, we have the token but backend expects the shared_chat_id
-    // We need to fetch the shared chat first to get its ID
-    // For now, we'll assume the token parameter is actually the ID when deleting
-    // This should be improved in a production system
+    const apiKey = authHeader.replace('Bearer ', '');
+    const { token } = await params;
 
     // Call backend API to delete share link
     const response = await fetch(
-      `${BACKEND_API_URL}/v1/chat/share/${token}`,
+      `${API_BASE_URL}/v1/chat/share/${token}`,
       {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${userData.api_key}`,
+          'Authorization': `Bearer ${apiKey}`,
         },
       }
     );

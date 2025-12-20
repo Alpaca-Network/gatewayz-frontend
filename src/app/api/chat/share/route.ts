@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
-
-const BACKEND_API_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+import { API_BASE_URL } from '@/lib/config';
 
 /**
  * POST /api/chat/share
@@ -9,31 +7,17 @@ const BACKEND_API_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost
  */
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient();
+    // Get API key from Authorization header
+    const authHeader = request.headers.get('authorization');
 
-    // Get current user
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-
-    if (userError || !user) {
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return NextResponse.json(
-        { error: 'Unauthorized' },
+        { error: 'Missing or invalid authorization header' },
         { status: 401 }
       );
     }
 
-    // Get user's API key
-    const { data: userData, error: apiKeyError } = await supabase
-      .from('users')
-      .select('api_key')
-      .eq('id', user.id)
-      .single();
-
-    if (apiKeyError || !userData?.api_key) {
-      return NextResponse.json(
-        { error: 'API key not found' },
-        { status: 401 }
-      );
-    }
+    const apiKey = authHeader.replace('Bearer ', '');
 
     // Get request body
     const body = await request.json();
@@ -47,11 +31,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Call backend API to create share link
-    const response = await fetch(`${BACKEND_API_URL}/v1/chat/share`, {
+    const response = await fetch(`${API_BASE_URL}/v1/chat/share`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${userData.api_key}`,
+        'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
         session_id,
@@ -93,31 +77,17 @@ export async function POST(request: NextRequest) {
  */
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient();
+    // Get API key from Authorization header
+    const authHeader = request.headers.get('authorization');
 
-    // Get current user
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-
-    if (userError || !user) {
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return NextResponse.json(
-        { error: 'Unauthorized' },
+        { error: 'Missing or invalid authorization header' },
         { status: 401 }
       );
     }
 
-    // Get user's API key
-    const { data: userData, error: apiKeyError } = await supabase
-      .from('users')
-      .select('api_key')
-      .eq('id', user.id)
-      .single();
-
-    if (apiKeyError || !userData?.api_key) {
-      return NextResponse.json(
-        { error: 'API key not found' },
-        { status: 401 }
-      );
-    }
+    const apiKey = authHeader.replace('Bearer ', '');
 
     // Get query parameters
     const { searchParams } = new URL(request.url);
@@ -126,10 +96,10 @@ export async function GET(request: NextRequest) {
 
     // Call backend API to get user's share links
     const response = await fetch(
-      `${BACKEND_API_URL}/v1/chat/share?limit=${limit}&offset=${offset}`,
+      `${API_BASE_URL}/v1/chat/share?limit=${limit}&offset=${offset}`,
       {
         headers: {
-          'Authorization': `Bearer ${userData.api_key}`,
+          'Authorization': `Bearer ${apiKey}`,
         },
       }
     );
