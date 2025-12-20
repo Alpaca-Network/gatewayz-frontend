@@ -729,26 +729,15 @@ describe('Handlers with active session', () => {
   });
 
   it('should call handleShare and create share URL', async () => {
-    // Mock the createShareLink function
-    const mockCreateShareLink = jest.fn().mockResolvedValue({
-      success: true,
-      share_url: 'https://gatewayz.ai/share/abc123',
-    });
-
-    // Mock the share-chat module
-    jest.doMock('@/lib/share-chat', () => ({
-      createShareLink: mockCreateShareLink,
-      copyShareUrlToClipboard: jest.fn().mockImplementation(async (url, toast) => {
-        await navigator.clipboard.writeText(url);
-        if (toast) {
-          toast({
-            title: 'Share link copied!',
-            description: 'Anyone with this link can view this conversation.',
-          });
-        }
-        return true;
+    // Mock fetch to return a successful share response
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: jest.fn().mockResolvedValue({
+        success: true,
+        share_url: 'https://gatewayz.ai/share/abc123',
       }),
-    }));
+    });
 
     render(<ChatLayout />);
 
@@ -767,14 +756,12 @@ describe('Handlers with active session', () => {
   });
 
   it('should show error toast when handleShare fails to create share link', async () => {
-    // Mock the createShareLink to fail
-    jest.doMock('@/lib/share-chat', () => ({
-      createShareLink: jest.fn().mockResolvedValue({
-        success: false,
-        error: 'Failed to create share link',
-      }),
-      copyShareUrlToClipboard: jest.fn(),
-    }));
+    // Mock fetch to return a failure response for the share API
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      json: jest.fn().mockResolvedValue({ error: 'Server error' }),
+    });
 
     render(<ChatLayout />);
 
