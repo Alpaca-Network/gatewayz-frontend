@@ -94,20 +94,26 @@ function transformModel(model: any, gateway: string) {
   };
 }
 
-export async function getModelsForGateway(gateway: string, limit?: number) {
+export async function getModelsForGateway(gateway: string, limit?: number, search?: string) {
   // Use Redis cache with stale-while-revalidate pattern for instant page loads
-  const cacheKeyStr = cacheKey(
+  // Skip caching for search queries to ensure fresh results
+  const cacheKeyStr = search ? null : cacheKey(
     CACHE_PREFIX.MODELS,
     gateway,
     limit ? `limit:${limit}` : 'all'
   );
+
+  // If there's a search query, skip cache and fetch directly
+  if (search) {
+    return await fetchModelsLogic(gateway, limit, search);
+  }
 
   // Stale-while-revalidate:
   // - Fresh for 4 hours (TTL.MODELS_ALL)
   // - Serve stale for up to 12 additional hours (3x TTL)
   // - Revalidate in background when stale
   return await cacheStaleWhileRevalidate(
-    cacheKeyStr,
+    cacheKeyStr!,
     async () => {
       // Fetch logic (extracted below)
       return await fetchModelsLogic(gateway, limit);
@@ -119,9 +125,9 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
 }
 
 // Extracted fetch logic for reuse
-async function fetchModelsLogic(gateway: string, limit?: number) {
-  // Check in-memory cache as fallback
-  if (modelsCache && gateway === 'all') {
+async function fetchModelsLogic(gateway: string, limit?: number, search?: string) {
+  // Check in-memory cache as fallback (only if no search query)
+  if (modelsCache && gateway === 'all' && !search) {
     const now = Date.now();
     if (now - modelsCache.timestamp < CACHE_DURATION) {
       console.log(`[Models] Returning in-memory cached models (${modelsCache.data.length} models)`);
@@ -142,7 +148,7 @@ async function fetchModelsLogic(gateway: string, limit?: number) {
     try {
       // Make a single API call to the backend with gateway=all
       // The backend handles fetching from all gateways and deduplication internally
-      const models = await fetchModelsFromGateway('all', limit);
+      const models = await fetchModelsFromGateway('all', limit, search);
 
       if (models.length > 0) {
         // Auto-register any new gateways discovered from the API response
@@ -151,11 +157,13 @@ async function fetchModelsLogic(gateway: string, limit?: number) {
 
         console.log(`[Models] Fetched ${models.length} models from backend with gateway=all`);
 
-        // Cache the result for 'all' gateway
-        modelsCache = {
-          data: models,
-          timestamp: Date.now()
-        };
+        // Cache the result for 'all' gateway (only if not searching)
+        if (!search) {
+          modelsCache = {
+            data: models,
+            timestamp: Date.now()
+          };
+        }
 
         return { data: models };
       }
@@ -167,7 +175,7 @@ async function fetchModelsLogic(gateway: string, limit?: number) {
   }
 
   // For specific gateways, use the existing fetch logic
-  const models = await fetchModelsFromGateway(gateway, limit);
+  const models = await fetchModelsFromGateway(gateway, limit, search);
   if (models.length > 0) {
     return { data: models };
   }
@@ -218,7 +226,7 @@ function getApiBaseUrl(): string {
 }
 
 // Helper function to fetch models from a specific gateway
-async function fetchModelsFromGateway(gateway: string, limit?: number): Promise<any[]> {
+async function fetchModelsFromGateway(gateway: string, limit?: number, search?: string): Promise<any[]> {
   const allModels: any[] = [];
   const requestLimit = limit || 50000; // Request up to 50k models per page (backend limit)
   // Use centralized PRIORITY_GATEWAYS for fast gateway detection
@@ -242,7 +250,8 @@ async function fetchModelsFromGateway(gateway: string, limit?: number): Promise<
     pageCount++;
     // Only include offset for server-side requests (client requests don't paginate)
     const offsetParam = (!isClientSide && offset > 0) ? `&offset=${offset}` : '';
-    const limitParam = `limit=${requestLimit}${offsetParam}`;
+    const searchParam = search ? `&search=${encodeURIComponent(search)}` : '';
+    const limitParam = `limit=${requestLimit}${offsetParam}${searchParam}`;
 
     // Build URLs based on environment
     // Client-side: use Next.js API route (/api/models) to avoid CORS - single request, no pagination
