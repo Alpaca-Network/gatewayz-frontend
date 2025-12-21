@@ -554,9 +554,10 @@ Sentry.init({
     }),
   ],
 
-  // Keep enableLogs: true for additional error context
-  // This works in conjunction with captureConsoleIntegration
-  enableLogs: true,
+  // DISABLED: enableLogs was causing excessive event volume and consoleIntegration errors
+  // The consoleIntegration API changed in Sentry SDK v10+ and was causing runtime errors
+  // Re-enable only for debugging with proper integration: Sentry.consoleIntegration()
+  enableLogs: false,
 
   // Filter out non-blocking errors FIRST, then apply rate limiting
   // This prevents filtered events from consuming rate limit quota
