@@ -21,6 +21,16 @@ import { useNetworkStatus } from "@/hooks/use-network-status";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCreateSession } from "@/lib/hooks/use-chat-queries";
 import { useToast } from "@/hooks/use-toast";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 // Pool of prompts to randomly select from
 const ALL_PROMPTS = [
@@ -97,6 +107,9 @@ export function ChatLayout() {
 
    // Track if user has clicked a prompt (to immediately hide welcome screen)
    const [pendingPrompt, setPendingPrompt] = useState<string | null>(null);
+
+   // Share privacy dialog state
+   const [showSharePrivacyDialog, setShowSharePrivacyDialog] = useState(false);
 
    const { data: activeMessages = [], isLoading: messagesLoading } = useSessionMessages(activeSessionId);
 
@@ -460,42 +473,61 @@ export function ChatLayout() {
        }
    }, [activeSessionId, activeMessages, toast]);
 
-   // Handle share - copy message or share link
+   // Handle share - create and copy shareable link
+   // Note: messageId parameter is kept for interface compatibility with MessageList,
+   // but we share the entire session (not individual messages)
    const handleShare = useCallback(async (messageId: number) => {
-       // Find the message and copy its content
-       const message = activeMessages.find(m => m.id === messageId);
-       if (!message) {
+       if (!activeSessionId) {
            toast({
                title: "Unable to share",
-               description: "Message not found.",
+               description: "No active chat session.",
                variant: "destructive",
            });
            return;
        }
-       let content = '';
-       if (typeof message.content === 'string') {
-           content = message.content;
-       } else if (Array.isArray(message.content)) {
-           content = message.content
-               .filter((c: any) => c.type === 'text' && c.text)
-               .map((c: any) => c.text)
-               .join('');
-       }
+
+       // Show privacy warning dialog (messageId not used in actual sharing)
+       setShowSharePrivacyDialog(true);
+   }, [activeSessionId, toast]);
+
+   // Execute share after user confirms privacy warning
+   const executeShare = useCallback(async () => {
        try {
-           await navigator.clipboard.writeText(content);
-           toast({
-               title: "Copied to clipboard",
-               description: "Response has been copied to your clipboard.",
+           if (!activeSessionId) {
+               toast({
+                   title: "Unable to share",
+                   description: "No active chat session.",
+                   variant: "destructive",
+               });
+               return;
+           }
+           // Import the share utility function
+           const { createShareLink, copyShareUrlToClipboard } = await import('@/lib/share-chat');
+
+           // Create a shareable link for the entire chat session
+           const result = await createShareLink({
+               sessionId: activeSessionId,
            });
+
+           if (!result.success || !result.share_url) {
+               throw new Error(result.error || 'Failed to create share link');
+           }
+
+           // Copy the share URL to clipboard
+           await copyShareUrlToClipboard(result.share_url, toast);
+
        } catch (error) {
-           console.error('[ChatLayout] Failed to copy to clipboard:', error);
+           console.error('[ChatLayout] Failed to create share link:', error);
            toast({
-               title: "Copy failed",
-               description: "Unable to copy to clipboard. Please try again.",
+               title: "Share failed",
+               description: "Unable to create share link. Please try again.",
                variant: "destructive",
            });
+       } finally {
+           // Clean up
+           setShowSharePrivacyDialog(false);
        }
-   }, [activeMessages, toast]);
+   }, [activeSessionId, toast]);
 
    // Show welcome screen only when:
    // 1. No pending prompt (user hasn't clicked a starter prompt)
@@ -667,6 +699,39 @@ export function ChatLayout() {
                     <ChatInput />
                </div>
            </div>
+
+           {/* Privacy Warning Dialog for Sharing */}
+           <AlertDialog open={showSharePrivacyDialog} onOpenChange={setShowSharePrivacyDialog}>
+             <AlertDialogContent>
+               <AlertDialogHeader>
+                 <AlertDialogTitle>Share this conversation?</AlertDialogTitle>
+                 <AlertDialogDescription className="space-y-2">
+                   <p>
+                     Anyone with the link will be able to view the entire conversation, including all messages and responses.
+                   </p>
+                   <p className="font-medium text-foreground">
+                     Please ensure your conversation doesn't contain:
+                   </p>
+                   <ul className="list-disc list-inside space-y-1 text-sm">
+                     <li>Personal information (names, emails, phone numbers)</li>
+                     <li>Passwords or API keys</li>
+                     <li>Confidential or sensitive data</li>
+                     <li>Private business information</li>
+                   </ul>
+                 </AlertDialogDescription>
+               </AlertDialogHeader>
+               <AlertDialogFooter>
+                 <AlertDialogCancel onClick={() => {
+                   setShowSharePrivacyDialog(false);
+                 }}>
+                   Cancel
+                 </AlertDialogCancel>
+                 <AlertDialogAction onClick={executeShare}>
+                   I understand, share anyway
+                 </AlertDialogAction>
+               </AlertDialogFooter>
+             </AlertDialogContent>
+           </AlertDialog>
        </div>
    )
 }
