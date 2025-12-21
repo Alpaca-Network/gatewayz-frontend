@@ -660,10 +660,10 @@ export async function POST(request: NextRequest) {
         'X-Response-Time': `${(performance.now() - requestStartTime).toFixed(2)}ms`,
       };
 
-      // Increment guest rate limit only after successful response
+      // Increment guest rate limit only after successful response (2xx status)
       // This ensures quota is not consumed on failed requests
       const guestClientIP = (request as any).__guestClientIP;
-      if (guestClientIP) {
+      if (guestClientIP && result.status >= 200 && result.status < 300) {
         const incrementResult = incrementGuestRateLimit(guestClientIP);
         console.log(`[API Completions] Guest request from ${guestClientIP}. Remaining: ${incrementResult.remaining}/${incrementResult.limit}`);
         responseHeaders['X-RateLimit-Limit'] = String(incrementResult.limit);
@@ -686,10 +686,10 @@ export async function POST(request: NextRequest) {
         'Connection': 'keep-alive',
       };
 
-      // Increment guest rate limit only after successful response
+      // Increment guest rate limit only after successful response (2xx status)
       // This ensures quota is not consumed on failed requests
       const guestClientIP = (request as any).__guestClientIP;
-      if (guestClientIP) {
+      if (guestClientIP && result.status >= 200 && result.status < 300) {
         const incrementResult = incrementGuestRateLimit(guestClientIP);
         console.log(`[API Completions] Guest request from ${guestClientIP}. Remaining: ${incrementResult.remaining}/${incrementResult.limit}`);
         streamHeaders['X-RateLimit-Limit'] = String(incrementResult.limit);
