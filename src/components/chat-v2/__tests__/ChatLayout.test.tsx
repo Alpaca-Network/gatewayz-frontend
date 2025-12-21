@@ -767,6 +767,57 @@ describe('Handlers with active session', () => {
     });
   });
 
+  it('should show privacy dialog when share is clicked', async () => {
+    render(<ChatLayout />);
+
+    expect(mockMessageListProps.onShare).toBeDefined();
+
+    // Call onShare to trigger privacy dialog
+    await mockMessageListProps.onShare(2);
+
+    // Wait for dialog to appear with privacy warning
+    await waitFor(() => {
+      expect(screen.getByText('Share this conversation?')).toBeInTheDocument();
+      expect(screen.getByText(/Anyone with the link will be able to view/i)).toBeInTheDocument();
+    });
+
+    // Check for the presence of privacy warnings
+    expect(screen.getByText(/Personal information/i)).toBeInTheDocument();
+    expect(screen.getByText(/Passwords or API keys/i)).toBeInTheDocument();
+  });
+
+  it('should not create share link if user cancels privacy dialog', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        success: true,
+        share_url: 'https://gatewayz.ai/share/abc123',
+      }),
+    });
+
+    render(<ChatLayout />);
+
+    expect(mockMessageListProps.onShare).toBeDefined();
+
+    // Call onShare to trigger privacy dialog
+    await mockMessageListProps.onShare(2);
+
+    // Wait for dialog to appear
+    await waitFor(() => {
+      expect(screen.getByText('Share this conversation?')).toBeInTheDocument();
+    });
+
+    // Click the cancel button
+    const cancelButton = screen.getByRole('button', { name: /Cancel/i });
+    fireEvent.click(cancelButton);
+
+    // Verify that fetch was NOT called (no share link created)
+    expect(global.fetch).not.toHaveBeenCalled();
+
+    // Verify clipboard was NOT written to
+    expect(clipboardWriteText).not.toHaveBeenCalled();
+  });
+
   it('should show error toast when handleShare fails to create share link', async () => {
     // Mock global fetch BEFORE render to ensure it intercepts the dynamic import's fetch call
     global.fetch = jest.fn().mockResolvedValue({
