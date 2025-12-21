@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { API_BASE_URL } from '@/lib/config';
+import { validateApiKey } from '@/app/api/middleware/auth';
 
 /**
  * GET /api/chat/share/[token]
@@ -45,12 +46,15 @@ export async function GET(
     }
 
     const data = await response.json();
-    return NextResponse.json(data);
+    return NextResponse.json({
+      success: true,
+      data: data,
+    });
 
   } catch (error) {
     console.error('Error fetching shared chat:', error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { success: false, error: 'Internal server error' },
       { status: 500 }
     );
   }
@@ -58,27 +62,32 @@ export async function GET(
 
 /**
  * DELETE /api/chat/share/[token]
- * Delete a share link (requires authentication)
+ * Delete a share link by its token (requires authentication)
+ *
+ * Note: The backend DELETE endpoint accepts either a token or an ID.
+ * This route uses the token from the URL path for consistency with GET.
  */
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ token: string }> }
 ) {
   try {
-    // Get API key from Authorization header
-    const authHeader = request.headers.get('authorization');
+    // Validate API key using existing middleware
+    const { key: apiKey, error } = await validateApiKey(request);
+    if (error) {
+      return error;
+    }
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    const { token } = await params;
+
+    if (!token) {
       return NextResponse.json(
-        { error: 'Missing or invalid authorization header' },
-        { status: 401 }
+        { success: false, error: 'Token is required' },
+        { status: 400 }
       );
     }
 
-    const apiKey = authHeader.replace('Bearer ', '');
-    const { token } = await params;
-
-    // Call backend API to delete share link
+    // Call backend API to delete share link by token
     const response = await fetch(
       `${API_BASE_URL}/v1/chat/share/${token}`,
       {
@@ -92,18 +101,21 @@ export async function DELETE(
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       return NextResponse.json(
-        { error: errorData.detail || 'Failed to delete share link' },
+        { success: false, error: errorData.detail || 'Failed to delete share link' },
         { status: response.status }
       );
     }
 
     const data = await response.json();
-    return NextResponse.json(data);
+    return NextResponse.json({
+      success: true,
+      message: data.message || 'Share link deleted successfully',
+    });
 
   } catch (error) {
     console.error('Error deleting share link:', error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { success: false, error: 'Internal server error' },
       { status: 500 }
     );
   }

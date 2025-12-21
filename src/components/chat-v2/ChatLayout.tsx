@@ -110,7 +110,6 @@ export function ChatLayout() {
 
    // Share privacy dialog state
    const [showSharePrivacyDialog, setShowSharePrivacyDialog] = useState(false);
-   const pendingShareRef = useRef<number | null>(null);
 
    const { data: activeMessages = [], isLoading: messagesLoading } = useSessionMessages(activeSessionId);
 
@@ -475,6 +474,8 @@ export function ChatLayout() {
    }, [activeSessionId, activeMessages, toast]);
 
    // Handle share - create and copy shareable link
+   // Note: messageId parameter is kept for interface compatibility with MessageList,
+   // but we share the entire session (not individual messages)
    const handleShare = useCallback(async (messageId: number) => {
        if (!activeSessionId) {
            toast({
@@ -485,8 +486,7 @@ export function ChatLayout() {
            return;
        }
 
-       // Store the messageId and show privacy warning dialog
-       pendingShareRef.current = messageId;
+       // Show privacy warning dialog (messageId not used in actual sharing)
        setShowSharePrivacyDialog(true);
    }, [activeSessionId, toast]);
 
@@ -521,7 +521,6 @@ export function ChatLayout() {
            });
        } finally {
            // Clean up
-           pendingShareRef.current = null;
            setShowSharePrivacyDialog(false);
        }
    }, [activeSessionId, toast]);
@@ -719,7 +718,6 @@ export function ChatLayout() {
                </AlertDialogHeader>
                <AlertDialogFooter>
                  <AlertDialogCancel onClick={() => {
-                   pendingShareRef.current = null;
                    setShowSharePrivacyDialog(false);
                  }}>
                    Cancel

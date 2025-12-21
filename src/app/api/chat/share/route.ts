@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { API_BASE_URL } from '@/lib/config';
+import { validateApiKey } from '@/app/api/middleware/auth';
 
 /**
  * POST /api/chat/share
@@ -7,17 +8,11 @@ import { API_BASE_URL } from '@/lib/config';
  */
 export async function POST(request: NextRequest) {
   try {
-    // Get API key from Authorization header
-    const authHeader = request.headers.get('authorization');
-
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json(
-        { error: 'Missing or invalid authorization header' },
-        { status: 401 }
-      );
+    // Validate API key using existing middleware
+    const { key: apiKey, error } = await validateApiKey(request);
+    if (error) {
+      return error;
     }
-
-    const apiKey = authHeader.replace('Bearer ', '');
 
     // Get request body
     const body = await request.json();
@@ -53,12 +48,30 @@ export async function POST(request: NextRequest) {
 
     const data = await response.json();
 
-    // Convert the relative share URL to an absolute URL
-    const shareUrl = data.share_url;
-    const absoluteShareUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}${shareUrl}`;
+    // Backend returns share_token, construct the absolute share URL
+    if (!data.share_token) {
+      return NextResponse.json(
+        { success: false, error: 'Backend did not return a share_token' },
+        { status: 500 }
+      );
+    }
+
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL || 'http://localhost:3000';
+    const absoluteShareUrl = `${baseUrl}/share/${data.share_token}`;
 
     return NextResponse.json({
-      ...data,
+      success: true,
+      data: {
+        id: data.id,
+        session_id: data.session_id,
+        share_token: data.share_token,
+        created_by_user_id: data.created_by_user_id,
+        created_at: data.created_at,
+        expires_at: data.expires_at,
+        view_count: data.view_count,
+        last_viewed_at: data.last_viewed_at,
+        is_active: data.is_active,
+      },
       share_url: absoluteShareUrl,
     });
 
@@ -77,17 +90,11 @@ export async function POST(request: NextRequest) {
  */
 export async function GET(request: NextRequest) {
   try {
-    // Get API key from Authorization header
-    const authHeader = request.headers.get('authorization');
-
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json(
-        { error: 'Missing or invalid authorization header' },
-        { status: 401 }
-      );
+    // Validate API key using existing middleware
+    const { key: apiKey, error } = await validateApiKey(request);
+    if (error) {
+      return error;
     }
-
-    const apiKey = authHeader.replace('Bearer ', '');
 
     // Get query parameters
     const { searchParams } = new URL(request.url);

@@ -124,11 +124,12 @@ export async function getUserShareLinks(limit = 50, offset = 0): Promise<ShareLi
 }
 
 /**
- * Delete a share link
+ * Delete a share link by its token
+ * @param shareToken - The share token (not the numeric ID)
  */
-export async function deleteShareLink(shareId: number): Promise<{ success: boolean; error?: string }> {
+export async function deleteShareLink(shareToken: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const response = await fetch(`/api/chat/share/${shareId}`, {
+    const response = await fetch(`/api/chat/share/${shareToken}`, {
       method: 'DELETE',
     });
 
@@ -137,7 +138,8 @@ export async function deleteShareLink(shareId: number): Promise<{ success: boole
       throw new Error(errorData.error || 'Failed to delete share link');
     }
 
-    return { success: true };
+    const data = await response.json();
+    return { success: data.success !== false };
   } catch (error) {
     console.error('Error deleting share link:', error);
     return {
