@@ -696,40 +696,40 @@ export function ChatLayout() {
                     <ChatInput />
                </div>
            </div>
-       </div>
 
-       {/* Privacy Warning Dialog for Sharing */}
-       <AlertDialog open={showSharePrivacyDialog} onOpenChange={setShowSharePrivacyDialog}>
-         <AlertDialogContent>
-           <AlertDialogHeader>
-             <AlertDialogTitle>Share this conversation?</AlertDialogTitle>
-             <AlertDialogDescription className="space-y-2">
-               <p>
-                 Anyone with the link will be able to view the entire conversation, including all messages and responses.
-               </p>
-               <p className="font-medium text-foreground">
-                 Please ensure your conversation doesn't contain:
-               </p>
-               <ul className="list-disc list-inside space-y-1 text-sm">
-                 <li>Personal information (names, emails, phone numbers)</li>
-                 <li>Passwords or API keys</li>
-                 <li>Confidential or sensitive data</li>
-                 <li>Private business information</li>
-               </ul>
-             </AlertDialogDescription>
-           </AlertDialogHeader>
-           <AlertDialogFooter>
-             <AlertDialogCancel onClick={() => {
-               pendingShareRef.current = null;
-               setShowSharePrivacyDialog(false);
-             }}>
-               Cancel
-             </AlertDialogCancel>
-             <AlertDialogAction onClick={executeShare}>
-               I understand, share anyway
-             </AlertDialogAction>
-           </AlertDialogFooter>
-         </AlertDialogContent>
-       </AlertDialog>
+           {/* Privacy Warning Dialog for Sharing */}
+           <AlertDialog open={showSharePrivacyDialog} onOpenChange={setShowSharePrivacyDialog}>
+             <AlertDialogContent>
+               <AlertDialogHeader>
+                 <AlertDialogTitle>Share this conversation?</AlertDialogTitle>
+                 <AlertDialogDescription className="space-y-2">
+                   <p>
+                     Anyone with the link will be able to view the entire conversation, including all messages and responses.
+                   </p>
+                   <p className="font-medium text-foreground">
+                     Please ensure your conversation doesn't contain:
+                   </p>
+                   <ul className="list-disc list-inside space-y-1 text-sm">
+                     <li>Personal information (names, emails, phone numbers)</li>
+                     <li>Passwords or API keys</li>
+                     <li>Confidential or sensitive data</li>
+                     <li>Private business information</li>
+                   </ul>
+                 </AlertDialogDescription>
+               </AlertDialogHeader>
+               <AlertDialogFooter>
+                 <AlertDialogCancel onClick={() => {
+                   pendingShareRef.current = null;
+                   setShowSharePrivacyDialog(false);
+                 }}>
+                   Cancel
+                 </AlertDialogCancel>
+                 <AlertDialogAction onClick={executeShare}>
+                   I understand, share anyway
+                 </AlertDialogAction>
+               </AlertDialogFooter>
+             </AlertDialogContent>
+           </AlertDialog>
+       </div>
    )
 }
