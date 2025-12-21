@@ -21,6 +21,21 @@ jest.mock('@/components/ui/sheet', () => ({
   SheetTitle: ({ children }: any) => <div>{children}</div>,
 }));
 
+jest.mock('@/components/ui/alert-dialog', () => ({
+  AlertDialog: ({ children, open }: any) => open ? <div role="dialog">{children}</div> : null,
+  AlertDialogContent: ({ children }: any) => <div>{children}</div>,
+  AlertDialogHeader: ({ children }: any) => <div>{children}</div>,
+  AlertDialogTitle: ({ children }: any) => <div>{children}</div>,
+  AlertDialogDescription: ({ children }: any) => <div>{children}</div>,
+  AlertDialogFooter: ({ children }: any) => <div>{children}</div>,
+  AlertDialogAction: ({ children, onClick }: any) => (
+    <button role="button" onClick={onClick}>{children}</button>
+  ),
+  AlertDialogCancel: ({ children, onClick }: any) => (
+    <button role="button" onClick={onClick}>{children}</button>
+  ),
+}));
+
 jest.mock('@/lib/utils', () => ({
   cn: (...args: any[]) => args.filter(Boolean).join(' '),
 }));
