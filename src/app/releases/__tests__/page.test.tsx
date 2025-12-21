@@ -45,19 +45,22 @@ describe('ReleasesPage', () => {
     it('should render Bug Fixes section', () => {
       render(<ReleasesPage />);
 
-      expect(screen.getByText('Bug Fixes')).toBeInTheDocument();
+      const bugFixesHeadings = screen.getAllByText('Bug Fixes');
+      expect(bugFixesHeadings.length).toBeGreaterThanOrEqual(1);
     });
 
     it('should render Infrastructure section', () => {
       render(<ReleasesPage />);
 
-      expect(screen.getByText('Infrastructure')).toBeInTheDocument();
+      const infrastructureHeadings = screen.getAllByText('Infrastructure');
+      expect(infrastructureHeadings.length).toBeGreaterThanOrEqual(1);
     });
 
     it('should render Documentation section', () => {
       render(<ReleasesPage />);
 
-      expect(screen.getByText('Documentation')).toBeInTheDocument();
+      const documentationHeadings = screen.getAllByText('Documentation');
+      expect(documentationHeadings.length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -72,11 +75,11 @@ describe('ReleasesPage', () => {
     it('should render bug fix categories', () => {
       render(<ReleasesPage />);
 
-      // Check for bug fix categories
-      expect(screen.getByText('Streaming Fixes')).toBeInTheDocument();
-      expect(screen.getByText('UI/UX Fixes')).toBeInTheDocument();
-      expect(screen.getByText('Backend Fixes')).toBeInTheDocument();
-      expect(screen.getByText('CI Fixes')).toBeInTheDocument();
+      // Check for bug fix categories (there may be multiple across different releases)
+      expect(screen.getAllByText('Streaming Fixes').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText('UI/UX Fixes').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText('Backend Fixes').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText('CI Fixes').length).toBeGreaterThanOrEqual(1);
     });
 
     it('should render specific bug fix items', () => {
