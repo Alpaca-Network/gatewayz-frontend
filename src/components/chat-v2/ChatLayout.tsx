@@ -492,11 +492,15 @@ export function ChatLayout() {
 
    // Execute share after user confirms privacy warning
    const executeShare = useCallback(async () => {
-       if (!activeSessionId) {
-           return;
-       }
-
        try {
+           if (!activeSessionId) {
+               toast({
+                   title: "Unable to share",
+                   description: "No active chat session.",
+                   variant: "destructive",
+               });
+               return;
+           }
            // Import the share utility function
            const { createShareLink, copyShareUrlToClipboard } = await import('@/lib/share-chat');
 

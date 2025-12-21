@@ -2,6 +2,8 @@
  * Utility functions for chat sharing functionality
  */
 
+import { getApiKey } from '@/lib/api';
+
 export interface CreateShareLinkParams {
   sessionId: number;
   expiresAt?: Date;
@@ -51,10 +53,19 @@ export interface SharedChatPublicView {
  */
 export async function createShareLink(params: CreateShareLinkParams): Promise<ShareLinkResponse> {
   try {
+    const apiKey = getApiKey();
+    if (!apiKey) {
+      return {
+        success: false,
+        error: 'Authentication required to create share links',
+      };
+    }
+
     const response = await fetch('/api/chat/share', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
         session_id: params.sessionId,
@@ -109,7 +120,17 @@ export async function getSharedChat(token: string): Promise<SharedChatPublicView
  */
 export async function getUserShareLinks(limit = 50, offset = 0): Promise<ShareLinkResponse[]> {
   try {
-    const response = await fetch(`/api/chat/share?limit=${limit}&offset=${offset}`);
+    const apiKey = getApiKey();
+    if (!apiKey) {
+      console.warn('No API key available to fetch share links');
+      return [];
+    }
+
+    const response = await fetch(`/api/chat/share?limit=${limit}&offset=${offset}`, {
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+      },
+    });
 
     if (!response.ok) {
       throw new Error('Failed to fetch share links');
@@ -129,8 +150,19 @@ export async function getUserShareLinks(limit = 50, offset = 0): Promise<ShareLi
  */
 export async function deleteShareLink(shareToken: string): Promise<{ success: boolean; error?: string }> {
   try {
+    const apiKey = getApiKey();
+    if (!apiKey) {
+      return {
+        success: false,
+        error: 'Authentication required to delete share links',
+      };
+    }
+
     const response = await fetch(`/api/chat/share/${shareToken}`, {
       method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+      },
     });
 
     if (!response.ok) {

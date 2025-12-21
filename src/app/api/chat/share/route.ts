@@ -56,7 +56,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL || 'http://localhost:3000';
+    // Construct base URL with proper protocol
+    // VERCEL_URL doesn't include protocol, so we need to add it
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL ||
+                    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
     const absoluteShareUrl = `${baseUrl}/share/${data.share_token}`;
 
     return NextResponse.json({
