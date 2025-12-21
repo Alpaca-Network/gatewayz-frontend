@@ -21,6 +21,16 @@ import { useNetworkStatus } from "@/hooks/use-network-status";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCreateSession } from "@/lib/hooks/use-chat-queries";
 import { useToast } from "@/hooks/use-toast";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 // Pool of prompts to randomly select from
 const ALL_PROMPTS = [
@@ -97,6 +107,10 @@ export function ChatLayout() {
 
    // Track if user has clicked a prompt (to immediately hide welcome screen)
    const [pendingPrompt, setPendingPrompt] = useState<string | null>(null);
+
+   // Share privacy dialog state
+   const [showSharePrivacyDialog, setShowSharePrivacyDialog] = useState(false);
+   const pendingShareRef = useRef<number | null>(null);
 
    const { data: activeMessages = [], isLoading: messagesLoading } = useSessionMessages(activeSessionId);
 
@@ -471,6 +485,17 @@ export function ChatLayout() {
            return;
        }
 
+       // Store the messageId and show privacy warning dialog
+       pendingShareRef.current = messageId;
+       setShowSharePrivacyDialog(true);
+   }, [activeSessionId, toast]);
+
+   // Execute share after user confirms privacy warning
+   const executeShare = useCallback(async () => {
+       if (!activeSessionId) {
+           return;
+       }
+
        try {
            // Import the share utility function
            const { createShareLink, copyShareUrlToClipboard } = await import('@/lib/share-chat');
@@ -494,6 +519,10 @@ export function ChatLayout() {
                description: "Unable to create share link. Please try again.",
                variant: "destructive",
            });
+       } finally {
+           // Clean up
+           pendingShareRef.current = null;
+           setShowSharePrivacyDialog(false);
        }
    }, [activeSessionId, toast]);
 
@@ -668,5 +697,39 @@ export function ChatLayout() {
                </div>
            </div>
        </div>
+
+       {/* Privacy Warning Dialog for Sharing */}
+       <AlertDialog open={showSharePrivacyDialog} onOpenChange={setShowSharePrivacyDialog}>
+         <AlertDialogContent>
+           <AlertDialogHeader>
+             <AlertDialogTitle>Share this conversation?</AlertDialogTitle>
+             <AlertDialogDescription className="space-y-2">
+               <p>
+                 Anyone with the link will be able to view the entire conversation, including all messages and responses.
+               </p>
+               <p className="font-medium text-foreground">
+                 Please ensure your conversation doesn't contain:
+               </p>
+               <ul className="list-disc list-inside space-y-1 text-sm">
+                 <li>Personal information (names, emails, phone numbers)</li>
+                 <li>Passwords or API keys</li>
+                 <li>Confidential or sensitive data</li>
+                 <li>Private business information</li>
+               </ul>
+             </AlertDialogDescription>
+           </AlertDialogHeader>
+           <AlertDialogFooter>
+             <AlertDialogCancel onClick={() => {
+               pendingShareRef.current = null;
+               setShowSharePrivacyDialog(false);
+             }}>
+               Cancel
+             </AlertDialogCancel>
+             <AlertDialogAction onClick={executeShare}>
+               I understand, share anyway
+             </AlertDialogAction>
+           </AlertDialogFooter>
+         </AlertDialogContent>
+       </AlertDialog>
    )
 }
