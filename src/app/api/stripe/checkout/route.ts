@@ -37,8 +37,8 @@ export async function POST(req: NextRequest) {
 
     // Description shows the credit value they receive (may differ from payment amount for discounted packages)
     const description = creditsToAdd !== amount
-      ? `$${creditsToAdd} credits (discounted from $${creditsToAdd} to $${amount}) for Gatewayz AI platform`
-      : `${amount} credits for Gatewayz AI platform`;
+      ? `$${creditsToAdd} credits (discounted price: $${amount}) for Gatewayz AI platform`
+      : `$${amount} credits for Gatewayz AI platform`;
 
     const requestBody = {
       amount: amount * 100, // Convert dollars to cents (payment amount)
