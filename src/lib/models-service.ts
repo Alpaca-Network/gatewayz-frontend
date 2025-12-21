@@ -10,6 +10,7 @@ import {
   autoRegisterGatewaysFromModels,
   getAllActiveGatewayIds,
 } from '@/lib/gateway-registry';
+import { trackBadBackendResponse, trackBackendNetworkError, trackBackendProcessingError } from '@/lib/backend-error-tracking';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
 
@@ -327,17 +328,37 @@ async function fetchModelsFromGateway(gateway: string, limit?: number): Promise<
           }
           break; // Success, exit retry loop
         } else {
+          // Track non-OK responses from backend API
+          await trackBadBackendResponse(response, {
+            endpoint: urls[0], // Use first URL for logging
+            method: 'GET',
+            gateway,
+            retryCount,
+          });
           hasMore = false;
           break;
         }
       } catch (error: any) {
         const message = getErrorMessage(error);
         if (isAbortOrNetworkError(error)) {
+          // Track network/timeout errors to backend API
+          trackBackendNetworkError(error, {
+            endpoint: urls[0],
+            method: 'GET',
+            gateway,
+            timeoutMs,
+          });
           // Only log timeouts in development mode to reduce console noise
           if (process.env.NODE_ENV === 'development') {
             console.warn(`[Models] ${gateway} request timed out after ${timeoutMs}ms (will use cache/fallback)`);
           }
         } else {
+          // Track non-network errors (e.g., JSON parsing, validation, etc.)
+          trackBackendProcessingError(error, {
+            endpoint: urls[0],
+            method: 'GET',
+            gateway,
+          });
           console.error(`[Models] Failed to fetch ${gateway}:`, message);
         }
         hasMore = false;
