@@ -2,6 +2,8 @@
  * Utility functions for chat sharing functionality
  */
 
+import { getApiKey } from './api';
+
 export interface CreateShareLinkParams {
   sessionId: number;
   expiresAt?: Date;
@@ -51,10 +53,16 @@ export interface SharedChatPublicView {
  */
 export async function createShareLink(params: CreateShareLinkParams): Promise<ShareLinkResponse> {
   try {
+    const apiKey = getApiKey();
+    if (!apiKey) {
+      throw new Error('No API key found. Please log in.');
+    }
+
     const response = await fetch('/api/chat/share', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
         session_id: params.sessionId,
@@ -109,7 +117,16 @@ export async function getSharedChat(token: string): Promise<SharedChatPublicView
  */
 export async function getUserShareLinks(limit = 50, offset = 0): Promise<ShareLinkResponse[]> {
   try {
-    const response = await fetch(`/api/chat/share?limit=${limit}&offset=${offset}`);
+    const apiKey = getApiKey();
+    if (!apiKey) {
+      throw new Error('No API key found. Please log in.');
+    }
+
+    const response = await fetch(`/api/chat/share?limit=${limit}&offset=${offset}`, {
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+      },
+    });
 
     if (!response.ok) {
       throw new Error('Failed to fetch share links');
@@ -126,10 +143,18 @@ export async function getUserShareLinks(limit = 50, offset = 0): Promise<ShareLi
 /**
  * Delete a share link
  */
-export async function deleteShareLink(shareId: number): Promise<{ success: boolean; error?: string }> {
+export async function deleteShareLink(shareToken: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const response = await fetch(`/api/chat/share/${shareId}`, {
+    const apiKey = getApiKey();
+    if (!apiKey) {
+      throw new Error('No API key found. Please log in.');
+    }
+
+    const response = await fetch(`/api/chat/share/${shareToken}`, {
       method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+      },
     });
 
     if (!response.ok) {

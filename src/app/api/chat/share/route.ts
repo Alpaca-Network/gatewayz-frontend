@@ -54,8 +54,13 @@ export async function POST(request: NextRequest) {
     const data = await response.json();
 
     // Convert the relative share URL to an absolute URL
+    // Use request URL to dynamically construct the base URL
     const shareUrl = data.share_url;
-    const absoluteShareUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}${shareUrl}`;
+    const requestUrl = new URL(request.url);
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL ||
+                    process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` :
+                    `${requestUrl.protocol}//${requestUrl.host}`;
+    const absoluteShareUrl = `${baseUrl}${shareUrl}`;
 
     return NextResponse.json({
       ...data,
