@@ -479,8 +479,8 @@ function CreditsPageContent() {
     } catch (error) {
       console.log('Checkout error:', error);
       alert('Failed to start checkout. Please try again.');
-      setIsLoading(false);
     } finally {
+      setIsLoading(false);
       setSelectedPackage(null);
     }
   };
