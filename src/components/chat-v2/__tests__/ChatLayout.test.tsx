@@ -1238,3 +1238,70 @@ describe('handleRegenerate with undefined text values', () => {
     });
   });
 });
+
+describe('Background logo rendering', () => {
+  it('should render background logos with correct styling', () => {
+    const { container } = render(<ChatLayout />);
+
+    // Find the background logo images
+    const backgroundLogos = container.querySelectorAll('img[alt="Background"]');
+
+    // Should have 2 logos (light and dark mode)
+    expect(backgroundLogos).toHaveLength(2);
+
+    // Check light mode logo
+    const lightLogo = backgroundLogos[0];
+    expect(lightLogo).toHaveAttribute('src', '/logo_transparent.svg');
+    expect(lightLogo.className).toContain('w-96');
+    expect(lightLogo.className).toContain('h-96');
+    expect(lightLogo.className).toContain('top-24');
+    expect(lightLogo.className).toContain('opacity-30');
+    expect(lightLogo.className).toContain('z-0');
+
+    // Check dark mode logo
+    const darkLogo = backgroundLogos[1];
+    expect(darkLogo).toHaveAttribute('src', '/logo_black.svg');
+    expect(darkLogo.className).toContain('w-96');
+    expect(darkLogo.className).toContain('h-96');
+    expect(darkLogo.className).toContain('top-24');
+    expect(darkLogo.className).toContain('opacity-30');
+    expect(darkLogo.className).toContain('z-0');
+  });
+
+  it('should position background logo behind content', () => {
+    const { container } = render(<ChatLayout />);
+
+    const backgroundLogos = container.querySelectorAll('img[alt="Background"]');
+
+    // Both logos should have z-0 to stay behind content
+    backgroundLogos.forEach(logo => {
+      expect(logo.className).toContain('z-0');
+    });
+
+    // Main content should have higher z-index (z-10)
+    const mainContent = container.querySelector('[class*="z-10"]');
+    expect(mainContent).toBeInTheDocument();
+  });
+
+  it('should hide background logos on small screens', () => {
+    const { container } = render(<ChatLayout />);
+
+    const backgroundLogos = container.querySelectorAll('img[alt="Background"]');
+
+    // Both logos should have "hidden lg:block" or "hidden dark:lg:block"
+    expect(backgroundLogos[0].className).toContain('hidden');
+    expect(backgroundLogos[0].className).toContain('lg:block');
+    expect(backgroundLogos[1].className).toContain('hidden');
+  });
+
+  it('should make background logos non-interactive', () => {
+    const { container } = render(<ChatLayout />);
+
+    const backgroundLogos = container.querySelectorAll('img[alt="Background"]');
+
+    // Both logos should have pointer-events-none
+    backgroundLogos.forEach(logo => {
+      expect(logo.className).toContain('pointer-events-none');
+    });
+  });
+});

@@ -544,12 +544,12 @@ export function ChatLayout() {
                <img
                     src="/logo_transparent.svg"
                     alt="Background"
-                    className="absolute top-8 left-1/2 transform -translate-x-1/2 w-48 h-48 pointer-events-none opacity-50 hidden lg:block dark:hidden z-0"
+                    className="absolute top-24 left-1/2 transform -translate-x-1/2 w-96 h-96 pointer-events-none opacity-30 hidden lg:block dark:hidden z-0"
                 />
                 <img
                     src="/logo_black.svg"
                     alt="Background"
-                    className="absolute top-8 left-1/2 transform -translate-x-1/2 w-48 h-48 pointer-events-none opacity-50 hidden dark:lg:block z-0"
+                    className="absolute top-24 left-1/2 transform -translate-x-1/2 w-96 h-96 pointer-events-none opacity-30 hidden dark:lg:block z-0"
                 />
 
                {/* Header */}
