@@ -547,8 +547,10 @@ Sentry.init({
     }),
   ],
 
-  // Enable console logging integration for error-level logs
-  enableLogs: true,
+  // DISABLED: enableLogs was causing excessive event volume and consoleIntegration errors
+  // The consoleIntegration API changed in Sentry SDK v10+ and was causing runtime errors
+  // Re-enable only for debugging with proper integration: Sentry.consoleIntegration()
+  enableLogs: false,
 
   // Filter out non-blocking errors FIRST, then apply rate limiting
   // This prevents filtered events from consuming rate limit quota
