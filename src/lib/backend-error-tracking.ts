@@ -6,6 +6,7 @@
  */
 
 import * as Sentry from '@sentry/nextjs';
+import { getErrorMessage } from './network-error';
 
 /**
  * Track a backend API error in Sentry
@@ -115,11 +116,11 @@ export async function trackBadBackendResponse(
 /**
  * Track a network error when calling backend API
  *
- * @param error - The network error
+ * @param error - The network error (can be Error, string, or any thrown value)
  * @param context - Additional context
  */
 export function trackBackendNetworkError(
-  error: Error,
+  error: unknown,
   context: {
     endpoint: string;
     method?: string;
@@ -127,18 +128,52 @@ export function trackBackendNetworkError(
     timeoutMs?: number;
   }
 ): void {
-  // Check if it's a timeout
-  const isTimeout = error.name === 'AbortError' || error.message.includes('timeout');
+  // Safely extract error details - handles Error objects, strings, and other thrown values
+  const errorName = error instanceof Error ? error.name : 'Error';
+  const errorMessage = getErrorMessage(error);
 
-  const errorMessage = isTimeout
+  // Check if it's a timeout
+  const isTimeout = errorName === 'AbortError' || errorMessage.toLowerCase().includes('timeout');
+
+  const contextualMessage = isTimeout
     ? `Backend API timeout after ${context.timeoutMs}ms: ${context.endpoint}`
     : `Backend API network error: ${context.endpoint}`;
 
   trackBackendError(
-    new Error(errorMessage),
+    new Error(contextualMessage),
     {
       ...context,
       statusCode: isTimeout ? 408 : undefined, // Request Timeout
+    }
+  );
+}
+
+/**
+ * Track a general processing error when calling backend API
+ * Use this for errors that are NOT network-related (e.g., JSON parsing, validation, etc.)
+ *
+ * @param error - The error (can be Error, string, or any thrown value)
+ * @param context - Additional context
+ */
+export function trackBackendProcessingError(
+  error: unknown,
+  context: {
+    endpoint: string;
+    method?: string;
+    gateway?: string;
+    errorType?: string;
+  }
+): void {
+  const errorMessage = getErrorMessage(error);
+  const errorType = context.errorType || (error instanceof Error ? error.name : 'ProcessingError');
+
+  const contextualMessage = `Backend API ${errorType}: ${context.endpoint} - ${errorMessage}`;
+
+  trackBackendError(
+    new Error(contextualMessage),
+    {
+      ...context,
+      statusCode: undefined, // No HTTP status for processing errors
     }
   );
 }

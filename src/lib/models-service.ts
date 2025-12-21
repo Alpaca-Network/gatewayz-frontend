@@ -10,7 +10,7 @@ import {
   autoRegisterGatewaysFromModels,
   getAllActiveGatewayIds,
 } from '@/lib/gateway-registry';
-import { trackBadBackendResponse, trackBackendNetworkError } from '@/lib/backend-error-tracking';
+import { trackBadBackendResponse, trackBackendNetworkError, trackBackendProcessingError } from '@/lib/backend-error-tracking';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
 
@@ -353,8 +353,8 @@ async function fetchModelsFromGateway(gateway: string, limit?: number): Promise<
             console.warn(`[Models] ${gateway} request timed out after ${timeoutMs}ms (will use cache/fallback)`);
           }
         } else {
-          // Track other errors
-          trackBackendNetworkError(error, {
+          // Track non-network errors (e.g., JSON parsing, validation, etc.)
+          trackBackendProcessingError(error, {
             endpoint: urls[0],
             method: 'GET',
             gateway,

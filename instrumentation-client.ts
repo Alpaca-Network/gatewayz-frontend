@@ -545,16 +545,17 @@ Sentry.init({
       maskAllText: true,
       blockAllMedia: true,
     }),
-    // Capture only console.error() calls, not log/info/warn
+    // Capture console.error() calls as actual Sentry events, not just breadcrumbs
     // This provides critical error context without the noise that caused 429s
     // Previous config captured ALL console levels and overwhelmed Sentry quota
-    Sentry.consoleIntegration({
+    // Using captureConsoleIntegration instead of consoleIntegration to send as events
+    Sentry.captureConsoleIntegration({
       levels: ['error'],  // Only error level, not 'log', 'info', 'warn', 'debug'
     }),
   ],
 
   // Keep enableLogs: true for additional error context
-  // This works in conjunction with consoleIntegration
+  // This works in conjunction with captureConsoleIntegration
   enableLogs: true,
 
   // Filter out non-blocking errors FIRST, then apply rate limiting
