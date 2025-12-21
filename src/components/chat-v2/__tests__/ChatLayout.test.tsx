@@ -1136,19 +1136,19 @@ describe('Background logo rendering', () => {
     // Check light mode logo
     const lightLogo = backgroundLogos[0];
     expect(lightLogo).toHaveAttribute('src', '/logo_transparent.svg');
-    expect(lightLogo.className).toContain('w-96');
-    expect(lightLogo.className).toContain('h-96');
-    expect(lightLogo.className).toContain('top-24');
-    expect(lightLogo.className).toContain('opacity-30');
+    expect(lightLogo.className).toContain('w-48');
+    expect(lightLogo.className).toContain('h-48');
+    expect(lightLogo.className).toContain('top-8');
+    expect(lightLogo.className).toContain('opacity-50');
     expect(lightLogo.className).toContain('z-0');
 
     // Check dark mode logo
     const darkLogo = backgroundLogos[1];
     expect(darkLogo).toHaveAttribute('src', '/logo_black.svg');
-    expect(darkLogo.className).toContain('w-96');
-    expect(darkLogo.className).toContain('h-96');
-    expect(darkLogo.className).toContain('top-24');
-    expect(darkLogo.className).toContain('opacity-30');
+    expect(darkLogo.className).toContain('w-48');
+    expect(darkLogo.className).toContain('h-48');
+    expect(darkLogo.className).toContain('top-8');
+    expect(darkLogo.className).toContain('opacity-50');
     expect(darkLogo.className).toContain('z-0');
   });
 

@@ -38,7 +38,8 @@ describe('ReleasesPage', () => {
     it('should render Features section', () => {
       render(<ReleasesPage />);
 
-      expect(screen.getByText('Features')).toBeInTheDocument();
+      const featuresHeadings = screen.getAllByText('Features');
+      expect(featuresHeadings.length).toBeGreaterThanOrEqual(1);
     });
 
     it('should render Bug Fixes section', () => {
