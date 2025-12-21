@@ -2,6 +2,8 @@
  * Utility functions for chat sharing functionality
  */
 
+import { getApiKey } from '@/lib/api';
+
 export interface CreateShareLinkParams {
   sessionId: number;
   expiresAt?: Date;
@@ -51,10 +53,19 @@ export interface SharedChatPublicView {
  */
 export async function createShareLink(params: CreateShareLinkParams): Promise<ShareLinkResponse> {
   try {
+    const apiKey = getApiKey();
+    if (!apiKey) {
+      return {
+        success: false,
+        error: 'Authentication required to create share links',
+      };
+    }
+
     const response = await fetch('/api/chat/share', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
         session_id: params.sessionId,
@@ -109,7 +120,17 @@ export async function getSharedChat(token: string): Promise<SharedChatPublicView
  */
 export async function getUserShareLinks(limit = 50, offset = 0): Promise<ShareLinkResponse[]> {
   try {
-    const response = await fetch(`/api/chat/share?limit=${limit}&offset=${offset}`);
+    const apiKey = getApiKey();
+    if (!apiKey) {
+      console.warn('No API key available to fetch share links');
+      return [];
+    }
+
+    const response = await fetch(`/api/chat/share?limit=${limit}&offset=${offset}`, {
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+      },
+    });
 
     if (!response.ok) {
       throw new Error('Failed to fetch share links');
@@ -124,12 +145,24 @@ export async function getUserShareLinks(limit = 50, offset = 0): Promise<ShareLi
 }
 
 /**
- * Delete a share link
+ * Delete a share link by its token
+ * @param shareToken - The share token (not the numeric ID)
  */
-export async function deleteShareLink(shareId: number): Promise<{ success: boolean; error?: string }> {
+export async function deleteShareLink(shareToken: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const response = await fetch(`/api/chat/share/${shareId}`, {
+    const apiKey = getApiKey();
+    if (!apiKey) {
+      return {
+        success: false,
+        error: 'Authentication required to delete share links',
+      };
+    }
+
+    const response = await fetch(`/api/chat/share/${shareToken}`, {
       method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+      },
     });
 
     if (!response.ok) {
@@ -137,7 +170,8 @@ export async function deleteShareLink(shareId: number): Promise<{ success: boole
       throw new Error(errorData.error || 'Failed to delete share link');
     }
 
-    return { success: true };
+    const data = await response.json();
+    return { success: data.success !== false };
   } catch (error) {
     console.error('Error deleting share link:', error);
     return {

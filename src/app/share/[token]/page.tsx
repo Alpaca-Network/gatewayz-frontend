@@ -1,13 +1,18 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { getSharedChat, SharedChatPublicView } from '@/lib/share-chat';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ExternalLink, MessageSquare } from 'lucide-react';
 import Link from 'next/link';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
 
 interface ChatMessage {
   id: number;
@@ -21,7 +26,6 @@ interface ChatMessage {
 
 export default function SharedChatPage() {
   const params = useParams();
-  const router = useRouter();
   const token = params?.token as string;
 
   const [loading, setLoading] = useState(true);
@@ -170,9 +174,38 @@ export default function SharedChatPage() {
                     )}
                   </div>
                   <div className="prose prose-sm dark:prose-invert max-w-none">
-                    <div className="whitespace-pre-wrap break-words">
-                      {message.content}
-                    </div>
+                    {message.role === 'assistant' ? (
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm, remarkMath]}
+                        rehypePlugins={[rehypeKatex]}
+                        components={{
+                          // Ensure code blocks have proper styling
+                          code: ({ node, inline, className, children, ...props }: any) => {
+                            return inline ? (
+                              <code className={className} {...props}>
+                                {children}
+                              </code>
+                            ) : (
+                              <code className={`${className} block overflow-x-auto`} {...props}>
+                                {children}
+                              </code>
+                            );
+                          },
+                          // Ensure tables are scrollable on mobile
+                          table: ({ children, ...props }) => (
+                            <div className="overflow-x-auto">
+                              <table {...props}>{children}</table>
+                            </div>
+                          ),
+                        }}
+                      >
+                        {message.content}
+                      </ReactMarkdown>
+                    ) : (
+                      <div className="whitespace-pre-wrap break-words">
+                        {message.content}
+                      </div>
+                    )}
                   </div>
                   {message.tokens && (
                     <div className="mt-2 text-xs text-muted-foreground">

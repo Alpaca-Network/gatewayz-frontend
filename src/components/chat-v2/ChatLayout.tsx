@@ -110,7 +110,6 @@ export function ChatLayout() {
 
    // Share privacy dialog state
    const [showSharePrivacyDialog, setShowSharePrivacyDialog] = useState(false);
-   const pendingShareRef = useRef<number | null>(null);
 
    const { data: activeMessages = [], isLoading: messagesLoading } = useSessionMessages(activeSessionId);
 
@@ -475,6 +474,8 @@ export function ChatLayout() {
    }, [activeSessionId, activeMessages, toast]);
 
    // Handle share - create and copy shareable link
+   // Note: messageId parameter is kept for interface compatibility with MessageList,
+   // but we share the entire session (not individual messages)
    const handleShare = useCallback(async (messageId: number) => {
        if (!activeSessionId) {
            toast({
@@ -485,18 +486,21 @@ export function ChatLayout() {
            return;
        }
 
-       // Store the messageId and show privacy warning dialog
-       pendingShareRef.current = messageId;
+       // Show privacy warning dialog (messageId not used in actual sharing)
        setShowSharePrivacyDialog(true);
    }, [activeSessionId, toast]);
 
    // Execute share after user confirms privacy warning
    const executeShare = useCallback(async () => {
-       if (!activeSessionId) {
-           return;
-       }
-
        try {
+           if (!activeSessionId) {
+               toast({
+                   title: "Unable to share",
+                   description: "No active chat session.",
+                   variant: "destructive",
+               });
+               return;
+           }
            // Import the share utility function
            const { createShareLink, copyShareUrlToClipboard } = await import('@/lib/share-chat');
 
@@ -521,7 +525,6 @@ export function ChatLayout() {
            });
        } finally {
            // Clean up
-           pendingShareRef.current = null;
            setShowSharePrivacyDialog(false);
        }
    }, [activeSessionId, toast]);
@@ -573,12 +576,12 @@ export function ChatLayout() {
                <img
                     src="/logo_transparent.svg"
                     alt="Background"
-                    className="absolute top-24 left-1/2 transform -translate-x-1/2 w-96 h-96 pointer-events-none opacity-30 hidden lg:block dark:hidden z-0"
+                    className="absolute top-8 left-1/2 transform -translate-x-1/2 w-48 h-48 pointer-events-none opacity-50 hidden lg:block dark:hidden z-0"
                 />
                 <img
                     src="/logo_black.svg"
                     alt="Background"
-                    className="absolute top-24 left-1/2 transform -translate-x-1/2 w-96 h-96 pointer-events-none opacity-30 hidden dark:lg:block z-0"
+                    className="absolute top-8 left-1/2 transform -translate-x-1/2 w-48 h-48 pointer-events-none opacity-50 hidden dark:lg:block z-0"
                 />
 
                {/* Header */}
@@ -719,7 +722,6 @@ export function ChatLayout() {
                </AlertDialogHeader>
                <AlertDialogFooter>
                  <AlertDialogCancel onClick={() => {
-                   pendingShareRef.current = null;
                    setShowSharePrivacyDialog(false);
                  }}>
                    Cancel
