@@ -28,6 +28,7 @@ describe('backend-error-tracking', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.spyOn(console, 'error').mockImplementation(() => {});
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -134,11 +135,14 @@ describe('backend-error-tracking', () => {
       );
     });
 
-    it('should log to console', () => {
+    it('should log to console in development mode only', () => {
+      const originalEnv = process.env.NODE_ENV;
+      process.env.NODE_ENV = 'development';
+
       const error = new Error('Test error');
       trackBackendError(error, { endpoint: '/api/test', statusCode: 500 });
 
-      expect(console.error).toHaveBeenCalledWith(
+      expect(console.warn).toHaveBeenCalledWith(
         '[Backend API Error]',
         expect.objectContaining({
           endpoint: '/api/test',
@@ -146,6 +150,21 @@ describe('backend-error-tracking', () => {
           error: 'Test error',
         })
       );
+
+      process.env.NODE_ENV = originalEnv;
+    });
+
+    it('should not log to console in production mode', () => {
+      const originalEnv = process.env.NODE_ENV;
+      process.env.NODE_ENV = 'production';
+
+      const error = new Error('Test error');
+      trackBackendError(error, { endpoint: '/api/test', statusCode: 500 });
+
+      expect(console.warn).not.toHaveBeenCalled();
+      expect(console.error).not.toHaveBeenCalled();
+
+      process.env.NODE_ENV = originalEnv;
     });
   });
 

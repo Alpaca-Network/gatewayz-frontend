@@ -59,13 +59,16 @@ export function trackBackendError(
     ],
   });
 
-  // Also log to console for debugging
-  console.error('[Backend API Error]', {
-    endpoint: context.endpoint,
-    status: context.statusCode,
-    gateway: context.gateway,
-    error: errorObj.message,
-  });
+  // Log to console in development only, using console.warn to avoid double-reporting to Sentry
+  // (captureConsoleIntegration only captures console.error, not console.warn)
+  if (process.env.NODE_ENV === 'development') {
+    console.warn('[Backend API Error]', {
+      endpoint: context.endpoint,
+      status: context.statusCode,
+      gateway: context.gateway,
+      error: errorObj.message,
+    });
+  }
 }
 
 /**
