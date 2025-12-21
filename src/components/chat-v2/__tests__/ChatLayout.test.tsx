@@ -742,7 +742,17 @@ describe('Handlers with active session', () => {
 
     expect(mockMessageListProps.onShare).toBeDefined();
 
+    // Call onShare to trigger privacy dialog
     await mockMessageListProps.onShare(2);
+
+    // Wait for dialog to appear and find the confirmation button
+    await waitFor(() => {
+      expect(screen.getByText('Share this conversation?')).toBeInTheDocument();
+    });
+
+    // Click the confirmation button
+    const confirmButton = screen.getByRole('button', { name: /I understand, share anyway/i });
+    fireEvent.click(confirmButton);
 
     await waitFor(() => {
       expect(clipboardWriteText).toHaveBeenCalledWith('https://gatewayz.ai/share/abc123');
@@ -769,7 +779,17 @@ describe('Handlers with active session', () => {
 
     expect(mockMessageListProps.onShare).toBeDefined();
 
+    // Call onShare to trigger privacy dialog
     await mockMessageListProps.onShare(2);
+
+    // Wait for dialog to appear
+    await waitFor(() => {
+      expect(screen.getByText('Share this conversation?')).toBeInTheDocument();
+    });
+
+    // Click the confirmation button
+    const confirmButton = screen.getByRole('button', { name: /I understand, share anyway/i });
+    fireEvent.click(confirmButton);
 
     await waitFor(() => {
       expect(mockToast).toHaveBeenCalledWith(
