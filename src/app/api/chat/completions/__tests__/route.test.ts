@@ -872,5 +872,285 @@ describe('Chat Completions API Route', () => {
       // Clean up
       delete process.env.GUEST_API_KEY;
     });
+
+    test('should NOT increment rate limit on failed backend requests', async () => {
+      // Set GUEST_API_KEY for this test
+      process.env.GUEST_API_KEY = 'test-guest-key';
+
+      const requestBody = {
+        model: 'openrouter/auto',
+        messages: [{ role: 'user', content: 'Hello' }],
+        stream: true,
+        apiKey: 'guest',
+      };
+
+      const ip = '192.168.1.100';
+
+      // First request - backend returns 500 error (should NOT count)
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        headers: new Headers(),
+        text: async () => JSON.stringify({ detail: 'Internal server error' }),
+      });
+
+      const failedRequest = createMockRequestWithIP(requestBody, ip);
+      const failedResponse = await POST(failedRequest);
+
+      expect(failedResponse.status).toBe(500);
+
+      // Second request - backend returns 401 error (should NOT count)
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        headers: new Headers(),
+        text: async () => JSON.stringify({ detail: 'Unauthorized' }),
+      });
+
+      const authFailedRequest = createMockRequestWithIP(requestBody, ip);
+      const authFailedResponse = await POST(authFailedRequest);
+
+      expect(authFailedResponse.status).toBe(401);
+
+      // Third request - successful (should count)
+      const mockChunks = [
+        'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n',
+        'data: [DONE]\n\n',
+      ];
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({
+          'content-type': 'text/event-stream',
+        }),
+        body: createMockStream(mockChunks),
+      });
+
+      const successRequest = createMockRequestWithIP(requestBody, ip);
+      const successResponse = await POST(successRequest);
+
+      expect(successResponse.status).toBe(200);
+      // After 1 successful request, should have 2 remaining (not 0 if failed requests counted)
+      expect(successResponse.headers.get('X-RateLimit-Remaining')).toBe('2');
+
+      // Clean up
+      delete process.env.GUEST_API_KEY;
+    });
+
+    test('should NOT increment rate limit on timeout/network errors', async () => {
+      // Set GUEST_API_KEY for this test
+      process.env.GUEST_API_KEY = 'test-guest-key';
+
+      const requestBody = {
+        model: 'openrouter/auto',
+        messages: [{ role: 'user', content: 'Hello' }],
+        stream: true,
+        apiKey: 'guest',
+      };
+
+      const ip = '192.168.1.101';
+
+      // First request - network timeout (should NOT count)
+      const abortError = new Error('Aborted');
+      abortError.name = 'AbortError';
+      (global.fetch as jest.Mock).mockRejectedValueOnce(abortError);
+
+      const timeoutRequest = createMockRequestWithIP(requestBody, ip);
+      const timeoutResponse = await POST(timeoutRequest);
+
+      // Should return error status
+      expect(timeoutResponse.status).toBeGreaterThanOrEqual(500);
+
+      // Second request - successful (should count)
+      const mockChunks = [
+        'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n',
+        'data: [DONE]\n\n',
+      ];
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({
+          'content-type': 'text/event-stream',
+        }),
+        body: createMockStream(mockChunks),
+      });
+
+      const successRequest = createMockRequestWithIP(requestBody, ip);
+      const successResponse = await POST(successRequest);
+
+      expect(successResponse.status).toBe(200);
+      // After 1 successful request, should have 2 remaining (timeout should not have counted)
+      expect(successResponse.headers.get('X-RateLimit-Remaining')).toBe('2');
+
+      // Clean up
+      delete process.env.GUEST_API_KEY;
+    });
+
+    test('should NOT increment rate limit when response body is missing', async () => {
+      // Set GUEST_API_KEY for this test
+      process.env.GUEST_API_KEY = 'test-guest-key';
+
+      const requestBody = {
+        model: 'openrouter/auto',
+        messages: [{ role: 'user', content: 'Hello' }],
+        stream: true,
+        apiKey: 'guest',
+      };
+
+      const ip = '192.168.1.102';
+
+      // First request - no response body (should NOT count)
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({
+          'content-type': 'text/event-stream',
+        }),
+        body: null,
+      });
+
+      const failedRequest = createMockRequestWithIP(requestBody, ip);
+      const failedResponse = await POST(failedRequest);
+
+      expect(failedResponse.status).toBe(500);
+
+      // Second request - successful (should count)
+      const mockChunks = [
+        'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n',
+        'data: [DONE]\n\n',
+      ];
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({
+          'content-type': 'text/event-stream',
+        }),
+        body: createMockStream(mockChunks),
+      });
+
+      const successRequest = createMockRequestWithIP(requestBody, ip);
+      const successResponse = await POST(successRequest);
+
+      expect(successResponse.status).toBe(200);
+      // After 1 successful request, should have 2 remaining (missing body should not have counted)
+      expect(successResponse.headers.get('X-RateLimit-Remaining')).toBe('2');
+
+      // Clean up
+      delete process.env.GUEST_API_KEY;
+    });
+
+    test('should increment rate limit only after successful stream for non-streaming requests', async () => {
+      // Set GUEST_API_KEY for this test
+      process.env.GUEST_API_KEY = 'test-guest-key';
+
+      const requestBody = {
+        model: 'openrouter/auto',
+        messages: [{ role: 'user', content: 'Hello' }],
+        stream: false, // Non-streaming request
+        apiKey: 'guest',
+      };
+
+      const ip = '192.168.1.103';
+
+      // First request - backend error (should NOT count)
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        headers: new Headers(),
+        json: async () => ({ error: 'Internal server error' }),
+      });
+
+      const failedRequest = createMockRequestWithIP(requestBody, ip);
+      const failedResponse = await POST(failedRequest);
+
+      expect(failedResponse.status).toBe(500);
+
+      // Second request - successful (should count)
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({
+          'content-type': 'application/json',
+        }),
+        json: async () => ({
+          choices: [{ message: { content: 'Response' } }],
+          usage: { prompt_tokens: 5, completion_tokens: 2, total_tokens: 7 },
+        }),
+      });
+
+      const successRequest = createMockRequestWithIP(requestBody, ip);
+      const successResponse = await POST(successRequest);
+
+      expect(successResponse.status).toBe(200);
+      // After 1 successful request, should have 2 remaining (error should not have counted)
+      expect(successResponse.headers.get('X-RateLimit-Remaining')).toBe('2');
+
+      // Clean up
+      delete process.env.GUEST_API_KEY;
+    });
+
+    test('should allow exactly 3 successful requests before rate limiting', async () => {
+      // Set GUEST_API_KEY for this test
+      process.env.GUEST_API_KEY = 'test-guest-key';
+
+      const requestBody = {
+        model: 'openrouter/auto',
+        messages: [{ role: 'user', content: 'Hello' }],
+        stream: true,
+        apiKey: 'guest',
+      };
+
+      const ip = '192.168.1.104';
+
+      // Make 2 failed requests (should NOT count)
+      for (let i = 0; i < 2; i++) {
+        (global.fetch as jest.Mock).mockResolvedValueOnce({
+          ok: false,
+          status: 500,
+          headers: new Headers(),
+          text: async () => JSON.stringify({ detail: 'Server error' }),
+        });
+
+        const failedRequest = createMockRequestWithIP(requestBody, ip);
+        const failedResponse = await POST(failedRequest);
+        expect(failedResponse.status).toBe(500);
+      }
+
+      const mockChunks = [
+        'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n',
+        'data: [DONE]\n\n',
+      ];
+
+      // Make 3 successful requests (the daily limit)
+      for (let i = 0; i < 3; i++) {
+        (global.fetch as jest.Mock).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: new Headers({
+            'content-type': 'text/event-stream',
+          }),
+          body: createMockStream(mockChunks),
+        });
+
+        const successRequest = createMockRequestWithIP(requestBody, ip);
+        const successResponse = await POST(successRequest);
+        expect(successResponse.status).toBe(200);
+        expect(successResponse.headers.get('X-RateLimit-Remaining')).toBe(String(2 - i));
+      }
+
+      // 4th successful request should be rate limited
+      const rateLimitedRequest = createMockRequestWithIP(requestBody, ip);
+      const rateLimitedResponse = await POST(rateLimitedRequest);
+
+      expect(rateLimitedResponse.status).toBe(429);
+      const body = await rateLimitedResponse.json();
+      expect(body.code).toBe('GUEST_RATE_LIMIT_EXCEEDED');
+
+      // Clean up
+      delete process.env.GUEST_API_KEY;
+    });
   });
 });
