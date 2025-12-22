@@ -2,7 +2,7 @@
 "use client"
 
 import * as React from "react"
-import { Check, ChevronDown, ChevronRight, ChevronsUpDown, Loader2, Star, Sparkles, TrendingUp, Shield, Image as ImageIcon } from "lucide-react"
+import { Check, ChevronDown, ChevronRight, ChevronsUpDown, Loader2, Star, Sparkles, TrendingUp, Shield, Image as ImageIcon, Video } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { getAdaptiveTimeout } from "@/lib/network-timeouts"
@@ -1124,7 +1124,12 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
               const getCategoryIcon = (cat: string) => {
                 switch (cat) {
                   case 'Image/Video':
-                    return <ImageIcon className="h-4 w-4 text-pink-500" />;
+                    return (
+                      <span className="flex items-center gap-0.5">
+                        <ImageIcon className="h-4 w-4 text-pink-500" />
+                        <Video className="h-4 w-4 text-pink-500" />
+                      </span>
+                    );
                   default:
                     return null;
                 }
