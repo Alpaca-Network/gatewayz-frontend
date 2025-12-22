@@ -437,6 +437,24 @@ export async function* streamChatResponse(
             });
           }
 
+          // Handle tool call events (server executing a tool)
+          if (chunk.type === 'tool_call' && chunk.toolCall) {
+            yield {
+              type: 'tool_call',
+              toolCall: chunk.toolCall,
+            };
+            continue;
+          }
+
+          // Handle tool result events (tool execution completed)
+          if (chunk.type === 'tool_result' && chunk.toolResult) {
+            yield {
+              type: 'tool_result',
+              toolResult: chunk.toolResult,
+            };
+            continue;
+          }
+
           if (chunk.content || chunk.reasoning) {
             contentChunkCount++;
 
