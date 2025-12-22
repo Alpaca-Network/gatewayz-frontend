@@ -27,6 +27,19 @@ export type ChatMessageView = {
   model?: string;
   isStreaming?: boolean;
   createdAt: number;
+  // Search tool state
+  isSearching?: boolean;
+  searchQuery?: string;
+  searchResults?: {
+    query: string;
+    results: Array<{ title: string; url: string; content: string; score?: number }>;
+    answer?: string;
+  };
+  searchError?: string;
+};
+
+export type SendMessageOptions = {
+  enableWebSearch?: boolean;
 };
 
 const makeLocalId = (prefix: string) => {
@@ -225,7 +238,7 @@ export function useChatController() {
     }
   }, [chatApi, setError, state.sessions]);
 
-  const sendMessage = useCallback(async (content: string, model: ModelOption | null) => {
+  const sendMessage = useCallback(async (content: string, model: ModelOption | null, options?: SendMessageOptions) => {
     if (!chatApi || !apiKey) {
       setError("You are not fully authenticated. Please sign in again.");
       return;
@@ -267,15 +280,69 @@ export function useChatController() {
         console.warn("Failed to persist user message", err);
       });
 
-      const payload = {
+      const payload: Record<string, unknown> = {
         model: modelId,
         messages: [...history, userMessage].map((m) => ({ role: m.role, content: m.content })),
         stream: true,
       };
 
+      // Enable web search if requested
+      if (options?.enableWebSearch) {
+        payload.enable_web_search = true;
+      }
+
       let assembled = "";
+      let currentSearchQuery: string | undefined;
+      let currentSearchResults: ChatMessageView["searchResults"] | undefined;
+      let currentSearchError: string | undefined;
 
       for await (const chunk of streamChatResponse("/api/chat/completions", apiKey, payload)) {
+        // Handle tool call events (search starting)
+        if (chunk.type === "tool_call" && chunk.toolCall) {
+          if (chunk.toolCall.name === "web_search") {
+            currentSearchQuery = chunk.toolCall.arguments?.query as string;
+            setMessages(session.id, (msgs) =>
+              msgs.map((m) =>
+                m.id === assistantMessage.id
+                  ? { ...m, isSearching: true, searchQuery: currentSearchQuery }
+                  : m
+              )
+            );
+          }
+          continue;
+        }
+
+        // Handle tool result events (search completed)
+        if (chunk.type === "tool_result" && chunk.toolResult) {
+          if (chunk.toolResult.name === "web_search") {
+            if (chunk.toolResult.success && chunk.toolResult.result) {
+              const result = chunk.toolResult.result as {
+                query: string;
+                results: Array<{ title: string; url: string; content: string; score?: number }>;
+                answer?: string;
+              };
+              currentSearchResults = result;
+              setMessages(session.id, (msgs) =>
+                msgs.map((m) =>
+                  m.id === assistantMessage.id
+                    ? { ...m, isSearching: false, searchResults: currentSearchResults }
+                    : m
+                )
+              );
+            } else if (chunk.toolResult.error) {
+              currentSearchError = chunk.toolResult.error;
+              setMessages(session.id, (msgs) =>
+                msgs.map((m) =>
+                  m.id === assistantMessage.id
+                    ? { ...m, isSearching: false, searchError: currentSearchError }
+                    : m
+                )
+              );
+            }
+          }
+          continue;
+        }
+
         if (chunk.content) {
           assembled += chunk.content;
           const contentCopy = assembled;
