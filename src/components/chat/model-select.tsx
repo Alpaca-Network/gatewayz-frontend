@@ -560,12 +560,10 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
     }
 
     // Image/Video models - check modalities array for image or video support
-    // Note: We only use modalities array here, not vision name check, since vision models
-    // are already captured in the Multimodal category above
     const modalities = model.modalities || [];
     const hasImageSupport = modalities.some(m => m.toLowerCase() === 'image');
     const hasVideoSupport = modalities.some(m => m.toLowerCase() === 'video');
-    if (hasImageSupport || hasVideoSupport) {
+    if (hasImageSupport || hasVideoSupport || modelName.includes('vision') || modelId.includes('vision')) {
       categories.push('Image/Video');
     }
 

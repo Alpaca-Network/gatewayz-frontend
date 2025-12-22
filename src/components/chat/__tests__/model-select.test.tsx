@@ -610,12 +610,10 @@ describe('ModelSelect model categorization', () => {
     }
 
     // Image/Video models - check modalities array for image or video support
-    // Note: We only use modalities array here, not vision name check, since vision models
-    // are already captured in the Multimodal category above
     const modalities = model.modalities || [];
     const hasImageSupport = modalities.some(m => m.toLowerCase() === 'image');
     const hasVideoSupport = modalities.some(m => m.toLowerCase() === 'video');
-    if (hasImageSupport || hasVideoSupport) {
+    if (hasImageSupport || hasVideoSupport || modelName.includes('vision') || modelId.includes('vision')) {
       categories.push('Image/Video');
     }
 
@@ -696,7 +694,7 @@ describe('ModelSelect model categorization', () => {
     expect(categories).toContain('Image/Video');
   });
 
-  it('should categorize vision models as Multimodal (not Image/Video without modalities)', () => {
+  it('should categorize Image/Video models correctly by vision in name', () => {
     const models: ModelOption[] = [
       { value: 'openai/gpt-4-vision-preview', label: 'GPT-4 Vision Preview', category: 'Paid' },
       { value: 'meta/llama-3-vision', label: 'Llama 3 Vision', category: 'Paid' },
@@ -704,9 +702,7 @@ describe('ModelSelect model categorization', () => {
 
     models.forEach(model => {
       const categories = categorizeModel(model);
-      // Vision models without explicit modalities go to Multimodal, not Image/Video
-      expect(categories).toContain('Multimodal');
-      expect(categories).not.toContain('Image/Video');
+      expect(categories).toContain('Image/Video');
     });
   });
 
@@ -981,11 +977,10 @@ describe('ModelSelect server-side search', () => {
         }
 
         // Image/Video models - check modalities array for image or video support
-        // Note: We only use modalities array here, not vision name check
         const modalities = model.modalities || [];
         const hasImageSupport = modalities.some(m => m.toLowerCase() === 'image');
         const hasVideoSupport = modalities.some(m => m.toLowerCase() === 'video');
-        if (hasImageSupport || hasVideoSupport) {
+        if (hasImageSupport || hasVideoSupport || modelName.includes('vision') || modelId.includes('vision')) {
           categories.push('Image/Video');
         }
 
