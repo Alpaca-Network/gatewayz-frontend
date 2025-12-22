@@ -2,7 +2,7 @@
 "use client"
 
 import * as React from "react"
-import { Check, ChevronDown, ChevronRight, ChevronsUpDown, Loader2, Star, Sparkles, TrendingUp, Shield } from "lucide-react"
+import { Check, ChevronDown, ChevronRight, ChevronsUpDown, Loader2, Star, Sparkles, TrendingUp, Shield, Image as ImageIcon, Video } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { getAdaptiveTimeout } from "@/lib/network-timeouts"
@@ -559,6 +559,14 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
       categories.push('Multimodal');
     }
 
+    // Image/Video models - check modalities array for image or video support
+    const modalities = model.modalities || [];
+    const hasImageSupport = modalities.some(m => m.toLowerCase() === 'image');
+    const hasVideoSupport = modalities.some(m => m.toLowerCase() === 'video');
+    if (hasImageSupport || hasVideoSupport || modelName.includes('vision') || modelId.includes('vision')) {
+      categories.push('Image/Video');
+    }
+
     // Cost Efficient models (free OR paid under $1/M input tokens)
     // Note: Price info not available in ModelOption currently, so we'll use category
     const isFree = model.category === 'Free' || model.category?.toLowerCase().includes('free');
@@ -580,6 +588,7 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
     const categories: Record<string, ModelOption[]> = {
       'Reasoning': [],
       'Code Generation': [],
+      'Image/Video': [],
       'Multimodal': [],
       'Cost Efficient': [],
       'Free': [],
@@ -671,6 +680,7 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
     const searchModelsByCategory: Record<string, ModelOption[]> = {
       'Reasoning': [],
       'Code Generation': [],
+      'Image/Video': [],
       'Multimodal': [],
       'Cost Efficient': [],
       'Free': [],
@@ -1108,6 +1118,16 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
               // Skip empty categories
               if (catModels.length === 0) return null;
 
+              // Get icon for category
+              const getCategoryIcon = (cat: string) => {
+                switch (cat) {
+                  case 'Image/Video':
+                    return <ImageIcon className="h-4 w-4 text-pink-500" />;
+                  default:
+                    return null;
+                }
+              };
+
               return (
                 <div key={category} className="border-b">
                   <button
@@ -1119,6 +1139,7 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
                     ) : (
                       <ChevronRight className="h-4 w-4" />
                     )}
+                    {getCategoryIcon(category)}
                     <span>{category} ({catModels.length})</span>
                   </button>
                   {expandedDevelopers.has(category) && (
