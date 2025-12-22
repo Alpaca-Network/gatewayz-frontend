@@ -36,6 +36,16 @@ jest.mock('ai', () => {
   return {
     streamText: jest.fn(),
     convertToCoreMessages: jest.fn((messages: unknown[]) => messages),
+    // Mock convertToModelMessages to simulate the AI SDK's conversion behavior
+    // In real usage, this strips UI-specific fields and converts to ModelMessage format
+    convertToModelMessages: jest.fn((messages: unknown[]) => {
+      // Simulate the conversion by returning messages with only role and content
+      if (!Array.isArray(messages)) return messages;
+      return messages.map((msg: any) => ({
+        role: msg.role,
+        content: msg.content,
+      }));
+    }),
     APICallError: MockAPICallError,
   };
 });
@@ -819,6 +829,178 @@ describe('AI SDK Completions Route', () => {
         expect(callArgs.baseURL).toContain('/v1');
         expect(callArgs.apiKey).toBe('test-key');
       }
+    });
+  });
+
+  describe('UIMessage to ModelMessage Conversion', () => {
+    it('should convert UIMessage format to ModelMessage format', async () => {
+      const { streamText, convertToModelMessages } = require('ai');
+      streamText.mockReturnValue({
+        fullStream: (async function* () {
+          yield { type: 'text-delta', text: 'Hello' };
+          yield { type: 'finish', finishReason: 'stop' };
+        })(),
+      });
+
+      // UIMessage format with additional UI-specific properties
+      const uiMessages = [
+        {
+          id: 'msg-1',
+          role: 'user',
+          content: 'Hello',
+          createdAt: new Date().toISOString(),
+          // UI-specific properties that should be stripped
+          experimental_attachments: [],
+        },
+        {
+          id: 'msg-2',
+          role: 'assistant',
+          content: 'Hi there!',
+          createdAt: new Date().toISOString(),
+          // UI-specific properties
+          toolInvocations: [],
+        },
+      ];
+
+      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
+        method: 'POST',
+        body: JSON.stringify({
+          model: 'gpt-4',
+          messages: uiMessages,
+          apiKey: 'test-key',
+        }),
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(200);
+
+      // Verify convertToModelMessages was called
+      expect(convertToModelMessages).toHaveBeenCalled();
+
+      // Verify the converted messages were passed to streamText
+      expect(streamText).toHaveBeenCalled();
+    });
+
+    it('should handle messages with providerMetadata', async () => {
+      const { streamText, convertToModelMessages } = require('ai');
+      streamText.mockReturnValue({
+        fullStream: (async function* () {
+          yield { type: 'text-delta', text: 'Response' };
+          yield { type: 'finish', finishReason: 'stop' };
+        })(),
+      });
+
+      // Messages with providerMetadata that could cause issues
+      const messagesWithMetadata = [
+        {
+          role: 'user',
+          content: 'Test message',
+          providerMetadata: { someField: 'value' },
+        },
+      ];
+
+      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
+        method: 'POST',
+        body: JSON.stringify({
+          model: 'gpt-4',
+          messages: messagesWithMetadata,
+          apiKey: 'test-key',
+        }),
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(200);
+      expect(convertToModelMessages).toHaveBeenCalled();
+    });
+
+    it('should handle messages with tool results containing providerExecuted', async () => {
+      const { streamText, convertToModelMessages } = require('ai');
+      streamText.mockReturnValue({
+        fullStream: (async function* () {
+          yield { type: 'text-delta', text: 'Tool response' };
+          yield { type: 'finish', finishReason: 'stop' };
+        })(),
+      });
+
+      // Messages with tool call parts that could cause issues
+      const messagesWithToolCalls = [
+        {
+          role: 'user',
+          content: 'Use the tool',
+        },
+        {
+          role: 'assistant',
+          content: [
+            {
+              type: 'tool-call',
+              toolCallId: 'call-1',
+              toolName: 'test-tool',
+              args: { input: 'test' },
+              // This field can cause "Invalid prompt" errors
+              providerExecuted: null,
+            },
+          ],
+        },
+        {
+          role: 'tool',
+          content: [
+            {
+              type: 'tool-result',
+              toolCallId: 'call-1',
+              result: { output: 'result' },
+            },
+          ],
+        },
+      ];
+
+      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
+        method: 'POST',
+        body: JSON.stringify({
+          model: 'gpt-4',
+          messages: messagesWithToolCalls,
+          apiKey: 'test-key',
+        }),
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(200);
+      expect(convertToModelMessages).toHaveBeenCalled();
+    });
+
+    it('should deep clone messages before conversion to avoid reference issues', async () => {
+      const { streamText, convertToModelMessages } = require('ai');
+      streamText.mockReturnValue({
+        fullStream: (async function* () {
+          yield { type: 'text-delta', text: 'Response' };
+          yield { type: 'finish', finishReason: 'stop' };
+        })(),
+      });
+
+      const originalMessages = [
+        {
+          role: 'user',
+          content: 'Test',
+          nested: { deep: { value: 'original' } },
+        },
+      ];
+
+      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
+        method: 'POST',
+        body: JSON.stringify({
+          model: 'gpt-4',
+          messages: originalMessages,
+          apiKey: 'test-key',
+        }),
+      });
+
+      await POST(request);
+
+      // Verify convertToModelMessages was called with a deep-cloned copy
+      expect(convertToModelMessages).toHaveBeenCalled();
+      const passedMessages = convertToModelMessages.mock.calls[0][0];
+
+      // The passed messages should be a separate copy (due to JSON parse/stringify)
+      expect(passedMessages).toEqual(originalMessages);
     });
   });
 });

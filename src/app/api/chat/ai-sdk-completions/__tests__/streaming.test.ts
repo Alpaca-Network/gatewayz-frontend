@@ -8,10 +8,43 @@
 import { NextRequest } from 'next/server';
 import { POST } from '../route';
 
-jest.mock('ai', () => ({
-  streamText: jest.fn(),
-  convertToCoreMessages: jest.fn((messages) => messages),
-}));
+jest.mock('ai', () => {
+  // Create a mock APICallError class for testing
+  class MockAPICallError extends Error {
+    statusCode?: number;
+    responseHeaders?: Record<string, string>;
+    responseBody?: string;
+    isRetryable: boolean;
+
+    constructor(options: {
+      message: string;
+      statusCode?: number;
+      responseHeaders?: Record<string, string>;
+      responseBody?: string;
+      isRetryable?: boolean;
+    }) {
+      super(options.message);
+      this.name = 'APICallError';
+      this.statusCode = options.statusCode;
+      this.responseHeaders = options.responseHeaders;
+      this.responseBody = options.responseBody;
+      this.isRetryable = options.isRetryable ?? false;
+    }
+  }
+
+  return {
+    streamText: jest.fn(),
+    convertToCoreMessages: jest.fn((messages) => messages),
+    convertToModelMessages: jest.fn((messages: unknown[]) => {
+      if (!Array.isArray(messages)) return messages;
+      return messages.map((msg: any) => ({
+        role: msg.role,
+        content: msg.content,
+      }));
+    }),
+    APICallError: MockAPICallError,
+  };
+});
 
 jest.mock('@ai-sdk/openai', () => ({
   createOpenAI: jest.fn(() => {

@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { streamText, APICallError } from 'ai';
+import { streamText, APICallError, convertToModelMessages } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 import { checkGuestRateLimit, incrementGuestRateLimit, getClientIP, formatResetTime } from '@/lib/guest-rate-limiter';
 
@@ -446,13 +446,20 @@ export async function POST(request: NextRequest) {
           attempt,
         });
 
-        // Messages are already in the correct ModelMessage format (OpenAI-compatible)
-        console.log('[AI SDK Route] Using messages directly (already in ModelMessage format)');
+        // Convert messages to ModelMessage format if they're UIMessage format
+        // This handles cases where messages contain UI-specific properties like
+        // providerMetadata, tool results with providerExecuted, etc.
+        // The convertToModelMessages function safely handles both formats.
+        // We use a deep clone to work around known AI SDK issues with object references.
+        const modelMessages = convertToModelMessages(
+          JSON.parse(JSON.stringify(messages))
+        );
+        console.log('[AI SDK Route] Converted messages to ModelMessage format');
 
         // Stream the response using AI SDK
         result = streamText({
           model,
-          messages,
+          messages: modelMessages,
           temperature,
           maxOutputTokens: max_tokens,
           topP: top_p,
