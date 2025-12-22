@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Twitter } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
+import Script from 'next/script';
 
 export function AppFooter() {
   const pathname = usePathname();
@@ -60,8 +61,46 @@ export function AppFooter() {
   }
 
   return (
-    <footer className={`w-full border-t border-border py-12 bg-background transition-opacity duration-500 ${hasScrolledPastFold ? 'opacity-100' : 'opacity-0'}`}>
-      <div className="w-full px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+    <>
+      {/* LinkedIn Insight Tag */}
+      <Script
+        id="linkedin-insight-init"
+        strategy="afterInteractive"
+        dangerouslySetInnerHTML={{
+          __html: `
+_linkedin_partner_id = "8380570";
+window._linkedin_data_partner_ids = window._linkedin_data_partner_ids || [];
+window._linkedin_data_partner_ids.push(_linkedin_partner_id);
+          `,
+        }}
+      />
+      <Script
+        id="linkedin-insight-tracker"
+        strategy="afterInteractive"
+        dangerouslySetInnerHTML={{
+          __html: `
+(function(l) {
+if (!l){window.lintrk = function(a,b){window.lintrk.q.push([a,b])};
+window.lintrk.q=[]}
+var s = document.getElementsByTagName("script")[0];
+var b = document.createElement("script");
+b.type = "text/javascript";b.async = true;
+b.src = "https://snap.licdn.com/li.lms-analytics/insight.min.js";
+s.parentNode.insertBefore(b, s);})(window.lintrk);
+          `,
+        }}
+      />
+      <noscript>
+        <img
+          height="1"
+          width="1"
+          style={{ display: 'none' }}
+          alt=""
+          src="https://px.ads.linkedin.com/collect/?pid=8380570&fmt=gif"
+        />
+      </noscript>
+      <footer className={`w-full border-t border-border py-12 bg-background transition-opacity duration-500 ${hasScrolledPastFold ? 'opacity-100' : 'opacity-0'}`}>
+        <div className="w-full px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
         <div className="flex flex-wrap justify-between gap-8 mb-8">
           <div>
             <h3 className="font-semibold mb-4 text-foreground">Product</h3>
@@ -163,5 +202,6 @@ export function AppFooter() {
         </div>
       </div>
     </footer>
+    </>
   );
 }
