@@ -109,81 +109,119 @@ export class ChatHistoryAPI {
   /**
    * Makes an authenticated API request
    * @private
+   * @param retryOn401 - If true, retries on 401 errors with delay (for race condition during auth)
+   * @param maxRetries - Maximum number of retries for 401 errors
    */
   private async makeRequest<T>(
     method: string,
     endpoint: string,
     body: any = null,
-    timeout?: number
+    timeout?: number,
+    retryOn401: boolean = false,
+    maxRetries: number = 3
   ): Promise<ApiResponse<T>> {
     // Use unified timeout configuration
     const timeoutMs = timeout || TIMEOUT_CONFIG.api.default;
-    const { controller, timeoutId } = createTimeoutController(timeoutMs);
 
-    const config: RequestInit = {
-      method,
-      headers: {
-        'Authorization': `Bearer ${this.apiKey}`,
-        'Content-Type': 'application/json',
-        'Connection': 'keep-alive' // Enable connection pooling for session API
-      },
-      signal: controller.signal
-    };
+    // Retry loop for 401 errors (race condition where API key isn't indexed yet)
+    let lastError: Error | null = null;
+    const retryCount = retryOn401 ? maxRetries : 1;
 
-    if (body) {
-      config.body = JSON.stringify(body);
-    }
+    for (let attempt = 1; attempt <= retryCount; attempt++) {
+      const { controller, timeoutId } = createTimeoutController(timeoutMs);
 
-    // Add privy_user_id to query string if available
-    let url = `${this.baseUrl}${endpoint}`;
-    if (this.privyUserId) {
-      const separator = endpoint.includes('?') ? '&' : '?';
-      url += `${separator}privy_user_id=${encodeURIComponent(this.privyUserId)}`;
-    }
+      const config: RequestInit = {
+        method,
+        headers: {
+          'Authorization': `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json',
+          'Connection': 'keep-alive' // Enable connection pooling for session API
+        },
+        signal: controller.signal
+      };
 
-    // Debug logging only in development
-    if (process.env.NODE_ENV === 'development') {
-      console.log('ChatHistoryAPI - Making request to:', url);
-      console.log('ChatHistoryAPI - Method:', method);
-      console.log('ChatHistoryAPI - Has API key:', !!this.apiKey);
-    }
+      if (body) {
+        config.body = JSON.stringify(body);
+      }
 
-    try {
-      const response = await fetch(url, config);
-      clearTimeout(timeoutId);
+      // Add privy_user_id to query string if available
+      let url = `${this.baseUrl}${endpoint}`;
+      if (this.privyUserId) {
+        const separator = endpoint.includes('?') ? '&' : '?';
+        url += `${separator}privy_user_id=${encodeURIComponent(this.privyUserId)}`;
+      }
 
-      // Handle 401 specifically - invalid API key
-      if (response.status === 401) {
-        console.error('ChatHistoryAPI - Authentication failed (401), API key may be invalid');
-        // Dispatch auth refresh event to trigger re-authentication
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new Event('gatewayz:refresh-auth'));
+      // Debug logging only in development
+      if (process.env.NODE_ENV === 'development') {
+        console.log('ChatHistoryAPI - Making request to:', url);
+        console.log('ChatHistoryAPI - Method:', method);
+        console.log('ChatHistoryAPI - Has API key:', !!this.apiKey);
+        if (attempt > 1) {
+          console.log('ChatHistoryAPI - Retry attempt:', attempt);
         }
-        throw new Error('Session authentication failed. Attempting to refresh...');
       }
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.detail || `HTTP ${response.status}: ${response.statusText}`);
-      }
+      try {
+        const response = await fetch(url, config);
+        clearTimeout(timeoutId);
 
-      return await response.json();
-    } catch (error) {
-      clearTimeout(timeoutId);
-      if (error instanceof Error && error.name === 'AbortError') {
-        console.error('ChatHistoryAPI - Request timed out after', timeoutMs, 'ms');
-        throw new Error(`Request timed out after ${timeoutMs / 1000} seconds. Please try again.`);
+        // Handle 401 specifically - may be race condition with newly created API key
+        if (response.status === 401) {
+          // If retrying is enabled and we have attempts left, wait and retry
+          if (retryOn401 && attempt < retryCount) {
+            // Exponential backoff: 500ms, 1000ms, 2000ms
+            const delayMs = 500 * Math.pow(2, attempt - 1);
+            console.log(`[ChatHistoryAPI] 401 received, retrying in ${delayMs}ms (attempt ${attempt}/${retryCount}) - API key may not be indexed yet`);
+            await new Promise(resolve => setTimeout(resolve, delayMs));
+            continue;
+          }
+
+          // Final attempt failed or retry not enabled
+          console.error('ChatHistoryAPI - Authentication failed (401), API key may be invalid');
+          // Dispatch auth refresh event to trigger re-authentication
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new Event('gatewayz:refresh-auth'));
+          }
+          throw new Error('Session authentication failed. Attempting to refresh...');
+        }
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.detail || `HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        return await response.json();
+      } catch (error) {
+        clearTimeout(timeoutId);
+        if (error instanceof Error && error.name === 'AbortError') {
+          console.error('ChatHistoryAPI - Request timed out after', timeoutMs, 'ms');
+          throw new Error(`Request timed out after ${timeoutMs / 1000} seconds. Please try again.`);
+        }
+        lastError = error instanceof Error ? error : new Error(String(error));
+        
+        // If this is a 401 retry situation, the loop handles it above via continue
+        // For other errors, rethrow immediately
+        if (!retryOn401 || !lastError.message.includes('401')) {
+          throw error;
+        }
       }
-      throw error;
     }
+
+    // Should only reach here if all retries exhausted
+    throw lastError || new Error('Request failed after all retries');
   }
 
   /**
    * Creates a new chat session with automatic retry on timeout/network errors
+   * Also handles 401 retry for race condition where API key isn't indexed yet
    */
   async createSession(title?: string, model?: string): Promise<ChatSession> {
     const sessionTitle = title || `Chat ${new Date().toLocaleString()}`;
     const sessionModel = model || 'fireworks/deepseek-r1';
+
+    // Track 401 retry attempts separately from other retries
+    const max401Retries = 3;
+    let attempt401Count = 0;
 
     // Use withTimeoutAndRetry for automatic retry on transient failures
     const result = await withTimeoutAndRetry<ApiResponse<ChatSession>>(
@@ -213,8 +251,20 @@ export class ChatHistoryAPI {
 
           clearTimeout(timeoutId);
 
-          // Handle 401 specifically - invalid API key, trigger re-auth
+          // Handle 401 - may be race condition with newly created API key
           if (response.status === 401) {
+            attempt401Count++;
+            
+            // Retry on 401 with exponential backoff (API key may not be indexed yet)
+            if (attempt401Count < max401Retries) {
+              const delayMs = 500 * Math.pow(2, attempt401Count - 1);
+              console.log(`[ChatHistoryAPI.createSession] 401 received, retrying in ${delayMs}ms (attempt ${attempt401Count}/${max401Retries}) - API key may not be indexed yet`);
+              await new Promise(resolve => setTimeout(resolve, delayMs));
+              // Throw a specific error that shouldRetry will catch
+              throw new Error('AUTH_RETRY_401');
+            }
+            
+            // Final attempt failed
             console.error('ChatHistoryAPI.createSession - Authentication failed (401), API key may be invalid');
             // Dispatch auth refresh event to trigger re-authentication
             if (typeof window !== 'undefined') {
@@ -241,16 +291,21 @@ export class ChatHistoryAPI {
         timeout: TIMEOUT_CONFIG.chat.sessionCreate,
         maxRetries: 3,
         shouldRetry: (error) => {
-          // Retry on timeouts and network errors
+          // Retry on 401 race condition, timeouts and network errors
           if (error instanceof Error) {
-            return error.name === 'AbortError' ||
+            return error.message === 'AUTH_RETRY_401' ||
+                   error.name === 'AbortError' ||
                    error.message.includes('timeout') ||
                    error.message.includes('network');
           }
           return false;
         },
         onRetry: (attempt, error) => {
-          console.log(`[Session Creation Retry] Attempt ${attempt} failed:`, error);
+          if (error instanceof Error && error.message === 'AUTH_RETRY_401') {
+            console.log(`[Session Creation] Retrying after 401 (API key indexing race condition)`);
+          } else {
+            console.log(`[Session Creation Retry] Attempt ${attempt} failed:`, error);
+          }
         }
       }
     );
@@ -269,14 +324,18 @@ export class ChatHistoryAPI {
 
   /**
    * Retrieves all chat sessions for the authenticated user
+   * @param retryOn401 - If true, retries on 401 errors (useful for race condition after login)
    */
-  async getSessions(limit: number = 50, offset: number = 0): Promise<ChatSession[]> {
+  async getSessions(limit: number = 50, offset: number = 0, retryOn401: boolean = false): Promise<ChatSession[]> {
     // Use longer timeout for background sync to prevent timeout errors
+    // Enable 401 retry for initial load to handle race condition where API key isn't indexed yet
     const result = await this.makeRequest<ChatSession[]>(
       'GET',
       `/sessions?limit=${limit}&offset=${offset}`,
       null,
-      TIMEOUT_CONFIG.api.long // 60 seconds for background sync
+      TIMEOUT_CONFIG.api.long, // 60 seconds for background sync
+      retryOn401,  // Retry on 401 if enabled
+      3  // Max 3 retries
     );
     return result.data || [];
   }
@@ -627,6 +686,9 @@ export class ChatHistoryAPI {
   /**
    * Cache-aware session loading
    * Returns cached sessions immediately, syncs with backend in background
+   * 
+   * IMPORTANT: For initial load (no cache), enables 401 retry to handle
+   * the race condition where the backend hasn't indexed a newly created API key yet.
    */
   async getSessionsWithCache(limit: number = 50, offset: number = 0): Promise<ChatSession[]> {
     // Return cached sessions immediately for instant UI
@@ -638,7 +700,8 @@ export class ChatHistoryAPI {
       // retry logic on top of makeRequest's built-in timeout mechanism.
       withTimeoutAndRetry(
         async () => {
-          return await this.getSessions(limit, offset);
+          // Background sync doesn't need 401 retry since we have cached data
+          return await this.getSessions(limit, offset, false);
         },
         {
           timeout: TIMEOUT_CONFIG.api.long, // 60 seconds
@@ -670,13 +733,16 @@ export class ChatHistoryAPI {
       return cached;
     }
 
-    // No cache, fetch from backend with retry logic
-    // Note: signal parameter is intentionally not used because makeRequest()
-    // creates its own AbortController internally. The retry wrapper provides
-    // retry logic on top of makeRequest's built-in timeout mechanism.
+    // No cache - this is likely initial load after login
+    // Enable 401 retry to handle race condition where API key isn't indexed yet
+    // The getSessions method will retry with exponential backoff on 401 errors
+    console.log('[ChatHistoryAPI] No cached sessions, fetching from backend with 401 retry enabled');
+    
     const sessions = await withTimeoutAndRetry(
       async () => {
-        return await this.getSessions(limit, offset);
+        // Enable 401 retry for initial load - handles the race condition
+        // where the backend hasn't finished indexing the new API key
+        return await this.getSessions(limit, offset, true);
       },
       {
         timeout: TIMEOUT_CONFIG.api.long, // 60 seconds
@@ -689,6 +755,9 @@ export class ChatHistoryAPI {
                    error.message.includes('504');
           }
           return false;
+        },
+        onRetry: (attempt, error) => {
+          console.log(`[Session Initial Load Retry] Attempt ${attempt} failed:`, error);
         }
       }
     );
