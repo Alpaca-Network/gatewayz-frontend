@@ -13,6 +13,7 @@ import { Check, Copy } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { getApiKey } from '@/lib/api';
 import { API_BASE_URL } from '@/lib/config';
+import { isAbortOrNetworkError } from '@/lib/network-error';
 import Image from 'next/image';
 import { PathChooserModal } from '@/components/onboarding/path-chooser-modal';
 import posthog from 'posthog-js';
@@ -173,22 +174,61 @@ console.log(completion.choices[0].message);`,
   const [featuredModels, setFeaturedModels] = useState<FeaturedModel[]>([]);
   const [isLoadingModels, setIsLoadingModels] = useState(true);
 
-  // Fetch models from rankings API
+  // Fallback models used when API fails or in restrictive browser environments
+  const fallbackModels: FeaturedModel[] = [
+    { name: 'Gemini 2.5 Pro', by: 'google', tokens: '170.06', latency: '2.6s', growth: '+13.06%', color: 'bg-blue-400', logo_url: '/Google_Logo-black.svg' },
+    { name: 'GPT-4', by: 'openai', tokens: '20.98', latency: '850ms', growth: '--', color: 'bg-green-400', logo_url: '/OpenAI_Logo-black.svg' },
+    { name: 'Claude Sonnet 4', by: 'anthropic', tokens: '585.26', latency: '1.9s', growth: '-9.04%', color: 'bg-purple-400', logo_url: '/anthropic-logo.svg' },
+    { name: 'Claude 3.5 Sonnet', by: 'anthropic', tokens: '420.50', latency: '1.5s', growth: '+5.2%', color: 'bg-green-400', logo_url: '/anthropic-logo.svg' },
+    { name: 'GPT-4o', by: 'openai', tokens: '350.00', latency: '950ms', growth: '+12.8%', color: 'bg-green-400', logo_url: '/OpenAI_Logo-black.svg' },
+  ];
+
+  // Fetch models from rankings API with retry logic
   useEffect(() => {
-    const fetchRankingModels = async () => {
+    let isMounted = true;
+    
+    const fetchWithTimeout = async (url: string, options: RequestInit, timeoutMs: number): Promise<Response> => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      
       try {
+        const response = await fetch(url, {
+          ...options,
+          signal: controller.signal,
+        });
+        return response;
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    };
+
+    const fetchRankingModels = async (retryCount = 0): Promise<void> => {
+      const maxRetries = 2;
+      const timeoutMs = 8000; // 8 second timeout
+      
+      try {
+        if (!isMounted) return;
         setIsLoadingModels(true);
+        
         // Use Next.js API proxy to avoid CORS issues
-        const response = await fetch('/api/ranking/models', {
+        const response = await fetchWithTimeout('/api/ranking/models', {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
-          }
-        });
+          },
+        }, timeoutMs);
+
+        if (!isMounted) return;
 
         if (response.ok) {
           const result = await response.json();
           const rankingModels: RankingModelData[] = result.data || [];
+
+          if (rankingModels.length === 0) {
+            // API returned empty data, use fallback
+            setFeaturedModels(fallbackModels);
+            return;
+          }
 
           // Map ranking data to featured model format
           const mappedModels: FeaturedModel[] = rankingModels.slice(0, 10).map((model) => {
@@ -230,28 +270,54 @@ console.log(completion.choices[0].message);`,
 
           setFeaturedModels(mappedModels);
         } else {
-          console.error('Failed to fetch ranking models');
-          // Set fallback models if API fails
-          setFeaturedModels([
-            { name: 'Gemini 2.5 Pro', by: 'google', tokens: '170.06', latency: '2.6s', growth: '+13.06%', color: 'bg-blue-400', logo_url: '/Google_Logo-black.svg' },
-            { name: 'GPT-4', by: 'openai', tokens: '20.98', latency: '850ms', growth: '--', color: 'bg-green-400', logo_url: '/OpenAI_Logo-black.svg' },
-            { name: 'Claude Sonnet 4', by: 'anthropic', tokens: '585.26', latency: '1.9s', growth: '-9.04%', color: 'bg-purple-400', logo_url: '/anthropic-logo.svg' }
-          ]);
+          // Non-OK response, use fallback
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('Ranking models API returned non-OK status:', response.status);
+          }
+          setFeaturedModels(fallbackModels);
         }
       } catch (error) {
-        console.error('Error fetching ranking models:', error);
-        // Set fallback models on error
-        setFeaturedModels([
-          { name: 'Gemini 2.5 Pro', by: 'google', tokens: '170.06', latency: '2.6s', growth: '+13.06%', color: 'bg-blue-400', logo_url: '/Google_Logo-black.svg' },
-          { name: 'GPT-4', by: 'openai', tokens: '20.98', latency: '850ms', growth: '--', color: 'bg-green-400', logo_url: '/OpenAI_Logo-black.svg' },
-          { name: 'Claude Sonnet 4', by: 'anthropic', tokens: '585.26', latency: '1.9s', growth: '-9.04%', color: 'bg-purple-400', logo_url: '/anthropic-logo.svg' }
-        ]);
+        if (!isMounted) return;
+        
+        // Check if this is a known WebKit/in-app browser network error (Safari, Twitter, Instagram, etc.)
+        // These are expected in restrictive browser environments
+        if (isAbortOrNetworkError(error)) {
+          // Don't log as an error to avoid noise in Sentry
+          if (process.env.NODE_ENV === 'development') {
+            console.info('Network request blocked by browser environment, using fallback models');
+          }
+          setFeaturedModels(fallbackModels);
+          return;
+        }
+        
+        // For other errors, retry if we haven't exceeded max retries
+        if (retryCount < maxRetries) {
+          // Exponential backoff: 500ms, 1000ms
+          const delay = Math.pow(2, retryCount) * 500;
+          await new Promise(resolve => setTimeout(resolve, delay));
+          if (isMounted) {
+            return fetchRankingModels(retryCount + 1);
+          }
+          return;
+        }
+        
+        // After all retries failed, log and use fallback
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('Error fetching ranking models after retries:', error);
+        }
+        setFeaturedModels(fallbackModels);
       } finally {
-        setIsLoadingModels(false);
+        if (isMounted) {
+          setIsLoadingModels(false);
+        }
       }
     };
 
     fetchRankingModels();
+    
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   // Auto-advance carousel every 3 seconds
