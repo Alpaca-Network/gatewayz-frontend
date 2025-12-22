@@ -2,7 +2,7 @@
 "use client"
 
 import * as React from "react"
-import { Check, ChevronDown, ChevronRight, ChevronsUpDown, Loader2, Star, Sparkles, TrendingUp, Shield, Image as ImageIcon, Video } from "lucide-react"
+import { Check, ChevronDown, ChevronRight, ChevronsUpDown, Loader2, Star, Sparkles, TrendingUp, Shield, Image as ImageIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { getAdaptiveTimeout } from "@/lib/network-timeouts"
@@ -560,10 +560,12 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
     }
 
     // Image/Video models - check modalities array for image or video support
+    // Note: We only use modalities array here, not vision name check, since vision models
+    // are already captured in the Multimodal category above
     const modalities = model.modalities || [];
     const hasImageSupport = modalities.some(m => m.toLowerCase() === 'image');
     const hasVideoSupport = modalities.some(m => m.toLowerCase() === 'video');
-    if (hasImageSupport || hasVideoSupport || modelName.includes('vision') || modelId.includes('vision')) {
+    if (hasImageSupport || hasVideoSupport) {
       categories.push('Image/Video');
     }
 
