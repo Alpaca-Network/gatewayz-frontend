@@ -7,6 +7,8 @@ let lastLocalStorageCheckResult: boolean | null = null;
 let lastLocalStorageCheckAt = 0;
 let lastSessionStorageCheckResult: boolean | null = null;
 let lastSessionStorageCheckAt = 0;
+let lastIndexedDBCheckResult: boolean | null = null;
+let lastIndexedDBCheckAt = 0;
 
 // In-memory fallback for when both localStorage and sessionStorage are unavailable
 const memoryStorage = new Map<string, string>();
@@ -78,6 +80,71 @@ export function canUseSessionStorage(): boolean {
   } catch (error) {
     lastSessionStorageCheckResult = false;
     lastSessionStorageCheckAt = now;
+    return false;
+  }
+}
+
+/**
+ * Check if IndexedDB is available and working.
+ * This is important for WalletConnect which uses idb-keyval for storage.
+ * In restricted environments (e.g., Facebook iOS in-app browser),
+ * indexedDB may be undefined, causing crashes.
+ */
+export function canUseIndexedDB(): boolean {
+  if (!hasWindow()) {
+    return false;
+  }
+
+  const now = Date.now();
+  if (lastIndexedDBCheckResult !== null && now - lastIndexedDBCheckAt < CACHE_TTL_MS) {
+    return lastIndexedDBCheckResult;
+  }
+
+  try {
+    // Check if indexedDB exists and is the real implementation (not our shim)
+    const idb = window.indexedDB;
+    if (!idb) {
+      lastIndexedDBCheckResult = false;
+      lastIndexedDBCheckAt = now;
+      return false;
+    }
+
+    // Our shim doesn't have the proper open behavior, so check if it's the real thing
+    // by verifying that it's an IDBFactory instance (if available)
+    // In restricted environments, our shim will be in place
+    const isRealIndexedDB = typeof IDBFactory !== "undefined" && idb instanceof IDBFactory;
+    
+    lastIndexedDBCheckResult = isRealIndexedDB;
+    lastIndexedDBCheckAt = now;
+    
+    if (!isRealIndexedDB) {
+      // Log first occurrence to Sentry
+      if (lastIndexedDBCheckResult !== false) {
+        Sentry.captureMessage("IndexedDB unavailable - wallet features may be limited", {
+          level: "info",
+          tags: {
+            storage_error: "indexeddb_unavailable",
+          },
+        });
+      }
+    }
+    
+    return isRealIndexedDB;
+  } catch (error) {
+    // Log first occurrence to Sentry
+    if (lastIndexedDBCheckResult !== false) {
+      Sentry.captureMessage("IndexedDB check failed", {
+        level: "warning",
+        tags: {
+          storage_error: "indexeddb_check_error",
+        },
+        extra: {
+          error_message: error instanceof Error ? error.message : String(error),
+        },
+      });
+    }
+    lastIndexedDBCheckResult = false;
+    lastIndexedDBCheckAt = now;
     return false;
   }
 }
@@ -234,4 +301,16 @@ export function isRestrictedStorageEnvironment(): boolean {
   }
 
   return !canUseLocalStorage() && !canUseSessionStorage();
+}
+
+/**
+ * Check if IndexedDB is in a restricted/shimmed state.
+ * This indicates wallet features may be limited.
+ */
+export function isIndexedDBRestricted(): boolean {
+  if (!hasWindow()) {
+    return false;
+  }
+
+  return !canUseIndexedDB();
 }

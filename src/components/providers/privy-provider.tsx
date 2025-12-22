@@ -13,7 +13,7 @@ import { GatewayzAuthProvider } from "@/context/gatewayz-auth-context";
 import { PreviewHostnameInterceptor } from "@/components/auth/preview-hostname-interceptor";
 import { isVercelPreviewDeployment } from "@/lib/preview-hostname-handler";
 import { buildPreviewSafeRedirectUrl, DEFAULT_PREVIEW_REDIRECT_ORIGIN } from "@/lib/preview-oauth-redirect";
-import { waitForLocalStorageAccess, canUseLocalStorage } from "@/lib/safe-storage";
+import { waitForLocalStorageAccess, canUseLocalStorage, canUseIndexedDB } from "@/lib/safe-storage";
 
 interface PrivyProviderWrapperProps {
   children: ReactNode;
@@ -309,6 +309,13 @@ export function PrivyProviderWrapper(props: PrivyProviderWrapperProps) {
   useEffect(() => {
     // Check localStorage availability after mount (client-side only)
     if (canUseLocalStorage()) {
+      // Log IndexedDB status for debugging (helps identify restricted environments)
+      if (!canUseIndexedDB()) {
+        console.warn(
+          "[Auth] IndexedDB unavailable - wallet features may be limited. " +
+          "This is expected in restricted browser environments (e.g., Facebook in-app browser)."
+        );
+      }
       setStatus("ready");
       return;
     }
@@ -317,6 +324,12 @@ export function PrivyProviderWrapper(props: PrivyProviderWrapperProps) {
     let active = true;
     waitForLocalStorageAccess({ attempts: 5, baseDelayMs: 200 }).then((available) => {
       if (!active) return;
+      if (available && !canUseIndexedDB()) {
+        console.warn(
+          "[Auth] IndexedDB unavailable - wallet features may be limited. " +
+          "This is expected in restricted browser environments (e.g., Facebook in-app browser)."
+        );
+      }
       setStatus(available ? "ready" : "blocked");
     });
 

@@ -24,6 +24,7 @@ import { SafeStorageShim } from '@/components/safe-storage-shim';
 import { ReferralToast } from '@/components/referral/referral-toast';
 import { WebVitalsReporter } from '@/components/web-vitals';
 import { EarlyErrorSuppressor } from '@/components/early-error-suppressor';
+import { IndexedDBShim } from '@/components/indexed-db-shim';
 import { FloatingNewChatButton } from '@/components/chat-v2/FloatingNewChatButton';
 
 const inter = Inter({
@@ -90,6 +91,8 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning className="scroll-smooth">
       <head>
+        {/* IndexedDB shim must run first - prevents crashes in restricted browsers (Facebook in-app, etc.) */}
+        <IndexedDBShim />
         {/* Early error suppressor must run before wallet extensions inject ethereum */}
         <EarlyErrorSuppressor />
       </head>
