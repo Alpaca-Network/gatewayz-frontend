@@ -576,7 +576,16 @@ export function ChatInput() {
       if (currentRecognitionRef.current !== recognition) {
         return;
       }
+
+      // 'aborted' is not a real error - it occurs during normal cleanup (component unmount,
+      // page navigation, or browser webview reloading). Skip logging and state cleanup for this case.
+      if (event.error === 'aborted') {
+        return;
+      }
+
+      // Log actual speech recognition errors for debugging
       console.error('Speech recognition error:', event.error);
+
       isRecordingRef.current = false;
       setIsRecording(false);
       setSpeechRecognition(null);
@@ -588,7 +597,7 @@ export function ChatInput() {
           description: "Please allow microphone access to use voice input.",
           variant: "destructive"
         });
-      } else if (event.error !== 'aborted') {
+      } else {
         toast({
           title: "Speech recognition error",
           description: `Error: ${event.error}`,
