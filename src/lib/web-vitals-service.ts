@@ -91,13 +91,26 @@ class WebVitalsService {
 
   /**
    * Get device type from user agent
+   * Note: Avoids negative lookahead regex syntax (?!) which causes
+   * SyntaxError in iOS 16.3.1 WebKit (Twitter in-app browser)
    */
   getDeviceType(): DeviceType {
     if (typeof window === 'undefined') return 'desktop';
 
     const ua = navigator.userAgent.toLowerCase();
-    const isMobile = /mobile|iphone|ipod|android.*mobile|windows phone|blackberry/i.test(ua);
-    const isTablet = /ipad|android(?!.*mobile)|tablet/i.test(ua);
+
+    // Check for explicit mobile identifiers
+    const isMobile = /mobile|iphone|ipod|windows phone|blackberry/i.test(ua);
+
+    // Check for tablet patterns separately to avoid lookahead regex
+    // iPad is always a tablet
+    const isIpad = /ipad/i.test(ua);
+    // Android without "mobile" in UA is a tablet
+    const isAndroidTablet = /android/i.test(ua) && !/mobile/i.test(ua);
+    // Explicit tablet identifier
+    const isExplicitTablet = /tablet/i.test(ua);
+
+    const isTablet = isIpad || isAndroidTablet || isExplicitTablet;
 
     if (isTablet) return 'tablet';
     if (isMobile) return 'mobile';
