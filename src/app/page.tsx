@@ -173,8 +173,18 @@ console.log(completion.choices[0].message);`,
   const [featuredModels, setFeaturedModels] = useState<FeaturedModel[]>([]);
   const [isLoadingModels, setIsLoadingModels] = useState(true);
 
+  // Default fallback models (used when API returns no data)
+  const fallbackModels: FeaturedModel[] = [
+    { name: 'Gemini 2.5 Pro', by: 'google', tokens: '170.06', latency: '2.6s', growth: '+13.06%', color: 'bg-blue-400', logo_url: '/Google_Logo-black.svg' },
+    { name: 'GPT-4', by: 'openai', tokens: '20.98', latency: '850ms', growth: '--', color: 'bg-green-400', logo_url: '/OpenAI_Logo-black.svg' },
+    { name: 'Claude Sonnet 4', by: 'anthropic', tokens: '585.26', latency: '1.9s', growth: '-9.04%', color: 'bg-purple-400', logo_url: '/anthropic-logo.svg' }
+  ];
+
   // Fetch models from rankings API
   useEffect(() => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+
     const fetchRankingModels = async () => {
       try {
         setIsLoadingModels(true);
@@ -183,12 +193,19 @@ console.log(completion.choices[0].message);`,
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
-          }
+          },
+          signal: controller.signal,
         });
 
         if (response.ok) {
           const result = await response.json();
           const rankingModels: RankingModelData[] = result.data || [];
+
+          if (rankingModels.length === 0) {
+            // API returned empty data, use fallback
+            setFeaturedModels(fallbackModels);
+            return;
+          }
 
           // Map ranking data to featured model format
           const mappedModels: FeaturedModel[] = rankingModels.slice(0, 10).map((model) => {
@@ -230,28 +247,30 @@ console.log(completion.choices[0].message);`,
 
           setFeaturedModels(mappedModels);
         } else {
-          console.error('Failed to fetch ranking models');
-          // Set fallback models if API fails
-          setFeaturedModels([
-            { name: 'Gemini 2.5 Pro', by: 'google', tokens: '170.06', latency: '2.6s', growth: '+13.06%', color: 'bg-blue-400', logo_url: '/Google_Logo-black.svg' },
-            { name: 'GPT-4', by: 'openai', tokens: '20.98', latency: '850ms', growth: '--', color: 'bg-green-400', logo_url: '/OpenAI_Logo-black.svg' },
-            { name: 'Claude Sonnet 4', by: 'anthropic', tokens: '585.26', latency: '1.9s', growth: '-9.04%', color: 'bg-purple-400', logo_url: '/anthropic-logo.svg' }
-          ]);
+          // Non-OK response, use fallback (shouldn't happen with new API route)
+          console.warn('Ranking API returned non-OK status:', response.status);
+          setFeaturedModels(fallbackModels);
         }
       } catch (error) {
-        console.error('Error fetching ranking models:', error);
-        // Set fallback models on error
-        setFeaturedModels([
-          { name: 'Gemini 2.5 Pro', by: 'google', tokens: '170.06', latency: '2.6s', growth: '+13.06%', color: 'bg-blue-400', logo_url: '/Google_Logo-black.svg' },
-          { name: 'GPT-4', by: 'openai', tokens: '20.98', latency: '850ms', growth: '--', color: 'bg-green-400', logo_url: '/OpenAI_Logo-black.svg' },
-          { name: 'Claude Sonnet 4', by: 'anthropic', tokens: '585.26', latency: '1.9s', growth: '-9.04%', color: 'bg-purple-400', logo_url: '/anthropic-logo.svg' }
-        ]);
+        // Only log non-abort errors (abort is expected on unmount or timeout)
+        if (error instanceof Error && error.name !== 'AbortError') {
+          console.warn('Error fetching ranking models:', error.message);
+        }
+        // Use fallback models on any error
+        setFeaturedModels(fallbackModels);
       } finally {
+        clearTimeout(timeoutId);
         setIsLoadingModels(false);
       }
     };
 
     fetchRankingModels();
+
+    // Cleanup: abort fetch on unmount
+    return () => {
+      controller.abort();
+      clearTimeout(timeoutId);
+    };
   }, []);
 
   // Auto-advance carousel every 3 seconds
