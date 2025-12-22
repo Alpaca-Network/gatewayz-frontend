@@ -2,7 +2,7 @@
 "use client"
 
 import * as React from "react"
-import { Check, ChevronDown, ChevronRight, ChevronsUpDown, Loader2, Star, Sparkles, TrendingUp, Shield, Image as ImageIcon } from "lucide-react"
+import { Check, ChevronDown, ChevronRight, ChevronsUpDown, Loader2, Star, Sparkles, TrendingUp, Shield, Image as ImageIcon, Video } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { getAdaptiveTimeout } from "@/lib/network-timeouts"
