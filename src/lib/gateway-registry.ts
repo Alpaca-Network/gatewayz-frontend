@@ -102,10 +102,11 @@ export const GATEWAYS: GatewayConfig[] = [
     priority: 'slow',
   },
   {
-    id: 'google',
+    id: 'google-vertex',
     name: 'Google',
     color: 'bg-blue-600',
     priority: 'slow',
+    aliases: ['google'], // Support both 'google' and 'google-vertex' for backwards compatibility
   },
   {
     id: 'cerebras',
