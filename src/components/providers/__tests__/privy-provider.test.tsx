@@ -68,10 +68,15 @@ jest.mock('@sentry/nextjs', () => ({
 
 const mockCanUseLocalStorage = jest.fn(() => true);
 const mockWaitForLocalStorageAccess = jest.fn(() => Promise.resolve(true));
+const mockHasIndexedDBIssues = jest.fn(() => false);
 
 jest.mock('@/lib/safe-storage', () => ({
   canUseLocalStorage: () => mockCanUseLocalStorage(),
   waitForLocalStorageAccess: () => mockWaitForLocalStorageAccess(),
+}));
+
+jest.mock('@/lib/browser-detection', () => ({
+  hasIndexedDBIssues: () => mockHasIndexedDBIssues(),
 }));
 
 describe('PrivyProviderWrapper', () => {
@@ -84,6 +89,7 @@ describe('PrivyProviderWrapper', () => {
     mockCanUseLocalStorage.mockReturnValue(true);
     mockWaitForLocalStorageAccess.mockResolvedValue(true);
     mockIsVercelPreviewDeployment.mockReturnValue(false);
+    mockHasIndexedDBIssues.mockReturnValue(false);
     mockUsePathname.mockReturnValue('/');
     mockUseSearchParams.mockReturnValue({
       toString: () => '',
@@ -535,5 +541,133 @@ describe('PrivyProviderWrapper', () => {
 
     // Note: "Cannot redefine property: ethereum" errors are handled by ErrorSuppressor component
     // which is loaded earlier in the component tree (layout.tsx) to centralize error suppression
+  });
+
+  describe('Safari IndexedDB Error Handling', () => {
+    it('should call preventDefault for IndexedDB createObjectStore errors', () => {
+      process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app-id-12345';
+      const consoleSpy = jest.spyOn(console, 'info').mockImplementation();
+
+      render(
+        <PrivyProviderWrapper>
+          <div>Test Child</div>
+        </PrivyProviderWrapper>
+      );
+
+      // Create a mock PromiseRejectionEvent with an IndexedDB error
+      const mockEvent = new Event('unhandledrejection') as PromiseRejectionEvent;
+      Object.defineProperty(mockEvent, 'reason', {
+        value: { message: "TypeError: undefined is not an object (evaluating 'n.result.createObjectStore')" },
+        writable: false,
+      });
+      const preventDefaultSpy = jest.spyOn(mockEvent, 'preventDefault');
+
+      window.dispatchEvent(mockEvent);
+
+      expect(preventDefaultSpy).toHaveBeenCalled();
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('[Auth] Safari IndexedDB initialization error detected'),
+        expect.any(String)
+      );
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should call preventDefault for connector timeout errors', () => {
+      process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app-id-12345';
+      const consoleSpy = jest.spyOn(console, 'info').mockImplementation();
+
+      render(
+        <PrivyProviderWrapper>
+          <div>Test Child</div>
+        </PrivyProviderWrapper>
+      );
+
+      // Create a mock PromiseRejectionEvent with a connector timeout error
+      const mockEvent = new Event('unhandledrejection') as PromiseRejectionEvent;
+      Object.defineProperty(mockEvent, 'reason', {
+        value: { message: 'Unable to initialize all expected connectors before timeout' },
+        writable: false,
+      });
+      const preventDefaultSpy = jest.spyOn(mockEvent, 'preventDefault');
+
+      window.dispatchEvent(mockEvent);
+
+      expect(preventDefaultSpy).toHaveBeenCalled();
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('[Auth] Wallet connector initialization timeout detected'),
+        expect.any(String)
+      );
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should call preventDefault for AbortError', () => {
+      process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app-id-12345';
+      const consoleSpy = jest.spyOn(console, 'info').mockImplementation();
+
+      render(
+        <PrivyProviderWrapper>
+          <div>Test Child</div>
+        </PrivyProviderWrapper>
+      );
+
+      // Create a mock PromiseRejectionEvent with an AbortError
+      const mockEvent = new Event('unhandledrejection') as PromiseRejectionEvent;
+      Object.defineProperty(mockEvent, 'reason', {
+        value: { message: 'AbortError: The operation was aborted.' },
+        writable: false,
+      });
+      const preventDefaultSpy = jest.spyOn(mockEvent, 'preventDefault');
+
+      window.dispatchEvent(mockEvent);
+
+      expect(preventDefaultSpy).toHaveBeenCalled();
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('[Auth] Operation aborted'),
+        expect.any(String)
+      );
+
+      consoleSpy.mockRestore();
+    });
+  });
+
+  describe('Safari Embedded Wallets Configuration', () => {
+    it('should disable embedded wallets when browser has IndexedDB issues', () => {
+      process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app-id-12345';
+      mockHasIndexedDBIssues.mockReturnValue(true);
+      const consoleSpy = jest.spyOn(console, 'info').mockImplementation();
+
+      render(
+        <PrivyProviderWrapper>
+          <div>Test Child</div>
+        </PrivyProviderWrapper>
+      );
+
+      const config = (global as any).__PRIVY_CONFIG__;
+      // Embedded wallets should be undefined on Safari/iOS
+      expect(config.embeddedWallets).toBeUndefined();
+      expect(consoleSpy).toHaveBeenCalledWith(
+        '[Privy] Embedded wallets disabled due to Safari/iOS IndexedDB compatibility'
+      );
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should enable embedded wallets when browser does not have IndexedDB issues', () => {
+      process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app-id-12345';
+      mockHasIndexedDBIssues.mockReturnValue(false);
+
+      render(
+        <PrivyProviderWrapper>
+          <div>Test Child</div>
+        </PrivyProviderWrapper>
+      );
+
+      const config = (global as any).__PRIVY_CONFIG__;
+      expect(config.embeddedWallets).toBeDefined();
+      expect(config.embeddedWallets.ethereum).toBeDefined();
+      expect(config.embeddedWallets.ethereum.createOnLogin).toBe('users-without-wallets');
+    });
   });
 });

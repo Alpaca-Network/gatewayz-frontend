@@ -14,6 +14,7 @@ import { PreviewHostnameInterceptor } from "@/components/auth/preview-hostname-i
 import { isVercelPreviewDeployment } from "@/lib/preview-hostname-handler";
 import { buildPreviewSafeRedirectUrl, DEFAULT_PREVIEW_REDIRECT_ORIGIN } from "@/lib/preview-oauth-redirect";
 import { waitForLocalStorageAccess, canUseLocalStorage } from "@/lib/safe-storage";
+import { hasIndexedDBIssues } from "@/lib/browser-detection";
 
 interface PrivyProviderWrapperProps {
   children: ReactNode;
@@ -38,7 +39,7 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
 
   useEffect(() => {
     type WalletErrorType = "extension" | "relay";
-    type PrivyErrorType = "iframe" | "java_object";
+    type PrivyErrorType = "iframe" | "java_object" | "indexeddb" | "connector_timeout" | "abort";
 
     const classifyWalletError = (errorStr?: string): WalletErrorType | null => {
       if (!errorStr) {
@@ -83,6 +84,35 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
         return "java_object";
       }
 
+      // Safari IndexedDB bug - "undefined is not an object (evaluating 'n.result.createObjectStore')"
+      // This occurs when Safari's IndexedDB fails to initialize properly
+      if (
+        normalized.includes("createobjectstore") ||
+        normalized.includes("indexeddb") ||
+        (normalized.includes("undefined is not an object") && normalized.includes("result"))
+      ) {
+        return "indexeddb";
+      }
+
+      // Connector timeout - "Unable to initialize all expected connectors before timeout"
+      // Occurs when embedded wallet initialization times out
+      if (
+        normalized.includes("unable to initialize") ||
+        normalized.includes("connectors before timeout")
+      ) {
+        return "connector_timeout";
+      }
+
+      // AbortError - "The operation was aborted"
+      // Occurs when initialization is aborted due to timeout
+      if (
+        normalized.includes("aborterror") ||
+        normalized.includes("the operation was aborted") ||
+        normalized.includes("aborted")
+      ) {
+        return "abort";
+      }
+
       return null;
     };
 
@@ -113,18 +143,30 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
       const labels: Record<PrivyErrorType, string> = {
         iframe: "Privy iframe initialization error",
         java_object: "WebView bridge error",
+        indexeddb: "Safari IndexedDB initialization error",
+        connector_timeout: "Wallet connector initialization timeout",
+        abort: "Operation aborted (likely due to timeout)",
       };
       const label = labels[type];
 
-      console.warn(`[Auth] ${label} detected (non-blocking via ${source}):`, message);
+      // These are known browser-specific issues, log at lower level
+      const isBrowserBug = type === "indexeddb" || type === "connector_timeout" || type === "abort";
+      
+      if (isBrowserBug) {
+        console.info(`[Auth] ${label} detected (non-blocking, Safari/iOS known issue):`, message);
+      } else {
+        console.warn(`[Auth] ${label} detected (non-blocking via ${source}):`, message);
+      }
 
       // Log to Sentry as info level - these are expected transient errors
+      // Browser-specific bugs get even lower priority with additional context
       Sentry.captureMessage(`${label}: ${message}`, {
         level: "info",
         tags: {
           auth_error: `privy_${type}_error`,
           blocking: "false",
           event_source: source,
+          ...(isBrowserBug && { browser_bug: "safari_indexeddb" }),
         },
       });
     };
@@ -151,11 +193,19 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
         return;
       }
 
-      // Handle Privy-specific errors (iframe not initialized, Java object gone)
+      // Handle Privy-specific errors (iframe not initialized, Java object gone, IndexedDB, etc.)
       const privyErrorType = classifyPrivyError(reasonStr);
       if (privyErrorType) {
         logPrivyError(privyErrorType, reasonStr, "unhandledrejection");
-        // Don't preventDefault - let Privy handle recovery
+        // For browser-specific bugs (indexeddb, connector_timeout, abort), 
+        // call preventDefault to suppress console noise - these are known issues
+        // that we handle gracefully by disabling embedded wallets on Safari/iOS
+        const isBrowserBug = privyErrorType === "indexeddb" || 
+                            privyErrorType === "connector_timeout" || 
+                            privyErrorType === "abort";
+        if (isBrowserBug) {
+          event.preventDefault();
+        }
         return;
       }
 
@@ -182,7 +232,14 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
       const privyErrorType = classifyPrivyError(event.message);
       if (privyErrorType) {
         logPrivyError(privyErrorType, event.message, "error");
-        // Don't preventDefault - these are transient errors that Privy recovers from
+        // For browser-specific bugs (indexeddb, connector_timeout, abort), 
+        // call preventDefault to suppress console noise
+        const isBrowserBug = privyErrorType === "indexeddb" || 
+                            privyErrorType === "connector_timeout" || 
+                            privyErrorType === "abort";
+        if (isBrowserBug) {
+          event.preventDefault();
+        }
         return;
       }
 
@@ -244,6 +301,11 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
   }, [pathname, searchParamsKey, previewRedirectOrigin]);
 
   const privyConfig = useMemo<PrivyClientConfig>(() => {
+    // Detect if browser has IndexedDB issues (Safari, iOS)
+    // Safari has a known bug where IndexedDB operations can hang during
+    // embedded wallet initialization, causing AbortError timeouts
+    const browserHasIndexedDBIssues = hasIndexedDBIssues();
+
     const config: PrivyClientConfig = {
       loginMethods: ["email", "google", "github"],
       appearance: {
@@ -251,16 +313,27 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
         accentColor: "#000000",
         logo: "/logo_black.svg",
       },
-      embeddedWallets: {
-        ethereum: {
-          createOnLogin: "users-without-wallets",
-        },
-      },
+      // Disable embedded wallets on Safari/iOS to avoid IndexedDB hang bug
+      // The bug causes: "undefined is not an object (evaluating 'n.result.createObjectStore')"
+      // followed by connector timeout and AbortError
+      ...(browserHasIndexedDBIssues
+        ? {}
+        : {
+            embeddedWallets: {
+              ethereum: {
+                createOnLogin: "users-without-wallets",
+              },
+            },
+          }),
       defaultChain: base,
     };
 
     if (previewSafeOAuthRedirectUrl) {
       config.customOAuthRedirectUrl = previewSafeOAuthRedirectUrl;
+    }
+
+    if (browserHasIndexedDBIssues) {
+      console.info('[Privy] Embedded wallets disabled due to Safari/iOS IndexedDB compatibility');
     }
 
     return config;
