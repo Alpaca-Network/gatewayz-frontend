@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { streamText, APICallError } from 'ai';
+import { streamText, APICallError, CoreMessage } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 import { checkGuestRateLimit, incrementGuestRateLimit, getClientIP, formatResetTime } from '@/lib/guest-rate-limiter';
 
@@ -23,6 +23,143 @@ import { checkGuestRateLimit, incrementGuestRateLimit, getClientIP, formatResetT
  * - Qwen (QwQ and thinking models)
  * - And 60+ other providers
  */
+
+/**
+ * Sanitize and convert incoming messages to CoreMessage[] format for AI SDK.
+ * 
+ * The AI SDK v5 uses strict Zod validation on messages. This function:
+ * 1. Filters out UI-specific fields (isStreaming, wasStopped, error, hasError, etc.)
+ * 2. Normalizes content to valid formats (string or content parts array)
+ * 3. Ensures only valid roles are passed through
+ * 4. Returns properly typed CoreMessage[] that passes AI SDK validation
+ */
+function sanitizeMessages(rawMessages: any[]): CoreMessage[] {
+  if (!Array.isArray(rawMessages)) {
+    return [];
+  }
+
+  const validMessages: CoreMessage[] = [];
+  
+  for (const msg of rawMessages) {
+    // Filter out invalid messages
+    if (!msg || typeof msg !== 'object') continue;
+    if (!msg.role || typeof msg.role !== 'string') continue;
+    // Filter out empty content (but allow empty string for some edge cases)
+    if (msg.content === undefined || msg.content === null) continue;
+    
+    const role = msg.role.toLowerCase();
+    
+    // Normalize content - handle string, array, and edge cases
+    let content: string | any[];
+    if (typeof msg.content === 'string') {
+      content = msg.content;
+    } else if (Array.isArray(msg.content)) {
+      // For content arrays (multimodal), sanitize each part
+      const parts = msg.content
+        .filter((part: any) => part && typeof part === 'object')
+        .map((part: any) => {
+          // Handle text parts
+          if (part.type === 'text' && typeof part.text === 'string') {
+            return { type: 'text' as const, text: part.text };
+          }
+          // Handle image parts (OpenAI format)
+          if (part.type === 'image_url' && part.image_url?.url) {
+            return { 
+              type: 'image' as const, 
+              image: part.image_url.url 
+            };
+          }
+          // Handle image parts (AI SDK format)
+          if (part.type === 'image' && part.image) {
+            return { type: 'image' as const, image: part.image };
+          }
+            // Handle file parts
+            if (part.type === 'file' && part.data) {
+              return { 
+                type: 'file' as const, 
+                data: part.data,
+                mediaType: part.mediaType || part.mimeType || 'application/octet-stream'
+              };
+            }
+          // Skip unknown part types
+          return null;
+        })
+        .filter((part: any): part is NonNullable<typeof part> => part !== null);
+      
+      // If array is empty after filtering, use empty string
+      content = parts.length > 0 ? parts : '';
+    } else {
+      // Convert any other type to string
+      content = String(msg.content);
+    }
+
+    // Build the sanitized message with only valid fields
+    // The AI SDK is very strict about extra properties
+    switch (role) {
+      case 'system':
+        validMessages.push({
+          role: 'system' as const,
+          content: typeof content === 'string' ? content : 
+            // For system messages, extract text from content array
+            (Array.isArray(content) 
+              ? content.filter((p: any) => p.type === 'text').map((p: any) => p.text).join('\n')
+              : String(content))
+        });
+        break;
+      
+      case 'user':
+        // User content can be string or array of parts
+        // Cast is safe because we've already sanitized the content
+        validMessages.push({
+          role: 'user' as const,
+          content: content as any // Type assertion needed due to complex union types
+        });
+        break;
+      
+      case 'assistant':
+        // Assistant messages - extract text content only
+        // Skip tool_calls since we don't support that in this sanitization
+        validMessages.push({
+          role: 'assistant' as const,
+          content: typeof content === 'string' ? content : 
+            // For assistant, extract text content
+            (Array.isArray(content)
+              ? content.filter((p: any) => p.type === 'text').map((p: any) => p.text).join('')
+              : String(content))
+        });
+        break;
+      
+      case 'tool':
+        // Tool messages require tool_call_id and content
+        // These are rarely sent from the frontend, but handle gracefully
+        const toolCallId = msg.tool_call_id || msg.toolCallId || 'unknown';
+        const toolName = msg.name || msg.toolName || 'unknown';
+        const outputValue = typeof content === 'string' ? content : JSON.stringify(content);
+        validMessages.push({
+          role: 'tool' as const,
+          content: [{
+            type: 'tool-result' as const,
+            toolCallId,
+            toolName,
+            // Output must be LanguageModelV2ToolResultOutput type
+            output: { type: 'text' as const, value: outputValue }
+          }]
+        });
+        break;
+      
+      default:
+        // Default to user role for unknown roles
+        console.warn(`[AI SDK Route] Unknown message role "${role}", treating as user`);
+        validMessages.push({
+          role: 'user' as const,
+          content: typeof content === 'string' ? content : String(content)
+        });
+        break;
+    }
+  }
+  
+  return validMessages;
+}
 
 // Retry configuration for transient failures
 const MAX_RETRIES = 3;
@@ -446,13 +583,19 @@ export async function POST(request: NextRequest) {
           attempt,
         });
 
-        // Messages are already in the correct ModelMessage format (OpenAI-compatible)
-        console.log('[AI SDK Route] Using messages directly (already in ModelMessage format)');
+        // Sanitize messages to CoreMessage[] format for AI SDK
+        // This strips UI-specific fields and ensures proper typing
+        const sanitizedMessages = sanitizeMessages(messages);
+        console.log('[AI SDK Route] Sanitized messages:', {
+          originalCount: messages.length,
+          sanitizedCount: sanitizedMessages.length,
+          roles: sanitizedMessages.map(m => m.role)
+        });
 
         // Stream the response using AI SDK
         result = streamText({
           model,
-          messages,
+          messages: sanitizedMessages,
           temperature,
           maxOutputTokens: max_tokens,
           topP: top_p,
