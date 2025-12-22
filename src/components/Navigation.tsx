@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 import { Menu } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -137,6 +137,7 @@ const Navigation = () => {
               </Button>
             </SheetTrigger>
             <SheetContent side="right" className="w-64 bg-white border-gray-200">
+              <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
               <div className="flex flex-col space-y-4 mt-8">
                 {navItems.map((item) => (
                   item.external ? (
