@@ -207,6 +207,24 @@ export function initializeGlobalErrorHandlers(): void {
     const errorMessage = event.message || '';
     const errorMessageLower = errorMessage.toLowerCase();
 
+    // Skip generic "Script error." from cross-origin scripts
+    // This occurs when external scripts (analytics, ads, etc.) throw errors but the browser
+    // suppresses details due to CORS security policies. These are typically:
+    // - Third-party analytics scripts (GTM, PostHog, Statsig)
+    // - Ad network scripts
+    // - Social media widgets
+    // These errors provide no actionable debugging information and pollute error logs.
+    // The `crossorigin="anonymous"` attribute on script tags can help get details,
+    // but many third-party services don't support CORS headers for their scripts.
+    if (
+      errorMessage === 'Script error.' ||
+      errorMessageLower === 'script error' ||
+      (errorMessageLower.includes('script error') && !event.filename && !event.lineno)
+    ) {
+      console.debug('[GlobalError] Skipping generic cross-origin "Script error." (no actionable details available)');
+      return;
+    }
+
     // Skip "message port closed" errors from Chrome extensions
     // These are benign browser extension communication errors (password managers, ad blockers, etc.)
     if (

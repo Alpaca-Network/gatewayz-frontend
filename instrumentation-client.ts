@@ -144,6 +144,29 @@ function shouldFilterEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): bo
   const eventMessage = event.message || '';
   const stackFrames = event.exception?.values?.[0]?.stacktrace?.frames;
 
+  // Filter out generic "Script error." from cross-origin scripts
+  // This occurs when external scripts (analytics, ads, social widgets) throw errors but the browser
+  // suppresses details due to CORS security policies (Same-Origin Policy).
+  // Common sources: GTM, PostHog, Statsig, ad networks, social media widgets
+  // These errors provide NO actionable debugging information because:
+  // - No error message (just "Script error.")
+  // - No stack trace
+  // - No filename or line number
+  // The `crossorigin="anonymous"` attribute on script tags can help get details,
+  // but many third-party services don't support CORS headers for their scripts.
+  const exceptionValue = event.exception?.values?.[0]?.value || '';
+  if (
+    eventMessage === 'Script error.' ||
+    eventMessage.toLowerCase() === 'script error' ||
+    exceptionValue === 'Script error.' ||
+    exceptionValue.toLowerCase() === 'script error' ||
+    // Also check for "Script error." with no stack trace (definitive cross-origin indicator)
+    (eventMessage.toLowerCase().includes('script error') && (!stackFrames || stackFrames.length === 0))
+  ) {
+    console.debug('[Sentry] Filtered out generic cross-origin "Script error." (no actionable details available)');
+    return true;
+  }
+
   // Filter out "message port closed" errors from Chrome extensions
   // These are benign browser extension communication errors that occur when:
   // - An extension's background page/service worker is unloaded
