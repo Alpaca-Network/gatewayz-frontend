@@ -4,6 +4,142 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { checkGuestRateLimit, incrementGuestRateLimit, getClientIP, formatResetTime } from '@/lib/guest-rate-limiter';
 
 /**
+ * Content part types for AI SDK ModelMessage format.
+ * The AI SDK uses a different format than OpenAI for multimodal content.
+ * 
+ * Using 'AISDKMessage' prefix to avoid conflicts with AI SDK's internal types.
+ */
+type AISDKTextPart = { type: 'text'; text: string };
+type AISDKImagePart = { type: 'image'; image: string | URL; mediaType?: string };
+type AISDKFilePart = { type: 'file'; data: string | URL; mediaType: string; filename?: string };
+type AISDKContentPart = AISDKTextPart | AISDKImagePart | AISDKFilePart;
+
+/**
+ * Convert OpenAI-style content parts to AI SDK ModelMessage format.
+ * 
+ * OpenAI format uses:
+ * - { type: "text", text: "..." }
+ * - { type: "image_url", image_url: { url: "..." } }
+ * 
+ * AI SDK format uses:
+ * - { type: "text", text: "..." }
+ * - { type: "image", image: URL | dataContent }
+ * - { type: "file", data: URL | dataContent, mediaType: "..." }
+ */
+function convertToAISDKMessageContent(content: unknown): string | AISDKContentPart[] {
+  // If content is a string, return as-is
+  if (typeof content === 'string') {
+    return content;
+  }
+
+  // If content is null/undefined, return empty string
+  if (content == null) {
+    return '';
+  }
+
+  // If content is an array, convert each part
+  if (Array.isArray(content)) {
+    const modelParts: AISDKContentPart[] = [];
+
+    for (const part of content) {
+      if (!part || typeof part !== 'object') continue;
+
+      const partType = (part as Record<string, unknown>).type;
+
+      if (partType === 'text') {
+        // Text parts are the same format
+        const text = (part as { text?: string }).text;
+        if (text) {
+          modelParts.push({ type: 'text', text });
+        }
+      } else if (partType === 'image_url') {
+        // Convert OpenAI image_url format to AI SDK image format
+        const imageUrl = (part as { image_url?: { url?: string } }).image_url?.url;
+        if (imageUrl) {
+          modelParts.push({ type: 'image', image: imageUrl });
+        }
+      } else if (partType === 'image') {
+        // Already in AI SDK format
+        const image = (part as { image?: string | URL }).image;
+        if (image) {
+          modelParts.push({ 
+            type: 'image', 
+            image,
+            mediaType: (part as { mediaType?: string }).mediaType 
+          });
+        }
+      } else if (partType === 'file_url' || partType === 'file') {
+        // Convert file formats
+        const fileUrl = partType === 'file_url' 
+          ? (part as { file_url?: { url?: string } }).file_url?.url
+          : (part as { data?: string | URL }).data;
+        if (fileUrl) {
+          modelParts.push({ 
+            type: 'file', 
+            data: typeof fileUrl === 'string' ? fileUrl : fileUrl,
+            mediaType: (part as { mediaType?: string; mimeType?: string }).mediaType || 
+                       (part as { mimeType?: string }).mimeType || 
+                       'application/octet-stream',
+            filename: (part as { filename?: string }).filename
+          });
+        }
+      }
+      // Skip unknown part types
+    }
+
+    // If we have parts, return them; otherwise return empty string
+    if (modelParts.length > 0) {
+      return modelParts;
+    }
+    return '';
+  }
+
+  // Unknown content type, try to convert to string
+  return String(content);
+}
+
+/**
+ * A single message in the format expected by AI SDK's streamText.
+ * Uses a discriminated union with specific role types for proper type inference.
+ */
+type AISDKSystemMessage = { role: 'system'; content: string };
+type AISDKUserMessage = { role: 'user'; content: string | AISDKContentPart[] };
+type AISDKAssistantMessage = { role: 'assistant'; content: string | AISDKContentPart[] };
+type AISDKModelMessage = AISDKSystemMessage | AISDKUserMessage | AISDKAssistantMessage;
+
+/**
+ * Convert an array of OpenAI-style messages to AI SDK ModelMessage format.
+ * This handles the format differences between OpenAI and AI SDK.
+ */
+function convertMessagesToAISDKFormat(messages: unknown[]): AISDKModelMessage[] {
+  const result: AISDKModelMessage[] = [];
+
+  for (const msg of messages) {
+    if (msg == null || typeof msg !== 'object') continue;
+
+    const rawMsg = msg as Record<string, unknown>;
+    const role = rawMsg.role as string;
+    const content = convertToAISDKMessageContent(rawMsg.content);
+
+    if (role === 'system') {
+      // System messages must have string content
+      const stringContent = typeof content === 'string' ? content : 
+        (Array.isArray(content) ? content.filter(p => p.type === 'text').map(p => (p as AISDKTextPart).text).join('\n') : '');
+      if (stringContent) {
+        result.push({ role: 'system', content: stringContent });
+      }
+    } else if (role === 'user') {
+      result.push({ role: 'user', content });
+    } else if (role === 'assistant') {
+      result.push({ role: 'assistant', content });
+    }
+    // Skip messages with unknown roles
+  }
+
+  return result;
+}
+
+/**
  * AI SDK Chat Completions Route
  *
  * This route uses the official Vercel AI SDK for streaming chat completions
@@ -446,13 +582,17 @@ export async function POST(request: NextRequest) {
           attempt,
         });
 
-        // Messages are already in the correct ModelMessage format (OpenAI-compatible)
-        console.log('[AI SDK Route] Using messages directly (already in ModelMessage format)');
+        // Convert OpenAI-style messages to AI SDK ModelMessage format
+        // The AI SDK uses different content part formats (e.g., {type: "image"} vs {type: "image_url"})
+        const modelMessages = convertMessagesToAISDKFormat(messages);
+        console.log('[AI SDK Route] Converted messages to ModelMessage format:', modelMessages.length);
 
         // Stream the response using AI SDK
+        // Use type assertion since we've manually converted to the correct format
         result = streamText({
           model,
-          messages,
+          // eslint-disable-next-line
+          messages: modelMessages as any,
           temperature,
           maxOutputTokens: max_tokens,
           topP: top_p,
