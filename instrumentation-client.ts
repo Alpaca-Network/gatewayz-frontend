@@ -352,6 +352,24 @@ function shouldFilterEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): bo
     return true;
   }
 
+  // Filter out iOS WebKit "Load failed" errors
+  // These occur in iOS Safari, Twitter iOS WebView, and other iOS WebKit browsers when:
+  // - Next.js optimized images (AVIF/WebP) fail to load due to format incompatibility
+  // - Network requests are interrupted by WebView restrictions or security policies
+  // - The underlying network layer throws a generic failure that WebKit reports as TypeError
+  // This is a benign browser behavior, not an application bug
+  const exceptionType = event.exception?.values?.[0]?.type;
+  const exceptionValue = event.exception?.values?.[0]?.value?.toLowerCase() || '';
+  if (
+    (exceptionType === 'TypeError' || errorMessage.includes('TypeError')) &&
+    (errorMessageLower.includes('load failed') ||
+     eventMessageLower.includes('load failed') ||
+     exceptionValue.includes('load failed'))
+  ) {
+    console.debug('[Sentry] Filtered out iOS WebKit "TypeError: Load failed" error (benign browser behavior)');
+    return true;
+  }
+
   return false;
 }
 

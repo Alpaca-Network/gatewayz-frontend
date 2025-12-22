@@ -825,4 +825,182 @@ describe('Sentry Error Filters', () => {
       expect(result).toBe(event);
     });
   });
+
+  describe('iOS WebKit "Load failed" error filtering', () => {
+    let loadFailedCallback: (event: Sentry.ErrorEvent, hint: Sentry.EventHint) => Sentry.ErrorEvent | null;
+    let consoleDebugSpy: jest.SpyInstance;
+
+    beforeEach(() => {
+      consoleDebugSpy = jest.spyOn(console, 'debug').mockImplementation();
+
+      // Callback that mimics the actual implementation for iOS WebKit "Load failed" filtering
+      loadFailedCallback = (event: Sentry.ErrorEvent, hint: Sentry.EventHint) => {
+        const error = hint.originalException;
+        const errorMessage = typeof error === 'string' ? error : error instanceof Error ? error.message : '';
+        const errorMessageLower = errorMessage.toLowerCase();
+        const eventMessage = event.message || '';
+        const eventMessageLower = eventMessage.toLowerCase();
+
+        // Filter out iOS WebKit "Load failed" errors
+        const exceptionType = event.exception?.values?.[0]?.type;
+        const exceptionValue = event.exception?.values?.[0]?.value?.toLowerCase() || '';
+        if (
+          (exceptionType === 'TypeError' || errorMessage.includes('TypeError')) &&
+          (errorMessageLower.includes('load failed') ||
+           eventMessageLower.includes('load failed') ||
+           exceptionValue.includes('load failed'))
+        ) {
+          console.debug('[Sentry] Filtered out iOS WebKit "TypeError: Load failed" error (benign browser behavior)');
+          return null;
+        }
+
+        return event;
+      };
+    });
+
+    afterEach(() => {
+      consoleDebugSpy.mockRestore();
+    });
+
+    it('should filter out "TypeError: Load failed" errors from iOS WebKit', () => {
+      const error = new TypeError('Load failed');
+      const event: Sentry.ErrorEvent = {
+        exception: {
+          values: [{
+            type: 'TypeError',
+            value: 'Load failed',
+            stacktrace: { frames: [] }
+          }]
+        }
+      } as Sentry.ErrorEvent;
+
+      const hint: Sentry.EventHint = { originalException: error };
+      const result = loadFailedCallback(event, hint);
+
+      expect(result).toBeNull();
+      expect(consoleDebugSpy).toHaveBeenCalledWith(
+        '[Sentry] Filtered out iOS WebKit "TypeError: Load failed" error (benign browser behavior)'
+      );
+    });
+
+    it('should filter out "TypeError: TypeError: Load failed" errors (double type prefix)', () => {
+      const error = new TypeError('TypeError: Load failed');
+      const event: Sentry.ErrorEvent = {
+        exception: {
+          values: [{
+            type: 'TypeError',
+            value: 'TypeError: Load failed',
+            stacktrace: { frames: [] }
+          }]
+        }
+      } as Sentry.ErrorEvent;
+
+      const hint: Sentry.EventHint = { originalException: error };
+      const result = loadFailedCallback(event, hint);
+
+      expect(result).toBeNull();
+    });
+
+    it('should filter out Load failed errors from event message', () => {
+      const error = new Error('Network issue');
+      const event: Sentry.ErrorEvent = {
+        message: 'TypeError: Load failed',
+        exception: {
+          values: [{
+            type: 'TypeError',
+            value: 'Network issue',
+            stacktrace: { frames: [] }
+          }]
+        }
+      } as Sentry.ErrorEvent;
+
+      const hint: Sentry.EventHint = { originalException: error };
+      const result = loadFailedCallback(event, hint);
+
+      expect(result).toBeNull();
+    });
+
+    it('should filter out Load failed errors with native code stack trace', () => {
+      // This mimics the actual error structure from iOS WebKit
+      const error = new TypeError('Load failed');
+      const event: Sentry.ErrorEvent = {
+        exception: {
+          values: [{
+            type: 'TypeError',
+            value: 'Load failed',
+            stacktrace: {
+              frames: [
+                { filename: '[native code]', function: 'error', lineNo: undefined, colNo: undefined },
+                { filename: '[native code]', function: 'Unknown', lineNo: undefined, colNo: undefined }
+              ]
+            }
+          }]
+        }
+      } as Sentry.ErrorEvent;
+
+      const hint: Sentry.EventHint = { originalException: error };
+      const result = loadFailedCallback(event, hint);
+
+      expect(result).toBeNull();
+    });
+
+    it('should filter case-insensitive variants', () => {
+      const error = new TypeError('LOAD FAILED');
+      const event: Sentry.ErrorEvent = {
+        exception: {
+          values: [{
+            type: 'TypeError',
+            value: 'LOAD FAILED',
+            stacktrace: { frames: [] }
+          }]
+        }
+      } as Sentry.ErrorEvent;
+
+      const hint: Sentry.EventHint = { originalException: error };
+      const result = loadFailedCallback(event, hint);
+
+      expect(result).toBeNull();
+    });
+
+    it('should NOT filter Load failed errors that are not TypeErrors', () => {
+      // Generic Error (not TypeError) with "Load failed" should be captured
+      const error = new Error('Load failed due to server error');
+      const event: Sentry.ErrorEvent = {
+        exception: {
+          values: [{
+            type: 'Error',
+            value: 'Load failed due to server error',
+            stacktrace: { frames: [] }
+          }]
+        }
+      } as Sentry.ErrorEvent;
+
+      const hint: Sentry.EventHint = { originalException: error };
+      const result = loadFailedCallback(event, hint);
+
+      // Should NOT be filtered - this is a real application error
+      expect(result).not.toBeNull();
+      expect(result).toBe(event);
+    });
+
+    it('should NOT filter TypeErrors without "Load failed" message', () => {
+      const error = new TypeError('Cannot read property of undefined');
+      const event: Sentry.ErrorEvent = {
+        exception: {
+          values: [{
+            type: 'TypeError',
+            value: 'Cannot read property of undefined',
+            stacktrace: { frames: [] }
+          }]
+        }
+      } as Sentry.ErrorEvent;
+
+      const hint: Sentry.EventHint = { originalException: error };
+      const result = loadFailedCallback(event, hint);
+
+      // Should NOT be filtered - this is a real TypeError
+      expect(result).not.toBeNull();
+      expect(result).toBe(event);
+    });
+  });
 });
