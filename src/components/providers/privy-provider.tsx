@@ -14,6 +14,7 @@ import { PreviewHostnameInterceptor } from "@/components/auth/preview-hostname-i
 import { isVercelPreviewDeployment } from "@/lib/preview-hostname-handler";
 import { buildPreviewSafeRedirectUrl, DEFAULT_PREVIEW_REDIRECT_ORIGIN } from "@/lib/preview-oauth-redirect";
 import { waitForLocalStorageAccess, canUseLocalStorage } from "@/lib/safe-storage";
+import { isRestrictedWebView, getWebViewInfo } from "@/lib/webview-detection";
 
 interface PrivyProviderWrapperProps {
   children: ReactNode;
@@ -24,11 +25,27 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
   const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID || "clxxxxxxxxxxxxxxxxxxx";
   const [showRateLimit, setShowRateLimit] = useState(false);
   const hasLoggedWalletConnectRelayErrorRef = useRef(false);
+  const hasLoggedConnectorTimeoutRef = useRef(false);
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const searchParamsKey = searchParams?.toString() ?? "";
   const previewRedirectOrigin =
     process.env.NEXT_PUBLIC_PRIVY_OAUTH_REDIRECT_ORIGIN?.trim() || DEFAULT_PREVIEW_REDIRECT_ORIGIN;
+  
+  // Detect restricted WebView environments where embedded wallets don't work
+  const [isInRestrictedWebView, setIsInRestrictedWebView] = useState(false);
+  
+  useEffect(() => {
+    // Check for restricted WebView environment on mount
+    const webViewInfo = getWebViewInfo();
+    if (webViewInfo.isRestrictedWebView) {
+      setIsInRestrictedWebView(true);
+      console.info(
+        `[Auth] Detected restricted WebView environment (${webViewInfo.detectedPlatform}). ` +
+        `Embedded wallets will be disabled to prevent initialization errors.`
+      );
+    }
+  }, []);
 
   useEffect(() => {
     if (!process.env.NEXT_PUBLIC_PRIVY_APP_ID) {
@@ -65,6 +82,8 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
       return isExtensionError ? "extension" : null;
     };
 
+    type EmbeddedWalletErrorType = "eth_accounts_unauthorized" | "connector_timeout";
+    
     // Classify Privy-specific errors that are non-blocking
     const classifyPrivyError = (errorStr?: string): PrivyErrorType | null => {
       if (!errorStr) {
@@ -83,6 +102,36 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
         return "java_object";
       }
 
+      return null;
+    };
+    
+    // Classify embedded wallet errors that occur in restricted WebViews
+    const classifyEmbeddedWalletError = (errorStr?: string, errorObj?: unknown): EmbeddedWalletErrorType | null => {
+      if (!errorStr && !errorObj) {
+        return null;
+      }
+      
+      const normalized = (errorStr || "").toLowerCase();
+      
+      // "Must call 'eth_requestAccounts' before other methods" - 4100 protocol error
+      // This happens when eth_accounts is called before user authorization
+      if (
+        normalized.includes("eth_requestaccounts") ||
+        normalized.includes("4100") ||
+        (typeof errorObj === "object" && errorObj !== null && "code" in errorObj && (errorObj as { code: number }).code === 4100)
+      ) {
+        return "eth_accounts_unauthorized";
+      }
+      
+      // "Unable to initialize all expected connectors before timeout"
+      // This happens in restricted WebViews where Base Account SDK can't initialize
+      if (
+        normalized.includes("unable to initialize all expected connectors") ||
+        (normalized.includes("expected") && normalized.includes("initialized") && normalized.includes("connectors"))
+      ) {
+        return "connector_timeout";
+      }
+      
       return null;
     };
 
@@ -128,9 +177,40 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
         },
       });
     };
+    
+    const logEmbeddedWalletError = (type: EmbeddedWalletErrorType, message: string, source: "unhandledrejection" | "error" | "console") => {
+      const labels: Record<EmbeddedWalletErrorType, string> = {
+        eth_accounts_unauthorized: "Embedded wallet eth_accounts unauthorized (4100)",
+        connector_timeout: "Embedded wallet connector initialization timeout",
+      };
+      const label = labels[type];
+      
+      // Only log connector timeout once per session
+      if (type === "connector_timeout") {
+        if (hasLoggedConnectorTimeoutRef.current) {
+          return;
+        }
+        hasLoggedConnectorTimeoutRef.current = true;
+      }
+
+      // These are expected errors in restricted WebView environments
+      // Log as info level to reduce noise
+      console.info(`[Auth] ${label} detected (expected in restricted WebViews via ${source}):`, message);
+
+      // Log to Sentry as info level - these are expected in restricted WebViews
+      Sentry.captureMessage(`${label}: ${message}`, {
+        level: "info",
+        tags: {
+          auth_error: `embedded_wallet_${type}`,
+          blocking: "false",
+          event_source: source,
+          is_restricted_webview: isRestrictedWebView() ? "true" : "false",
+        },
+      });
+    };
 
     const rateLimitListener = (event: PromiseRejectionEvent) => {
-      const reason = event.reason as { status?: number; message?: string } | undefined;
+      const reason = event.reason as { status?: number; message?: string; code?: number } | undefined;
       const reasonStr = reason?.message ?? String(reason);
 
       // Handle rate limit errors
@@ -147,6 +227,17 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
           },
         });
 
+        event.preventDefault();
+        return;
+      }
+      
+      // Handle embedded wallet errors (4100 protocol error, connector timeout)
+      // These are expected in restricted WebView environments
+      const embeddedWalletErrorType = classifyEmbeddedWalletError(reasonStr, reason);
+      if (embeddedWalletErrorType) {
+        logEmbeddedWalletError(embeddedWalletErrorType, reasonStr, "unhandledrejection");
+        // Prevent these errors from showing in console as uncaught
+        // They are expected in restricted WebViews and non-blocking
         event.preventDefault();
         return;
       }
@@ -178,6 +269,14 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
     // Note: "Cannot redefine property: ethereum" errors are handled by ErrorSuppressor component
     // which is loaded earlier in the component tree (layout.tsx) to avoid duplicate handling
     const errorListener = (event: ErrorEvent) => {
+      // Handle embedded wallet errors (4100 protocol error, connector timeout)
+      const embeddedWalletErrorType = classifyEmbeddedWalletError(event.message);
+      if (embeddedWalletErrorType) {
+        logEmbeddedWalletError(embeddedWalletErrorType, event.message, "error");
+        // Don't preventDefault - these are transient errors
+        return;
+      }
+      
       // Handle Privy-specific errors
       const privyErrorType = classifyPrivyError(event.message);
       if (privyErrorType) {
@@ -251,11 +350,19 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
         accentColor: "#000000",
         logo: "/logo_black.svg",
       },
-      embeddedWallets: {
-        ethereum: {
-          createOnLogin: "users-without-wallets",
-        },
-      },
+      // Disable embedded wallets in restricted WebViews (Twitter, Facebook, Instagram, etc.)
+      // to prevent connector initialization timeouts and eth_accounts 4100 errors
+      embeddedWallets: isInRestrictedWebView 
+        ? {
+            ethereum: {
+              createOnLogin: "off",
+            },
+          }
+        : {
+            ethereum: {
+              createOnLogin: "users-without-wallets",
+            },
+          },
       defaultChain: base,
     };
 
@@ -264,7 +371,7 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
     }
 
     return config;
-  }, [previewSafeOAuthRedirectUrl]);
+  }, [previewSafeOAuthRedirectUrl, isInRestrictedWebView]);
 
   const renderChildren = children;
 
