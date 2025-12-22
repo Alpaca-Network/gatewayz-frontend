@@ -52,6 +52,10 @@ export interface ChatMessage {
   error?: string;
   // Optimistic update flag
   isPending?: boolean;
+  // Tool calling state
+  toolCall?: ToolCall;
+  toolResult?: ToolResult;
+  isSearching?: boolean;
 }
 
 export interface MessageAttachment {
@@ -60,6 +64,36 @@ export interface MessageAttachment {
   name: string;
   size?: number;
   mimeType?: string;
+}
+
+// =============================================================================
+// TOOL CALLING TYPES
+// =============================================================================
+
+export interface ToolCall {
+  id: string;
+  name: string;
+  arguments: Record<string, unknown>;
+}
+
+export interface ToolResult {
+  tool_call_id: string;
+  name: string;
+  success: boolean;
+  result?: unknown;
+  error?: string;
+}
+
+export interface WebSearchResult {
+  query: string;
+  results: Array<{
+    title: string;
+    url: string;
+    content: string;
+    score: number;
+  }>;
+  answer?: string;
+  formatted?: string;
 }
 
 // =============================================================================
@@ -73,7 +107,8 @@ export type StreamStatus =
   | 'completing'
   | 'complete'
   | 'error'
-  | 'cancelled';
+  | 'cancelled'
+  | 'tool_executing';  // New status for when a tool is being executed
 
 export interface StreamChunk {
   content?: string;
@@ -86,6 +121,10 @@ export interface StreamChunk {
     totalTime?: number;
     tokensPerSecond?: number;
   };
+  // Tool calling events
+  type?: 'tool_call' | 'tool_result';
+  toolCall?: ToolCall;
+  toolResult?: ToolResult;
 }
 
 export interface StreamState {
@@ -271,6 +310,7 @@ export interface ChatCompletionRequest {
   top_p?: number;
   frequency_penalty?: number;
   presence_penalty?: number;
+  enable_web_search?: boolean;  // Enable server-side web search tool
 }
 
 // =============================================================================
