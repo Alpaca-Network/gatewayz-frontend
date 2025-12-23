@@ -24,6 +24,7 @@ import { SafeStorageShim } from '@/components/safe-storage-shim';
 import { ReferralToast } from '@/components/referral/referral-toast';
 import { WebVitalsReporter } from '@/components/web-vitals';
 import { EarlyErrorSuppressor } from '@/components/early-error-suppressor';
+import { EarlyStorageShim } from '@/components/early-storage-shim';
 import { FloatingNewChatButton } from '@/components/chat-v2/FloatingNewChatButton';
 
 const inter = Inter({
@@ -90,6 +91,9 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning className="scroll-smooth">
       <head>
+        {/* Early storage shim MUST run first - before any modules access localStorage/sessionStorage */}
+        {/* This prevents SecurityError on iOS Safari Private Mode from WalletConnect */}
+        <EarlyStorageShim />
         {/* Early error suppressor must run before wallet extensions inject ethereum */}
         <EarlyErrorSuppressor />
       </head>
