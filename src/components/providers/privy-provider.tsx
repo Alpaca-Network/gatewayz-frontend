@@ -38,7 +38,7 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
 
   useEffect(() => {
     type WalletErrorType = "extension" | "relay";
-    type PrivyErrorType = "iframe" | "java_object";
+    type PrivyErrorType = "iframe" | "java_object" | "invalid_hook";
 
     const classifyWalletError = (errorStr?: string): WalletErrorType | null => {
       if (!errorStr) {
@@ -83,6 +83,12 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
         return "java_object";
       }
 
+      // "Invalid hook call" - React hook called before PrivyProvider mounted
+      // This can happen during SSR/hydration or when localStorage check is in progress
+      if (normalized.includes("invalid hook call")) {
+        return "invalid_hook";
+      }
+
       return null;
     };
 
@@ -113,6 +119,7 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
       const labels: Record<PrivyErrorType, string> = {
         iframe: "Privy iframe initialization error",
         java_object: "WebView bridge error",
+        invalid_hook: "React hook called before PrivyProvider mounted",
       };
       const label = labels[type];
 
