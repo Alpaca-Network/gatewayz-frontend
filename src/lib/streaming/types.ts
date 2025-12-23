@@ -5,6 +5,26 @@
  */
 
 /**
+ * Tool call from the model.
+ */
+export interface ToolCall {
+  id: string;
+  name: string;
+  arguments: Record<string, unknown>;
+}
+
+/**
+ * Result of executing a tool.
+ */
+export interface ToolResult {
+  tool_call_id: string;
+  name: string;
+  success: boolean;
+  result?: unknown;
+  error?: string;
+}
+
+/**
  * A chunk of streamed content from the chat API.
  */
 export interface StreamChunk {
@@ -29,6 +49,15 @@ export interface StreamChunk {
     networkTimeMs?: number;
     totalTimeMs?: number;
   };
+
+  /** Type of chunk for tool calling events */
+  type?: 'tool_call' | 'tool_result';
+
+  /** Tool call being executed (type === 'tool_call') */
+  toolCall?: ToolCall;
+
+  /** Tool execution result (type === 'tool_result') */
+  toolResult?: ToolResult;
 }
 
 /**
@@ -43,6 +72,10 @@ export interface ParsedSSEData {
     type?: string;
     code?: string;
   };
+  // Tool calling events
+  type?: 'tool_call' | 'tool_result';
+  toolCall?: ToolCall;
+  toolResult?: ToolResult;
 }
 
 /**

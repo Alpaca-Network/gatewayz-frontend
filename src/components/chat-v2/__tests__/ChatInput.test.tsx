@@ -101,6 +101,18 @@ jest.mock('@/lib/hooks/use-chat-stream', () => ({
   }),
 }));
 
+// Mock auto model switch hook
+jest.mock('@/lib/hooks/use-auto-model-switch', () => ({
+  useAutoModelSwitch: () => ({
+    checkImageSupport: jest.fn(() => false),
+    checkVideoSupport: jest.fn(() => false),
+    checkAudioSupport: jest.fn(() => false),
+    checkFileSupport: jest.fn(() => false),
+    checkAndSwitchModel: jest.fn(() => false),
+    modelSupportsModality: jest.fn(() => true),
+  }),
+}));
+
 jest.mock('@/hooks/use-toast', () => ({
   useToast: () => ({ toast: mockToast }),
 }));

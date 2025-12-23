@@ -81,12 +81,44 @@ class WebVitalsService {
 
   /**
    * Generate a unique session ID
+   * Falls back to a manual UUID generation for browsers that don't support crypto.randomUUID
    */
   private generateSessionId(): string {
-    if (typeof window !== 'undefined' && window.crypto) {
+    if (
+      typeof window !== 'undefined' &&
+      typeof crypto !== 'undefined' &&
+      typeof crypto.randomUUID === 'function'
+    ) {
       return crypto.randomUUID();
     }
-    return `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
+    // Fallback for browsers without crypto.randomUUID support (e.g., older Android WebViews, Twitter browser)
+    return this.generateFallbackUUID();
+  }
+
+  /**
+   * Generate a UUID v4-like string without crypto.randomUUID
+   * Uses crypto.getRandomValues when available for better randomness
+   */
+  private generateFallbackUUID(): string {
+    // Try to use crypto.getRandomValues for better randomness
+    if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+      const bytes = new Uint8Array(16);
+      crypto.getRandomValues(bytes);
+      // Set version (4) and variant (RFC4122)
+      bytes[6] = (bytes[6] & 0x0f) | 0x40;
+      bytes[8] = (bytes[8] & 0x3f) | 0x80;
+      // Convert to hex string with dashes
+      const hex = Array.from(bytes)
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
+      return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+    }
+    // Final fallback using Math.random (less secure but works everywhere)
+    return `${Date.now().toString(16)}-${'xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+      const r = (Math.random() * 16) | 0;
+      const v = c === 'x' ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    })}`;
   }
 
   /**
