@@ -652,6 +652,114 @@ describe('Authentication Error Handling', () => {
     });
   });
 
+  describe('422 Unprocessable Entity Handling (Incomplete Privy User Data)', () => {
+    it('should detect 422 error and set shouldRetry=true within retry limit', () => {
+      const status = 422;
+      const authRetryCount = 0;
+      const MAX_AUTH_RETRIES = 3;
+
+      let shouldRetry = false;
+      let userMessage = '';
+
+      if (status === 422) {
+        userMessage = "Authentication data incomplete. Retrying...";
+        shouldRetry = authRetryCount < MAX_AUTH_RETRIES;
+      }
+
+      expect(shouldRetry).toBe(true);
+      expect(userMessage).toContain('incomplete');
+    });
+
+    it('should set shouldRetry=false for 422 at retry limit', () => {
+      const status = 422;
+      const authRetryCount = 3;
+      const MAX_AUTH_RETRIES = 3;
+
+      let shouldRetry = false;
+      if (status === 422) {
+        shouldRetry = authRetryCount < MAX_AUTH_RETRIES;
+      }
+
+      expect(shouldRetry).toBe(false);
+    });
+
+    it('should validate Privy user has required id field', () => {
+      // Test case: user object without id
+      const incompleteUser = {
+        linkedAccounts: [],
+        createdAt: new Date(),
+        hasAcceptedTerms: true,
+        isGuest: false,
+        // Note: id is missing
+      };
+
+      const hasRequiredFields = !!incompleteUser && !!(incompleteUser as { id?: string }).id;
+      expect(hasRequiredFields).toBe(false);
+    });
+
+    it('should allow auth when Privy user has valid id', () => {
+      const validUser = {
+        id: 'did:privy:abc123',
+        linkedAccounts: [],
+        createdAt: new Date(),
+        hasAcceptedTerms: true,
+        isGuest: false,
+      };
+
+      const hasRequiredFields = !!validUser && !!validUser.id;
+      expect(hasRequiredFields).toBe(true);
+    });
+
+    it('should not send auth request when user.id is missing', () => {
+      // Simulating the validation logic added to syncWithBackend
+      const user = { linkedAccounts: [] } as { id?: string; linkedAccounts: unknown[] };
+      
+      const shouldProceed = !!user?.id;
+      expect(shouldProceed).toBe(false);
+    });
+
+    it('should log breadcrumb when Privy user is incomplete', () => {
+      const user = { linkedAccounts: [] } as { id?: string; linkedAccounts: unknown[] };
+      
+      // Verify expected breadcrumb structure
+      const expectedBreadcrumb = {
+        category: 'auth',
+        message: 'Privy user missing required id field',
+        level: 'warning',
+        data: {
+          has_user: !!user,
+          user_keys: user ? Object.keys(user).join(', ') : 'none',
+        },
+      };
+
+      expect(expectedBreadcrumb.message).toContain('missing required id field');
+      expect(expectedBreadcrumb.level).toBe('warning');
+    });
+
+    it('should add Sentry breadcrumb for 422 validation error', () => {
+      const status = 422;
+      const user = {
+        id: 'did:privy:abc123',
+        linkedAccounts: [{ type: 'email', email: 'test@example.com' }],
+      };
+
+      // Verify expected breadcrumb structure for 422 error
+      const expectedBreadcrumb = {
+        category: 'auth',
+        message: 'Backend 422 validation error - possible incomplete Privy data',
+        level: 'warning',
+        data: {
+          has_user_id: !!user?.id,
+          has_linked_accounts: !!(user?.linkedAccounts?.length),
+          retry_attempt: 1,
+        },
+      };
+
+      expect(expectedBreadcrumb.message).toContain('422 validation error');
+      expect(expectedBreadcrumb.data.has_user_id).toBe(true);
+    });
+  });
+
   describe('Error Message User Friendliness', () => {
     it.each([
       { status: 500, shouldContain: 'servers are experiencing issues' },

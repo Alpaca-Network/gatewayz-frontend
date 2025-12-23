@@ -705,6 +705,12 @@ export function GatewayzAuthProvider({
 
   const buildAuthRequestBody = useCallback(
     (privyUser: User, token: string | null, existingUserData: UserData | null) => {
+      // Validate required Privy user fields to prevent 422 errors from backend
+      // This is a safety net in case validation in syncWithBackend is bypassed
+      if (!privyUser.id) {
+        throw new Error("Privy user missing required 'id' field - cannot build auth request");
+      }
+
       const existingGatewayzUser = existingUserData ?? null;
       const isNewUser = !existingGatewayzUser;
       const hasStoredApiKey = Boolean(existingGatewayzUser?.api_key);
@@ -713,15 +719,19 @@ export function GatewayzAuthProvider({
       const referralCode = getReferralCode();
       console.log("[Auth] Final referral code:", referralCode);
 
+      // Build user object with required fields explicitly set
+      // Using stripUndefined on the rest to clean up optional fields
+      const userObject = {
+        id: privyUser.id, // Required - validated above
+        created_at: toUnixSeconds(privyUser.createdAt) ?? Math.floor(Date.now() / 1000),
+        linked_accounts: (privyUser.linkedAccounts || []).map(mapLinkedAccount).filter(Boolean),
+        mfa_methods: privyUser.mfaMethods || [],
+        has_accepted_terms: privyUser.hasAcceptedTerms ?? false,
+        is_guest: privyUser.isGuest ?? false,
+      };
+
       const authRequestBody = {
-        user: stripUndefined({
-          id: privyUser.id,
-          created_at: toUnixSeconds(privyUser.createdAt) ?? Math.floor(Date.now() / 1000),
-          linked_accounts: (privyUser.linkedAccounts || []).map(mapLinkedAccount).filter(Boolean),
-          mfa_methods: privyUser.mfaMethods || [],
-          has_accepted_terms: privyUser.hasAcceptedTerms ?? false,
-          is_guest: privyUser.isGuest ?? false,
-        }),
+        user: stripUndefined(userObject),
         token: token ?? "",
         // Only request API key creation for new users or users without stored keys
         // Existing users should get their existing key back to avoid replacing live keys with temp keys
@@ -754,6 +764,28 @@ export function GatewayzAuthProvider({
         clearStoredCredentials();
         setAuthStatus(privyReady ? "unauthenticated" : "idle", "no privy user");
         syncPromiseRef.current = null;
+        return;
+      }
+
+      // Validate that Privy user has required fields before attempting auth
+      // This prevents 422 errors when wallet proxy initialization fails and
+      // leaves the user object incomplete
+      if (!user.id) {
+        console.warn("[Auth] Privy user object is missing required 'id' field - delaying auth sync");
+        console.warn("[Auth] This may happen during wallet proxy initialization - will retry when user data is complete");
+        
+        Sentry.addBreadcrumb({
+          category: 'auth',
+          message: 'Privy user missing required id field',
+          level: 'warning',
+          data: {
+            has_user: !!user,
+            user_keys: user ? Object.keys(user).join(', ') : 'none',
+          },
+        });
+        
+        // Don't treat this as an error - just return and let Privy complete initialization
+        // The useEffect will re-trigger syncWithBackend when user data updates
         return;
       }
 
@@ -1009,6 +1041,28 @@ export function GatewayzAuthProvider({
             shouldRetry = authRetryCountRef.current < MAX_AUTH_RETRIES;
           } else if (is5xxError) {
             userMessage = "Our servers are experiencing issues. Please try again in a moment.";
+            shouldRetry = authRetryCountRef.current < MAX_AUTH_RETRIES;
+          } else if (response.status === 422) {
+            // 422 Unprocessable Entity - malformed request data
+            // This typically happens when Privy user data is incomplete (e.g., wallet proxy initialization failure)
+            // We should retry as Privy may complete initialization on subsequent attempts
+            console.warn("[Auth] Backend returned 422 - request body validation failed");
+            console.warn("[Auth] This may indicate incomplete Privy user data");
+            
+            // Log detailed info for debugging
+            Sentry.addBreadcrumb({
+              category: 'auth',
+              message: 'Backend 422 validation error - possible incomplete Privy data',
+              level: 'warning',
+              data: {
+                has_user_id: !!user?.id,
+                has_linked_accounts: !!(user?.linkedAccounts?.length),
+                retry_attempt: authRetryCountRef.current,
+              },
+            });
+            
+            userMessage = "Authentication data incomplete. Retrying...";
+            // Retry for 422 as it may be due to timing issues with Privy initialization
             shouldRetry = authRetryCountRef.current < MAX_AUTH_RETRIES;
           } else if (response.status === 401 || response.status === 403) {
             userMessage = "Authentication failed. Please try logging in again.";
