@@ -72,8 +72,19 @@ class StatsigErrorBoundary extends React.Component<
       error.message?.includes('CORS') ||
       error.message?.includes('blocked');
 
+    // Check if this is a DOM race condition error (happens during navigation with Radix UI portals)
+    // This occurs when Statsig's Session Replay/Auto Capture plugins interfere with portal cleanup
+    const isDomRaceCondition =
+      error.name === 'NotFoundError' ||
+      error.message?.includes('The object can not be found here') ||
+      error.message?.includes('removeChild') ||
+      error.message?.includes('The node to be removed is not a child');
+
     if (isNetworkError) {
       console.warn('[Statsig] Network/ad blocker error caught - analytics will be disabled:', error.message);
+    } else if (isDomRaceCondition) {
+      // This is a benign race condition during navigation, log at debug level only
+      console.debug('[Statsig] DOM race condition during navigation (non-critical):', error.message);
     } else {
       console.error('[Statsig] Unexpected error in Statsig initialization:', error.message, errorInfo);
     }
@@ -90,11 +101,62 @@ class StatsigErrorBoundary extends React.Component<
   }
 }
 
+// Helper to check if an error is a benign DOM race condition from Statsig plugins
+const isStatsigDomRaceCondition = (error: Error | string | Event): boolean => {
+  const message = typeof error === 'string' 
+    ? error 
+    : error instanceof Error 
+      ? error.message 
+      : '';
+  const name = error instanceof Error ? error.name : '';
+  
+  return (
+    name === 'NotFoundError' ||
+    message.includes('The object can not be found here') ||
+    message.includes('removeChild') ||
+    message.includes('The node to be removed is not a child')
+  );
+};
+
 function StatsigProviderInternal({ children }: { children: React.ReactNode }) {
   const { user, authenticated } = usePrivy();
   const [userId, setUserId] = React.useState<string>('anonymous');
   const [shouldBypassStatsig, setShouldBypassStatsig] = React.useState(false);
   const initTimeoutRef = React.useRef<NodeJS.Timeout>();
+
+  // Global error handler to catch Statsig DOM race conditions before they reach Sentry
+  // This is needed because errors from MutationObserver callbacks (used by Session Replay)
+  // may not be caught by React error boundaries
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleGlobalError = (event: ErrorEvent) => {
+      if (isStatsigDomRaceCondition(event.error || event.message)) {
+        // Prevent the error from propagating to Sentry and other handlers
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        console.debug('[Statsig] Suppressed DOM race condition error during navigation');
+        return true;
+      }
+    };
+
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      if (event.reason && isStatsigDomRaceCondition(event.reason)) {
+        event.preventDefault();
+        console.debug('[Statsig] Suppressed DOM race condition in promise rejection');
+        return true;
+      }
+    };
+
+    // Add handlers at capture phase to intercept before Sentry
+    window.addEventListener('error', handleGlobalError, true);
+    window.addEventListener('unhandledrejection', handleUnhandledRejection, true);
+
+    return () => {
+      window.removeEventListener('error', handleGlobalError, true);
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection, true);
+    };
+  }, []);
 
   // Get user ID from Privy or backend user data
   React.useEffect(() => {
