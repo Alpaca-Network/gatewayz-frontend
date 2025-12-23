@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { streamText, APICallError } from 'ai';
+import { streamText, APICallError, type ModelMessage } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 import { checkGuestRateLimit, incrementGuestRateLimit, getClientIP, formatResetTime } from '@/lib/guest-rate-limiter';
 
@@ -94,6 +94,100 @@ function extractRateLimitInfo(error: unknown): { retryAfter?: number; message: s
  */
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Convert incoming messages to AI SDK ModelMessage format.
+ *
+ * The frontend sends messages in OpenAI-compatible format: { role, content, name? }
+ * The AI SDK 5's streamText expects ModelMessage[] which has specific content structures.
+ *
+ * This function handles:
+ * 1. Simple string content -> converted to text part array for user/assistant
+ * 2. Array content (multimodal) -> validated and converted to proper part structure
+ * 3. System messages -> content as string (per AI SDK spec)
+ *
+ * @see https://ai-sdk.dev/docs/reference/ai-sdk-core/model-message
+ */
+function convertToValidModelMessages(messages: Array<{ role: string; content: any; name?: string }>): ModelMessage[] {
+  return messages.map((msg): ModelMessage => {
+    const role = msg.role as 'system' | 'user' | 'assistant' | 'tool';
+
+    // System messages must have string content per AI SDK spec
+    if (role === 'system') {
+      return {
+        role: 'system',
+        content: typeof msg.content === 'string'
+          ? msg.content
+          : Array.isArray(msg.content)
+            ? msg.content.map(part => typeof part === 'string' ? part : part.text || '').join('\n')
+            : String(msg.content || ''),
+      };
+    }
+
+    // Tool messages have specific structure
+    if (role === 'tool') {
+      return {
+        role: 'tool',
+        content: Array.isArray(msg.content) ? msg.content : [{ type: 'tool-result', toolCallId: '', toolName: '', result: msg.content }],
+      } as ModelMessage;
+    }
+
+    // User and Assistant messages can have string or parts array
+    if (typeof msg.content === 'string') {
+      // String content - AI SDK accepts this directly
+      return {
+        role: role as 'user' | 'assistant',
+        content: msg.content,
+      };
+    }
+
+    // Array content (multimodal) - convert to AI SDK parts format
+    if (Array.isArray(msg.content)) {
+      const parts: Array<any> = [];
+
+      for (const part of msg.content) {
+        if (typeof part === 'string') {
+          parts.push({ type: 'text', text: part });
+        } else if (part.type === 'text') {
+          parts.push({ type: 'text', text: part.text || '' });
+        } else if (part.type === 'image_url' && part.image_url?.url) {
+          // Convert OpenAI image_url format to AI SDK image part
+          parts.push({ type: 'image', image: part.image_url.url });
+        } else if (part.type === 'image' && part.image) {
+          // Already in AI SDK format
+          parts.push(part);
+        } else if (part.type === 'file_url' && part.file_url?.url) {
+          // Convert file_url to AI SDK file part
+          parts.push({ type: 'file', data: part.file_url.url, mimeType: part.file_url.mimeType || 'application/octet-stream' });
+        } else if (part.type === 'file' && part.data) {
+          // Already in AI SDK format
+          parts.push(part);
+        }
+        // Skip unsupported parts (video_url, audio_url) as they're not in AI SDK ModelMessage spec
+        // The flexible /api/chat/completions route handles these
+      }
+
+      // If no valid parts were extracted, use empty string
+      if (parts.length === 0) {
+        return {
+          role: role as 'user' | 'assistant',
+          content: '',
+        };
+      }
+
+      return {
+        role: role as 'user' | 'assistant',
+        content: parts,
+      } as ModelMessage;
+    }
+
+    // Fallback: convert to string
+    return {
+      role: role as 'user' | 'assistant',
+      content: String(msg.content || ''),
+    };
+  });
 }
 
 /**
@@ -446,13 +540,31 @@ export async function POST(request: NextRequest) {
           attempt,
         });
 
-        // Messages are already in the correct ModelMessage format (OpenAI-compatible)
-        console.log('[AI SDK Route] Using messages directly (already in ModelMessage format)');
+        // Convert incoming messages to proper ModelMessage format
+        // The frontend sends OpenAI-compatible format, but AI SDK 5's streamText
+        // validates messages against a strict ModelMessage Zod schema.
+        // This conversion handles:
+        // - String content (kept as-is)
+        // - Array content with OpenAI format (image_url, file_url) -> AI SDK format (image, file)
+        // - System messages (must have string content)
+        let modelMessages: ModelMessage[];
+        try {
+          modelMessages = convertToValidModelMessages(messages);
+          console.log('[AI SDK Route] Converted messages to ModelMessage format', {
+            inputCount: messages.length,
+            outputCount: modelMessages.length,
+            roles: modelMessages.map(m => m.role),
+          });
+        } catch (conversionError) {
+          console.error('[AI SDK Route] Message conversion failed:', conversionError);
+          console.error('[AI SDK Route] Raw messages sample:', JSON.stringify(messages.slice(0, 2)));
+          throw new Error(`Failed to convert messages to ModelMessage format: ${conversionError instanceof Error ? conversionError.message : 'Unknown error'}`);
+        }
 
         // Stream the response using AI SDK
         result = streamText({
           model,
-          messages,
+          messages: modelMessages,
           temperature,
           maxOutputTokens: max_tokens,
           topP: top_p,

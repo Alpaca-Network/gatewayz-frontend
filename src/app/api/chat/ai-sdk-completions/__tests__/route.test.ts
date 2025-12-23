@@ -821,4 +821,226 @@ describe('AI SDK Completions Route', () => {
       }
     });
   });
+
+  describe('Message Format Conversion', () => {
+    it('should handle simple string content messages', async () => {
+      const { streamText } = require('ai');
+      streamText.mockReturnValue({
+        fullStream: (async function* () {
+          yield { type: 'text-delta', text: 'Response' };
+          yield { type: 'finish', finishReason: 'stop' };
+        })(),
+      });
+
+      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
+        method: 'POST',
+        body: JSON.stringify({
+          model: 'gpt-4',
+          messages: [
+            { role: 'user', content: 'Hello' },
+            { role: 'assistant', content: 'Hi there!' },
+            { role: 'user', content: 'How are you?' },
+          ],
+          apiKey: 'test-key',
+        }),
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(200);
+      expect(streamText).toHaveBeenCalled();
+    });
+
+    it('should convert OpenAI image_url format to AI SDK image format', async () => {
+      const { streamText } = require('ai');
+      let capturedMessages: any[] = [];
+      streamText.mockImplementation((opts: any) => {
+        capturedMessages = opts.messages;
+        return {
+          fullStream: (async function* () {
+            yield { type: 'text-delta', text: 'I see an image' };
+            yield { type: 'finish', finishReason: 'stop' };
+          })(),
+        };
+      });
+
+      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
+        method: 'POST',
+        body: JSON.stringify({
+          model: 'gpt-4-vision',
+          messages: [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: 'What is in this image?' },
+                { type: 'image_url', image_url: { url: 'data:image/png;base64,abc123' } },
+              ],
+            },
+          ],
+          apiKey: 'test-key',
+        }),
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(200);
+
+      // Verify the message was converted to AI SDK format
+      expect(capturedMessages).toHaveLength(1);
+      expect(capturedMessages[0].role).toBe('user');
+      expect(Array.isArray(capturedMessages[0].content)).toBe(true);
+
+      // Check that image_url was converted to image
+      const imagePart = capturedMessages[0].content.find((p: any) => p.type === 'image');
+      expect(imagePart).toBeDefined();
+      expect(imagePart.image).toBe('data:image/png;base64,abc123');
+    });
+
+    it('should handle system messages with string content', async () => {
+      const { streamText } = require('ai');
+      let capturedMessages: any[] = [];
+      streamText.mockImplementation((opts: any) => {
+        capturedMessages = opts.messages;
+        return {
+          fullStream: (async function* () {
+            yield { type: 'text-delta', text: 'Response' };
+            yield { type: 'finish', finishReason: 'stop' };
+          })(),
+        };
+      });
+
+      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
+        method: 'POST',
+        body: JSON.stringify({
+          model: 'gpt-4',
+          messages: [
+            { role: 'system', content: 'You are a helpful assistant.' },
+            { role: 'user', content: 'Hello' },
+          ],
+          apiKey: 'test-key',
+        }),
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(200);
+
+      // Verify system message content is a string
+      expect(capturedMessages[0].role).toBe('system');
+      expect(typeof capturedMessages[0].content).toBe('string');
+      expect(capturedMessages[0].content).toBe('You are a helpful assistant.');
+    });
+
+    it('should handle mixed text and image content', async () => {
+      const { streamText } = require('ai');
+      let capturedMessages: any[] = [];
+      streamText.mockImplementation((opts: any) => {
+        capturedMessages = opts.messages;
+        return {
+          fullStream: (async function* () {
+            yield { type: 'text-delta', text: 'Response' };
+            yield { type: 'finish', finishReason: 'stop' };
+          })(),
+        };
+      });
+
+      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
+        method: 'POST',
+        body: JSON.stringify({
+          model: 'gpt-4-vision',
+          messages: [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: 'Describe these images:' },
+                { type: 'image_url', image_url: { url: 'https://example.com/image1.jpg' } },
+                { type: 'text', text: 'And this one:' },
+                { type: 'image_url', image_url: { url: 'https://example.com/image2.jpg' } },
+              ],
+            },
+          ],
+          apiKey: 'test-key',
+        }),
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(200);
+
+      // Verify content parts were converted correctly
+      const content = capturedMessages[0].content;
+      expect(content).toHaveLength(4);
+      expect(content[0]).toEqual({ type: 'text', text: 'Describe these images:' });
+      expect(content[1]).toEqual({ type: 'image', image: 'https://example.com/image1.jpg' });
+      expect(content[2]).toEqual({ type: 'text', text: 'And this one:' });
+      expect(content[3]).toEqual({ type: 'image', image: 'https://example.com/image2.jpg' });
+    });
+
+    it('should gracefully handle empty array content', async () => {
+      const { streamText } = require('ai');
+      let capturedMessages: any[] = [];
+      streamText.mockImplementation((opts: any) => {
+        capturedMessages = opts.messages;
+        return {
+          fullStream: (async function* () {
+            yield { type: 'text-delta', text: 'Response' };
+            yield { type: 'finish', finishReason: 'stop' };
+          })(),
+        };
+      });
+
+      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
+        method: 'POST',
+        body: JSON.stringify({
+          model: 'gpt-4',
+          messages: [
+            { role: 'user', content: [] },
+          ],
+          apiKey: 'test-key',
+        }),
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(200);
+
+      // Should convert empty array to empty string
+      expect(capturedMessages[0].content).toBe('');
+    });
+
+    it('should skip unsupported content types (video_url, audio_url)', async () => {
+      const { streamText } = require('ai');
+      let capturedMessages: any[] = [];
+      streamText.mockImplementation((opts: any) => {
+        capturedMessages = opts.messages;
+        return {
+          fullStream: (async function* () {
+            yield { type: 'text-delta', text: 'Response' };
+            yield { type: 'finish', finishReason: 'stop' };
+          })(),
+        };
+      });
+
+      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
+        method: 'POST',
+        body: JSON.stringify({
+          model: 'gpt-4',
+          messages: [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: 'Check this out:' },
+                { type: 'video_url', video_url: { url: 'https://example.com/video.mp4' } },
+                { type: 'audio_url', audio_url: { url: 'https://example.com/audio.mp3' } },
+              ],
+            },
+          ],
+          apiKey: 'test-key',
+        }),
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(200);
+
+      // Should only have the text part (video and audio skipped)
+      const content = capturedMessages[0].content;
+      expect(content).toHaveLength(1);
+      expect(content[0]).toEqual({ type: 'text', text: 'Check this out:' });
+    });
+  });
 });
