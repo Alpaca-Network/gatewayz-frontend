@@ -52,6 +52,7 @@ import {
 import { useChatUIStore } from "@/lib/store/chat-ui-store";
 import { useCreateSession, useSessionMessages } from "@/lib/hooks/use-chat-queries";
 import { useChatStream } from "@/lib/hooks/use-chat-stream";
+import { useAutoModelSwitch } from "@/lib/hooks/use-auto-model-switch";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/lib/store/auth-store";
@@ -143,6 +144,7 @@ export function ChatInput() {
   const { data: messages = [], isLoading: isHistoryLoading } = useSessionMessages(activeSessionId);
   const createSession = useCreateSession();
   const { isStreaming, streamMessage, stopStream } = useChatStream();
+  const { checkImageSupport, checkVideoSupport, checkAudioSupport, checkFileSupport } = useAutoModelSwitch();
   const { toast } = useToast();
   const { isAuthenticated } = useAuthStore();
   const { login } = usePrivy();
@@ -459,6 +461,10 @@ export function ChatInput() {
           // Compress image to avoid 413 payload too large errors
           const compressedBase64 = await compressImage(file);
           setSelectedImage(compressedBase64);
+
+          // Auto-switch to a multimodal model if current model doesn't support images
+          const currentModel = useChatUIStore.getState().selectedModel;
+          checkImageSupport(currentModel);
       } catch (e) {
           toast({ title: "Failed to load image", variant: "destructive" });
       }
@@ -472,6 +478,10 @@ export function ChatInput() {
       try {
           const base64 = await fileToBase64(file);
           setSelectedVideo(base64);
+
+          // Auto-switch to a multimodal model if current model doesn't support video
+          const currentModel = useChatUIStore.getState().selectedModel;
+          checkVideoSupport(currentModel);
       } catch (e) {
           toast({ title: "Failed to load video", variant: "destructive" });
       }
@@ -485,6 +495,10 @@ export function ChatInput() {
       try {
           const base64 = await fileToBase64(file);
           setSelectedAudio(base64);
+
+          // Auto-switch to a multimodal model if current model doesn't support audio
+          const currentModel = useChatUIStore.getState().selectedModel;
+          checkAudioSupport(currentModel);
       } catch (e) {
           toast({ title: "Failed to load audio", variant: "destructive" });
       }
@@ -499,6 +513,10 @@ export function ChatInput() {
           const base64 = await fileToBase64(file);
           setSelectedDocument(base64);
           setSelectedDocumentName(file.name);
+
+          // Auto-switch to a multimodal model if current model doesn't support files
+          const currentModel = useChatUIStore.getState().selectedModel;
+          checkFileSupport(currentModel);
       } catch (e) {
           toast({ title: "Failed to load document", variant: "destructive" });
       }

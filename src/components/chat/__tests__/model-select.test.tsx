@@ -609,6 +609,16 @@ describe('ModelSelect model categorization', () => {
       categories.push('Multimodal');
     }
 
+    // Image/Video models - check modalities array for image or video support
+    // Note: We only use modalities array here, not vision name check, since vision models
+    // are already captured in the Multimodal category above
+    const modalities = model.modalities || [];
+    const hasImageSupport = modalities.some(m => m.toLowerCase() === 'image');
+    const hasVideoSupport = modalities.some(m => m.toLowerCase() === 'video');
+    if (hasImageSupport || hasVideoSupport) {
+      categories.push('Image/Video');
+    }
+
     // Cost Efficient models
     const isFree = model.category === 'Free' || model.category?.toLowerCase().includes('free');
     if (isFree) {
@@ -659,6 +669,69 @@ describe('ModelSelect model categorization', () => {
 
     const categories = categorizeModel(model);
     expect(categories).toContain('Multimodal');
+  });
+
+  it('should categorize Image/Video models correctly by modalities array', () => {
+    const modelsWithImageSupport: ModelOption[] = [
+      { value: 'openai/gpt-4o', label: 'GPT-4o', category: 'Paid', modalities: ['Text', 'Image'] },
+      { value: 'google/gemini-pro-vision', label: 'Gemini Pro Vision', category: 'Paid', modalities: ['Text', 'Image', 'Video'] },
+      { value: 'anthropic/claude-3-sonnet', label: 'Claude 3 Sonnet', category: 'Paid', modalities: ['Text', 'Image'] },
+    ];
+
+    modelsWithImageSupport.forEach(model => {
+      const categories = categorizeModel(model);
+      expect(categories).toContain('Image/Video');
+    });
+  });
+
+  it('should categorize Image/Video models correctly by video modality', () => {
+    const model: ModelOption = {
+      value: 'google/gemini-pro',
+      label: 'Gemini Pro',
+      category: 'Paid',
+      modalities: ['Text', 'Video'],
+    };
+
+    const categories = categorizeModel(model);
+    expect(categories).toContain('Image/Video');
+  });
+
+  it('should categorize vision models as Multimodal (not Image/Video without modalities)', () => {
+    const models: ModelOption[] = [
+      { value: 'openai/gpt-4-vision-preview', label: 'GPT-4 Vision Preview', category: 'Paid' },
+      { value: 'meta/llama-3-vision', label: 'Llama 3 Vision', category: 'Paid' },
+    ];
+
+    models.forEach(model => {
+      const categories = categorizeModel(model);
+      // Vision models without explicit modalities go to Multimodal, not Image/Video
+      expect(categories).toContain('Multimodal');
+      expect(categories).not.toContain('Image/Video');
+    });
+  });
+
+  it('should not categorize text-only models as Image/Video', () => {
+    const model: ModelOption = {
+      value: 'openai/gpt-4-turbo',
+      label: 'GPT-4 Turbo',
+      category: 'Paid',
+      modalities: ['Text'],
+    };
+
+    const categories = categorizeModel(model);
+    expect(categories).not.toContain('Image/Video');
+  });
+
+  it('should handle models without modalities array for Image/Video', () => {
+    const model: ModelOption = {
+      value: 'openai/gpt-4-turbo',
+      label: 'GPT-4 Turbo',
+      category: 'Paid',
+      // No modalities array
+    };
+
+    const categories = categorizeModel(model);
+    expect(categories).not.toContain('Image/Video');
   });
 
   it('should categorize free models as cost efficient', () => {
@@ -870,6 +943,7 @@ describe('ModelSelect server-side search', () => {
         { value: 'openai/o1-preview', label: 'O1 Preview', category: 'Paid', developer: 'OpenAI' },
         { value: 'deepseek/deepseek-coder', label: 'DeepSeek Coder', category: 'Paid', developer: 'DeepSeek' },
         { value: 'meta/llama-3', label: 'Llama 3', category: 'Free', developer: 'Meta' },
+        { value: 'openai/gpt-4-vision', label: 'GPT-4 Vision', category: 'Paid', developer: 'OpenAI', modalities: ['Text', 'Image'] },
       ];
 
       const categoryPatterns = {
@@ -906,6 +980,15 @@ describe('ModelSelect server-side search', () => {
           categories.push('Code Generation');
         }
 
+        // Image/Video models - check modalities array for image or video support
+        // Note: We only use modalities array here, not vision name check
+        const modalities = model.modalities || [];
+        const hasImageSupport = modalities.some(m => m.toLowerCase() === 'image');
+        const hasVideoSupport = modalities.some(m => m.toLowerCase() === 'video');
+        if (hasImageSupport || hasVideoSupport) {
+          categories.push('Image/Video');
+        }
+
         const isFree = model.category === 'Free' || model.category?.toLowerCase().includes('free');
         if (isFree) {
           categories.push('Cost Efficient');
@@ -918,6 +1001,7 @@ describe('ModelSelect server-side search', () => {
       const searchModelsByCategory: Record<string, ModelOption[]> = {
         'Reasoning': [],
         'Code Generation': [],
+        'Image/Video': [],
         'Cost Efficient': [],
         'Free': [],
       };
@@ -933,6 +1017,7 @@ describe('ModelSelect server-side search', () => {
 
       expect(searchModelsByCategory['Reasoning']).toHaveLength(1); // O1 Preview
       expect(searchModelsByCategory['Code Generation']).toHaveLength(1); // DeepSeek Coder
+      expect(searchModelsByCategory['Image/Video']).toHaveLength(1); // GPT-4 Vision
       expect(searchModelsByCategory['Free']).toHaveLength(1); // Llama 3
       expect(searchModelsByCategory['Cost Efficient']).toHaveLength(1); // Llama 3
     });
