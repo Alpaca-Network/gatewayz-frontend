@@ -704,7 +704,7 @@ export function GatewayzAuthProvider({
   );
 
   const buildAuthRequestBody = useCallback(
-    (privyUser: User, token: string | null, existingUserData: UserData | null) => {
+    (privyUser: User, token: string, existingUserData: UserData | null) => {
       const existingGatewayzUser = existingUserData ?? null;
       const isNewUser = !existingGatewayzUser;
       const hasStoredApiKey = Boolean(existingGatewayzUser?.api_key);
@@ -722,7 +722,9 @@ export function GatewayzAuthProvider({
           has_accepted_terms: privyUser.hasAcceptedTerms ?? false,
           is_guest: privyUser.isGuest ?? false,
         }),
-        token: token ?? "",
+        // Token is guaranteed to be a valid string (not null/empty) at this point
+        // because syncWithBackend aborts if token is null
+        token: token,
         // Only request API key creation for new users or users without stored keys
         // Existing users should get their existing key back to avoid replacing live keys with temp keys
         auto_create_api_key: isNewUser || !hasStoredApiKey,
@@ -912,6 +914,48 @@ export function GatewayzAuthProvider({
         }
 
         console.log("[Auth] Token retrieved:", token ? `${token.substring(0, 20)}...` : "null");
+
+        // If we don't have a valid token, check if we can use cached credentials
+        // Don't send an empty string token to the backend - it will fail validation
+        if (!token) {
+          const cachedKey = getApiKey();
+          const cachedUser = getUserData();
+
+          if (cachedKey && cachedUser && cachedUser.user_id && cachedUser.email) {
+            // Use cached credentials when token retrieval fails
+            console.warn("[Auth] Token retrieval failed but valid cached credentials found - maintaining session");
+            setAuthStatus("authenticated", "cached credentials after token failure");
+            clearAuthTimeout();
+            authRetryCountRef.current = 0;
+
+            Sentry.captureMessage("Token retrieval failed - using cached credentials", {
+              level: 'info',
+              tags: {
+                auth_info: 'token_failure_cached_fallback',
+              },
+            });
+
+            syncInFlightRef.current = false;
+            syncPromiseRef.current = null;
+            return;
+          }
+
+          // No cached credentials and no token - can't authenticate
+          console.error("[Auth] Cannot authenticate: no valid Privy token and no cached credentials");
+          setAuthStatus("unauthenticated", "no token available");
+          setError("Unable to authenticate. Please try logging in again.");
+
+          Sentry.captureMessage("Authentication failed: no valid token available", {
+            level: 'warning',
+            tags: {
+              auth_error: 'no_token_no_cache',
+            },
+          });
+
+          syncInFlightRef.current = false;
+          syncPromiseRef.current = null;
+          return;
+        }
 
         // Preserve existing live key before auth refresh
         // If backend returns a temp key, we'll restore this
