@@ -7,8 +7,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { CheckCircle2, Circle, ArrowRight, Code, MessageSquare, CreditCard, Sparkles, Terminal, Book, Copy, Check, Key } from "lucide-react";
 import Link from "next/link";
 import { getUserData, getApiKey } from '@/lib/api';
-import { API_BASE_URL } from '@/lib/config';
-import { useToast } from '@/hooks/use-toast';
 import { CodeHighlighter } from '@/components/code-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
@@ -24,7 +22,6 @@ interface OnboardingTask {
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const { toast } = useToast();
   const [apiKey, setApiKey] = useState<string>('');
   const [copiedKey, setCopiedKey] = useState(false);
 
@@ -174,23 +171,8 @@ export default function OnboardingPage() {
     fetchTopModels();
   }, [router]);
 
-  // Check for referral bonus notification
-  useEffect(() => {
-    const showReferralBonus = localStorage.getItem('gatewayz_show_referral_bonus');
-    if (showReferralBonus === 'true') {
-      // Remove the flag
-      localStorage.removeItem('gatewayz_show_referral_bonus');
-
-      // Show the bonus credits notification
-      setTimeout(() => {
-        toast({
-          title: "$10 Trial Credits Added!",
-          description: "Your free trial credits have been added to your account. Start chatting now!",
-          duration: 8000,
-        });
-      }, 1000); // Delay to allow page to settle
-    }
-  }, [toast]);
+  // Note: Referral bonus notification is handled by ReferralBonusDialog component
+  // in the root layout to avoid race conditions with Portal mounting
 
   const markTaskComplete = (taskId: string) => {
     setTasks(prev => {
