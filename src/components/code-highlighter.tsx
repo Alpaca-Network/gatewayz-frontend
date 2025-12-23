@@ -23,10 +23,20 @@ interface CodeHighlighterProps extends Omit<SyntaxHighlighterProps, 'children'> 
   language: string;
 }
 
+/**
+ * CodeHighlighter component with rrweb blocking
+ * 
+ * The data-rr-block attribute tells rrweb (used by Statsig Session Replay) to skip
+ * recording this element. This prevents the "insertBefore" DOM mutation error that
+ * occurs when rrweb tries to record the complex DOM structure created by
+ * react-syntax-highlighter's dynamic code rendering.
+ */
 export function CodeHighlighter({ children, language, ...props }: CodeHighlighterProps) {
   return (
-    <SyntaxHighlighter language={language} {...props}>
-      {children}
-    </SyntaxHighlighter>
+    <div data-rr-block="true">
+      <SyntaxHighlighter language={language} {...props}>
+        {children}
+      </SyntaxHighlighter>
+    </div>
   );
 }
