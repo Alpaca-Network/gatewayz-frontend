@@ -52,6 +52,12 @@ describe('ETHEREUM_ERROR_SUPPRESSOR_SCRIPT', () => {
       expect(ETHEREUM_ERROR_SUPPRESSOR_SCRIPT).toContain('Cannot redefine property: ethereum');
     });
 
+    it('should include suppress patterns for React Portal cleanup errors', () => {
+      expect(ETHEREUM_ERROR_SUPPRESSOR_SCRIPT).toContain("Failed to execute 'removeChild' on 'Node'");
+      expect(ETHEREUM_ERROR_SUPPRESSOR_SCRIPT).toContain('The node to be removed is not a child of this node');
+      expect(ETHEREUM_ERROR_SUPPRESSOR_SCRIPT).toContain('NotFoundError.*removeChild');
+    });
+
     it('should use strict mode', () => {
       expect(ETHEREUM_ERROR_SUPPRESSOR_SCRIPT).toContain("'use strict'");
     });
@@ -87,6 +93,21 @@ describe('ETHEREUM_ERROR_SUPPRESSOR_SCRIPT', () => {
     it('should allow generic TypeError errors through', () => {
       console.error('TypeError: Cannot read property "foo" of undefined');
       expect(errorLogs).toContain('TypeError: Cannot read property "foo" of undefined');
+    });
+
+    it('should suppress React Portal removeChild errors', () => {
+      console.error("NotFoundError: Failed to execute 'removeChild' on 'Node': The node to be removed is not a child of this node.");
+      expect(errorLogs).toEqual([]);
+    });
+
+    it('should suppress various removeChild error formats', () => {
+      console.error("Failed to execute 'removeChild' on 'Node'");
+      expect(errorLogs).toEqual([]);
+    });
+
+    it('should suppress node not a child errors', () => {
+      console.error('The node to be removed is not a child of this node');
+      expect(errorLogs).toEqual([]);
     });
   });
 
@@ -159,6 +180,43 @@ describe('ETHEREUM_ERROR_SUPPRESSOR_SCRIPT', () => {
 
       expect(preventDefaultSpy).not.toHaveBeenCalled();
       expect(stopPropagationSpy).not.toHaveBeenCalled();
+    });
+
+    it('should suppress removeChild ErrorEvents', () => {
+      const preventDefaultSpy = jest.fn();
+      const stopPropagationSpy = jest.fn();
+
+      const errorEvent = new ErrorEvent('error', {
+        message: "NotFoundError: Failed to execute 'removeChild' on 'Node': The node to be removed is not a child of this node.",
+        filename: 'react-dom-client.production.js',
+      });
+      errorEvent.preventDefault = preventDefaultSpy;
+      errorEvent.stopPropagation = stopPropagationSpy;
+
+      window.dispatchEvent(errorEvent);
+
+      expect(preventDefaultSpy).toHaveBeenCalled();
+      expect(stopPropagationSpy).toHaveBeenCalled();
+    });
+
+    it('should suppress NotFoundError with error.name check', () => {
+      const preventDefaultSpy = jest.fn();
+      const stopPropagationSpy = jest.fn();
+
+      // Create an error event with a NotFoundError
+      const notFoundError = new DOMException('The node to be removed is not a child of this node', 'NotFoundError');
+      const errorEvent = new ErrorEvent('error', {
+        message: notFoundError.message,
+        error: notFoundError,
+        filename: 'react-dom.production.js',
+      });
+      errorEvent.preventDefault = preventDefaultSpy;
+      errorEvent.stopPropagation = stopPropagationSpy;
+
+      window.dispatchEvent(errorEvent);
+
+      expect(preventDefaultSpy).toHaveBeenCalled();
+      expect(stopPropagationSpy).toHaveBeenCalled();
     });
   });
 });

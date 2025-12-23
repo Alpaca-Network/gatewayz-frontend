@@ -29,6 +29,9 @@ export function ErrorSuppressor() {
       /Cannot read properties of undefined.*removeListener/i, // Wallet extension cleanup errors
       /inpage\.js.*removeListener/i,    // Wallet extension inpage.js errors
       /stopListeners/i,                 // Wallet extension stopListeners errors
+      /Failed to execute 'removeChild' on 'Node'/i, // React Portal cleanup errors during navigation (often caused by browser extensions modifying DOM)
+      /NotFoundError.*removeChild/i,   // Alternative format for removeChild errors
+      /The node to be removed is not a child of this node/i, // Another variant of the Portal cleanup error
     ];
 
     // Override console.error
@@ -94,6 +97,19 @@ export function ErrorSuppressor() {
       ) {
         // Don't preventDefault - just return to suppress console logging via override
         return false;
+      }
+
+      // Suppress React Portal cleanup errors (NotFoundError: removeChild)
+      // This occurs when browser extensions (like Google Translate) modify DOM
+      // and React tries to clean up Portal elements during navigation
+      if (
+        errorMessage.includes("Failed to execute 'removeChild' on 'Node'") ||
+        errorMessage.includes('The node to be removed is not a child of this node') ||
+        (event.error instanceof DOMException && event.error.name === 'NotFoundError')
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        return true;
       }
 
       return false;

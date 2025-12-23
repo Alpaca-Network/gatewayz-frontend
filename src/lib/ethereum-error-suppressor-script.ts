@@ -1,14 +1,19 @@
 /**
- * Early error suppressor script for ethereum property conflicts.
+ * Early error suppressor script for ethereum property conflicts and DOM errors.
  *
  * This script must run BEFORE any wallet extensions (like evmAsk.js) attempt
  * to define window.ethereum. Wallet extensions often try to use Object.defineProperty
  * on window.ethereum, and if another extension has already defined it as non-configurable,
  * this causes "Cannot redefine property: ethereum" errors.
  *
+ * This script also suppresses React Portal cleanup errors (NotFoundError: removeChild)
+ * which occur when browser extensions (like Google Translate) modify the DOM structure
+ * and React's cleanup logic fails during navigation.
+ *
  * This script:
  * 1. Sets up early error handlers to catch these errors before React mounts
  * 2. Suppresses console errors from wallet extensions
+ * 3. Suppresses React Portal cleanup errors from DOM modifications
  *
  * Note: This is complementary to the ErrorSuppressor React component, which handles
  * errors after React has mounted.
@@ -21,7 +26,10 @@ export const ETHEREUM_ERROR_SUPPRESSOR_SCRIPT = `
   var suppressPatterns = [
     /Cannot redefine property.*ethereum/i,
     /evmAsk.*ethereum/i,
-    /Cannot redefine property: ethereum/i
+    /Cannot redefine property: ethereum/i,
+    /Failed to execute 'removeChild' on 'Node'/i,
+    /The node to be removed is not a child of this node/i,
+    /NotFoundError.*removeChild/i
   ];
 
   // Check if error message matches any suppress pattern
@@ -49,6 +57,14 @@ export const ETHEREUM_ERROR_SUPPRESSOR_SCRIPT = `
 
     // Suppress any errors from evmAsk.js (wallet extension script)
     if (filename.indexOf('evmAsk') !== -1) {
+      event.preventDefault();
+      event.stopPropagation();
+      return true;
+    }
+
+    // Suppress NotFoundError (React Portal cleanup errors)
+    // This occurs when browser extensions modify DOM and React cleanup fails
+    if (event.error && event.error.name === 'NotFoundError') {
       event.preventDefault();
       event.stopPropagation();
       return true;

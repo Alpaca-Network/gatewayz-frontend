@@ -45,6 +45,19 @@ export class GlobalErrorBoundary extends Component<Props, State> {
   }
 
   static getDerivedStateFromError(error: Error): Partial<State> {
+    // Suppress React Portal cleanup errors (caused by browser extensions modifying DOM)
+    // These are non-fatal and shouldn't show the error UI
+    const message = error.message || '';
+    const errorName = error.name || '';
+    
+    if (
+      message.includes("Failed to execute 'removeChild' on 'Node'") ||
+      message.includes('The node to be removed is not a child of this node') ||
+      errorName === 'NotFoundError'
+    ) {
+      return { hasError: false };
+    }
+    
     return { hasError: true, error };
   }
 

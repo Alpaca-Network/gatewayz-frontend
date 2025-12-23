@@ -50,6 +50,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   static getDerivedStateFromError(error: Error): Partial<ErrorBoundaryState> {
     // Check if it's a hydration error from Privy or Next.js internal error
     const message = error.message || '';
+    const errorName = error.name || '';
     const shouldSuppress =
       message.includes('Hydration') ||
       message.includes('div cannot be a descendant of p') ||
@@ -59,7 +60,12 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
       // Add wallet extension errors
       message.includes('ethereum') && message.includes('redefine') ||
       message.includes('removeListener') ||
-      message.includes('stopListeners');
+      message.includes('stopListeners') ||
+      // React Portal cleanup errors (often caused by browser extensions modifying DOM)
+      // These occur during navigation when Radix UI Portals (Select, Dialog, Tooltip) unmount
+      message.includes("Failed to execute 'removeChild' on 'Node'") ||
+      message.includes('The node to be removed is not a child of this node') ||
+      errorName === 'NotFoundError';
 
     if (shouldSuppress) {
       // Suppress these errors - let Next.js/Privy handle them
@@ -79,6 +85,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     });
 
     const message = error.message || '';
+    const errorName = error.name || '';
 
     // Suppress hydration and wallet errors in console
     const shouldSuppress =
@@ -89,7 +96,11 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
       message.includes('invariant') ||
       message.includes('ethereum') && message.includes('redefine') ||
       message.includes('removeListener') ||
-      message.includes('stopListeners');
+      message.includes('stopListeners') ||
+      // React Portal cleanup errors (often caused by browser extensions modifying DOM)
+      message.includes("Failed to execute 'removeChild' on 'Node'") ||
+      message.includes('The node to be removed is not a child of this node') ||
+      errorName === 'NotFoundError';
 
     if (shouldSuppress) {
       return; // Don't log suppressed errors
