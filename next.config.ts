@@ -24,6 +24,31 @@ const nextConfig: NextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  // Transpile third-party packages that may use modern syntax for older browser support
+  transpilePackages: [
+    'ai',
+    '@ai-sdk/anthropic',
+    '@ai-sdk/google',
+    '@ai-sdk/openai',
+    '@ai-sdk/react',
+    'braintrust',
+    '@statsig/react-bindings',
+    '@statsig/session-replay',
+    '@statsig/web-analytics',
+    'posthog-js',
+    'zustand',
+    'cmdk',
+    '@radix-ui/react-use-controllable-state',
+    'undici',
+    'undici-proxy',
+  ],
+  // SWC compiler configuration for broader browser support
+  compiler: {
+    // Remove console logs in production for smaller bundles
+    removeConsole: process.env.NODE_ENV === 'production' ? {
+      exclude: ['error', 'warn'],
+    } : false,
+  },
   images: {
     remotePatterns: [
       {
