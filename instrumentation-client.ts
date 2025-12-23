@@ -240,6 +240,37 @@ function shouldFilterEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): bo
     }
   }
 
+  // Filter out errors originating from browser extensions
+  // These are not application errors and we have no control over them
+  // Common patterns: chrome-extension://, moz-extension://, safari-extension://
+  if (stackFrames?.some(frame => 
+    frame.filename?.includes('chrome-extension://') ||
+    frame.filename?.includes('moz-extension://') ||
+    frame.filename?.includes('safari-extension://') ||
+    frame.filename?.includes('safari-web-extension://') ||
+    frame.filename?.includes('/scripts/inspector.js') // Common extension pattern
+  )) {
+    console.debug('[Sentry] Filtered out error originating from browser extension (not application code)');
+    return true;
+  }
+
+  // Filter out errors from third-party analytics/tracking scripts
+  // These scripts (Google Tag Manager, Twitter ads, etc.) are not our code
+  // and their failures don't affect core application functionality
+  if (stackFrames?.some(frame => 
+    frame.filename?.includes('googletagmanager.com') ||
+    frame.filename?.includes('gtag/js') ||
+    frame.filename?.includes('google-analytics.com') ||
+    frame.filename?.includes('ads-twitter.com') ||
+    frame.filename?.includes('static.ads-twitter.com') ||
+    frame.filename?.includes('connect.facebook.net') ||
+    frame.filename?.includes('snap.licdn.com') ||
+    frame.filename?.includes('analytics.tiktok.com')
+  )) {
+    console.debug('[Sentry] Filtered out error from third-party analytics script (not application code)');
+    return true;
+  }
+
   // Filter out network errors related to monitoring/telemetry
   // These are non-critical and can cause cascading errors
   if (
@@ -259,6 +290,31 @@ function shouldFilterEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): bo
 
     if (isMonitoringNetworkError) {
       console.debug('[Sentry] Filtered out network error from monitoring/Sentry endpoint');
+      return true;
+    }
+
+    // Filter out "Failed to fetch" errors from third-party scripts
+    // These are often caused by ad blockers, network issues, or extensions
+    // intercepting requests from analytics/tracking scripts
+    const isThirdPartyNetworkError = stackFrames?.some(frame =>
+      // Google Tag Manager and Analytics
+      frame.filename?.includes('googletagmanager') ||
+      frame.filename?.includes('google-analytics') ||
+      frame.filename?.includes('gtag') ||
+      // Social media tracking pixels
+      frame.filename?.includes('twitter.com') ||
+      frame.filename?.includes('facebook.net') ||
+      frame.filename?.includes('linkedin.com') ||
+      frame.filename?.includes('tiktok.com') ||
+      // Ad networks
+      frame.filename?.includes('doubleclick') ||
+      frame.filename?.includes('googlesyndication') ||
+      // Browser extensions (backup check)
+      frame.filename?.includes('extension://')
+    );
+
+    if (isThirdPartyNetworkError) {
+      console.debug('[Sentry] Filtered out network error from third-party tracking script');
       return true;
     }
   }
