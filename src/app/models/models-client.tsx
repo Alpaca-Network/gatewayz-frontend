@@ -400,8 +400,24 @@ export default function ModelsClient({
   }, [models]);
 
   const [layout, setLayout] = useState("list");
-  const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || "");
-  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState(searchParams.get('search') || "");
+  
+  // Helper to safely decode URL-encoded search terms
+  // This handles cases where the search term might be double-encoded or contain special characters
+  const safeDecodeSearchParam = (value: string | null): string => {
+    if (!value) return "";
+    try {
+      // Try to decode - handles both encoded and raw values
+      const decoded = decodeURIComponent(value);
+      // If it looks the same, it wasn't encoded
+      return decoded;
+    } catch {
+      // If decoding fails (malformed URI), return the raw value
+      return value;
+    }
+  };
+  
+  const [searchTerm, setSearchTerm] = useState(() => safeDecodeSearchParam(searchParams.get('search')));
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState(() => safeDecodeSearchParam(searchParams.get('search')));
   const [selectedInputFormats, setSelectedInputFormats] = useState<string[]>(searchParams.get('inputFormats')?.split(',').filter(Boolean) || []);
   const [selectedOutputFormats, setSelectedOutputFormats] = useState<string[]>(searchParams.get('outputFormats')?.split(',').filter(Boolean) || []);
   const [contextLengthRange, setContextLengthRange] = useState<[number, number]>([
@@ -465,7 +481,10 @@ export default function ModelsClient({
   useEffect(() => {
     const params = new URLSearchParams();
 
-    if (debouncedSearchTerm) params.set('search', debouncedSearchTerm);
+    // Encode search term to ensure ASCII-safe URL parameters
+    // This prevents TypeError: Failed to fetch on Android Chrome during RSC prefetch
+    // when the URL contains non-ISO-8859-1 characters (emojis, non-Latin text, etc.)
+    if (debouncedSearchTerm) params.set('search', encodeURIComponent(debouncedSearchTerm));
     if (selectedInputFormats.length > 0) params.set('inputFormats', selectedInputFormats.join(','));
     if (selectedOutputFormats.length > 0) params.set('outputFormats', selectedOutputFormats.join(','));
     if (contextLengthRange[0] !== 0) params.set('contextLengthMin', contextLengthRange[0].toString());
