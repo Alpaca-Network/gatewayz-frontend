@@ -1162,8 +1162,8 @@ export default function ModelsClient({
             }
             key={`models-${filteredModels.length}-${debouncedSearchTerm}`}
           >
-            {visibleModels.map((model, key) => (
-              <ModelCard key={key} model={model} />
+            {visibleModels.map((model) => (
+              <ModelCard key={model.id} model={model} />
             ))}
           </div>
 
