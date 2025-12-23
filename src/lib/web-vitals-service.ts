@@ -83,9 +83,15 @@ class WebVitalsService {
    * Generate a unique session ID
    */
   private generateSessionId(): string {
-    if (typeof window !== 'undefined' && window.crypto) {
+    // Check for crypto.randomUUID availability (not supported in older browsers/WebViews)
+    if (
+      typeof window !== 'undefined' &&
+      typeof crypto !== 'undefined' &&
+      typeof crypto.randomUUID === 'function'
+    ) {
       return crypto.randomUUID();
     }
+    // Fallback for environments without crypto.randomUUID (e.g., older Android WebViews)
     return `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
   }
 
