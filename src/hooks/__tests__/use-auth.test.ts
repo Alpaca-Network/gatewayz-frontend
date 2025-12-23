@@ -143,6 +143,24 @@ describe('useAuth', () => {
       expect(mockSetUserContext).not.toHaveBeenCalled();
       expect(mockClearUserContext).not.toHaveBeenCalled();
     });
+
+    it('should handle user with null email', () => {
+      const mockUser = {
+        id: 'user-789',
+        email: null,
+      };
+
+      mockUsePrivy.mockReturnValue({
+        user: mockUser,
+        authenticated: true,
+        ready: true,
+        login: jest.fn(),
+      });
+
+      renderHook(() => useAuth());
+
+      expect(mockSetUserContext).toHaveBeenCalledWith('user-789', undefined);
+    });
   });
 
   describe('Context Updates on Authentication Change', () => {
@@ -227,6 +245,32 @@ describe('useAuth', () => {
       rerender();
 
       expect(mockSetUserContext).toHaveBeenLastCalledWith('user-123', 'new@example.com');
+    });
+
+    it('should update when ready state changes', () => {
+      // Start not ready
+      mockUsePrivy.mockReturnValue({
+        user: null,
+        authenticated: false,
+        ready: false,
+        login: jest.fn(),
+      });
+
+      const { result, rerender } = renderHook(() => useAuth());
+
+      expect(result.current.loading).toBe(true);
+
+      // Become ready
+      mockUsePrivy.mockReturnValue({
+        user: null,
+        authenticated: false,
+        ready: true,
+        login: jest.fn(),
+      });
+
+      rerender();
+
+      expect(result.current.loading).toBe(false);
     });
   });
 
