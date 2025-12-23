@@ -1,30 +1,25 @@
 "use client";
 
+import { useEffect } from 'react';
 import { usePrivy } from '@privy-io/react-auth';
-import { captureHookError, setUserContext, clearUserContext } from '@/lib/sentry-utils';
+import { setUserContext, clearUserContext } from '@/lib/sentry-utils';
 
 export function useAuth() {
-  try {
-    const { user, authenticated, ready, login } = usePrivy();
+  const { user, authenticated, ready, login } = usePrivy();
 
-    // Track user in Sentry if authenticated
+  // Track user in Sentry when authentication state changes
+  useEffect(() => {
     if (authenticated && user?.id) {
       setUserContext(user.id, user.email?.address);
     } else if (!authenticated) {
       clearUserContext();
     }
+  }, [authenticated, user?.id, user?.email?.address]);
 
-    return {
-      user,
-      loading: !ready,
-      isAuthenticated: authenticated,
-      login,
-    };
-  } catch (error) {
-    captureHookError(error, {
-      hookName: 'useAuth',
-      operation: 'privy_initialization',
-    });
-    throw error;
-  }
+  return {
+    user,
+    loading: !ready,
+    isAuthenticated: authenticated,
+    login,
+  };
 }

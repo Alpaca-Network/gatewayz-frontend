@@ -92,7 +92,7 @@ describe('models-service', () => {
               id: 'models/gemini-pro',
               name: 'Gemini Pro',
               canonical_slug: 'gemini-pro',
-              source_gateway: 'google',
+              source_gateway: 'google-vertex',
             }),
             createTestModel({
               id: 'gemini-pro-v1',

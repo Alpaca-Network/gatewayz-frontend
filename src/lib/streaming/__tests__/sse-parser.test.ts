@@ -233,27 +233,21 @@ describe('parseSSEChunk', () => {
 
     it('should handle response.error event with message at top level (line 240)', () => {
       // Line 240: use data.message when error.message is not present
-      // Note: This returns an error object (event format), doesn't throw
       const json = JSON.stringify({
         type: 'response.error',
         message: 'Top level error message',
       });
-      const result = parseSSEChunk(json);
-      expect(result?.error).toBeDefined();
-      expect(result?.error?.message).toBe('Top level error message');
-      expect(result?.error?.type).toBe('response_error');
+      expect(() => parseSSEChunk(json)).toThrow(StreamingError);
+      expect(() => parseSSEChunk(json)).toThrow('Top level error message');
     });
 
     it('should handle response.error event with default message (line 241)', () => {
       // Line 241: default message when no specific message found
-      // Note: This returns an error object (event format), doesn't throw
       const json = JSON.stringify({
         type: 'response.error',
       });
-      const result = parseSSEChunk(json);
-      expect(result?.error).toBeDefined();
-      expect(result?.error?.message).toBe('Response stream error');
-      expect(result?.error?.type).toBe('response_error');
+      expect(() => parseSSEChunk(json)).toThrow(StreamingError);
+      expect(() => parseSSEChunk(json)).toThrow('Response stream error');
     });
 
     it('should return null for unknown event types', () => {

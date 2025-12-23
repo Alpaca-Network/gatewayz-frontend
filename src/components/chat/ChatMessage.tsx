@@ -22,6 +22,7 @@ const ReasoningDisplay = dynamic(
   () => import('@/components/chat/reasoning-display').then(mod => ({ default: mod.ReasoningDisplay })),
   { ssr: true }
 );
+const SearchResults = dynamic(() => import('@/components/chat/SearchResults'), { ssr: true });
 
 export interface ChatMessageProps {
   role: 'user' | 'assistant';
@@ -44,6 +45,15 @@ export interface ChatMessageProps {
   onShare?: () => void;
   onMore?: () => void;
   showActions?: boolean;
+  // Search tool state
+  isSearching?: boolean;
+  searchQuery?: string;
+  searchResults?: {
+    query: string;
+    results: Array<{ title: string; url: string; content: string; score?: number }>;
+    answer?: string;
+  };
+  searchError?: string;
 }
 
 // Helper to compare content (handles arrays properly)
@@ -176,6 +186,10 @@ export const ChatMessage = memo<ChatMessageProps>(
     onShare,
     onMore,
     showActions = true,
+    isSearching,
+    searchQuery,
+    searchResults,
+    searchError,
   }) => {
     const isUser = role === 'user';
 
@@ -277,6 +291,17 @@ export const ChatMessage = memo<ChatMessageProps>(
               <div className="mb-3">
                 <ReasoningDisplay reasoning={reasoning} />
               </div>
+            )}
+
+            {/* Search results (for web search tool) */}
+            {!isUser && (isSearching || searchResults || searchError) && (
+              <SearchResults
+                query={searchQuery || searchResults?.query}
+                results={searchResults?.results}
+                isSearching={isSearching}
+                answer={searchResults?.answer}
+                error={searchError}
+              />
             )}
 
             {/* Message content */}
@@ -461,7 +486,12 @@ export const ChatMessage = memo<ChatMessageProps>(
       prevProps.onDislike === nextProps.onDislike &&
       prevProps.onShare === nextProps.onShare &&
       prevProps.onMore === nextProps.onMore &&
-      prevProps.onRegenerate === nextProps.onRegenerate
+      prevProps.onRegenerate === nextProps.onRegenerate &&
+      // Search-related props
+      prevProps.isSearching === nextProps.isSearching &&
+      prevProps.searchQuery === nextProps.searchQuery &&
+      prevProps.searchError === nextProps.searchError &&
+      JSON.stringify(prevProps.searchResults) === JSON.stringify(nextProps.searchResults)
     );
   }
 );

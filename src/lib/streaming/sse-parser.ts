@@ -201,6 +201,46 @@ function parseEventFormat(data: Record<string, unknown>): ParsedSSEData | null {
   if (typeof eventType !== 'string') return null;
 
   switch (eventType) {
+    // Tool call events - server is executing a tool
+    case 'tool_call': {
+      const toolCallId = data.tool_call_id as string;
+      const name = data.name as string;
+      const args = data.arguments as Record<string, unknown>;
+      if (toolCallId && name) {
+        return {
+          type: 'tool_call',
+          toolCall: {
+            id: toolCallId,
+            name,
+            arguments: args || {},
+          },
+        };
+      }
+      return null;
+    }
+
+    // Tool result events - tool execution completed
+    case 'tool_result': {
+      const toolCallId = data.tool_call_id as string;
+      const name = data.name as string;
+      const success = data.success as boolean;
+      const result = data.result;
+      const error = data.error as string | undefined;
+      if (toolCallId && name) {
+        return {
+          type: 'tool_result',
+          toolResult: {
+            tool_call_id: toolCallId,
+            name,
+            success,
+            result,
+            error,
+          },
+        };
+      }
+      return null;
+    }
+
     // Content delta events
     case 'response.output_text.delta': {
       const delta = data.delta as Record<string, unknown> | string;
@@ -232,14 +272,15 @@ function parseEventFormat(data: Record<string, unknown>): ParsedSSEData | null {
     case 'response.stop':
       return { done: true };
 
-    // Error events
+    // Error events - these should propagate as errors, not regular returns
     case 'response.error': {
       const errorData = data.error as Record<string, unknown> | undefined;
       const message =
         (errorData && typeof errorData.message === 'string' && errorData.message) ||
         (typeof data.message === 'string' && data.message) ||
         'Response stream error';
-      return { error: { message, type: 'response_error' } };
+      // Throw immediately for response.error events so they're handled as stream errors
+      throw new StreamingError(message, { type: 'response_error' });
     }
 
     default:
@@ -330,7 +371,15 @@ export function parseSSEChunk(jsonStr: string): ParsedSSEData | null {
     return null;
   }
 
-  // Check for errors first
+  // Try each format parser in order of likelihood
+  let result: ParsedSSEData | null = null;
+
+  // 1. Try event-based format first (type field) - this includes tool_call and tool_result
+  // which may have "error" fields that are not streaming errors
+  result = parseEventFormat(data);
+  if (result) return result;
+
+  // 2. Check for errors (after event format to avoid false positives with tool_result.error)
   const errorResult = checkForError(data);
   if (errorResult?.error) {
     throw new StreamingError(errorResult.error.message, {
@@ -339,19 +388,12 @@ export function parseSSEChunk(jsonStr: string): ParsedSSEData | null {
     });
   }
 
-  // Try each format parser in order of likelihood
-  let result: ParsedSSEData | null = null;
-
-  // 1. Try Fireworks/Responses API format (output array)
+  // 3. Try Fireworks/Responses API format (output array)
   result = parseFireworksFormat(data);
   if (result) return result;
 
-  // 2. Try OpenAI format (choices array)
+  // 4. Try OpenAI format (choices array)
   result = parseOpenAIFormat(data);
-  if (result) return result;
-
-  // 3. Try event-based format (type field)
-  result = parseEventFormat(data);
   if (result) return result;
 
   // No recognized format - return null to skip
