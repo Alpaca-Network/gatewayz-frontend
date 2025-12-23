@@ -173,6 +173,13 @@ console.log(completion.choices[0].message);`,
   const [featuredModels, setFeaturedModels] = useState<FeaturedModel[]>([]);
   const [isLoadingModels, setIsLoadingModels] = useState(true);
 
+  // Fallback models used when API fails
+  const fallbackModels: FeaturedModel[] = [
+    { name: 'Gemini 2.5 Pro', by: 'google', tokens: '170.06', latency: '2.6s', growth: '+13.06%', color: 'bg-blue-400', logo_url: '/Google_Logo-black.svg' },
+    { name: 'GPT-4', by: 'openai', tokens: '20.98', latency: '850ms', growth: '--', color: 'bg-green-400', logo_url: '/OpenAI_Logo-black.svg' },
+    { name: 'Claude Sonnet 4', by: 'anthropic', tokens: '585.26', latency: '1.9s', growth: '-9.04%', color: 'bg-purple-400', logo_url: '/anthropic-logo.svg' }
+  ];
+
   // Fetch models from rankings API
   useEffect(() => {
     const fetchRankingModels = async () => {
@@ -183,11 +190,28 @@ console.log(completion.choices[0].message);`,
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
+            'Accept': 'application/json',
           }
         });
 
         if (response.ok) {
-          const result = await response.json();
+          // Safely parse JSON response - handle cases where response may not be valid JSON
+          let result;
+          try {
+            result = await response.json();
+          } catch (parseError) {
+            console.error('Failed to parse ranking models response as JSON:', parseError);
+            setFeaturedModels(fallbackModels);
+            return;
+          }
+
+          // Check if response indicates an error from the API route
+          if (result.success === false || !result.data) {
+            console.error('Ranking API returned error:', result.error || 'No data');
+            setFeaturedModels(fallbackModels);
+            return;
+          }
+
           const rankingModels: RankingModelData[] = result.data || [];
 
           // Map ranking data to featured model format
@@ -228,24 +252,14 @@ console.log(completion.choices[0].message);`,
             };
           });
 
-          setFeaturedModels(mappedModels);
+          setFeaturedModels(mappedModels.length > 0 ? mappedModels : fallbackModels);
         } else {
-          console.error('Failed to fetch ranking models');
-          // Set fallback models if API fails
-          setFeaturedModels([
-            { name: 'Gemini 2.5 Pro', by: 'google', tokens: '170.06', latency: '2.6s', growth: '+13.06%', color: 'bg-blue-400', logo_url: '/Google_Logo-black.svg' },
-            { name: 'GPT-4', by: 'openai', tokens: '20.98', latency: '850ms', growth: '--', color: 'bg-green-400', logo_url: '/OpenAI_Logo-black.svg' },
-            { name: 'Claude Sonnet 4', by: 'anthropic', tokens: '585.26', latency: '1.9s', growth: '-9.04%', color: 'bg-purple-400', logo_url: '/anthropic-logo.svg' }
-          ]);
+          console.error('Failed to fetch ranking models, status:', response.status);
+          setFeaturedModels(fallbackModels);
         }
       } catch (error) {
         console.error('Error fetching ranking models:', error);
-        // Set fallback models on error
-        setFeaturedModels([
-          { name: 'Gemini 2.5 Pro', by: 'google', tokens: '170.06', latency: '2.6s', growth: '+13.06%', color: 'bg-blue-400', logo_url: '/Google_Logo-black.svg' },
-          { name: 'GPT-4', by: 'openai', tokens: '20.98', latency: '850ms', growth: '--', color: 'bg-green-400', logo_url: '/OpenAI_Logo-black.svg' },
-          { name: 'Claude Sonnet 4', by: 'anthropic', tokens: '585.26', latency: '1.9s', growth: '-9.04%', color: 'bg-purple-400', logo_url: '/anthropic-logo.svg' }
-        ]);
+        setFeaturedModels(fallbackModels);
       } finally {
         setIsLoadingModels(false);
       }
