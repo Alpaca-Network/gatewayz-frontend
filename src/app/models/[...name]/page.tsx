@@ -488,8 +488,31 @@ export default function ModelProfilePage() {
                     signal: AbortSignal.timeout(15000)
                 });
 
+                if (!mounted) {
+                    return;
+                }
+
+                // Handle 404 gracefully - model not found is expected behavior, not an error
+                if (response.status === 404) {
+                    // Model doesn't exist in gateway or static data
+                    // Only set model to null if we don't have a static match
+                    if (!staticFoundModel) {
+                        setModel(null);
+                        setLoading(false);
+                    }
+                    setLoadingProviders(false);
+                    return;
+                }
+
                 if (!response.ok) {
-                    throw new Error(`Model detail request failed (${response.status})`);
+                    // Log actual errors (5xx, network issues, etc.) but not 404s
+                    console.error(`[ModelProfilePage] Model detail request failed (${response.status})`);
+                    if (!staticFoundModel) {
+                        setModel(null);
+                        setLoading(false);
+                    }
+                    setLoadingProviders(false);
+                    return;
                 }
 
                 const payload = await safeParseJson<{
@@ -517,7 +540,11 @@ export default function ModelProfilePage() {
 
                 setLoadingProviders(false);
             } catch (error) {
-                console.error('[ModelProfilePage] Failed to load model detail:', error);
+                // Only log actual unexpected errors (network failures, timeouts, etc.)
+                // Don't log as error if it's just a model not found scenario
+                if (error instanceof Error && !error.message.includes('404')) {
+                    console.error('[ModelProfilePage] Failed to load model detail:', error);
+                }
                 if (!mounted) {
                     return;
                 }
