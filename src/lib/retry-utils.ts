@@ -102,6 +102,12 @@ export async function retryFetch(
   for (let attempt = 0; attempt <= config.maxRetries; attempt++) {
     try {
       const response = await fn();
+
+      // Guard against undefined response (can happen with AbortController or network edge cases)
+      if (!response) {
+        throw new Error('Fetch returned undefined response');
+      }
+
       lastResponse = response;
 
       // Don't retry on success

@@ -6,6 +6,7 @@ describe('Retry Utils', () => {
       jest.clearAllMocks();
     });
 
+
     it('should return successful response on first attempt', async () => {
       const mockResponse = {
         ok: true,
@@ -435,9 +436,8 @@ describe('Retry Utils', () => {
       // Mock setTimeout to capture delay values
       jest.useFakeTimers();
       const originalSetTimeout = global.setTimeout;
-      let setTimeoutCallCount = 0;
 
-      jest.spyOn(global, 'setTimeout').mockImplementation((callback, delay) => {
+      const setTimeoutSpy = jest.spyOn(global, 'setTimeout').mockImplementation((callback, delay) => {
         delayValues.push(delay as number);
         return originalSetTimeout(callback, 0) as unknown as NodeJS.Timeout;
       });
@@ -446,11 +446,62 @@ describe('Retry Utils', () => {
       await jest.runAllTimersAsync();
       await promise;
 
+      // Restore setTimeout spy before switching to real timers
+      setTimeoutSpy.mockRestore();
       jest.useRealTimers();
 
       // Should have 2 delays (retries) and increasing values
       expect(delayValues.length).toBe(2);
       expect(delayValues[1]).toBeGreaterThanOrEqual(delayValues[0]);
+    });
+
+    it('should handle undefined response by throwing and retrying', async () => {
+      // This tests the case where fetch resolves to undefined (e.g., AbortController edge cases)
+      // The undefined response should be treated as a network error and retried
+      const mockFetch = jest.fn().mockResolvedValue(undefined);
+
+      jest.useFakeTimers();
+
+      // Wrap in a try-catch to properly handle the rejection
+      let caughtError: Error | null = null;
+      const promise = retryFetch(mockFetch, { maxRetries: 1 }).catch((e) => {
+        caughtError = e;
+      });
+
+      // Advance all timers and let the promise resolve/reject
+      await jest.runAllTimersAsync();
+      await promise;
+
+      jest.useRealTimers();
+
+      expect(caughtError).not.toBeNull();
+      expect(caughtError!.message).toBe('Fetch returned undefined response');
+      // 2 total calls: initial + 1 retry
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('should handle null response by throwing and retrying', async () => {
+      // This tests the case where fetch resolves to null
+      const mockFetch = jest.fn().mockResolvedValue(null);
+
+      jest.useFakeTimers();
+
+      // Wrap in a try-catch to properly handle the rejection
+      let caughtError: Error | null = null;
+      const promise = retryFetch(mockFetch, { maxRetries: 1 }).catch((e) => {
+        caughtError = e;
+      });
+
+      // Advance all timers and let the promise resolve/reject
+      await jest.runAllTimersAsync();
+      await promise;
+
+      jest.useRealTimers();
+
+      expect(caughtError).not.toBeNull();
+      expect(caughtError!.message).toBe('Fetch returned undefined response');
+      // 2 total calls: initial + 1 retry
+      expect(mockFetch).toHaveBeenCalledTimes(2);
     });
   });
 
