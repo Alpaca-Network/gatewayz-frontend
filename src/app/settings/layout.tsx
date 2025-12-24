@@ -12,6 +12,7 @@ const navItems = [
   { href: "/settings/referrals", label: "Referrals" },
   { href: "/settings/keys", label: "Keys" },
   { href: "/settings/activity", label: "Activity" },
+  { href: "/settings/memory", label: "AI Memory" },
   { href: "/settings/presets", label: "Presets" },
   { href: "/settings/provisioning", label: "Provisioning Keys" },
   { href: "/settings/integrations", label: "Integrations (BYOK)" },
