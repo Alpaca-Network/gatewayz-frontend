@@ -66,6 +66,13 @@ export default function SettingsPage() {
     }
   }, [user]);
 
+  // Reset settingsLoaded when user logs out so settings are re-fetched on next login
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setSettingsLoaded(false);
+    }
+  }, [isAuthenticated]);
+
   // Load settings only after authentication is complete
   useEffect(() => {
     const loadSettings = async () => {
@@ -90,8 +97,9 @@ export default function SettingsPage() {
           setIgnoredProviders(data.ignored_providers || []);
           setDefaultProviderSort(data.default_provider_sort || "balanced");
           setDefaultModel(data.default_model || "auto-router");
+          // Only mark as loaded on successful API response
+          setSettingsLoaded(true);
         }
-        setSettingsLoaded(true);
       } catch (error) {
         console.error("Error loading settings:", error);
       } finally {
