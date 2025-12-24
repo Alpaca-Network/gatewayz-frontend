@@ -275,6 +275,58 @@ describe('Global Error Handlers - Error Filtering Logic', () => {
     });
   });
 
+  describe('Privy auth network error filtering (JAVASCRIPT-NEXTJS-7139666867)', () => {
+    /**
+     * Tests for filtering Privy passwordless authentication network errors
+     * These occur when users have network connectivity issues to auth.privy.io
+     * Error format: "Failed to fetch (auth.privy.io)" or "[POST] https://auth.privy.io/..."
+     */
+    function shouldSkipPrivyNetworkError(errorMessage: string): boolean {
+      const errorMessageLower = errorMessage.toLowerCase();
+
+      // Privy network errors are non-blocking and should be skipped
+      // They occur due to user network issues, CORS blocks, or connectivity problems
+      const isPrivyNetworkError =
+        (errorMessageLower.includes('failed to fetch') || errorMessageLower.includes('networkerror') || errorMessageLower.includes('<no response>')) &&
+        (errorMessageLower.includes('privy.io') || errorMessageLower.includes('auth.privy'));
+
+      return isPrivyNetworkError;
+    }
+
+    it('should skip "Failed to fetch (auth.privy.io)" errors', () => {
+      expect(shouldSkipPrivyNetworkError('Failed to fetch (auth.privy.io)')).toBe(true);
+    });
+
+    it('should skip POST to auth.privy.io passwordless/init errors', () => {
+      expect(shouldSkipPrivyNetworkError('[POST] "https://auth.privy.io/api/v1/passwordless/init": <no response> Failed to fetch (auth.privy.io)')).toBe(true);
+    });
+
+    it('should skip "<no response>" errors from privy.io', () => {
+      expect(shouldSkipPrivyNetworkError('[POST] "https://auth.privy.io/api/v1/passwordless/init": <no response>')).toBe(true);
+    });
+
+    it('should skip NetworkError from auth.privy endpoints', () => {
+      expect(shouldSkipPrivyNetworkError('NetworkError when attempting to fetch resource: https://auth.privy.io/api/v1/passwordless/init')).toBe(true);
+    });
+
+    it('should NOT skip network errors from non-Privy domains', () => {
+      expect(shouldSkipPrivyNetworkError('Failed to fetch https://api.example.com/data')).toBe(false);
+    });
+
+    it('should NOT skip Privy errors that are not network-related', () => {
+      expect(shouldSkipPrivyNetworkError('Privy authentication failed: Invalid token')).toBe(false);
+    });
+
+    it('should handle case-insensitive matching', () => {
+      expect(shouldSkipPrivyNetworkError('FAILED TO FETCH (AUTH.PRIVY.IO)')).toBe(true);
+      expect(shouldSkipPrivyNetworkError('NETWORKERROR from PRIVY.IO')).toBe(true);
+    });
+
+    it('should skip errors mentioning auth.privy in the URL', () => {
+      expect(shouldSkipPrivyNetworkError('Failed to fetch https://auth.privy.io/api/v1/users')).toBe(true);
+    });
+  });
+
   describe('Edge cases', () => {
     function shouldSkipUnhandledRejection(errorMessage: string): boolean {
       const errorMessageLower = errorMessage.toLowerCase();

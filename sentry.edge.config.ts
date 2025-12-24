@@ -76,13 +76,20 @@ function shouldFilterEdgeEvent(errorMessage: string, event?: Sentry.ErrorEvent):
     (normalizedMessage.includes('iframe not initialized') || normalizedMessage.includes('origin not allowed')) &&
     normalizedMessage.includes('privy');
 
+  // Filter out Privy auth network errors (user network issues to auth.privy.io)
+  // These occur when users have connectivity issues, CORS blocks, or network blocking
+  // Error format: "Failed to fetch (auth.privy.io)" or "[POST] https://auth.privy.io/..."
+  const isPrivyNetworkError =
+    (normalizedMessage.includes('failed to fetch') || normalizedMessage.includes('networkerror') || normalizedMessage.includes('<no response>')) &&
+    (normalizedMessage.includes('privy.io') || normalizedMessage.includes('auth.privy'));
+
   // Filter out "Large HTTP payload" info events
   const isLargePayloadInfo =
     event?.level === 'info' &&
     (normalizedMessage.includes('large http payload') ||
      (event?.message?.toLowerCase() || '').includes('large http payload'));
 
-  return isWalletExtensionError || isWalletConnectRelayError || isN1ApiCall || isStorageAccessDenied || isJavaObjectGone || isPrivyIframeError || isLargePayloadInfo;
+  return isWalletExtensionError || isWalletConnectRelayError || isN1ApiCall || isStorageAccessDenied || isJavaObjectGone || isPrivyIframeError || isPrivyNetworkError || isLargePayloadInfo;
 }
 
 function shouldEdgeRateLimit(event: Sentry.ErrorEvent): boolean {

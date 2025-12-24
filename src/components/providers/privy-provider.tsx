@@ -38,7 +38,7 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
 
   useEffect(() => {
     type WalletErrorType = "extension" | "relay";
-    type PrivyErrorType = "iframe" | "java_object";
+    type PrivyErrorType = "iframe" | "java_object" | "network";
 
     const classifyWalletError = (errorStr?: string): WalletErrorType | null => {
       if (!errorStr) {
@@ -83,6 +83,16 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
         return "java_object";
       }
 
+      // Network failures to Privy auth servers (auth.privy.io)
+      // These occur due to user network issues, CORS blocks, or connectivity problems
+      // Error format: "Failed to fetch (auth.privy.io)" or similar network errors to privy domains
+      if (
+        (normalized.includes("failed to fetch") || normalized.includes("networkerror") || normalized.includes("network request failed")) &&
+        (normalized.includes("privy.io") || normalized.includes("auth.privy"))
+      ) {
+        return "network";
+      }
+
       return null;
     };
 
@@ -113,14 +123,16 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
       const labels: Record<PrivyErrorType, string> = {
         iframe: "Privy iframe initialization error",
         java_object: "WebView bridge error",
+        network: "Privy auth network error",
       };
       const label = labels[type];
 
       console.warn(`[Auth] ${label} detected (non-blocking via ${source}):`, message);
 
       // Log to Sentry as info level - these are expected transient errors
+      // Network errors are slightly higher priority (warning) as they may indicate broader issues
       Sentry.captureMessage(`${label}: ${message}`, {
-        level: "info",
+        level: type === "network" ? "warning" : "info",
         tags: {
           auth_error: `privy_${type}_error`,
           blocking: "false",

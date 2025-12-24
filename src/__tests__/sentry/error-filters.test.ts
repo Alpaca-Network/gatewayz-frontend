@@ -478,6 +478,169 @@ describe('Sentry Error Filters', () => {
     });
   });
 
+  describe('Privy auth network error filtering (JAVASCRIPT-NEXTJS-7139666867)', () => {
+    /**
+     * Tests for filtering Privy passwordless authentication network errors
+     * These occur when users have network connectivity issues to auth.privy.io
+     * Error format: "Failed to fetch (auth.privy.io)" or "[POST] https://auth.privy.io/..."
+     */
+    let privyNetworkCallback: (event: Sentry.ErrorEvent, hint: Sentry.EventHint) => Sentry.ErrorEvent | null;
+
+    beforeEach(() => {
+      privyNetworkCallback = (event: Sentry.ErrorEvent, hint: Sentry.EventHint) => {
+        const error = hint.originalException;
+        const errorMessage = typeof error === 'string' ? error : error instanceof Error ? error.message : '';
+        const normalizedMessage = errorMessage.toLowerCase();
+
+        // Filter out Privy auth network errors (user network issues to auth.privy.io)
+        // These occur when users have connectivity issues, CORS blocks, or network blocking
+        const isPrivyNetworkError =
+          (normalizedMessage.includes('failed to fetch') || normalizedMessage.includes('networkerror') || normalizedMessage.includes('<no response>')) &&
+          (normalizedMessage.includes('privy.io') || normalizedMessage.includes('auth.privy'));
+
+        if (isPrivyNetworkError) {
+          console.warn('[Sentry] Filtered out Privy auth network error (user network issue):', errorMessage);
+          return null;
+        }
+
+        return event;
+      };
+    });
+
+    it('should filter out "Failed to fetch (auth.privy.io)" errors', () => {
+      const error = new TypeError('Failed to fetch (auth.privy.io)');
+      const event: Sentry.ErrorEvent = {
+        exception: {
+          values: [{
+            type: 'TypeError',
+            value: 'Failed to fetch (auth.privy.io)',
+            stacktrace: { frames: [] }
+          }]
+        }
+      } as Sentry.ErrorEvent;
+
+      const hint: Sentry.EventHint = { originalException: error };
+      const result = privyNetworkCallback(event, hint);
+
+      expect(result).toBeNull();
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        '[Sentry] Filtered out Privy auth network error (user network issue):',
+        'Failed to fetch (auth.privy.io)'
+      );
+    });
+
+    it('should filter out POST to auth.privy.io passwordless/init errors', () => {
+      const error = new Error('[POST] "https://auth.privy.io/api/v1/passwordless/init": <no response> Failed to fetch (auth.privy.io)');
+      const event: Sentry.ErrorEvent = {
+        exception: {
+          values: [{
+            type: 'FetchError',
+            value: '[POST] "https://auth.privy.io/api/v1/passwordless/init": <no response> Failed to fetch (auth.privy.io)',
+            stacktrace: { frames: [] }
+          }]
+        }
+      } as Sentry.ErrorEvent;
+
+      const hint: Sentry.EventHint = { originalException: error };
+      const result = privyNetworkCallback(event, hint);
+
+      expect(result).toBeNull();
+    });
+
+    it('should filter out "<no response>" errors from privy.io', () => {
+      const error = new Error('[POST] "https://auth.privy.io/api/v1/passwordless/init": <no response>');
+      const event: Sentry.ErrorEvent = {
+        exception: {
+          values: [{
+            type: 'Error',
+            value: '[POST] "https://auth.privy.io/api/v1/passwordless/init": <no response>',
+            stacktrace: { frames: [] }
+          }]
+        }
+      } as Sentry.ErrorEvent;
+
+      const hint: Sentry.EventHint = { originalException: error };
+      const result = privyNetworkCallback(event, hint);
+
+      expect(result).toBeNull();
+    });
+
+    it('should filter out NetworkError from auth.privy endpoints', () => {
+      const error = new Error('NetworkError when attempting to fetch resource: https://auth.privy.io/api/v1/passwordless/init');
+      const event: Sentry.ErrorEvent = {
+        exception: {
+          values: [{
+            type: 'Error',
+            value: 'NetworkError when attempting to fetch resource: https://auth.privy.io/api/v1/passwordless/init',
+            stacktrace: { frames: [] }
+          }]
+        }
+      } as Sentry.ErrorEvent;
+
+      const hint: Sentry.EventHint = { originalException: error };
+      const result = privyNetworkCallback(event, hint);
+
+      expect(result).toBeNull();
+    });
+
+    it('should NOT filter network errors from non-Privy domains', () => {
+      const error = new Error('Failed to fetch https://api.example.com/data');
+      const event: Sentry.ErrorEvent = {
+        exception: {
+          values: [{
+            type: 'Error',
+            value: 'Failed to fetch https://api.example.com/data',
+            stacktrace: { frames: [] }
+          }]
+        }
+      } as Sentry.ErrorEvent;
+
+      const hint: Sentry.EventHint = { originalException: error };
+      const result = privyNetworkCallback(event, hint);
+
+      expect(result).not.toBeNull();
+      expect(result).toBe(event);
+    });
+
+    it('should NOT filter Privy errors that are not network-related', () => {
+      const error = new Error('Privy authentication failed: Invalid token');
+      const event: Sentry.ErrorEvent = {
+        exception: {
+          values: [{
+            type: 'Error',
+            value: 'Privy authentication failed: Invalid token',
+            stacktrace: { frames: [] }
+          }]
+        }
+      } as Sentry.ErrorEvent;
+
+      const hint: Sentry.EventHint = { originalException: error };
+      const result = privyNetworkCallback(event, hint);
+
+      // Should NOT be filtered - this is a real auth error
+      expect(result).not.toBeNull();
+      expect(result).toBe(event);
+    });
+
+    it('should handle case-insensitive matching', () => {
+      const error = new TypeError('FAILED TO FETCH (AUTH.PRIVY.IO)');
+      const event: Sentry.ErrorEvent = {
+        exception: {
+          values: [{
+            type: 'TypeError',
+            value: 'FAILED TO FETCH (AUTH.PRIVY.IO)',
+            stacktrace: { frames: [] }
+          }]
+        }
+      } as Sentry.ErrorEvent;
+
+      const hint: Sentry.EventHint = { originalException: error };
+      const result = privyNetworkCallback(event, hint);
+
+      expect(result).toBeNull();
+    });
+  });
+
   describe('edge cases', () => {
     it('should pass through unrelated errors', () => {
       const error = new Error('Some other application error');
