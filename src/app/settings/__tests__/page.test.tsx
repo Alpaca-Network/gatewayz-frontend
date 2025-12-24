@@ -281,6 +281,59 @@ describe('SettingsPage', () => {
   });
 
   describe('Auth State Transitions', () => {
+    it('should cancel in-flight request when user logs out (race condition fix)', async () => {
+      // Start authenticated
+      (useGatewayzAuth as jest.Mock).mockReturnValue({
+        status: 'authenticated',
+        apiKey: 'test-api-key',
+        privyReady: true,
+        login: mockLogin,
+      });
+
+      // Create a delayed response that we can control
+      let resolveRequest: (value: unknown) => void;
+      const delayedResponse = new Promise((resolve) => {
+        resolveRequest = resolve;
+      });
+
+      (makeAuthenticatedRequest as jest.Mock).mockImplementation(() => delayedResponse);
+
+      const { rerender } = render(<SettingsPage />);
+
+      // Verify request was made
+      await waitFor(() => {
+        expect(makeAuthenticatedRequest).toHaveBeenCalled();
+      });
+
+      // Simulate logout BEFORE request completes
+      (useGatewayzAuth as jest.Mock).mockReturnValue({
+        status: 'unauthenticated',
+        apiKey: null,
+        privyReady: true,
+        login: mockLogin,
+      });
+
+      rerender(<SettingsPage />);
+
+      // Now resolve the delayed request (simulating response arriving after logout)
+      resolveRequest!({
+        ok: true,
+        json: () => Promise.resolve({
+          low_balance_notifications: true,
+          default_provider_sort: 'balanced',
+          default_model: 'auto-router',
+        }),
+      });
+
+      // Wait a tick for any state updates
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+
+      // Should show unauthenticated state
+      expect(screen.getByText('Please sign in to view your settings.')).toBeInTheDocument();
+    });
+
     it('should reset settings when user logs out', async () => {
       // Start authenticated
       const authMock = {

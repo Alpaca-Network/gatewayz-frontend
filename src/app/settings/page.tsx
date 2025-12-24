@@ -75,17 +75,30 @@ export default function SettingsPage() {
 
   // Load settings only after authentication is complete
   useEffect(() => {
-    const loadSettings = async () => {
-      // Don't load settings if not authenticated or already loaded
-      if (!isAuthenticated || settingsLoaded) {
-        return;
-      }
+    // Don't load settings if not authenticated or already loaded
+    if (!isAuthenticated || settingsLoaded) {
+      return;
+    }
 
+    // Use AbortController to cancel in-flight requests on cleanup
+    // This prevents race conditions when user logs out during a fetch
+    const abortController = new AbortController();
+    let isCancelled = false;
+
+    const loadSettings = async () => {
       setLoading(true);
 
       try {
         // Fetch user settings from backend - now safe because apiKey is available
-        const response = await makeAuthenticatedRequest(`${API_BASE_URL}/user/settings`);
+        const response = await makeAuthenticatedRequest(`${API_BASE_URL}/user/settings`, {
+          signal: abortController.signal,
+        });
+
+        // Check if effect was cleaned up while request was in flight
+        if (isCancelled) {
+          return;
+        }
+
         if (response.ok) {
           const data = await response.json();
 
@@ -101,13 +114,25 @@ export default function SettingsPage() {
           setSettingsLoaded(true);
         }
       } catch (error) {
+        // Ignore abort errors - they're expected when effect cleans up
+        if (error instanceof Error && error.name === 'AbortError') {
+          return;
+        }
         console.error("Error loading settings:", error);
       } finally {
-        setLoading(false);
+        if (!isCancelled) {
+          setLoading(false);
+        }
       }
     };
 
     loadSettings();
+
+    // Cleanup: cancel in-flight request when effect re-runs or component unmounts
+    return () => {
+      isCancelled = true;
+      abortController.abort();
+    };
   }, [isAuthenticated, settingsLoaded]);
 
   const saveSettings = async () => {
