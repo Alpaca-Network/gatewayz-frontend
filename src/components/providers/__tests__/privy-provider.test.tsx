@@ -536,4 +536,95 @@ describe('PrivyProviderWrapper', () => {
     // Note: "Cannot redefine property: ethereum" errors are handled by ErrorSuppressor component
     // which is loaded earlier in the component tree (layout.tsx) to centralize error suppression
   });
+
+  describe('Privy Wallet Creation Error Handling', () => {
+    it('should call preventDefault for "User wallet creation failed" errors', () => {
+      process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app-id-12345';
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+
+      render(
+        <PrivyProviderWrapper>
+          <div>Test Child</div>
+        </PrivyProviderWrapper>
+      );
+
+      // Create a mock PromiseRejectionEvent with wallet creation failed error
+      const mockEvent = new Event('unhandledrejection') as PromiseRejectionEvent;
+      Object.defineProperty(mockEvent, 'reason', {
+        value: { message: 'User wallet creation failed' },
+        writable: false,
+      });
+      const preventDefaultSpy = jest.spyOn(mockEvent, 'preventDefault');
+
+      window.dispatchEvent(mockEvent);
+
+      // User-initiated wallet creation cancellation should call preventDefault
+      expect(preventDefaultSpy).toHaveBeenCalled();
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('[Auth] User cancelled wallet creation'),
+        expect.any(String)
+      );
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should call preventDefault for unknown_embedded_wallet_error privyErrorCode', () => {
+      process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app-id-12345';
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+
+      render(
+        <PrivyProviderWrapper>
+          <div>Test Child</div>
+        </PrivyProviderWrapper>
+      );
+
+      // Create a mock PromiseRejectionEvent with Privy error code
+      const mockEvent = new Event('unhandledrejection') as PromiseRejectionEvent;
+      Object.defineProperty(mockEvent, 'reason', {
+        value: { 
+          message: 'Some wallet error',
+          privyErrorCode: 'unknown_embedded_wallet_error'
+        },
+        writable: false,
+      });
+      const preventDefaultSpy = jest.spyOn(mockEvent, 'preventDefault');
+
+      window.dispatchEvent(mockEvent);
+
+      // Privy error code unknown_embedded_wallet_error should call preventDefault
+      expect(preventDefaultSpy).toHaveBeenCalled();
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should NOT call preventDefault for iframe initialization errors', () => {
+      process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app-id-12345';
+      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+
+      render(
+        <PrivyProviderWrapper>
+          <div>Test Child</div>
+        </PrivyProviderWrapper>
+      );
+
+      // Create a mock PromiseRejectionEvent with iframe error
+      const mockEvent = new Event('unhandledrejection') as PromiseRejectionEvent;
+      Object.defineProperty(mockEvent, 'reason', {
+        value: { message: 'iframe not initialized' },
+        writable: false,
+      });
+      const preventDefaultSpy = jest.spyOn(mockEvent, 'preventDefault');
+
+      window.dispatchEvent(mockEvent);
+
+      // Transient Privy errors should NOT call preventDefault - let Privy handle recovery
+      expect(preventDefaultSpy).not.toHaveBeenCalled();
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('[Auth] Privy iframe initialization error detected'),
+        expect.any(String)
+      );
+
+      consoleSpy.mockRestore();
+    });
+  });
 });

@@ -38,7 +38,7 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
 
   useEffect(() => {
     type WalletErrorType = "extension" | "relay";
-    type PrivyErrorType = "iframe" | "java_object";
+    type PrivyErrorType = "iframe" | "java_object" | "wallet_creation_cancelled";
 
     const classifyWalletError = (errorStr?: string): WalletErrorType | null => {
       if (!errorStr) {
@@ -66,7 +66,7 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
     };
 
     // Classify Privy-specific errors that are non-blocking
-    const classifyPrivyError = (errorStr?: string): PrivyErrorType | null => {
+    const classifyPrivyError = (errorStr?: string, reason?: unknown): PrivyErrorType | null => {
       if (!errorStr) {
         return null;
       }
@@ -81,6 +81,18 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
       // "Java object is gone" - WebView/Android bridge timing issue
       if (normalized.includes("java object is gone")) {
         return "java_object";
+      }
+
+      // "User wallet creation failed" - User dismissed the wallet creation modal
+      // This happens when createOnLogin triggers wallet creation and user closes the modal
+      if (normalized.includes("user wallet creation failed")) {
+        return "wallet_creation_cancelled";
+      }
+
+      // Check for Privy error code in the reason object
+      const privyErrorCode = (reason as { privyErrorCode?: string })?.privyErrorCode;
+      if (privyErrorCode === "unknown_embedded_wallet_error") {
+        return "wallet_creation_cancelled";
       }
 
       return null;
@@ -113,18 +125,27 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
       const labels: Record<PrivyErrorType, string> = {
         iframe: "Privy iframe initialization error",
         java_object: "WebView bridge error",
+        wallet_creation_cancelled: "User cancelled wallet creation",
       };
       const label = labels[type];
 
-      console.warn(`[Auth] ${label} detected (non-blocking via ${source}):`, message);
+      // For wallet creation cancellation, use debug level since it's user-initiated
+      const isUserAction = type === "wallet_creation_cancelled";
+      
+      if (isUserAction) {
+        console.log(`[Auth] ${label} (user action via ${source}):`, message);
+      } else {
+        console.warn(`[Auth] ${label} detected (non-blocking via ${source}):`, message);
+      }
 
-      // Log to Sentry as info level - these are expected transient errors
+      // Log to Sentry - info for transient errors, debug for user actions
       Sentry.captureMessage(`${label}: ${message}`, {
-        level: "info",
+        level: isUserAction ? "debug" : "info",
         tags: {
           auth_error: `privy_${type}_error`,
           blocking: "false",
           event_source: source,
+          user_initiated: isUserAction ? "true" : "false",
         },
       });
     };
@@ -151,11 +172,16 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
         return;
       }
 
-      // Handle Privy-specific errors (iframe not initialized, Java object gone)
-      const privyErrorType = classifyPrivyError(reasonStr);
+      // Handle Privy-specific errors (iframe not initialized, Java object gone, wallet creation cancelled)
+      const privyErrorType = classifyPrivyError(reasonStr, reason);
       if (privyErrorType) {
         logPrivyError(privyErrorType, reasonStr, "unhandledrejection");
-        // Don't preventDefault - let Privy handle recovery
+        // For user-initiated actions like wallet creation cancellation, prevent the error from bubbling
+        // to avoid "Uncaught (in promise)" console errors
+        if (privyErrorType === "wallet_creation_cancelled") {
+          event.preventDefault();
+        }
+        // Don't preventDefault for other types - let Privy handle recovery
         return;
       }
 
@@ -179,10 +205,14 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
     // which is loaded earlier in the component tree (layout.tsx) to avoid duplicate handling
     const errorListener = (event: ErrorEvent) => {
       // Handle Privy-specific errors
-      const privyErrorType = classifyPrivyError(event.message);
+      const privyErrorType = classifyPrivyError(event.message, event.error);
       if (privyErrorType) {
         logPrivyError(privyErrorType, event.message, "error");
-        // Don't preventDefault - these are transient errors that Privy recovers from
+        // For user-initiated actions like wallet creation cancellation, prevent the error from bubbling
+        if (privyErrorType === "wallet_creation_cancelled") {
+          event.preventDefault();
+        }
+        // Don't preventDefault for other types - these are transient errors that Privy recovers from
         return;
       }
 
