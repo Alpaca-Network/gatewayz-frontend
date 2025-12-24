@@ -142,11 +142,18 @@ function convertToAISDKMessages(openAIMessages: OpenAIMessage[]): ModelMessage[]
           }
 
           for (const tc of tool_calls) {
+            let parsedInput: unknown = {};
+            try {
+              parsedInput = JSON.parse(tc.function.arguments || '{}');
+            } catch (parseError) {
+              console.warn(`[AI SDK Route] Failed to parse tool call arguments for ${tc.function.name}: ${parseError instanceof Error ? parseError.message : 'Invalid JSON'}`);
+              // Use empty object as fallback for malformed JSON
+            }
             parts.push({
               type: 'tool-call',
               toolCallId: tc.id,
               toolName: tc.function.name,
-              input: JSON.parse(tc.function.arguments || '{}'),
+              input: parsedInput,
             });
           }
 
@@ -159,12 +166,21 @@ function convertToAISDKMessages(openAIMessages: OpenAIMessage[]): ModelMessage[]
 
     // Handle array content - convert each part
     if (Array.isArray(content)) {
+      // For user messages: can include text, image, and file parts
+      // For assistant messages: can only include text parts (and tool-call which are handled separately above)
+      // AI SDK's Zod validation rejects image/file parts in assistant messages
+      const isAssistant = role === 'assistant';
       const convertedParts: AISDKUserContentPart[] = [];
 
       for (const part of content) {
         if (part.type === 'text') {
           convertedParts.push({ type: 'text', text: part.text });
         } else if (part.type === 'image_url' && part.image_url?.url) {
+          // Skip image parts for assistant messages - AI SDK rejects them
+          if (isAssistant) {
+            console.warn('[AI SDK Route] Skipping image_url in assistant message - not supported by AI SDK');
+            continue;
+          }
           // Convert OpenAI image_url format to AI SDK image format
           const url = part.image_url.url;
           // Check if it's a data URL (base64)
@@ -186,6 +202,11 @@ function convertToAISDKMessages(openAIMessages: OpenAIMessage[]): ModelMessage[]
             }
           }
         } else if (part.type === 'file_url' && part.file_url?.url) {
+          // Skip file parts for assistant messages - AI SDK rejects them
+          if (isAssistant) {
+            console.warn('[AI SDK Route] Skipping file_url in assistant message - not supported by AI SDK');
+            continue;
+          }
           const url = part.file_url.url;
           const mediaType = part.file_url.mime_type || 'application/octet-stream';
 
@@ -211,8 +232,10 @@ function convertToAISDKMessages(openAIMessages: OpenAIMessage[]): ModelMessage[]
         // They would need special handling based on the model/provider
       }
 
-      // If no parts were converted, use empty string
+      // If no parts were converted, use empty string and log a warning
+      // This can happen when all content parts are unsupported media types
       if (convertedParts.length === 0) {
+        console.warn(`[AI SDK Route] Message with role "${role}" had all content parts filtered out. Original parts: ${content.map((p: OpenAIContentPart) => p.type).join(', ')}`);
         return role === 'assistant'
           ? { role: 'assistant', content: '' }
           : { role: 'user', content: '' };
@@ -226,10 +249,18 @@ function convertToAISDKMessages(openAIMessages: OpenAIMessage[]): ModelMessage[]
           : { role: 'user', content: (convertedParts[0] as AISDKTextPart).text };
       }
 
+      // For assistant messages with multiple parts, filter to only text parts to satisfy AI SDK validation
+      if (isAssistant) {
+        const textOnlyParts = convertedParts.filter((p): p is AISDKTextPart => p.type === 'text');
+        if (textOnlyParts.length === 0) {
+          console.warn('[AI SDK Route] Assistant message had no text parts after filtering');
+          return { role: 'assistant', content: '' };
+        }
+        return { role: 'assistant', content: textOnlyParts } as ModelMessage;
+      }
+
       // Cast to ModelMessage to satisfy TypeScript - the runtime validation happens in AI SDK
-      return role === 'assistant'
-        ? { role: 'assistant', content: convertedParts } as ModelMessage
-        : { role: 'user', content: convertedParts } as ModelMessage;
+      return { role: 'user', content: convertedParts } as ModelMessage;
     }
 
     // Fallback for unexpected content types
