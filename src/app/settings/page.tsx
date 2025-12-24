@@ -16,10 +16,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { usePrivy } from "@privy-io/react-auth";
 import { useToast } from "@/hooks/use-toast";
-import { makeAuthenticatedRequest, getUserData } from "@/lib/api";
+import { makeAuthenticatedRequest } from "@/lib/api";
+import { useGatewayzAuth } from "@/context/gatewayz-auth-context";
 import { API_BASE_URL } from "@/lib/config";
 import { models } from "@/lib/models-data";
-import { X } from "lucide-react";
+import { X, Loader2 } from "lucide-react";
 
 // Get unique providers from models data
 const getUniqueProviders = () => {
@@ -36,9 +37,11 @@ export default function SettingsPage() {
   const router = useRouter();
   const { user } = usePrivy();
   const { toast } = useToast();
+  const { status, apiKey, privyReady, login } = useGatewayzAuth();
 
   // State management
   const [loading, setLoading] = useState(true);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [userEmail, setUserEmail] = useState("");
   const [lowBalanceNotifications, setLowBalanceNotifications] = useState(true);
   const [lowBalanceThreshold, setLowBalanceThreshold] = useState(5.00);
@@ -51,24 +54,30 @@ export default function SettingsPage() {
 
   const availableProviders = getUniqueProviders();
 
+  // Check if auth is still loading
+  const isAuthLoading = !privyReady || status === "idle" || status === "authenticating";
+  const isAuthenticated = status === "authenticated" && apiKey;
+
+  // Get user email from Privy
+  useEffect(() => {
+    if (user) {
+      const email = user?.email?.address || user?.google?.email || user?.github?.email || "";
+      setUserEmail(email);
+    }
+  }, [user]);
+
+  // Load settings only after authentication is complete
   useEffect(() => {
     const loadSettings = async () => {
+      // Don't load settings if not authenticated or already loaded
+      if (!isAuthenticated || settingsLoaded) {
+        return;
+      }
+
       setLoading(true);
 
-      // Get user email from Privy
-      if (user) {
-        const email = user?.email?.address || user?.google?.email || user?.github?.email || "";
-        setUserEmail(email);
-      }
-
-      // Wait for authentication if needed
-      const userData = getUserData();
-      if (!userData) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      }
-
       try {
-        // Fetch user settings from backend
+        // Fetch user settings from backend - now safe because apiKey is available
         const response = await makeAuthenticatedRequest(`${API_BASE_URL}/user/settings`);
         if (response.ok) {
           const data = await response.json();
@@ -82,6 +91,7 @@ export default function SettingsPage() {
           setDefaultProviderSort(data.default_provider_sort || "balanced");
           setDefaultModel(data.default_model || "auto-router");
         }
+        setSettingsLoaded(true);
       } catch (error) {
         console.error("Error loading settings:", error);
       } finally {
@@ -90,7 +100,7 @@ export default function SettingsPage() {
     };
 
     loadSettings();
-  }, [user]);
+  }, [isAuthenticated, settingsLoaded]);
 
   const saveSettings = async () => {
     setSaving(true);
@@ -148,11 +158,41 @@ export default function SettingsPage() {
     setIgnoredProviders(ignoredProviders.filter(p => p !== providerId));
   };
 
-  if (loading) {
+  // Show loading state while auth is in progress
+  if (isAuthLoading) {
     return (
       <div className="flex-1 space-y-10">
         <h1 className="text-3xl font-bold">Settings</h1>
-        <p className="text-muted-foreground">Loading settings...</p>
+        <div className="flex items-center gap-3 text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span>Connecting to your account...</span>
+        </div>
+      </div>
+    );
+  }
+
+  // Show sign-in prompt if not authenticated
+  if (!isAuthenticated) {
+    return (
+      <div className="flex-1 space-y-10">
+        <h1 className="text-3xl font-bold">Settings</h1>
+        <div className="flex flex-col items-center gap-4 py-8">
+          <p className="text-muted-foreground">Please sign in to view your settings.</p>
+          <Button onClick={() => login()}>Sign In</Button>
+        </div>
+      </div>
+    );
+  }
+
+  // Show loading state while settings are being fetched
+  if (loading && !settingsLoaded) {
+    return (
+      <div className="flex-1 space-y-10">
+        <h1 className="text-3xl font-bold">Settings</h1>
+        <div className="flex items-center gap-3 text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span>Loading settings...</span>
+        </div>
       </div>
     );
   }
