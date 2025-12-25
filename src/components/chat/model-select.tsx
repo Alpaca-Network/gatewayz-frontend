@@ -882,8 +882,7 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
     }
     }, [loadAllModels, models.length, persistModelsToCache]);
 
-    const totalCountLabel = totalAvailableModels !== null ? totalAvailableModels.toString() : '330+';
-    const loadAllButtonLabel = `Load all models (${models.length} of ${totalCountLabel})`;
+    const loadAllButtonLabel = 'Load all 10,000+ models';
 
     return (
     <Popover open={open} onOpenChange={(isOpen) => {
