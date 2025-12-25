@@ -2,7 +2,7 @@
  * Tests for Sentry error filtering
  */
 
-import { shouldSuppressError, isTransientError, beforeSend } from '../sentry-error-filters';
+import { shouldSuppressError, isTransientError, beforeSend, getDenyUrls, getIgnoreErrors } from '../sentry-error-filters';
 import type * as Sentry from '@sentry/nextjs';
 
 type ErrorEvent = Sentry.ErrorEvent;
@@ -99,6 +99,75 @@ describe('Sentry Error Filters', () => {
       };
 
       expect(shouldSuppressError(event)).toBe(false);
+    });
+
+    it('should suppress third-party service errors', () => {
+      const event: ErrorEvent = {
+        message: 'Statsig networking error: Failed to flush events',
+      };
+
+      expect(shouldSuppressError(event)).toBe(true);
+    });
+
+    it('should suppress rate limiting errors', () => {
+      const event: ErrorEvent = {
+        message: '/monitoring returned 429 Too Many Requests',
+      };
+
+      expect(shouldSuppressError(event)).toBe(true);
+    });
+
+    it('should suppress QuotaExceededError', () => {
+      const event: ErrorEvent = {
+        exception: {
+          values: [{
+            value: 'QuotaExceededError',
+            type: 'QuotaExceededError',
+          }],
+        },
+      };
+
+      expect(shouldSuppressError(event)).toBe(true);
+    });
+
+    it('should handle events with only exception values', () => {
+      const event: ErrorEvent = {
+        exception: {
+          values: [{
+            value: 'Cannot read properties of undefined (reading "removeListener")',
+            type: 'TypeError',
+          }],
+        },
+      };
+
+      expect(shouldSuppressError(event)).toBe(true);
+    });
+
+    it('should handle events with stack trace in exception', () => {
+      const event: ErrorEvent = {
+        message: 'Some error',
+        exception: {
+          values: [{
+            value: 'Error occurred',
+            type: 'Error',
+            stacktrace: {
+              frames: [{
+                filename: 'inpage.js',
+                function: 'removeListener',
+              }],
+            },
+          }],
+        },
+      };
+
+      expect(shouldSuppressError(event)).toBe(true);
+    });
+
+    it('should return false for empty events', () => {
+      const event: ErrorEvent = {};
+      const hint: Sentry.EventHint = {};
+
+      expect(shouldSuppressError(event, hint)).toBe(false);
     });
   });
 
@@ -223,6 +292,146 @@ describe('Sentry Error Filters', () => {
 
       // Should suppress because the hint contains hydration error pattern
       expect(result).toBeNull();
+    });
+
+    it('should add breadcrumbs to transient errors even when breadcrumbs exist', () => {
+      const event: ErrorEvent = {
+        message: 'Authentication timeout - stuck in authenticating state',
+        level: 'error',
+        breadcrumbs: [
+          {
+            message: 'Previous breadcrumb',
+            level: 'info',
+          },
+        ],
+      };
+      const hint: Sentry.EventHint = {
+        originalException: new Error('Authentication timeout'),
+      };
+
+      const result = beforeSend(event, hint);
+
+      expect(result).not.toBeNull();
+      expect(result?.level).toBe('warning');
+      expect(result?.breadcrumbs).toHaveLength(2);
+      expect(result?.breadcrumbs?.[1]).toMatchObject({
+        message: 'Error classified as transient',
+        level: 'info',
+      });
+    });
+
+    it('should handle events with exception value but no hint', () => {
+      const event: ErrorEvent = {
+        exception: {
+          values: [{
+            value: 'Failed to fetch',
+            type: 'TypeError',
+          }],
+        },
+        level: 'error',
+      };
+      const hint: Sentry.EventHint = {};
+
+      const result = beforeSend(event, hint);
+
+      expect(result).not.toBeNull();
+      expect(result?.level).toBe('warning');
+    });
+
+    it('should handle non-Error originalException objects', () => {
+      const event: ErrorEvent = {
+        message: 'Some error',
+      };
+      const hint: Sentry.EventHint = {
+        originalException: { custom: 'object' },
+      };
+
+      const result = beforeSend(event, hint);
+
+      // Should not suppress since it's not a recognized pattern
+      expect(result).toEqual(event);
+    });
+  });
+
+  describe('getDenyUrls', () => {
+    it('should return an array of RegExp patterns', () => {
+      const denyUrls = getDenyUrls();
+
+      expect(Array.isArray(denyUrls)).toBe(true);
+      expect(denyUrls.length).toBeGreaterThan(0);
+      expect(denyUrls[0]).toBeInstanceOf(RegExp);
+    });
+
+    it('should include browser extension patterns', () => {
+      const denyUrls = getDenyUrls();
+      const patterns = denyUrls.map(r => r.source).join(' ');
+
+      expect(patterns).toContain('chrome-extension');
+      expect(patterns).toContain('moz-extension');
+      expect(patterns).toContain('extensions');
+    });
+
+    it('should include wallet extension script patterns', () => {
+      const denyUrls = getDenyUrls();
+      const patterns = denyUrls.map(r => r.source).join(' ');
+
+      expect(patterns).toContain('inpage');
+      expect(patterns).toContain('contentscript');
+      expect(patterns).toContain('evmAsk');
+    });
+
+    it('should include third-party service patterns', () => {
+      const denyUrls = getDenyUrls();
+      const patterns = denyUrls.map(r => r.source).join(' ');
+
+      expect(patterns).toContain('statsig');
+      expect(patterns).toContain('walletconnect');
+    });
+  });
+
+  describe('getIgnoreErrors', () => {
+    it('should return an array of RegExp patterns', () => {
+      const ignoreErrors = getIgnoreErrors();
+
+      expect(Array.isArray(ignoreErrors)).toBe(true);
+      expect(ignoreErrors.length).toBeGreaterThan(0);
+      expect(ignoreErrors[0]).toBeInstanceOf(RegExp);
+    });
+
+    it('should include wallet extension error patterns', () => {
+      const ignoreErrors = getIgnoreErrors();
+
+      const hasRemoveListener = ignoreErrors.some(pattern =>
+        pattern.test('Cannot read properties of undefined (reading "removeListener")')
+      );
+      expect(hasRemoveListener).toBe(true);
+    });
+
+    it('should include hydration error patterns', () => {
+      const ignoreErrors = getIgnoreErrors();
+
+      const hasHydration = ignoreErrors.some(pattern =>
+        pattern.test("Hydration failed because the server rendered HTML didn't match the client")
+      );
+      expect(hasHydration).toBe(true);
+    });
+
+    it('should include third-party error patterns', () => {
+      const ignoreErrors = getIgnoreErrors();
+
+      const hasStatsig = ignoreErrors.some(pattern =>
+        pattern.test('Statsig networking error')
+      );
+      expect(hasStatsig).toBe(true);
+    });
+
+    it('should include storage access error patterns', () => {
+      const ignoreErrors = getIgnoreErrors();
+
+      const hasLocalStorage = ignoreErrors.some(pattern =>
+        pattern.test("Failed to read the 'localStorage' property from 'Window': Access is denied")
+      );
+      expect(hasLocalStorage).toBe(true);
     });
   });
 });
