@@ -261,6 +261,51 @@ function shouldFilterEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): bo
       console.debug('[Sentry] Filtered out network error from monitoring/Sentry endpoint');
       return true;
     }
+
+    // Check if the error originates from Google Analytics/GTM or browser extensions
+    // These errors occur when:
+    // - Browser extensions wrap window.fetch and fail during execution
+    // - Google Analytics (gtag) tries to flush telemetry data
+    // - Ad blockers or privacy extensions block analytics requests
+    // These are expected behaviors and not application bugs
+    const isGtagOrExtensionError = stackFrames?.some(frame => {
+      const filename = frame.filename?.toLowerCase() || '';
+      return (
+        // Chrome extension scripts
+        filename.includes('chrome-extension://') ||
+        filename.includes('moz-extension://') ||
+        filename.includes('safari-extension://') ||
+        filename.includes('scripts/inspector') ||
+        filename.includes('inpage.js') ||
+        // Google Analytics / Tag Manager
+        filename.includes('googletagmanager.com') ||
+        filename.includes('gtag/js') ||
+        filename.includes('gtm.js') ||
+        filename.includes('google-analytics.com') ||
+        // Other common analytics that can be blocked
+        filename.includes('analytics') ||
+        // Sentry's own fetch instrumentation wrapping gtag
+        (filename.includes('@sentry') && filename.includes('fetch'))
+      );
+    });
+
+    if (isGtagOrExtensionError) {
+      console.debug('[Sentry] Filtered out "Failed to fetch" from gtag/browser extension (expected behavior)');
+      return true;
+    }
+
+    // Also check for generic TypeError: Failed to fetch without clear origin
+    // These often come from browser extensions that don't have proper stack frames
+    // Only filter if the error is a generic "Failed to fetch" TypeError with no meaningful context
+    if (
+      event.exception?.values?.[0]?.type === 'TypeError' &&
+      event.exception?.values?.[0]?.value === 'Failed to fetch' &&
+      (!stackFrames || stackFrames.length === 0 || 
+       stackFrames.every(frame => !frame.filename || frame.filename.includes('app:///')))
+    ) {
+      console.debug('[Sentry] Filtered out generic "Failed to fetch" TypeError (likely browser extension)');
+      return true;
+    }
   }
 
   // Filter out "N+1 API Call" performance monitoring events

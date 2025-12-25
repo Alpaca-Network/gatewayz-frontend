@@ -82,7 +82,27 @@ function shouldFilterEdgeEvent(errorMessage: string, event?: Sentry.ErrorEvent):
     (normalizedMessage.includes('large http payload') ||
      (event?.message?.toLowerCase() || '').includes('large http payload'));
 
-  return isWalletExtensionError || isWalletConnectRelayError || isN1ApiCall || isStorageAccessDenied || isJavaObjectGone || isPrivyIframeError || isLargePayloadInfo;
+  // Filter out "Failed to fetch" TypeErrors from gtag/browser extensions
+  // These occur when browser extensions interfere with Google Analytics telemetry
+  // and are expected behavior, not application bugs
+  const stackFrames = event?.exception?.values?.[0]?.stacktrace?.frames;
+  const hasGtagOrExtensionFrames = stackFrames?.some(frame => {
+    const filename = (frame.filename || '').toLowerCase();
+    return (
+      filename.includes('chrome-extension://') ||
+      filename.includes('scripts/inspector') ||
+      filename.includes('gtag/js') ||
+      filename.includes('gtm.js')
+    );
+  }) ?? false;
+  const isGtagOrExtensionFetchError =
+    normalizedMessage.includes('failed to fetch') &&
+    (normalizedMessage.includes('gtag') ||
+     normalizedMessage.includes('googletagmanager') ||
+     normalizedMessage.includes('google-analytics') ||
+     hasGtagOrExtensionFrames);
+
+  return isWalletExtensionError || isWalletConnectRelayError || isN1ApiCall || isStorageAccessDenied || isJavaObjectGone || isPrivyIframeError || isLargePayloadInfo || isGtagOrExtensionFetchError;
 }
 
 function shouldEdgeRateLimit(event: Sentry.ErrorEvent): boolean {

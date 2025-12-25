@@ -1,5 +1,10 @@
 /**
  * Network utilities for detecting connectivity and handling offline scenarios
+ * 
+ * The NetworkMonitor uses lazy initialization to prevent uncontrolled network
+ * requests at module load time. Periodic connectivity checks only run when
+ * there are active subscribers, reducing interference with third-party scripts
+ * like Google Analytics (gtag) and avoiding browser extension conflicts.
  */
 
 type ConnectionCallback = (isOnline: boolean) => void;
@@ -8,41 +13,97 @@ class NetworkMonitor {
   private listeners: Set<ConnectionCallback> = new Set();
   private _isOnline: boolean = typeof navigator !== 'undefined' ? navigator.onLine : true;
   private initialized = false;
+  private periodicCheckInterval: ReturnType<typeof setInterval> | null = null;
+  private boundOnlineHandler: (() => void) | null = null;
+  private boundOfflineHandler: (() => void) | null = null;
 
   constructor() {
-    if (typeof window !== 'undefined') {
-      this.init();
-    }
+    // Don't initialize automatically - use lazy initialization
+    // This prevents network requests at module load time which can
+    // interfere with gtag and other third-party scripts
   }
 
+  /**
+   * Lazily initialize the network monitor
+   * Only called when there are active subscribers
+   */
   private init() {
-    if (this.initialized) return;
+    if (this.initialized || typeof window === 'undefined') return;
     this.initialized = true;
 
-    window.addEventListener('online', () => {
+    this.boundOnlineHandler = () => {
       this._isOnline = true;
       this.notifyListeners();
-    });
+    };
 
-    window.addEventListener('offline', () => {
+    this.boundOfflineHandler = () => {
       this._isOnline = false;
       this.notifyListeners();
-    });
+    };
 
-    // Also check connectivity periodically (handles cases where browser events are unreliable)
-    this.startPeriodicCheck();
+    window.addEventListener('online', this.boundOnlineHandler);
+    window.addEventListener('offline', this.boundOfflineHandler);
   }
 
-  private startPeriodicCheck() {
-    // Check every 10 seconds
-    setInterval(async () => {
-      const wasOnline = this._isOnline;
-      this._isOnline = await this.checkConnectivity();
+  /**
+   * Cleanup event listeners and intervals
+   * Called when there are no more subscribers
+   */
+  private cleanup() {
+    if (typeof window === 'undefined') return;
 
-      if (wasOnline !== this._isOnline) {
-        this.notifyListeners();
+    if (this.boundOnlineHandler) {
+      window.removeEventListener('online', this.boundOnlineHandler);
+      this.boundOnlineHandler = null;
+    }
+
+    if (this.boundOfflineHandler) {
+      window.removeEventListener('offline', this.boundOfflineHandler);
+      this.boundOfflineHandler = null;
+    }
+
+    this.stopPeriodicCheck();
+    this.initialized = false;
+  }
+
+  /**
+   * Start periodic connectivity checks
+   * Only runs when there are active subscribers
+   */
+  private startPeriodicCheck() {
+    // Don't start if already running or no listeners
+    if (this.periodicCheckInterval || this.listeners.size === 0) return;
+
+    // Check every 30 seconds (increased from 10s to reduce network noise)
+    this.periodicCheckInterval = setInterval(async () => {
+      // Stop if no listeners to prevent unnecessary network requests
+      if (this.listeners.size === 0) {
+        this.stopPeriodicCheck();
+        return;
       }
-    }, 10000);
+
+      try {
+        const wasOnline = this._isOnline;
+        this._isOnline = await this.checkConnectivity();
+
+        if (wasOnline !== this._isOnline) {
+          this.notifyListeners();
+        }
+      } catch {
+        // Silently handle any errors during periodic check
+        // This prevents errors from propagating to error monitoring
+      }
+    }, 30000);
+  }
+
+  /**
+   * Stop periodic connectivity checks
+   */
+  private stopPeriodicCheck() {
+    if (this.periodicCheckInterval) {
+      clearInterval(this.periodicCheckInterval);
+      this.periodicCheckInterval = null;
+    }
   }
 
   private notifyListeners() {
@@ -51,10 +112,20 @@ class NetworkMonitor {
 
   /**
    * Check actual network connectivity by pinging a lightweight endpoint
+   * 
+   * This method is designed to fail silently and never throw errors that
+   * would be captured by error monitoring. Network errors during connectivity
+   * checks are expected and should not pollute error logs.
    */
   async checkConnectivity(): Promise<boolean> {
+    // Fast path: if browser says we're offline, trust it
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
       return false;
+    }
+
+    // Check if we're in a browser environment
+    if (typeof window === 'undefined') {
+      return true;
     }
 
     try {
@@ -66,29 +137,30 @@ class NetworkMonitor {
         method: 'HEAD',
         signal: controller.signal,
         cache: 'no-store',
+        // Use keepalive to prevent connection issues during page transitions
+        keepalive: true,
       });
 
       clearTimeout(timeoutId);
       return response.ok;
-    } catch {
-      // If our API is unreachable, try a more universal check
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3000);
-
-        // Fallback: check if we can reach anything
-        await fetch('https://www.google.com/favicon.ico', {
-          method: 'HEAD',
-          mode: 'no-cors',
-          signal: controller.signal,
-          cache: 'no-store',
-        });
-
-        clearTimeout(timeoutId);
-        return true;
-      } catch {
+    } catch (error) {
+      // Silently handle fetch errors - these are expected when offline
+      // or when browser extensions interfere with requests
+      // Don't log to console to avoid polluting logs with expected errors
+      
+      // Check if the error is from an abort (timeout)
+      if (error instanceof Error && error.name === 'AbortError') {
+        // Timeout occurred - likely slow connection, consider offline
         return false;
       }
+
+      // For any other error, try navigator.onLine as fallback
+      // This avoids making additional network requests that could fail
+      if (typeof navigator !== 'undefined') {
+        return navigator.onLine;
+      }
+
+      return false;
     }
   }
 
@@ -96,9 +168,44 @@ class NetworkMonitor {
     return this._isOnline;
   }
 
+  /**
+   * Subscribe to network status changes
+   * Lazily initializes the monitor and starts periodic checks when first subscriber is added
+   * Automatically cleans up when last subscriber unsubscribes
+   */
   subscribe(callback: ConnectionCallback): () => void {
+    // Lazily initialize when first subscriber is added
+    if (this.listeners.size === 0) {
+      this.init();
+      // Delay starting periodic check to avoid interfering with initial page load
+      // This gives gtag and other third-party scripts time to initialize
+      setTimeout(() => {
+        if (this.listeners.size > 0) {
+          this.startPeriodicCheck();
+        }
+      }, 5000);
+    }
+
     this.listeners.add(callback);
-    return () => this.listeners.delete(callback);
+
+    // Return unsubscribe function
+    return () => {
+      this.listeners.delete(callback);
+
+      // Cleanup when no more subscribers to avoid unnecessary network requests
+      if (this.listeners.size === 0) {
+        this.cleanup();
+      }
+    };
+  }
+
+  /**
+   * Manually destroy the network monitor
+   * Useful for testing or when the monitor is no longer needed
+   */
+  destroy() {
+    this.listeners.clear();
+    this.cleanup();
   }
 }
 
