@@ -3,15 +3,18 @@
  */
 
 import { shouldSuppressError, isTransientError, beforeSend } from '../sentry-error-filters';
-import type { Event, EventHint } from '@sentry/types';
+import type * as Sentry from '@sentry/nextjs';
+
+type ErrorEvent = Sentry.ErrorEvent;
+type EventHint = Sentry.EventHint;
 
 describe('Sentry Error Filters', () => {
   describe('shouldSuppressError', () => {
     it('should suppress wallet extension removeListener errors', () => {
-      const event: Event = {
+      const event: Sentry.ErrorEvent = {
         message: 'Cannot read properties of undefined (reading "removeListener")',
       };
-      const hint: EventHint = {
+      const hint: Sentry.EventHint = {
         originalException: new Error('Cannot read properties of undefined (reading "removeListener")'),
       };
 
@@ -19,7 +22,7 @@ describe('Sentry Error Filters', () => {
     });
 
     it('should suppress inpage.js errors', () => {
-      const event: Event = {
+      const event: ErrorEvent = {
         message: 'TypeError from inpage.js',
         exception: {
           values: [{
@@ -33,7 +36,7 @@ describe('Sentry Error Filters', () => {
     });
 
     it('should suppress hydration errors', () => {
-      const event: Event = {
+      const event: ErrorEvent = {
         message: "Hydration failed because the server rendered HTML didn't match the client",
       };
 
@@ -41,7 +44,7 @@ describe('Sentry Error Filters', () => {
     });
 
     it('should suppress Java object is gone errors', () => {
-      const event: Event = {
+      const event: ErrorEvent = {
         exception: {
           values: [{
             value: 'Java object is gone',
@@ -54,7 +57,7 @@ describe('Sentry Error Filters', () => {
     });
 
     it('should suppress Privy iframe errors', () => {
-      const event: Event = {
+      const event: ErrorEvent = {
         message: 'iframe not initialized',
       };
 
@@ -62,7 +65,7 @@ describe('Sentry Error Filters', () => {
     });
 
     it('should suppress origin not allowed errors', () => {
-      const event: Event = {
+      const event: ErrorEvent = {
         exception: {
           values: [{
             value: 'Origin not allowed',
@@ -75,7 +78,7 @@ describe('Sentry Error Filters', () => {
     });
 
     it('should suppress localStorage access denied errors', () => {
-      const event: Event = {
+      const event: ErrorEvent = {
         message: "Failed to read the 'localStorage' property from 'Window': Access is denied for this document.",
       };
 
@@ -83,7 +86,7 @@ describe('Sentry Error Filters', () => {
     });
 
     it('should NOT suppress legitimate errors', () => {
-      const event: Event = {
+      const event: ErrorEvent = {
         message: 'Uncaught ReferenceError: myFunction is not defined',
       };
 
@@ -91,7 +94,7 @@ describe('Sentry Error Filters', () => {
     });
 
     it('should NOT suppress API errors', () => {
-      const event: Event = {
+      const event: ErrorEvent = {
         message: 'API request failed with status 500',
       };
 
@@ -101,7 +104,7 @@ describe('Sentry Error Filters', () => {
 
   describe('isTransientError', () => {
     it('should identify authentication timeout as transient', () => {
-      const event: Event = {
+      const event: ErrorEvent = {
         message: 'Authentication timeout - stuck in authenticating state',
       };
 
@@ -109,7 +112,7 @@ describe('Sentry Error Filters', () => {
     });
 
     it('should identify 504 errors as transient', () => {
-      const event: Event = {
+      const event: ErrorEvent = {
         exception: {
           values: [{
             value: 'Authentication failed: 504',
@@ -122,7 +125,7 @@ describe('Sentry Error Filters', () => {
     });
 
     it('should identify abort errors as transient', () => {
-      const event: Event = {
+      const event: ErrorEvent = {
         message: 'signal is aborted without reason',
       };
 
@@ -130,7 +133,7 @@ describe('Sentry Error Filters', () => {
     });
 
     it('should identify network failures as transient', () => {
-      const event: Event = {
+      const event: ErrorEvent = {
         message: 'Network request failed',
       };
 
@@ -138,7 +141,7 @@ describe('Sentry Error Filters', () => {
     });
 
     it('should NOT identify non-transient errors', () => {
-      const event: Event = {
+      const event: ErrorEvent = {
         message: 'Uncaught TypeError: Cannot read property "foo" of undefined',
       };
 
@@ -148,10 +151,10 @@ describe('Sentry Error Filters', () => {
 
   describe('beforeSend', () => {
     it('should return null for suppressed errors', () => {
-      const event: Event = {
+      const event: ErrorEvent = {
         message: 'Cannot read properties of undefined (reading "removeListener")',
       };
-      const hint: EventHint = {
+      const hint: Sentry.EventHint = {
         originalException: new Error('Cannot read properties of undefined (reading "removeListener")'),
       };
 
@@ -161,11 +164,11 @@ describe('Sentry Error Filters', () => {
     });
 
     it('should downgrade transient errors to warning level', () => {
-      const event: Event = {
+      const event: ErrorEvent = {
         message: 'Authentication timeout - stuck in authenticating state',
         level: 'error',
       };
-      const hint: EventHint = {
+      const hint: Sentry.EventHint = {
         originalException: new Error('Authentication timeout'),
       };
 
@@ -182,11 +185,11 @@ describe('Sentry Error Filters', () => {
     });
 
     it('should pass through legitimate errors unchanged', () => {
-      const event: Event = {
+      const event: ErrorEvent = {
         message: 'Uncaught ReferenceError: myFunction is not defined',
         level: 'error',
       };
-      const hint: EventHint = {
+      const hint: Sentry.EventHint = {
         originalException: new Error('Uncaught ReferenceError: myFunction is not defined'),
       };
 
@@ -197,26 +200,28 @@ describe('Sentry Error Filters', () => {
     });
 
     it('should handle events without hints', () => {
-      const event: Event = {
-        message: 'removeListener error',
+      const event: ErrorEvent = {
+        message: 'Cannot read properties of undefined (reading "removeListener")',
       };
-      const hint: EventHint = {};
+      const hint: Sentry.EventHint = {};
 
       const result = beforeSend(event, hint);
 
+      // Should suppress because the message itself contains the suppression pattern
       expect(result).toBeNull();
     });
 
     it('should handle string exceptions', () => {
-      const event: Event = {
+      const event: ErrorEvent = {
         message: 'Hydration failed',
       };
-      const hint: EventHint = {
-        originalException: 'Hydration failed - the server rendered HTML didnt match the client',
+      const hint: Sentry.EventHint = {
+        originalException: "Hydration failed - the server rendered HTML didn't match the client",
       };
 
       const result = beforeSend(event, hint);
 
+      // Should suppress because the hint contains hydration error pattern
       expect(result).toBeNull();
     });
   });

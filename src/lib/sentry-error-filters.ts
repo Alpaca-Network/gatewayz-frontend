@@ -7,7 +7,7 @@
  * Usage: Import and apply filters in sentry.client.config.ts and sentry.server.config.ts
  */
 
-import type { Event, EventHint } from '@sentry/types';
+import type * as Sentry from '@sentry/nextjs';
 
 /**
  * Error patterns that should NOT be sent to Sentry
@@ -78,10 +78,15 @@ const TRANSIENT_ERROR_PATTERNS = [
 /**
  * Check if an error should be suppressed from Sentry
  */
-export function shouldSuppressError(event: Event, hint?: EventHint): boolean {
+export function shouldSuppressError(event: Sentry.ErrorEvent, hint?: Sentry.EventHint): boolean {
   const errorMessage = getErrorMessage(event, hint);
   const errorStack = getErrorStack(event, hint);
   const combinedText = `${errorMessage} ${errorStack}`.toLowerCase();
+
+  // If we have no error information, don't suppress
+  if (!combinedText.trim()) {
+    return false;
+  }
 
   // Check all suppression patterns
   for (const category of Object.values(SUPPRESSED_ERROR_PATTERNS)) {
@@ -99,7 +104,7 @@ export function shouldSuppressError(event: Event, hint?: EventHint): boolean {
 /**
  * Check if an error is transient and should be downgraded to warning level
  */
-export function isTransientError(event: Event, hint?: EventHint): boolean {
+export function isTransientError(event: Sentry.ErrorEvent, hint?: Sentry.EventHint): boolean {
   const errorMessage = getErrorMessage(event, hint);
 
   for (const pattern of TRANSIENT_ERROR_PATTERNS) {
@@ -114,7 +119,7 @@ export function isTransientError(event: Event, hint?: EventHint): boolean {
 /**
  * Extract error message from Sentry event or hint
  */
-function getErrorMessage(event: Event, hint?: EventHint): string {
+function getErrorMessage(event: Sentry.ErrorEvent, hint?: Sentry.EventHint): string {
   if (hint?.originalException) {
     if (hint.originalException instanceof Error) {
       return hint.originalException.message;
@@ -138,7 +143,7 @@ function getErrorMessage(event: Event, hint?: EventHint): string {
 /**
  * Extract error stack from Sentry event or hint
  */
-function getErrorStack(event: Event, hint?: EventHint): string {
+function getErrorStack(event: Sentry.ErrorEvent, hint?: Sentry.EventHint): string {
   if (hint?.originalException instanceof Error && hint.originalException.stack) {
     return hint.originalException.stack;
   }
@@ -154,7 +159,7 @@ function getErrorStack(event: Event, hint?: EventHint): string {
  * Apply error filtering to a Sentry event before sending
  * Returns null if the error should be suppressed
  */
-export function beforeSend(event: Event, hint: EventHint): Event | null {
+export function beforeSend(event: Sentry.ErrorEvent, hint: Sentry.EventHint): Sentry.ErrorEvent | null {
   // Suppress filtered errors entirely
   if (shouldSuppressError(event, hint)) {
     return null;
