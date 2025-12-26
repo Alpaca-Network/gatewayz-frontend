@@ -14,6 +14,7 @@ import { PreviewHostnameInterceptor } from "@/components/auth/preview-hostname-i
 import { isVercelPreviewDeployment } from "@/lib/preview-hostname-handler";
 import { buildPreviewSafeRedirectUrl, DEFAULT_PREVIEW_REDIRECT_ORIGIN } from "@/lib/preview-oauth-redirect";
 import { waitForLocalStorageAccess, canUseLocalStorage } from "@/lib/safe-storage";
+import { shouldDisableEmbeddedWallets } from "@/lib/browser-detection";
 
 interface PrivyProviderWrapperProps {
   children: ReactNode;
@@ -66,6 +67,7 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
     };
 
     // Classify Privy-specific errors that are non-blocking
+    type IndexedDBErrorType = "database_deleted" | "connector_timeout";
     const classifyPrivyError = (errorStr?: string): PrivyErrorType | null => {
       if (!errorStr) {
         return null;
@@ -84,6 +86,48 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
       }
 
       return null;
+    };
+
+    // Classify IndexedDB-related errors from embedded wallet initialization
+    const classifyIndexedDBError = (errorStr?: string): IndexedDBErrorType | null => {
+      if (!errorStr) {
+        return null;
+      }
+
+      const normalized = errorStr.toLowerCase();
+
+      // "Database deleted by request of the user" - iOS WebKit storage eviction
+      if (normalized.includes("database deleted") || normalized.includes("deleted by request")) {
+        return "database_deleted";
+      }
+
+      // "Unable to initialize all expected connectors before timeout" - connector timeout
+      if (normalized.includes("unable to initialize") && normalized.includes("connectors")) {
+        return "connector_timeout";
+      }
+
+      return null;
+    };
+
+    const logIndexedDBError = (type: IndexedDBErrorType, message: string, source: "unhandledrejection" | "error") => {
+      const labels: Record<IndexedDBErrorType, string> = {
+        database_deleted: "IndexedDB database deleted (iOS storage eviction)",
+        connector_timeout: "Wallet connector initialization timeout",
+      };
+      const label = labels[type];
+
+      console.warn(`[Auth] ${label} detected (non-blocking via ${source}):`, message);
+
+      // Log to Sentry as warning - this is a known iOS issue
+      Sentry.captureMessage(`${label}: ${message}`, {
+        level: "warning",
+        tags: {
+          auth_error: `indexeddb_${type}`,
+          blocking: "false",
+          event_source: source,
+          is_ios_in_app_browser: String(shouldDisableEmbeddedWallets()),
+        },
+      });
     };
 
     const logWalletError = (type: WalletErrorType, message: string, source: "unhandledrejection" | "error") => {
@@ -159,6 +203,15 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
         return;
       }
 
+      // Handle IndexedDB errors (iOS storage eviction, connector timeout)
+      const indexedDBErrorType = classifyIndexedDBError(reasonStr);
+      if (indexedDBErrorType) {
+        logIndexedDBError(indexedDBErrorType, reasonStr, "unhandledrejection");
+        // Prevent the error from appearing in console as unhandled
+        event.preventDefault();
+        return;
+      }
+
       const walletErrorType = classifyWalletError(reasonStr);
 
       // Log wallet extension and WalletConnect relay errors
@@ -183,6 +236,15 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
       if (privyErrorType) {
         logPrivyError(privyErrorType, event.message, "error");
         // Don't preventDefault - these are transient errors that Privy recovers from
+        return;
+      }
+
+      // Handle IndexedDB errors
+      const indexedDBErrorType = classifyIndexedDBError(event.message);
+      if (indexedDBErrorType) {
+        logIndexedDBError(indexedDBErrorType, event.message, "error");
+        // Prevent the error from appearing in console
+        event.preventDefault();
         return;
       }
 
@@ -243,6 +305,9 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
     });
   }, [pathname, searchParamsKey, previewRedirectOrigin]);
 
+  // Check if we should disable embedded wallets (iOS in-app browsers have IndexedDB issues)
+  const disableEmbeddedWallets = useMemo(() => shouldDisableEmbeddedWallets(), []);
+
   const privyConfig = useMemo<PrivyClientConfig>(() => {
     const config: PrivyClientConfig = {
       loginMethods: ["email", "google", "github"],
@@ -251,11 +316,16 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
         accentColor: "#000000",
         logo: "/logo_black.svg",
       },
-      embeddedWallets: {
-        ethereum: {
-          createOnLogin: "users-without-wallets",
-        },
-      },
+      // Only enable embedded wallets if not in a problematic environment
+      // iOS in-app browsers (Twitter, Facebook, etc.) have IndexedDB issues
+      // that cause "Database deleted by request of the user" errors
+      embeddedWallets: disableEmbeddedWallets
+        ? undefined
+        : {
+            ethereum: {
+              createOnLogin: "users-without-wallets",
+            },
+          },
       defaultChain: base,
     };
 
@@ -263,8 +333,13 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
       config.customOAuthRedirectUrl = previewSafeOAuthRedirectUrl;
     }
 
+    // Log when embedded wallets are disabled for debugging
+    if (disableEmbeddedWallets) {
+      console.info("[Auth] Embedded wallets disabled due to iOS in-app browser environment");
+    }
+
     return config;
-  }, [previewSafeOAuthRedirectUrl]);
+  }, [previewSafeOAuthRedirectUrl, disableEmbeddedWallets]);
 
   const renderChildren = children;
 
