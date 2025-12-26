@@ -617,6 +617,281 @@ describe('Sentry Error Filters', () => {
     });
   });
 
+  describe('Browser extension error filtering', () => {
+    let extensionFilterCallback: (event: Sentry.ErrorEvent, hint: Sentry.EventHint) => Sentry.ErrorEvent | null;
+    let consoleDebugSpy: jest.SpyInstance;
+
+    beforeEach(() => {
+      consoleDebugSpy = jest.spyOn(console, 'debug').mockImplementation();
+
+      extensionFilterCallback = (event: Sentry.ErrorEvent, hint: Sentry.EventHint) => {
+        const stackFrames = event.exception?.values?.[0]?.stacktrace?.frames;
+
+        // Filter out errors originating from browser extensions
+        if (stackFrames?.some(frame => 
+          frame.filename?.includes('chrome-extension://') ||
+          frame.filename?.includes('moz-extension://') ||
+          frame.filename?.includes('safari-extension://') ||
+          frame.filename?.includes('safari-web-extension://') ||
+          frame.filename?.includes('/scripts/inspector.js')
+        )) {
+          console.debug('[Sentry] Filtered out error originating from browser extension (not application code)');
+          return null;
+        }
+
+        // Filter out errors from third-party analytics/tracking scripts
+        if (stackFrames?.some(frame => 
+          frame.filename?.includes('googletagmanager.com') ||
+          frame.filename?.includes('gtag/js') ||
+          frame.filename?.includes('google-analytics.com') ||
+          frame.filename?.includes('ads-twitter.com') ||
+          frame.filename?.includes('static.ads-twitter.com') ||
+          frame.filename?.includes('connect.facebook.net') ||
+          frame.filename?.includes('snap.licdn.com') ||
+          frame.filename?.includes('analytics.tiktok.com')
+        )) {
+          console.debug('[Sentry] Filtered out error from third-party analytics script (not application code)');
+          return null;
+        }
+
+        return event;
+      };
+    });
+
+    afterEach(() => {
+      consoleDebugSpy.mockRestore();
+    });
+
+    it('should filter out errors from Chrome extensions', () => {
+      const error = new TypeError('Failed to fetch');
+      const event: Sentry.ErrorEvent = {
+        exception: {
+          values: [{
+            type: 'TypeError',
+            value: 'Failed to fetch',
+            stacktrace: {
+              frames: [
+                { filename: 'chrome-extension://dbjbempljhcmhlfpfacalomonjpalpko/scripts/inspector.js', function: 'window.fetch', lineNo: 7, colNo: 3144 }
+              ]
+            }
+          }]
+        }
+      } as Sentry.ErrorEvent;
+
+      const hint: Sentry.EventHint = { originalException: error };
+      const result = extensionFilterCallback(event, hint);
+
+      expect(result).toBeNull();
+      expect(consoleDebugSpy).toHaveBeenCalledWith(
+        '[Sentry] Filtered out error originating from browser extension (not application code)'
+      );
+    });
+
+    it('should filter out errors from Firefox extensions', () => {
+      const error = new Error('Extension error');
+      const event: Sentry.ErrorEvent = {
+        exception: {
+          values: [{
+            type: 'Error',
+            value: 'Extension error',
+            stacktrace: {
+              frames: [
+                { filename: 'moz-extension://abc123/content.js', function: 'handleRequest', lineNo: 100, colNo: 50 }
+              ]
+            }
+          }]
+        }
+      } as Sentry.ErrorEvent;
+
+      const hint: Sentry.EventHint = { originalException: error };
+      const result = extensionFilterCallback(event, hint);
+
+      expect(result).toBeNull();
+    });
+
+    it('should filter out errors from Safari extensions', () => {
+      const error = new Error('Extension error');
+      const event: Sentry.ErrorEvent = {
+        exception: {
+          values: [{
+            type: 'Error',
+            value: 'Extension error',
+            stacktrace: {
+              frames: [
+                { filename: 'safari-web-extension://abc123/script.js', function: 'init', lineNo: 10, colNo: 5 }
+              ]
+            }
+          }]
+        }
+      } as Sentry.ErrorEvent;
+
+      const hint: Sentry.EventHint = { originalException: error };
+      const result = extensionFilterCallback(event, hint);
+
+      expect(result).toBeNull();
+    });
+
+    it('should filter out errors from inspector.js pattern', () => {
+      const error = new TypeError('Failed to fetch');
+      const event: Sentry.ErrorEvent = {
+        exception: {
+          values: [{
+            type: 'TypeError',
+            value: 'Failed to fetch',
+            stacktrace: {
+              frames: [
+                { filename: 'app:///scripts/inspector.js', function: 'window.fetch', lineNo: 7, colNo: 3144 }
+              ]
+            }
+          }]
+        }
+      } as Sentry.ErrorEvent;
+
+      const hint: Sentry.EventHint = { originalException: error };
+      const result = extensionFilterCallback(event, hint);
+
+      expect(result).toBeNull();
+    });
+
+    it('should filter out errors from Google Tag Manager', () => {
+      const error = new TypeError('Failed to fetch');
+      const event: Sentry.ErrorEvent = {
+        exception: {
+          values: [{
+            type: 'TypeError',
+            value: 'Failed to fetch',
+            stacktrace: {
+              frames: [
+                { filename: 'https://www.googletagmanager.com/gtag/js?id=G-NCWGNQ7981', function: 'bd', lineNo: 277, colNo: 391 }
+              ]
+            }
+          }]
+        }
+      } as Sentry.ErrorEvent;
+
+      const hint: Sentry.EventHint = { originalException: error };
+      const result = extensionFilterCallback(event, hint);
+
+      expect(result).toBeNull();
+      expect(consoleDebugSpy).toHaveBeenCalledWith(
+        '[Sentry] Filtered out error from third-party analytics script (not application code)'
+      );
+    });
+
+    it('should filter out errors from gtag/js pattern', () => {
+      const error = new TypeError('Failed to fetch');
+      const event: Sentry.ErrorEvent = {
+        exception: {
+          values: [{
+            type: 'TypeError',
+            value: 'Failed to fetch',
+            stacktrace: {
+              frames: [
+                { filename: 'app:///gtag/js', function: 'Bl', lineNo: 438, colNo: 1269 }
+              ]
+            }
+          }]
+        }
+      } as Sentry.ErrorEvent;
+
+      const hint: Sentry.EventHint = { originalException: error };
+      const result = extensionFilterCallback(event, hint);
+
+      expect(result).toBeNull();
+    });
+
+    it('should filter out errors from Twitter ads script', () => {
+      const error = new Error('Script error');
+      const event: Sentry.ErrorEvent = {
+        exception: {
+          values: [{
+            type: 'Error',
+            value: 'Script error',
+            stacktrace: {
+              frames: [
+                { filename: 'https://static.ads-twitter.com/uwt.js', function: 'track', lineNo: 1, colNo: 100 }
+              ]
+            }
+          }]
+        }
+      } as Sentry.ErrorEvent;
+
+      const hint: Sentry.EventHint = { originalException: error };
+      const result = extensionFilterCallback(event, hint);
+
+      expect(result).toBeNull();
+    });
+
+    it('should filter out errors from Facebook tracking', () => {
+      const error = new Error('Tracking error');
+      const event: Sentry.ErrorEvent = {
+        exception: {
+          values: [{
+            type: 'Error',
+            value: 'Tracking error',
+            stacktrace: {
+              frames: [
+                { filename: 'https://connect.facebook.net/en_US/fbevents.js', function: 'fbq', lineNo: 50, colNo: 200 }
+              ]
+            }
+          }]
+        }
+      } as Sentry.ErrorEvent;
+
+      const hint: Sentry.EventHint = { originalException: error };
+      const result = extensionFilterCallback(event, hint);
+
+      expect(result).toBeNull();
+    });
+
+    it('should NOT filter out errors from application code', () => {
+      const error = new Error('Real application error');
+      const event: Sentry.ErrorEvent = {
+        exception: {
+          values: [{
+            type: 'Error',
+            value: 'Real application error',
+            stacktrace: {
+              frames: [
+                { filename: '/src/components/Chat.tsx', function: 'handleSubmit', lineNo: 50, colNo: 10 }
+              ]
+            }
+          }]
+        }
+      } as Sentry.ErrorEvent;
+
+      const hint: Sentry.EventHint = { originalException: error };
+      const result = extensionFilterCallback(event, hint);
+
+      expect(result).not.toBeNull();
+      expect(result).toBe(event);
+    });
+
+    it('should NOT filter errors with mixed stack frames if no extension frames present', () => {
+      const error = new Error('Application error');
+      const event: Sentry.ErrorEvent = {
+        exception: {
+          values: [{
+            type: 'Error',
+            value: 'Application error',
+            stacktrace: {
+              frames: [
+                { filename: '/src/lib/api.ts', function: 'fetchData', lineNo: 100, colNo: 20 },
+                { filename: '/src/hooks/useData.ts', function: 'useData', lineNo: 50, colNo: 10 }
+              ]
+            }
+          }]
+        }
+      } as Sentry.ErrorEvent;
+
+      const hint: Sentry.EventHint = { originalException: error };
+      const result = extensionFilterCallback(event, hint);
+
+      expect(result).not.toBeNull();
+      expect(result).toBe(event);
+    });
+  });
+
   describe('429 Rate Limit error filtering (prevents cascade)', () => {
     // Update beforeSendCallback to include 429 filtering for these tests
     let beforeSend429Callback: (event: Sentry.ErrorEvent, hint: Sentry.EventHint) => Sentry.ErrorEvent | null;
