@@ -29,13 +29,30 @@ describe('Client-side Sentry Error Filtering (instrumentation-client.ts)', () =>
   // Helper to extract shouldFilterEvent from the instrumentation file
   // We'll test this by examining the Sentry.init config
   let sentryConfig: any;
+  let originalDateNow: () => number;
+  let mockTime: number;
 
   beforeAll(() => {
+    // Save original Date.now
+    originalDateNow = Date.now;
+
     // Import instrumentation-client to trigger Sentry.init
     require('../../../instrumentation-client');
 
     // Get the config that was passed to Sentry.init
     sentryConfig = (Sentry.init as jest.Mock).mock.calls[0][0];
+  });
+
+  beforeEach(() => {
+    // Mock Date.now to advance time by 2 minutes before each test
+    // This ensures each test gets a fresh rate limit window
+    mockTime = (mockTime || Date.now()) + (2 * 60 * 1000);
+    Date.now = jest.fn(() => mockTime);
+  });
+
+  afterAll(() => {
+    // Restore original Date.now
+    Date.now = originalDateNow;
   });
 
   describe('Hydration Error Filtering', () => {
