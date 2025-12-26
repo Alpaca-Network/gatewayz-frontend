@@ -628,19 +628,17 @@ Sentry.init({
   maxBreadcrumbs: RATE_LIMIT_CONFIG.maxBreadcrumbs,
 
   // Ignore errors from third-party scripts and browser extensions
+  // NOTE: 'Script error' and 'Load failed' are NOT in this list because we have
+  // nuanced filtering logic in beforeSend() that preserves important errors:
+  // - Script errors WITH stack traces (may be from our code)
+  // - Load failed errors related to API calls (backend issues we need to see)
   ignoreErrors: [
-    'Script error.',
-    'Script error',
-    /^Script error\.?$/,
     // Chrome extensions
     'Extension context invalidated',
     'Extension ID',
     // Wallet extensions
     'removeListener',
     'stopListeners',
-    // Network errors that are filtered
-    'Load failed',
-    /^Load failed$/,
   ],
 
   // Deny URLs from third-party domains and browser extensions
@@ -662,9 +660,11 @@ Sentry.init({
     /googleads\.g\.doubleclick\.net/i,
     /stats\.g\.doubleclick\.net/i,
     /pagead\/js/i,
-    // Other third-party analytics
-    /statsig/i,
-    /posthog/i,
+    // Other third-party analytics (specific CDN patterns to avoid filtering local integration files)
+    /cdn\.statsig\.com/i,
+    /statsig-sdk/i,
+    /app\.posthog\.com/i,
+    /posthog-js/i,
     // WalletConnect
     /walletconnect\.com/i,
     /walletconnect\.org/i,

@@ -395,24 +395,28 @@ describe('Client-side Sentry Error Filtering (instrumentation-client.ts)', () =>
       expect(sentryConfig.ignoreErrors.length).toBeGreaterThan(0);
     });
 
-    it('should ignore "Script error." in ignoreErrors', () => {
+    it('should NOT have "Script error" in ignoreErrors (handled in beforeSend with nuance)', () => {
       const hasScriptError = sentryConfig.ignoreErrors.some((pattern: string | RegExp) => {
         if (typeof pattern === 'string') {
           return pattern === 'Script error.' || pattern === 'Script error';
         }
         return pattern.test('Script error.');
       });
-      expect(hasScriptError).toBe(true);
+      // Script error is NOT in ignoreErrors because we have nuanced logic in beforeSend
+      // that preserves Script errors WITH stack traces (may be from our code)
+      expect(hasScriptError).toBe(false);
     });
 
-    it('should ignore "Load failed" in ignoreErrors', () => {
+    it('should NOT have "Load failed" in ignoreErrors (handled in beforeSend with nuance)', () => {
       const hasLoadFailed = sentryConfig.ignoreErrors.some((pattern: string | RegExp) => {
         if (typeof pattern === 'string') {
           return pattern === 'Load failed';
         }
         return pattern.test('Load failed');
       });
-      expect(hasLoadFailed).toBe(true);
+      // Load failed is NOT in ignoreErrors because we have nuanced logic in beforeSend
+      // that preserves API-related Load failed errors (backend issues we need to see)
+      expect(hasLoadFailed).toBe(false);
     });
 
     it('should have denyUrls configured', () => {
