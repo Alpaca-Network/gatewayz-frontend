@@ -214,16 +214,16 @@ function shouldFilterEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): bo
   // These are benign and non-blocking - the page still functions correctly
   // The mismatch gets resolved on the client side automatically
   const isHydrationError =
-    (errorMessageLower.includes('hydration') ||
-     eventMessageLower.includes('hydration')) &&
-    (errorMessageLower.includes("didn't match") ||
-     errorMessageLower.includes("text content does not match") ||
-     errorMessageLower.includes("there was an error while hydrating") ||
-     errorMessageLower.includes("hydration failed") ||
-     eventMessageLower.includes("didn't match") ||
-     eventMessageLower.includes("text content does not match") ||
-     eventMessageLower.includes("there was an error while hydrating") ||
-     eventMessageLower.includes("hydration failed"));
+    errorMessageLower.includes('hydration') ||
+    eventMessageLower.includes('hydration') ||
+    errorMessageLower.includes("text content does not match server-rendered") ||
+    errorMessageLower.includes("text content does not match") ||
+    errorMessageLower.includes("there was an error while hydrating") ||
+    errorMessageLower.includes("hydration error") ||
+    eventMessageLower.includes("text content does not match server-rendered") ||
+    eventMessageLower.includes("text content does not match") ||
+    eventMessageLower.includes("there was an error while hydrating") ||
+    eventMessageLower.includes("hydration error");
 
   if (isHydrationError) {
     console.debug('[Sentry] Filtered out hydration error (benign SSR/CSR mismatch from dynamic content)');
@@ -431,7 +431,8 @@ function shouldFilterEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): bo
   // different origins throw errors without proper CORS headers
   // We cannot debug these as we don't have stack traces or error details
   const isScriptError =
-    (errorMessage === 'Script error.' || eventMessage === 'Script error.') &&
+    (errorMessage === 'Script error.' || errorMessage === 'Script error' ||
+     eventMessage === 'Script error.' || eventMessage === 'Script error') &&
     (!stackFrames || stackFrames.length === 0);
 
   if (isScriptError) {
