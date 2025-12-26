@@ -474,8 +474,8 @@ function CreditsPageContent() {
         return;
       }
 
-      // Pass the discounted price as the payment amount, and credit value as the credits to add
-      await redirectToCheckout(selectedPackage.price, userData.email, userData.user_id, selectedPackage.creditValue);
+      // Redirect to checkout page with package info
+      window.location.href = `/checkout?package=${selectedPackage.id}&mode=credits`;
     } catch (error) {
       console.log('Checkout error:', error);
       alert('Failed to start checkout. Please try again.');

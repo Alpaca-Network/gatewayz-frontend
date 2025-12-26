@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
       currency: 'usd',
       description,
       customer_email: normalizedEmail,
-      success_url: `${frontendUrl}/settings/credits?session_id={{CHECKOUT_SESSION_ID}}`,
+      success_url: `${frontendUrl}/checkout/success?session_id={{CHECKOUT_SESSION_ID}}&tier=credits`,
       cancel_url: `${frontendUrl}/settings/credits`,
     };
 

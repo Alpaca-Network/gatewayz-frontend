@@ -1,21 +1,18 @@
 import React from 'react';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
-import CheckoutPage from '../page';
+import CheckoutSuccessPage from '../page';
 
 // Mock next/navigation
-const mockBack = jest.fn();
 jest.mock('next/navigation', () => ({
   useSearchParams: () => ({
     get: (key: string) => {
       const params: Record<string, string> = {
         tier: 'pro',
-        mode: 'subscription',
+        session_id: 'cs_test_1234',
+        quantity: '1',
       };
       return params[key] || null;
     },
-  }),
-  useRouter: () => ({
-    back: mockBack,
   }),
 }));
 
@@ -62,17 +59,12 @@ jest.mock('@/hooks/use-toast', () => ({
 
 // Mock lucide-react icons
 jest.mock('lucide-react', () => ({
-  ArrowLeft: () => <span data-testid="icon-arrow-left">ArrowLeft</span>,
   Copy: () => <span data-testid="icon-copy">Copy</span>,
   Gift: () => <span data-testid="icon-gift">Gift</span>,
   CheckCircle: () => <span data-testid="icon-check-circle">CheckCircle</span>,
   Share2: () => <span data-testid="icon-share">Share</span>,
   Users: () => <span data-testid="icon-users">Users</span>,
   Sparkles: () => <span data-testid="icon-sparkles">Sparkles</span>,
-  CreditCard: () => <span data-testid="icon-credit-card">CreditCard</span>,
-  Check: () => <span data-testid="icon-check">Check</span>,
-  Shield: () => <span data-testid="icon-shield">Shield</span>,
-  Zap: () => <span data-testid="icon-zap">Zap</span>,
 }));
 
 // Mock the API module
@@ -88,16 +80,9 @@ jest.mock('@/lib/config', () => ({
   API_BASE_URL: 'https://api.test.com',
 }));
 
-// Mock fetch for Stripe API calls
-global.fetch = jest.fn();
-
-describe('CheckoutPage - Pre-purchase Confirmation', () => {
+describe('CheckoutSuccessPage', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ url: 'https://checkout.stripe.com/test' }),
-    });
     // Mock clipboard API
     Object.assign(navigator, {
       clipboard: {
@@ -119,48 +104,42 @@ describe('CheckoutPage - Pre-purchase Confirmation', () => {
       });
     });
 
-    it('should render the confirm your order header', async () => {
-      render(<CheckoutPage />);
+    it('should render the thank you message', async () => {
+      render(<CheckoutSuccessPage />);
 
       await waitFor(() => {
-        expect(screen.getByText('Confirm Your Order')).toBeInTheDocument();
+        expect(screen.getByText('Thank You for Your Purchase!')).toBeInTheDocument();
       });
     });
 
-    it('should display the Pro tier details from URL params', async () => {
-      render(<CheckoutPage />);
+    it('should display the Pro tier name from URL params', async () => {
+      render(<CheckoutSuccessPage />);
 
       await waitFor(() => {
-        expect(screen.getByText('Pro Plan')).toBeInTheDocument();
+        // Pro tier appears in the subscription active message - look for "Pro" in text
+        const proElements = screen.getAllByText(/Pro/);
+        expect(proElements.length).toBeGreaterThan(0);
       });
     });
 
     it('should render the order summary card', async () => {
-      render(<CheckoutPage />);
+      render(<CheckoutSuccessPage />);
 
       await waitFor(() => {
         expect(screen.getByText('Order Summary')).toBeInTheDocument();
       });
     });
 
-    it('should display the Pro tier features', async () => {
-      render(<CheckoutPage />);
+    it('should display Active status for subscription', async () => {
+      render(<CheckoutSuccessPage />);
 
       await waitFor(() => {
-        expect(screen.getByText('Access to 10,000+ models')).toBeInTheDocument();
-      });
-    });
-
-    it('should render the Proceed to Payment button', async () => {
-      render(<CheckoutPage />);
-
-      await waitFor(() => {
-        expect(screen.getByText('Proceed to Payment')).toBeInTheDocument();
+        expect(screen.getByText('Active')).toBeInTheDocument();
       });
     });
 
     it('should render the referral CTA section', async () => {
-      render(<CheckoutPage />);
+      render(<CheckoutSuccessPage />);
 
       await waitFor(() => {
         expect(screen.getByText('Earn Free Credits!')).toBeInTheDocument();
@@ -168,7 +147,7 @@ describe('CheckoutPage - Pre-purchase Confirmation', () => {
     });
 
     it('should fetch and display the referral link', async () => {
-      render(<CheckoutPage />);
+      render(<CheckoutSuccessPage />);
 
       await waitFor(() => {
         const inputs = screen.getAllByTestId('input');
@@ -179,35 +158,47 @@ describe('CheckoutPage - Pre-purchase Confirmation', () => {
       });
     });
 
-    it('should render the back button', async () => {
-      render(<CheckoutPage />);
+    it('should render Share Referral Link button', async () => {
+      render(<CheckoutSuccessPage />);
 
       await waitFor(() => {
-        expect(screen.getByText('Back')).toBeInTheDocument();
+        expect(screen.getByText('Share Referral Link')).toBeInTheDocument();
       });
     });
 
-    it('should display trust badges', async () => {
-      render(<CheckoutPage />);
+    it('should render Copy Link button', async () => {
+      render(<CheckoutSuccessPage />);
 
       await waitFor(() => {
-        expect(screen.getByText('Secure payment powered by Stripe')).toBeInTheDocument();
-        expect(screen.getByText('Instant activation after payment')).toBeInTheDocument();
+        expect(screen.getByText('Copy Link')).toBeInTheDocument();
       });
     });
 
-    it('should render the Proceed to Payment button as clickable', async () => {
-      render(<CheckoutPage />);
+    it('should render navigation buttons', async () => {
+      render(<CheckoutSuccessPage />);
 
-      // Wait for the button to be enabled (loading state to complete)
       await waitFor(() => {
-        const proceedButton = screen.getByText('Proceed to Payment');
-        expect(proceedButton).not.toBeDisabled();
+        expect(screen.getByText('View Referral Dashboard')).toBeInTheDocument();
+        expect(screen.getByText('Start Using Gatewayz')).toBeInTheDocument();
       });
+    });
 
-      // Verify the button can be clicked (even though the Stripe API call won't work in test env)
-      const proceedButton = screen.getByText('Proceed to Payment');
-      expect(proceedButton).toBeInTheDocument();
+    it('should display the referral code', async () => {
+      render(<CheckoutSuccessPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('TESTREF123')).toBeInTheDocument();
+      });
+    });
+
+    it('should call the referral code API', async () => {
+      render(<CheckoutSuccessPage />);
+
+      await waitFor(() => {
+        expect(mockMakeAuthenticatedRequest).toHaveBeenCalledWith(
+          'https://api.test.com/referral/code'
+        );
+      });
     });
   });
 
@@ -217,7 +208,7 @@ describe('CheckoutPage - Pre-purchase Confirmation', () => {
     });
 
     it('should display authentication required message', async () => {
-      render(<CheckoutPage />);
+      render(<CheckoutSuccessPage />);
 
       await waitFor(() => {
         expect(screen.getByText('Authentication Required')).toBeInTheDocument();
@@ -225,10 +216,22 @@ describe('CheckoutPage - Pre-purchase Confirmation', () => {
     });
 
     it('should display sign in button', async () => {
-      render(<CheckoutPage />);
+      render(<CheckoutSuccessPage />);
 
       await waitFor(() => {
         expect(screen.getByText('Sign In')).toBeInTheDocument();
+      }, { timeout: 5000 });
+    });
+  });
+
+  describe('loading state', () => {
+    it('should eventually resolve from loading state', async () => {
+      mockGetUserData.mockReturnValue(null);
+      render(<CheckoutSuccessPage />);
+
+      // Wait for the component to finish loading and show auth required
+      await waitFor(() => {
+        expect(screen.getByText('Authentication Required')).toBeInTheDocument();
       }, { timeout: 5000 });
     });
   });
@@ -246,7 +249,7 @@ describe('CheckoutPage - Pre-purchase Confirmation', () => {
     });
 
     it('should display bonus credits message', async () => {
-      render(<CheckoutPage />);
+      render(<CheckoutSuccessPage />);
 
       await waitFor(() => {
         expect(screen.getByText(/bonus credits/)).toBeInTheDocument();
@@ -254,7 +257,7 @@ describe('CheckoutPage - Pre-purchase Confirmation', () => {
     });
 
     it('should display reward explanation', async () => {
-      render(<CheckoutPage />);
+      render(<CheckoutSuccessPage />);
 
       await waitFor(() => {
         expect(screen.getByText('Both you and your friend get rewarded')).toBeInTheDocument();
@@ -262,74 +265,69 @@ describe('CheckoutPage - Pre-purchase Confirmation', () => {
     });
 
     it('should display how referrals work', async () => {
-      render(<CheckoutPage />);
+      render(<CheckoutSuccessPage />);
 
       await waitFor(() => {
         expect(screen.getByText('When they sign up and make their first purchase')).toBeInTheDocument();
       });
     });
-
-    it('should display the referral code', async () => {
-      render(<CheckoutPage />);
-
-      await waitFor(() => {
-        expect(screen.getByText('TESTREF123')).toBeInTheDocument();
-      });
-    });
   });
 });
 
-describe('CheckoutPage - No plan selected', () => {
+describe('CheckoutSuccessPage - Credit purchase', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockGetUserData.mockReturnValue({
       user_id: 1,
       api_key: 'test-api-key',
-    });
-  });
-
-  // Override the mock to return no tier/package
-  it('should display no plan selected message when tier is empty', async () => {
-    jest.doMock('next/navigation', () => ({
-      useSearchParams: () => ({
-        get: () => null,
-      }),
-      useRouter: () => ({
-        back: mockBack,
-      }),
-    }));
-
-    // Note: This test would need the module to be re-imported to work correctly
-    // For simplicity, we're testing the happy path in other tests
-  });
-});
-
-describe('CheckoutPage - Credit package mode', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockGetUserData.mockReturnValue({
-      user_id: 1,
-      api_key: 'test-api-key',
-      email: 'test@example.com',
     });
     mockMakeAuthenticatedRequest.mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({ referral_code: 'TESTREF123' }),
     });
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ url: 'https://checkout.stripe.com/test' }),
+  });
+
+  it('should handle credit purchase mode', async () => {
+    // Note: To fully test credits mode, you would need to mock useSearchParams
+    // to return tier=credits. This test validates the setup works.
+    render(<CheckoutSuccessPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Thank You for Your Purchase!')).toBeInTheDocument();
+    });
+  });
+});
+
+describe('CheckoutSuccessPage API error handling', () => {
+  beforeEach(() => {
+    mockGetUserData.mockReturnValue({
+      user_id: 1,
+      api_key: 'test-api-key',
     });
   });
 
-  it('should handle credit package mode', async () => {
-    // Note: To fully test credit package mode, you would need to mock useSearchParams
-    // to return package and mode=credits parameters. This test validates the setup.
-    render(<CheckoutPage />);
+  it('should handle API failure gracefully', async () => {
+    mockMakeAuthenticatedRequest.mockResolvedValue({
+      ok: false,
+      status: 500,
+    });
 
+    render(<CheckoutSuccessPage />);
+
+    // Should still render the page structure
     await waitFor(() => {
-      // The page should load with the subscription mode by default
-      expect(screen.getByText('Confirm Your Order')).toBeInTheDocument();
+      expect(screen.getByText('Thank You for Your Purchase!')).toBeInTheDocument();
+    });
+  });
+
+  it('should handle network errors gracefully', async () => {
+    mockMakeAuthenticatedRequest.mockRejectedValue(new Error('Network error'));
+
+    render(<CheckoutSuccessPage />);
+
+    // Should still render the page structure
+    await waitFor(() => {
+      expect(screen.getByText('Thank You for Your Purchase!')).toBeInTheDocument();
     });
   });
 });
