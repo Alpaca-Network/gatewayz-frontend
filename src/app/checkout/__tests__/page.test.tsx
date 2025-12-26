@@ -4,6 +4,7 @@ import CheckoutPage from '../page';
 
 // Mock next/navigation
 const mockBack = jest.fn();
+const mockPush = jest.fn();
 jest.mock('next/navigation', () => ({
   useSearchParams: () => ({
     get: (key: string) => {
@@ -16,6 +17,7 @@ jest.mock('next/navigation', () => ({
   }),
   useRouter: () => ({
     back: mockBack,
+    push: mockPush,
   }),
 }));
 
@@ -86,6 +88,37 @@ jest.mock('@/lib/api', () => ({
 
 jest.mock('@/lib/config', () => ({
   API_BASE_URL: 'https://api.test.com',
+}));
+
+jest.mock('@/lib/pricing-config', () => ({
+  tierConfigs: {
+    pro: {
+      id: 'pro',
+      name: 'Pro',
+      description: 'Scale with confidence',
+      price: '$10',
+      priceValue: 10,
+      originalPrice: '$20/month',
+      discount: 'Save 50%',
+      color: 'text-blue-600',
+      bgColor: 'bg-blue-100',
+      features: [
+        '50% discount on first $10 credits',
+        'Access to 10,000+ models',
+        'Smart cost optimization',
+        'Advanced analytics',
+        'Priority support',
+        '99.9% uptime SLA',
+      ],
+      ctaText: 'Get Started',
+      stripePriceId: 'price_test_pro',
+      stripeProductId: 'prod_test_pro',
+    },
+  },
+  creditPackages: {
+    tier1: { id: 'tier1', name: 'Starter', creditValue: 10, price: 9, discount: '10% off' },
+    tier2: { id: 'tier2', name: 'Growth', creditValue: 100, price: 75, discount: '25% off' },
+  },
 }));
 
 // Mock fetch for Stripe API calls

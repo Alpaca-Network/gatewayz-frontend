@@ -9,106 +9,7 @@ import { ArrowLeft, Copy, Gift, CheckCircle, Share2, Users, Sparkles, CreditCard
 import { useToast } from "@/hooks/use-toast";
 import { makeAuthenticatedRequest, getUserData } from '@/lib/api';
 import { API_BASE_URL } from '@/lib/config';
-
-// Tier pricing configuration - must match pricing-section.tsx
-interface TierConfig {
-  name: string;
-  description: string;
-  price: string;
-  priceValue: number;
-  originalPrice?: string;
-  discount?: string;
-  color: string;
-  bgColor: string;
-  features: string[];
-  stripePriceId?: string;
-  stripeProductId?: string;
-}
-
-const tierConfigs: Record<string, TierConfig> = {
-  starter: {
-    name: 'Starter',
-    description: 'Perfect for experimenting',
-    price: '$0',
-    priceValue: 0,
-    color: 'text-gray-600',
-    bgColor: 'bg-gray-100',
-    features: [
-      '$10 free credits monthly',
-      'Access to 5+ models',
-      'Community support',
-      'Basic analytics',
-    ],
-  },
-  pro: {
-    name: 'Pro',
-    description: 'Scale with confidence',
-    price: '$10',
-    priceValue: 10,
-    originalPrice: '$20/month',
-    discount: 'Save 50%',
-    color: 'text-blue-600',
-    bgColor: 'bg-blue-100',
-    features: [
-      '50% discount on first $10 credits',
-      'Access to 10,000+ models',
-      'Smart cost optimization',
-      'Advanced analytics',
-      'Priority support',
-      '99.9% uptime SLA',
-    ],
-    stripePriceId: process.env.NEXT_PUBLIC_STRIPE_PRO_PRICE_ID,
-    stripeProductId: 'prod_TKOqQPhVRxNp4Q',
-  },
-  max: {
-    name: 'Max',
-    description: 'Higher limits, priority access',
-    price: '$75',
-    priceValue: 75,
-    originalPrice: '$150/month',
-    discount: 'Save 50%',
-    color: 'text-purple-600',
-    bgColor: 'bg-purple-100',
-    features: [
-      '50% discount on $150 credits',
-      '10x more usage than Pro',
-      'Higher output limits for all tasks',
-      'Early access to advanced features',
-    ],
-    stripePriceId: process.env.NEXT_PUBLIC_STRIPE_MAX_PRICE_ID,
-    stripeProductId: 'prod_TKOraBpWMxMAIu',
-  },
-  enterprise: {
-    name: 'Enterprise',
-    description: 'Tailored for scale',
-    price: 'Custom',
-    priceValue: 0,
-    color: 'text-amber-600',
-    bgColor: 'bg-amber-100',
-    features: [
-      'Dedicated infrastructure',
-      'Custom model training',
-      'White-label options',
-      '24/7 dedicated support',
-      '99.99% uptime SLA',
-    ],
-  },
-};
-
-// Credit package configuration for one-time purchases
-interface CreditPackage {
-  id: string;
-  name: string;
-  creditValue: number;
-  price: number;
-  discount: string;
-}
-
-const creditPackages: Record<string, CreditPackage> = {
-  tier1: { id: 'tier1', name: 'Starter', creditValue: 10, price: 9, discount: '10% off' },
-  tier2: { id: 'tier2', name: 'Growth', creditValue: 100, price: 75, discount: '25% off' },
-  tier3: { id: 'tier3', name: 'Scale', creditValue: 250, price: 175, discount: '30% off' },
-};
+import { tierConfigs, creditPackages } from '@/lib/pricing-config';
 
 function CheckoutPageContent() {
   const searchParams = useSearchParams();
@@ -201,7 +102,7 @@ function CheckoutPageContent() {
           title: "Please sign in to continue",
           variant: "destructive",
         });
-        window.location.href = '/signup';
+        router.push('/signup');
         return;
       }
 
@@ -271,6 +172,15 @@ function CheckoutPageContent() {
         } else {
           throw new Error('No checkout URL received');
         }
+      } else {
+        // Fallback: Mode/parameter mismatch - show error and redirect to pricing
+        toast({
+          title: "Invalid checkout configuration",
+          description: "Please select a plan from our pricing page.",
+          variant: "destructive",
+        });
+        router.push('/settings/credits');
+        return;
       }
     } catch (error) {
       console.error('Checkout error:', error);
@@ -298,7 +208,7 @@ function CheckoutPageContent() {
                   Please log in to complete your purchase
                 </p>
               </div>
-              <Button onClick={() => window.location.href = '/signup'}>
+              <Button onClick={() => router.push('/signup')}>
                 Sign In
               </Button>
             </div>
@@ -322,7 +232,7 @@ function CheckoutPageContent() {
                   Please select a plan from our pricing page
                 </p>
               </div>
-              <Button onClick={() => window.location.href = '/settings/credits'}>
+              <Button onClick={() => router.push('/settings/credits')}>
                 View Plans
               </Button>
             </div>
