@@ -21,7 +21,7 @@ jest.mock('@sentry/nextjs', () => ({
 }));
 
 // Mock global error handlers
-jest.mock('../../../lib/global-error-handlers', () => ({
+jest.mock('../global-error-handlers', () => ({
   initializeGlobalErrorHandlers: jest.fn(),
 }));
 
