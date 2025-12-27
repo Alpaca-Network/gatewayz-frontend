@@ -415,10 +415,26 @@ describe('ChatInput attachment dropdown', () => {
   it('should have correct labels for attachment options', () => {
     render(<ChatInput />);
 
-    // Check for dropdown items (video and audio upload options)
+    // The dropdown content has:
+    // - Top row buttons: Camera, Photos, Files (plain text labels)
+    // - DropdownMenuItem items: Upload video, Record audio
     const dropdownItems = screen.getAllByTestId('dropdown-item');
     expect(dropdownItems[0]).toHaveTextContent('Upload video');
-    expect(dropdownItems[1]).toHaveTextContent('Upload audio');
+    expect(dropdownItems[1]).toHaveTextContent('Record audio');
+  });
+
+  it('should have Camera button that opens device camera (capture attribute)', () => {
+    render(<ChatInput />);
+
+    // Find the camera input with capture attribute
+    const inputs = document.querySelectorAll('input[type="file"]');
+    const cameraInput = Array.from(inputs).find(
+      input => input.getAttribute('capture') === 'environment'
+    );
+
+    expect(cameraInput).toBeInTheDocument();
+    expect(cameraInput).toHaveAttribute('accept', 'image/*');
+    expect(cameraInput).toHaveClass('hidden');
   });
 });
 
@@ -514,19 +530,29 @@ describe('ChatInput hidden file inputs', () => {
     resetMockStoreState();
   });
 
-  it('should have four hidden file inputs for different media types', () => {
+  it('should have five hidden file inputs for different media types', () => {
     render(<ChatInput />);
 
     const fileInputs = document.querySelectorAll('input[type="file"].hidden');
-    expect(fileInputs).toHaveLength(4);
+    expect(fileInputs).toHaveLength(5);
   });
 
   it('should have image input with correct accept type', () => {
     render(<ChatInput />);
 
-    const imageInput = document.querySelector('input[accept="image/*"]');
-    expect(imageInput).toBeInTheDocument();
-    expect(imageInput).toHaveClass('hidden');
+    const imageInputs = document.querySelectorAll('input[accept="image/*"]');
+    // There should be 2 image inputs: one for photos picker, one for camera (with capture)
+    expect(imageInputs).toHaveLength(2);
+    expect(imageInputs[0]).toHaveClass('hidden');
+    expect(imageInputs[1]).toHaveClass('hidden');
+  });
+
+  it('should have camera input with capture attribute', () => {
+    render(<ChatInput />);
+
+    const cameraInput = document.querySelector('input[accept="image/*"][capture="environment"]');
+    expect(cameraInput).toBeInTheDocument();
+    expect(cameraInput).toHaveClass('hidden');
   });
 
   it('should have video input with correct accept type', () => {
@@ -1153,6 +1179,21 @@ describe('ChatInput speech recognition', () => {
     // Button should still show mic icon (not square) because isRecording was reset
     const micButtons = screen.getAllByTestId('button').filter(btn => btn.querySelector('[data-testid="mic-icon"]'));
     expect(micButtons.length).toBeGreaterThan(0);
+  });
+
+  it('should start speech recognition from Record audio dropdown item', () => {
+    render(<ChatInput />);
+
+    // Find and click the Record audio dropdown item (second dropdown item)
+    const dropdownItems = screen.getAllByTestId('dropdown-item');
+    const recordAudioItem = dropdownItems[1]; // Second item is Record audio
+
+    fireEvent.click(recordAudioItem);
+
+    // Speech recognition should be started
+    expect(mockRecognition.start).toHaveBeenCalled();
+    expect(mockRecognition.continuous).toBe(true);
+    expect(mockRecognition.interimResults).toBe(true);
   });
 });
 

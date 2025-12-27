@@ -168,6 +168,7 @@ export function ChatInput() {
   const [speechRecognition, setSpeechRecognition] = useState<SpeechRecognition | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
@@ -739,6 +740,7 @@ export function ChatInput() {
         <div className="flex gap-2 items-center bg-muted p-3 rounded-2xl border">
             {/* Hidden Inputs */}
             <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageSelect} className="hidden" />
+            <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handleImageSelect} className="hidden" />
             <input ref={videoInputRef} type="file" accept="video/*" onChange={handleVideoSelect} className="hidden" />
             <input ref={audioInputRef} type="file" accept="audio/*" onChange={handleAudioSelect} className="hidden" />
             <input ref={documentInputRef} type="file" accept=".pdf,.doc,.docx,.txt,.md,.csv,.json,.xml" onChange={handleDocumentSelect} className="hidden" />
@@ -755,7 +757,7 @@ export function ChatInput() {
                         {/* Top row: Camera, Photos, Files */}
                         <div className="grid grid-cols-3 gap-3 mb-4">
                             <button
-                                onClick={() => fileInputRef.current?.click()}
+                                onClick={() => cameraInputRef.current?.click()}
                                 className="flex flex-col items-center justify-center p-4 rounded-xl bg-muted hover:bg-accent transition-colors"
                             >
                                 <Camera className="h-6 w-6 mb-2 text-foreground" />
@@ -786,11 +788,11 @@ export function ChatInput() {
                                 <p className="text-xs text-muted-foreground">Add video files</p>
                             </div>
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => audioInputRef.current?.click()} className="py-3">
-                            <AudioIcon className="h-5 w-5 mr-3" />
+                        <DropdownMenuItem onClick={toggleRecording} className="py-3">
+                            <AudioIcon className={cn("h-5 w-5 mr-3", isRecording && "text-destructive animate-pulse")} />
                             <div>
-                                <p className="font-medium">Upload audio</p>
-                                <p className="text-xs text-muted-foreground">Add audio files</p>
+                                <p className="font-medium">{isRecording ? "Stop recording" : "Record audio"}</p>
+                                <p className="text-xs text-muted-foreground">{isRecording ? "Stop transcription" : "Start voice transcription"}</p>
                             </div>
                         </DropdownMenuItem>
                     </DropdownMenuContent>
