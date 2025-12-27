@@ -97,7 +97,7 @@ export function ReferralBonusDialog() {
               </p>
             </div>
             <p className="text-sm text-muted-foreground mt-3">
-              Plus your $10 in trial credits = <span className="font-semibold text-emerald-600 dark:text-emerald-400">${totalCredits} total</span>
+              Plus your $3 in trial credits = <span className="font-semibold text-emerald-600 dark:text-emerald-400">${totalCredits} total</span>
             </p>
           </div>
 
@@ -109,7 +109,7 @@ export function ReferralBonusDialog() {
                 <div className="h-5 w-5 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
                   <span className="text-xs font-semibold text-primary">1</span>
                 </div>
-                <span>Add $10 to unlock both trial + bonus credits</span>
+                <span>Add $3 to unlock both trial + bonus credits</span>
               </li>
               <li className="flex items-center gap-2">
                 <div className="h-5 w-5 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
