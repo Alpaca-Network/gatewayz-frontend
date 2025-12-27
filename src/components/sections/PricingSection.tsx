@@ -70,12 +70,12 @@ const tiers = [
 
 export function PricingSection() {
   const handleClick = (tierName: string) => {
-    // Track Twitter conversion for ad attribution
-    trackTwitterSignupClick();
-
     if (tierName === "Enterprise") {
+      // Enterprise tier goes to contact sales - don't track as signup conversion
       window.location.href = "/contact";
     } else {
+      // Track Twitter conversion for ad attribution (signup tiers only)
+      trackTwitterSignupClick();
       document.getElementById("waitlist")?.scrollIntoView({ behavior: "smooth" });
     }
   };

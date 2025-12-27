@@ -29,10 +29,17 @@ export function TwitterPixel() {
 }
 
 // Helper function to track Twitter conversion events
+// Note: The Twitter pixel inline script creates the twq function immediately with a
+// built-in queue, so events called before the full script loads are automatically queued.
+// We only check for window (SSR safety) and use optional chaining as a safeguard.
 export const trackTwitterConversion = (eventId?: string) => {
-  if (typeof window !== 'undefined' && (window as any).twq) {
-    const conversionEventId = eventId || TWITTER_CONVERSION_EVENT_ID;
-    (window as any).twq('event', conversionEventId, {});
+  if (typeof window === 'undefined') return;
+
+  const conversionEventId = eventId || TWITTER_CONVERSION_EVENT_ID;
+  const twq = (window as any).twq;
+
+  if (typeof twq === 'function') {
+    twq('event', conversionEventId, {});
   }
 };
 

@@ -42,9 +42,6 @@ export default function WaitlistForm({ compact = false }: WaitlistFormProps) {
   const [userEmail, setUserEmail] = useState<string>("");
 
   const onSubmit = async (data: FormData) => {
-    // Track Twitter conversion for ad attribution
-    trackTwitterSignupClick();
-
     try {
       const payload = {
         email: data.email,
@@ -72,6 +69,10 @@ export default function WaitlistForm({ compact = false }: WaitlistFormProps) {
       if (process.env.NODE_ENV === 'development') {
         console.log("Waitlist signup:", payload, fnData);
       }
+
+      // Track Twitter conversion for ad attribution only after successful submission
+      trackTwitterSignupClick();
+
       setSubmitted(true);
       setUserEmail(data.email);
       reset();
