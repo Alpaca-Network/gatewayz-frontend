@@ -40,7 +40,7 @@ interface SpeechRecognition extends EventTarget {
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import * as Sentry from "@sentry/nextjs";
-import { Send, Image as ImageIcon, Video as VideoIcon, Mic, Mic as AudioIcon, X, RefreshCw, Paperclip, FileText, Square } from "lucide-react";
+import { Send, Image as ImageIcon, Video as VideoIcon, Mic, Mic as AudioIcon, X, RefreshCw, Plus, FileText, Square, Camera } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -736,7 +736,7 @@ export function ChatInput() {
             )}
         </div>
 
-        <div className="flex gap-2 items-center bg-muted p-2 rounded-lg border">
+        <div className="flex gap-2 items-center bg-muted p-3 rounded-2xl border">
             {/* Hidden Inputs */}
             <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageSelect} className="hidden" />
             <input ref={videoInputRef} type="file" accept="video/*" onChange={handleVideoSelect} className="hidden" />
@@ -744,29 +744,54 @@ export function ChatInput() {
             <input ref={documentInputRef} type="file" accept=".pdf,.doc,.docx,.txt,.md,.csv,.json,.xml" onChange={handleDocumentSelect} className="hidden" />
 
             <div className="flex gap-1">
-                {/* Combined "Add photos & files" dropdown */}
+                {/* Combined "Add photos & files" dropdown with [+] button */}
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                        <Button size="icon" variant="ghost" title="Add photos & files">
-                            <Paperclip className="h-5 w-5 text-muted-foreground" />
+                        <Button size="icon" variant="ghost" title="Add photos & files" className="h-10 w-10 rounded-full border border-border hover:bg-accent">
+                            <Plus className="h-5 w-5 text-muted-foreground" />
                         </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start" side="top">
-                        <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
-                            <ImageIcon className="h-4 w-4 mr-2" />
-                            Upload image
+                    <DropdownMenuContent align="start" side="top" className="w-80 p-4">
+                        {/* Top row: Camera, Photos, Files */}
+                        <div className="grid grid-cols-3 gap-3 mb-4">
+                            <button
+                                onClick={() => fileInputRef.current?.click()}
+                                className="flex flex-col items-center justify-center p-4 rounded-xl bg-muted hover:bg-accent transition-colors"
+                            >
+                                <Camera className="h-6 w-6 mb-2 text-foreground" />
+                                <span className="text-sm font-medium">Camera</span>
+                            </button>
+                            <button
+                                onClick={() => fileInputRef.current?.click()}
+                                className="flex flex-col items-center justify-center p-4 rounded-xl bg-muted hover:bg-accent transition-colors"
+                            >
+                                <ImageIcon className="h-6 w-6 mb-2 text-foreground" />
+                                <span className="text-sm font-medium">Photos</span>
+                            </button>
+                            <button
+                                onClick={() => documentInputRef.current?.click()}
+                                className="flex flex-col items-center justify-center p-4 rounded-xl bg-muted hover:bg-accent transition-colors"
+                            >
+                                <FileText className="h-6 w-6 mb-2 text-foreground" />
+                                <span className="text-sm font-medium">Files</span>
+                            </button>
+                        </div>
+                        {/* Divider */}
+                        <div className="border-t border-border mb-3" />
+                        {/* Additional options */}
+                        <DropdownMenuItem onClick={() => videoInputRef.current?.click()} className="py-3">
+                            <VideoIcon className="h-5 w-5 mr-3" />
+                            <div>
+                                <p className="font-medium">Upload video</p>
+                                <p className="text-xs text-muted-foreground">Add video files</p>
+                            </div>
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => videoInputRef.current?.click()}>
-                            <VideoIcon className="h-4 w-4 mr-2" />
-                            Upload video
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => audioInputRef.current?.click()}>
-                            <AudioIcon className="h-4 w-4 mr-2" />
-                            Upload audio
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => documentInputRef.current?.click()}>
-                            <FileText className="h-4 w-4 mr-2" />
-                            Upload document
+                        <DropdownMenuItem onClick={() => audioInputRef.current?.click()} className="py-3">
+                            <AudioIcon className="h-5 w-5 mr-3" />
+                            <div>
+                                <p className="font-medium">Upload audio</p>
+                                <p className="text-xs text-muted-foreground">Add audio files</p>
+                            </div>
                         </DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>
@@ -797,8 +822,8 @@ export function ChatInput() {
                         handleSend();
                     }
                 }}
-                placeholder="Type a message..."
-                className="flex-1 border-0 bg-background focus-visible:ring-0"
+                placeholder="Ask Gatewayz"
+                className="flex-1 border-0 bg-background focus-visible:ring-0 h-12 text-base"
                 disabled={isStreaming}
                 enterKeyHint="send"
             />
