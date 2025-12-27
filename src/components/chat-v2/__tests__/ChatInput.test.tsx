@@ -1157,6 +1157,31 @@ describe('ChatInput speech recognition', () => {
     const micButtons = screen.getAllByTestId('button').filter(btn => btn.querySelector('[data-testid="mic-icon"]'));
     expect(micButtons.length).toBeGreaterThan(0);
   });
+
+  it('should show waveform animation and "Listening..." text when recording', async () => {
+    render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // Simulate onstart callback
+    if (mockRecognition.onstart) {
+      mockRecognition.onstart();
+    }
+
+    await waitFor(() => {
+      // Should show "Listening..." text
+      expect(screen.getByText('Listening...')).toBeInTheDocument();
+    });
+
+    // Should show waveform animation (5 bars)
+    const waveformBars = document.querySelectorAll('.audio-waveform-bar');
+    expect(waveformBars.length).toBe(5);
+  });
 });
 
 describe('ChatInput stop streaming button', () => {
