@@ -1,6 +1,7 @@
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Check } from "lucide-react";
+import { trackTwitterSignupClick } from "@/components/analytics/twitter-pixel";
 
 const tiers = [
   {
@@ -70,8 +71,11 @@ const tiers = [
 export function PricingSection() {
   const handleClick = (tierName: string) => {
     if (tierName === "Enterprise") {
+      // Enterprise tier goes to contact sales - don't track as signup conversion
       window.location.href = "/contact";
     } else {
+      // Track Twitter conversion for ad attribution (signup tiers only)
+      trackTwitterSignupClick();
       document.getElementById("waitlist")?.scrollIntoView({ behavior: "smooth" });
     }
   };

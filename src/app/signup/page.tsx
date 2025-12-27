@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Gift } from 'lucide-react';
 import { storeReferralCode } from '@/lib/referral';
+import { trackTwitterSignupClick } from '@/components/analytics/twitter-pixel';
 
 function SignupContent() {
   const searchParams = useSearchParams();
@@ -45,6 +46,9 @@ function SignupContent() {
       router.push('/chat');
       return;
     }
+
+    // Track Twitter conversion for ad attribution
+    trackTwitterSignupClick();
 
     login();
   };
