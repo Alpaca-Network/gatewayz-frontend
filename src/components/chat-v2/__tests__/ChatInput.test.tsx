@@ -399,26 +399,23 @@ describe('ChatInput attachment dropdown', () => {
   it('should render attachment options in dropdown', () => {
     render(<ChatInput />);
 
-    // The new UI has Camera, Photos, Files as buttons in a grid (not DropdownMenuItem)
-    // and Video, Audio as DropdownMenuItem items
+    // The new UI has 3 button options (Camera, Photos, Files) + 2 dropdown items (video, audio)
     const dropdownItems = screen.getAllByTestId('dropdown-item');
-    expect(dropdownItems).toHaveLength(2); // Video and Audio are DropdownMenuItem
+    expect(dropdownItems).toHaveLength(2);
 
-    // Verify icons exist - Camera, Photos (Image), Files (FileText), Video, Audio (Mic)
+    // Verify icons exist for various attachment types
     expect(screen.getByTestId('camera-icon')).toBeInTheDocument();
     expect(screen.getByTestId('image-icon')).toBeInTheDocument();
-    expect(screen.getByTestId('file-text-icon')).toBeInTheDocument();
     expect(screen.getByTestId('video-icon')).toBeInTheDocument();
-    // There are 2 mic icons - one in dropdown (audio) and one for speech-to-text
+    // There are 2 mic icons - one in dropdown and one for speech-to-text
     expect(screen.getAllByTestId('mic-icon').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByTestId('file-text-icon')).toBeInTheDocument();
   });
 
   it('should have correct labels for attachment options', () => {
     render(<ChatInput />);
 
-    // The dropdown content has:
-    // - Top row buttons: Camera, Photos, Files (plain text labels)
-    // - DropdownMenuItem items: Upload video, Upload audio
+    // Check for dropdown items (video and audio upload options)
     const dropdownItems = screen.getAllByTestId('dropdown-item');
     expect(dropdownItems[0]).toHaveTextContent('Upload video');
     expect(dropdownItems[1]).toHaveTextContent('Upload audio');

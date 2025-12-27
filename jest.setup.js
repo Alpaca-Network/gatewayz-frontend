@@ -174,13 +174,73 @@ global.Response = class Response {
   }
 }
 
-// Mock lucide-react icons
-jest.mock('lucide-react', () => ({
-  Coins: () => 'Coins',
-  Crown: () => 'Crown',
-  Menu: () => 'Menu',
-  Copy: () => 'Copy',
-}))
+// Mock lucide-react icons - create mock components that return the icon name as text
+jest.mock('lucide-react', () => {
+  const React = require('react');
+  const createIconMock = (name) => {
+    const IconComponent = (props) => React.createElement('span', { 'data-testid': `icon-${name.toLowerCase()}`, ...props }, name);
+    IconComponent.displayName = name;
+    return IconComponent;
+  };
+
+  return {
+    __esModule: true,
+    // Chat-related icons
+    Send: createIconMock('Send'),
+    Image: createIconMock('Image'),
+    Video: createIconMock('Video'),
+    Mic: createIconMock('Mic'),
+    X: createIconMock('X'),
+    RefreshCw: createIconMock('RefreshCw'),
+    Plus: createIconMock('Plus'),
+    FileText: createIconMock('FileText'),
+    Square: createIconMock('Square'),
+    Camera: createIconMock('Camera'),
+    // Layout icons
+    Menu: createIconMock('Menu'),
+    Pencil: createIconMock('Pencil'),
+    Lock: createIconMock('Lock'),
+    Unlock: createIconMock('Unlock'),
+    Shield: createIconMock('Shield'),
+    ImageIcon: createIconMock('ImageIcon'),
+    BarChart3: createIconMock('BarChart3'),
+    Code2: createIconMock('Code2'),
+    Lightbulb: createIconMock('Lightbulb'),
+    MoreHorizontal: createIconMock('MoreHorizontal'),
+    // Other commonly used icons
+    Coins: createIconMock('Coins'),
+    Crown: createIconMock('Crown'),
+    Copy: createIconMock('Copy'),
+    Check: createIconMock('Check'),
+    ChevronDown: createIconMock('ChevronDown'),
+    ChevronUp: createIconMock('ChevronUp'),
+    ChevronLeft: createIconMock('ChevronLeft'),
+    ChevronRight: createIconMock('ChevronRight'),
+    Search: createIconMock('Search'),
+    Settings: createIconMock('Settings'),
+    User: createIconMock('User'),
+    LogOut: createIconMock('LogOut'),
+    Trash: createIconMock('Trash'),
+    Edit: createIconMock('Edit'),
+    Eye: createIconMock('Eye'),
+    EyeOff: createIconMock('EyeOff'),
+    AlertCircle: createIconMock('AlertCircle'),
+    Info: createIconMock('Info'),
+    ExternalLink: createIconMock('ExternalLink'),
+    Share: createIconMock('Share'),
+    ThumbsUp: createIconMock('ThumbsUp'),
+    ThumbsDown: createIconMock('ThumbsDown'),
+    RotateCcw: createIconMock('RotateCcw'),
+    Loader2: createIconMock('Loader2'),
+    ArrowLeft: createIconMock('ArrowLeft'),
+    ArrowRight: createIconMock('ArrowRight'),
+    Home: createIconMock('Home'),
+    Star: createIconMock('Star'),
+    Heart: createIconMock('Heart'),
+    MessageSquare: createIconMock('MessageSquare'),
+    Zap: createIconMock('Zap'),
+  };
+})
 
 // Mock jose library (ESM module causing issues in Jest)
 jest.mock('jose', () => ({

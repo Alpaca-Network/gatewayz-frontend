@@ -48,6 +48,11 @@ jest.mock('lucide-react', () => ({
   Unlock: () => <span data-testid="unlock-icon">Unlock</span>,
   Shield: () => <span data-testid="shield-icon">Shield</span>,
   Plus: () => <span data-testid="plus-icon">Plus</span>,
+  ImageIcon: () => <span data-testid="image-icon">ImageIcon</span>,
+  BarChart3: () => <span data-testid="barchart-icon">BarChart3</span>,
+  Code2: () => <span data-testid="code-icon">Code2</span>,
+  Lightbulb: () => <span data-testid="lightbulb-icon">Lightbulb</span>,
+  MoreHorizontal: () => <span data-testid="more-icon">MoreHorizontal</span>,
 }));
 
 // Mock the stores and hooks
@@ -193,8 +198,8 @@ describe('ChatLayout', () => {
     it('should render 4 prompt cards on welcome screen', () => {
       render(<ChatLayout />);
 
-      // Welcome screen should show "What's On Your Mind?"
-      expect(screen.getByText("What's On Your Mind?")).toBeInTheDocument();
+      // Welcome screen should show "What can I help with?"
+      expect(screen.getByText("What can I help with?")).toBeInTheDocument();
 
       // Should have exactly 4 prompt cards
       const cards = screen.getAllByTestId('card');
@@ -508,7 +513,7 @@ describe('Feedback handlers', () => {
 
     // Component renders successfully with feedback handlers defined internally
     // The handlers are passed to MessageList when there's an active session
-    expect(screen.getByText("What's On Your Mind?")).toBeInTheDocument();
+    expect(screen.getByText("What can I help with?")).toBeInTheDocument();
   });
 });
 
@@ -542,7 +547,7 @@ describe('handleShare', () => {
     render(<ChatLayout />);
 
     // Component renders without errors, handler is defined internally
-    expect(screen.getByText("What's On Your Mind?")).toBeInTheDocument();
+    expect(screen.getByText("What can I help with?")).toBeInTheDocument();
   });
 });
 
