@@ -22,7 +22,7 @@ Displays to new users when they sign up with a referral link.
 
 **Features:**
 - Prominently displays bonus amount earned
-- Shows breakdown: $10 trial + $X bonus = total
+- Shows breakdown: $3 trial + $X bonus = total
 - Explains how to maximize benefits (add payment, share link)
 - Provides CTAs:
   - Explore Platform (dismiss)
@@ -192,15 +192,15 @@ The Gatewayz Team
 │    - Validates ABC123 referral code                              │
 │    - Finds referrer (User 1)                                     │
 │    - Calculates bonus: $10                                       │
-│    - Creates transaction: referee=User2, bonus=$10, status=ok    │
+│    - Creates transaction: referee=User2, bonus=$3, status=ok     │
 │    - Sends email to User 1 ⭐                                    │
-│    - Returns: credits=20 (10 trial + 10 bonus)                   │
+│    - Returns: credits=6 (3 trial + 3 bonus)                      │
 │                                                                  │
 │ 5. Frontend:                                                     │
 │    - Sets flag: localStorage['gatewayz_show_referral_bonus']     │
 │    - Redirects to /chat or /onboarding                           │
 │    - After 1.5s, shows ReferralBonusDialog                       │
-│    - User sees: "You earned +$10 in bonus credits!"              │
+│    - User sees: "You earned +$3 in bonus credits!"               │
 └────────────────────────────────────────────────────────────────────┘
 
 ┌─ User 1 (Referrer) - Verification ──────────────────────────────┐

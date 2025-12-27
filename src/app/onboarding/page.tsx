@@ -32,7 +32,7 @@ export default function OnboardingPage() {
     {
       id: "welcome",
       title: "Welcome to Gatewayz",
-      description: "You're all set! You have $10 in free credits to get started.",
+      description: "You're all set! You have $3 in free credits to get started.",
       icon: <Sparkles className="h-5 w-5" />,
       completed: true,
     },
@@ -57,7 +57,7 @@ export default function OnboardingPage() {
     {
       id: "credits",
       title: "Add More Credits (Optional)",
-      description: "Add $10 and get a bonus $10 in free credits on your first top up",
+      description: "Add $3 and get a bonus $3 in free credits on your first top up",
       icon: <CreditCard className="h-5 w-5" />,
       completed: false,
       action: "/settings/credits",
@@ -184,7 +184,7 @@ export default function OnboardingPage() {
       // Show the bonus credits notification
       setTimeout(() => {
         toast({
-          title: "$10 Trial Credits Added!",
+          title: "$3 Trial Credits Added!",
           description: "Your free trial credits have been added to your account. Start chatting now!",
           duration: 8000,
         });
@@ -331,7 +331,7 @@ console.log(response.choices[0].message.content);`
               <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 sm:border-l sm:border-white/30 sm:pl-3 lg:ml-4 lg:pl-4">
                 <div className="flex items-center gap-2 flex-1 sm:flex-initial">
                   <CreditCard className="h-4 w-4 flex-shrink-0" />
-                  <span className="text-sm font-semibold">💰 Add $10 and get a bonus $10 in free credits on your first top up</span>
+                  <span className="text-sm font-semibold">💰 Add $3 and get a bonus $3 in free credits on your first top up</span>
                 </div>
                 <Link href="/settings/credits" className="flex-shrink-0">
                   <Button
@@ -387,7 +387,7 @@ console.log(response.choices[0].message.content);`
                     💰 Limited Time Offer
                   </h3>
                   <p className="text-sm text-green-800 dark:text-green-200">
-                    <strong>Add $10 and get a bonus $10 in free credits</strong> on your first top up!
+                    <strong>Add $3 and get a bonus $3 in free credits</strong> on your first top up!
                   </p>
                 </div>
                 <Link href="/settings/credits">

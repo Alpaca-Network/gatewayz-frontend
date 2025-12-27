@@ -126,7 +126,7 @@ export function useAuthSync() {
         referral_code: referralCode ?? null,
         privy_user_id: user.id,
         // Add trial credits if new
-        ...(isNewUser ? { trial_credits: 10 } : {})
+        ...(isNewUser ? { trial_credits: 3 } : {})
       };
 
       // 3. Fetch

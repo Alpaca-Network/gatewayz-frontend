@@ -104,7 +104,7 @@ describe('auth-sync', () => {
         token: mockAccessToken,
         auto_create_api_key: true,
         is_new_user: true,
-        trial_credits: 10, // New users get trial credits
+        trial_credits: 3, // New users get trial credits
         privy_user_id: 'privy-user-123',
       });
     });

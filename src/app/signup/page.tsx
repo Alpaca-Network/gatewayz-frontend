@@ -124,7 +124,7 @@ function SignupContent() {
               </li>
               <li className="flex items-center gap-2">
                 <span className="text-green-600">✓</span>
-                $10 in free trial credits
+                $3 in free trial credits
               </li>
               {refCode && (
                 <li className="flex items-center gap-2">
