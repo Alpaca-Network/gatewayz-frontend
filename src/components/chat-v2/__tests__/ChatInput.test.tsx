@@ -13,6 +13,7 @@ jest.mock('lucide-react', () => ({
   FileText: () => <span data-testid="file-text-icon">FileText</span>,
   Paperclip: () => <span data-testid="paperclip-icon">Paperclip</span>,
   Square: () => <span data-testid="square-icon">Square</span>,
+  Camera: () => <span data-testid="camera-icon">Camera</span>,
 }));
 
 // Mock the UI components
@@ -385,39 +386,42 @@ describe('ChatInput attachment dropdown', () => {
     delete (window as any).__chatInputSend;
   });
 
-  it('should render the attachment dropdown with paperclip icon', () => {
+  it('should render the attachment dropdown with plus icon', () => {
     render(<ChatInput />);
 
     // Check for dropdown menu structure
     expect(screen.getByTestId('dropdown-menu')).toBeInTheDocument();
     expect(screen.getByTestId('dropdown-trigger')).toBeInTheDocument();
     expect(screen.getByTestId('dropdown-content')).toBeInTheDocument();
-    expect(screen.getByTestId('paperclip-icon')).toBeInTheDocument();
+    expect(screen.getByTestId('plus-icon')).toBeInTheDocument();
   });
 
-  it('should render all four attachment options in dropdown', () => {
+  it('should render attachment options in dropdown', () => {
     render(<ChatInput />);
 
+    // The new UI has Camera, Photos, Files as buttons in a grid (not DropdownMenuItem)
+    // and Video, Audio as DropdownMenuItem items
     const dropdownItems = screen.getAllByTestId('dropdown-item');
-    expect(dropdownItems).toHaveLength(4);
+    expect(dropdownItems).toHaveLength(2); // Video and Audio are DropdownMenuItem
 
-    // Verify each option exists with correct icon
+    // Verify icons exist - Camera, Photos (Image), Files (FileText), Video, Audio (Mic)
+    expect(screen.getByTestId('camera-icon')).toBeInTheDocument();
     expect(screen.getByTestId('image-icon')).toBeInTheDocument();
-    expect(screen.getByTestId('video-icon')).toBeInTheDocument();
-    // There are 2 mic icons - one in dropdown and one in input
-    expect(screen.getAllByTestId('mic-icon').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByTestId('file-text-icon')).toBeInTheDocument();
+    expect(screen.getByTestId('video-icon')).toBeInTheDocument();
+    // There are 2 mic icons - one in dropdown (audio) and one for speech-to-text
+    expect(screen.getAllByTestId('mic-icon').length).toBeGreaterThanOrEqual(1);
   });
 
   it('should have correct labels for attachment options', () => {
     render(<ChatInput />);
 
-    // Use getAllByText since icons have text too, then verify dropdown items have text
+    // The dropdown content has:
+    // - Top row buttons: Camera, Photos, Files (plain text labels)
+    // - DropdownMenuItem items: Upload video, Upload audio
     const dropdownItems = screen.getAllByTestId('dropdown-item');
-    expect(dropdownItems[0]).toHaveTextContent('Upload image');
-    expect(dropdownItems[1]).toHaveTextContent('Upload video');
-    expect(dropdownItems[2]).toHaveTextContent('Upload audio');
-    expect(dropdownItems[3]).toHaveTextContent('Upload document');
+    expect(dropdownItems[0]).toHaveTextContent('Upload video');
+    expect(dropdownItems[1]).toHaveTextContent('Upload audio');
   });
 });
 
