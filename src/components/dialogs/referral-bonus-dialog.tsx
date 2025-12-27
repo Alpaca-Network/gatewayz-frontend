@@ -41,8 +41,8 @@ export function ReferralBonusDialog() {
         return;
       }
 
-      // Calculate bonus: total credits - 10 (base trial credits)
-      const baseCredits = 10;
+      // Calculate bonus: total credits - 3 (base trial credits)
+      const baseCredits = 3;
       const total = Math.floor(userData.credits);
       const bonus = Math.max(0, total - baseCredits);
 
