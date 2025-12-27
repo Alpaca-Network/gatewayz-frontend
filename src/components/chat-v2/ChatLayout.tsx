@@ -92,11 +92,6 @@ function WelcomeScreen({ onPromptSelect, onPromptChipSelect }: { onPromptSelect:
                          {chip.label}
                      </button>
                  ))}
-                 <button
-                    className="flex items-center gap-2 px-4 py-2 rounded-full border border-border bg-background hover:bg-accent transition-colors text-sm font-medium"
-                 >
-                     More
-                 </button>
              </div>
 
              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-4xl w-full">
