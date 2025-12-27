@@ -153,7 +153,7 @@ export async function syncPrivyToGatewayz(
   };
 
   if (isNewUser) {
-    (authRequestBody as any).trial_credits = 10;
+    (authRequestBody as any).trial_credits = 5;
   }
 
   console.log('[AuthSync] Syncing with Gatewayz backend:', {
