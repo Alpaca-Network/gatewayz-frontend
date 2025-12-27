@@ -1,6 +1,7 @@
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Check } from "lucide-react";
+import { trackTwitterSignupClick } from "@/components/analytics/twitter-pixel";
 
 const tiers = [
   {
@@ -69,6 +70,9 @@ const tiers = [
 
 export function PricingSection() {
   const handleClick = (tierName: string) => {
+    // Track Twitter conversion for ad attribution
+    trackTwitterSignupClick();
+
     if (tierName === "Enterprise") {
       window.location.href = "/contact";
     } else {
